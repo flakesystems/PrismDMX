@@ -26,7 +26,8 @@
 | 8 | `ui/` scaffold (Vite + React + TS) | ✅ | Vite 8.2.1, 69 packages, 0 vulnerabilities. `strict` added manually — see D-log |
 | 9 | CI workflow | ✅ | `.github/workflows/ci.yml` — Windows full, Linux neutral tests, ARM64 cross-check, UI |
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
-| 11 | Git remote | ☐ | None configured. CI has therefore never actually run — see B2 |
+| 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
+| 12 | CI first run verified | ☐ | Triggered by the push, but unverifiable from here — private repo, no authenticated CLI. See B2 |
 
 ---
 
@@ -113,7 +114,7 @@ Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S0:
 | `cargo run -p prismd` | ✅ exit 0 — daemon binary links and runs |
 | `npx tsc -b --force` (ui, strict) | ✅ exit 0 |
 | `npm run build` (ui) | ✅ exit 0 |
-| CI green on a pushed branch | ⛔ not verifiable — no remote (B2) |
+| CI green on a pushed branch | ⛔ triggered but unverified — private repo, no API access (B2) |
 
 ---
 
@@ -146,12 +147,18 @@ Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and prot
 
 *No blocking issues. One non-blocking item below.*
 
-### B2 — No git remote ☐ (non-blocking)
-**Impact:** `.github/workflows/ci.yml` exists and is committed but has **never executed**. Its correctness is therefore unverified — a YAML or action-version error would only surface on the first push.
+### B2 — CI run not yet verified ☐ (non-blocking)
+**State:** the remote is configured and `master` is pushed, so `.github/workflows/ci.yml` has been **triggered**. Whether it passed is unknown.
+
+**Why it cannot be checked from the development shell:** the repository is private, so the unauthenticated GitHub API returns 404, and the `gh` CLI is not installed (authenticating it needs an interactive browser or device flow). Pushing works only because git uses the stored credential helper.
 
 **Why it is not blocking:** every check the CI performs also runs locally and is green (§2.1). CI protects against regressions over time; its absence does not stop S1.
 
-**Resolution:** create a repository on GitHub, `git remote add origin <url>`, push. The first run either confirms the workflow or shows what to fix.
+**Resolution — one of:**
+1. Check the Actions tab at github.com/flakesystems/PrismDMX/actions and report the result.
+2. Install and authenticate the GitHub CLI (`winget install --id GitHub.cli`, then `gh auth login`), after which run status can be read directly.
+
+**Likely first failure, if any:** the `ui` job runs `npm ci`, which requires `ui/package-lock.json` to match `package.json`. It is committed, so this should hold — but it is the step most sensitive to the scaffold.
 
 ### B1 — MSVC Build Tools missing ✅ RESOLVED 2026-08-10
 Rust could be installed per-user via winget, but the MSVC linker could not — `link.exe` was absent and every link step failed. Resolved by the user installing Visual Studio Build Tools 2022 (17.14.37516.0) from an elevated shell. Verified: `cargo build`, `cargo test` and `cargo run -p prismd` all succeed.
@@ -177,6 +184,7 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 |---|---|---|---|
 | 2026-08-10 | S0 | Rust installs cleanly per-user via winget, but the MSVC linker does not — they are separate installs | Setup split into an automatic part and a manual elevated part; recorded as B1 |
 | 2026-08-10 | S0 | `cargo check` and `cargo clippy` do not link | Workspace scaffold can be verified before B1 is resolved; test-driven work cannot start until it is |
+| 2026-08-10 | S0 | The remote already carried an MIT `LICENSE` from repository creation, while the workspace manifest declared `license = "UNLICENSED"` | Rebased onto the existing commit instead of overwriting it; manifest corrected to `MIT` in a separate commit |
 | 2026-08-10 | S0 | The CI workflow cannot be validated without a remote, so a green local build is not the same as a green pipeline | Tracked as B2 rather than silently assuming CI works. S0 closed with this criterion explicitly unmet |
 | 2026-08-10 | S0 | The Vite `react-ts` template does **not** set `"strict": true` — the default is `false`, so the template ships non-strict TypeScript despite its name | `CLAUDE.md` violation caught before any code was written. `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` and `noImplicitReturns` added to both `tsconfig.app.json` and `tsconfig.node.json`; typecheck and build re-verified green |
 
