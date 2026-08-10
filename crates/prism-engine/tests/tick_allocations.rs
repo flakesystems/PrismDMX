@@ -21,10 +21,12 @@ use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 
-use prism_domain::{AttributeDef, AttributeType, ExecutorId, FixtureId, FixtureType, UniverseId};
+use prism_domain::{
+    AttributeDef, AttributeType, ExecutorId, Fixture, FixtureId, FixtureType, UniverseId, Vec3,
+};
 use prism_engine::{
-    Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, MergePlan,
-    SystemClock, TickBody, TickCommand, TickInfo, command_queue,
+    Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, SystemClock,
+    TickBody, TickCommand, TickInfo, UNIVERSE_CHANNELS, command_queue,
 };
 
 /// Counts allocator calls made by whichever thread has armed the probe.
@@ -207,16 +209,20 @@ fn the_real_clock_path_is_allocation_free_too() {
 }
 
 /// A fixture type with `attributes` of the merge's own attributes, so a plan
-/// built from many of them exercises both merge modes.
-fn fixture_type(attributes: usize) -> FixtureType {
+/// built from many of them exercises both merge modes. `sixteen_bit` doubles
+/// the footprint and gives every attribute a fine channel, which is the
+/// encoder's worst case: two writes per slot instead of one.
+fn fixture_type(attributes: usize, sixteen_bit: bool) -> FixtureType {
+    let width = if sixteen_bit { 2 } else { 1 };
     let attributes = AttributeType::ALL
         .iter()
         .take(attributes)
-        .map(|attribute| AttributeDef {
+        .enumerate()
+        .map(|(index, attribute)| AttributeDef {
             attribute: *attribute,
             feature_group: attribute.feature_group(),
-            coarse_offset: 0,
-            fine_offset: None,
+            coarse_offset: (index * width) as u16,
+            fine_offset: sixteen_bit.then(|| (index * width + 1) as u16),
             default_value: 32_768,
             merge_mode: attribute.default_merge_mode(),
             invert: false,
@@ -229,18 +235,51 @@ fn fixture_type(attributes: usize) -> FixtureType {
         manufacturer: "Test".to_owned(),
         name: "Test".to_owned(),
         mode: "test".to_owned(),
-        footprint: attributes.len() as u16,
+        footprint: (attributes.len() * width) as u16,
         attributes,
     }
 }
 
+/// `count` fixtures of `fixture_type`, patched back to back across the
+/// universes of `layout`. Every other one is hung upside down, so the encoder's
+/// invert path is on the measured tick as well.
+fn patch(layout: &FrameLayout, fixture_type: &FixtureType, count: u32) -> Vec<Fixture> {
+    let footprint = u32::from(fixture_type.footprint);
+    let per_universe = (UNIVERSE_CHANNELS as u32) / footprint;
+    (0..count)
+        .map(|index| Fixture {
+            id: FixtureId::new(index + 1),
+            name: String::new(),
+            type_id: fixture_type.id.clone(),
+            universe: *layout
+                .universes()
+                .get((index / per_universe) as usize)
+                .expect("the layout must be wide enough for the patch"),
+            address: ((index % per_universe) * footprint) as u16 + 1,
+            position: Vec3::ZERO,
+            rotation: Vec3::ZERO,
+            invert_pan: index % 2 == 0,
+            invert_tilt: index % 2 == 0,
+        })
+        .collect()
+}
+
 /// The merge, loaded up: every source provides a value for every slot, which is
 /// the worst case the resolve can be given.
-fn merge_body(fixtures: u32, executors: u32, attributes: usize) -> MergeBody {
-    let head = fixture_type(attributes);
-    let plan = MergePlan::build((1..=fixtures).map(|id| (FixtureId::new(id), &head))).unwrap();
-    let slots = plan.slot_count();
-    let mut body = MergeBody::new(plan, (1..=executors).map(ExecutorId::new)).unwrap();
+fn merge_body(
+    layout: &FrameLayout,
+    head: &FixtureType,
+    fixtures: u32,
+    executors: u32,
+) -> MergeBody {
+    let patched = patch(layout, head, fixtures);
+    let mut body = MergeBody::for_patch(
+        layout,
+        patched.iter().map(|fixture| (fixture, head)),
+        (1..=executors).map(ExecutorId::new),
+    )
+    .unwrap();
+    let slots = body.plan().slot_count();
     for executor in 1..=executors {
         let source = body
             .layer_mut()
@@ -259,12 +298,13 @@ fn a_tick_running_the_merge_makes_no_allocator_call_either() {
     // The empty tick proving nothing about the allocator is easy. This is the
     // criterion that matters: the merge itself, resolving a full source set on
     // every tick, with executors going on and off underneath it.
-    let body = merge_body(128, 8, 6);
+    let head = fixture_type(6, false);
+    let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
+    let body = merge_body(&layout, &head, 128, 8);
     let slots = body.plan().slot_count();
     assert_eq!(slots, 128 * 6);
 
-    let layout = Arc::new(FrameLayout::new((1..=8).map(UniverseId::new)).unwrap());
-    let mut publisher = FramePublisher::new(layout);
+    let mut publisher = FramePublisher::new(Arc::new(layout));
     let mut subscriber = publisher.subscribe();
     let (mut producer, consumer) = command_queue(256);
     let mut engine = Engine::new(body, consumer, publisher);
@@ -307,6 +347,73 @@ fn a_tick_running_the_merge_makes_no_allocator_call_either() {
         engine.body().values().iter().any(|value| *value != 32_768),
         "the merge produced nothing, so the measurement is meaningless"
     );
+}
+
+#[test]
+fn a_tick_running_the_encoder_as_well_makes_no_allocator_call_either() {
+    // The merge writing a `[u16]` allocates nothing rather easily. This is the
+    // whole chain on the tick: resolve, invert, split, and 1536 channel writes
+    // spread over four universes, with the frame going out to a driver.
+    let head = fixture_type(6, true);
+    let layout = FrameLayout::new((1..=4).map(UniverseId::new)).unwrap();
+    let body = merge_body(&layout, &head, 128, 8);
+    let slots = body.plan().slot_count();
+    assert_eq!(slots, 128 * 6);
+    assert_eq!(body.channels().target_count(), slots);
+
+    let mut publisher = FramePublisher::new(Arc::new(layout));
+    let mut subscriber = publisher.subscribe();
+    let (mut producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle =
+        |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
+            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let _ = producer.push(TickCommand::SetExecutorActive {
+                executor,
+                on: index % 2 == 0,
+            });
+            let _ = producer.push(TickCommand::SetExecutorLevel {
+                executor,
+                level: index,
+            });
+            engine.run_ticks(&clock, 1);
+            subscriber.refresh();
+        };
+
+    for index in 0..200 {
+        cycle(&mut engine, &mut producer, index);
+    }
+    engine.reset_stats();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, &mut producer, index);
+        }
+    });
+
+    println!("allocator calls in 1000 encoded ticks, {slots} 16-bit slots: {calls}");
+    assert_eq!(calls, 0, "the encoder called the allocator {calls} times");
+    assert_eq!(engine.stats().ticks, 1_000);
+    assert_eq!(engine.stats().panics, 0);
+    // And the bytes really travelled: the driver's copy carries what the
+    // encoder wrote, in the fixtures' channels and nowhere else.
+    let frame = subscriber.frame();
+    assert!(
+        frame.channels().iter().any(|&byte| byte != 0),
+        "nothing was encoded, so the measurement is meaningless"
+    );
+    let footprint = usize::from(head.footprint);
+    let per_universe = UNIVERSE_CHANNELS / footprint;
+    for position in 0..4 {
+        let universe = frame.universe(position).unwrap();
+        let here = per_universe.min(128 - per_universe * position);
+        assert!(
+            universe[here * footprint..].iter().all(|&byte| byte == 0),
+            "the encoder wrote past the patch in universe {position}"
+        );
+    }
 }
 
 #[test]

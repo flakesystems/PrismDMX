@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-10
 **Current phase:** Phase 1 — Domain and engine
-**Current session:** S4 — `prism-engine` attribute-to-DMX encoding (not started; see §8 for the prompt that starts it)
-**Last completed:** S3 — `prism-engine` HTP/LTP merge ✅
+**Current session:** S5 — `prism-engine` executors, cues, fades (not started; see §8 for the prompt that starts it)
+**Last completed:** S4 — `prism-engine` attribute-to-DMX encoding ✅
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -46,8 +46,8 @@
 | S1 | `prism-domain` — types | ✅ | 2026-08-10 | All exit criteria verified — see §2.2. 133 tests, coverage 99.8 % lines |
 | S2 | `prism-engine` — tick loop, triple buffer | ✅ | 2026-08-10 | All exit criteria verified — see §2.3. 77 tests + 3 `loom` models, coverage 98.6 % lines |
 | S3 | `prism-engine` — HTP/LTP merge | ✅ | 2026-08-10 | All exit criteria verified — see §2.4. 135 tests, coverage 99.1 % lines |
-| S4 | `prism-engine` — DMX encoding | ☐ | | Consumes `MergeBody::values()` — attribute values, not bytes |
-| S5 | `prism-engine` — executors, cues, fades | ☐ | | |
+| S4 | `prism-engine` — DMX encoding | ✅ | 2026-08-10 | All exit criteria verified — see §2.5. 179 tests, coverage 99.3 % lines |
+| S5 | `prism-engine` — executors, cues, fades | ☐ | | Feeds `PlaybackLayer::source_mut(..).set(slot, value)` |
 | S6 | `prism-engine` — programmer, masters, stress | ☐ | | Coverage gate > 95 % |
 
 ### Phase 2 — Protocols
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 4 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 5 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -206,6 +206,34 @@ resolves into a `[u16]` and leaves the frame alone; the encoding is S4. Until
 then a `prismd` built on `MergeBody` outputs a blackout, which is why S4 is the
 next session rather than S5.
 
+### 2.5 S4 verification record
+
+Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S4 and
+the session prompt:
+
+| Check | Result |
+|---|---|
+| `cargo test -p prism-engine` | ✅ exit 0 — **163 lib tests** (28 of them new) + 16 integration tests, 0 failed, 4 `#[ignore]`d |
+| `cargo test --workspace` | ✅ exit 0 — 312 tests across 18 targets |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Table tests, 8-bit and 16-bit, boundaries 0, 1, 32767, 32768, 65534, 65535 | ✅ one `BOUNDARIES` table drives both cases, plus a property that the 8-bit write **is** the coarse byte of the 16-bit one — so the two cannot drift into separate scalings |
+| Invert composition, all four combinations | ✅ `the_attribute_invert_and_the_fixture_invert_compose`, with both-inverted asserted equal to neither-inverted; `inverting_twice_is_the_identity` as a property; and `the_fixture_inverts_reach_pan_and_tilt_and_nothing_else` |
+| Footprint past channel 512 rejected **at patch time** | ✅ `PatchError::AddressOutOfRange`, asserted through `ChannelPlan::build` and again through `MergeBody::for_patch`, with the "fits exactly at 512" case beside it. Also address 0 and an empty footprint |
+| Universe not in the `FrameLayout` rejected at patch time | ✅ `PatchError::UniverseNotPatched`, same two levels |
+| Zero allocations in the tick with merge **and** encoding | ✅ **0 allocator calls** over 1 000 ticks — 768 16-bit slots, 128 fixtures over 4 universes, half of them inverted, 8 sources, executors switching, frame published to a driver each tick |
+| `Patch → Merge → Frame` as an integration test | ✅ `tests/patch_to_frame.rs`: the home layer listed byte for byte, an active executor asserted to move **exactly** eight channels, deactivation byte-identical to the home frame, HTP-with-master and LTP both checked on the wire |
+| `loom` models still pass | ✅ 3 models, unchanged since S2 |
+| Coverage on `prism-engine` | ✅ **99.31 % lines**, 99.42 % regions, 98.47 % functions — `encode.rs` and `body.rs` both at **100 % lines**, and the only uncovered production lines in the crate are the four S2 files' pre-existing ones |
+
+**Delivered:** one module, `encode`. `ChannelPlan::build` validates the patch —
+universe, address, footprint, offsets, and that the fixture list agrees with the
+`MergePlan` — and flattens it into one `ChannelTarget` per slot, carrying the
+frame position of the coarse channel, of the fine channel if there is one, and
+the two inverts already composed. `ChannelPlan::encode` is what runs on the tick:
+a walk over that table, one or two byte writes each. `MergeBody::for_patch`
+builds both plans from one patch, so they cannot describe different rigs.
+
 ---
 
 ## 3. Coverage tracking
@@ -218,7 +246,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Crate | Target | Measured | Date |
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
-| `prism-engine` | **> 95 %** | **99.14 % lines**, 99.29 % regions, 98.46 % functions | 2026-08-10 (S3) |
+| `prism-engine` | **> 95 %** | **99.31 % lines**, 99.42 % regions, 98.47 % functions | 2026-08-10 (S4) |
 | `prism-core` | **> 95 %** (programmer) | — | |
 | `prism-protocols` | **> 95 %** | — | |
 | `prism-surface` | **> 95 %** | — | |
@@ -231,7 +259,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | Tick jitter | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 588 µs, **0 of 26 401 ticks missed** — at the thread priority `ARCHITECTURE_SPEC.md` §3 specifies. See the note below | 2026-08-10 |
 | Tick jitter under 100 % CPU load | S6 stress gate — not this session | — | |
-| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; and **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching | 2026-08-10 |
+| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; and **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick | 2026-08-10 |
 | Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Open DMX frame rate | measure real rate on SH-RS09B | — | |
@@ -318,6 +346,12 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-10 | S4 | **A footprint that fits is not the same as an attribute that fits inside it.** `docs/DMX_MERGE.md` §5 only requires rejecting a fixture that runs past channel 512, and `Fixture::last_address` answers exactly that. But a profile is free to name a `coarseOffset` of 9 on a four-channel type, and the two checks together are what make the write provably in range: a four-channel fixture at address 509 would otherwise write channel 518, which is another fixture — or the next universe, since the frame is one flat slice | Offsets are validated against the footprint too, as `PatchError::AttributeOutsideFootprint`, for the fine channel as well as the coarse one. With both checks, every target is inside its own fixture's footprint — asserted as a `proptest` over arbitrary `prism_domain::Fixture` values, not just as an argument |
+| 2026-08-10 | S4 | **Two fixtures at overlapping addresses are not an error.** The obvious next validation would be to reject them, and it would be wrong: patching a second fixture onto the first is how an operator clones one, and it is a technique in daily use. The real risk is the *accidental* overlap | Allowed, and made deterministic rather than merely tolerated: targets are written in slot order, so the higher fixture number wins the shared channel, and a test says so. **S27 requirement:** the patch UI warns about overlapping footprints — the engine is the wrong place to forbid them |
+| 2026-08-10 | S4 | **The encoder does not blank the frame it is given.** It writes only the channels the patch covers, which is correct while the patch is fixed: every patched channel is rewritten every tick and nothing else ever writes one. It stops being correct the moment a patch can change at run time, because the triple buffer recycles frame buffers — a channel that was patched and no longer is would keep a stale value for as long as that buffer lives | Documented on `ChannelPlan::encode`. **S11/S17 requirement:** replacing a `MergeBody` at run time must blank every frame buffer in the publisher, not merely swap the plan. Blanking on every tick instead was rejected: 32 KB of memset per tick to defend against a case that does not exist yet |
+| 2026-08-10 | S4 | **Both inverts compose to a single flag, resolved at patch time.** `AttributeDef.invert` and `Fixture.invertPan`/`invertTilt` are exclusive or — a head hung upside down in a rig whose profile already inverts pan comes out the right way round, because inverting twice is the identity | One `bool` per target instead of two, and no branch on the fixture in the tick. All four combinations are asserted, including the both-true case that must equal the neither-true case; the identity is a `proptest` in its own right |
+| 2026-08-10 | S4 | **A generic `build` is measured once per caller.** `ChannelPlan::build` and `MergeBody::for_patch` take `IntoIterator`, so each call site gets its own copy of the whole function — and llvm-cov counts every copy's untaken error paths as uncovered lines. The crate's line coverage read 99.03 % with no uncovered production line anywhere in the new code | Both collect the iterator and delegate to one non-generic function, which is where the work lives. Coverage went to 99.31 % — above the S3 figure rather than below it — and `encode.rs` to 100 %. Worth recording because the first reading was a measurement artefact, not a gap, and the fix is a real one: a patch is validated by one copy of the code rather than one per caller |
+| 2026-08-10 | S4 | `MergeBody::new` now takes both plans and can be handed two that describe different patches. A silent mismatch would encode the wrong slot into the right channel — the worst kind of wrong, because every channel would still look plausible | `PatchError::PlanMismatch` on differing slot counts, and `MergeBody::for_patch` as the constructor that cannot produce one. **S11/S17 requirement:** build the two plans through `for_patch`, or re-derive both together |
 | 2026-08-10 | S3 | **"LTP is order-dependent" and "LTP is not commutative" are two different claims, and only one of them is about the merge.** Ordering a source *set* by activation counter is, correctly, independent of the order of the list — shuffling the input must not change the answer. The non-commutativity `DMX_MERGE.md` §6.2 demands lives one level down, in the binary operation "the later one wins" | Split into two functions and two properties. `merge_ltp(a, b) = b` carries the non-commutativity and is asserted against it; `merge_playbacks` carries the ordering and is asserted to be shuffle-invariant. A second property, `ltp_is_not_a_maximum`, fails as well if anyone replaces the operation with `max` — the failure the specification is really trying to prevent |
 | 2026-08-10 | S3 | **Equal activation counters would make LTP depend on slice order.** Counters are unique by construction, so the case cannot arise from the layer — but `merge_playbacks` is public and takes any slice, and "usually deterministic" is not a property worth having in the one function the whole product resolves through | The LTP key is `(activation, executor)`, a total order on any source set at all. Costs nothing, and makes shuffle-invariance a theorem rather than a convention |
 | 2026-08-10 | S3 | **The resolver cannot be a per-slot fold without wasting the tick.** Asking every source about every slot costs `slots × sources` every tick whether anything is running or not — at 8 000 attributes and 64 executors, half a million operations per tick to produce a rig at home | Source-major instead: each source is asked only for the slots it touches, and the per-slot winner accumulates in a scratch buffer. The cost is what the active cues contain. The price is that the accumulator exists, so `PlaybackLayer::resolve` takes `&self` and the scratch is passed in — purity kept in the signature rather than in a comment — and a `proptest` holds the resolver to agreeing with the pure `merge_playbacks` on every slot |
@@ -358,11 +392,12 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-The merge resolves. Begin **S4** (`prism-engine` — attribute to DMX encoding). Use the prompt in §8. The seam is `MergeBody::render`, which resolves values and leaves the frame untouched.
+The chain `Patch → Merge → Frame` is closed: a daemon built on `MergeBody` now makes light. Begin **S5** (`prism-engine` — executors, cues, fades). Use the prompt in §8. The seam is `PlaybackLayer::source_mut(..).set(slot, value)`, which is where evaluated cue values go in.
 
-Carried into S4 and beyond:
-- The encoder consumes `MergeBody::values()` — one 16-bit value per `MergePlan` slot, in slot order (`fixture`, then `attribute`). That order is stable and part of the plan's contract.
-- `MergePlan` deliberately knows nothing about addresses: `Fixture.universe`, `Fixture.address`, `AttributeDef.coarse_offset`/`fine_offset`/`invert` and `Fixture.invert_pan`/`invert_tilt` are all S4's, as is rejecting a footprint that runs past channel 512.
+Carried into S5 and beyond:
+- `MergeBody::for_patch(&layout, fixtures, executors)` is the constructor: it builds the `MergePlan` and the `ChannelPlan` from one patch, so they cannot describe different rigs. `MergeBody::new` takes both separately and rejects a mismatch.
+- The encoder consumes `MergeBody::values()` — one 16-bit value per `MergePlan` slot, in slot order (`fixture`, then `attribute`). That order is stable and part of the plan's contract, and `ChannelPlan` targets are sorted by it.
+- The encoder leaves unpatched channels alone, so **replacing a `MergeBody` at run time must blank the publisher's frame buffers** — see the decision log.
 - `PlaybackLayer::source_mut(..).set(slot, value)` and `.clear()` are how **S5** feeds evaluated cue values in; `activate`/`deactivate` maintain the LTP order. `activate` is idempotent — a retrigger that should move a playback to the top of the order needs its own operation.
 - Masters and the programmer state machine are **S6**. `SetGrandMaster` and `SetBlackout` reach `MergeBody` today and are ignored on purpose.
 - `prism-domain`'s optional `proptest` feature is already enabled in `prism-engine`'s `[dev-dependencies]`. Use `prism_domain::arb` rather than growing new generators.
@@ -379,70 +414,77 @@ Carried into S4 and beyond:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S4 — `prism-engine`: Attribut-zu-DMX-Encoding**
+**Next up: S5 — `prism-engine`: Executoren, Cues, Fades**
 
 ```text
-PrismDMX — Session S4: prism-engine, Attribut-zu-DMX-Encoding
+PrismDMX — Session S5: prism-engine, Executoren, Cues, Fades
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                        — verbindliche Qualitäts-, Architektur- und Teststandards
 2. PROGRESS.md                      — aktueller Stand, Decision Log, gemessene Zahlen
-3. IMPLEMENTATION_PLAN.md           — Session-Protokoll und die Definition von S4
-4. docs/DMX_MERGE.md §5             — die Spezifikation dieser Session; §1 für den Stack darüber
-5. ARCHITECTURE_SPEC.md §3.1, §5    — die harten Tick-Regeln und die Pipeline-Reihenfolge
-6. crates/prism-engine/src/lib.rs   — die Crate-Doku erklärt Aufbau, Tick-Vertrag und die Merge-Schichten
-7. crates/prism-engine/src/plan.rs  — MergePlan: die Slots, die S4 in Kanäle übersetzt
-8. crates/prism-engine/src/body.rs  — MergeBody: render() löst Werte auf und lässt den Frame in Ruhe
-9. crates/prism-domain/src/attribute.rs und src/patch.rs — AttributeDef, FixtureType, Fixture
+3. IMPLEMENTATION_PLAN.md           — Session-Protokoll und die Definition von S5
+4. ARCHITECTURE_SPEC.md §3.1, §5    — die harten Tick-Regeln und die Pipeline-Reihenfolge
+                                      (S5 ist Schritt 2 und 3: Fades fortschreiben,
+                                      Executoren zu Attributwerten auswerten)
+5. docs/DMX_MERGE.md §2, §5         — worin die ausgewerteten Werte danach münden
+6. crates/prism-engine/src/lib.rs   — die Crate-Doku erklärt Aufbau, Tick-Vertrag und Schichten
+7. crates/prism-engine/src/playback.rs — PlaybackLayer und PlaybackSource: die Nahtstelle dieser Session
+8. crates/prism-engine/src/body.rs  — MergeBody: apply() nimmt Kommandos, render() tickt die Kette
+9. crates/prism-engine/src/clock.rs und src/tick.rs — Clock, ManualClock, TickInfo, deadline_offset
+10. crates/prism-domain/src/sequence.rs und src/executor.rs — Cue, CuePart, CueTrigger, Sequence, Executor
 
-Aufgabe: Session S4 umsetzen — das Encoding. Aus den gemergten Attributwerten
-(16 Bit, 0..=65535, einer pro MergePlan-Slot) werden DMX-Kanalbytes im DmxFrame.
-Das ist der Schritt, nach dem die Kette Patch → Merge → Frame vollständig ist und
-ein Daemon tatsächlich Licht machen könnte.
+Aufgabe: Session S5 umsetzen — Playback, das auf der Zeitbasis des Ticks läuft.
+Aus Cues und Fadezeiten werden pro Tick Attributwerte, die in die vorhandene
+PlaybackSource geschrieben werden. Danach spielt das System Cuelisten ab.
 
-Stand nach S3 — nichts davon musst du neu bauen:
-- Der Merge ist fertig und getestet: MergePlan (Home-Layer), PlaybackLayer
-  (HTP/LTP, Aktivierungsordnung, Executor-Master), MergeBody als TickBody.
-- `MergeBody::render` löst pro Tick auf und füllt `MergeBody::values()`:
-  ein `[u16]`, ein Wert pro Slot, in Slot-Reihenfolge (Fixture, dann Attribut).
-  Diese Reihenfolge ist stabil und Teil des Vertrags von MergePlan.
-- Der Frame bleibt bisher unberührt. Genau diese Lücke schließt S4.
-- MergePlan kennt bewusst keine Adressen. Universum, Startadresse, coarse/fine
-  Offsets und beide Invert-Ebenen sind Sache dieser Session.
+Stand nach S4 — nichts davon musst du neu bauen:
+- Die Kette Patch → Merge → Frame ist vollständig und getestet. `MergeBody`
+  ist der TickBody: `apply()` nimmt `TickCommand`s entgegen, `render()` löst
+  den Merge auf und schreibt den DmxFrame.
+- `MergeBody::for_patch(&layout, fixtures, executors)` baut MergePlan und
+  ChannelPlan aus einem Patch. `MergePlan` hat einen Slot je Fixture und
+  Attribut, `MergePlan::index_of(fixture, attribute)` liefert den Slotindex.
+- `PlaybackLayer` ist der Quellensatz: eine `PlaybackSource` je Executor,
+  `activate`/`deactivate` führen die LTP-Reihenfolge, `set_master` den
+  Executor-Master. Der Merge (HTP/LTP, Master vor dem Maximum) ist fertig.
+- Der Tick läuft mit 44 Hz, hält absolute Deadlines und liefert `TickInfo`
+  (Index, Deadline, Startzeit, verpasste Ticks). `ManualClock` erlaubt
+  deterministische Zeit im Test, ohne echt zu warten.
 
-Umzusetzen (docs/DMX_MERGE.md §5):
-- 8-Bit-Attribut (`fineOffset == null`): data[address + coarseOffset] = value >> 8
-- 16-Bit-Attribut: coarse = value >> 8, fine = value & 0xFF, geschrieben an
-  coarseOffset und fineOffset
-- `AttributeDef.invert`: value = 65535 - value, VOR dem Aufteilen
-- `Fixture.invertPan` / `invertTilt`: zusätzlich zum Attribut-Invert, damit ein
-  über Kopf hängender Scheinwerfer ohne Änderung des Fixture-Typs stimmt
-- Adressarithmetik wird beim Patchen validiert, nie im Tick: ein Fixture, dessen
-  Footprint über Kanal 512 hinausginge, wird beim Patchen abgelehnt. Dafür gibt
-  es bereits `Fixture::last_address(footprint)` in prism-domain.
-- Die Anbindung an den Tick: `MergeBody::render` schreibt danach den Frame,
-  nicht mehr nur die Werte.
+Die Nahtstelle dieser Session:
+- `PlaybackLayer::source_mut(executor).set(slot, value)` und `.clear()` — so
+  kommen ausgewertete Cue-Werte in den Merge. Genau das füllt S5.
+- `TickCommand::Go { executor, direction }` erreicht `MergeBody::apply` heute
+  und wird bewusst ignoriert. S5 macht daraus Cue-Traversal.
+- `PlaybackLayer::activate` ist idempotent: ein bereits aktiver Executor
+  bekommt keinen neuen Aktivierungsstempel. Wenn ein Retrigger einen Playback
+  an die Spitze der LTP-Ordnung holen soll, ist das eine eigene Operation mit
+  eigenem Namen — kein Nebeneffekt von zweimal Drücken.
+
+Umzusetzen (IMPLEMENTATION_PLAN.md S5):
+- Cue-Auswertung: aus `Cue.parts` (Fixture, Attribut, Wert) werden Slotwerte
+- Fade in / Fade out / Delay, fortgeschrieben auf der Tickzeit
+- Cuelisten-Traversal: nächster/vorheriger Cue, Loop am Ende
+- Triggerarten `Go`, `Follow`, `Time` (`Sound` ist ausdrücklich vertagt)
+- Pflege der Aktivierungsreihenfolge, die die LTP-Ordnung trägt
 
 Vorgehen strikt test-driven (CLAUDE.md): erst der fehlschlagende Test, dann die
 Implementierung. Diese Crate trägt die strengste Coverage-Anforderung des
-Projekts (> 95 %); nach S3 gemessen wurden 99,14 % Zeilen. Abgenommen wird die
+Projekts (> 95 %); nach S4 gemessen wurden 99,31 % Zeilen. Abgenommen wird die
 Coverage in S6, aber sie darf hier nicht fallen.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Tabellentests für 8-Bit- und 16-Bit-Encoding, inklusive der Grenzwerte
-  0, 1, 32767, 32768, 65534, 65535
-- Invert-Komposition getestet: Attribut-Invert × Fixture-Invert in allen vier
-  Kombinationen, und dass doppeltes Invertieren die Identität ist
-- Ein Fixture, dessen Footprint über Kanal 512 hinausgeht, wird BEIM PATCHEN
-  mit einer klaren Fehlermeldung abgelehnt — nicht im Tick
-- Ein Fixture in einem Universum, das nicht im FrameLayout steht, wird ebenso
-  beim Patchen abgelehnt
-- Null Allokationen im Tick mit aktivem Merge UND Encoding
+- Ein 10-Sekunden-Fade steht bei 5 s auf exakt 50 %, ±1 Tick, auf simulierter Uhr
+- Fades interpolieren in 16 Bit, auch auf 8-Bit gepatchten Kanälen — kein
+  sichtbares Treppen; das ist gegen den fertigen Encoder prüfbar
+- Ein Go während eines laufenden Fades verhält sich deterministisch und ist
+  getestet — nicht „irgendwie sinnvoll", sondern festgelegt und begründet
+- Cue-Nummern mit Dezimalstellen (1, 1.5, 2, 10) sortieren richtig;
+  `Cue::compare_numbers` in prism-domain ist die vorhandene Antwort darauf
+- Null Allokationen im Tick mit laufenden Fades
   (crates/prism-engine/tests/tick_allocations.rs erweitern, nicht ersetzen)
-- Die Kette Patch → Merge → Frame als Integrationstest: der Home-Layer ergibt
-  bestimmte Bytes, ein aktiver Executor ändert genau die erwarteten Kanäle
 - cargo test -p prism-engine ist grün
 - cargo clippy --workspace --all-targets -- -D warnings ist sauber
 - cargo fmt --all --check ist sauber
@@ -454,10 +496,18 @@ Wichtige Randbedingungen:
   kein Logging. Alle Puffer werden vorab aus dem Patch dimensioniert. Zusätzlich
   sind clippy::indexing_slicing und clippy::integer_division im Produktionscode
   verboten — also `get`/`get_mut` und `div_euclid` statt `[]` und `/`.
+- Ein `prism_domain::Cue` besitzt Strings und Vecs. Er darf im Tick weder
+  angelegt noch fallen gelassen werden (Droppen alloziert genauso wie Anlegen).
+  Wie S2 das für `TickCommand` gelöst hat, steht im Decision Log — die
+  auswertbare Form wird vor dem Tick gebaut, nicht in ihm.
+- Zeit kommt aus `TickInfo`/`Clock`, niemals aus `Instant::now()` im Body.
+  `ManualClock` macht Zeit im Test deterministisch; 1/44 s ist keine ganze
+  Nanosekundenzahl, deshalb rechnet der Tick exakt rational — siehe tick.rs.
 - prism-domain hat ein optionales Feature `proptest` (`prism_domain::arb` und die
   `Arbitrary`-Impls). Es ist in den [dev-dependencies] von prism-engine bereits
   aktiviert — benutzen statt eigene Generatoren zu schreiben.
-- Interne Testhelfer für Fixture-Typen stehen in crates/prism-engine/src/testkit.rs.
+- Interne Testhelfer für Fixture-Typen und gepatchte Fixtures stehen in
+  crates/prism-engine/src/testkit.rs.
 - Lange Tests laufen nicht in CI. Wie man sie ausführt, steht in PROGRESS.md §3.1
   und in der Crate-Doku von prism-engine.
 - Toolchain ist eingerichtet und funktioniert (Rust 1.97.1 msvc, MSVC Build Tools 2022,
@@ -465,9 +515,9 @@ Wichtige Randbedingungen:
 - Es ist kein Setup mehr nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S4-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S5-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S5 (prism-engine: Executoren, Cues, Fades) überschreiben
+  Session S6 (prism-engine: Programmer-Layer, Masters, Stress) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(engine): …
 ```

@@ -8,49 +8,60 @@
 //!
 //! # What it does not do yet
 //!
-//! `render` resolves attribute *values*. It does not write the frame: turning a
-//! 16-bit attribute value into DMX bytes — the coarse/fine split, the
-//! attribute and per-fixture inverts, patch-time address validation — is S4,
-//! and half of an encoder would be worse than none. The grand master, group
-//! masters and the programmer state machine are S6. The commands for those
-//! arrive here already and are deliberately ignored, which the tests state
-//! outright so that the gap is a recorded decision rather than a surprise.
+//! The grand master, group masters and the programmer state machine are S6, and
+//! cue traversal is S5. The commands for those arrive here already and are
+//! deliberately ignored, which the tests state outright so that the gap is a
+//! recorded decision rather than a surprise.
 
-use prism_domain::ExecutorId;
+use prism_domain::{ExecutorId, Fixture, FixtureType};
 
 use crate::command::TickCommand;
-use crate::frame::DmxFrame;
-use crate::plan::{MergeError, MergePlan};
+use crate::encode::{ChannelPlan, PatchError};
+use crate::frame::{DmxFrame, FrameLayout};
+use crate::plan::MergePlan;
 use crate::playback::{MergeScratch, PlaybackLayer};
 use crate::tick::{TickBody, TickInfo};
 
-/// The HTP/LTP merge, wired into the tick.
+/// The HTP/LTP merge and the DMX encoding, wired into the tick.
 #[derive(Debug, Clone)]
 pub struct MergeBody {
     plan: MergePlan,
+    channels: ChannelPlan,
     layer: PlaybackLayer,
     scratch: MergeScratch,
     values: Box<[u16]>,
 }
 
 impl MergeBody {
-    /// Builds the merge for a patch and a set of executors.
+    /// Builds the merge and the encoder for a patch and a set of executors.
     ///
-    /// Every buffer the tick will use is allocated here, once.
+    /// Every buffer the tick will use is allocated here, once. The two plans
+    /// must describe the same patch — build them with [`Self::for_patch`] unless
+    /// there is a reason not to.
     ///
     /// # Errors
     ///
-    /// [`MergeError::TooManySources`] if there are more executors than
+    /// [`PatchError::PlanMismatch`] if the plans were built against different
+    /// patches, or [`PatchError::Plan`] carrying
+    /// [`crate::MergeError::TooManySources`] if there are more executors than
     /// [`crate::MAX_SOURCES`].
     pub fn new(
         plan: MergePlan,
+        channels: ChannelPlan,
         executors: impl IntoIterator<Item = ExecutorId>,
-    ) -> Result<Self, MergeError> {
+    ) -> Result<Self, PatchError> {
+        if channels.slot_count() != plan.slot_count() {
+            return Err(PatchError::PlanMismatch {
+                plan: plan.slot_count(),
+                channels: channels.slot_count(),
+            });
+        }
         let layer = PlaybackLayer::new(&plan, executors)?;
         let scratch = MergeScratch::new(&plan);
         let values = vec![0; plan.slot_count()].into_boxed_slice();
         let mut body = Self {
             plan,
+            channels,
             layer,
             scratch,
             values,
@@ -61,10 +72,40 @@ impl MergeBody {
         Ok(body)
     }
 
+    /// Builds both plans from one patch: `Patch → Merge → Frame` in a call.
+    ///
+    /// Each entry is a patched fixture and the type it instantiates. This is the
+    /// constructor a daemon wants — the plans cannot disagree because they come
+    /// from the same list.
+    ///
+    /// # Errors
+    ///
+    /// [`PatchError`] if the patch cannot be merged (a fixture patched twice, a
+    /// type naming an attribute twice) or cannot be encoded (an address that
+    /// does not fit, a universe the layout does not carry).
+    pub fn for_patch<'a, I>(
+        layout: &FrameLayout,
+        fixtures: I,
+        executors: impl IntoIterator<Item = ExecutorId>,
+    ) -> Result<Self, PatchError>
+    where
+        I: IntoIterator<Item = (&'a Fixture, &'a FixtureType)>,
+    {
+        let fixtures: Vec<(&Fixture, &FixtureType)> = fixtures.into_iter().collect();
+        let (plan, channels) = plans(layout, &fixtures)?;
+        Self::new(plan, channels, executors)
+    }
+
     /// The patch this body merges over.
     #[must_use]
     pub const fn plan(&self) -> &MergePlan {
         &self.plan
+    }
+
+    /// The channels this body writes, and where.
+    #[must_use]
+    pub const fn channels(&self) -> &ChannelPlan {
+        &self.channels
     }
 
     /// The playback sources.
@@ -82,7 +123,8 @@ impl MergeBody {
     ///
     /// `0..=65535` regardless of the resolution the attribute is patched at:
     /// working in 16 bits until the final write is what keeps a fade over an
-    /// 8-bit channel smooth (`docs/DMX_MERGE.md` §5). S4 turns these into bytes.
+    /// 8-bit channel smooth (`docs/DMX_MERGE.md` §5). [`Self::channels`] turns
+    /// these into bytes.
     #[must_use]
     pub const fn values(&self) -> &[u16] {
         &self.values
@@ -95,9 +137,27 @@ impl MergeBody {
             layer,
             scratch,
             values,
+            ..
         } = self;
         layer.resolve(plan, scratch, values);
     }
+}
+
+/// Both plans for one patch, validated against each other by construction.
+///
+/// Not generic, and called from a generic wrapper, so building a patch is one
+/// copy of this code rather than one per caller's iterator type.
+fn plans(
+    layout: &FrameLayout,
+    fixtures: &[(&Fixture, &FixtureType)],
+) -> Result<(MergePlan, ChannelPlan), PatchError> {
+    let plan = MergePlan::build(
+        fixtures
+            .iter()
+            .map(|(fixture, fixture_type)| (fixture.id, *fixture_type)),
+    )?;
+    let channels = ChannelPlan::build(&plan, layout, fixtures.iter().copied())?;
+    Ok((plan, channels))
 }
 
 impl TickBody for MergeBody {
@@ -121,27 +181,45 @@ impl TickBody for MergeBody {
         }
     }
 
-    fn render(&mut self, _tick: &TickInfo, _frame: &mut DmxFrame) {
+    fn render(&mut self, _tick: &TickInfo, frame: &mut DmxFrame) {
         self.resolve();
+        self.channels.encode(&self.values, frame);
     }
 }
 
 #[cfg(all(test, not(loom)))]
 mod tests {
     use crate::body::MergeBody;
+    use crate::encode::{ChannelPlan, PatchError, coarse_byte, fine_byte};
     use crate::merge::{FULL, merge_programmer};
-    use crate::plan::MergePlan;
-    use crate::testkit::moving_head;
+    use crate::plan::{MergeError, MergePlan};
+    use crate::testkit::{fixture, moving_head, moving_head_16};
     use crate::{
         DmxFrame, Engine, FrameLayout, ManualClock, TickBody, TickCommand, TickInfo, command_queue,
     };
-    use prism_domain::{AttributeType, ExecutorId, FixtureId, GoDirection, UniverseId};
+    use prism_domain::{AttributeType, ExecutorId, Fixture, FixtureId, GoDirection, UniverseId};
     use std::sync::Arc;
+
+    fn layout() -> FrameLayout {
+        FrameLayout::new([UniverseId::MIN]).unwrap()
+    }
+
+    /// `fixtures` moving heads, patched back to back from address 1.
+    fn patch(fixtures: u32) -> Vec<Fixture> {
+        (1..=fixtures)
+            .map(|id| fixture(id, "test.movinghead", 1, (id as u16 - 1) * 2 + 1))
+            .collect()
+    }
 
     fn body(fixtures: u32, executors: u32) -> MergeBody {
         let head = moving_head();
-        let plan = MergePlan::build((1..=fixtures).map(|id| (FixtureId::new(id), &head))).unwrap();
-        MergeBody::new(plan, (1..=executors).map(ExecutorId::new)).unwrap()
+        let patched = patch(fixtures);
+        MergeBody::for_patch(
+            &layout(),
+            patched.iter().map(|fixture| (fixture, &head)),
+            (1..=executors).map(ExecutorId::new),
+        )
+        .unwrap()
     }
 
     fn slot(body: &MergeBody, fixture: u32, attribute: AttributeType) -> usize {
@@ -266,8 +344,13 @@ mod tests {
     }
 
     #[test]
-    fn rendering_resolves_the_merge_and_leaves_the_frame_to_s4() {
-        let mut body = body(1, 1);
+    fn rendering_resolves_the_merge_and_encodes_it_into_the_frame() {
+        // The chain closes here: the merge produces 12345, the encoder splits it
+        // over the two channels of the 16-bit dimmer this head is patched with.
+        let head = moving_head_16();
+        let patched = fixture(1, "test.movinghead16", 1, 1);
+        let mut body =
+            MergeBody::for_patch(&layout(), [(&patched, &head)], [ExecutorId::new(1)]).unwrap();
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
             .source_mut(ExecutorId::new(1))
@@ -275,19 +358,65 @@ mod tests {
             .set(dimmer, 12_345);
         body.layer_mut().activate(ExecutorId::new(1));
 
-        let layout = FrameLayout::new([UniverseId::MIN]).unwrap();
-        let mut frame = DmxFrame::new(&layout);
+        let mut frame = DmxFrame::new(&layout());
         body.render(&tick(0), &mut frame);
         assert_eq!(body.values().get(dimmer).copied(), Some(12_345));
-        // The encoder is S4; until it exists the frame stays as it was.
-        assert!(frame.channels().iter().all(|&channel| channel == 0));
+        assert_eq!(frame.channel(0, 1), Some(0x30));
+        assert_eq!(frame.channel(0, 2), Some(0x39));
+        // Pan is at home, centred, and written as well: every patched channel is
+        // written every tick, whether a source touched it or not.
+        assert_eq!(frame.channel(0, 3), Some(0x80));
+        assert_eq!(frame.channel(0, 4), Some(0x00));
+    }
+
+    #[test]
+    fn a_channel_plan_built_against_a_different_merge_plan_is_rejected() {
+        // The two plans must describe one patch. Pairing them by hand is how a
+        // host would get that wrong, so the constructor says no.
+        let head = moving_head();
+        let one = patch(1);
+        let two = patch(2);
+        let plan = MergePlan::build(two.iter().map(|fixture| (fixture.id, &head))).unwrap();
+        let narrow = MergePlan::build(one.iter().map(|fixture| (fixture.id, &head))).unwrap();
+        let channels = ChannelPlan::build(
+            &narrow,
+            &layout(),
+            one.iter().map(|fixture| (fixture, &head)),
+        )
+        .unwrap();
+        assert_eq!(
+            MergeBody::new(plan, channels, [ExecutorId::new(1)]).unwrap_err(),
+            PatchError::PlanMismatch {
+                plan: 4,
+                channels: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn a_patch_neither_plan_accepts_never_becomes_a_body() {
+        // `for_patch` builds both plans, so it can fail either way round: the
+        // merge rejects a fixture patched twice, the encoder rejects a universe
+        // with no frame to write into.
+        let head = moving_head();
+        let patched = fixture(1, "test.movinghead", 9, 1);
+        assert_eq!(
+            MergeBody::for_patch(&layout(), [(&patched, &head)], []).unwrap_err(),
+            PatchError::UniverseNotPatched {
+                fixture: FixtureId::new(1),
+                universe: UniverseId::new(9),
+            }
+        );
+        let twice = fixture(1, "test.movinghead", 1, 1);
+        assert_eq!(
+            MergeBody::for_patch(&layout(), [(&twice, &head), (&twice, &head)], []).unwrap_err(),
+            PatchError::Plan(MergeError::DuplicateFixture(FixtureId::new(1)))
+        );
     }
 
     #[test]
     fn the_merge_runs_on_the_tick_through_the_command_queue() {
-        let head = moving_head();
-        let plan = MergePlan::build([(FixtureId::new(1), &head)]).unwrap();
-        let mut body = MergeBody::new(plan, [ExecutorId::new(1)]).unwrap();
+        let mut body = body(1, 1);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
             .source_mut(ExecutorId::new(1))
@@ -330,9 +459,15 @@ mod tests {
         //
         // The stamps 7 and 9 are the specification's; what the merge uses is
         // their order, so executor 3 is switched on first here.
-        let head = moving_head();
-        let plan = MergePlan::build([(FixtureId::new(1), &head)]).unwrap();
-        let mut body = MergeBody::new(plan, [ExecutorId::new(3), ExecutorId::new(5)]).unwrap();
+        // "a moving head with a 16-bit dimmer and 16-bit pan", patched at 1.
+        let head = moving_head_16();
+        let patched = fixture(1, "test.movinghead16", 1, 1);
+        let mut body = MergeBody::for_patch(
+            &layout(),
+            [(&patched, &head)],
+            [ExecutorId::new(3), ExecutorId::new(5)],
+        )
+        .unwrap();
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         let pan = slot(&body, 1, AttributeType::Pan);
 
@@ -360,10 +495,12 @@ mod tests {
         let merged_dimmer = body.values().get(dimmer).copied().unwrap();
         assert_eq!(merged_dimmer, 32_767);
         assert_eq!(merge_programmer(merged_dimmer, None), 32_767);
-        // "Written as coarse 0x7F, fine 0xFF" - the split itself is S4, but the
-        // number the specification quotes is checked here all the same.
-        assert_eq!((merged_dimmer >> 8) as u8, 0x7F);
-        assert_eq!((merged_dimmer & 0xFF) as u8, 0xFF);
+        // "Written as coarse 0x7F, fine 0xFF" - now on the wire, not as
+        // arithmetic beside it.
+        let mut frame = DmxFrame::new(&layout());
+        body.render(&tick(0), &mut frame);
+        assert_eq!(frame.channel(0, 1), Some(0x7F));
+        assert_eq!(frame.channel(0, 2), Some(0xFF));
 
         // Pan is LTP: executor 5 has the higher activation counter and would
         // win with 45000 - but the programmer holds 50000, which overrides
@@ -372,8 +509,10 @@ mod tests {
         assert_eq!(merged_pan, 45_000);
         let with_programmer = merge_programmer(merged_pan, Some(50_000));
         assert_eq!(with_programmer, 50_000);
-        assert_eq!((with_programmer >> 8) as u8, 0xC3);
-        assert_eq!((with_programmer & 0xFF) as u8, 0x50);
+        // The programmer layer is S6, so this value does not reach the frame
+        // yet; the bytes the specification quotes are checked all the same.
+        assert_eq!(coarse_byte(with_programmer), 0xC3);
+        assert_eq!(fine_byte(with_programmer), 0x50);
 
         // "Turning executor 5 off changes nothing about pan while the
         // programmer holds it."

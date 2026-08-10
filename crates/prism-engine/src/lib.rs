@@ -40,9 +40,19 @@
 //! - [`PlaybackLayer`] — the source set, and [`PlaybackLayer::resolve`], which
 //!   turns it into one value per slot without allocating.
 //!
-//! [`MergeBody`] joins the three onto the tick. What it produces is *attribute
-//! values*, not DMX bytes: the encoding (S4), the executors and fades (S5) and
-//! the programmer and masters (S6) are still to come.
+//! # The encoding
+//!
+//! The merge answers in attribute values, 16-bit and address-free.
+//! [`ChannelPlan`] turns those into channel bytes: the coarse/fine split, the
+//! attribute and per-fixture inverts, and the frame position each write lands
+//! at. Everything that can be decided from the patch is decided when the plan is
+//! built — including whether the patch is legal at all, which is why a fixture
+//! running past channel 512 is a [`PatchError`] at patch time and never a
+//! problem in the tick.
+//!
+//! [`MergeBody`] joins all of it onto the tick, and
+//! [`MergeBody::for_patch`] builds it from a patch in one call. The executors
+//! and fades (S5) and the programmer and masters (S6) are still to come.
 //!
 //! # Rules for code on the tick path
 //!
@@ -101,6 +111,7 @@
 mod body;
 mod clock;
 mod command;
+mod encode;
 mod frame;
 mod merge;
 mod plan;
@@ -116,6 +127,7 @@ mod triple_buffer;
 pub use body::MergeBody;
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use command::TickCommand;
+pub use encode::{ChannelPlan, ChannelTarget, PatchError, coarse_byte, fine_byte, invert};
 pub use frame::{DmxFrame, FrameLayout, LayoutError, MAX_UNIVERSES, UNIVERSE_CHANNELS};
 pub use merge::{
     FULL, SourceValue, apply_master, merge_htp, merge_ltp, merge_playbacks, merge_programmer,
