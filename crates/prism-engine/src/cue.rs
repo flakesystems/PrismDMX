@@ -1,0 +1,853 @@
+//! Cues, compiled into the form the tick can run.
+//!
+//! `ARCHITECTURE_SPEC.md` §5 steps 2 and 3: advance the fades, evaluate the
+//! executors into attribute values. This module is the *plan* half of that — the
+//! part that can be worked out before the tick starts — and `crate::player` is
+//! the part that runs.
+//!
+//! # Why a cue cannot enter the tick
+//!
+//! A [`prism_domain::Cue`] owns a `String` for its number, a `String` for its
+//! name and a `Vec` of parts. `ARCHITECTURE_SPEC.md` §3.1 forbids allocation
+//! inside the tick, and **dropping** an owned field allocates exactly as surely
+//! as creating one — the mistake S2 already met with `TickCommand`. So a cue is
+//! compiled once, off the tick: fixtures and attributes become slot indices into
+//! the [`MergePlan`], seconds become whole ticks, and what is left is flat,
+//! `Copy` and indexed.
+//!
+//! # The shape of a compiled sequence
+//!
+//! ```text
+//!   SequencePlan
+//!     slots  [CueSlot]   one per plan slot the *whole sequence* touches
+//!     cues   [CuePlan]   in cue-number order, each naming a range of parts
+//!     parts  [CueValue]  (slot index, value), grouped by cue
+//! ```
+//!
+//! The `slots` table is what bounds the player's working memory: a playback
+//! needs one entry per attribute its own sequence can touch, not one per
+//! attribute in the show. It also carries each slot's home value and merge mode,
+//! so releasing a playback needs no lookup back into the merge plan.
+
+use core::fmt;
+use std::collections::BTreeMap;
+
+use prism_domain::{Cue, CueTrigger, ExecutorId, GoDirection, MergeMode, Sequence, SequenceId};
+
+use crate::plan::MergePlan;
+use crate::tick::TICK_HZ;
+
+/// Upper bound on cues in one sequence.
+///
+/// Not a product limit — no show has ten thousand cues in one list. It exists so
+/// that a corrupt show becomes a rejected sequence rather than an allocation
+/// nobody asked for.
+pub const MAX_CUES: usize = 10_000;
+
+/// Upper bound on the total number of resolved parts in one sequence.
+pub const MAX_CUE_PARTS: usize = 1_048_576;
+
+/// Why a sequence cannot be compiled or loaded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CueError {
+    /// More cues than [`MAX_CUES`].
+    TooManyCues(usize),
+    /// More parts than [`MAX_CUE_PARTS`].
+    TooManyParts(usize),
+    /// The sequence was loaded onto an executor this engine does not have.
+    UnknownExecutor(ExecutorId),
+}
+
+impl fmt::Display for CueError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TooManyCues(count) => {
+                write!(f, "{count} cues exceeds the limit of {MAX_CUES}")
+            }
+            Self::TooManyParts(count) => {
+                write!(f, "{count} cue parts exceeds the limit of {MAX_CUE_PARTS}")
+            }
+            Self::UnknownExecutor(executor) => {
+                write!(f, "executor {executor} is not in this patch")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CueError {}
+
+/// Ticks in `seconds`, rounded to the nearest whole tick.
+///
+/// The tick is the time base for everything (`ARCHITECTURE_SPEC.md` §3.2), so a
+/// cue time is converted once, when the sequence is compiled, and no float ever
+/// reaches the tick. Rounds rather than truncating: truncation would bias every
+/// time in the show the same way.
+///
+/// Monotone in its argument, including at the edges: a time that is negative,
+/// zero or not a number is no fade at all, and one too large to count — up to
+/// and including infinity — saturates rather than wrapping. `prism-domain`
+/// refuses non-finite times on the wire, so neither edge can arrive from a show
+/// file; this function is public and must not be able to panic on one anyway.
+#[must_use]
+pub fn ticks_from_seconds(seconds: f64) -> u64 {
+    if seconds.is_nan() || seconds <= 0.0 {
+        return 0;
+    }
+    // `as` on a float saturates at the integer bounds and maps NaN to zero, so
+    // an absurd fade time becomes a fade nobody outlives rather than a short one.
+    (seconds * TICK_HZ as f64).round() as u64
+}
+
+/// Where a fade has got to: `from` at `elapsed` 0, `to` from `duration` onwards.
+///
+/// Sixteen-bit throughout, whatever resolution the attribute is patched at.
+/// `docs/DMX_MERGE.md` §5: an 8-bit dimmer fading over ten seconds still moves
+/// in 16-bit steps and only quantises at the final write, which is what keeps a
+/// slow fade from stepping visibly.
+///
+/// A duration of zero is a fade that is already finished, which is what a cue
+/// with no fade time means.
+#[must_use]
+pub fn interpolate(from: u16, to: u16, elapsed: u64, duration: u64) -> u16 {
+    if elapsed >= duration {
+        return to;
+    }
+    // `elapsed < duration`, so the quotient is below the span and cannot
+    // overflow the u16 either way round. u128 because `duration` is a tick count
+    // and a show file may legitimately ask for a very long fade.
+    let span = u128::from(from.abs_diff(to));
+    let moved = (span * u128::from(elapsed)).div_euclid(u128::from(duration)) as u16;
+    if to >= from {
+        from.saturating_add(moved)
+    } else {
+        from.saturating_sub(moved)
+    }
+}
+
+/// One plan slot a sequence touches, with everything the player needs about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CueSlot {
+    /// Index into the [`MergePlan`] this sequence was compiled against.
+    pub slot: usize,
+    /// The value this attribute falls back to — where a release fades it to.
+    pub home: u16,
+    /// Whether the attribute merges HTP. Only an intensity is faded out on
+    /// release; `docs/DMX_MERGE.md` §2.3 is the same asymmetry.
+    pub htp: bool,
+}
+
+/// One value a cue provides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CueValue {
+    /// Index into [`SequencePlan::slots`] — **not** into the merge plan.
+    pub slot: u32,
+    /// The value to fade to, `0..=65535`.
+    pub value: u16,
+}
+
+/// One cue, compiled: times in ticks, parts as a range.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CuePlan {
+    number: Box<str>,
+    fade_in: u64,
+    fade_out: u64,
+    delay: u64,
+    trigger: CueTrigger,
+    trigger_ticks: Option<u64>,
+    first: usize,
+    len: usize,
+}
+
+impl CuePlan {
+    /// The cue number as the operator typed it.
+    #[must_use]
+    pub fn number(&self) -> &str {
+        &self.number
+    }
+
+    /// Fade-in time in ticks: how long this cue takes to reach its values.
+    #[must_use]
+    pub const fn fade_in(&self) -> u64 {
+        self.fade_in
+    }
+
+    /// Fade-out time in ticks: how long this cue's intensities take to go away
+    /// when the playback is switched off.
+    #[must_use]
+    pub const fn fade_out(&self) -> u64 {
+        self.fade_out
+    }
+
+    /// Delay in ticks before the fade starts.
+    #[must_use]
+    pub const fn delay(&self) -> u64 {
+        self.delay
+    }
+
+    /// What starts this cue.
+    #[must_use]
+    pub const fn trigger(&self) -> CueTrigger {
+        self.trigger
+    }
+
+    /// Trigger time in ticks, for [`CueTrigger::Time`].
+    #[must_use]
+    pub const fn trigger_ticks(&self) -> Option<u64> {
+        self.trigger_ticks
+    }
+
+    /// Ticks from this cue's start to the moment it has finished fading — what
+    /// a [`CueTrigger::Follow`] on the next cue waits for.
+    #[must_use]
+    pub const fn transition_ticks(&self) -> u64 {
+        self.delay.saturating_add(self.fade_in)
+    }
+}
+
+/// A cue list, compiled against one patch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SequencePlan {
+    id: SequenceId,
+    slots: Box<[CueSlot]>,
+    cues: Box<[CuePlan]>,
+    parts: Box<[CueValue]>,
+    looping: bool,
+    unresolved: usize,
+}
+
+impl SequencePlan {
+    /// Compiles a sequence against a patch.
+    ///
+    /// Cues are ordered by [`Cue::compare_numbers`], not by their position in
+    /// the list: `1`, `1.5`, `2`, `10` is the order an operator reads, and
+    /// inserting a cue between two others is the entire reason cue numbers are
+    /// decimal strings.
+    ///
+    /// A part naming a fixture or attribute this patch does not have is dropped
+    /// and counted in [`Self::unresolved`]. A show outlives the rig it was
+    /// written on, and refusing to run a cue list because one fixture was
+    /// unpatched would take the show down rather than one light.
+    ///
+    /// # Errors
+    ///
+    /// [`CueError::TooManyCues`] or [`CueError::TooManyParts`] if the sequence
+    /// is implausibly large.
+    pub fn build(plan: &MergePlan, sequence: &Sequence) -> Result<Self, CueError> {
+        if sequence.cues.len() > MAX_CUES {
+            return Err(CueError::TooManyCues(sequence.cues.len()));
+        }
+
+        let mut order: Vec<&Cue> = sequence.cues.iter().collect();
+        // Stable, so two cues with the same number keep their file order.
+        order.sort_by(|left, right| Cue::compare_numbers(&left.number, &right.number));
+
+        // Every slot the whole sequence touches, once, in merge-plan order.
+        let mut slots: BTreeMap<usize, CueSlot> = BTreeMap::new();
+        let mut unresolved = 0usize;
+        let mut resolved = 0usize;
+        for cue in &order {
+            for part in &cue.parts {
+                let Some((index, slot)) = plan
+                    .index_of(part.fixture, part.attribute)
+                    .and_then(|index| Some((index, plan.slot(index)?)))
+                else {
+                    unresolved += 1;
+                    continue;
+                };
+                resolved += 1;
+                if resolved > MAX_CUE_PARTS {
+                    return Err(CueError::TooManyParts(resolved));
+                }
+                slots.entry(index).or_insert(CueSlot {
+                    slot: index,
+                    home: slot.home,
+                    htp: slot.merge_mode == MergeMode::Htp,
+                });
+            }
+        }
+        let positions: BTreeMap<usize, u32> = slots
+            .keys()
+            .enumerate()
+            .map(|(position, slot)| (*slot, position as u32))
+            .collect();
+
+        let mut cues: Vec<CuePlan> = Vec::with_capacity(order.len());
+        let mut parts: Vec<CueValue> = Vec::with_capacity(resolved);
+        let mut scratch: BTreeMap<u32, u16> = BTreeMap::new();
+        for cue in order {
+            scratch.clear();
+            for part in &cue.parts {
+                let Some(position) = plan
+                    .index_of(part.fixture, part.attribute)
+                    .and_then(|index| positions.get(&index))
+                else {
+                    continue;
+                };
+                // Later wins: a cue that names one attribute twice says the
+                // second thing, exactly as a second keystroke would.
+                scratch.insert(*position, part.value);
+            }
+            let first = parts.len();
+            parts.extend(scratch.iter().map(|(slot, value)| CueValue {
+                slot: *slot,
+                value: *value,
+            }));
+            cues.push(CuePlan {
+                number: cue.number.clone().into_boxed_str(),
+                fade_in: ticks_from_seconds(cue.fade_in),
+                fade_out: ticks_from_seconds(cue.fade_out),
+                delay: ticks_from_seconds(cue.delay),
+                trigger: cue.trigger,
+                trigger_ticks: cue.trigger_time.map(ticks_from_seconds),
+                first,
+                len: parts.len() - first,
+            });
+        }
+
+        Ok(Self {
+            id: sequence.id,
+            slots: slots.into_values().collect::<Vec<_>>().into_boxed_slice(),
+            cues: cues.into_boxed_slice(),
+            parts: parts.into_boxed_slice(),
+            looping: sequence.looping,
+            unresolved,
+        })
+    }
+
+    /// Which sequence this is.
+    #[must_use]
+    pub const fn id(&self) -> SequenceId {
+        self.id
+    }
+
+    /// Whether the last cue wraps back to the first.
+    #[must_use]
+    pub const fn looping(&self) -> bool {
+        self.looping
+    }
+
+    /// How many cue parts named something this patch does not have.
+    #[must_use]
+    pub const fn unresolved(&self) -> usize {
+        self.unresolved
+    }
+
+    /// How many cues this sequence has.
+    #[must_use]
+    pub const fn cue_count(&self) -> usize {
+        self.cues.len()
+    }
+
+    /// One cue, by playback position.
+    #[must_use]
+    pub fn cue(&self, index: usize) -> Option<&CuePlan> {
+        self.cues.get(index)
+    }
+
+    /// How many distinct plan slots the whole sequence touches — the size of the
+    /// working memory a player over it needs.
+    #[must_use]
+    pub const fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
+
+    /// Every slot the sequence touches, in merge-plan order.
+    #[must_use]
+    pub const fn slots(&self) -> &[CueSlot] {
+        &self.slots
+    }
+
+    /// One slot by its index within this sequence.
+    #[must_use]
+    pub fn slot(&self, index: usize) -> Option<&CueSlot> {
+        self.slots.get(index)
+    }
+
+    /// The values one cue provides, in slot order. Empty for a cue that is not
+    /// there, so a caller cannot index past the list.
+    #[must_use]
+    pub fn parts_of(&self, index: usize) -> &[CueValue] {
+        let Some(cue) = self.cues.get(index) else {
+            return &[];
+        };
+        self.parts
+            .get(cue.first..cue.first.saturating_add(cue.len))
+            .unwrap_or(&[])
+    }
+
+    /// Where a Go from `current` lands.
+    ///
+    /// `None` means the playback is stopped: stepping forward from there enters
+    /// at the first cue and stepping back enters at the last. At the end of a
+    /// list that does not loop the step stays where it is — a Go past the end
+    /// holds the last look rather than dropping the show to black.
+    #[must_use]
+    pub fn step(&self, current: Option<usize>, direction: GoDirection) -> Option<usize> {
+        let last = self.cues.len().checked_sub(1)?;
+        let Some(current) = current else {
+            return Some(match direction {
+                GoDirection::Next => 0,
+                GoDirection::Prev => last,
+            });
+        };
+        let current = current.min(last);
+        Some(match direction {
+            GoDirection::Next => {
+                if current < last {
+                    current + 1
+                } else if self.looping {
+                    0
+                } else {
+                    last
+                }
+            }
+            GoDirection::Prev => {
+                if current > 0 {
+                    current - 1
+                } else if self.looping {
+                    last
+                } else {
+                    0
+                }
+            }
+        })
+    }
+}
+
+#[cfg(all(test, not(loom)))]
+mod tests {
+    use crate::cue::{
+        CueError, MAX_CUE_PARTS, MAX_CUES, SequencePlan, interpolate, ticks_from_seconds,
+    };
+    use crate::plan::MergePlan;
+    use crate::testkit::{cue, cue_part, moving_head, sequence};
+    use crate::tick::TICK_HZ;
+    use prism_domain::{AttributeType, CueTrigger, FixtureId, GoDirection, SequenceId};
+    use proptest::prelude::*;
+
+    /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
+    fn plan() -> MergePlan {
+        let head = moving_head();
+        MergePlan::build((1..=3).map(|id| (FixtureId::new(id), &head))).unwrap()
+    }
+
+    fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
+        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+    }
+
+    #[test]
+    fn a_fade_time_in_seconds_becomes_a_whole_number_of_ticks() {
+        // The tick is the time base for every fade (ARCHITECTURE_SPEC.md 3.2),
+        // so a cue time is converted once, when the plan is built, and the tick
+        // itself never sees a float.
+        assert_eq!(ticks_from_seconds(10.0), 440);
+        assert_eq!(ticks_from_seconds(1.0), TICK_HZ);
+        assert_eq!(ticks_from_seconds(0.0), 0);
+        // Rounded to the nearest tick rather than truncated: half a period early
+        // is as good as half a period late, and truncating biases every cue in
+        // the show in the same direction.
+        assert_eq!(ticks_from_seconds(0.5), 22);
+        assert_eq!(ticks_from_seconds(1.0 / 88.0), 1);
+        assert_eq!(ticks_from_seconds(1.0 / 200.0), 0);
+    }
+
+    #[test]
+    fn an_impossible_fade_time_is_no_fade_rather_than_a_panic() {
+        // prism-domain refuses non-finite times on the wire, but this function
+        // is public and the tick must not be able to panic on one.
+        for seconds in [-1.0, -0.0, f64::NAN, f64::NEG_INFINITY] {
+            assert_eq!(ticks_from_seconds(seconds), 0, "{seconds}");
+        }
+        assert_eq!(ticks_from_seconds(f64::INFINITY), u64::MAX);
+        assert_eq!(ticks_from_seconds(1e300), u64::MAX);
+    }
+
+    #[test]
+    fn a_ten_second_fade_is_at_exactly_half_after_five_seconds() {
+        // IMPLEMENTATION_PLAN.md S5, the headline criterion, as arithmetic.
+        // 65535 is odd, so half of it is 32767 - the same number
+        // docs/DMX_MERGE.md 7 gets from "65535 x 0.5".
+        let ticks = ticks_from_seconds(10.0);
+        assert_eq!(interpolate(0, 65_535, ticks / 2, ticks), 32_767);
+        // And one tick either side is one tick's worth away, not a jump.
+        let step = 65_535 / ticks as u16;
+        assert!(interpolate(0, 65_535, ticks / 2 - 1, ticks).abs_diff(32_767) <= step + 1);
+        assert!(interpolate(0, 65_535, ticks / 2 + 1, ticks).abs_diff(32_767) <= step + 1);
+    }
+
+    #[test]
+    fn a_fade_starts_at_its_start_and_ends_at_its_target() {
+        assert_eq!(interpolate(1_000, 60_000, 0, 100), 1_000);
+        assert_eq!(interpolate(1_000, 60_000, 100, 100), 60_000);
+        // Past the end it stays at the target rather than running on.
+        assert_eq!(interpolate(1_000, 60_000, u64::MAX, 100), 60_000);
+    }
+
+    #[test]
+    fn a_fade_of_no_length_is_already_finished() {
+        assert_eq!(interpolate(0, 60_000, 0, 0), 60_000);
+    }
+
+    #[test]
+    fn fading_down_is_the_mirror_of_fading_up() {
+        assert_eq!(interpolate(65_535, 0, 220, 440), 32_768);
+        assert_eq!(interpolate(60_000, 20_000, 1, 4), 50_000);
+    }
+
+    #[test]
+    fn a_cue_resolves_its_parts_into_slot_indices() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![cue(
+                    "1",
+                    3.0,
+                    vec![
+                        cue_part(2, AttributeType::Pan, 45_000),
+                        cue_part(1, AttributeType::Dimmer, 65_535),
+                    ],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(compiled.cue_count(), 1);
+        assert_eq!(compiled.unresolved(), 0);
+        assert_eq!(compiled.slot_count(), 2);
+        assert_eq!(compiled.id(), SequenceId::new(1));
+        assert!(!compiled.looping());
+        let values: Vec<(usize, u16)> = compiled
+            .parts_of(0)
+            .iter()
+            .map(|part| (compiled.slot(part.slot as usize).unwrap().slot, part.value))
+            .collect();
+        assert_eq!(
+            values,
+            [
+                (slot(&plan, 1, AttributeType::Dimmer), 65_535),
+                (slot(&plan, 2, AttributeType::Pan), 45_000),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_compiled_slot_carries_the_home_value_and_merge_mode_it_falls_back_to() {
+        // The release fades an intensity down to its home value, so the plan has
+        // to know what that is without reaching back into the merge plan on the
+        // tick.
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![cue(
+                    "1",
+                    0.0,
+                    vec![
+                        cue_part(1, AttributeType::Dimmer, 1),
+                        cue_part(1, AttributeType::Pan, 1),
+                    ],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+        let dimmer = compiled.slot(0).unwrap();
+        assert_eq!(dimmer.slot, slot(&plan, 1, AttributeType::Dimmer));
+        assert_eq!(dimmer.home, 0);
+        assert!(dimmer.htp);
+        let pan = compiled.slot(1).unwrap();
+        assert_eq!(pan.home, 32_768);
+        assert!(!pan.htp);
+        assert!(compiled.slot(2).is_none());
+    }
+
+    #[test]
+    fn a_part_for_something_that_is_not_patched_is_dropped_and_counted() {
+        // A show can outlive the rig it was written on. A cue naming a fixture
+        // that is no longer patched must not stop the sequence from running -
+        // and must not vanish silently either, or the operator has no way to
+        // know why a cue does nothing.
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![cue(
+                    "1",
+                    0.0,
+                    vec![
+                        cue_part(9, AttributeType::Dimmer, 100),
+                        cue_part(1, AttributeType::Tilt, 100),
+                        cue_part(1, AttributeType::Dimmer, 100),
+                    ],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(compiled.unresolved(), 2);
+        assert_eq!(compiled.parts_of(0).len(), 1);
+        assert_eq!(compiled.slot_count(), 1);
+    }
+
+    #[test]
+    fn one_slot_set_twice_in_a_cue_keeps_the_last_value() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![cue(
+                    "1",
+                    0.0,
+                    vec![
+                        cue_part(1, AttributeType::Dimmer, 100),
+                        cue_part(1, AttributeType::Dimmer, 200),
+                    ],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(compiled.parts_of(0).len(), 1);
+        assert_eq!(compiled.parts_of(0).first().unwrap().value, 200);
+    }
+
+    #[test]
+    fn a_slot_two_cues_share_is_listed_once() {
+        // The player's working memory is one entry per slot the *sequence*
+        // touches, which is what bounds it without a dense per-slot array.
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![
+                    cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 100)]),
+                    cue("2", 0.0, vec![cue_part(1, AttributeType::Dimmer, 200)]),
+                ],
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(compiled.slot_count(), 1);
+        assert_eq!(compiled.parts_of(0).first().unwrap().slot, 0);
+        assert_eq!(compiled.parts_of(1).first().unwrap().slot, 0);
+    }
+
+    #[test]
+    fn cues_play_in_cue_number_order_not_in_list_order() {
+        // IMPLEMENTATION_PLAN.md S5: 1, 1.5, 2, 10 - the order an operator reads,
+        // which is `Cue::compare_numbers` and not the lexical one. Inserting a
+        // cue between two others is the whole reason cue numbers are decimals.
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                ["10", "2", "1.5", "1"]
+                    .into_iter()
+                    .map(|number| cue(number, 0.0, Vec::new()))
+                    .collect(),
+                false,
+            ),
+        )
+        .unwrap();
+        let numbers: Vec<&str> = (0..compiled.cue_count())
+            .map(|index| compiled.cue(index).unwrap().number())
+            .collect();
+        assert_eq!(numbers, ["1", "1.5", "2", "10"]);
+    }
+
+    #[test]
+    fn a_cue_number_that_is_not_a_number_still_has_a_place_in_the_order() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                ["oops", "2", "1"]
+                    .into_iter()
+                    .map(|number| cue(number, 0.0, Vec::new()))
+                    .collect(),
+                false,
+            ),
+        )
+        .unwrap();
+        let numbers: Vec<&str> = (0..compiled.cue_count())
+            .map(|index| compiled.cue(index).unwrap().number())
+            .collect();
+        assert_eq!(numbers, ["1", "2", "oops"]);
+    }
+
+    #[test]
+    fn a_cue_carries_its_times_as_ticks_and_its_trigger() {
+        let plan = plan();
+        let mut source = cue("1", 2.0, Vec::new());
+        source.fade_in = 10.0;
+        source.fade_out = 4.0;
+        source.delay = 1.0;
+        source.trigger = CueTrigger::Time;
+        source.trigger_time = Some(3.0);
+        let compiled = SequencePlan::build(&plan, &sequence(vec![source], false)).unwrap();
+        let compiled = compiled.cue(0).unwrap();
+        assert_eq!(compiled.fade_in(), 440);
+        assert_eq!(compiled.fade_out(), 176);
+        assert_eq!(compiled.delay(), 44);
+        assert_eq!(compiled.trigger(), CueTrigger::Time);
+        assert_eq!(compiled.trigger_ticks(), Some(132));
+        // A cue is finished fading when its delay and its fade-in are over -
+        // which is what a Follow on the next cue waits for.
+        assert_eq!(compiled.transition_ticks(), 484);
+    }
+
+    #[test]
+    fn stepping_forward_and_back_walks_the_list_and_stops_at_its_ends() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                ["1", "2", "3"]
+                    .into_iter()
+                    .map(|number| cue(number, 0.0, Vec::new()))
+                    .collect(),
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(compiled.step(None, GoDirection::Next), Some(0));
+        assert_eq!(compiled.step(Some(0), GoDirection::Next), Some(1));
+        assert_eq!(compiled.step(Some(2), GoDirection::Next), Some(2));
+        // Stepping back into a stopped list enters at the end.
+        assert_eq!(compiled.step(None, GoDirection::Prev), Some(2));
+        assert_eq!(compiled.step(Some(1), GoDirection::Prev), Some(0));
+        assert_eq!(compiled.step(Some(0), GoDirection::Prev), Some(0));
+    }
+
+    #[test]
+    fn a_looping_sequence_wraps_at_both_ends() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                ["1", "2", "3"]
+                    .into_iter()
+                    .map(|number| cue(number, 0.0, Vec::new()))
+                    .collect(),
+                true,
+            ),
+        )
+        .unwrap();
+        assert!(compiled.looping());
+        assert_eq!(compiled.step(Some(2), GoDirection::Next), Some(0));
+        assert_eq!(compiled.step(Some(0), GoDirection::Prev), Some(2));
+    }
+
+    #[test]
+    fn an_empty_sequence_has_nowhere_to_step() {
+        let plan = plan();
+        let compiled = SequencePlan::build(&plan, &sequence(Vec::new(), true)).unwrap();
+        assert_eq!(compiled.cue_count(), 0);
+        assert_eq!(compiled.step(None, GoDirection::Next), None);
+        assert_eq!(compiled.step(None, GoDirection::Prev), None);
+        assert_eq!(compiled.step(Some(0), GoDirection::Next), None);
+        assert!(compiled.cue(0).is_none());
+        assert!(compiled.parts_of(0).is_empty());
+    }
+
+    #[test]
+    fn an_absurd_sequence_is_rejected_rather_than_compiled() {
+        let plan = plan();
+        let cues = (0..=MAX_CUES)
+            .map(|number| cue(&number.to_string(), 0.0, Vec::new()))
+            .collect();
+        assert_eq!(
+            SequencePlan::build(&plan, &sequence(cues, false)).unwrap_err(),
+            CueError::TooManyCues(MAX_CUES + 1)
+        );
+    }
+
+    #[test]
+    fn a_cue_with_an_absurd_number_of_parts_is_rejected_rather_than_compiled() {
+        // The limit counts parts as they resolve and stops there, rather than
+        // collecting an implausible list first and measuring it afterwards.
+        let plan = plan();
+        let parts = (0..=MAX_CUE_PARTS)
+            .map(|_| cue_part(1, AttributeType::Dimmer, 1))
+            .collect();
+        assert_eq!(
+            SequencePlan::build(&plan, &sequence(vec![cue("1", 0.0, parts)], false)).unwrap_err(),
+            CueError::TooManyParts(MAX_CUE_PARTS + 1)
+        );
+    }
+
+    #[test]
+    fn a_rejected_sequence_says_why_in_words() {
+        assert_eq!(
+            CueError::TooManyCues(20_000).to_string(),
+            "20000 cues exceeds the limit of 10000"
+        );
+        assert_eq!(
+            CueError::TooManyParts(9_000_000).to_string(),
+            "9000000 cue parts exceeds the limit of 1048576"
+        );
+        assert_eq!(
+            CueError::UnknownExecutor(prism_domain::ExecutorId::new(7)).to_string(),
+            "executor 7 is not in this patch"
+        );
+        let as_error: &dyn std::error::Error = &CueError::TooManyCues(1);
+        assert!(!as_error.to_string().is_empty());
+    }
+
+    proptest! {
+        /// A fade never leaves the interval between where it started and where
+        /// it is going. An operator seeing a value outside that interval sees a
+        /// light doing something no cue asked for.
+        #[test]
+        fn a_fade_never_leaves_the_interval_it_is_fading_across(
+            from in any::<u16>(),
+            to in any::<u16>(),
+            elapsed in any::<u64>(),
+            duration in any::<u64>(),
+        ) {
+            let value = interpolate(from, to, elapsed, duration);
+            prop_assert!(value >= from.min(to));
+            prop_assert!(value <= from.max(to));
+        }
+
+        /// And it only ever moves towards the target: a fade that went back on
+        /// itself for one tick would be a visible flicker.
+        #[test]
+        fn a_fade_is_monotone_in_the_time_that_has_passed(
+            from in any::<u16>(),
+            to in any::<u16>(),
+            elapsed in 0u64..1_000,
+            duration in 1u64..1_000,
+        ) {
+            let earlier = interpolate(from, to, elapsed, duration);
+            let later = interpolate(from, to, elapsed + 1, duration);
+            if to >= from {
+                prop_assert!(later >= earlier);
+            } else {
+                prop_assert!(later <= earlier);
+            }
+        }
+
+        /// Ordering cues is `Cue::compare_numbers` and nothing else, whatever
+        /// order the show file happens to hold them in.
+        #[test]
+        fn compiling_a_sequence_orders_it_by_cue_number(
+            numbers in proptest::collection::vec(0u32..50, 0..8),
+        ) {
+            let plan = plan();
+            let cues = numbers
+                .iter()
+                .map(|number| cue(&number.to_string(), 0.0, Vec::new()))
+                .collect();
+            let compiled = SequencePlan::build(&plan, &sequence(cues, false)).unwrap();
+            let mut expected = numbers.clone();
+            expected.sort_unstable();
+            let actual: Vec<u32> = (0..compiled.cue_count())
+                .map(|index| compiled.cue(index).unwrap().number().parse().unwrap())
+                .collect();
+            prop_assert_eq!(actual, expected);
+        }
+    }
+}

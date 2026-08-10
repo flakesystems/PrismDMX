@@ -6,28 +6,35 @@
 //! never reaches the allocator — `crates/prism-engine/tests/tick_allocations.rs`
 //! counts that rather than asserting it.
 //!
+//! The tick runs `ARCHITECTURE_SPEC.md` §5 in order: the playbacks are advanced
+//! and evaluated (steps 2 and 3, `crate::player`), the result is merged (step 4,
+//! `crate::playback`) and encoded into the frame (step 7, `crate::encode`).
+//!
 //! # What it does not do yet
 //!
-//! The grand master, group masters and the programmer state machine are S6, and
-//! cue traversal is S5. The commands for those arrive here already and are
-//! deliberately ignored, which the tests state outright so that the gap is a
-//! recorded decision rather than a surprise.
+//! The grand master, group masters and the programmer state machine are S6. The
+//! commands for those arrive here already and are deliberately ignored, which
+//! the tests state outright so that the gap is a recorded decision rather than a
+//! surprise.
 
-use prism_domain::{ExecutorId, Fixture, FixtureType};
+use prism_domain::{ExecutorId, Fixture, FixtureType, Sequence};
 
 use crate::command::TickCommand;
+use crate::cue::{CueError, SequencePlan};
 use crate::encode::{ChannelPlan, PatchError};
 use crate::frame::{DmxFrame, FrameLayout};
 use crate::plan::MergePlan;
 use crate::playback::{MergeScratch, PlaybackLayer};
+use crate::player::CueLayer;
 use crate::tick::{TickBody, TickInfo};
 
-/// The HTP/LTP merge and the DMX encoding, wired into the tick.
+/// The playbacks, the HTP/LTP merge and the DMX encoding, wired into the tick.
 #[derive(Debug, Clone)]
 pub struct MergeBody {
     plan: MergePlan,
     channels: ChannelPlan,
     layer: PlaybackLayer,
+    cues: CueLayer,
     scratch: MergeScratch,
     values: Box<[u16]>,
 }
@@ -57,12 +64,14 @@ impl MergeBody {
             });
         }
         let layer = PlaybackLayer::new(&plan, executors)?;
+        let cues = CueLayer::for_layer(&layer);
         let scratch = MergeScratch::new(&plan);
         let values = vec![0; plan.slot_count()].into_boxed_slice();
         let mut body = Self {
             plan,
             channels,
             layer,
+            cues,
             scratch,
             values,
         };
@@ -114,9 +123,52 @@ impl MergeBody {
         &self.layer
     }
 
-    /// The playback sources, mutably — how S5 will feed cue values in.
+    /// The playback sources, mutably. An executor with a sequence loaded is
+    /// driven by its player and writing into its source by hand will not last
+    /// past the next tick.
     pub const fn layer_mut(&mut self) -> &mut PlaybackLayer {
         &mut self.layer
+    }
+
+    /// The cue players, one per executor.
+    #[must_use]
+    pub const fn cues(&self) -> &CueLayer {
+        &self.cues
+    }
+
+    /// The cue players, mutably.
+    pub const fn cues_mut(&mut self) -> &mut CueLayer {
+        &mut self.cues
+    }
+
+    /// Compiles a cue list against this body's patch and puts it on an executor.
+    ///
+    /// The body compiles the sequence itself rather than taking a compiled one,
+    /// for the same reason [`Self::for_patch`] builds both plans: a sequence
+    /// compiled against a different rig would resolve its parts to the wrong
+    /// slots, and every value would still look plausible.
+    ///
+    /// Allocates, so this is a set-up operation — not something to do while the
+    /// tick is running.
+    ///
+    /// # Errors
+    ///
+    /// [`CueError::UnknownExecutor`] if this body has no such executor, or
+    /// [`CueError::TooManyCues`] / [`CueError::TooManyParts`] if the sequence is
+    /// implausibly large.
+    pub fn load_sequence(
+        &mut self,
+        executor: ExecutorId,
+        sequence: &Sequence,
+    ) -> Result<(), CueError> {
+        if self.cues.player(executor).is_none() {
+            return Err(CueError::UnknownExecutor(executor));
+        }
+        let compiled = SequencePlan::build(&self.plan, sequence)?;
+        if let Some(player) = self.cues.player_mut(executor) {
+            player.load(compiled);
+        }
+        Ok(())
     }
 
     /// The merged attribute values, one per slot of [`Self::plan`].
@@ -167,21 +219,45 @@ impl TickBody for MergeBody {
                 self.layer.set_master(executor, level);
             }
             TickCommand::SetExecutorActive { executor, on } => {
-                if on {
-                    self.layer.activate(executor);
-                } else {
-                    self.layer.deactivate(executor);
+                // On an executor with a cue list, "active" means the sequence is
+                // playing: `ExecutorButtonFunction::On` and `Off`. On one
+                // without, it is the raw activation S3 defined, which is how a
+                // host drives an executor it is holding values in by hand.
+                match self.cues.player_mut(executor) {
+                    Some(player) if player.is_loaded() => {
+                        if on {
+                            player.on();
+                        } else {
+                            player.off();
+                        }
+                    }
+                    _ => {
+                        if on {
+                            self.layer.activate(executor);
+                        } else {
+                            self.layer.deactivate(executor);
+                        }
+                    }
                 }
             }
-            // Cue traversal is S5; the grand master and blackout are masters,
-            // which `docs/DMX_MERGE.md` §4 applies after the merge — S6.
-            TickCommand::Go { .. }
-            | TickCommand::SetGrandMaster(_)
-            | TickCommand::SetBlackout(_) => {}
+            TickCommand::Go {
+                executor,
+                direction,
+            } => {
+                if let Some(player) = self.cues.player_mut(executor) {
+                    player.go(direction);
+                }
+            }
+            // The grand master and blackout are masters, which
+            // `docs/DMX_MERGE.md` §4 applies after the merge — S6.
+            TickCommand::SetGrandMaster(_) | TickCommand::SetBlackout(_) => {}
         }
     }
 
-    fn render(&mut self, _tick: &TickInfo, frame: &mut DmxFrame) {
+    fn render(&mut self, tick: &TickInfo, frame: &mut DmxFrame) {
+        // `ARCHITECTURE_SPEC.md` §5 in order: advance the fades and evaluate the
+        // executors, merge, encode.
+        self.cues.advance(tick.index, &mut self.layer);
         self.resolve();
         self.channels.encode(&self.values, frame);
     }
@@ -190,15 +266,18 @@ impl TickBody for MergeBody {
 #[cfg(all(test, not(loom)))]
 mod tests {
     use crate::body::MergeBody;
+    use crate::cue::CueError;
     use crate::encode::{ChannelPlan, PatchError, coarse_byte, fine_byte};
     use crate::merge::{FULL, merge_programmer};
     use crate::plan::{MergeError, MergePlan};
-    use crate::testkit::{fixture, moving_head, moving_head_16};
+    use crate::testkit::{cue, cue_part, fixture, moving_head, moving_head_16, sequence};
     use crate::{
-        DmxFrame, Engine, FrameLayout, ManualClock, TickBody, TickCommand, TickInfo, command_queue,
+        Clock, DmxFrame, Engine, FrameLayout, ManualClock, TickBody, TickCommand, TickInfo,
+        command_queue,
     };
     use prism_domain::{AttributeType, ExecutorId, Fixture, FixtureId, GoDirection, UniverseId};
     use std::sync::Arc;
+    use std::time::Duration;
 
     fn layout() -> FrameLayout {
         FrameLayout::new([UniverseId::MIN]).unwrap()
@@ -316,9 +395,9 @@ mod tests {
 
     #[test]
     fn the_commands_this_session_does_not_own_are_ignored_rather_than_half_handled() {
-        // Go is S5, the grand master and blackout are S6. Recorded as a test so
-        // the gap is visible: a body that silently swallowed a blackout would
-        // look like it worked.
+        // The grand master and blackout are S6. Recorded as a test so the gap is
+        // visible: a body that silently swallowed a blackout would look like it
+        // worked.
         let mut body = body(1, 1);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
@@ -332,15 +411,197 @@ mod tests {
         for command in [
             TickCommand::SetBlackout(true),
             TickCommand::SetGrandMaster(0),
-            TickCommand::Go {
-                executor: ExecutorId::new(1),
-                direction: GoDirection::Next,
-            },
         ] {
             body.apply(command);
         }
         body.resolve();
         assert_eq!(body.values().get(dimmer).copied(), Some(FULL));
+    }
+
+    #[test]
+    fn a_go_for_an_executor_with_no_sequence_does_nothing_at_all() {
+        // An executor with nothing on it is the ordinary state of most of a
+        // page. A Go on one must not disturb what a host has written into it.
+        let mut body = body(1, 1);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        body.layer_mut()
+            .source_mut(ExecutorId::new(1))
+            .unwrap()
+            .set(dimmer, FULL);
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(1),
+            on: true,
+        });
+        body.apply(TickCommand::Go {
+            executor: ExecutorId::new(1),
+            direction: GoDirection::Next,
+        });
+        body.render(&tick(0), &mut DmxFrame::new(&layout()));
+        assert_eq!(body.values().get(dimmer).copied(), Some(FULL));
+    }
+
+    #[test]
+    fn a_go_command_walks_the_executor_through_its_cue_list() {
+        let mut body = body(1, 2);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        body.load_sequence(
+            ExecutorId::new(1),
+            &sequence(
+                vec![
+                    cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 10_000)]),
+                    cue("2", 0.0, vec![cue_part(1, AttributeType::Dimmer, 20_000)]),
+                ],
+                false,
+            ),
+        )
+        .unwrap();
+
+        let mut frame = DmxFrame::new(&layout());
+        for (index, expected) in [(0u64, 10_000u16), (1, 20_000)] {
+            body.apply(TickCommand::Go {
+                executor: ExecutorId::new(1),
+                direction: GoDirection::Next,
+            });
+            body.render(&tick(index), &mut frame);
+            assert_eq!(body.values().get(dimmer).copied(), Some(expected));
+        }
+        assert_eq!(
+            body.cues()
+                .player(ExecutorId::new(1))
+                .unwrap()
+                .current_cue(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn switching_a_loaded_executor_on_and_off_runs_and_releases_its_sequence() {
+        // On a loaded executor, `SetExecutorActive` is "start the sequence" and
+        // "stop it", not a raw activation: an executor with a cue list on it is
+        // played, not poked.
+        let mut body = body(1, 1);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        body.load_sequence(
+            ExecutorId::new(1),
+            &sequence(
+                vec![cue(
+                    "1",
+                    0.0,
+                    vec![cue_part(1, AttributeType::Dimmer, 40_000)],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+
+        let mut frame = DmxFrame::new(&layout());
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(1),
+            on: true,
+        });
+        body.render(&tick(0), &mut frame);
+        assert_eq!(body.values().get(dimmer).copied(), Some(40_000));
+
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(1),
+            on: false,
+        });
+        body.render(&tick(1), &mut frame);
+        assert_eq!(body.values().get(dimmer).copied(), Some(0));
+        assert!(!body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+
+        // And a host can reach the same playback directly, which is how a
+        // daemon takes a cue list back off an executor.
+        body.cues_mut()
+            .player_mut(ExecutorId::new(1))
+            .unwrap()
+            .unload();
+        body.render(&tick(2), &mut frame);
+        assert!(!body.cues().player(ExecutorId::new(1)).unwrap().is_loaded());
+    }
+
+    #[test]
+    fn a_sequence_can_only_be_loaded_onto_an_executor_this_body_has() {
+        let mut body = body(1, 2);
+        assert_eq!(
+            body.load_sequence(ExecutorId::new(77), &sequence(Vec::new(), false))
+                .unwrap_err(),
+            CueError::UnknownExecutor(ExecutorId::new(77))
+        );
+    }
+
+    #[test]
+    fn a_sequence_is_compiled_against_this_bodys_own_patch() {
+        // The lesson of `PlanMismatch`, applied once more: a caller cannot hand
+        // in a sequence compiled against a different rig, because it hands in
+        // the sequence and the body compiles it.
+        let mut body = body(1, 1);
+        body.load_sequence(
+            ExecutorId::new(1),
+            &sequence(
+                vec![cue(
+                    "1",
+                    0.0,
+                    vec![
+                        cue_part(9, AttributeType::Dimmer, 100),
+                        cue_part(1, AttributeType::Dimmer, 100),
+                    ],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+        let player = body.cues().player(ExecutorId::new(1)).unwrap();
+        let compiled = player.sequence().unwrap();
+        assert_eq!(compiled.unresolved(), 1);
+        assert_eq!(compiled.slot_count(), 1);
+        assert_eq!(
+            compiled.slot(0).unwrap().slot,
+            slot(&body, 1, AttributeType::Dimmer)
+        );
+    }
+
+    #[test]
+    fn a_ten_second_fade_reaches_half_after_five_seconds_of_engine_ticks() {
+        // IMPLEMENTATION_PLAN.md S5, on the engine's own clock rather than on a
+        // tick index handed in by a test: 44 Hz, absolute deadlines, five
+        // seconds of them.
+        let mut body = body(1, 1);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        body.load_sequence(
+            ExecutorId::new(1),
+            &sequence(
+                vec![cue(
+                    "1",
+                    10.0,
+                    vec![cue_part(1, AttributeType::Dimmer, 65_535)],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+
+        let layout = Arc::new(FrameLayout::new([UniverseId::MIN]).unwrap());
+        let publisher = crate::FramePublisher::new(layout);
+        let (mut producer, consumer) = command_queue(8);
+        let mut engine = Engine::new(body, consumer, publisher);
+        let clock = ManualClock::new();
+
+        producer
+            .push(TickCommand::Go {
+                executor: ExecutorId::new(1),
+                direction: GoDirection::Next,
+            })
+            .unwrap();
+        // Tick 0 starts the fade, and ticks 1..=220 carry it to five seconds.
+        engine.run_ticks(&clock, 221);
+        assert_eq!(engine.last_index(), 220);
+        assert!(clock.now().abs_diff(Duration::from_secs(5)) < crate::TICK_PERIOD);
+        assert_eq!(
+            engine.body().values().get(dimmer).copied(),
+            Some(32_767),
+            "a ten-second fade was not at half after five seconds"
+        );
     }
 
     #[test]

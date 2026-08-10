@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-10
 **Current phase:** Phase 1 — Domain and engine
-**Current session:** S5 — `prism-engine` executors, cues, fades (not started; see §8 for the prompt that starts it)
-**Last completed:** S4 — `prism-engine` attribute-to-DMX encoding ✅
+**Current session:** S6 — `prism-engine` programmer, masters, stress (not started; see §8 for the prompt that starts it)
+**Last completed:** S5 — `prism-engine` executors, cues, fades ✅
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -47,7 +47,7 @@
 | S2 | `prism-engine` — tick loop, triple buffer | ✅ | 2026-08-10 | All exit criteria verified — see §2.3. 77 tests + 3 `loom` models, coverage 98.6 % lines |
 | S3 | `prism-engine` — HTP/LTP merge | ✅ | 2026-08-10 | All exit criteria verified — see §2.4. 135 tests, coverage 99.1 % lines |
 | S4 | `prism-engine` — DMX encoding | ✅ | 2026-08-10 | All exit criteria verified — see §2.5. 179 tests, coverage 99.3 % lines |
-| S5 | `prism-engine` — executors, cues, fades | ☐ | | Feeds `PlaybackLayer::source_mut(..).set(slot, value)` |
+| S5 | `prism-engine` — executors, cues, fades | ✅ | 2026-08-10 | All exit criteria verified — see §2.6. 241 tests, coverage 99.6 % lines |
 | S6 | `prism-engine` — programmer, masters, stress | ☐ | | Coverage gate > 95 % |
 
 ### Phase 2 — Protocols
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 5 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 6 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -235,6 +235,40 @@ the two inverts already composed. `ChannelPlan::encode` is what runs on the tick
 a walk over that table, one or two byte writes each. `MergeBody::for_patch`
 builds both plans from one patch, so they cannot describe different rigs.
 
+### 2.6 S5 verification record
+
+Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S5 and
+the session prompt:
+
+| Check | Result |
+|---|---|
+| `cargo test -p prism-engine` | ✅ exit 0 — **224 lib tests** (61 of them new) + 17 integration tests, 0 failed, 4 `#[ignore]`d |
+| `cargo test --workspace` | ✅ exit 0 — 374 tests across 19 targets |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| A 10-second fade is at exactly 50 % at 5 s, ±1 tick, on a simulated clock | ✅ **32 767 at tick 220**, which is what "65535 × 0.5" gives in `docs/DMX_MERGE.md` §7. Asserted three ways: on the arithmetic, on the tick grid, and through `Engine` + `ManualClock` where the clock reads within one period of 5.000 s. Ticks 219 and 221 are asserted to be one step either side, so the criterion cannot pass on a fade that is merely near the right place |
+| Fades interpolate in 16-bit even on 8-bit patched channels | ✅ `tests/cue_playback.rs`: over 440 ticks the coarse byte of an 8-bit patched dimmer **never steps by more than one** and passes through all 256 values. Plus the same fade run against an 8-bit and a 16-bit patch of the same dimmer, asserted byte-identical on the coarse channel at every one of the 441 ticks |
+| Go during a running fade is deterministic and tested | ✅ the rule is stated in `player.rs`'s module documentation and asserted at both levels: the value at the instant of the Go **is** the value the running fade had reached (no jump), and the new fade then runs on the new cue's time base, not the old one. On the wire as well as in the merge |
+| Cue numbers with decimals order correctly | ✅ `1`, `1.5`, `2`, `10` from a list given in the reverse order, through `Cue::compare_numbers`; an unparsable number sorts last; plus a `proptest` that compiling any list orders it by number |
+| Zero allocations in the tick with running fades | ✅ **0 allocator calls** over 1 000 ticks with 8 cue lists loaded, each fading over all 768 slots, cues following on by themselves, Gos and on/off arriving over the queue — and asserted afterwards that values were still moving, so it is not a measurement of a rig at rest |
+| `loom` models still pass | ✅ 3 models, unchanged since S2 |
+| Coverage on `prism-engine` | ✅ **99.55 % lines**, 99.52 % regions, 99.07 % functions — up from S4's 99.31 %. `cue.rs`, `player.rs` and `body.rs` all at **100 % lines**; every uncovered line in the crate is a pre-existing one in the four S2 files |
+| CI green on the pushed commit | ⏳ recorded after the run — see below |
+
+**Delivered:** two modules. `cue` is the compiler — `SequencePlan::build` resolves
+cue parts against the `MergePlan` into slot indices, converts seconds into whole
+ticks, orders cues by `Cue::compare_numbers`, and flattens the result into three
+flat tables. `player` is the state machine — `CuePlayer` runs one compiled cue
+list on the tick index, and `CueLayer` keeps one player per executor in step with
+the `PlaybackLayer`. `MergeBody::load_sequence` compiles a sequence against the
+body's own patch, and `TickCommand::Go` now reaches the traversal.
+
+**The playback rules are written down, not implied.** Four of them are choices
+rather than deductions from `docs/DMX_MERGE.md`, and all four are in the decision
+log below and in `player.rs`'s module documentation: cues track, a Go overtakes a
+running fade, a release fades the light out and leaves the rig still, and at most
+one cue starts per tick.
+
 ---
 
 ## 3. Coverage tracking
@@ -247,7 +281,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Crate | Target | Measured | Date |
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
-| `prism-engine` | **> 95 %** | **99.31 % lines**, 99.42 % regions, 98.47 % functions | 2026-08-10 (S4) |
+| `prism-engine` | **> 95 %** | **99.55 % lines**, 99.52 % regions, 99.07 % functions | 2026-08-10 (S5) |
 | `prism-core` | **> 95 %** (programmer) | — | |
 | `prism-protocols` | **> 95 %** | — | |
 | `prism-surface` | **> 95 %** | — | |
@@ -260,7 +294,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | Tick jitter | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 588 µs, **0 of 26 401 ticks missed** — at the thread priority `ARCHITECTURE_SPEC.md` §3 specifies. See the note below | 2026-08-10 |
 | Tick jitter under 100 % CPU load | S6 stress gate — not this session | — | |
-| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; and **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick | 2026-08-10 |
+| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick; and **0** in 1 000 ticks with **8 cue lists running** — every cue touching all 768 slots, ten-second fades, cues following on by themselves, Gos and on/off over the queue | 2026-08-10 |
 | Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Open DMX frame rate | measure real rate on SH-RS09B | — | |
@@ -347,6 +381,16 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-10 | S5 | **Cues track, and that is forced by a decision already taken rather than chosen here.** A cue could be read as a complete look — everything it does not name goes out — or as a delta, where an attribute it does not mention keeps whatever the playback was holding. The second is the only one available: `Command::StoreCue` stores the programmer, and `docs/DMX_MERGE.md` §3 makes the programmer **sparse** by specification, so a cue recorded after moving one head would contain only that head and would black the rest of the stage out | Implemented as tracking and asserted. **S13 requirement:** the store operation records the programmer's sparse contents as the cue's parts, which is what the playback then reads as a delta. **S28 requirement:** the cue editor shows what a cue *contains*, not what the stage looks like when it runs — those are different lists, and an editor that conflated them would teach operators the wrong model |
+| 2026-08-10 | S5 | **"A Go during a running fade behaves deterministically" names a decision the specification does not make.** Three answers are defensible: complete the running fade first, start the new one from the old cue's target, or start it from wherever the fade actually is. The first two both put a visible step in the middle of a crossfade — the operator sees the light jump *because* they pressed Go | Every attribute re-bases from the value it is holding at that instant and moves to the new cue's target over the **new** cue's fade time; attributes the new cue does not name keep their targets and move on to the same new time base. One transition has one clock. Asserted at the value level and again on the wire: the byte at the instant of the Go is the byte the previous fade had reached |
+| 2026-08-10 | S5 | **A fade-out cannot mean the same thing for an intensity and for a position.** Fading a pan to its home value on release would swing the head while it is still lit, and — worse — a released LTP source that went on holding a value would go on *winning* its slot for the whole fade, so what faded would be the winner of the merge rather than the value | On release, intensities fade to home over the current cue's fade-out time and every other attribute is **held where it is** until that is over; then the whole source leaves the merge at once and everything falls back together. Same asymmetry as `docs/DMX_MERGE.md` §2.3, and the reason `CueSlot` carries the merge mode |
+| 2026-08-10 | S5 | S3 left an open question: whether a retrigger should move a playback to the top of the LTP order, and it required that if so it be a separate operation with its own name. **It needs no new operation.** A Go on a running playback advances its cue and leaves the order alone — stepping a cue list is not switching a playback on. A playback that was switched off and started again *does* go to the top, because its source genuinely left the merge and genuinely re-entered it | Both asserted. `PlaybackLayer::activate` stays idempotent and no `reactivate` was added: the case that motivated the requirement turns out to be the ordinary activate/deactivate pair |
+| 2026-08-10 | S5 | **`SetExecutorActive` has to mean two different things, and pretending otherwise would break either playback or the existing tests.** On an executor with a cue list it must mean "play the sequence" and "stop it" (`ExecutorButtonFunction::On`/`Off`); on one without, S3's raw activation is what a host uses to drive values it wrote into the source by hand — which is exactly what S3, S4 and the allocation harness do | Dispatched on whether a sequence is loaded, and a player without one does not touch its source at all. **S11/S17 requirement:** a daemon translating `Command::ExecutorGo`/`ExecutorOff` must go through `MergeBody`, not reach into `PlaybackLayer` — an executor with a cue list on it is played, not poked |
+| 2026-08-10 | S5 | **A cue naming a fixture that is no longer patched must not stop the cue list.** A show outlives the rig it was written on, and refusing to compile the sequence would take the whole show down to defend against one dead light | Unresolved parts are dropped and counted in `SequencePlan::unresolved()`. **S27/S28 requirement:** the UI surfaces that count — dropped silently, an operator has no way to learn why a cue does nothing |
+| 2026-08-10 | S5 | **A follow chain with no times in it is a loop with no fuse.** Cue 2 follows cue 1 after zero seconds, cue 3 follows cue 2 after zero seconds; evaluated as "advance while the trigger fires", one tick would run the whole list, and a looping sequence would never return | At most **one** cue starts per tick, whatever the times say. A zero-time follow chain advances at 44 cues a second, which is fast enough to look instant and cannot hang the tick. Asserted for both a finite and a looping list |
+| 2026-08-10 | S5 | **The order of the two halves of a tick decides whether a cue ever reaches its target.** Checking the follow trigger before evaluating the fades means the cue that ends on this tick hands over one step short of its target, and the next cue starts from a value the operator never saw | Fades are evaluated first, then the trigger is checked, then the new cue re-bases from the values just computed. The test asserts the completed value is what reaches the frame on the tick the follow fires |
+| 2026-08-10 | S5 | **`Sound` is deferred and `Time` can arrive with no time.** The tempting default for an under-specified trigger is to fire it — treat a missing time as zero | Neither fires; both wait for a Go. A cue that runs away by itself mid-show is a worse fault than one that waits, and "the cue did not fire" is a diagnosable complaint in a way that "the show ran ahead" is not |
+| 2026-08-10 | S5 | **Coverage was raised by deleting unreachable code, not by writing tests for impossible states.** The first measurement read 99.18 % — below S4 — and every uncovered line was an `Option` that cannot be `None`: a slot index that came from `index_of`, a cue index that came from `step`. Writing tests to reach them would have meant inventing states the API cannot produce | The double lookups were merged into one fallible expression and the nested `if let`s became a let-chain, which removed the branches rather than excusing them; the genuinely reachable defensive paths (an out-of-range cue index, a buffer shorter than its sequence) got a real test that asserts they degrade instead of panicking. 99.55 % lines, above S4. Same lesson as S4's generic `build`: a coverage gap in this crate has usually been a structural finding, not a missing test |
 | 2026-08-10 | S4 | **A footprint that fits is not the same as an attribute that fits inside it.** `docs/DMX_MERGE.md` §5 only requires rejecting a fixture that runs past channel 512, and `Fixture::last_address` answers exactly that. But a profile is free to name a `coarseOffset` of 9 on a four-channel type, and the two checks together are what make the write provably in range: a four-channel fixture at address 509 would otherwise write channel 518, which is another fixture — or the next universe, since the frame is one flat slice | Offsets are validated against the footprint too, as `PatchError::AttributeOutsideFootprint`, for the fine channel as well as the coarse one. With both checks, every target is inside its own fixture's footprint — asserted as a `proptest` over arbitrary `prism_domain::Fixture` values, not just as an argument |
 | 2026-08-10 | S4 | **Two fixtures at overlapping addresses are not an error.** The obvious next validation would be to reject them, and it would be wrong: patching a second fixture onto the first is how an operator clones one, and it is a technique in daily use. The real risk is the *accidental* overlap | Allowed, and made deterministic rather than merely tolerated: targets are written in slot order, so the higher fixture number wins the shared channel, and a test says so. **S27 requirement:** the patch UI warns about overlapping footprints — the engine is the wrong place to forbid them |
 | 2026-08-10 | S4 | **The encoder does not blank the frame it is given.** It writes only the channels the patch covers, which is correct while the patch is fixed: every patched channel is rewritten every tick and nothing else ever writes one. It stops being correct the moment a patch can change at run time, because the triple buffer recycles frame buffers — a channel that was patched and no longer is would keep a stale value for as long as that buffer lives | Documented on `ChannelPlan::encode`. **S11/S17 requirement:** replacing a `MergeBody` at run time must blank every frame buffer in the publisher, not merely swap the plan. Blanking on every tick instead was rejected: 32 KB of memset per tick to defend against a case that does not exist yet |
@@ -393,14 +437,20 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-The chain `Patch → Merge → Frame` is closed: a daemon built on `MergeBody` now makes light. Begin **S5** (`prism-engine` — executors, cues, fades). Use the prompt in §8. The seam is `PlaybackLayer::source_mut(..).set(slot, value)`, which is where evaluated cue values go in.
+The chain `Patch → Cue → Fade → Merge → Frame` is closed: a daemon built on
+`MergeBody` plays cue lists. Begin **S6** (`prism-engine` — programmer layer,
+masters, stress). Use the prompt in §8. The seams are `merge_programmer`, which
+exists and is unused on the tick, and `TickCommand::SetGrandMaster` /
+`SetBlackout`, which reach `MergeBody::apply` and are ignored on purpose.
 
-Carried into S5 and beyond:
+Carried into S6 and beyond:
 - `MergeBody::for_patch(&layout, fixtures, executors)` is the constructor: it builds the `MergePlan` and the `ChannelPlan` from one patch, so they cannot describe different rigs. `MergeBody::new` takes both separately and rejects a mismatch.
 - The encoder consumes `MergeBody::values()` — one 16-bit value per `MergePlan` slot, in slot order (`fixture`, then `attribute`). That order is stable and part of the plan's contract, and `ChannelPlan` targets are sorted by it.
 - The encoder leaves unpatched channels alone, so **replacing a `MergeBody` at run time must blank the publisher's frame buffers** — see the decision log.
-- `PlaybackLayer::source_mut(..).set(slot, value)` and `.clear()` are how **S5** feeds evaluated cue values in; `activate`/`deactivate` maintain the LTP order. `activate` is idempotent — a retrigger that should move a playback to the top of the order needs its own operation.
-- Masters and the programmer state machine are **S6**. `SetGrandMaster` and `SetBlackout` reach `MergeBody` today and are ignored on purpose.
+- `MergeBody::load_sequence(executor, &Sequence)` compiles a cue list against the body's own patch and puts it on an executor. It allocates, so it is set-up work, not something to do while the tick runs.
+- An executor **with** a sequence is owned by its `CuePlayer`: it is played through `Go` and `SetExecutorActive`, and writing into its `PlaybackSource` by hand will not survive the next tick. An executor **without** one still answers S3's raw activation, which is how a host drives values it wrote in itself.
+- The four playback rules S5 decided — cues track, a Go overtakes a running fade, a release fades intensity and holds the rest, one cue per tick — are in the decision log and in `crates/prism-engine/src/player.rs`'s module documentation. They are the console's behaviour, not an implementation detail.
+- Masters and the programmer state machine are **S6**. `SetGrandMaster` and `SetBlackout` reach `MergeBody` today and are ignored on purpose; `merge_programmer` exists as a pure function and is not yet on the tick.
 - `prism-domain`'s optional `proptest` feature is already enabled in `prism-engine`'s `[dev-dependencies]`. Use `prism_domain::arb` rather than growing new generators.
 - `TickCommand` is flat, `Copy` and encoded into 16 bytes; S3 added `SetExecutorActive` as tag 5. A new variant needs a new tag, a row in the round-trip test and, if it is wider, a raised `MAX_ENCODED` — a `const` assertion breaks the build otherwise.
 - `prismd` (S17) owns the translation from `prism_domain::Command` to `TickCommand`, must attach every output driver during setup (`FramePublisher::subscribe` allocates), and **must raise the tick thread's priority** — without it the deadline is not held, see §3.
@@ -415,77 +465,79 @@ Carried into S5 and beyond:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S5 — `prism-engine`: Executoren, Cues, Fades**
+**Next up: S6 — `prism-engine`: Programmer-Layer, Masters, Stress**
 
 ```text
-PrismDMX — Session S5: prism-engine, Executoren, Cues, Fades
+PrismDMX — Session S6: prism-engine, Programmer-Layer, Masters, Stress
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                        — verbindliche Qualitäts-, Architektur- und Teststandards
 2. PROGRESS.md                      — aktueller Stand, Decision Log, gemessene Zahlen
-3. IMPLEMENTATION_PLAN.md           — Session-Protokoll und die Definition von S5
+3. IMPLEMENTATION_PLAN.md           — Session-Protokoll und die Definition von S6
 4. ARCHITECTURE_SPEC.md §3.1, §5    — die harten Tick-Regeln und die Pipeline-Reihenfolge
-                                      (S5 ist Schritt 2 und 3: Fades fortschreiben,
-                                      Executoren zu Attributwerten auswerten)
-5. docs/DMX_MERGE.md §2, §5         — worin die ausgewerteten Werte danach münden
+                                      (S6 ist Schritt 5 und 6: Programmer mischen,
+                                      danach die Masters anwenden)
+5. docs/DMX_MERGE.md §3, §4, §6.3, §7 — Programmer-Schicht, Masters, die
+                                      Stack-Invarianten und das durchgerechnete Beispiel
 6. crates/prism-engine/src/lib.rs   — die Crate-Doku erklärt Aufbau, Tick-Vertrag und Schichten
-7. crates/prism-engine/src/playback.rs — PlaybackLayer und PlaybackSource: die Nahtstelle dieser Session
+7. crates/prism-engine/src/merge.rs — merge_programmer existiert schon als reine Funktion
 8. crates/prism-engine/src/body.rs  — MergeBody: apply() nimmt Kommandos, render() tickt die Kette
-9. crates/prism-engine/src/clock.rs und src/tick.rs — Clock, ManualClock, TickInfo, deadline_offset
-10. crates/prism-domain/src/sequence.rs und src/executor.rs — Cue, CuePart, CueTrigger, Sequence, Executor
+9. crates/prism-engine/src/plan.rs  — MergePlan: ein Slot je Fixture und Attribut, index_of()
+10. crates/prism-domain/src/programmer.rs — ProgrammerState, ProgrammerValue, set_value/clear_value
 
-Aufgabe: Session S5 umsetzen — Playback, das auf der Zeitbasis des Ticks läuft.
-Aus Cues und Fadezeiten werden pro Tick Attributwerte, die in die vorhandene
-PlaybackSource geschrieben werden. Danach spielt das System Cuelisten ab.
+Aufgabe: Session S6 umsetzen — die Pipeline vollständig machen und unter Last
+beweisen. Über die Playbacks kommt der Programmer als absolute Übersteuerung,
+darüber die Masters, die ausschließlich Intensität skalieren.
 
-Stand nach S4 — nichts davon musst du neu bauen:
-- Die Kette Patch → Merge → Frame ist vollständig und getestet. `MergeBody`
-  ist der TickBody: `apply()` nimmt `TickCommand`s entgegen, `render()` löst
-  den Merge auf und schreibt den DmxFrame.
+Stand nach S5 — nichts davon musst du neu bauen:
+- Die Kette Patch → Cue → Fade → Merge → Frame ist vollständig und getestet.
+  `MergeBody` ist der TickBody: `apply()` nimmt `TickCommand`s entgegen,
+  `render()` wertet die Playbacks aus, mischt und schreibt den DmxFrame.
 - `MergeBody::for_patch(&layout, fixtures, executors)` baut MergePlan und
   ChannelPlan aus einem Patch. `MergePlan` hat einen Slot je Fixture und
   Attribut, `MergePlan::index_of(fixture, attribute)` liefert den Slotindex.
-- `PlaybackLayer` ist der Quellensatz: eine `PlaybackSource` je Executor,
-  `activate`/`deactivate` führen die LTP-Reihenfolge, `set_master` den
-  Executor-Master. Der Merge (HTP/LTP, Master vor dem Maximum) ist fertig.
-- Der Tick läuft mit 44 Hz, hält absolute Deadlines und liefert `TickInfo`
-  (Index, Deadline, Startzeit, verpasste Ticks). `ManualClock` erlaubt
-  deterministische Zeit im Test, ohne echt zu warten.
+  Diese Slotnummer ist die Adresse, unter der auch der Programmer seine Werte
+  hält — die Reihenfolge (Fixture, dann Attribut) ist Teil des Vertrags.
+- `MergeBody::load_sequence(executor, &Sequence)` legt eine Cueliste auf einen
+  Executor; `TickCommand::Go` läuft, Fades laufen, Trigger laufen.
+- Der Merge (HTP/LTP, Executor-Master vor dem Maximum, Rückfall auf Home) ist
+  fertig und durch die Invarianten aus DMX_MERGE.md §6.1–6.2 abgesichert.
+- Der Tick läuft mit 44 Hz, hält absolute Deadlines und liefert `TickInfo`.
+  `ManualClock` erlaubt deterministische Zeit im Test, ohne echt zu warten.
 
 Die Nahtstelle dieser Session:
-- `PlaybackLayer::source_mut(executor).set(slot, value)` und `.clear()` — so
-  kommen ausgewertete Cue-Werte in den Merge. Genau das füllt S5.
-- `TickCommand::Go { executor, direction }` erreicht `MergeBody::apply` heute
-  und wird bewusst ignoriert. S5 macht daraus Cue-Traversal.
-- `PlaybackLayer::activate` ist idempotent: ein bereits aktiver Executor
-  bekommt keinen neuen Aktivierungsstempel. Wenn ein Retrigger einen Playback
-  an die Spitze der LTP-Ordnung holen soll, ist das eine eigene Operation mit
-  eigenem Namen — kein Nebeneffekt von zweimal Drücken.
+- `merge_programmer(merged, Option<u16>)` existiert seit S3 als reine Funktion,
+  ist getestet und wird auf dem Tick noch nicht benutzt. S6 füllt das.
+- `TickCommand::SetGrandMaster(u16)` und `TickCommand::SetBlackout(bool)`
+  erreichen `MergeBody::apply` heute und werden bewusst ignoriert; ein Test
+  sagt das ausdrücklich. S6 macht daraus die Masterschicht.
+- `MergeBody::render` ruft heute `cues.advance(...)`, dann `resolve()`, dann
+  `channels.encode(...)`. Programmer und Masters gehören zwischen resolve und
+  encode — die Reihenfolge steht in ARCHITECTURE_SPEC.md §5.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S5):
-- Cue-Auswertung: aus `Cue.parts` (Fixture, Attribut, Wert) werden Slotwerte
-- Fade in / Fade out / Delay, fortgeschrieben auf der Tickzeit
-- Cuelisten-Traversal: nächster/vorheriger Cue, Loop am Ende
-- Triggerarten `Go`, `Follow`, `Time` (`Sound` ist ausdrücklich vertagt)
-- Pflege der Aktivierungsreihenfolge, die die LTP-Ordnung trägt
+Umzusetzen (IMPLEMENTATION_PLAN.md S6):
+- Programmer-Übersteuerungsschicht: sparsam (nicht ein voller Frame),
+  absolute Priorität über allen Playbacks
+- Group Master, Grand Master — ausschließlich Intensität
+- Die Pipeline aus ARCHITECTURE_SPEC.md §5 vollständig, Ende zu Ende
 
 Vorgehen strikt test-driven (CLAUDE.md): erst der fehlschlagende Test, dann die
 Implementierung. Diese Crate trägt die strengste Coverage-Anforderung des
-Projekts (> 95 %); nach S4 gemessen wurden 99,31 % Zeilen. Abgenommen wird die
-Coverage in S6, aber sie darf hier nicht fallen.
+Projekts (> 95 %); nach S5 gemessen wurden 99,55 % Zeilen. In dieser Session
+wird die Coverage abgenommen — sie ist ein Exit-Kriterium, kein Nebenprodukt.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Ein 10-Sekunden-Fade steht bei 5 s auf exakt 50 %, ±1 Tick, auf simulierter Uhr
-- Fades interpolieren in 16 Bit, auch auf 8-Bit gepatchten Kanälen — kein
-  sichtbares Treppen; das ist gegen den fertigen Encoder prüfbar
-- Ein Go während eines laufenden Fades verhält sich deterministisch und ist
-  getestet — nicht „irgendwie sinnvoll", sondern festgelegt und begründet
-- Cue-Nummern mit Dezimalstellen (1, 1.5, 2, 10) sortieren richtig;
-  `Cue::compare_numbers` in prism-domain ist die vorhandene Antwort darauf
-- Null Allokationen im Tick mit laufenden Fades
-  (crates/prism-engine/tests/tick_allocations.rs erweitern, nicht ersetzen)
+- Die Stack-Invarianten aus docs/DMX_MERGE.md §6.3 gelten, mit proptest geprüft
+- Grand Master auf 0 zwingt jedes Intensitätsattribut auf 0 und lässt jedes
+  andere Attribut unangetastet — behauptet und geprüft, nicht angenommen
+- Stress-Gate: 64 Universen, 100 % CPU-Last, 10 Minuten, p99.9-Jitter < 2 ms,
+  keine verlorenen Frames. Wie man lange Tests ausführt und wie die
+  Thread-Priorität die Zahlen bestimmt, steht in PROGRESS.md §3 und §3.1 —
+  ohne die dort beschriebene Priorität ist die Messung nicht vergleichbar
+- Determinismus: gleiche Eingabe erzeugt über mehrere Läufe byte-identische Frames
+- Coverage auf prism-engine > 95 %, gemessen und in PROGRESS.md eingetragen
 - cargo test -p prism-engine ist grün
 - cargo clippy --workspace --all-targets -- -D warnings ist sauber
 - cargo fmt --all --check ist sauber
@@ -497,28 +549,40 @@ Wichtige Randbedingungen:
   kein Logging. Alle Puffer werden vorab aus dem Patch dimensioniert. Zusätzlich
   sind clippy::indexing_slicing und clippy::integer_division im Produktionscode
   verboten — also `get`/`get_mut` und `div_euclid` statt `[]` und `/`.
-- Ein `prism_domain::Cue` besitzt Strings und Vecs. Er darf im Tick weder
+- `prism_domain::ProgrammerState` besitzt Maps und Vecs und darf im Tick weder
   angelegt noch fallen gelassen werden (Droppen alloziert genauso wie Anlegen).
-  Wie S2 das für `TickCommand` gelöst hat, steht im Decision Log — die
-  auswertbare Form wird vor dem Tick gebaut, nicht in ihm.
-- Zeit kommt aus `TickInfo`/`Clock`, niemals aus `Instant::now()` im Body.
-  `ManualClock` macht Zeit im Test deterministisch; 1/44 s ist keine ganze
-  Nanosekundenzahl, deshalb rechnet der Tick exakt rational — siehe tick.rs.
+  Wie S2 das für `TickCommand` und S5 für `Cue` gelöst hat, steht im Decision
+  Log — die auswertbare Form wird vor dem Tick gebaut, nicht in ihm. Für den
+  Programmer heißt das eine vorab dimensionierte, dünn besetzte Struktur über
+  Slotnummern, kein `BTreeMap` auf dem Tickpfad.
+- Der Programmer ist ausdrücklich sparsam: ein unberührtes Attribut ist
+  abwesend, nicht null (docs/DMX_MERGE.md §3). Eine dichte Schicht, die überall
+  einen Wert hätte, wäre kein Programmer, sondern ein weiterer Playback.
+- Masters skalieren ausschließlich Intensität (docs/DMX_MERGE.md §4). Welche
+  Attribute das sind, entscheidet die Attributdefinition, nicht ein Name.
+- Die Erweiterung von tick_allocations.rs erfolgt additiv: die vorhandenen
+  Messungen bleiben stehen, es kommt eine mit Programmer und Masters dazu.
+- Die drei `loom`-Modelle müssen weiterhin durchlaufen; wie man sie startet,
+  steht in PROGRESS.md §3.1.
+- Der Programmer-*Zustandsautomat* (Dreistufen-Clear, Store-Verhalten,
+  Selektion) ist prism-core und gehört zu S13, nicht hierher. S6 baut die
+  Merge-Schicht, die einen fertigen Programmer-Zustand verrechnet.
 - prism-domain hat ein optionales Feature `proptest` (`prism_domain::arb` und die
   `Arbitrary`-Impls). Es ist in den [dev-dependencies] von prism-engine bereits
   aktiviert — benutzen statt eigene Generatoren zu schreiben.
-- Interne Testhelfer für Fixture-Typen und gepatchte Fixtures stehen in
-  crates/prism-engine/src/testkit.rs.
-- Lange Tests laufen nicht in CI. Wie man sie ausführt, steht in PROGRESS.md §3.1
-  und in der Crate-Doku von prism-engine.
+- Interne Testhelfer für Fixture-Typen, gepatchte Fixtures, Cues und Sequenzen
+  stehen in crates/prism-engine/src/testkit.rs.
 - Toolchain ist eingerichtet und funktioniert (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Coverage misst man mit `cargo llvm-cov -p prism-engine --summary-only`.
 - Es ist kein Setup mehr nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S5-Status, gemessene Coverage, Decision Log bei
-  Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
+- PROGRESS.md aktualisieren: S6-Status, gemessene Coverage, gemessene
+  Stress-Zahlen, Decision Log bei Abweichungen vom Plan oder Funden, die
+  spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S6 (prism-engine: Programmer-Layer, Masters, Stress) überschreiben
+  Session S7 (prism-protocols: DmxOutput-Trait und Open DMX USB) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(engine): …
+- Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
+  eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```

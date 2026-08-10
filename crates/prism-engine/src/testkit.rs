@@ -6,7 +6,8 @@
 //! fields of scenery.
 
 use prism_domain::{
-    AttributeDef, AttributeType, Fixture, FixtureId, FixtureType, UniverseId, Vec3,
+    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, Fixture, FixtureId, FixtureType,
+    Sequence, SequenceId, UniverseId, Vec3,
 };
 
 /// An attribute definition with everything but the merge-relevant fields at a
@@ -82,6 +83,40 @@ pub(crate) fn moving_head_16() -> FixtureType {
             attribute_at(AttributeType::Pan, 32_768, 2, Some(3)),
         ],
     )
+}
+
+/// One value of one attribute of one fixture, as a cue holds it.
+pub(crate) fn cue_part(fixture: u32, attribute: AttributeType, value: u16) -> CuePart {
+    CuePart {
+        fixture: FixtureId::new(fixture),
+        attribute,
+        value,
+        preset_ref: None,
+    }
+}
+
+/// A cue with the same time for fade in and fade out, no delay, waiting for a Go.
+pub(crate) fn cue(number: &str, fade: f64, parts: Vec<CuePart>) -> Cue {
+    Cue {
+        number: number.to_owned(),
+        name: format!("Cue {number}"),
+        fade_in: fade,
+        fade_out: fade,
+        delay: 0.0,
+        trigger: CueTrigger::Go,
+        trigger_time: None,
+        parts,
+    }
+}
+
+/// A cue list, numbered 1.
+pub(crate) fn sequence(cues: Vec<Cue>, looping: bool) -> Sequence {
+    Sequence {
+        id: SequenceId::new(1),
+        name: "Test".to_owned(),
+        cues,
+        looping,
+    }
 }
 
 /// A patched fixture at an address, with no geometry and no inverts.

@@ -6,7 +6,7 @@
 //! strictest coverage requirement (> 95 %).
 //!
 //! Merge semantics are specified in `docs/DMX_MERGE.md`; the tick contract is
-//! in `ARCHITECTURE_SPEC.md` section 3.1.
+//! in `ARCHITECTURE_SPEC.md` section 3.1, and the pipeline order in section 5.
 //!
 //! Sessions **S2-S6**.
 //!
@@ -19,7 +19,7 @@
 //!                        [`Engine`] ── 44 Hz tick ──▶ [`FramePublisher`]
 //!                                       ▲                     │
 //!                                  [`TickBody`]                │ triple buffer,
-//!                            ([`MergeBody`], S5 playback)      │ wait-free
+//!                                 ([`MergeBody`])              │ wait-free
 //!                                                              ▼
 //!                                                     [`FrameSubscriber`]
 //!                                                      one per output driver
@@ -50,9 +50,22 @@
 //! running past channel 512 is a [`PatchError`] at patch time and never a
 //! problem in the tick.
 //!
+//! # The playback
+//!
+//! The merge answers over a *set* of values; what puts values into that set is
+//! the playback. [`SequencePlan`] compiles a `prism_domain::Sequence` against
+//! the same patch — fixtures and attributes become slot indices, seconds become
+//! whole ticks — because a cue owns `String`s and `Vec`s and so cannot be
+//! created *or dropped* inside a tick. [`CuePlayer`] then runs one compiled cue
+//! list on the tick's own time base: fades, delays, cue traversal, and the
+//! `Go`, `Follow` and `Time` triggers. The rules it settles — that cues track,
+//! that a Go overtakes a running fade rather than jumping, what a release does —
+//! are written out in that module's documentation.
+//!
 //! [`MergeBody`] joins all of it onto the tick, and
-//! [`MergeBody::for_patch`] builds it from a patch in one call. The executors
-//! and fades (S5) and the programmer and masters (S6) are still to come.
+//! [`MergeBody::for_patch`] builds it from a patch in one call;
+//! [`MergeBody::load_sequence`] puts a cue list on an executor. The programmer
+//! and the masters (S6) are still to come.
 //!
 //! # Rules for code on the tick path
 //!
@@ -111,11 +124,13 @@
 mod body;
 mod clock;
 mod command;
+mod cue;
 mod encode;
 mod frame;
 mod merge;
 mod plan;
 mod playback;
+mod player;
 mod spsc;
 mod stats;
 mod sync;
@@ -127,6 +142,10 @@ mod triple_buffer;
 pub use body::MergeBody;
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use command::TickCommand;
+pub use cue::{
+    CueError, CuePlan, CueSlot, CueValue, MAX_CUE_PARTS, MAX_CUES, SequencePlan, interpolate,
+    ticks_from_seconds,
+};
 pub use encode::{ChannelPlan, ChannelTarget, PatchError, coarse_byte, fine_byte, invert};
 pub use frame::{DmxFrame, FrameLayout, LayoutError, MAX_UNIVERSES, UNIVERSE_CHANNELS};
 pub use merge::{
@@ -134,6 +153,7 @@ pub use merge::{
 };
 pub use plan::{AttributeSlot, MAX_SLOTS, MergeError, MergePlan};
 pub use playback::{MAX_SOURCES, MergeScratch, PlaybackLayer, PlaybackSource};
+pub use player::{CueLayer, CuePlayer};
 pub use spsc::{Consumer, PAYLOAD_BYTES, Producer, TickPayload, command_queue};
 pub use stats::{Histogram, TickStats};
 pub use tick::{

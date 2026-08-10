@@ -22,7 +22,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use prism_domain::{
-    AttributeDef, AttributeType, ExecutorId, Fixture, FixtureId, FixtureType, UniverseId, Vec3,
+    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, ExecutorId, Fixture, FixtureId,
+    FixtureType, GoDirection, Sequence, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, SystemClock,
@@ -414,6 +415,137 @@ fn a_tick_running_the_encoder_as_well_makes_no_allocator_call_either() {
             "the encoder wrote past the patch in universe {position}"
         );
     }
+}
+
+/// A cue list whose every cue touches every attribute of every fixture, fading
+/// over ten seconds and following on by itself. The worst case a player can be
+/// given: nothing in it is idle, and the fades are still running at the end of
+/// the measured window.
+fn loaded_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
+    let cues = (0..4u16)
+        .map(|number| Cue {
+            number: number.to_string(),
+            name: String::new(),
+            fade_in: 10.0,
+            fade_out: 10.0,
+            delay: 0.0,
+            // Every cue but the first follows on by itself, so cue traversal is
+            // on the measured tick and not only in the commands.
+            trigger: if number == 0 {
+                CueTrigger::Go
+            } else {
+                CueTrigger::Follow
+            },
+            trigger_time: None,
+            parts: (1..=fixtures)
+                .flat_map(|fixture| {
+                    head.attributes.iter().map(move |def| CuePart {
+                        fixture: FixtureId::new(fixture),
+                        attribute: def.attribute,
+                        value: fixture
+                            .wrapping_mul(u32::from(number))
+                            .wrapping_add(u32::from(seed)) as u16,
+                        preset_ref: None,
+                    })
+                })
+                .collect(),
+        })
+        .collect();
+    Sequence {
+        id: SequenceId::new(u32::from(seed)),
+        name: String::new(),
+        cues,
+        looping: true,
+    }
+}
+
+#[test]
+fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
+    // The session's own criterion. A `prism_domain::Cue` owns a String for its
+    // number, a String for its name and a Vec of parts; dropping one inside the
+    // tick would call the allocator just as surely as building one. This counts
+    // what actually happens with eight cue lists running, every one of them
+    // part way through a fade over every slot in the patch.
+    let head = fixture_type(6, false);
+    let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
+    let patched = patch(&layout, &head, 128);
+    let mut body = MergeBody::for_patch(
+        &layout,
+        patched.iter().map(|fixture| (fixture, &head)),
+        (1..=8).map(ExecutorId::new),
+    )
+    .unwrap();
+    let slots = body.plan().slot_count();
+    assert_eq!(slots, 128 * 6);
+    for executor in 1..=8u32 {
+        body.load_sequence(
+            ExecutorId::new(executor),
+            &loaded_sequence(&head, 128, executor as u16),
+        )
+        .unwrap();
+    }
+
+    let mut publisher = FramePublisher::new(Arc::new(layout));
+    let mut subscriber = publisher.subscribe();
+    let (mut producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle =
+        |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
+            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let _ = producer.push(TickCommand::Go {
+                executor,
+                direction: if index % 16 < 8 {
+                    GoDirection::Next
+                } else {
+                    GoDirection::Prev
+                },
+            });
+            // And an executor going off and on underneath the fades, so the
+            // release path and the activation path are measured too.
+            let _ = producer.push(TickCommand::SetExecutorActive {
+                executor: ExecutorId::new(u32::from(index % 8) + 1),
+                on: index % 32 != 0,
+            });
+            engine.run_ticks(&clock, 1);
+            subscriber.refresh();
+        };
+
+    for index in 0..200 {
+        cycle(&mut engine, &mut producer, index);
+    }
+    engine.reset_stats();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, &mut producer, index);
+        }
+    });
+
+    println!("allocator calls in 1000 ticks with 8 cue lists fading over {slots} slots: {calls}");
+    assert_eq!(calls, 0, "playback called the allocator {calls} times");
+    assert_eq!(engine.stats().ticks, 1_000);
+    assert_eq!(engine.stats().commands, 2_000);
+    assert_eq!(engine.stats().panics, 0);
+
+    // And the fades really were running: a further tick moves values that were
+    // part way through a fade, so this was not a measurement of a rig at rest.
+    let before = engine.body().values().to_vec();
+    engine.run_ticks(&clock, 1);
+    assert!(
+        engine.body().values() != before.as_slice(),
+        "nothing was fading, so the measurement is meaningless"
+    );
+    assert!(
+        engine
+            .body()
+            .cues()
+            .players()
+            .iter()
+            .any(|player| player.current_cue().is_some()),
+        "no cue was running, so the measurement is meaningless"
+    );
 }
 
 #[test]
