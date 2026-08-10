@@ -1,0 +1,99 @@
+# CI matrix per ARCHITECTURE_SPEC.md section 10.1.
+#
+# Windows is the release target and gets the full treatment. Linux runs the
+# platform-neutral crates and a cross-compile check so the Raspberry Pi path
+# cannot rot unnoticed - a portability break should fail on the commit that
+# caused it, not a year later. macOS is deliberately absent until it becomes
+# a priority (decision D10).
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  windows:
+    name: Windows - full build and test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace
+
+      - name: Test
+        run: cargo test --workspace
+
+  linux-neutral:
+    name: Linux - platform-neutral crates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # These crates must never contain #[cfg(target_os = ...)]. Running their
+      # tests on a second platform is what proves it.
+      - name: Test platform-neutral crates
+        run: >
+          cargo test
+          -p prism-domain
+          -p prism-engine
+          -p prism-core
+          -p prism-surface
+          -p prism-ipc
+
+  linux-arm64-check:
+    name: Linux ARM64 - cross-compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@v2
+
+      # `cargo check` does not link, so no cross-linker is needed here. This
+      # catches the realistic failure - platform-specific code leaking into a
+      # crate that is supposed to be neutral.
+      - name: Check
+        run: cargo check --workspace --target aarch64-unknown-linux-gnu
+
+  ui:
+    name: UI - typecheck, build, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build

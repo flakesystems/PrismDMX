@@ -1,0 +1,45 @@
+---
+config:
+  theme: redux
+  layout: elk
+---
+flowchart TB
+    n1["PrismDMX"] --> n2["UI"]
+    n2 -- Center --> n3["Canvas"]
+    n2 -- Bottom --> n5["Bottom Section"]
+    n2 -- Right Side --> n4["View Selector Bar"]
+    n5 -- Top --> n6["Console"]
+    n5 -- Left --> n7["Executor Bar"]
+    n5 -- Right --> n8["Encoder Bar"]
+    n7 -- Left --> n9["4 Rows of 8 Executors"]
+    n7 -- Right --> n10["Selected Executor"]
+    n8 --> n11["Dimmer"] & n12["Position"] & n13["Color"] & n14["Beam"] & n15["Focus"]
+    n3 --> n17["Draggable, Resizable Windows"]
+    n17 --> n22["Data Pools"] & n23["Tools"] & n25["Presets"] & n31["Settings"]
+    n22 --> n19["Fixture Sheet"] & n20["Sequence Sheet"] & n24["Groups"]
+    n23 --> n18["3D Viewer"] & n21["Phaser Editor"] & n29["Clock Viewer"] & n30["Sequence Cue Viewer"]
+    n25 --> n26["Color"] & n27["Position"] & n28["Dimmer"]
+    n31 --> n32["In &amp; Out"] & n33["Patch"] & n34["Network"] & n35["DMX"] & n36["Backup"]
+    n32 --> n37["MIDI"] & n40["OSC"] & n41["PSN"]
+    n37 --> n38["Control Surface"]
+    n38 -- Mackie Control --> n39["Behringer XTouch"]
+    n33 --> n42["Patch"] & n43["Fixture Types"] & n44["DMX Universes"]
+    n35 --> n45["ArtNet"] & n46["sACN"] & n47["FTDI USB DMX"]
+    n34 --> n48["Internet Settings"] & n49["Web Remote"]
+    n36 --> n50["Load Showfile"] & n51["Save Showfile"]
+    n18 --> n52["Contains every Fixture from the Patch"]
+    n39 -- Default --> n53["Controls"]
+    n41 --> n158["The systems should integrate position data from openfollow.app"]
+    n40 --> n158
+    n11 --> n159["Programmer"]
+    n12 --> n160["Programmer"]
+    n159 --> n161["Dimmer"]
+    n13 --> n162["Programmer"]
+    n14 --> n163["Programmer"]
+    n15 --> n164["Programmer"]
+    n160 --> n165["Pan"] & n166["Tilt"]
+    n162 --> n167["Red"] & n168["Green"] & n169["Blue"] & n170["White"] & n171["Amber"]
+    n163 --> n172["Iris"]
+    n164 --> n173["Zoom"]
+
+    n1@{ shape: rect}

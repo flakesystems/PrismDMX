@@ -1,0 +1,19 @@
+[package]
+name = "prismd"
+description = "PrismDMX engine daemon. Owns the show, the outputs and the control surface."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+prism-core = { path = "../prism-core" }
+prism-domain = { path = "../prism-domain" }
+prism-engine = { path = "../prism-engine" }
+prism-ipc = { path = "../prism-ipc" }
+prism-protocols = { path = "../prism-protocols" }
+prism-surface = { path = "../prism-surface" }
+
+[lints]
+workspace = true

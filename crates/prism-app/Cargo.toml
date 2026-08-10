@@ -1,0 +1,15 @@
+[package]
+name = "prism-app"
+description = "Tauri desktop shell. A thin client that spawns or attaches to prismd."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+prism-domain = { path = "../prism-domain" }
+prism-ipc = { path = "../prism-ipc" }
+
+[lints]
+workspace = true

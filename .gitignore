@@ -1,0 +1,36 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Node / UI
+node_modules/
+ui/dist/
+ui/.vite/
+*.tsbuildinfo
+
+# Tauri
+crates/prism-app/gen/
+crates/prism-app/target/
+
+# Generated bindings (regenerated from prism-domain)
+ui/src/bindings/
+
+# Show files and runtime data
+*.prism
+*.prism-shm
+*.prism-wal
+*.prism.backup
+/recovery/
+
+# Coverage and profiling
+/coverage/
+*.profraw
+tarpaulin-report.*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

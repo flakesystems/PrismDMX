@@ -1,0 +1,14 @@
+[package]
+name = "prism-core"
+description = "Show model, session state, programmer, Oops journal and persistence."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+prism-domain = { path = "../prism-domain" }
+
+[lints]
+workspace = true

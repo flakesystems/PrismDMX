@@ -1,0 +1,78 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+    n53["Controls"] --> n54["8 Fader Strips"] & n55["Main Fader"] & n56["Encoder Assign Section"] & n57["View Section"] & n58["Function Section"] & n59["Modify Section"] & n60["Automation Section"] & n61["Utility Section"] & n62["Transport Section"] & n63["Selection Section"] & n150["Display"]
+    n54 --> n64["Encoder"] & n65["Display"] & n66["Buttons"] & n67["Meeter"] & n68["Motorised Touch Sensitive Fader"]
+    n68 --> n69["On Touch"] & n70["On Move"]
+    n66 --> n71["Rec"] & n72["Solo"] & n73["Mute"] & n74["Select"]
+    n55 --> n75["Flip Button"] & n76["Motorised Touch Sensitive Fader"]
+    n76 --> n77["On Touch"] & n78["On Move"]
+    n56 --> n79["Buttons"]
+    n57 --> n80["Buttons"]
+    n58 --> n81["Buttons"]
+    n59 --> n82["Buttons"]
+    n60 --> n83["Buttons"]
+    n61 --> n84["Buttons"]
+    n62 --> n85["Buttons"]
+    n63 --> n86["Buttons"] & n87["Encoder Knob"]
+    n79 --> n88["Track"] & n89["Pan"] & n90["EQ"] & n91["Send"] & n92["Plug In"] & n93["Inst"]
+    n80 --> n94["Global View"] & n95["MIDI Tracks"] & n96["Inputs"] & n97["Audio Tracks"] & n98["Audio Inst"] & n99["Aux"] & n100["Buses"] & n101["Outputs"] & n102["User"]
+    n81 --> n103["F1"] & n104["F2"] & n105["F3"] & n106["F4"] & n107["F5"] & n108["F6"] & n109["F7"] & n110["F8"]
+    n82 --> n111["Shift"] & n112["Option"] & n113["Control"] & n114["Alt"]
+    n83 --> n115["Read"] & n116["Write"] & n117["Trim"] & n118["Touch"] & n119["Latch"] & n120["Group"]
+    n84 --> n121["Save"] & n122["Undo"] & n123["Cancel"] & n124["Enter"]
+    n85 --> n125["Marker"] & n126["Nudge"] & n127["Cycle"] & n128["Drop"] & n129["Replace"] & n130["Click"] & n131["Solo"] & n132["Backwards"] & n133["Forwards"] & n134["Stop"] & n135["Play"] & n136["Record"]
+    n86 --> n137["Faderbank"] & n140["Channel"] & n143["Zoom"] & n149["Scrub"]
+    n137 --> n138["Prev"] & n139["Next"]
+    n140 --> n141["Prev"] & n142["Next"]
+    n143 --> n144["Up"] & n145["Left"] & n146["Center"] & n147["Right"] & n148["Down"]
+    n150 --> n151["Name Button"] & n152["7 Segment Display"]
+    n152 --> n153["Assignment"] & n154["Bars"] & n155["Beats"] & n156["Subdivision"] & n157["Ticks"]
+    n64 --> n159["Assignable function out of a list of encoder functions for the active executor on this strip"]
+    n65 --> n160["Show color, name and value of the active executor on this strip"]
+    n69 -- Light up Meeter --> n67
+    n71 --> n161["Assignable function out of a list of button functions for the active executor on this strip"]
+    n72 --> n161
+    n73 --> n161
+    n74 --> n161
+    n70 --> n162["Assignable function out of a list of fader functions for the active executor on this strip"]
+    n77 --> n163["Unused"]
+    n78 --> n164["Assignable function out of a list of fader functions for the selected executor"]
+    n75 --> n165["Assignable function out of a list of button functions for the selected executor"]
+    n159 -- Default --> n166["Empty"]
+    n159 --> n167["Master"] & n168["Speed"]
+    n161 --> n169["Empty"] & n171["Go-"] & n172["LearnSpeed"] & n173["Off"] & n174["On"] & n175["Flash"] & n176["Toggle"]
+    n161 -- Default --> n170["Go+"]
+    n162 --> n177["Empty"] & n179["Speed"] & n180["XFade"]
+    n162 -- Default --> n178["Master"]
+    n165 --> n181["Empty"] & n183["Go-"] & n184["Off"] & n185["On"] & n186["Flash"] & n187["Toggle"]
+    n165 -- Default --> n182["Go+"]
+    n164 --> n188["Empty"] & n189["Master"]
+    n164 -- Default --> n190["XFade"]
+    n132 --> n191["Go- on selected Executor"]
+    n133 --> n192["Go+ on selected Executor"]
+    n134 --> n193["Off on selected Executor"]
+    n135 --> n194["On on selected Executor"]
+    n138 --> n195["Page down"]
+    n139 --> n196["Page up"]
+    n141 --> n197["View down"]
+    n142 --> n198["View up"]
+    n87 --> n199["Change value of selected programmer"]
+    n136 --> n200["Clear"]
+    n144 --> n201["Programmer page up"]
+    n148 --> n202["Programmer page down"]
+    n145 --> n203["Select previous programmer"]
+    n147 --> n204["Select next programmer"]
+    n121 --> n205["Saves the showfile"]
+    n205 --> n206["Led is on when there are unsaved changes"]
+    n122 --> n207["Oops"]
+    n103 --> n208["XKeys Assign custom function -&gt; macro/executer/etc."]
+    n104 --> n208
+    n105 --> n208
+    n106 --> n208
+    n107 --> n208
+    n108 --> n208
+    n109 --> n208
+    n110 --> n208
