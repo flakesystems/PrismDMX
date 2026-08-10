@@ -27,7 +27,8 @@
 | 9 | CI workflow | ✅ | `.github/workflows/ci.yml` — Windows full, Linux neutral tests, ARM64 cross-check, UI |
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
-| 12 | CI first run verified | ☐ | Triggered by the push, but unverifiable from here — private repo, no authenticated CLI. See B2 |
+| 12 | GitHub CLI | ▶ | `gh` 2.97.0 installed at `C:\Program Files\GitHub CLI\gh.exe`. **Not authenticated** — needs one interactive `gh auth login` |
+| 13 | CI first run verified | ☐ | Triggered by the push, but unreadable until item 12 is done. See B2 |
 
 ---
 
@@ -150,13 +151,11 @@ Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and prot
 ### B2 — CI run not yet verified ☐ (non-blocking)
 **State:** the remote is configured and `master` is pushed, so `.github/workflows/ci.yml` has been **triggered**. Whether it passed is unknown.
 
-**Why it cannot be checked from the development shell:** the repository is private, so the unauthenticated GitHub API returns 404, and the `gh` CLI is not installed (authenticating it needs an interactive browser or device flow). Pushing works only because git uses the stored credential helper.
+**Why it cannot be checked from the development shell:** the repository is private, so the unauthenticated GitHub API returns 404. The `gh` CLI is now installed (2.97.0) but not logged in, and `gh auth login` is an interactive browser or device flow that cannot be driven from a non-interactive shell. Pushing works only because git uses the stored credential helper, which is not a token `gh` can read.
 
 **Why it is not blocking:** every check the CI performs also runs locally and is green (§2.1). CI protects against regressions over time; its absence does not stop S1.
 
-**Resolution — one of:**
-1. Check the Actions tab at github.com/flakesystems/PrismDMX/actions and report the result.
-2. Install and authenticate the GitHub CLI (`winget install --id GitHub.cli`, then `gh auth login`), after which run status can be read directly.
+**Resolution:** run `gh auth login` once (interactive, user action). After that, run status is readable directly from the shell for the rest of the project. Alternatively, read the Actions tab in a browser.
 
 **Likely first failure, if any:** the `ui` job runs `npm ci`, which requires `ui/package-lock.json` to match `package.json`. It is committed, so this should hold — but it is the step most sensitive to the scaffold.
 
