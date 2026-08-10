@@ -31,6 +31,7 @@ mod command;
 mod delta;
 mod executor;
 mod export;
+pub mod finite;
 mod ids;
 mod json;
 mod output;

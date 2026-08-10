@@ -122,6 +122,20 @@ pub enum Command {
         level: u16,
     },
     /// Patch a fixture into a universe.
+    ///
+    /// Carries the start address only, not the individual DMX channels. The
+    /// channel layout is derived: it follows from the [`crate::FixtureType`] that
+    /// `type_id` names, and `prism-engine` resolves it once at patch time (S4) so
+    /// the tick needs no lookup. Putting the resolved channels in the command
+    /// would make a client compute state the daemon must then accept, which
+    /// decision **D3** exists to prevent, and would duplicate a derived value
+    /// that then has to be kept in step with the profile.
+    ///
+    /// The risk that motivates the question is real but lives elsewhere: if the
+    /// profile library changes under a saved show, patched fixtures silently
+    /// change meaning. The fix for that is for the show file to **embed** the
+    /// fixture types it uses rather than reference an external library — a
+    /// requirement on the show model in S11, not on this command.
     PatchFixture {
         /// Fixture number to assign.
         id: FixtureId,

@@ -8,6 +8,19 @@
 //! `serde_json::Value` would do the job in Rust, but `ts-rs` renders it as
 //! `any`, which `CLAUDE.md` forbids. [`JsonValue`] is therefore defined here and
 //! renders as a closed union.
+//!
+//! # Nesting depth is a transport concern
+//!
+//! [`JsonValue`] is recursive, so a corrupt or hostile payload can nest
+//! arbitrarily deep and exhaust the stack while being decoded — and a stack
+//! overflow aborts the process, which would take DMX output down with it.
+//!
+//! That limit cannot be enforced here. `serde` buffers the content of an
+//! internally tagged enum before any of this crate's code runs, so by the time
+//! a `JsonValue` inside a `Delta` is constructed, the recursion has already
+//! happened. `serde_json` applies its own limit (128 levels); MessagePack has
+//! none by default. **`prism-ipc` (S16) must therefore enforce a nesting depth
+//! limit on decode**, next to the maximum frame size it already rejects on.
 
 use std::collections::BTreeMap;
 
@@ -28,8 +41,13 @@ pub enum JsonValue {
     Bool(bool),
     /// A whole number.
     Int(i64),
-    /// A finite floating-point number. JSON cannot encode NaN or infinity.
-    Float(f64),
+    /// A finite floating-point number. JSON cannot encode NaN or infinity, so
+    /// both are rejected in either direction — see [`crate::finite`].
+    Float(
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        f64,
+    ),
     /// A string.
     String(String),
     /// An ordered list.

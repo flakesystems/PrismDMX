@@ -31,14 +31,16 @@ const INDEX_HEADER: &str = "\
 
 /// Writes the TypeScript bindings for every domain type into `out_dir`.
 ///
-/// The directory is emptied first, so a type that has been removed in Rust
-/// cannot leave a stale binding behind. Returns the exported type names, sorted.
+/// Existing `.ts` files in that directory are removed first, so a type that has
+/// been removed in Rust cannot leave a stale binding behind. Nothing else is
+/// touched and no directory is deleted — a mistyped path costs at most the
+/// generated files it was pointed at. Returns the exported type names, sorted.
 ///
 /// # Errors
 ///
-/// Fails if the directory cannot be replaced or a binding cannot be written.
+/// Fails if the directory cannot be prepared or a binding cannot be written.
 pub fn export_bindings(out_dir: &Path) -> Result<Vec<String>, ExportError> {
-    replace_dir(out_dir).map_err(ExportError::Io)?;
+    clear_generated(out_dir).map_err(ExportError::Io)?;
 
     // `export_all` pulls in every dependency, so only the roots are listed:
     // the two wire enums, and the show and session types they do not reach.
@@ -63,14 +65,16 @@ pub fn export_bindings(out_dir: &Path) -> Result<Vec<String>, ExportError> {
     Ok(names)
 }
 
-/// Removes `dir` and recreates it empty.
-fn replace_dir(dir: &Path) -> io::Result<()> {
-    match fs::remove_dir_all(dir) {
-        Ok(()) => {}
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
+/// Creates `dir` if needed and deletes the `.ts` files already in it.
+fn clear_generated(dir: &Path) -> io::Result<()> {
+    fs::create_dir_all(dir)?;
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_file() && path.extension().is_some_and(|extension| extension == "ts") {
+            fs::remove_file(path)?;
+        }
     }
-    fs::create_dir_all(dir)
+    Ok(())
 }
 
 /// The stem of every `.ts` file in `dir` except the barrel, sorted.

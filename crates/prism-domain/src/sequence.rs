@@ -55,18 +55,24 @@ pub struct Cue {
     /// Operator-facing name.
     pub name: String,
     /// Fade-in time in seconds.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::seconds()")
     )]
     pub fade_in: f64,
     /// Fade-out time in seconds.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::seconds()")
     )]
     pub fade_out: f64,
     /// Delay before the fade starts, in seconds.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::seconds()")
@@ -75,6 +81,8 @@ pub struct Cue {
     /// What starts this cue.
     pub trigger: CueTrigger,
     /// Trigger time in seconds, for [`CueTrigger::Time`].
+    #[serde(with = "crate::finite::option")]
+    #[ts(as = "Option<f64>")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "proptest::option::of(crate::arb::seconds())")

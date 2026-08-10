@@ -159,12 +159,16 @@ pub struct AttributeDef {
     /// Whether the encoded DMX value is inverted.
     pub invert: bool,
     /// Physical value at 0, e.g. `-270` degrees for pan.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")
     )]
     pub physical_from: f64,
     /// Physical value at 65535.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")

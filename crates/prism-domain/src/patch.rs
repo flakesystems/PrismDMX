@@ -17,18 +17,24 @@ pub const CHANNELS_PER_UNIVERSE: u16 = 512;
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 pub struct Vec3 {
     /// Stage left/right.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")
     )]
     pub x: f64,
     /// Height.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")
     )]
     pub y: f64,
     /// Depth.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")

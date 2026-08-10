@@ -112,9 +112,14 @@ impl ExecutorId {
     }
 
     /// Builds an executor number from a page and a slot.
+    ///
+    /// Saturates rather than wrapping. `SetExecutorPage` carries an arbitrary
+    /// `u32` from any client, and in a release build `page * 8` would wrap
+    /// silently for a large one — addressing the wrong executor during a show.
+    /// Saturating keeps an out-of-range page out of range instead.
     #[must_use]
     pub const fn from_page_and_slot(page: u32, slot: u32) -> Self {
-        Self::new(page * EXECUTORS_PER_PAGE + slot)
+        Self::new(page.saturating_mul(EXECUTORS_PER_PAGE).saturating_add(slot))
     }
 }
 
@@ -188,6 +193,20 @@ mod tests {
         assert_eq!(ExecutorId::new(9).page(), 1);
         assert_eq!(ExecutorId::new(9).slot(), 1);
         assert_eq!(ExecutorId::from_page_and_slot(1, 1), ExecutorId::new(9));
+    }
+
+    #[test]
+    fn an_absurd_page_number_saturates_instead_of_wrapping() {
+        // SetExecutorPage carries an arbitrary u32 from any client. Wrapping
+        // would silently address a low executor - a live show hazard.
+        assert_eq!(
+            ExecutorId::from_page_and_slot(u32::MAX, 7),
+            ExecutorId::new(u32::MAX)
+        );
+        assert_eq!(
+            ExecutorId::from_page_and_slot(u32::MAX / 8, 0).get(),
+            (u32::MAX / 8) * 8
+        );
     }
 
     #[test]

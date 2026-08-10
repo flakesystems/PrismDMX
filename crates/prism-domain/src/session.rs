@@ -58,24 +58,32 @@ pub struct WindowInstance {
     #[serde(rename = "type")]
     pub window_type: WindowType,
     /// Left edge on the canvas.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")
     )]
     pub x: f64,
     /// Top edge on the canvas.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")
     )]
     pub y: f64,
     /// Width.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")
     )]
     pub w: f64,
     /// Height.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::finite_f64()")
