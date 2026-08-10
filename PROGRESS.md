@@ -27,8 +27,8 @@
 | 9 | CI workflow | ✅ | `.github/workflows/ci.yml` — Windows full, Linux neutral tests, ARM64 cross-check, UI |
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
-| 12 | GitHub CLI | ▶ | `gh` 2.97.0 installed at `C:\Program Files\GitHub CLI\gh.exe`. **Not authenticated** — needs one interactive `gh auth login` |
-| 13 | CI first run verified | ☐ | Triggered by the push, but unreadable until item 12 is done. See B2 |
+| 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
+| 13 | CI first run verified | ✅ | Run 31346285996 — **all four jobs green**: Windows 49 s, Linux neutral 16 s, ARM64 check 16 s, UI 15 s |
 
 ---
 
@@ -115,7 +115,7 @@ Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S0:
 | `cargo run -p prismd` | ✅ exit 0 — daemon binary links and runs |
 | `npx tsc -b --force` (ui, strict) | ✅ exit 0 |
 | `npm run build` (ui) | ✅ exit 0 |
-| CI green on a pushed branch | ⛔ triggered but unverified — private repo, no API access (B2) |
+| CI green on a pushed branch | ✅ run 31346285996, all four jobs passed |
 
 ---
 
@@ -146,18 +146,13 @@ Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and prot
 
 ## 4. Blockers
 
-*No blocking issues. One non-blocking item below.*
+*None. All setup blockers resolved.*
 
-### B2 — CI run not yet verified ☐ (non-blocking)
-**State:** the remote is configured and `master` is pushed, so `.github/workflows/ci.yml` has been **triggered**. Whether it passed is unknown.
+### B2 — CI run not yet verified ✅ RESOLVED 2026-08-10
+The repository is private, so the unauthenticated GitHub API returned 404 and run status could not be read from the shell. Resolved by installing the `gh` CLI and the user authenticating it. Run **31346285996** passed with all four jobs green: Windows full build and test (49 s), Linux platform-neutral crates (16 s), Linux ARM64 cross-compile check (16 s), UI typecheck and build (15 s). The workflow required no corrections.
 
-**Why it cannot be checked from the development shell:** the repository is private, so the unauthenticated GitHub API returns 404. The `gh` CLI is now installed (2.97.0) but not logged in, and `gh auth login` is an interactive browser or device flow that cannot be driven from a non-interactive shell. Pushing works only because git uses the stored credential helper, which is not a token `gh` can read.
-
-**Why it is not blocking:** every check the CI performs also runs locally and is green (§2.1). CI protects against regressions over time; its absence does not stop S1.
-
-**Resolution:** run `gh auth login` once (interactive, user action). After that, run status is readable directly from the shell for the rest of the project. Alternatively, read the Actions tab in a browser.
-
-**Likely first failure, if any:** the `ui` job runs `npm ci`, which requires `ui/package-lock.json` to match `package.json`. It is committed, so this should hold — but it is the step most sensitive to the scaffold.
+### B1 — MSVC Build Tools missing ✅ RESOLVED 2026-08-10
+Rust could be installed per-user via winget, but the MSVC linker could not — `link.exe` was absent and every link step failed. Resolved by the user installing Visual Studio Build Tools 2022 (17.14.37516.0) from an elevated shell. Verified: `cargo build`, `cargo test` and `cargo run -p prismd` all succeed.
 
 ### B1 — MSVC Build Tools missing ✅ RESOLVED 2026-08-10
 Rust could be installed per-user via winget, but the MSVC linker could not — `link.exe` was absent and every link step failed. Resolved by the user installing Visual Studio Build Tools 2022 (17.14.37516.0) from an elevated shell. Verified: `cargo build`, `cargo test` and `cargo run -p prismd` all succeed.
@@ -183,6 +178,7 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 |---|---|---|---|
 | 2026-08-10 | S0 | Rust installs cleanly per-user via winget, but the MSVC linker does not — they are separate installs | Setup split into an automatic part and a manual elevated part; recorded as B1 |
 | 2026-08-10 | S0 | `cargo check` and `cargo clippy` do not link | Workspace scaffold can be verified before B1 is resolved; test-driven work cannot start until it is |
+| 2026-08-10 | S0 | The first CI run passed but flagged `actions/checkout@v4` and `actions/setup-node@v4` as targeting the deprecated Node 20 runtime | Both bumped to `@v5` immediately, while the workflow was still trivial to re-verify |
 | 2026-08-10 | S0 | The remote already carried an MIT `LICENSE` from repository creation, while the workspace manifest declared `license = "UNLICENSED"` | Rebased onto the existing commit instead of overwriting it; manifest corrected to `MIT` in a separate commit |
 | 2026-08-10 | S0 | The CI workflow cannot be validated without a remote, so a green local build is not the same as a green pipeline | Tracked as B2 rather than silently assuming CI works. S0 closed with this criterion explicitly unmet |
 | 2026-08-10 | S0 | The Vite `react-ts` template does **not** set `"strict": true` — the default is `false`, so the template ships non-strict TypeScript despite its name | `CLAUDE.md` violation caught before any code was written. `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride` and `noImplicitReturns` added to both `tsconfig.app.json` and `tsconfig.node.json`; typecheck and build re-verified green |
@@ -191,8 +187,7 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-1. Optional: add a git remote so the CI workflow gets its first real run (B2).
-2. Begin **S1** (`prism-domain`) — the dependency root for everything else. Use the prompt in §8.
+Setup is complete and verified end to end. Begin **S1** (`prism-domain`) — the dependency root for everything else. Use the prompt in §8.
 
 ---
 
