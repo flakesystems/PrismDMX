@@ -21,10 +21,10 @@ use std::cell::Cell;
 use std::sync::Arc;
 use std::time::Duration;
 
-use prism_domain::{ExecutorId, UniverseId};
+use prism_domain::{AttributeDef, AttributeType, ExecutorId, FixtureId, FixtureType, UniverseId};
 use prism_engine::{
-    Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, SystemClock, TickBody,
-    TickCommand, TickInfo, command_queue,
+    Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, MergePlan,
+    SystemClock, TickBody, TickCommand, TickInfo, command_queue,
 };
 
 /// Counts allocator calls made by whichever thread has armed the probe.
@@ -105,7 +105,9 @@ impl TickBody for RampBody {
         match command {
             TickCommand::SetGrandMaster(level) => self.grand_master = level,
             TickCommand::SetBlackout(on) => self.blackout = on,
-            TickCommand::SetExecutorLevel { .. } | TickCommand::Go { .. } => {}
+            TickCommand::SetExecutorLevel { .. }
+            | TickCommand::SetExecutorActive { .. }
+            | TickCommand::Go { .. } => {}
         }
     }
 
@@ -202,6 +204,109 @@ fn the_real_clock_path_is_allocation_free_too() {
     println!("allocator calls in 44 ticks on the system clock: {calls}");
     assert_eq!(calls, 0);
     assert_eq!(harness.engine.stats().ticks, 44);
+}
+
+/// A fixture type with `attributes` of the merge's own attributes, so a plan
+/// built from many of them exercises both merge modes.
+fn fixture_type(attributes: usize) -> FixtureType {
+    let attributes = AttributeType::ALL
+        .iter()
+        .take(attributes)
+        .map(|attribute| AttributeDef {
+            attribute: *attribute,
+            feature_group: attribute.feature_group(),
+            coarse_offset: 0,
+            fine_offset: None,
+            default_value: 32_768,
+            merge_mode: attribute.default_merge_mode(),
+            invert: false,
+            physical_from: 0.0,
+            physical_to: 100.0,
+        })
+        .collect::<Vec<_>>();
+    FixtureType {
+        id: "test.head".to_owned(),
+        manufacturer: "Test".to_owned(),
+        name: "Test".to_owned(),
+        mode: "test".to_owned(),
+        footprint: attributes.len() as u16,
+        attributes,
+    }
+}
+
+/// The merge, loaded up: every source provides a value for every slot, which is
+/// the worst case the resolve can be given.
+fn merge_body(fixtures: u32, executors: u32, attributes: usize) -> MergeBody {
+    let head = fixture_type(attributes);
+    let plan = MergePlan::build((1..=fixtures).map(|id| (FixtureId::new(id), &head))).unwrap();
+    let slots = plan.slot_count();
+    let mut body = MergeBody::new(plan, (1..=executors).map(ExecutorId::new)).unwrap();
+    for executor in 1..=executors {
+        let source = body
+            .layer_mut()
+            .source_mut(ExecutorId::new(executor))
+            .unwrap();
+        for slot in 0..slots {
+            source.set(slot, (slot as u16).wrapping_mul(executor as u16));
+        }
+        body.layer_mut().activate(ExecutorId::new(executor));
+    }
+    body
+}
+
+#[test]
+fn a_tick_running_the_merge_makes_no_allocator_call_either() {
+    // The empty tick proving nothing about the allocator is easy. This is the
+    // criterion that matters: the merge itself, resolving a full source set on
+    // every tick, with executors going on and off underneath it.
+    let body = merge_body(128, 8, 6);
+    let slots = body.plan().slot_count();
+    assert_eq!(slots, 128 * 6);
+
+    let layout = Arc::new(FrameLayout::new((1..=8).map(UniverseId::new)).unwrap());
+    let mut publisher = FramePublisher::new(layout);
+    let mut subscriber = publisher.subscribe();
+    let (mut producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle =
+        |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
+            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let _ = producer.push(TickCommand::SetExecutorActive {
+                executor,
+                on: index % 2 == 0,
+            });
+            let _ = producer.push(TickCommand::SetExecutorLevel {
+                executor,
+                level: index,
+            });
+            engine.run_ticks(&clock, 1);
+            subscriber.refresh();
+        };
+
+    for index in 0..200 {
+        cycle(&mut engine, &mut producer, index);
+    }
+    engine.reset_stats();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, &mut producer, index);
+        }
+    });
+
+    println!("allocator calls in 1000 merged ticks, {slots} slots, 8 sources: {calls}");
+    assert_eq!(calls, 0, "the merge called the allocator {calls} times");
+    assert_eq!(engine.stats().ticks, 1_000);
+    assert_eq!(engine.stats().commands, 2_000);
+    assert_eq!(engine.stats().panics, 0);
+    // And it was actually merging: with sources active the values are not the
+    // home layer they started at.
+    assert!(
+        engine.body().values().iter().any(|value| *value != 32_768),
+        "the merge produced nothing, so the measurement is meaningless"
+    );
 }
 
 #[test]

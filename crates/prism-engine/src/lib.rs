@@ -19,13 +19,30 @@
 //!                        [`Engine`] ── 44 Hz tick ──▶ [`FramePublisher`]
 //!                                       ▲                     │
 //!                                  [`TickBody`]                │ triple buffer,
-//!                             (S3 merge, S5 playback)          │ wait-free
+//!                            ([`MergeBody`], S5 playback)      │ wait-free
 //!                                                              ▼
 //!                                                     [`FrameSubscriber`]
 //!                                                      one per output driver
 //! ```
 //!
 //! Nothing on that path takes a lock, allocates, or waits for anything else.
+//!
+//! # The merge
+//!
+//! `docs/DMX_MERGE.md` is the specification; this crate implements it in three
+//! layers, smallest first:
+//!
+//! - [`merge`](self#reexports) — the arithmetic. [`merge_htp`], [`merge_ltp`],
+//!   [`apply_master`] and [`merge_playbacks`]: pure functions with no state and
+//!   no clock, which is what lets §6.1 and §6.2 be checked as algebra.
+//! - [`MergePlan`] — the home layer. The patch flattened into one
+//!   [`AttributeSlot`] per fixture and attribute, built before the tick starts.
+//! - [`PlaybackLayer`] — the source set, and [`PlaybackLayer::resolve`], which
+//!   turns it into one value per slot without allocating.
+//!
+//! [`MergeBody`] joins the three onto the tick. What it produces is *attribute
+//! values*, not DMX bytes: the encoding (S4), the executors and fades (S5) and
+//! the programmer and masters (S6) are still to come.
 //!
 //! # Rules for code on the tick path
 //!
@@ -81,18 +98,30 @@
     )
 )]
 
+mod body;
 mod clock;
 mod command;
 mod frame;
+mod merge;
+mod plan;
+mod playback;
 mod spsc;
 mod stats;
 mod sync;
+#[cfg(all(test, not(loom)))]
+mod testkit;
 mod tick;
 mod triple_buffer;
 
+pub use body::MergeBody;
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use command::TickCommand;
 pub use frame::{DmxFrame, FrameLayout, LayoutError, MAX_UNIVERSES, UNIVERSE_CHANNELS};
+pub use merge::{
+    FULL, SourceValue, apply_master, merge_htp, merge_ltp, merge_playbacks, merge_programmer,
+};
+pub use plan::{AttributeSlot, MAX_SLOTS, MergeError, MergePlan};
+pub use playback::{MAX_SOURCES, MergeScratch, PlaybackLayer, PlaybackSource};
 pub use spsc::{Consumer, PAYLOAD_BYTES, Producer, TickPayload, command_queue};
 pub use stats::{Histogram, TickStats};
 pub use tick::{

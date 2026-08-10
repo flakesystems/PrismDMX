@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-10
 **Current phase:** Phase 1 — Domain and engine
-**Current session:** S3 — `prism-engine` HTP/LTP merge (not started; see §8 for the prompt that starts it)
-**Last completed:** S2 — `prism-engine` tick loop and triple buffer ✅
+**Current session:** S4 — `prism-engine` attribute-to-DMX encoding (not started; see §8 for the prompt that starts it)
+**Last completed:** S3 — `prism-engine` HTP/LTP merge ✅
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -45,8 +45,8 @@
 |---|---|---|---|---|
 | S1 | `prism-domain` — types | ✅ | 2026-08-10 | All exit criteria verified — see §2.2. 133 tests, coverage 99.8 % lines |
 | S2 | `prism-engine` — tick loop, triple buffer | ✅ | 2026-08-10 | All exit criteria verified — see §2.3. 77 tests + 3 `loom` models, coverage 98.6 % lines |
-| S3 | `prism-engine` — HTP/LTP merge | ☐ | | Highest-value TDD target. Plugs into `TickBody` |
-| S4 | `prism-engine` — DMX encoding | ☐ | | |
+| S3 | `prism-engine` — HTP/LTP merge | ✅ | 2026-08-10 | All exit criteria verified — see §2.4. 135 tests, coverage 99.1 % lines |
+| S4 | `prism-engine` — DMX encoding | ☐ | | Consumes `MergeBody::values()` — attribute values, not bytes |
 | S5 | `prism-engine` — executors, cues, fades | ☐ | | |
 | S6 | `prism-engine` — programmer, masters, stress | ☐ | | Coverage gate > 95 % |
 
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 3 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 4 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -174,6 +174,37 @@ At the shell's default priority the same run missed 45 ticks with a p99.9 of
 54 ms; at high priority, nothing else changed, it missed none with a p99.9 of
 200 µs. See the decision log and §3.1.
 
+### 2.4 S3 verification record
+
+Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S3:
+
+| Check | Result |
+|---|---|
+| `cargo test -p prism-engine` | ✅ exit 0 — **135 lib tests** (64 of them new) + 7 integration tests, 0 failed, 4 `#[ignore]`d |
+| `cargo test --workspace` | ✅ exit 0 — 268 tests across 17 targets |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| `DMX_MERGE.md` §6.1 — HTP commutative, associative, idempotent, monotone, identity | ✅ five `proptest` properties on `merge_htp`, plus `raising_one_source_never_lowers_an_htp_slot` for monotonicity of the whole layer |
+| §6.2 — LTP order-dependent, asserted against a shuffled input | ✅ `ltp_is_the_value_of_the_most_recently_activated_source` rotates the slice with the counters preserved and demands the same answer |
+| §6.2 — LTP **not** commutative, asserted | ✅ `ltp_is_not_commutative` **and** `ltp_is_not_a_maximum`, so turning LTP into a max fails two properties, not none |
+| Deactivation fallback down to home | ✅ tested at all three levels: the pure function, the layer, and the §7 cascade |
+| `DMX_MERGE.md` §7 worked example, literal | ✅ `the_worked_example_from_the_specification` — every number in the table, both quoted DMX byte pairs, and all four sentences of the closing paragraph |
+| Zero allocations in the tick **with the merge active** | ✅ **0 allocator calls** over 1 000 ticks, 768 slots, 8 fully-loaded sources, executors going on and off, counted by the allocator itself |
+| `loom` models still pass | ✅ 3 models, unchanged from S2 |
+| Coverage on `prism-engine` | ✅ **99.14 % lines**, 99.29 % regions, 98.46 % functions — `merge.rs`, `playback.rs` and `body.rs` at 100 % lines |
+
+**Delivered:** four modules. `merge` is the arithmetic — `merge_htp`, `merge_ltp`,
+`apply_master`, `merge_playbacks`, `merge_programmer` — pure, `const` where it
+can be, with no state and no clock. `plan` is the home layer: `MergePlan`
+flattens the patch into one `AttributeSlot` per fixture and attribute. `playback`
+is the source set and the resolver. `body` joins them onto `TickBody`. One new
+`TickCommand` variant, `SetExecutorActive`, drives the activation counter.
+
+**The merge produces attribute values, not DMX bytes.** `MergeBody::render`
+resolves into a `[u16]` and leaves the frame alone; the encoding is S4. Until
+then a `prismd` built on `MergeBody` outputs a blackout, which is why S4 is the
+next session rather than S5.
+
 ---
 
 ## 3. Coverage tracking
@@ -186,7 +217,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Crate | Target | Measured | Date |
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
-| `prism-engine` | **> 95 %** | **98.61 % lines**, 99.01 % regions, 96.97 % functions | 2026-08-10 |
+| `prism-engine` | **> 95 %** | **99.14 % lines**, 99.29 % regions, 98.46 % functions | 2026-08-10 (S3) |
 | `prism-core` | **> 95 %** (programmer) | — | |
 | `prism-protocols` | **> 95 %** | — | |
 | `prism-surface` | **> 95 %** | — | |
@@ -199,7 +230,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | Tick jitter | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 588 µs, **0 of 26 401 ticks missed** — at the thread priority `ARCHITECTURE_SPEC.md` §3 specifies. See the note below | 2026-08-10 |
 | Tick jitter under 100 % CPU load | S6 stress gate — not this session | — | |
-| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers | 2026-08-10 |
+| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; and **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching | 2026-08-10 |
 | Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Open DMX frame rate | measure real rate on SH-RS09B | — | |
@@ -286,6 +317,14 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-10 | S3 | **"LTP is order-dependent" and "LTP is not commutative" are two different claims, and only one of them is about the merge.** Ordering a source *set* by activation counter is, correctly, independent of the order of the list — shuffling the input must not change the answer. The non-commutativity `DMX_MERGE.md` §6.2 demands lives one level down, in the binary operation "the later one wins" | Split into two functions and two properties. `merge_ltp(a, b) = b` carries the non-commutativity and is asserted against it; `merge_playbacks` carries the ordering and is asserted to be shuffle-invariant. A second property, `ltp_is_not_a_maximum`, fails as well if anyone replaces the operation with `max` — the failure the specification is really trying to prevent |
+| 2026-08-10 | S3 | **Equal activation counters would make LTP depend on slice order.** Counters are unique by construction, so the case cannot arise from the layer — but `merge_playbacks` is public and takes any slice, and "usually deterministic" is not a property worth having in the one function the whole product resolves through | The LTP key is `(activation, executor)`, a total order on any source set at all. Costs nothing, and makes shuffle-invariance a theorem rather than a convention |
+| 2026-08-10 | S3 | **The resolver cannot be a per-slot fold without wasting the tick.** Asking every source about every slot costs `slots × sources` every tick whether anything is running or not — at 8 000 attributes and 64 executors, half a million operations per tick to produce a rig at home | Source-major instead: each source is asked only for the slots it touches, and the per-slot winner accumulates in a scratch buffer. The cost is what the active cues contain. The price is that the accumulator exists, so `PlaybackLayer::resolve` takes `&self` and the scratch is passed in — purity kept in the signature rather than in a comment — and a `proptest` holds the resolver to agreeing with the pure `merge_playbacks` on every slot |
+| 2026-08-10 | S3 | **`Accumulator` needs a "covered" flag; a sentinel value will not do.** An HTP slot whose only source contributes 0 must resolve to 0, not to its home value. Without a third state the merge cannot tell "resolved to zero" from "nothing active", which is the difference between a dark fixture and a fixture at home — and for a moving head, between a centred pan and pan 0 | One bool per slot. Recorded because it is the sort of thing a later optimisation removes |
+| 2026-08-10 | S3 | **The §7 worked example is an S3 exit criterion but its last two rows are the programmer, which the plan gives to S6.** Leaving them out would have meant closing the session on a partial test of a criterion that names the example explicitly | `merge_programmer(merged, Option<u16>)` implemented here: five lines, pure, no state. The programmer *state machine* — `ProgrammerValue`, the three-stage clear, store behaviour — is untouched and remains **S6**, as do all masters. The §7 test asserts the two DMX byte pairs the document quotes as arithmetic on the 16-bit value, without pre-empting S4's encoder |
+| 2026-08-10 | S3 | An executor that is already active and is switched on again does **not** get a new activation stamp. §2.2 orders by when an executor "goes active", and one that was already on has not gone active | `PlaybackLayer::activate` is idempotent and returns `false` for a source already on. **S5 requirement:** if a retrigger is ever meant to move a playback to the top of the LTP order, that is a separate operation with its own name, not a side effect of pressing a button twice |
+| 2026-08-10 | S3 | `MergeBody::render` writes **nothing** to the frame. Attribute values are 16-bit and the split into DMX bytes, the two levels of invert and the patch-time address validation are all S4 | Recorded rather than papered over with a provisional encoder: half an encoder that S4 then replaces is worse than none, and a body that silently wrote coarse bytes only would look like it worked. **S4 requirement:** the encoder consumes `MergeBody::values()` against the same `MergePlan`, whose slot order (`fixture`, then `attribute`) is stable and is part of its contract |
+| 2026-08-10 | S3 | `TickCommand::SetGrandMaster` and `SetBlackout` reach the merge already but are masters, which `DMX_MERGE.md` §4 applies *after* the merge | Ignored by `MergeBody`, with a test that says so outright. A body that quietly swallowed a blackout would pass every other test in the crate. **S6 requirement:** the masters wrap the merged values, and only intensity attributes |
 | 2026-08-10 | S2 | **A `prism_domain::Command` cannot enter the tick at all.** It owns `String`s, `Vec`s and `JsonValue`s, so *dropping* one inside the tick calls the allocator — which §3.1 forbids exactly as firmly as allocating does, and which is the easier mistake to make because nothing in the code looks like an allocation | The queue carries `TickCommand`: flat, `Copy`, no owned fields, encoded into a fixed 16-byte slot. The core thread resolves a `Command` against the show and pushes the flat form. **S17 requirement:** `prismd` owns that translation, and anything that cannot be expressed flatly does not belong in the engine. A `const` assertion fails the build if a later session's variant outgrows the slot |
 | 2026-08-10 | S2 | **A triple buffer with one control word is single-consumer, not multi-consumer.** The plan says "one writer, many readers". With two readers swapping against the same word, one can be handed the slot the other has just given back — an *older* frame than it has already put on the wire. Making that safe needs a retry loop, and a retry loop is not wait-free | Each subscriber gets its own three-slot buffer and the publisher fans the frame out. Costs one copy per subscriber per tick (32 KB at 64 universes); buys that *every* buffer in the system is genuinely single-producer/single-consumer, which is a property `loom` can actually check. Measured cost recorded in §3.1 |
 | 2026-08-10 | S2 | `unsafe_code` is denied workspace-wide, so a shared slot cannot be an `UnsafeCell` — and `prism-engine` is the last crate in which to start making exceptions | Slots are `[AtomicU64]`, and frames are packed in and out of them eight channel bytes at a time. The ownership protocol already guarantees exclusive access, so every payload access is `Relaxed` and the control-word swap carries the ordering. What the atomics buy is that the worst case of a protocol bug is a stale frame, never undefined behaviour |
@@ -318,11 +357,15 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-The heartbeat runs and holds its deadline. Begin **S3** (`prism-engine` — HTP/LTP merge). Use the prompt in §8. `TickBody` in `crates/prism-engine/src/tick.rs` is the seam it plugs into.
+The merge resolves. Begin **S4** (`prism-engine` — attribute to DMX encoding). Use the prompt in §8. The seam is `MergeBody::render`, which resolves values and leaves the frame untouched.
 
-Carried into S3 and beyond:
+Carried into S4 and beyond:
+- The encoder consumes `MergeBody::values()` — one 16-bit value per `MergePlan` slot, in slot order (`fixture`, then `attribute`). That order is stable and part of the plan's contract.
+- `MergePlan` deliberately knows nothing about addresses: `Fixture.universe`, `Fixture.address`, `AttributeDef.coarse_offset`/`fine_offset`/`invert` and `Fixture.invert_pan`/`invert_tilt` are all S4's, as is rejecting a footprint that runs past channel 512.
+- `PlaybackLayer::source_mut(..).set(slot, value)` and `.clear()` are how **S5** feeds evaluated cue values in; `activate`/`deactivate` maintain the LTP order. `activate` is idempotent — a retrigger that should move a playback to the top of the order needs its own operation.
+- Masters and the programmer state machine are **S6**. `SetGrandMaster` and `SetBlackout` reach `MergeBody` today and are ignored on purpose.
 - `prism-domain`'s optional `proptest` feature is already enabled in `prism-engine`'s `[dev-dependencies]`. Use `prism_domain::arb` rather than growing new generators.
-- `TickCommand` is flat, `Copy` and encoded into 16 bytes. A new variant needs a new tag, a row in the round-trip test and, if it is wider, a raised `MAX_ENCODED` — a `const` assertion breaks the build otherwise.
+- `TickCommand` is flat, `Copy` and encoded into 16 bytes; S3 added `SetExecutorActive` as tag 5. A new variant needs a new tag, a row in the round-trip test and, if it is wider, a raised `MAX_ENCODED` — a `const` assertion breaks the build otherwise.
 - `prismd` (S17) owns the translation from `prism_domain::Command` to `TickCommand`, must attach every output driver during setup (`FramePublisher::subscribe` allocates), and **must raise the tick thread's priority** — without it the deadline is not held, see §3.
 - `prism-protocols` (S7): a driver thread should wake at its own output cadence rather than spin near the engine — see the decision log.
 - `prism-ipc` (S16) must serialise MessagePack with `to_vec_named`, must enforce a **nesting depth limit** on decode, and must treat serialisation as fallible — see the decision log.
@@ -335,57 +378,70 @@ Carried into S3 and beyond:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S3 — `prism-engine`: HTP/LTP-Merge**
+**Next up: S4 — `prism-engine`: Attribut-zu-DMX-Encoding**
 
 ```text
-PrismDMX — Session S3: prism-engine, HTP/LTP-Merge
+PrismDMX — Session S4: prism-engine, Attribut-zu-DMX-Encoding
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
-1. CLAUDE.md                     — verbindliche Qualitäts-, Architektur- und Teststandards
-2. PROGRESS.md                   — aktueller Stand, Decision Log, gemessene Zahlen
-3. IMPLEMENTATION_PLAN.md        — Session-Protokoll und die Definition von S3
-4. docs/DMX_MERGE.md             — vollständig; das ist die Spezifikation dieser Session
-5. ARCHITECTURE_SPEC.md §3.1, §5 — die harten Tick-Regeln und die Pipeline-Reihenfolge
-6. crates/prism-engine/src/lib.rs — die Crate-Doku erklärt Aufbau und Tick-Vertrag
-7. crates/prism-domain/src/attribute.rs — AttributeType, FeatureGroup, MergeMode
+1. CLAUDE.md                        — verbindliche Qualitäts-, Architektur- und Teststandards
+2. PROGRESS.md                      — aktueller Stand, Decision Log, gemessene Zahlen
+3. IMPLEMENTATION_PLAN.md           — Session-Protokoll und die Definition von S4
+4. docs/DMX_MERGE.md §5             — die Spezifikation dieser Session; §1 für den Stack darüber
+5. ARCHITECTURE_SPEC.md §3.1, §5    — die harten Tick-Regeln und die Pipeline-Reihenfolge
+6. crates/prism-engine/src/lib.rs   — die Crate-Doku erklärt Aufbau, Tick-Vertrag und die Merge-Schichten
+7. crates/prism-engine/src/plan.rs  — MergePlan: die Slots, die S4 in Kanäle übersetzt
+8. crates/prism-engine/src/body.rs  — MergeBody: render() löst Werte auf und lässt den Frame in Ruhe
+9. crates/prism-domain/src/attribute.rs und src/patch.rs — AttributeDef, FixtureType, Fixture
 
-Aufgabe: Session S3 umsetzen — der Merge. Das ist der Kern des Produkts: aus einer
-Menge von Quellen (Home-Layer, Playbacks) wird pro Fixture und Attribut ein Wert.
-Intensität mischt HTP, alles andere LTP nach Aktivierungsreihenfolge; der
-Executor-Master wirkt vor dem HTP-Maximum. Der Merge ist eine reine Funktion über
-eine Quellenmenge — keine versteckte Zeit, kein globaler Zustand.
+Aufgabe: Session S4 umsetzen — das Encoding. Aus den gemergten Attributwerten
+(16 Bit, 0..=65535, einer pro MergePlan-Slot) werden DMX-Kanalbytes im DmxFrame.
+Das ist der Schritt, nach dem die Kette Patch → Merge → Frame vollständig ist und
+ein Daemon tatsächlich Licht machen könnte.
+
+Stand nach S3 — nichts davon musst du neu bauen:
+- Der Merge ist fertig und getestet: MergePlan (Home-Layer), PlaybackLayer
+  (HTP/LTP, Aktivierungsordnung, Executor-Master), MergeBody als TickBody.
+- `MergeBody::render` löst pro Tick auf und füllt `MergeBody::values()`:
+  ein `[u16]`, ein Wert pro Slot, in Slot-Reihenfolge (Fixture, dann Attribut).
+  Diese Reihenfolge ist stabil und Teil des Vertrags von MergePlan.
+- Der Frame bleibt bisher unberührt. Genau diese Lücke schließt S4.
+- MergePlan kennt bewusst keine Adressen. Universum, Startadresse, coarse/fine
+  Offsets und beide Invert-Ebenen sind Sache dieser Session.
+
+Umzusetzen (docs/DMX_MERGE.md §5):
+- 8-Bit-Attribut (`fineOffset == null`): data[address + coarseOffset] = value >> 8
+- 16-Bit-Attribut: coarse = value >> 8, fine = value & 0xFF, geschrieben an
+  coarseOffset und fineOffset
+- `AttributeDef.invert`: value = 65535 - value, VOR dem Aufteilen
+- `Fixture.invertPan` / `invertTilt`: zusätzlich zum Attribut-Invert, damit ein
+  über Kopf hängender Scheinwerfer ohne Änderung des Fixture-Typs stimmt
+- Adressarithmetik wird beim Patchen validiert, nie im Tick: ein Fixture, dessen
+  Footprint über Kanal 512 hinausginge, wird beim Patchen abgelehnt. Dafür gibt
+  es bereits `Fixture::last_address(footprint)` in prism-domain.
+- Die Anbindung an den Tick: `MergeBody::render` schreibt danach den Frame,
+  nicht mehr nur die Werte.
 
 Vorgehen strikt test-driven (CLAUDE.md): erst der fehlschlagende Test, dann die
-Implementierung. Diese Crate trägt die strengste Coverage-Anforderung des Projekts
-(> 95 %), abgenommen wird sie in S6.
-
-Umzusetzen (docs/DMX_MERGE.md §1–§4):
-- Home-Layer: der Wert, auf den ein Attribut zurückfällt, wenn nichts aktiv ist
-- Playback-Layer mit MergeMode pro Attribut (HTP/LTP), Aktivierungszähler pro Quelle
-- Executor-Master vor dem HTP-Maximum angewandt (§2.3)
-- Der Merge als reine Funktion; die Programmer-Schicht und die Master kommen in S6
-
-Anschluss an das, was in S2 entstanden ist:
-- `TickBody` in crates/prism-engine/src/tick.rs ist genau die Naht, in die der Merge
-  gehört: `apply(TickCommand)` und `render(&TickInfo, &mut DmxFrame)`.
-- Im Tick gilt ARCHITECTURE_SPEC.md §3.1: keine Allokation, kein Lock, kein I/O,
-  kein Logging. Alle Puffer werden vorab aus dem Patch dimensioniert. Der
-  Zähl-Allokator in crates/prism-engine/tests/tick_allocations.rs weist das nach —
-  der Merge muss dort mitgemessen werden, nicht nur der leere Tick.
-- `TickCommand` (crates/prism-engine/src/command.rs) ist flach und `Copy` und wird in
-  16 Byte kodiert. Neue Varianten brauchen ein neues Tag plus eine Zeile im
-  Round-Trip-Test; `MAX_ENCODED` mitziehen, eine const-Assertion bricht sonst den Build.
+Implementierung. Diese Crate trägt die strengste Coverage-Anforderung des
+Projekts (> 95 %); nach S3 gemessen wurden 99,14 % Zeilen. Abgenommen wird die
+Coverage in S6, aber sie darf hier nicht fallen.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Jede Invariante aus docs/DMX_MERGE.md §6.1 und §6.2 ist mit proptest verifiziert
-- HTP: Kommutativität, Assoziativität, Idempotenz, Monotonie, Identität
-- LTP: Ordnungsabhängigkeit explizit geprüft UND Nicht-Kommutativität explizit
-  behauptet, damit niemand LTP später zu einem Maximum "optimiert"
-- Deaktivierungs-Fallback bis hinunter zum Home-Layer getestet
-- Das ausgearbeitete Beispiel aus docs/DMX_MERGE.md §7 als wörtlicher Testfall
-- Null Allokationen im Tick mit aktivem Merge (bestehendes Test-Target erweitern)
+- Tabellentests für 8-Bit- und 16-Bit-Encoding, inklusive der Grenzwerte
+  0, 1, 32767, 32768, 65534, 65535
+- Invert-Komposition getestet: Attribut-Invert × Fixture-Invert in allen vier
+  Kombinationen, und dass doppeltes Invertieren die Identität ist
+- Ein Fixture, dessen Footprint über Kanal 512 hinausgeht, wird BEIM PATCHEN
+  mit einer klaren Fehlermeldung abgelehnt — nicht im Tick
+- Ein Fixture in einem Universum, das nicht im FrameLayout steht, wird ebenso
+  beim Patchen abgelehnt
+- Null Allokationen im Tick mit aktivem Merge UND Encoding
+  (crates/prism-engine/tests/tick_allocations.rs erweitern, nicht ersetzen)
+- Die Kette Patch → Merge → Frame als Integrationstest: der Home-Layer ergibt
+  bestimmte Bytes, ein aktiver Executor ändert genau die erwarteten Kanäle
 - cargo test -p prism-engine ist grün
 - cargo clippy --workspace --all-targets -- -D warnings ist sauber
 - cargo fmt --all --check ist sauber
@@ -393,9 +449,14 @@ Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreff
 Wichtige Randbedingungen:
 - prism-engine ist plattformneutral und I/O-frei — kein #[cfg(target_os = ...)],
   keine UI-Abhängigkeit, keine Hardware. CI testet die Crate auch unter Linux.
+- Im Tick gilt ARCHITECTURE_SPEC.md §3.1: keine Allokation, kein Lock, kein I/O,
+  kein Logging. Alle Puffer werden vorab aus dem Patch dimensioniert. Zusätzlich
+  sind clippy::indexing_slicing und clippy::integer_division im Produktionscode
+  verboten — also `get`/`get_mut` und `div_euclid` statt `[]` und `/`.
 - prism-domain hat ein optionales Feature `proptest` (`prism_domain::arb` und die
   `Arbitrary`-Impls). Es ist in den [dev-dependencies] von prism-engine bereits
   aktiviert — benutzen statt eigene Generatoren zu schreiben.
+- Interne Testhelfer für Fixture-Typen stehen in crates/prism-engine/src/testkit.rs.
 - Lange Tests laufen nicht in CI. Wie man sie ausführt, steht in PROGRESS.md §3.1
   und in der Crate-Doku von prism-engine.
 - Toolchain ist eingerichtet und funktioniert (Rust 1.97.1 msvc, MSVC Build Tools 2022,
@@ -403,9 +464,9 @@ Wichtige Randbedingungen:
 - Es ist kein Setup mehr nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S3-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S4-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S4 (prism-engine: Attribut-zu-DMX-Encoding) überschreiben
+  Session S5 (prism-engine: Executoren, Cues, Fades) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(engine): …
 ```

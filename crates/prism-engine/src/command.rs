@@ -32,6 +32,18 @@ pub enum TickCommand {
         /// The new position.
         level: u16,
     },
+    /// Switch an executor on or off.
+    ///
+    /// Switching one on stamps it with the next activation counter, which is
+    /// what orders LTP attributes (`docs/DMX_MERGE.md` §2.2). Switching one off
+    /// removes it from the merge and every attribute it was holding falls back
+    /// to the next most recently activated source, or to home.
+    SetExecutorActive {
+        /// Which executor.
+        executor: ExecutorId,
+        /// On or off.
+        on: bool,
+    },
     /// Step an executor to its next or previous cue.
     Go {
         /// Which executor.
@@ -52,6 +64,7 @@ impl TickCommand {
     const TAG_EXECUTOR_LEVEL: u8 = 2;
     const TAG_GO: u8 = 3;
     const TAG_BLACKOUT: u8 = 4;
+    const TAG_EXECUTOR_ACTIVE: u8 = 5;
 }
 
 /// A variant added in a later session that outgrows a queue slot must fail to
@@ -70,6 +83,9 @@ impl TickPayload for TickCommand {
             Self::SetGrandMaster(level) => (Self::TAG_GRAND_MASTER, 0, level),
             Self::SetExecutorLevel { executor, level } => {
                 (Self::TAG_EXECUTOR_LEVEL, executor.get(), level)
+            }
+            Self::SetExecutorActive { executor, on } => {
+                (Self::TAG_EXECUTOR_ACTIVE, executor.get(), u16::from(on))
             }
             Self::Go {
                 executor,
@@ -117,6 +133,14 @@ impl TickPayload for TickCommand {
                     direction,
                 })
             }
+            Self::TAG_EXECUTOR_ACTIVE => match value {
+                0 => Some(Self::SetExecutorActive {
+                    executor,
+                    on: false,
+                }),
+                1 => Some(Self::SetExecutorActive { executor, on: true }),
+                _ => None,
+            },
             Self::TAG_BLACKOUT => match value {
                 0 => Some(Self::SetBlackout(false)),
                 1 => Some(Self::SetBlackout(true)),
@@ -159,6 +183,14 @@ mod tests {
             },
             TickCommand::SetBlackout(true),
             TickCommand::SetBlackout(false),
+            TickCommand::SetExecutorActive {
+                executor: ExecutorId::new(3),
+                on: true,
+            },
+            TickCommand::SetExecutorActive {
+                executor: ExecutorId::new(u32::MAX),
+                on: false,
+            },
         ];
         for command in commands {
             assert_eq!(round_trip(command), Some(command), "{command:?}");
