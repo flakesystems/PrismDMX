@@ -23,7 +23,7 @@ use std::time::Duration;
 
 use prism_domain::{
     AttributeDef, AttributeType, Cue, CuePart, CueTrigger, ExecutorId, Fixture, FixtureId,
-    FixtureType, GoDirection, Sequence, SequenceId, UniverseId, Vec3,
+    FixtureType, GoDirection, Group, GroupId, Sequence, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, SystemClock,
@@ -110,7 +110,11 @@ impl TickBody for RampBody {
             TickCommand::SetBlackout(on) => self.blackout = on,
             TickCommand::SetExecutorLevel { .. }
             | TickCommand::SetExecutorActive { .. }
-            | TickCommand::Go { .. } => {}
+            | TickCommand::Go { .. }
+            | TickCommand::SetGroupMaster { .. }
+            | TickCommand::SetProgrammerValue { .. }
+            | TickCommand::ClearProgrammerValue { .. }
+            | TickCommand::ClearProgrammer => {}
         }
     }
 
@@ -545,6 +549,119 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
             .iter()
             .any(|player| player.current_cue().is_some()),
         "no cue was running, so the measurement is meaningless"
+    );
+}
+
+#[test]
+fn a_tick_with_the_programmer_and_the_masters_makes_no_allocator_call_either() {
+    // S6's own criterion, added beside the earlier ones rather than replacing
+    // them. `prism_domain::ProgrammerState` owns a `BTreeMap` per fixture, so a
+    // programmer that reached the tick in that form would allocate on every
+    // touch and free on every clear. This counts what the flat, slot-addressed
+    // layer actually does, with values arriving and being cleared on the tick,
+    // group masters and the grand master moving, and the whole thing scaled and
+    // encoded every frame.
+    let head = fixture_type(6, false);
+    let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
+    let patched = patch(&layout, &head, 128);
+    let mut body = MergeBody::for_patch(
+        &layout,
+        patched.iter().map(|fixture| (fixture, &head)),
+        (1..=8).map(ExecutorId::new),
+    )
+    .unwrap();
+    let slots = body.plan().slot_count();
+    assert_eq!(slots, 128 * 6);
+    for executor in 1..=8u32 {
+        body.load_sequence(
+            ExecutorId::new(executor),
+            &loaded_sequence(&head, 128, executor as u16),
+        )
+        .unwrap();
+    }
+    // Sixteen groups over the whole rig, every fixture in two of them, so the
+    // group walk on the tick is neither empty nor trivial.
+    let groups: Vec<Group> = (0..16u32)
+        .map(|index| Group {
+            id: GroupId::new(index + 1),
+            name: String::new(),
+            fixtures: (1..=128u32)
+                .filter(|fixture| fixture % 8 == index % 8)
+                .map(FixtureId::new)
+                .collect(),
+        })
+        .collect();
+    body.load_groups(&groups);
+    assert_eq!(body.masters().group_count(), 16);
+    assert_eq!(body.masters().intensity_slots().len(), 128);
+
+    let mut publisher = FramePublisher::new(Arc::new(layout));
+    let mut subscriber = publisher.subscribe();
+    let (mut producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle =
+        |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
+            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let _ = producer.push(TickCommand::Go {
+                executor,
+                direction: GoDirection::Next,
+            });
+            // The programmer filling up and being cleared out again, which is
+            // the operation a naive implementation would allocate for.
+            let slot = u32::from(index) % 768;
+            let _ = producer.push(if index % 5 == 0 {
+                TickCommand::ClearProgrammerValue { slot }
+            } else if index % 64 == 0 {
+                TickCommand::ClearProgrammer
+            } else {
+                TickCommand::SetProgrammerValue { slot, value: index }
+            });
+            let _ = producer.push(TickCommand::SetGroupMaster {
+                group: GroupId::new(u32::from(index % 16) + 1),
+                level: index,
+            });
+            let _ = producer.push(TickCommand::SetGrandMaster(index | 0x8000));
+            engine.run_ticks(&clock, 1);
+            subscriber.refresh();
+        };
+
+    for index in 0..200 {
+        cycle(&mut engine, &mut producer, index);
+    }
+    engine.reset_stats();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, &mut producer, index);
+        }
+    });
+
+    println!(
+        "allocator calls in 1000 ticks with programmer and masters over {slots} slots: {calls}"
+    );
+    assert_eq!(
+        calls, 0,
+        "the programmer or the masters called the allocator {calls} times"
+    );
+    assert_eq!(engine.stats().ticks, 1_000);
+    assert_eq!(engine.stats().commands, 4_000);
+    assert_eq!(engine.stats().panics, 0);
+
+    // And all three layers were really doing something: the programmer holds
+    // values, the masters are down, and the frame is not the home layer.
+    assert!(
+        !engine.body().programmer().is_empty(),
+        "the programmer was empty, so the measurement is meaningless"
+    );
+    assert!(
+        engine.body().masters().grand() != u16::MAX,
+        "the grand master was at full, so the masters did nothing"
+    );
+    assert!(
+        subscriber.frame().channels().iter().any(|&byte| byte != 0),
+        "nothing reached the frame, so the measurement is meaningless"
     );
 }
 

@@ -39,6 +39,15 @@
 //!   [`AttributeSlot`] per fixture and attribute, built before the tick starts.
 //! - [`PlaybackLayer`] — the source set, and [`PlaybackLayer::resolve`], which
 //!   turns it into one value per slot without allocating.
+//! - [`ProgrammerLayer`] — the operator's absolute override, sparse by
+//!   specification: an untouched attribute is absent, not zero.
+//! - [`MasterLayer`] — the group masters and the grand master, which scale
+//!   intensity and nothing else.
+//!
+//! The order those last two run in is the specification's, and it is not
+//! symmetric: the programmer beats every playback, and the masters beat the
+//! programmer. A grand master that a programmer value could survive would not
+//! be a grand master.
 //!
 //! # The encoding
 //!
@@ -64,8 +73,11 @@
 //!
 //! [`MergeBody`] joins all of it onto the tick, and
 //! [`MergeBody::for_patch`] builds it from a patch in one call;
-//! [`MergeBody::load_sequence`] puts a cue list on an executor. The programmer
-//! and the masters (S6) are still to come.
+//! [`MergeBody::load_sequence`] puts a cue list on an executor,
+//! [`MergeBody::load_groups`] puts the show's groups on the group masters, and
+//! [`MergeBody::load_programmer`] resolves an operator-facing
+//! `prism_domain::ProgrammerState` against the patch. That is
+//! `ARCHITECTURE_SPEC.md` §5 complete, from the patch to the wire.
 //!
 //! # Rules for code on the tick path
 //!
@@ -83,11 +95,16 @@
 //!
 //! # The long tests
 //!
-//! Three of this crate's exit criteria take too long for `cargo test`, so they
-//! are marked `#[ignore]` and have to be asked for by name. A criterion nobody
-//! can re-run is not a measurement, so the commands are written down here.
+//! Several of this crate's exit criteria take too long for `cargo test`, so
+//! they are marked `#[ignore]` and have to be asked for by name. A criterion
+//! nobody can re-run is not a measurement, so the commands are written down
+//! here.
 //!
-//! The ten-minute deadline run, and the long triple-buffer stress test:
+//! The ten-minute deadline runs — including S6's stress gate, which is the
+//! whole pipeline at 64 universes with every core busy — and the long
+//! triple-buffer stress test. They need the **release** profile: an unoptimised
+//! build of the full-size pipeline does not fit inside a 22.7 ms tick, which is
+//! a fact about `-C opt-level=0` and not about the product.
 //!
 //! ```text
 //! cargo test -p prism-engine --release -- --ignored --nocapture
@@ -127,10 +144,12 @@ mod command;
 mod cue;
 mod encode;
 mod frame;
+mod master;
 mod merge;
 mod plan;
 mod playback;
 mod player;
+mod programmer;
 mod spsc;
 mod stats;
 mod sync;
@@ -148,12 +167,14 @@ pub use cue::{
 };
 pub use encode::{ChannelPlan, ChannelTarget, PatchError, coarse_byte, fine_byte, invert};
 pub use frame::{DmxFrame, FrameLayout, LayoutError, MAX_UNIVERSES, UNIVERSE_CHANNELS};
+pub use master::MasterLayer;
 pub use merge::{
     FULL, SourceValue, apply_master, merge_htp, merge_ltp, merge_playbacks, merge_programmer,
 };
 pub use plan::{AttributeSlot, MAX_SLOTS, MergeError, MergePlan};
 pub use playback::{MAX_SOURCES, MergeScratch, PlaybackLayer, PlaybackSource};
 pub use player::{CueLayer, CuePlayer};
+pub use programmer::ProgrammerLayer;
 pub use spsc::{Consumer, PAYLOAD_BYTES, Producer, TickPayload, command_queue};
 pub use stats::{Histogram, TickStats};
 pub use tick::{

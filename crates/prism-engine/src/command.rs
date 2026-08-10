@@ -7,11 +7,12 @@
 //! validating ranges, expanding selections) and pushes the flat, `Copy` result
 //! here. Anything that cannot be expressed flatly never belonged in the tick.
 //!
-//! Sessions **S3-S5** extend this enum as the merge, the executors and the
-//! programmer arrive. The encoding is versionless on purpose: both ends are
-//! compiled together, and the queue is an in-process channel, not a wire.
+//! Sessions **S3-S6** extend this enum as the merge, the executors, the
+//! programmer and the masters arrive. The encoding is versionless on purpose:
+//! both ends are compiled together, and the queue is an in-process channel, not
+//! a wire.
 
-use prism_domain::{ExecutorId, GoDirection};
+use prism_domain::{ExecutorId, GoDirection, GroupId};
 
 use crate::spsc::{PAYLOAD_BYTES, TickPayload};
 
@@ -51,8 +52,38 @@ pub enum TickCommand {
         /// Which way.
         direction: GoDirection,
     },
-    /// Blackout on or off.
+    /// Blackout on or off. Intensity only, like every other master.
     SetBlackout(bool),
+    /// A group master's fader position, `0..=65535`. Intensity only.
+    SetGroupMaster {
+        /// Which group.
+        group: GroupId,
+        /// The new position.
+        level: u16,
+    },
+    /// Put a value into the programmer, overriding every playback for that
+    /// attribute (`docs/DMX_MERGE.md` §3).
+    ///
+    /// Addressed by [`crate::MergePlan`] slot, not by fixture and attribute:
+    /// the tick resolves nothing, and the core thread that owns the
+    /// `prism_domain::ProgrammerState` already knows the plan's ordering —
+    /// fixture, then attribute — because it is part of the plan's contract.
+    SetProgrammerValue {
+        /// Which slot of the merge plan.
+        slot: u32,
+        /// The value the operator has set.
+        value: u16,
+    },
+    /// Take one attribute back out of the programmer, so the playbacks below it
+    /// decide again.
+    ClearProgrammerValue {
+        /// Which slot of the merge plan.
+        slot: u32,
+    },
+    /// Empty the programmer — the first stage of the operator's Clear.
+    ///
+    /// The other two stages are selection state, which never reaches the tick.
+    ClearProgrammer,
 }
 
 impl TickCommand {
@@ -65,6 +96,10 @@ impl TickCommand {
     const TAG_GO: u8 = 3;
     const TAG_BLACKOUT: u8 = 4;
     const TAG_EXECUTOR_ACTIVE: u8 = 5;
+    const TAG_GROUP_MASTER: u8 = 6;
+    const TAG_PROGRAMMER_VALUE: u8 = 7;
+    const TAG_PROGRAMMER_CLEAR_VALUE: u8 = 8;
+    const TAG_PROGRAMMER_CLEAR: u8 = 9;
 }
 
 /// A variant added in a later session that outgrows a queue slot must fail to
@@ -74,12 +109,13 @@ const _: () = assert!(
     "TickCommand no longer fits a queue slot: raise PAYLOAD_BYTES"
 );
 
-/// Every variant flattens to the same shape — a tag, an executor and a 16-bit
-/// value — which keeps the codec free of per-variant byte arithmetic and makes
-/// adding a variant a matter of adding a tag.
+/// Every variant flattens to the same shape — a tag, a 32-bit target and a
+/// 16-bit value — which keeps the codec free of per-variant byte arithmetic and
+/// makes adding a variant a matter of adding a tag. The target is an executor
+/// number, a group number or a merge-plan slot, according to the tag.
 impl TickPayload for TickCommand {
     fn encode(self, out: &mut [u8; PAYLOAD_BYTES]) {
-        let (tag, executor, value) = match self {
+        let (tag, target, value) = match self {
             Self::SetGrandMaster(level) => (Self::TAG_GRAND_MASTER, 0, level),
             Self::SetExecutorLevel { executor, level } => {
                 (Self::TAG_EXECUTOR_LEVEL, executor.get(), level)
@@ -98,8 +134,12 @@ impl TickPayload for TickCommand {
                 (Self::TAG_GO, executor.get(), direction)
             }
             Self::SetBlackout(on) => (Self::TAG_BLACKOUT, 0, u16::from(on)),
+            Self::SetGroupMaster { group, level } => (Self::TAG_GROUP_MASTER, group.get(), level),
+            Self::SetProgrammerValue { slot, value } => (Self::TAG_PROGRAMMER_VALUE, slot, value),
+            Self::ClearProgrammerValue { slot } => (Self::TAG_PROGRAMMER_CLEAR_VALUE, slot, 0),
+            Self::ClearProgrammer => (Self::TAG_PROGRAMMER_CLEAR, 0, 0),
         };
-        let [e0, e1, e2, e3] = executor.to_le_bytes();
+        let [e0, e1, e2, e3] = target.to_le_bytes();
         let [v0, v1] = value.to_le_bytes();
         let encoded = [tag, e0, e1, e2, e3, v0, v1];
         *out = [0; PAYLOAD_BYTES];
@@ -114,7 +154,8 @@ impl TickPayload for TickCommand {
             *slot = *byte;
         }
         let [tag, e0, e1, e2, e3, v0, v1] = fixed;
-        let executor = ExecutorId::new(u32::from_le_bytes([e0, e1, e2, e3]));
+        let target = u32::from_le_bytes([e0, e1, e2, e3]);
+        let executor = ExecutorId::new(target);
         let value = u16::from_le_bytes([v0, v1]);
         match tag {
             Self::TAG_GRAND_MASTER => Some(Self::SetGrandMaster(value)),
@@ -146,6 +187,16 @@ impl TickPayload for TickCommand {
                 1 => Some(Self::SetBlackout(true)),
                 _ => None,
             },
+            Self::TAG_GROUP_MASTER => Some(Self::SetGroupMaster {
+                group: GroupId::new(target),
+                level: value,
+            }),
+            Self::TAG_PROGRAMMER_VALUE => Some(Self::SetProgrammerValue {
+                slot: target,
+                value,
+            }),
+            Self::TAG_PROGRAMMER_CLEAR_VALUE => Some(Self::ClearProgrammerValue { slot: target }),
+            Self::TAG_PROGRAMMER_CLEAR => Some(Self::ClearProgrammer),
             _ => None,
         }
     }
@@ -155,7 +206,7 @@ impl TickPayload for TickCommand {
 mod tests {
     use super::TickCommand;
     use crate::spsc::{PAYLOAD_BYTES, TickPayload};
-    use prism_domain::{ExecutorId, GoDirection};
+    use prism_domain::{ExecutorId, GoDirection, GroupId};
     use proptest::prelude::*;
 
     fn round_trip(command: TickCommand) -> Option<TickCommand> {
@@ -191,10 +242,47 @@ mod tests {
                 executor: ExecutorId::new(u32::MAX),
                 on: false,
             },
+            TickCommand::SetGroupMaster {
+                group: GroupId::new(12),
+                level: 32_767,
+            },
+            TickCommand::SetGroupMaster {
+                group: GroupId::new(u32::MAX),
+                level: 0,
+            },
+            TickCommand::SetProgrammerValue {
+                slot: 0,
+                value: 65_535,
+            },
+            TickCommand::SetProgrammerValue {
+                slot: u32::MAX,
+                value: 0,
+            },
+            TickCommand::ClearProgrammerValue { slot: 4_242 },
+            TickCommand::ClearProgrammer,
         ];
         for command in commands {
             assert_eq!(round_trip(command), Some(command), "{command:?}");
         }
+    }
+
+    #[test]
+    fn the_programmer_addresses_a_slot_number_rather_than_a_fixture_and_attribute() {
+        // The tick knows slots, not names: `MergePlan`'s ordering (fixture, then
+        // attribute) is the address, and the core thread resolves a
+        // `prism_domain::Command` into one before it ever reaches the queue. A
+        // fixture number and an attribute would need a lookup table in the tick
+        // and would not fit a queue slot beside a 16-bit value.
+        let command = TickCommand::SetProgrammerValue {
+            slot: 0x0102_0304,
+            value: 0x0506,
+        };
+        let mut bytes = [0u8; PAYLOAD_BYTES];
+        command.encode(&mut bytes);
+        assert_eq!(
+            bytes[..TickCommand::MAX_ENCODED],
+            [7, 0x04, 0x03, 0x02, 0x01, 0x06, 0x05]
+        );
     }
 
     #[test]

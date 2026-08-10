@@ -6,35 +6,52 @@
 //! never reaches the allocator — `crates/prism-engine/tests/tick_allocations.rs`
 //! counts that rather than asserting it.
 //!
-//! The tick runs `ARCHITECTURE_SPEC.md` §5 in order: the playbacks are advanced
-//! and evaluated (steps 2 and 3, `crate::player`), the result is merged (step 4,
-//! `crate::playback`) and encoded into the frame (step 7, `crate::encode`).
+//! The tick runs `ARCHITECTURE_SPEC.md` §5 in order, and the order is the whole
+//! point of this module:
 //!
-//! # What it does not do yet
+//! 1. the playbacks are advanced and evaluated — steps 2 and 3, `crate::player`
+//! 2. the source set is merged — step 4, `crate::playback`
+//! 3. the programmer overrides it — step 5, `crate::programmer`
+//! 4. the masters scale what is left — step 6, `crate::master`
+//! 5. the result is encoded into the frame — step 7, `crate::encode`
 //!
-//! The grand master, group masters and the programmer state machine are S6. The
-//! commands for those arrive here already and are deliberately ignored, which
-//! the tests state outright so that the gap is a recorded decision rather than a
-//! surprise.
+//! Steps 3 and 4 are not interchangeable. The programmer sits *below* the
+//! masters, so a grand master at zero blacks out an intensity the operator is
+//! holding in the programmer as surely as one a cue is holding — which is what
+//! makes it a grand master rather than one more playback fader. The other way
+//! round, blackout would be a suggestion an operator could lose to their own
+//! programmer.
+//!
+//! # What lives elsewhere
+//!
+//! The programmer *state machine* — the three-stage Clear, what a store does,
+//! the selection — is `prism-core` (S13). What reaches the tick is values, one
+//! slot at a time, over [`TickCommand`]. Speed masters are playback rate rather
+//! than value, so they belong to step 2 and not to `crate::master`.
 
-use prism_domain::{ExecutorId, Fixture, FixtureType, Sequence};
+use prism_domain::{ExecutorId, Fixture, FixtureType, Group, ProgrammerState, Sequence};
 
 use crate::command::TickCommand;
 use crate::cue::{CueError, SequencePlan};
 use crate::encode::{ChannelPlan, PatchError};
 use crate::frame::{DmxFrame, FrameLayout};
+use crate::master::MasterLayer;
 use crate::plan::MergePlan;
 use crate::playback::{MergeScratch, PlaybackLayer};
 use crate::player::CueLayer;
+use crate::programmer::ProgrammerLayer;
 use crate::tick::{TickBody, TickInfo};
 
-/// The playbacks, the HTP/LTP merge and the DMX encoding, wired into the tick.
+/// The whole pipeline — playbacks, merge, programmer, masters and the DMX
+/// encoding — wired into the tick.
 #[derive(Debug, Clone)]
 pub struct MergeBody {
     plan: MergePlan,
     channels: ChannelPlan,
     layer: PlaybackLayer,
     cues: CueLayer,
+    programmer: ProgrammerLayer,
+    masters: MasterLayer,
     scratch: MergeScratch,
     values: Box<[u16]>,
 }
@@ -65,6 +82,8 @@ impl MergeBody {
         }
         let layer = PlaybackLayer::new(&plan, executors)?;
         let cues = CueLayer::for_layer(&layer);
+        let programmer = ProgrammerLayer::new(&plan);
+        let masters = MasterLayer::new(&plan);
         let scratch = MergeScratch::new(&plan);
         let values = vec![0; plan.slot_count()].into_boxed_slice();
         let mut body = Self {
@@ -72,6 +91,8 @@ impl MergeBody {
             channels,
             layer,
             cues,
+            programmer,
+            masters,
             scratch,
             values,
         };
@@ -141,6 +162,54 @@ impl MergeBody {
         &mut self.cues
     }
 
+    /// The programmer: the operator's absolute override, above every playback.
+    #[must_use]
+    pub const fn programmer(&self) -> &ProgrammerLayer {
+        &self.programmer
+    }
+
+    /// The programmer, mutably. On the tick it is driven by
+    /// [`TickCommand::SetProgrammerValue`] and its two companions; this is how a
+    /// host sets one up beforehand.
+    pub const fn programmer_mut(&mut self) -> &mut ProgrammerLayer {
+        &mut self.programmer
+    }
+
+    /// The grand master, the blackout and the group masters.
+    #[must_use]
+    pub const fn masters(&self) -> &MasterLayer {
+        &self.masters
+    }
+
+    /// The masters, mutably.
+    pub const fn masters_mut(&mut self) -> &mut MasterLayer {
+        &mut self.masters
+    }
+
+    /// Puts the show's groups onto the group masters.
+    ///
+    /// Allocates, so this is set-up work like [`Self::load_sequence`], not
+    /// something to do while the tick runs. Every group arrives at full: a
+    /// reload must not black the stage out.
+    pub fn load_groups(&mut self, groups: &[Group]) {
+        self.masters.set_groups(&self.plan, groups);
+    }
+
+    /// Resolves an operator-facing programmer state against this body's own
+    /// patch and installs it, returning how many of its entries named something
+    /// this patch does not have.
+    ///
+    /// The same reasoning as [`Self::load_sequence`] compiling its own sequence:
+    /// a state resolved against a different rig would put the operator's values
+    /// on the wrong lights, and every one of them would still look plausible.
+    ///
+    /// Set-up work. `prism_domain::ProgrammerState` owns maps and vectors, so it
+    /// cannot cross into the tick at all — the tick receives single values over
+    /// the command queue.
+    pub fn load_programmer(&mut self, state: &ProgrammerState) -> usize {
+        self.programmer.load(&self.plan, state)
+    }
+
     /// Compiles a cue list against this body's patch and puts it on an executor.
     ///
     /// The body compiles the sequence itself rather than taking a compiled one,
@@ -171,27 +240,36 @@ impl MergeBody {
         Ok(())
     }
 
-    /// The merged attribute values, one per slot of [`Self::plan`].
+    /// The fully resolved attribute values, one per slot of [`Self::plan`].
     ///
-    /// `0..=65535` regardless of the resolution the attribute is patched at:
-    /// working in 16 bits until the final write is what keeps a fade over an
-    /// 8-bit channel smooth (`docs/DMX_MERGE.md` §5). [`Self::channels`] turns
-    /// these into bytes.
+    /// The output of the whole stack — playbacks, programmer and masters — not
+    /// of the playback merge alone. `0..=65535` regardless of the resolution the
+    /// attribute is patched at: working in 16 bits until the final write is what
+    /// keeps a fade over an 8-bit channel smooth (`docs/DMX_MERGE.md` §5).
+    /// [`Self::channels`] turns these into bytes.
     #[must_use]
     pub const fn values(&self) -> &[u16] {
         &self.values
     }
 
-    /// Runs the merge. Allocation-free — this is the tick's work.
+    /// Runs the stack: merge the playbacks, override with the programmer, scale
+    /// by the masters.
+    ///
+    /// `ARCHITECTURE_SPEC.md` §5 steps 4 to 6. Allocation-free — this is the
+    /// tick's work, and the reason `render` is little more than a call to it.
     pub fn resolve(&mut self) {
         let Self {
             plan,
             layer,
+            programmer,
+            masters,
             scratch,
             values,
             ..
         } = self;
         layer.resolve(plan, scratch, values);
+        programmer.apply(values);
+        masters.apply(values);
     }
 }
 
@@ -248,15 +326,30 @@ impl TickBody for MergeBody {
                     player.go(direction);
                 }
             }
-            // The grand master and blackout are masters, which
-            // `docs/DMX_MERGE.md` §4 applies after the merge — S6.
-            TickCommand::SetGrandMaster(_) | TickCommand::SetBlackout(_) => {}
+            // `docs/DMX_MERGE.md` §4: the masters are applied after the merge,
+            // so a command only moves a fader here and the arithmetic happens in
+            // `resolve`.
+            TickCommand::SetGrandMaster(level) => self.masters.set_grand(level),
+            TickCommand::SetBlackout(on) => self.masters.set_blackout(on),
+            TickCommand::SetGroupMaster { group, level } => {
+                self.masters.set_group_level(group, level);
+            }
+            // The programmer is addressed by merge-plan slot: the core thread
+            // resolved the fixture and attribute before pushing this.
+            TickCommand::SetProgrammerValue { slot, value } => {
+                self.programmer.set(slot as usize, value);
+            }
+            TickCommand::ClearProgrammerValue { slot } => {
+                self.programmer.clear(slot as usize);
+            }
+            TickCommand::ClearProgrammer => self.programmer.clear_all(),
         }
     }
 
     fn render(&mut self, tick: &TickInfo, frame: &mut DmxFrame) {
         // `ARCHITECTURE_SPEC.md` §5 in order: advance the fades and evaluate the
-        // executors, merge, encode.
+        // executors, merge, override with the programmer, scale by the masters,
+        // encode.
         self.cues.advance(tick.index, &mut self.layer);
         self.resolve();
         self.channels.encode(&self.values, frame);
@@ -268,14 +361,18 @@ mod tests {
     use crate::body::MergeBody;
     use crate::cue::CueError;
     use crate::encode::{ChannelPlan, PatchError, coarse_byte, fine_byte};
-    use crate::merge::{FULL, merge_programmer};
+    use crate::merge::{FULL, apply_master, merge_programmer};
     use crate::plan::{MergeError, MergePlan};
     use crate::testkit::{cue, cue_part, fixture, moving_head, moving_head_16, sequence};
     use crate::{
         Clock, DmxFrame, Engine, FrameLayout, ManualClock, TickBody, TickCommand, TickInfo,
         command_queue,
     };
-    use prism_domain::{AttributeType, ExecutorId, Fixture, FixtureId, GoDirection, UniverseId};
+    use prism_domain::{
+        AttributeType, ExecutorId, Fixture, FixtureId, GoDirection, Group, GroupId,
+        ProgrammerState, ProgrammerValue, ProgrammerValueSource, UniverseId,
+    };
+    use proptest::prelude::*;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -393,29 +490,293 @@ mod tests {
         assert_eq!(body.values(), [0, 32_768]);
     }
 
+    /// One executor at full on fixture 1's dimmer, with its pan swung off home,
+    /// switched on. The state most of the tests below start from.
+    fn lit(fixtures: u32, executors: u32) -> MergeBody {
+        let mut body = body(fixtures, executors);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        let pan = slot(&body, 1, AttributeType::Pan);
+        {
+            let source = body.layer_mut().source_mut(ExecutorId::new(1)).unwrap();
+            source.set(dimmer, FULL);
+            source.set(pan, 20_000);
+        }
+        body.layer_mut().activate(ExecutorId::new(1));
+        body.resolve();
+        body
+    }
+
+    fn programmer_value(value: u16) -> ProgrammerValue {
+        ProgrammerValue {
+            value,
+            source: ProgrammerValueSource::Manual,
+            preset_ref: None,
+        }
+    }
+
     #[test]
-    fn the_commands_this_session_does_not_own_are_ignored_rather_than_half_handled() {
-        // The grand master and blackout are S6. Recorded as a test so the gap is
-        // visible: a body that silently swallowed a blackout would look like it
-        // worked.
-        let mut body = body(1, 1);
+    fn the_grand_master_and_the_blackout_now_reach_the_merge() {
+        // Until S6 these two were ignored and a test said so outright, because a
+        // body that silently swallowed a blackout would pass every other test in
+        // the crate. This is that test, turned round: they arrive, they scale
+        // intensity, and they leave the position alone.
+        let mut body = lit(1, 1);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        let pan = slot(&body, 1, AttributeType::Pan);
+        assert_eq!(body.values().get(dimmer).copied(), Some(FULL));
+
+        body.apply(TickCommand::SetGrandMaster(32_767));
+        body.resolve();
+        assert_eq!(
+            body.values().get(dimmer).copied(),
+            Some(apply_master(FULL, 32_767))
+        );
+        assert_eq!(body.values().get(pan).copied(), Some(20_000));
+
+        body.apply(TickCommand::SetBlackout(true));
+        body.resolve();
+        assert_eq!(body.values().get(dimmer).copied(), Some(0));
+        assert_eq!(
+            body.values().get(pan).copied(),
+            Some(20_000),
+            "blackout moved a position"
+        );
+
+        // And releasing blackout gives the fader back where it was, rather than
+        // at full or at zero.
+        body.apply(TickCommand::SetBlackout(false));
+        body.resolve();
+        assert_eq!(
+            body.values().get(dimmer).copied(),
+            Some(apply_master(FULL, 32_767))
+        );
+    }
+
+    #[test]
+    fn the_programmer_overrides_a_running_playback_and_clearing_hands_it_back() {
+        // docs/DMX_MERGE.md 3: what the operator grabs is what the rig does,
+        // whatever any playback is holding - and letting go gives the playback
+        // its attribute back rather than leaving the stage where the programmer
+        // left it.
+        let mut body = lit(1, 1);
+        let pan = slot(&body, 1, AttributeType::Pan);
+        let slot_index = pan as u32;
+
+        body.apply(TickCommand::SetProgrammerValue {
+            slot: slot_index,
+            value: 50_000,
+        });
+        body.resolve();
+        assert_eq!(body.values().get(pan).copied(), Some(50_000));
+        assert_eq!(body.programmer().len(), 1);
+
+        body.apply(TickCommand::ClearProgrammerValue { slot: slot_index });
+        body.resolve();
+        assert_eq!(body.values().get(pan).copied(), Some(20_000));
+
+        // And the whole-programmer clear, which is the first stage of the
+        // operator's Clear button.
+        body.apply(TickCommand::SetProgrammerValue {
+            slot: slot_index,
+            value: 50_000,
+        });
+        body.apply(TickCommand::ClearProgrammer);
+        body.resolve();
+        assert!(body.programmer().is_empty());
+        assert_eq!(body.values().get(pan).copied(), Some(20_000));
+    }
+
+    #[test]
+    fn a_programmer_value_of_zero_darkens_a_fixture_a_cue_is_holding_at_full() {
+        // The sparse layer's whole point, at body level: zero is a value, not an
+        // absence, so grabbing a dimmer and pulling it down beats an executor
+        // holding it up. A layer that treated zero as "untouched" would leave
+        // the light on and the operator baffled.
+        let mut body = lit(1, 1);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        body.apply(TickCommand::SetProgrammerValue {
+            slot: dimmer as u32,
+            value: 0,
+        });
+        body.resolve();
+        assert_eq!(body.values().get(dimmer).copied(), Some(0));
+    }
+
+    #[test]
+    fn the_masters_scale_the_programmer_as_well_as_the_playbacks() {
+        // ARCHITECTURE_SPEC.md 5: the programmer is step 5 and the masters are
+        // step 6. The other way round, a blackout would be a suggestion the
+        // operator could lose to their own programmer.
+        let mut body = lit(1, 1);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        let pan = slot(&body, 1, AttributeType::Pan);
+        body.programmer_mut().set(dimmer, FULL);
+        body.programmer_mut().set(pan, 50_000);
+        body.apply(TickCommand::SetGrandMaster(32_767));
+        body.resolve();
+        assert_eq!(
+            body.values().get(dimmer).copied(),
+            Some(apply_master(FULL, 32_767))
+        );
+        assert_eq!(body.values().get(pan).copied(), Some(50_000));
+
+        body.apply(TickCommand::SetBlackout(true));
+        body.resolve();
+        assert_eq!(
+            body.values().get(dimmer).copied(),
+            Some(0),
+            "the programmer survived a blackout"
+        );
+        assert_eq!(body.values().get(pan).copied(), Some(50_000));
+    }
+
+    #[test]
+    fn a_group_master_reaches_the_merge_and_scales_only_its_own_fixtures() {
+        let mut body = body(2, 1);
+        let first = slot(&body, 1, AttributeType::Dimmer);
+        let second = slot(&body, 2, AttributeType::Dimmer);
+        {
+            let source = body.layer_mut().source_mut(ExecutorId::new(1)).unwrap();
+            source.set(first, FULL);
+            source.set(second, FULL);
+        }
+        body.layer_mut().activate(ExecutorId::new(1));
+        body.load_groups(&[Group {
+            id: GroupId::new(3),
+            name: "Left".to_owned(),
+            fixtures: vec![FixtureId::new(1)],
+        }]);
+
+        body.apply(TickCommand::SetGroupMaster {
+            group: GroupId::new(3),
+            level: 32_767,
+        });
+        body.resolve();
+        assert_eq!(
+            body.values().get(first).copied(),
+            Some(apply_master(FULL, 32_767))
+        );
+        assert_eq!(body.values().get(second).copied(), Some(FULL));
+
+        // A command for a group this body does not have is ignored, like a
+        // command for an executor it does not have.
+        body.apply(TickCommand::SetGroupMaster {
+            group: GroupId::new(99),
+            level: 0,
+        });
+        body.resolve();
+        assert_eq!(body.values().get(second).copied(), Some(FULL));
+    }
+
+    #[test]
+    fn a_programmer_command_for_a_slot_this_patch_does_not_have_is_ignored() {
+        // A stale command from before a repatch. The tick's answer is to drop
+        // it, never to panic: a panic costs a frame.
+        let mut body = lit(1, 1);
+        for command in [
+            TickCommand::SetProgrammerValue {
+                slot: 99,
+                value: 500,
+            },
+            TickCommand::ClearProgrammerValue { slot: 99 },
+            TickCommand::SetProgrammerValue {
+                slot: u32::MAX,
+                value: 500,
+            },
+        ] {
+            body.apply(command);
+        }
+        body.resolve();
+        assert!(body.programmer().is_empty());
+        assert_eq!(
+            body.values()
+                .get(slot(&body, 1, AttributeType::Dimmer))
+                .copied(),
+            Some(FULL)
+        );
+    }
+
+    #[test]
+    fn an_operator_facing_programmer_state_can_be_installed_against_this_bodys_patch() {
+        // `prism_domain::ProgrammerState` owns maps and vectors, so it cannot
+        // cross into the tick; a host resolves it against the body's own plan
+        // beforehand, and an entry naming a light that is no longer patched is
+        // counted rather than refused.
+        let mut body = lit(1, 2);
+        let pan = slot(&body, 1, AttributeType::Pan);
+        let mut state = ProgrammerState::default();
+        state.set_value(
+            FixtureId::new(1),
+            AttributeType::Pan,
+            programmer_value(50_000),
+        );
+        state.set_value(FixtureId::new(9), AttributeType::Pan, programmer_value(1));
+
+        assert_eq!(body.load_programmer(&state), 1);
+        body.resolve();
+        assert_eq!(body.values().get(pan).copied(), Some(50_000));
+
+        assert_eq!(body.load_programmer(&ProgrammerState::default()), 0);
+        body.resolve();
+        assert_eq!(body.values().get(pan).copied(), Some(20_000));
+    }
+
+    #[test]
+    fn the_whole_stack_runs_on_the_tick_through_the_command_queue() {
+        // Every layer S6 added, driven the way the daemon will drive it: over
+        // the queue, on the engine's own tick, and out onto the wire.
+        let head = moving_head_16();
+        let patched = fixture(1, "test.movinghead16", 1, 1);
+        let mut body =
+            MergeBody::for_patch(&layout(), [(&patched, &head)], [ExecutorId::new(1)]).unwrap();
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
             .source_mut(ExecutorId::new(1))
             .unwrap()
             .set(dimmer, FULL);
-        body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
-            on: true,
-        });
+        body.load_groups(&[Group {
+            id: GroupId::new(1),
+            name: "All".to_owned(),
+            fixtures: vec![FixtureId::new(1)],
+        }]);
+
+        let layout = Arc::new(FrameLayout::new([UniverseId::MIN]).unwrap());
+        let mut publisher = crate::FramePublisher::new(layout);
+        let mut subscriber = publisher.subscribe();
+        let (mut producer, consumer) = command_queue(16);
+        let mut engine = Engine::new(body, consumer, publisher);
+
         for command in [
-            TickCommand::SetBlackout(true),
-            TickCommand::SetGrandMaster(0),
+            TickCommand::SetExecutorActive {
+                executor: ExecutorId::new(1),
+                on: true,
+            },
+            TickCommand::SetProgrammerValue {
+                slot: dimmer as u32,
+                value: 40_000,
+            },
+            TickCommand::SetGroupMaster {
+                group: GroupId::new(1),
+                level: 32_767,
+            },
+            TickCommand::SetGrandMaster(32_767),
         ] {
-            body.apply(command);
+            producer.push(command).unwrap();
         }
-        body.resolve();
-        assert_eq!(body.values().get(dimmer).copied(), Some(FULL));
+        engine.run_ticks(&ManualClock::new(), 1);
+        assert_eq!(engine.stats().commands, 4);
+        assert_eq!(engine.stats().panics, 0);
+
+        // The programmer wins the merge at 40000, the group master halves it,
+        // the grand master halves what is left, and the encoder splits it.
+        let expected = apply_master(apply_master(40_000, 32_767), 32_767);
+        assert_eq!(engine.body().values().get(dimmer).copied(), Some(expected));
+        assert!(subscriber.refresh());
+        assert_eq!(
+            subscriber.frame().channel(0, 1),
+            Some(coarse_byte(expected))
+        );
+        assert_eq!(subscriber.frame().channel(0, 2), Some(fine_byte(expected)));
     }
 
     #[test]
@@ -765,26 +1126,31 @@ mod tests {
 
         // Pan is LTP: executor 5 has the higher activation counter and would
         // win with 45000 - but the programmer holds 50000, which overrides
-        // everything. Result 50000, coarse 0xC3, fine 0x50.
-        let merged_pan = body.values().get(pan).copied().unwrap();
-        assert_eq!(merged_pan, 45_000);
-        let with_programmer = merge_programmer(merged_pan, Some(50_000));
-        assert_eq!(with_programmer, 50_000);
-        // The programmer layer is S6, so this value does not reach the frame
-        // yet; the bytes the specification quotes are checked all the same.
-        assert_eq!(coarse_byte(with_programmer), 0xC3);
-        assert_eq!(fine_byte(with_programmer), 0x50);
+        // everything. Result 50000, coarse 0xC3, fine 0x50 - on the wire now,
+        // where in S3 this was arithmetic beside the frame.
+        assert_eq!(body.values().get(pan).copied(), Some(45_000));
+        assert_eq!(merge_programmer(45_000, Some(50_000)), 50_000);
+        body.programmer_mut().set(pan, 50_000);
+        body.render(&tick(1), &mut frame);
+        assert_eq!(body.values().get(pan).copied(), Some(50_000));
+        assert_eq!(frame.channel(0, 3), Some(0xC3));
+        assert_eq!(frame.channel(0, 4), Some(0x50));
+        assert_eq!(coarse_byte(50_000), 0xC3);
+        assert_eq!(fine_byte(50_000), 0x50);
 
         // "Turning executor 5 off changes nothing about pan while the
         // programmer holds it."
         body.layer_mut().deactivate(ExecutorId::new(5));
-        body.resolve();
-        let merged_pan = body.values().get(pan).copied().unwrap();
-        assert_eq!(merge_programmer(merged_pan, Some(50_000)), 50_000);
+        body.render(&tick(2), &mut frame);
+        assert_eq!(body.values().get(pan).copied(), Some(50_000));
+        assert_eq!(frame.channel(0, 3), Some(0xC3));
+        assert_eq!(frame.channel(0, 4), Some(0x50));
 
         // "Clearing the programmer drops pan to 45000 only if executor 5 is
         // still active; otherwise it falls back to executor 3's 20000 ..."
-        assert_eq!(merge_programmer(merged_pan, None), 20_000);
+        body.programmer_mut().clear(pan);
+        body.resolve();
+        assert_eq!(body.values().get(pan).copied(), Some(20_000));
         body.layer_mut().activate(ExecutorId::new(5));
         body.resolve();
         assert_eq!(body.values().get(pan).copied(), Some(45_000));
@@ -796,5 +1162,158 @@ mod tests {
         assert_eq!(body.values().get(pan).copied(), Some(32_768));
         // And the dimmer falls back to its own home, which is dark.
         assert_eq!(body.values().get(dimmer).copied(), Some(0));
+    }
+
+    /// One thing an operator can do to a playback source.
+    #[derive(Debug, Clone, Copy)]
+    struct Action {
+        executor: u32,
+        slot: usize,
+        value: u16,
+        master: u16,
+        active: bool,
+    }
+
+    /// Arbitrary playback state over the four slots of `body(2, 4)`: values from
+    /// several executors, masters part way up, some of them switched on.
+    fn actions() -> impl Strategy<Value = Vec<Action>> {
+        proptest::collection::vec(
+            (
+                1u32..=4,
+                0usize..4,
+                any::<u16>(),
+                any::<u16>(),
+                any::<bool>(),
+            ),
+            0..12,
+        )
+        .prop_map(|raw| {
+            raw.into_iter()
+                .map(|(executor, slot, value, master, active)| Action {
+                    executor,
+                    slot,
+                    value,
+                    master,
+                    active,
+                })
+                .collect()
+        })
+    }
+
+    /// A body of two moving heads with that playback state applied.
+    fn played(actions: &[Action]) -> MergeBody {
+        let mut body = body(2, 4);
+        for action in actions {
+            let executor = ExecutorId::new(action.executor);
+            if let Some(source) = body.layer_mut().source_mut(executor) {
+                source.set(action.slot, action.value);
+            }
+            body.layer_mut().set_master(executor, action.master);
+            if action.active {
+                body.layer_mut().activate(executor);
+            } else {
+                body.layer_mut().deactivate(executor);
+            }
+        }
+        body
+    }
+
+    proptest! {
+        /// `docs/DMX_MERGE.md` §6.3 — a programmer value always appears in the
+        /// output, whatever the playbacks are doing. This is the property the
+        /// operator relies on without ever thinking about it: what you grab is
+        /// what you see.
+        #[test]
+        fn a_programmer_value_always_reaches_the_output(
+            actions in actions(),
+            slot in 0usize..4,
+            value in any::<u16>(),
+        ) {
+            let mut body = played(&actions);
+            body.programmer_mut().set(slot, value);
+            body.resolve();
+            prop_assert_eq!(body.values().get(slot).copied(), Some(value));
+        }
+
+        /// §6.3 — with no active playback and an empty programmer, every
+        /// patched attribute is at its home value. The bottom of the stack is
+        /// never empty, so a rig with nothing running sits at home rather than
+        /// at zero.
+        #[test]
+        fn a_desk_with_nothing_running_resolves_to_home(actions in actions()) {
+            let mut body = played(&actions);
+            for executor in 1..=4 {
+                body.layer_mut().deactivate(ExecutorId::new(executor));
+            }
+            body.resolve();
+            let homes: Vec<u16> = body.plan().slots().iter().map(|slot| slot.home).collect();
+            prop_assert_eq!(body.values(), homes.as_slice());
+        }
+
+        /// §6.3 — the grand master at zero forces every intensity attribute to
+        /// zero and leaves every other attribute untouched, whatever the
+        /// playbacks and the programmer hold.
+        #[test]
+        fn a_grand_master_at_zero_zeroes_intensity_and_nothing_else(
+            actions in actions(),
+            programmer in proptest::collection::vec(proptest::option::of(any::<u16>()), 4),
+        ) {
+            let mut body = played(&actions);
+            for (slot, value) in programmer.iter().enumerate() {
+                if let Some(value) = value {
+                    body.programmer_mut().set(slot, *value);
+                }
+            }
+            body.resolve();
+            let before = body.values().to_vec();
+
+            body.apply(TickCommand::SetGrandMaster(0));
+            body.resolve();
+            for (index, was) in before.iter().enumerate() {
+                let intensity = body.plan().slot(index).unwrap().is_intensity();
+                let expected = if intensity { 0 } else { *was };
+                prop_assert_eq!(body.values().get(index).copied(), Some(expected));
+            }
+        }
+
+        /// §6.3 — the grand master at full is a no-op. A master scales, it never
+        /// selects, so a desk with everything up produces exactly the merge.
+        #[test]
+        fn a_grand_master_at_full_changes_nothing(
+            actions in actions(),
+            programmer in proptest::collection::vec(proptest::option::of(any::<u16>()), 4),
+        ) {
+            let mut body = played(&actions);
+            for (slot, value) in programmer.iter().enumerate() {
+                if let Some(value) = value {
+                    body.programmer_mut().set(slot, *value);
+                }
+            }
+            body.resolve();
+            let before = body.values().to_vec();
+            body.apply(TickCommand::SetGrandMaster(FULL));
+            body.resolve();
+            prop_assert_eq!(body.values(), before.as_slice());
+        }
+
+        /// Resolving the same body twice gives the same answer twice: the stack
+        /// is a function of its state, with nothing carried between ticks. This
+        /// is determinism at the level of one body; the frame-level criterion is
+        /// in `tests/pipeline.rs`.
+        #[test]
+        fn resolving_twice_gives_the_same_values(
+            actions in actions(),
+            grand in any::<u16>(),
+            slot in 0usize..4,
+            value in any::<u16>(),
+        ) {
+            let mut body = played(&actions);
+            body.programmer_mut().set(slot, value);
+            body.masters_mut().set_grand(grand);
+            body.resolve();
+            let once = body.values().to_vec();
+            body.resolve();
+            prop_assert_eq!(body.values(), once.as_slice());
+        }
     }
 }

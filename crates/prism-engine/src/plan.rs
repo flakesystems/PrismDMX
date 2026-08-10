@@ -13,7 +13,7 @@
 use core::fmt;
 use std::collections::BTreeSet;
 
-use prism_domain::{AttributeType, FixtureId, FixtureType, MergeMode};
+use prism_domain::{AttributeType, FeatureGroup, FixtureId, FixtureType, MergeMode};
 
 /// Upper bound on attributes in one plan.
 ///
@@ -79,8 +79,30 @@ pub struct AttributeSlot {
     /// How playbacks combine for this attribute — from `AttributeDef.mergeMode`,
     /// which is the authority, not the attribute type's default.
     pub merge_mode: MergeMode,
+    /// Which encoder bank the definition files this attribute under — from
+    /// `AttributeDef.featureGroup`, again the authority rather than the
+    /// attribute type's default. This is what decides whether the masters may
+    /// touch the slot; see [`Self::is_intensity`].
+    pub feature_group: FeatureGroup,
     /// The value this attribute takes when no source provides one.
     pub home: u16,
+}
+
+impl AttributeSlot {
+    /// Whether the masters may scale this slot.
+    ///
+    /// `docs/DMX_MERGE.md` §4: group and grand masters scale **intensity only**,
+    /// because a grand master that dimmed colour would desaturate the rig on the
+    /// way down instead of dimming it. What counts as intensity is
+    /// [`Self::feature_group`] — the attribute *definition*, which a profile sets
+    /// per attribute — and deliberately not the attribute's name and not its
+    /// merge mode. A profile is free to file an oddly-wired dimmer channel under
+    /// [`FeatureGroup::Beam`], and then it is not intensity, whatever it is
+    /// called.
+    #[must_use]
+    pub const fn is_intensity(&self) -> bool {
+        matches!(self.feature_group, FeatureGroup::Dimmer)
+    }
 }
 
 /// The flattened patch the merge resolves against.
@@ -130,6 +152,7 @@ impl MergePlan {
                     fixture,
                     attribute: def.attribute,
                     merge_mode: def.merge_mode,
+                    feature_group: def.feature_group,
                     home: def.default_value,
                 });
             }
@@ -181,7 +204,7 @@ impl MergePlan {
 mod tests {
     use crate::plan::{MAX_SLOTS, MergeError, MergePlan};
     use crate::testkit::{attribute_def, fixture_type, moving_head};
-    use prism_domain::{AttributeType, FixtureId, MergeMode};
+    use prism_domain::{AttributeDef, AttributeType, FeatureGroup, FixtureId, MergeMode};
 
     fn plan_of(entries: &[(u32, &prism_domain::FixtureType)]) -> MergePlan {
         MergePlan::build(
@@ -192,12 +215,60 @@ mod tests {
         .unwrap()
     }
 
+    fn slot_of(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
+        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+    }
+
     #[test]
     fn a_plan_has_one_slot_per_fixture_and_attribute() {
         let head = moving_head();
         let plan = plan_of(&[(1, &head), (2, &head)]);
         assert_eq!(plan.slot_count(), 4);
         assert!(!plan.is_empty());
+    }
+
+    #[test]
+    fn a_slot_carries_the_feature_group_its_definition_files_it_under() {
+        // The masters scale intensity and nothing else (`docs/DMX_MERGE.md` §4),
+        // so the plan has to answer "is this intensity?" without asking the
+        // encoder or guessing from a name.
+        let head = moving_head();
+        let plan = plan_of(&[(1, &head)]);
+        let dimmer = plan.slot(slot_of(&plan, 1, AttributeType::Dimmer)).unwrap();
+        assert_eq!(dimmer.feature_group, FeatureGroup::Dimmer);
+        assert!(dimmer.is_intensity());
+        let pan = plan.slot(slot_of(&plan, 1, AttributeType::Pan)).unwrap();
+        assert_eq!(pan.feature_group, FeatureGroup::Position);
+        assert!(!pan.is_intensity());
+    }
+
+    #[test]
+    fn intensity_is_what_the_definition_says_it_is_not_what_the_attribute_is_called() {
+        // `docs/DMX_MERGE.md` §4 says masters scale intensity; which attributes
+        // those are is a property of `AttributeDef`, which a profile may set per
+        // attribute. A profile that files its dimmer under Beam - a haze machine
+        // whose "dimmer" channel is a fan speed - must not be dimmed by the grand
+        // master, and one that files a second intensity under Dimmer must be.
+        let odd = fixture_type(
+            "test.odd",
+            vec![
+                AttributeDef {
+                    feature_group: FeatureGroup::Beam,
+                    ..attribute_def(AttributeType::Dimmer, 0)
+                },
+                AttributeDef {
+                    feature_group: FeatureGroup::Dimmer,
+                    ..attribute_def(AttributeType::Shutter, 0)
+                },
+            ],
+        );
+        let plan = plan_of(&[(1, &odd)]);
+        let named_dimmer = plan.slot(slot_of(&plan, 1, AttributeType::Dimmer)).unwrap();
+        assert!(!named_dimmer.is_intensity());
+        let named_shutter = plan
+            .slot(slot_of(&plan, 1, AttributeType::Shutter))
+            .unwrap();
+        assert!(named_shutter.is_intensity());
     }
 
     #[test]

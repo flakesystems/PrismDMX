@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-08-10
-**Current phase:** Phase 1 — Domain and engine
-**Current session:** S6 — `prism-engine` programmer, masters, stress (not started; see §8 for the prompt that starts it)
-**Last completed:** S5 — `prism-engine` executors, cues, fades ✅
+**Last updated:** 2026-08-11
+**Current phase:** Phase 2 — Protocols
+**Current session:** S7 — `prism-protocols` `DmxOutput` trait and Open DMX USB (not started; see §8 for the prompt that starts it)
+**Last completed:** S6 — `prism-engine` programmer, masters, stress ✅ — **Phase 1 complete**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI verified green | ✅ | Latest: run **31433415055** on `83dc6a1` (S5). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
+| 13 | CI verified green | ✅ | Latest: run **31418621481** on `174c27d` (S4). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
 | 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
@@ -48,7 +48,7 @@
 | S3 | `prism-engine` — HTP/LTP merge | ✅ | 2026-08-10 | All exit criteria verified — see §2.4. 135 tests, coverage 99.1 % lines |
 | S4 | `prism-engine` — DMX encoding | ✅ | 2026-08-10 | All exit criteria verified — see §2.5. 179 tests, coverage 99.3 % lines |
 | S5 | `prism-engine` — executors, cues, fades | ✅ | 2026-08-10 | All exit criteria verified — see §2.6. 241 tests, coverage 99.6 % lines |
-| S6 | `prism-engine` — programmer, masters, stress | ☐ | | Coverage gate > 95 % |
+| S6 | `prism-engine` — programmer, masters, stress | ✅ | 2026-08-11 | All exit criteria verified — see §2.7. 299 tests, coverage 99.6 % lines. Stress gate passed under full CPU load |
 
 ### Phase 2 — Protocols
 | Session | Title | Status | Date | Note |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 6 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 7 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -269,6 +269,39 @@ log below and in `player.rs`'s module documentation: cues track, a Go overtakes 
 running fade, a release fades the light out and leaves the rig still, and at most
 one cue starts per tick.
 
+### 2.7 S6 verification record
+
+Measured on 2026-08-11, all exit criteria from `IMPLEMENTATION_PLAN.md` S6 and
+the session prompt:
+
+| Check | Result |
+|---|---|
+| `cargo test -p prism-engine` | ✅ exit 0 — **275 lib tests** (51 of them new) + 24 integration tests, 0 failed, 5 `#[ignore]`d |
+| `cargo test --workspace` | ✅ exit 0 — 432 tests across 20 targets |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| `DMX_MERGE.md` §6.3 — stack invariants, with `proptest` | ✅ four properties over arbitrary playback state, at body level and on the real pipeline: a programmer value always reaches the output whatever the playbacks do; a desk with nothing running resolves to home on every slot; the grand master at zero zeroes intensity and changes nothing else; the grand master at full changes nothing at all. Plus five more on the master layer alone |
+| Grand master at 0 forces every intensity to 0 and leaves every other attribute untouched | ✅ asserted three ways: as a `proptest` over arbitrary values at both levels, as a table test per slot, and on the wire in `tests/pipeline.rs` where a blackout leaves both heads' pan bytes exactly where they were |
+| **Stress gate:** 64 universes, 100 % CPU load, 10 min, p99.9 < 2 ms, no dropped frames | ✅ **26 401 of 26 401 ticks, 0 missed, 0 panics**, p99.9 = **200 µs**, p50 and p99 ≤ 100 µs, max 464 µs. The real pipeline: 32 640 slots, 5 440 intensity slots, 8 cue lists fading over every slot, 16 group masters, programmer values arriving and being cleared, 79 616 commands. Four drivers took 26 441–26 442 frames each. Load: eight CPU burners at normal priority, tick process at High — see the decision log for why that configuration and not the obvious one |
+| Determinism: identical input → byte-identical frames across runs | ✅ `tests/pipeline.rs`: three runs of the same scripted hundred ticks, compared frame by frame on the bytes a driver receives, with 8 command changes in the script and a guard that the run produced more than 20 distinct frames so it cannot pass by being static |
+| Zero allocations in the tick with the programmer and the masters | ✅ **0 allocator calls** over 1 000 ticks — 768 slots, 8 cue lists, 16 group masters moving, programmer values set and cleared on the tick, grand master moving, frame published to a driver. Added beside the four earlier measurements, not instead of them |
+| `loom` models still pass | ✅ 3 models, unchanged since S2 |
+| Coverage on `prism-engine` | ✅ **99.61 % lines**, 99.53 % regions, 99.22 % functions — up from S5's 99.55 %. `master.rs` at **100 % lines**, `programmer.rs` at 99.62 %, `body.rs` still at 100 % |
+| CI green on the pushed commit | ✅ run **PENDING** |
+
+**Delivered:** two modules and the wiring that closes the pipeline. `programmer`
+is the operator's override — sparse by specification, addressed by merge-plan
+slot, allocation-free to set, clear and apply. `master` is the top of the stack:
+the grand master, the blackout and one fader per group, scaling intensity and
+nothing else. `MergeBody::resolve` now runs `ARCHITECTURE_SPEC.md` §5 steps 4 to
+6 in order, `MergeBody::load_groups` and `MergeBody::load_programmer` are the
+set-up doors, and four new `TickCommand` variants carry programmer values and
+group masters onto the tick. `TickCommand::SetGrandMaster` and `SetBlackout`,
+ignored on purpose since S3, now do what they say.
+
+**Phase 1 is complete.** `prism-engine` implements `docs/DMX_MERGE.md` end to
+end and holds 44 Hz at 64 universes on a fully loaded machine.
+
 ---
 
 ## 3. Coverage tracking
@@ -281,7 +314,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Crate | Target | Measured | Date |
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
-| `prism-engine` | **> 95 %** | **99.55 % lines**, 99.52 % regions, 99.07 % functions | 2026-08-10 (S5) |
+| `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | — | |
 | `prism-protocols` | **> 95 %** | — | |
 | `prism-surface` | **> 95 %** | — | |
@@ -293,10 +326,11 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Gate | Requirement | Measured | Date |
 |---|---|---|---|
 | Tick jitter | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 588 µs, **0 of 26 401 ticks missed** — at the thread priority `ARCHITECTURE_SPEC.md` §3 specifies. See the note below | 2026-08-10 |
-| Tick jitter under 100 % CPU load | S6 stress gate — not this session | — | |
-| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick; and **0** in 1 000 ticks with **8 cue lists running** — every cue touching all 768 slots, ten-second fades, cues following on by themselves, Gos and on/off over the queue | 2026-08-10 |
+| Tick jitter under 100 % CPU load | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 464 µs, **0 of 26 401 ticks missed**, 0 panics — the whole pipeline at 32 640 slots with eight cue lists running, against eight CPU burners at normal priority. **The load has to come from outside the process** — see §3.1 and the decision log | 2026-08-11 |
+| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick; **0** in 1 000 ticks with **8 cue lists running** — every cue touching all 768 slots, ten-second fades, cues following on by themselves, Gos and on/off over the queue; and **0** in 1 000 ticks with the **programmer and the masters** as well — values arriving and being cleared on the tick, 16 group masters and the grand master moving | 2026-08-11 |
 | Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
+| Frame determinism | identical input → byte-identical frames | three runs of the same 100-tick script compared byte for byte on the driver's frames, 8 command changes, > 20 distinct frames | 2026-08-11 |
 | Open DMX frame rate | measure real rate on SH-RS09B | — | |
 | Telemetry render | 64 universes @ 30 Hz, zero React re-renders | — | |
 
@@ -313,7 +347,7 @@ subscriber threads polling at 5 ms, machine otherwise idle but not quiesced.
 
 ### 3.1 Running the long tests
 
-Four tests are `#[ignore]`d because they take minutes, not seconds. A criterion
+Five tests are `#[ignore]`d because they take minutes, not seconds. A criterion
 nobody can re-run is not a measurement, so this is how.
 
 Everything that is not `#[ignore]`d, which is what CI runs:
@@ -341,6 +375,35 @@ $p = Start-Process $exe -ArgumentList "--ignored","--nocapture","--test-threads=
        "the_tick_holds_its_deadline_for_ten_minutes" -PassThru -NoNewWindow
 $p.PriorityClass = "High"
 ```
+
+**The S6 stress gate needs the load applied from outside the process.** A Windows
+priority class applies to every thread in a process, so spinning burner threads
+inside the test process makes them exactly as important as the tick — and an
+equal-priority thread that never blocks is not preempted until its quantum
+expires. Measured that way the gate fails badly (7 484 of 26 455 ticks missed,
+median jitter 15.5 ms, which *is* one quantum), and it fails for a reason that
+has nothing to do with the engine. The product raises the tick **thread**, and
+the load on a real machine is other work at ordinary priority:
+
+```powershell
+cargo build -p prism-engine --release --tests
+$exe = (Get-ChildItem target\release\deps\realtime-*.exe |
+        Sort-Object LastWriteTime -Descending)[0].FullName
+$load = 1..([Environment]::ProcessorCount) | ForEach-Object {
+    Start-Process powershell -ArgumentList "-NoProfile","-Command","while(1){}" `
+        -PassThru -WindowStyle Hidden
+}
+$p = Start-Process $exe -ArgumentList "--ignored","--nocapture","--test-threads=1",`
+       "the_whole_pipeline_holds_its_deadline_for_ten_minutes_under_full_cpu_load" `
+       -PassThru -NoNewWindow
+$p.PriorityClass = "High"
+$p.WaitForExit(); $load | Stop-Process
+```
+
+The test measures whether the machine really was loaded rather than trusting the
+harness: a probe thread that yields on every iteration gets about 5.5 million
+turns a second on an idle machine and about 130 thousand on a saturated one, and
+the run fails if it looks idle.
 
 The `loom` models replace the standard atomics with instrumented ones, so they are
 a different build of the crate rather than a different test. Under `--cfg loom`
@@ -381,6 +444,15 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-11 | S6 | **The stress gate failed on its first run, and the cause was the harness rather than the engine: 7 484 of 26 455 ticks missed, median jitter 15.5 ms.** The run put one CPU-burning thread per core inside the test process. A Windows priority class applies to *every* thread in the process, so raising the tick's priority — which `ARCHITECTURE_SPEC.md` §3 requires and §3 of this document already records as decisive — raised the burners' priority too. An equal-priority thread that never blocks is not preempted until its quantum expires, and 15.5 ms is one quantum, measured rather than inferred | Load is applied from outside the process at ordinary priority, exactly as the priority is applied from outside; the run then holds every one of 26 401 deadlines with a p99.9 of 200 µs. **S17 requirement, and it is a sharp one:** `prismd` must raise the priority of the tick **thread**, never of the process. Raising the process would put the ArtNet, MIDI and IPC threads at the same priority as the tick and reproduce exactly this failure — and on a machine where the daemon is one process among many, it would also starve the rest of the desk |
+| 2026-08-11 | S6 | **The programmer reaches the tick as a slot number, not as a fixture and an attribute.** `prism_domain::ProgrammerState` is nested `BTreeMap`s and cannot cross into the tick at all — dropping one allocates, which §3.1 forbids as firmly as allocating does. A fixture number plus an attribute would also need a lookup table in the tick and would not fit beside a 16-bit value in a queue slot | `TickCommand::SetProgrammerValue`, `ClearProgrammerValue` and `ClearProgrammer` carry a `MergePlan` slot index; `MergeBody::load_programmer` resolves a whole `ProgrammerState` off the tick. **S11/S13/S17 requirement:** the core thread translates each programmer change against *the same plan the body was built from*, and a repatch makes every queued programmer command stale — an out-of-range slot is ignored, but an in-range one would land on a different attribute. Draining or versioning the queue across a repatch is the daemon's problem, not the engine's |
+| 2026-08-11 | S6 | **"Intensity" had to be defined before the masters could be written, and the obvious definitions are both wrong.** `AttributeType::Dimmer` is a name, and a profile is free to wire a channel called Dimmer to something that is not intensity; `MergeMode::Htp` describes how an attribute *combines*, which is a different question from what it *is* | An attribute is intensity when its definition files it under `FeatureGroup::Dimmer` — `AttributeDef.featureGroup`, which a profile sets per attribute. `AttributeSlot` carries it and `AttributeSlot::is_intensity` is the single place that decides. Asserted both ways round: a dimmer filed under Beam is not scaled, and a shutter filed under Dimmer is |
+| 2026-08-11 | S6 | **A fixture in two groups needed a rule, and `docs/DMX_MERGE.md` §4 does not give one.** Multiplying the masters together gives a quarter of the light for two faders at half — a number neither fader predicts — and makes the result depend on how many groups a fixture happens to belong to | The **lowest** group master applies. A group master is an inhibitive master, an answer to "how much of this fixture's light may pass", and where two constraints apply the tighter one binds. Asserted as a `proptest` against the arithmetic, not against a second implementation of the same walk |
+| 2026-08-11 | S6 | Blackout could have been "the grand master, set to zero". It is a separate switch | Releasing blackout gives the operator their fader back where they left it, rather than at zero or at full. One line of state, and the difference is visible mid-show |
+| 2026-08-11 | S6 | **An unoptimised build cannot run the full-size pipeline at 44 Hz.** At 64 universes the debug build missed 49 of 84 ticks; the release build of the same code misses none in ten minutes under full load. That is a fact about `-C opt-level=0`, not about the product, but it decides how the tests are sized | The CI-sized version of the stress gate runs 8 universes, with the reason written beside it, and every long run is documented as a release run. **S17 requirement:** never measure or ship a debug `prismd` — the frame rate it gives is not the product's |
+| 2026-08-11 | S6 | **The order of the programmer and the masters is not interchangeable, and only one order is defensible.** With the masters below the programmer, a blackout would be a suggestion the operator could lose to their own programmer | `ARCHITECTURE_SPEC.md` §5 steps 5 then 6, implemented in that order and asserted: a grand master at zero blacks out an intensity the programmer is holding, and leaves the programmer's *position* exactly where it was |
+| 2026-08-11 | S6 | A programmer value naming a fixture the patch no longer has is the same problem as S5's unresolved cue part | Dropped and counted; `MergeBody::load_programmer` returns the count. **S13/S27 requirement:** surface it, for the same reason as the cue-part count — dropped silently, an operator cannot learn why a value does nothing |
+| 2026-08-11 | S6 | **Coverage was raised by removing unreachable branches for the third session running.** The first measurement read 99.50 %, below S5, and every uncovered line in the new code was a defensive `else` no input can reach: a group index that came from the group list, a slot position that came from the intensity list, a membership range built together with its offsets | Merged into single fallible expressions and `map_or` defaults, which removes the branches rather than excusing them. 99.61 % lines, above S5, with `master.rs` at 100 %. This is now a pattern worth stating: in this crate a coverage gap has never once been a missing test — it has always been code the design does not need |
 | 2026-08-10 | S5 | **Cues track, and that is forced by a decision already taken rather than chosen here.** A cue could be read as a complete look — everything it does not name goes out — or as a delta, where an attribute it does not mention keeps whatever the playback was holding. The second is the only one available: `Command::StoreCue` stores the programmer, and `docs/DMX_MERGE.md` §3 makes the programmer **sparse** by specification, so a cue recorded after moving one head would contain only that head and would black the rest of the stage out | Implemented as tracking and asserted. **S13 requirement:** the store operation records the programmer's sparse contents as the cue's parts, which is what the playback then reads as a delta. **S28 requirement:** the cue editor shows what a cue *contains*, not what the stage looks like when it runs — those are different lists, and an editor that conflated them would teach operators the wrong model |
 | 2026-08-10 | S5 | **"A Go during a running fade behaves deterministically" names a decision the specification does not make.** Three answers are defensible: complete the running fade first, start the new one from the old cue's target, or start it from wherever the fade actually is. The first two both put a visible step in the middle of a crossfade — the operator sees the light jump *because* they pressed Go | Every attribute re-bases from the value it is holding at that instant and moves to the new cue's target over the **new** cue's fade time; attributes the new cue does not name keep their targets and move on to the same new time base. One transition has one clock. Asserted at the value level and again on the wire: the byte at the instant of the Go is the byte the previous fade had reached |
 | 2026-08-10 | S5 | **A fade-out cannot mean the same thing for an intensity and for a position.** Fading a pan to its home value on release would swing the head while it is still lit, and — worse — a released LTP source that went on holding a value would go on *winning* its slot for the whole fade, so what faded would be the winner of the merge rather than the value | On release, intensities fade to home over the current cue's fade-out time and every other attribute is **held where it is** until that is over; then the whole source leaves the merge at once and everything falls back together. Same asymmetry as `docs/DMX_MERGE.md` §2.3, and the reason `CueSlot` carries the merge mode |
@@ -437,20 +509,27 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-The chain `Patch → Cue → Fade → Merge → Frame` is closed: a daemon built on
-`MergeBody` plays cue lists. Begin **S6** (`prism-engine` — programmer layer,
-masters, stress). Use the prompt in §8. The seams are `merge_programmer`, which
-exists and is unused on the tick, and `TickCommand::SetGrandMaster` /
-`SetBlackout`, which reach `MergeBody::apply` and are ignored on purpose.
+**Phase 1 is complete.** `ARCHITECTURE_SPEC.md` §5 runs end to end —
+`Patch → Cue → Fade → Merge → Programmer → Masters → DMX bytes` — allocation-free
+on a 44 Hz tick that holds its deadline at 64 universes on a fully loaded
+machine. What the engine does not yet have is anywhere to send the frames.
+Begin **S7** (`prism-protocols` — the `DmxOutput` trait and Open DMX USB). Use
+the prompt in §8. The seam is `FramePublisher::subscribe`, which hands a driver
+its own `FrameSubscriber`.
 
-Carried into S6 and beyond:
+Carried into S7 and beyond:
+- The whole pipeline is on `MergeBody`. `load_sequence`, `load_groups` and `load_programmer` are the set-up doors and all three allocate; everything else arrives as a `TickCommand`.
+- The programmer is addressed by `MergePlan` slot. That number is a contract between the core thread and the engine, and a repatch invalidates every queued programmer command — see the decision log.
+- **`prismd` must raise the tick *thread*'s priority, not the process's.** The stress gate measured what happens otherwise; see the decision log and §3.1.
+- Masters scale intensity only, and "intensity" means `AttributeDef.featureGroup == Dimmer` — not the attribute's name and not its merge mode.
+- Speed masters (`docs/DMX_MERGE.md` §4, item 3) are playback *rate* and belong to step 2 of the tick. Nothing implements them yet and no domain type carries one.
+- The programmer *state machine* — the three-stage Clear, store behaviour, selection — is still **S13**. S6 built only the merge layer beneath it.
 - `MergeBody::for_patch(&layout, fixtures, executors)` is the constructor: it builds the `MergePlan` and the `ChannelPlan` from one patch, so they cannot describe different rigs. `MergeBody::new` takes both separately and rejects a mismatch.
 - The encoder consumes `MergeBody::values()` — one 16-bit value per `MergePlan` slot, in slot order (`fixture`, then `attribute`). That order is stable and part of the plan's contract, and `ChannelPlan` targets are sorted by it.
 - The encoder leaves unpatched channels alone, so **replacing a `MergeBody` at run time must blank the publisher's frame buffers** — see the decision log.
 - `MergeBody::load_sequence(executor, &Sequence)` compiles a cue list against the body's own patch and puts it on an executor. It allocates, so it is set-up work, not something to do while the tick runs.
 - An executor **with** a sequence is owned by its `CuePlayer`: it is played through `Go` and `SetExecutorActive`, and writing into its `PlaybackSource` by hand will not survive the next tick. An executor **without** one still answers S3's raw activation, which is how a host drives values it wrote in itself.
 - The four playback rules S5 decided — cues track, a Go overtakes a running fade, a release fades intensity and holds the rest, one cue per tick — are in the decision log and in `crates/prism-engine/src/player.rs`'s module documentation. They are the console's behaviour, not an implementation detail.
-- Masters and the programmer state machine are **S6**. `SetGrandMaster` and `SetBlackout` reach `MergeBody` today and are ignored on purpose; `merge_programmer` exists as a pure function and is not yet on the tick.
 - `prism-domain`'s optional `proptest` feature is already enabled in `prism-engine`'s `[dev-dependencies]`. Use `prism_domain::arb` rather than growing new generators.
 - `TickCommand` is flat, `Copy` and encoded into 16 bytes; S3 added `SetExecutorActive` as tag 5. A new variant needs a new tag, a row in the round-trip test and, if it is wider, a raised `MAX_ENCODED` — a `const` assertion breaks the build otherwise.
 - `prismd` (S17) owns the translation from `prism_domain::Command` to `TickCommand`, must attach every output driver during setup (`FramePublisher::subscribe` allocates), and **must raise the tick thread's priority** — without it the deadline is not held, see §3.
@@ -465,124 +544,98 @@ Carried into S6 and beyond:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S6 — `prism-engine`: Programmer-Layer, Masters, Stress**
+**Next up: S7 — `prism-protocols`: `DmxOutput` trait and Open DMX USB**
 
 ```text
-PrismDMX — Session S6: prism-engine, Programmer-Layer, Masters, Stress
+PrismDMX — Session S7: prism-protocols, DmxOutput-Trait und Open DMX USB
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
-1. CLAUDE.md                        — verbindliche Qualitäts-, Architektur- und Teststandards
-2. PROGRESS.md                      — aktueller Stand, Decision Log, gemessene Zahlen
-3. IMPLEMENTATION_PLAN.md           — Session-Protokoll und die Definition von S6
-4. ARCHITECTURE_SPEC.md §3.1, §5    — die harten Tick-Regeln und die Pipeline-Reihenfolge
-                                      (S6 ist Schritt 5 und 6: Programmer mischen,
-                                      danach die Masters anwenden)
-5. docs/DMX_MERGE.md §3, §4, §6.3, §7 — Programmer-Schicht, Masters, die
-                                      Stack-Invarianten und das durchgerechnete Beispiel
-6. crates/prism-engine/src/lib.rs   — die Crate-Doku erklärt Aufbau, Tick-Vertrag und Schichten
-7. crates/prism-engine/src/merge.rs — merge_programmer existiert schon als reine Funktion
-8. crates/prism-engine/src/body.rs  — MergeBody: apply() nimmt Kommandos, render() tickt die Kette
-9. crates/prism-engine/src/plan.rs  — MergePlan: ein Slot je Fixture und Attribut, index_of()
-10. crates/prism-domain/src/programmer.rs — ProgrammerState, ProgrammerValue, set_value/clear_value
+1. CLAUDE.md                          — verbindliche Qualitäts-, Architektur- und Teststandards
+2. PROGRESS.md                        — aktueller Stand, Decision Log, gemessene Zahlen
+3. IMPLEMENTATION_PLAN.md             — Session-Protokoll und die Definition von S7
+4. ARCHITECTURE_SPEC.md §3, §7, §7.1  — Threadmodell, das DmxOutput-Trait und die
+                                        vollständige Tabelle zum SH-RS09B: Zugriffspfad,
+                                        Portparameter, Break/MAB-Timing, Fehlerverhalten
+5. ARCHITECTURE_SPEC.md §10.1         — was plattformneutral bleiben muss und was nicht
+6. crates/prism-engine/src/frame.rs   — DmxFrame und FrameLayout: was ein Treiber bekommt
+7. crates/prism-engine/src/triple_buffer.rs — FrameSubscriber: wie ein Treiber Frames abholt
+8. crates/prism-protocols/src/lib.rs  — die Crate ist leer und wartet auf diese Session
 
-Aufgabe: Session S6 umsetzen — die Pipeline vollständig machen und unter Last
-beweisen. Über die Playbacks kommt der Programmer als absolute Übersteuerung,
-darüber die Masters, die ausschließlich Intensität skalieren.
+Aufgabe: Session S7 umsetzen — die Ausgabeseite. Ein Trait, hinter dem jeder
+DMX-Ausgang steckt, und der erste echte Treiber dahinter: Open DMX USB auf
+einem DSD TECH SH-RS09B. Vollständig getestet, ohne die Hardware zu besitzen.
 
-Stand nach S5 — nichts davon musst du neu bauen:
-- Die Kette Patch → Cue → Fade → Merge → Frame ist vollständig und getestet.
-  `MergeBody` ist der TickBody: `apply()` nimmt `TickCommand`s entgegen,
-  `render()` wertet die Playbacks aus, mischt und schreibt den DmxFrame.
-- `MergeBody::for_patch(&layout, fixtures, executors)` baut MergePlan und
-  ChannelPlan aus einem Patch. `MergePlan` hat einen Slot je Fixture und
-  Attribut, `MergePlan::index_of(fixture, attribute)` liefert den Slotindex.
-  Diese Slotnummer ist die Adresse, unter der auch der Programmer seine Werte
-  hält — die Reihenfolge (Fixture, dann Attribut) ist Teil des Vertrags.
-- `MergeBody::load_sequence(executor, &Sequence)` legt eine Cueliste auf einen
-  Executor; `TickCommand::Go` läuft, Fades laufen, Trigger laufen.
-- Der Merge (HTP/LTP, Executor-Master vor dem Maximum, Rückfall auf Home) ist
-  fertig und durch die Invarianten aus DMX_MERGE.md §6.1–6.2 abgesichert.
-- Der Tick läuft mit 44 Hz, hält absolute Deadlines und liefert `TickInfo`.
-  `ManualClock` erlaubt deterministische Zeit im Test, ohne echt zu warten.
+Stand nach S6 — nichts davon musst du neu bauen:
+- prism-engine ist fertig: die Pipeline Patch → Cue → Fade → Merge → Programmer
+  → Masters → DMX-Bytes läuft auf dem 44-Hz-Tick, hält absolute Deadlines,
+  alloziert im Tick nicht und ist mit 99 % Zeilenabdeckung geprüft.
+- `FramePublisher::subscribe()` liefert einen `FrameSubscriber`. Genau den
+  bekommt ein Ausgabetreiber: `refresh()` holt den neuesten Frame ab, `frame()`
+  gibt ihn her, `channels()` sind die Bytes. Ein Subscriber gehört genau einem
+  Treiberthread — der Puffer dahinter ist single-producer/single-consumer.
+- `subscribe()` alloziert, darf also nur beim Aufbau gerufen werden, nicht
+  während der Tick läuft. Treiber werden im Setup angehängt.
+- `DmxFrame::universe(index)` liefert die 512 Bytes eines Universums;
+  `FrameLayout::universes()` sagt, welche `UniverseId` an welchem Index liegt.
+- Der Tick läuft mit 44 Hz. Ein Treiber liest den *neuesten* Frame in seinem
+  eigenen Takt — Open DMX USB schafft laut §7.1 nur etwa 30–40 Hz, und das ist
+  kein Fehler, sondern die Eigenschaft der Hardware.
 
-Die Nahtstelle dieser Session:
-- `merge_programmer(merged, Option<u16>)` existiert seit S3 als reine Funktion,
-  ist getestet und wird auf dem Tick noch nicht benutzt. S6 füllt das.
-- `TickCommand::SetGrandMaster(u16)` und `TickCommand::SetBlackout(bool)`
-  erreichen `MergeBody::apply` heute und werden bewusst ignoriert; ein Test
-  sagt das ausdrücklich. S6 macht daraus die Masterschicht.
-- `MergeBody::render` ruft heute `cues.advance(...)`, dann `resolve()`, dann
-  `channels.encode(...)`. Programmer und Masters gehören zwischen resolve und
-  encode — die Reihenfolge steht in ARCHITECTURE_SPEC.md §5.
-
-Umzusetzen (IMPLEMENTATION_PLAN.md S6):
-- Programmer-Übersteuerungsschicht: sparsam (nicht ein voller Frame),
-  absolute Priorität über allen Playbacks
-- Group Master, Grand Master — ausschließlich Intensität
-- Die Pipeline aus ARCHITECTURE_SPEC.md §5 vollständig, Ende zu Ende
+Umzusetzen (IMPLEMENTATION_PLAN.md S7):
+- `DmxOutput`-Trait wie in ARCHITECTURE_SPEC.md §7, `OutputHealth`
+  (`prism_domain::OutputHealth` existiert bereits), ein Mock-Treiber
+- `FtdiBackend`-Trait mit einer Mock-Implementierung — der ganze Treiber muss
+  ohne angeschlossene Hardware prüfbar sein
+- `OpenDmxUsb`: Portaufbau, Break/MAB-Sequenz, 513-Byte-Frame mit Startcode 0x00
+- Treiberthread-Hülle: `catch_unwind`, Reconnect-Backoff 100 ms → 5 s
 
 Vorgehen strikt test-driven (CLAUDE.md): erst der fehlschlagende Test, dann die
-Implementierung. Diese Crate trägt die strengste Coverage-Anforderung des
-Projekts (> 95 %); nach S5 gemessen wurden 99,55 % Zeilen. In dieser Session
-wird die Coverage abgenommen — sie ist ein Exit-Kriterium, kein Nebenprodukt.
+Implementierung. `prism-protocols` trägt dieselbe Coverage-Anforderung wie die
+Engine (> 95 %); sie ist ein Exit-Kriterium, kein Nebenprodukt.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Die Stack-Invarianten aus docs/DMX_MERGE.md §6.3 gelten, mit proptest geprüft
-- Grand Master auf 0 zwingt jedes Intensitätsattribut auf 0 und lässt jedes
-  andere Attribut unangetastet — behauptet und geprüft, nicht angenommen
-- Stress-Gate: 64 Universen, 100 % CPU-Last, 10 Minuten, p99.9-Jitter < 2 ms,
-  keine verlorenen Frames. Wie man lange Tests ausführt und wie die
-  Thread-Priorität die Zahlen bestimmt, steht in PROGRESS.md §3 und §3.1 —
-  ohne die dort beschriebene Priorität ist die Messung nicht vergleichbar
-- Determinismus: gleiche Eingabe erzeugt über mehrere Läufe byte-identische Frames
-- Coverage auf prism-engine > 95 %, gemessen und in PROGRESS.md eingetragen
-- cargo test -p prism-engine ist grün
+- Das Mock-Backend prüft die exakte Aufruffolge: `SetBreakOn` → Wartezeit →
+  `SetBreakOff` → Wartezeit → Schreiben von 513 Bytes mit Startcode 0x00
+- Portparameter geprüft: 250 000 Baud, 8N2, keine Flusskontrolle, Latency
+  Timer 1 (die Voreinstellung von 16 ms wäre tödlich)
+- Simulierter Verbindungsabbruch mitten im Frame: der Treiber meldet
+  `Disconnected`, versucht es mit Backoff erneut, die Engine merkt nichts
+- Simulierte Panik im Treiber: von `catch_unwind` aufgefangen, Ausgang als
+  degraded markiert, der Prozess lebt weiter
+- Coverage auf prism-protocols > 95 %, gemessen und in PROGRESS.md eingetragen
+- cargo test -p prism-protocols ist grün
 - cargo clippy --workspace --all-targets -- -D warnings ist sauber
 - cargo fmt --all --check ist sauber
 
 Wichtige Randbedingungen:
-- prism-engine ist plattformneutral und I/O-frei — kein #[cfg(target_os = ...)],
-  keine UI-Abhängigkeit, keine Hardware. CI testet die Crate auch unter Linux.
-- Im Tick gilt ARCHITECTURE_SPEC.md §3.1: keine Allokation, kein Lock, kein I/O,
-  kein Logging. Alle Puffer werden vorab aus dem Patch dimensioniert. Zusätzlich
-  sind clippy::indexing_slicing und clippy::integer_division im Produktionscode
-  verboten — also `get`/`get_mut` und `div_euclid` statt `[]` und `/`.
-- `prism_domain::ProgrammerState` besitzt Maps und Vecs und darf im Tick weder
-  angelegt noch fallen gelassen werden (Droppen alloziert genauso wie Anlegen).
-  Wie S2 das für `TickCommand` und S5 für `Cue` gelöst hat, steht im Decision
-  Log — die auswertbare Form wird vor dem Tick gebaut, nicht in ihm. Für den
-  Programmer heißt das eine vorab dimensionierte, dünn besetzte Struktur über
-  Slotnummern, kein `BTreeMap` auf dem Tickpfad.
-- Der Programmer ist ausdrücklich sparsam: ein unberührtes Attribut ist
-  abwesend, nicht null (docs/DMX_MERGE.md §3). Eine dichte Schicht, die überall
-  einen Wert hätte, wäre kein Programmer, sondern ein weiterer Playback.
-- Masters skalieren ausschließlich Intensität (docs/DMX_MERGE.md §4). Welche
-  Attribute das sind, entscheidet die Attributdefinition, nicht ein Name.
-- Die Erweiterung von tick_allocations.rs erfolgt additiv: die vorhandenen
-  Messungen bleiben stehen, es kommt eine mit Programmer und Masters dazu.
-- Die drei `loom`-Modelle müssen weiterhin durchlaufen; wie man sie startet,
-  steht in PROGRESS.md §3.1.
-- Der Programmer-*Zustandsautomat* (Dreistufen-Clear, Store-Verhalten,
-  Selektion) ist prism-core und gehört zu S13, nicht hierher. S6 baut die
-  Merge-Schicht, die einen fertigen Programmer-Zustand verrechnet.
-- prism-domain hat ein optionales Feature `proptest` (`prism_domain::arb` und die
-  `Arbitrary`-Impls). Es ist in den [dev-dependencies] von prism-engine bereits
-  aktiviert — benutzen statt eigene Generatoren zu schreiben.
-- Interne Testhelfer für Fixture-Typen, gepatchte Fixtures, Cues und Sequenzen
-  stehen in crates/prism-engine/src/testkit.rs.
-- Toolchain ist eingerichtet und funktioniert (Rust 1.97.1 msvc, MSVC Build Tools 2022,
-  Node 24.11). Coverage misst man mit `cargo llvm-cov -p prism-engine --summary-only`.
+- Diese Crate darf Hardware anfassen, aber kein Test darf welche brauchen. Die
+  echte FTDI-Anbindung liegt hinter `FtdiBackend`; die Tests fahren den Treiber
+  gegen den Mock und prüfen die Aufrufe, nicht das Gerät.
+- VID/PID und die tatsächliche Framerate des SH-RS09B sind **unverifiziert**
+  (PROGRESS.md §5, ARCHITECTURE_SPEC.md §7.1). Sie gehören als Daten an eine
+  Stelle, an der S8 sie durch Messwerte ersetzt — nicht verstreut in den Code.
+- Ein Treiberthread soll in seinem eigenen Ausgabetakt aufwachen und nicht dicht
+  neben der Engine pollen (Decision Log, S2): 5 ms Pollintervall hat dort
+  gemessen die verpassten Ticks beseitigt.
+- Plattformabhängiger Code ist hier erstmals erlaubt (D2XX unter Windows,
+  libftdi unter Linux) — aber die Crate muss unter Linux weiter *bauen*, weil CI
+  sie dort baut. Das heißt: hinter `#[cfg]` und hinter dem Backend-Trait, und
+  die Logik selbst plattformneutral halten.
+- prism-domain hat ein optionales Feature `proptest` (`prism_domain::arb` und
+  die `Arbitrary`-Impls) — benutzen statt eigene Generatoren zu schreiben.
+- Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
+  Node 24.11). Coverage misst man mit
+  `cargo llvm-cov -p prism-protocols --summary-only`.
 - Es ist kein Setup mehr nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S6-Status, gemessene Coverage, gemessene
-  Stress-Zahlen, Decision Log bei Abweichungen vom Plan oder Funden, die
-  spätere Sessions betreffen
+- PROGRESS.md aktualisieren: S7-Status, gemessene Coverage, Decision Log bei
+  Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S7 (prism-protocols: DmxOutput-Trait und Open DMX USB) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. feat(engine): …
+  Session S8 (🔌 Hardware-Bring-up SH-RS09B) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. feat(protocols): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```
