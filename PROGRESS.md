@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI verified green | ✅ | Latest: run **31418621481** on `174c27d` (S4). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
+| 13 | CI verified green | ✅ | Latest: run **31439768003** on `2ddd66e` (S6). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
 | 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
@@ -287,7 +287,7 @@ the session prompt:
 | Zero allocations in the tick with the programmer and the masters | ✅ **0 allocator calls** over 1 000 ticks — 768 slots, 8 cue lists, 16 group masters moving, programmer values set and cleared on the tick, grand master moving, frame published to a driver. Added beside the four earlier measurements, not instead of them |
 | `loom` models still pass | ✅ 3 models, unchanged since S2 |
 | Coverage on `prism-engine` | ✅ **99.61 % lines**, 99.53 % regions, 99.22 % functions — up from S5's 99.55 %. `master.rs` at **100 % lines**, `programmer.rs` at 99.62 %, `body.rs` still at 100 % |
-| CI green on the pushed commit | ✅ run **PENDING** |
+| CI green on the pushed commit | ✅ run **31439768003** on `2ddd66e` — all four jobs, zero non-success steps: Windows full build and test 2 m 54 s, Linux platform-neutral 59 s, UI typecheck and build 50 s, ARM64 cross-check 16 s. The first push (**31439289713**) failed on Windows and is recorded in the decision log — two timing tests measuring each other, found by CI and not locally |
 
 **Delivered:** two modules and the wiring that closes the pipeline. `programmer`
 is the operator's override — sparse by specification, addressed by merge-plan
