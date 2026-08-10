@@ -7,7 +7,25 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Exposes `arb` and the `Arbitrary` impls to downstream crates. `prism-engine`
+# needs them from S3 onward to property-test the merge over arbitrary domain
+# values. This crate's own tests get them from `cfg(test)` without the feature.
+proptest = ["dep:proptest", "dep:proptest-derive"]
+
 [dependencies]
+serde = { workspace = true }
+ts-rs = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Wire codecs the round-trip tests run every type through: JSON for readability
+# and MessagePack because that is what `prism-ipc` puts on the wire.
+serde_json = { workspace = true }
+rmp-serde = { workspace = true }
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 
 [lints]
 workspace = true

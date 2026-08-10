@@ -88,6 +88,15 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: ui/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # ui/src/bindings is generated, not committed, so it has to exist before
+      # anything typechecks. prism-domain's test suite writes it - which also
+      # means a binding cannot silently go stale.
+      - name: Generate TypeScript bindings
+        working-directory: .
+        run: cargo test -p prism-domain
 
       - name: Install
         run: npm ci

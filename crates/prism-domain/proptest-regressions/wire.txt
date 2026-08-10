@@ -1,0 +1,13 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 98a5341bf4257748bf9eb1e070328e76c6b8cf389c8a9bca9181b8e2d577e26c # shrinks to value = AttributeDef { attribute: Dimmer, feature_group: Dimmer, coarse_offset: 0, fine_offset: None, default_value: 0, merge_mode: Htp, invert: false, physical_from: 996659.2889887971, physical_to: 0.0 }
+cc 0392d01abc0ec968cd7e4a1198895ebd31a337ddfa8fcc2465c94bad5cad216e # shrinks to value = Cue { number: "", name: "", fade_in: 0.0, fade_out: 240.50061439624523, delay: 0.0, trigger: Go, trigger_time: None, parts: [] }
+cc 9ecb89f4b99403b42cdaabd0761b8a866ea7ddd0ed8aed99cee6d075b29ede87 # shrinks to value = ProgrammerChanged { state: ProgrammerState { selection: [], active_feature_group: Dimmer, values: {FixtureId(0): {}}, clear_stage: Idle } }
+cc 15acbb75b8fea47d7465e1d50bef2f073fca659f162d5eb017cdaa230c9b1281 # shrinks to value = Fixture { id: FixtureId(0), name: "", type_id: "", universe: UniverseId(0), address: 0, position: Vec3 { x: 0.0, y: 0.0, z: 0.0 }, rotation: Vec3 { x: 0.0, y: 0.0, z: 904059.0187865519 }, invert_pan: false, invert_tilt: false }
+cc 16f7dd75261048369f96e38f2f755ff5bd9fc0e14ed594e7447c375725f9511b # shrinks to value = Add { path: "", value: Array([Float(-960806.3455093987)]) }
+cc 0875290cfb9fc74872f1e998fda477e7ac3485834f04f1d8adbc549ba593899a # shrinks to value = Array([Array([Float(-990916.8862451371)])])
+cc 533aba511139a57667f620568b822e1604f77d9e65a17d0f1f0ea54edbfe7a9b # shrinks to value = ProgrammerState { selection: [], active_feature_group: Dimmer, values: {FixtureId(0): {}}, clear_stage: Idle }
