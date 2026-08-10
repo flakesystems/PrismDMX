@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI first run verified | ✅ | Run 31346285996 — **all four jobs green**: Windows 49 s, Linux neutral 16 s, ARM64 check 16 s, UI 15 s |
+| 13 | CI verified green | ✅ | Run **31346581991** on HEAD — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
 
 ---
 
@@ -115,7 +115,7 @@ Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S0:
 | `cargo run -p prismd` | ✅ exit 0 — daemon binary links and runs |
 | `npx tsc -b --force` (ui, strict) | ✅ exit 0 |
 | `npm run build` (ui) | ✅ exit 0 |
-| CI green on a pushed branch | ✅ run 31346285996, all four jobs passed |
+| CI green on a pushed branch | ✅ run 31346581991, all four jobs passed |
 
 ---
 
@@ -149,7 +149,7 @@ Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and prot
 *None. All setup blockers resolved.*
 
 ### B2 — CI run not yet verified ✅ RESOLVED 2026-08-10
-The repository is private, so the unauthenticated GitHub API returned 404 and run status could not be read from the shell. Resolved by installing the `gh` CLI and the user authenticating it. Run **31346285996** passed with all four jobs green: Windows full build and test (49 s), Linux platform-neutral crates (16 s), Linux ARM64 cross-compile check (16 s), UI typecheck and build (15 s). The workflow required no corrections.
+The repository is private, so the unauthenticated GitHub API returned 404 and run status could not be read from the shell. Resolved by installing the `gh` CLI and the user authenticating it. The workflow was correct on its first run; the only change needed was bumping `actions/checkout` and `actions/setup-node` off the deprecated Node 20 runtime. Final verification: run **31346581991** on HEAD, all four jobs green — Windows full build and test (55 s), Linux ARM64 cross-compile check (20 s), UI typecheck and build (15 s), Linux platform-neutral crates (14 s), with no annotations.
 
 ### B1 — MSVC Build Tools missing ✅ RESOLVED 2026-08-10
 Rust could be installed per-user via winget, but the MSVC linker could not — `link.exe` was absent and every link step failed. Resolved by the user installing Visual Studio Build Tools 2022 (17.14.37516.0) from an elevated shell. Verified: `cargo build`, `cargo test` and `cargo run -p prismd` all succeed.
