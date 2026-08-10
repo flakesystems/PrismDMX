@@ -709,15 +709,29 @@ fn the_whole_pipeline_fits_inside_a_tick_period() {
     let stats = &measured.stats;
 
     assert_eq!(stats.panics, 0);
+    // Jitter is measured on the ticks that ran, and the engine resynchronises
+    // to the grid after a missed deadline - so a body too slow to fit inside a
+    // period does *not* show up in the median. The unoptimised 64-universe run
+    // that established the size of this test had a median of 100 µs while
+    // missing 49 of 133 ticks. What the median does catch is a schedule that
+    // drifts or sleeps by period instead of to a deadline, which is worth
+    // keeping, but it is not this test's headline.
     assert!(
         stats.jitter.percentile(0.50) <= Duration::from_millis(2),
         "median jitter was {:?}",
         stats.jitter.percentile(0.50)
     );
+    // The headline is the share of the grid that ran at all: a pipeline that no
+    // longer fits loses ticks wholesale, and the run above would fail this at
+    // 84 ticks of 133. Deliberately not a missed-tick budget - on a shared
+    // two-core runner one scheduler stall costs a burst of consecutive
+    // deadlines (68 ms of stall is three periods gone before the engine gets a
+    // core back), so a budget over 130 ticks measures the runner rather than
+    // the code. It failed exactly that way once, with a median of 100 µs.
+    let expected = (measured.elapsed.as_secs_f64() * TICK_HZ as f64) as u64;
     assert!(
-        stats.missed * 20 <= stats.ticks,
-        "{} of {} ticks were missed",
-        stats.missed,
+        stats.ticks * 4 >= expected * 3,
+        "only {} of about {expected} ticks ran",
         stats.ticks
     );
     for frames in &measured.frames_taken {
