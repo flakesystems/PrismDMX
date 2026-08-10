@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-10
 **Current phase:** Phase 1 — Domain and engine
-**Current session:** S2 — `prism-engine` tick loop and triple buffer (not started; see §8 for the prompt that starts it)
-**Last completed:** S1 — `prism-domain` ✅
+**Current session:** S3 — `prism-engine` HTP/LTP merge (not started; see §8 for the prompt that starts it)
+**Last completed:** S2 — `prism-engine` tick loop and triple buffer ✅
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -29,6 +29,7 @@
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
 | 13 | CI verified green | ✅ | Latest: run **31384082300** on `1ab1fac` (S1). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
+| 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
 
@@ -43,8 +44,8 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S1 | `prism-domain` — types | ✅ | 2026-08-10 | All exit criteria verified — see §2.2. 133 tests, coverage 99.8 % lines |
-| S2 | `prism-engine` — tick loop, triple buffer | ☐ | | |
-| S3 | `prism-engine` — HTP/LTP merge | ☐ | | Highest-value TDD target |
+| S2 | `prism-engine` — tick loop, triple buffer | ✅ | 2026-08-10 | All exit criteria verified — see §2.3. 77 tests + 3 `loom` models, coverage 98.6 % lines |
+| S3 | `prism-engine` — HTP/LTP merge | ☐ | | Highest-value TDD target. Plugs into `TickBody` |
 | S4 | `prism-engine` — DMX encoding | ☐ | | |
 | S5 | `prism-engine` — executors, cues, fades | ☐ | | |
 | S6 | `prism-engine` — programmer, masters, stress | ☐ | | Coverage gate > 95 % |
@@ -99,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 2 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 3 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -139,6 +140,40 @@ Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S1:
 by `prism_domain::export_bindings`, which the test suite runs, so a stale binding
 cannot survive a green test run.
 
+### 2.3 S2 verification record
+
+Measured on 2026-08-10, all exit criteria from `IMPLEMENTATION_PLAN.md` S2:
+
+| Check | Result |
+|---|---|
+| `cargo test -p prism-engine` | ✅ exit 0 — **77 tests**, 0 failed, 4 `#[ignore]`d (see §3.1) |
+| `cargo test --workspace` | ✅ exit 0 — 210 tests across 17 targets |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| 10-minute run: no missed tick | ✅ **26 401 of 26 401 ticks, 0 missed, 0 panics** |
+| 10-minute run: p99.9 jitter < 2 ms | ✅ **p99.9 = 200 µs**, max 588 µs, p50 and p99 both in the first 100 µs bucket |
+| Zero allocations in the tick after warm-up | ✅ **0 allocator calls** over 2 000 ticks at 64 universes, 4 subscribers, 4 000 commands — counted by the allocator itself, and again over 44 ticks on the real clock |
+| Triple buffer: concurrent stress, no torn frames | ✅ 1 000 000 frames of 64 universes to 4 reader threads in 15.8 s, no torn frame and no sequence regression. Plus **3 `loom` models** covering the buffer's ownership protocol and the queue |
+| Drift: < one tick period after 100 000 ticks | ✅ simulated clock with up to 900 µs of random overshoot per tick ends within one period of ideal, and the error does not grow with the tick count. Deadline arithmetic is exact to under 1 µs at 1, 100, 10 000, 100 000 and 1 000 000 ticks |
+
+**Delivered:** `DmxFrame`/`FrameLayout`, a wait-free triple buffer, a wait-free
+SPSC command queue, `TickCommand`, the `Clock` abstraction with a real and a
+simulated implementation, a fixed-bucket jitter histogram, and the `Engine` tick
+loop with `TickBody` as the seam S3-S6 plug into. No `unsafe`, no
+`#[cfg(target_os = …)]`, no dependency beyond `prism-domain`.
+
+**The `loom` models are known to work, not merely to pass.** Both were run against
+deliberately weakened memory orderings (`Relaxed` in place of `AcqRel`/`Release`)
+and both failed, as they should. That matters because CI runs tests only on
+x86-64, whose hardware would hide a missing `Release` — and D10 puts a Raspberry
+Pi on the roadmap.
+
+**The ten-minute run needs the thread priority the specification already asks
+for.** `ARCHITECTURE_SPEC.md` §3 gives `engine-tick` realtime or high priority.
+At the shell's default priority the same run missed 45 ticks with a p99.9 of
+54 ms; at high priority, nothing else changed, it missed none with a p99.9 of
+200 µs. See the decision log and §3.1.
+
 ---
 
 ## 3. Coverage tracking
@@ -151,7 +186,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Crate | Target | Measured | Date |
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
-| `prism-engine` | **> 95 %** | — | |
+| `prism-engine` | **> 95 %** | **98.61 % lines**, 99.01 % regions, 96.97 % functions | 2026-08-10 |
 | `prism-core` | **> 95 %** (programmer) | — | |
 | `prism-protocols` | **> 95 %** | — | |
 | `prism-surface` | **> 95 %** | — | |
@@ -162,10 +197,63 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 
 | Gate | Requirement | Measured | Date |
 |---|---|---|---|
-| Tick jitter | p99.9 < 2 ms, 64 universes, 100 % CPU, 10 min | — | |
-| Tick allocations | zero inside the tick after warm-up | — | |
+| Tick jitter | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 588 µs, **0 of 26 401 ticks missed** — at the thread priority `ARCHITECTURE_SPEC.md` §3 specifies. See the note below | 2026-08-10 |
+| Tick jitter under 100 % CPU load | S6 stress gate — not this session | — | |
+| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers | 2026-08-10 |
+| Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
+| Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Open DMX frame rate | measure real rate on SH-RS09B | — | |
 | Telemetry render | 64 universes @ 30 Hz, zero React re-renders | — | |
+
+**Thread priority is part of the tick jitter figure.** The same ten-minute run at
+the shell's default priority missed 45 ticks and had a p99.9 of 54 ms. The engine
+is not the difference: a three-minute run with *no* subscriber threads at all
+still stalled every twenty seconds or so, which is the Windows scheduler
+preempting a normal-priority thread. `prism-engine` cannot set its own priority —
+it is platform-neutral by rule — so **S17 must raise the tick thread's priority in
+`prismd`**, and the figure above is measured in that configuration.
+
+Measured on: Windows 11 26200, Rust 1.97.1 msvc, release profile, engine plus four
+subscriber threads polling at 5 ms, machine otherwise idle but not quiesced.
+
+### 3.1 Running the long tests
+
+Four tests are `#[ignore]`d because they take minutes, not seconds. A criterion
+nobody can re-run is not a measurement, so this is how.
+
+Everything that is not `#[ignore]`d, which is what CI runs:
+
+```bash
+cargo test --workspace
+```
+
+The long ones — the ten-minute deadline run, the diagnostic without subscribers,
+the full-size buffer stress and the real-clock drift run (that last is 38 minutes
+on its own):
+
+```bash
+cargo test -p prism-engine --release -- --ignored --nocapture --test-threads=1
+```
+
+To reproduce the **recorded** jitter figures, the tick needs the priority §3 gives
+it. Build first, then run the test binary in a high-priority process:
+
+```powershell
+cargo build -p prism-engine --release --tests
+$exe = (Get-ChildItem target\release\deps\realtime-*.exe |
+        Sort-Object LastWriteTime -Descending)[0].FullName
+$p = Start-Process $exe -ArgumentList "--ignored","--nocapture","--test-threads=1",`
+       "the_tick_holds_its_deadline_for_ten_minutes" -PassThru -NoNewWindow
+$p.PriorityClass = "High"
+```
+
+The `loom` models replace the standard atomics with instrumented ones, so they are
+a different build of the crate rather than a different test. Under `--cfg loom`
+the ordinary unit tests are compiled out, so this runs the models and nothing else:
+
+```powershell
+$env:RUSTFLAGS = "--cfg loom"; cargo test -p prism-engine --release --lib
+```
 
 ---
 
@@ -198,6 +286,16 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-10 | S2 | **A `prism_domain::Command` cannot enter the tick at all.** It owns `String`s, `Vec`s and `JsonValue`s, so *dropping* one inside the tick calls the allocator — which §3.1 forbids exactly as firmly as allocating does, and which is the easier mistake to make because nothing in the code looks like an allocation | The queue carries `TickCommand`: flat, `Copy`, no owned fields, encoded into a fixed 16-byte slot. The core thread resolves a `Command` against the show and pushes the flat form. **S17 requirement:** `prismd` owns that translation, and anything that cannot be expressed flatly does not belong in the engine. A `const` assertion fails the build if a later session's variant outgrows the slot |
+| 2026-08-10 | S2 | **A triple buffer with one control word is single-consumer, not multi-consumer.** The plan says "one writer, many readers". With two readers swapping against the same word, one can be handed the slot the other has just given back — an *older* frame than it has already put on the wire. Making that safe needs a retry loop, and a retry loop is not wait-free | Each subscriber gets its own three-slot buffer and the publisher fans the frame out. Costs one copy per subscriber per tick (32 KB at 64 universes); buys that *every* buffer in the system is genuinely single-producer/single-consumer, which is a property `loom` can actually check. Measured cost recorded in §3.1 |
+| 2026-08-10 | S2 | `unsafe_code` is denied workspace-wide, so a shared slot cannot be an `UnsafeCell` — and `prism-engine` is the last crate in which to start making exceptions | Slots are `[AtomicU64]`, and frames are packed in and out of them eight channel bytes at a time. The ownership protocol already guarantees exclusive access, so every payload access is `Relaxed` and the control-word swap carries the ordering. What the atomics buy is that the worst case of a protocol bug is a stale frame, never undefined behaviour |
+| 2026-08-10 | S2 | **The `loom` models cannot run a real frame.** loom explores every interleaving of every atomic access, and a 64-universe frame is 4097 words per slot | The ownership protocol was extracted into `Slots::publish` and `Slots::take`, which the models drive **unchanged** against a two-word slot — two words being the smallest number that can tear. Validated by deliberately weakening the orderings: with `Relaxed` in place of `AcqRel` both models fail, so they are checking something. This matters for the Raspberry Pi target (D10): CI runs tests only on x86-64, whose hardware would hide a missing `Release` |
+| 2026-08-10 | S2 | **1/44 s is not a whole number of nanoseconds.** A rounded 22 727 272 ns period loses 0.73 ns per tick — 73 µs over 100 000 ticks, which is small but is drift, and drift is the one thing this session exists to exclude | Deadlines are derived from the tick index as an exact rational (`index × 10⁹ / 44`), so the error is under a nanosecond at every tick and never accumulates. `TICK_PERIOD` survives as a nominal constant for budgets and display, and is documented as such |
+| 2026-08-10 | S2 | **A p99.9 over a three-second run is just the worst sample.** The short CI timing test failed about one run in four on an idle machine — not because of a regression but because 130 samples cannot carry a 99.9th percentile, and one scheduler stall decided it | The CI run asserts on the median and p95, which is where a schedule that drifts or sleeps by period rather than to a deadline shows up, and prints the whole distribution. The tail gate lives in the ten-minute run, where 26 400 samples make a p99.9 mean something. A gate that fails for reasons unrelated to the code teaches people to ignore gates |
+| 2026-08-10 | S2 | **The ten-minute criterion failed on the first run: 45 missed ticks, p99.9 jitter 54 ms.** The cause is not the engine. A three-minute run with *no* subscriber threads at all still missed 14 ticks with a 51 ms worst case, so nothing of ours was responsible; and the same run at high process priority missed none, with a p99.9 of 200 µs. It is the Windows scheduler preempting a normal-priority thread, roughly every twenty seconds | `ARCHITECTURE_SPEC.md` §3 already gives `engine-tick` realtime or high priority, and `prism-engine` cannot set it — platform-neutral by rule, and priority is a per-OS call. **S17 requirement:** `prismd` raises the tick thread's priority at start-up, and treats failing to do so as a degraded state worth reporting, not a silent one. The recorded figure is measured in that configuration and §3.1 says how to reproduce it. The diagnostic that answers "is it us or the operating system?" is kept as `the_tick_alone_holds_its_deadline_for_ten_minutes` |
+| 2026-08-10 | S2 | The first harness had four subscriber threads polling every 500 µs — eight thousand wake-ups a second, contending with the tick for the same cores. That models nothing: a driver consumes a 44 Hz stream | Poll interval raised to 5 ms, about four times the frame rate. It removed the missed ticks entirely at normal priority (45 → 0 over the equivalent period), which is worth knowing in its own right: **S7 driver threads should wake at their own output cadence, not spin near the engine**. Tuning a test until it passes is a bad habit, so both figures are recorded above rather than only the better one |
+| 2026-08-10 | S2 | A panic in the tick body leaves the frame half written, so containing the panic is not enough on its own | `Engine::tick` runs the body in `catch_unwind` and, on a panic, does **not** publish. Every output holds its last good frame for 23 ms, which is what a DMX receiver does with a stalled line anyway — far smaller a fault than one garbled frame reaching the fixtures. Counted in `TickStats::panics` |
+| 2026-08-10 | S2 | `FramePublisher::subscribe` allocates, so an output driver cannot be attached while the tick is running | Documented on the method. **S7/S17 requirement:** drivers are attached during setup; hot-plugging an interface at run time needs a different mechanism, not a call into this one |
 | 2026-08-10 | S0 | Rust installs cleanly per-user via winget, but the MSVC linker does not — they are separate installs | Setup split into an automatic part and a manual elevated part; recorded as B1 |
 | 2026-08-10 | S0 | `cargo check` and `cargo clippy` do not link | Workspace scaffold can be verified before B1 is resolved; test-driven work cannot start until it is |
 | 2026-08-10 | S0 | The first CI run passed but flagged `actions/checkout@v4` and `actions/setup-node@v4` as targeting the deprecated Node 20 runtime | Both bumped to `@v5` immediately, while the workflow was still trivial to re-verify |
@@ -220,10 +318,13 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-The domain vocabulary exists and is verified. Begin **S2** (`prism-engine` — tick loop and triple buffer). Use the prompt in §8.
+The heartbeat runs and holds its deadline. Begin **S3** (`prism-engine` — HTP/LTP merge). Use the prompt in §8. `TickBody` in `crates/prism-engine/src/tick.rs` is the seam it plugs into.
 
-Carried into S2 and beyond:
-- `prism-domain` has an optional `proptest` feature exposing `arb` and the `Arbitrary` impls. `prism-engine` should enable it in `[dev-dependencies]` from S3 onward rather than growing its own generators.
+Carried into S3 and beyond:
+- `prism-domain`'s optional `proptest` feature is already enabled in `prism-engine`'s `[dev-dependencies]`. Use `prism_domain::arb` rather than growing new generators.
+- `TickCommand` is flat, `Copy` and encoded into 16 bytes. A new variant needs a new tag, a row in the round-trip test and, if it is wider, a raised `MAX_ENCODED` — a `const` assertion breaks the build otherwise.
+- `prismd` (S17) owns the translation from `prism_domain::Command` to `TickCommand`, must attach every output driver during setup (`FramePublisher::subscribe` allocates), and **must raise the tick thread's priority** — without it the deadline is not held, see §3.
+- `prism-protocols` (S7): a driver thread should wake at its own output cadence rather than spin near the engine — see the decision log.
 - `prism-ipc` (S16) must serialise MessagePack with `to_vec_named`, must enforce a **nesting depth limit** on decode, and must treat serialisation as fallible — see the decision log.
 - `prism-core` (S11) must embed the used fixture types in the show file — see the decision log.
 - S15 must not assume bit-identical floats through a JSON export — see the decision log.
@@ -234,76 +335,77 @@ Carried into S2 and beyond:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S2 — `prism-engine`: Tick-Loop und Triple Buffer**
+**Next up: S3 — `prism-engine`: HTP/LTP-Merge**
 
 ```text
-PrismDMX — Session S2: prism-engine, Tick-Loop und Triple Buffer
+PrismDMX — Session S3: prism-engine, HTP/LTP-Merge
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                     — verbindliche Qualitäts-, Architektur- und Teststandards
-2. PROGRESS.md                   — aktueller Stand, Decision Log, gemessene Coverage
-3. IMPLEMENTATION_PLAN.md        — Session-Protokoll und die Definition von S2
-4. ARCHITECTURE_SPEC.md §3, §3.1, §3.2, §5 — Threading-Modell, die harten Regeln für
-   den engine-tick, die exakte Frame-Rate und die Pipeline-Reihenfolge
-5. crates/prism-domain/src/lib.rs — das Vokabular, das in S1 entstanden ist
+2. PROGRESS.md                   — aktueller Stand, Decision Log, gemessene Zahlen
+3. IMPLEMENTATION_PLAN.md        — Session-Protokoll und die Definition von S3
+4. docs/DMX_MERGE.md             — vollständig; das ist die Spezifikation dieser Session
+5. ARCHITECTURE_SPEC.md §3.1, §5 — die harten Tick-Regeln und die Pipeline-Reihenfolge
+6. crates/prism-engine/src/lib.rs — die Crate-Doku erklärt Aufbau und Tick-Vertrag
+7. crates/prism-domain/src/attribute.rs — AttributeType, FeatureGroup, MergeMode
 
-Aufgabe: Session S2 umsetzen — die Crate `prism-engine` unter crates/prism-engine
-ist derzeit ein leerer Stub und bekommt den Herzschlag des Systems: einen 44-Hz-Tick,
-der seine Deadline hält, und die Übergabe fertiger Frames an die Ausgabetreiber ohne
-Locks.
+Aufgabe: Session S3 umsetzen — der Merge. Das ist der Kern des Produkts: aus einer
+Menge von Quellen (Home-Layer, Playbacks) wird pro Fixture und Attribut ein Wert.
+Intensität mischt HTP, alles andere LTP nach Aktivierungsreihenfolge; der
+Executor-Master wirkt vor dem HTP-Maximum. Der Merge ist eine reine Funktion über
+eine Quellenmenge — keine versteckte Zeit, kein globaler Zustand.
 
 Vorgehen strikt test-driven (CLAUDE.md): erst der fehlschlagende Test, dann die
 Implementierung. Diese Crate trägt die strengste Coverage-Anforderung des Projekts
-(> 95 %), abgenommen wird sie aber erst in S6.
+(> 95 %), abgenommen wird sie in S6.
 
-Umzusetzen:
-- Triple Buffer: ein Schreiber (die Engine), viele Leser (Ausgabetreiber), wait-free.
-  Kein Leser darf einen halb geschriebenen Frame sehen.
-- Tick-Loop mit absoluten Deadlines — `sleep(deadline − 1 ms)` plus Spin bis zur
-  Deadline. Kein `sleep(periode)`, weil sich der Fehler sonst aufsummiert.
-- SPSC-Kommando-Queue in den Tick hinein. Der Tick darf beim Leeren der Queue weder
-  blockieren noch allozieren.
-- Zähl-Allokator als Test-Harness, um Allokationen im Tick nachzuweisen.
+Umzusetzen (docs/DMX_MERGE.md §1–§4):
+- Home-Layer: der Wert, auf den ein Attribut zurückfällt, wenn nichts aktiv ist
+- Playback-Layer mit MergeMode pro Attribut (HTP/LTP), Aktivierungszähler pro Quelle
+- Executor-Master vor dem HTP-Maximum angewandt (§2.3)
+- Der Merge als reine Funktion; die Programmer-Schicht und die Master kommen in S6
 
-Die harten Regeln aus ARCHITECTURE_SPEC.md §3.1 gelten ab hier: im Tick keine
-Allokation nach dem Warmlaufen, kein Logging, kein Lock, kein I/O. Ein Panic darf
-den DMX-Ausgang nicht mitreißen (`panic = "unwind"` ist im Release-Profil bereits
-gesetzt).
+Anschluss an das, was in S2 entstanden ist:
+- `TickBody` in crates/prism-engine/src/tick.rs ist genau die Naht, in die der Merge
+  gehört: `apply(TickCommand)` und `render(&TickInfo, &mut DmxFrame)`.
+- Im Tick gilt ARCHITECTURE_SPEC.md §3.1: keine Allokation, kein Lock, kein I/O,
+  kein Logging. Alle Puffer werden vorab aus dem Patch dimensioniert. Der
+  Zähl-Allokator in crates/prism-engine/tests/tick_allocations.rs weist das nach —
+  der Merge muss dort mitgemessen werden, nicht nur der leere Tick.
+- `TickCommand` (crates/prism-engine/src/command.rs) ist flach und `Copy` und wird in
+  16 Byte kodiert. Neue Varianten brauchen ein neues Tag plus eine Zeile im
+  Round-Trip-Test; `MAX_ENCODED` mitziehen, eine const-Assertion bricht sonst den Build.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- 10-Minuten-Lauf: kein verpasster Tick, p99.9-Jitter < 2 ms — gemessen und als Zahl
-  in PROGRESS.md §3 eingetragen, nicht per Augenmaß beurteilt
-- Allokations-Test: null Allokationen im Tick nach dem Warmlaufen
-- Triple Buffer: nebenläufiger Lese-/Schreib-Stresstest unter `loom` oder gleichwertig,
-  keine zerrissenen Frames
-- Drift-Test: nach 100 000 Ticks absoluter Zeitfehler < eine Tick-Periode
+- Jede Invariante aus docs/DMX_MERGE.md §6.1 und §6.2 ist mit proptest verifiziert
+- HTP: Kommutativität, Assoziativität, Idempotenz, Monotonie, Identität
+- LTP: Ordnungsabhängigkeit explizit geprüft UND Nicht-Kommutativität explizit
+  behauptet, damit niemand LTP später zu einem Maximum "optimiert"
+- Deaktivierungs-Fallback bis hinunter zum Home-Layer getestet
+- Das ausgearbeitete Beispiel aus docs/DMX_MERGE.md §7 als wörtlicher Testfall
+- Null Allokationen im Tick mit aktivem Merge (bestehendes Test-Target erweitern)
 - cargo test -p prism-engine ist grün
 - cargo clippy --workspace --all-targets -- -D warnings ist sauber
 - cargo fmt --all --check ist sauber
 
-Hinweis zu langen Tests: der 10-Minuten-Lauf und der Stresstest gehören hinter
-`#[ignore]` oder in ein eigenes Test-Target, damit `cargo test --workspace` in CI
-schnell bleibt. Wie man sie ausführt, gehört dokumentiert in PROGRESS.md — ein
-Kriterium, das niemand mehr ausführen kann, ist nicht gemessen.
-
 Wichtige Randbedingungen:
 - prism-engine ist plattformneutral und I/O-frei — kein #[cfg(target_os = ...)],
   keine UI-Abhängigkeit, keine Hardware. CI testet die Crate auch unter Linux.
-- prism-domain (Session S1) ist fertig und liefert das gesamte Typvokabular.
-  Es hat ein optionales Feature `proptest`, das `prism_domain::arb` und die
-  `Arbitrary`-Impls freischaltet — in [dev-dependencies] aktivieren statt eigene
-  Generatoren zu schreiben.
+- prism-domain hat ein optionales Feature `proptest` (`prism_domain::arb` und die
+  `Arbitrary`-Impls). Es ist in den [dev-dependencies] von prism-engine bereits
+  aktiviert — benutzen statt eigene Generatoren zu schreiben.
+- Lange Tests laufen nicht in CI. Wie man sie ausführt, steht in PROGRESS.md §3.1
+  und in der Crate-Doku von prism-engine.
 - Toolchain ist eingerichtet und funktioniert (Rust 1.97.1 msvc, MSVC Build Tools 2022,
-  Node 24.11). cargo-llvm-cov ist installiert; Coverage misst man mit
-  `cargo llvm-cov -p prism-engine --summary-only`.
+  Node 24.11). Coverage misst man mit `cargo llvm-cov -p prism-engine --summary-only`.
 - Es ist kein Setup mehr nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S2-Status, die gemessenen Jitter- und Drift-Zahlen in
-  §3 (Performance-Gates), gemessene Coverage, Decision Log bei Abweichungen vom Plan
+- PROGRESS.md aktualisieren: S3-Status, gemessene Coverage, Decision Log bei
+  Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S3 (prism-engine: HTP/LTP-Merge nach docs/DMX_MERGE.md) überschreiben
+  Session S4 (prism-engine: Attribut-zu-DMX-Encoding) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(engine): …
 ```

@@ -23,6 +23,10 @@ proptest-derive = "0.8"
 [workspace.lints.rust]
 unsafe_code = "deny"
 unused_qualifications = "warn"
+# `prism-engine` compiles against loom's instrumented atomics under
+# `--cfg loom` (see its crate docs). Declared here rather than per crate
+# because a crate that inherits `[lints] workspace = true` cannot add to it.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
 
 [workspace.lints.clippy]
 # CLAUDE.md: no plain println/eprintln in production code - use the structured

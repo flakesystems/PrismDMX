@@ -10,5 +10,19 @@ publish.workspace = true
 [dependencies]
 prism-domain = { path = "../prism-domain" }
 
+# Only compiled for `--cfg loom` builds. `src/sync.rs` swaps the standard
+# atomics for loom's instrumented ones there, which is what lets the model
+# checker explore every interleaving of the triple buffer and the command queue.
+[target.'cfg(loom)'.dependencies]
+loom = "0.7"
+
+[dev-dependencies]
+# S1 left `arb` and the `Arbitrary` impls behind a feature precisely so this
+# crate could property-test against real domain values instead of growing its
+# own generators.
+prism-domain = { path = "../prism-domain", features = ["proptest"] }
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
+
 [lints]
 workspace = true
