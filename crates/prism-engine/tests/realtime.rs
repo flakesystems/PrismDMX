@@ -55,8 +55,8 @@
     reason = "a measured criterion has to print the number it measured"
 )]
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -165,27 +165,62 @@ const DRIVER_POLL: Duration = Duration::from_millis(5);
 /// How long the long deadline runs last. The session's criterion is ten minutes.
 const LONG_RUN: Duration = Duration::from_secs(600);
 
+/// Held for the whole of every measured run.
+///
+/// `cargo test` runs the tests in one binary on several threads, and two
+/// deadline measurements sharing a machine measure each other. This was not
+/// visible while there was one of them; adding a second made both fail on a CI
+/// runner with two cores, with a median jitter of exactly one scheduler
+/// quantum. Timing runs take turns.
+static MEASURING: Mutex<()> = Mutex::new(());
+
+/// How a measured run is set up.
+struct Setup {
+    duration: Duration,
+    /// Output driver threads polling for frames.
+    drivers: usize,
+    /// CPU-burning threads inside this process. Almost always zero: they spin
+    /// at **this process's** priority, so they do not model a busy machine —
+    /// see [`the_whole_pipeline_holds_its_deadline_for_ten_minutes_under_full_cpu_load`].
+    load: usize,
+    /// Whether to run the busy probe. It spins, so it costs a core, and only
+    /// the stress gate needs what it measures.
+    probe: bool,
+}
+
 /// Runs the engine for `duration` with `universes` universes and `drivers`
 /// output threads polling for frames.
 fn measure(duration: Duration, universes: u32, drivers: usize) -> Measured {
     let layout = FrameLayout::new((1..=universes).map(UniverseId::new)).unwrap();
-    measure_body(RampBody::default(), layout, duration, drivers, 0, |_, _| {})
+    measure_body(
+        RampBody::default(),
+        layout,
+        &Setup {
+            duration,
+            drivers,
+            load: 0,
+            probe: false,
+        },
+        |_, _| {},
+    )
 }
 
-/// The same run with any tick body, any number of CPU-burning threads beside
-/// it, and a hook that gets a chance to push commands on every tick.
-///
-/// `load` threads spin at **this process's** priority, which is why the
-/// ten-minute gate does not use them — see
-/// [`the_whole_pipeline_holds_its_deadline_for_ten_minutes_under_full_cpu_load`].
+/// The same run with any tick body and a hook that gets a chance to push
+/// commands on every tick.
 fn measure_body<B: TickBody + Send>(
     body: B,
     layout: FrameLayout,
-    duration: Duration,
-    drivers: usize,
-    load: usize,
+    setup: &Setup,
     mut on_tick: impl FnMut(&mut prism_engine::Producer<TickCommand>, u64),
 ) -> Measured {
+    // Poisoning is irrelevant here: the guard protects a schedule, not data.
+    let _measuring = MEASURING.lock().unwrap_or_else(|held| held.into_inner());
+    let Setup {
+        duration,
+        drivers,
+        load,
+        probe: want_probe,
+    } = *setup;
     let layout = Arc::new(layout);
     let mut publisher = FramePublisher::new(layout);
     let subscribers: Vec<_> = (0..drivers).map(|_| publisher.subscribe()).collect();
@@ -223,13 +258,15 @@ fn measure_body<B: TickBody + Send>(
                 std::hint::black_box(value);
             });
         }
-        let probe_counter = &probe;
-        scope.spawn(move || {
-            while !running.load(Ordering::Relaxed) {
-                probe_counter.fetch_add(1, Ordering::Relaxed);
-                thread::yield_now();
-            }
-        });
+        if want_probe {
+            let probe_counter = &probe;
+            scope.spawn(move || {
+                while !running.load(Ordering::Relaxed) {
+                    probe_counter.fetch_add(1, Ordering::Relaxed);
+                    thread::yield_now();
+                }
+            });
+        }
         for (index, subscriber) in subscribers.into_iter().enumerate() {
             scope.spawn(move || {
                 let mut subscriber = subscriber;
@@ -559,29 +596,39 @@ fn the_whole_pipeline_holds_its_deadline_for_ten_minutes_under_full_cpu_load() {
          (external load at normal priority is the documented configuration)"
     );
 
-    let measured = measure_body(body, layout, LONG_RUN, 4, load, |producer, index| {
-        let executor = ExecutorId::new((index % 8) as u32 + 1);
-        if index % 64 == 0 {
-            let _ = producer.push(TickCommand::Go {
-                executor,
-                direction: GoDirection::Next,
-            });
-        }
-        let slot = (index % 4096) as u32;
-        let _ = producer.push(if index % 5 == 0 {
-            TickCommand::ClearProgrammerValue { slot }
-        } else {
-            TickCommand::SetProgrammerValue {
-                slot,
-                value: index as u16,
+    let measured = measure_body(
+        body,
+        layout,
+        &Setup {
+            duration: LONG_RUN,
+            drivers: 4,
+            load,
+            probe: true,
+        },
+        |producer, index| {
+            let executor = ExecutorId::new((index % 8) as u32 + 1);
+            if index % 64 == 0 {
+                let _ = producer.push(TickCommand::Go {
+                    executor,
+                    direction: GoDirection::Next,
+                });
             }
-        });
-        let _ = producer.push(TickCommand::SetGroupMaster {
-            group: GroupId::new((index % 16) as u32 + 1),
-            level: (index as u16) | 0x4000,
-        });
-        let _ = producer.push(TickCommand::SetGrandMaster((index as u16) | 0x8000));
-    });
+            let slot = (index % 4096) as u32;
+            let _ = producer.push(if index % 5 == 0 {
+                TickCommand::ClearProgrammerValue { slot }
+            } else {
+                TickCommand::SetProgrammerValue {
+                    slot,
+                    value: index as u16,
+                }
+            });
+            let _ = producer.push(TickCommand::SetGroupMaster {
+                group: GroupId::new((index % 16) as u32 + 1),
+                level: (index as u16) | 0x4000,
+            });
+            let _ = producer.push(TickCommand::SetGrandMaster((index as u16) | 0x8000));
+        },
+    );
     measured.report("64 universes, full pipeline, 4 drivers, 100 % CPU load");
     let stats = &measured.stats;
 
@@ -618,27 +665,36 @@ fn the_whole_pipeline_holds_its_deadline_for_ten_minutes_under_full_cpu_load() {
 }
 
 #[test]
-fn the_whole_pipeline_holds_its_deadline_for_a_few_seconds_under_load() {
-    // The CI-sized version of the gate above, asserting loosely for the reason
-    // the S2 short run does: a shared runner stalls for reasons that have
-    // nothing to do with this code, and a gate that cries wolf gets ignored.
-    // What it does catch is the regression that matters - a pipeline that has
-    // become too slow to finish inside a tick period at all.
+fn the_whole_pipeline_fits_inside_a_tick_period() {
+    // The CI-sized companion to the gate above. It asserts loosely, for the
+    // reason the S2 short run does: a shared runner stalls for reasons that
+    // have nothing to do with this code, and a gate that cries wolf gets
+    // ignored. What it does catch is the regression that matters - a pipeline
+    // that has become too slow to finish inside a tick period at all.
+    //
+    // No load threads and no probe. Both spin at this process's priority, and
+    // an equal-priority spinner does not model a busy machine, it models a
+    // priority inversion - the finding that is written up on the ten-minute
+    // gate. On a two-core CI runner it turned this test into a measurement of
+    // itself.
     //
     // Eight universes rather than 64, because CI runs `cargo test` without
     // optimisations and an unoptimised build of this pipeline is roughly ten
     // times slower: at full size it misses more deadlines than it holds. That
     // says nothing about the product - the release build at 64 universes holds
-    // every one of them - so the full-size claim belongs to the `#[ignore]`d
-    // gate above, which is documented as a release run.
+    // every one of them under full load - so the full-size claim belongs to the
+    // `#[ignore]`d gate above, which is documented as a release run.
     let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
     let body = stress_body(&layout);
     let measured = measure_body(
         body,
         layout,
-        Duration::from_secs(3),
-        2,
-        2,
+        &Setup {
+            duration: Duration::from_secs(3),
+            drivers: 2,
+            load: 0,
+            probe: false,
+        },
         |producer, index| {
             if index % 64 == 0 {
                 let _ = producer.push(TickCommand::Go {
@@ -649,7 +705,7 @@ fn the_whole_pipeline_holds_its_deadline_for_a_few_seconds_under_load() {
             let _ = producer.push(TickCommand::SetGrandMaster((index as u16) | 0x8000));
         },
     );
-    measured.report("3 s, 8 universes, full pipeline, 2 drivers, 2 load threads");
+    measured.report("3 s, 8 universes, full pipeline, 2 drivers");
     let stats = &measured.stats;
 
     assert_eq!(stats.panics, 0);
