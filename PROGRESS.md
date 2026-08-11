@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI verified green | ✅ | Latest: run **31451757315** on `9bf7573` (S7). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
+| 13 | CI verified green | ✅ | Latest: run **31456114786** on `176c674` (S8). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
 | 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
@@ -355,7 +355,7 @@ criteria from `IMPLEMENTATION_PLAN.md` S8 and the session prompt:
 | `cargo fmt --all --check` | ✅ exit 0 |
 | Coverage on `prism-protocols` **> 95 %** | ✅ **96.94 % lines without the adapter** — which is the figure CI can reproduce — and **99.30 % with it attached**, running the same suite with `--include-ignored`. Both are recorded because the difference *is* the FFI: 70 lines of library calls that no build server can execute |
 | Linux and ARM64 still build | ✅ the two backends are behind `cfg(windows)` and their crates are declared per target, so the Linux job and the ARM64 cross-check never see `libftd2xx` or `serialport` |
-| CI green on the pushed commit | ▶ not yet run — filled in from the actual run, per `IMPLEMENTATION_PLAN.md` session protocol point 6 |
+| CI green on the pushed commit | ✅ run **31456114786** on `176c674` — all four jobs, zero non-success steps: Windows full build and test 3 m 55 s (it now links a statically linked D2XX), Linux platform-neutral 1 m 13 s, UI typecheck and build 54 s, ARM64 cross-check 23 s. Green on the first attempt, which is the check that the two Windows-only crates really are behind `cfg(windows)` |
 
 **Delivered:** three modules and a bring-up target. `d2xx` is FTDI's own driver,
 statically linked; `vcp` is the serial-port fallback; `system` is the policy
