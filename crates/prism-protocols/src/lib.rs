@@ -26,7 +26,8 @@
 //!                                                                     │  [`FtdiBackend`]
 //!                                                                     │  D2XX / libftdi
 //!                                                                     │  / [`MockFtdi`]
-//!                                                                     └── [`ArtNetOutput`]
+//!                                                                     ├── [`ArtNetOutput`]
+//!                                                                     └── [`SacnOutput`]
 //!                                                                            │
 //!                                                                            ▼
 //!                                                                        [`UdpSender`]
@@ -81,6 +82,7 @@ mod ftdi;
 mod opendmx;
 mod output;
 mod runner;
+mod sacn;
 mod system;
 mod udp;
 #[cfg(windows)]
@@ -105,6 +107,14 @@ pub use output::{DmxOutput, MockOutput, MockOutputHandle, OutputError};
 pub use runner::{
     Backoff, BackoffConfig, OutputRunner, OutputStatus, OutputThread, RunnerConfig, StepOutcome,
     spawn,
+};
+pub use sacn::{
+    ACN_PACKET_IDENTIFIER, Cid, DMP_PDU_BYTES, E131_DATA_BYTES, E131_DATA_HEADER, E131_PORT,
+    E131Header, FRAMING_PDU_BYTES, OPTION_FORCE_SYNCHRONIZATION, OPTION_PREVIEW_DATA,
+    OPTION_STREAM_TERMINATED, Priority, ROOT_PDU_BYTES, SOURCE_NAME_BYTES, SacnConfig,
+    SacnDestination, SacnOutput, SacnPort, SacnUniverse, TERMINATION_PACKETS,
+    VECTOR_DMP_SET_PROPERTY, VECTOR_E131_DATA_PACKET, VECTOR_ROOT_E131_DATA, flags_and_length,
+    source_name_field, write_e131_data,
 };
 pub use system::{FallbackFtdi, UnsupportedBackend, list_devices, system_backend};
 pub use udp::{MockUdp, MockUdpHandle, SystemUdp, UdpError, UdpSender, classify};

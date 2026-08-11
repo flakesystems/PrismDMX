@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-11
 **Current phase:** Phase 2 — Protocols
-**Current session:** S10 — `prism-protocols` sACN/E1.31 (not started; see §8 for the prompt that starts it)
-**Last completed:** S9 — ArtNet ✅ — **the first output that keeps up with the engine**
+**Current session:** S11 — `prism-core` show model and command application (not started; see §8 for the prompt that starts it)
+**Last completed:** S10 — sACN (E1.31) ✅ — **Phase 2 is complete: all three V1 outputs exist**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -56,7 +56,7 @@
 | S7 | `DmxOutput` trait + Open DMX USB | ✅ | 2026-08-11 | All exit criteria verified — see §2.8. 92 tests, coverage 99.7 % lines. No real FTDI backend yet, on purpose — see the decision log |
 | S8 | 🔌 Hardware bring-up SH-RS09B | ✅ | 2026-08-11 | All exit criteria verified — see §2.9. **Found and fixed a real defect:** the break was landing inside the frame. 35.5 Hz measured, adapter verified `0403:6001` / `B0037HIY` |
 | S9 | ArtNet | ✅ | 2026-08-11 | All exit criteria verified — see §2.10. 184 tests, coverage 97.9 % lines on the crate with `artnet.rs` at **100 %**. Packet asserted field by field *and* on a datagram received over loopback |
-| S10 | sACN (E1.31) | ☐ | | |
+| S10 | sACN (E1.31) | ✅ | 2026-08-11 | All exit criteria verified — see §2.11. 231 tests, coverage 98.4 % lines on the crate with `sacn.rs` at **100 %**. Packet asserted field by field over all three layers *and* on a datagram received over loopback; the stream is ended rather than merely stopped |
 
 ### Phase 3 — Core state
 | Session | Title | Status | Date | Note |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 10 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 11 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -407,6 +407,44 @@ to do that.
 at `RunnerConfig::default()`, which is the engine's own 22.727 ms period, and
 sends about thirteen datagrams a second per universe while nothing moves.
 
+### 2.11 S10 verification record
+
+Measured on 2026-08-11, all exit criteria from `IMPLEMENTATION_PLAN.md` S10 and
+the session prompt. No network device was involved in any of it, and **nothing in
+the suite sends a multicast datagram**: the captures are unicast datagrams
+received on `127.0.0.1`.
+
+| Check | Result |
+|---|---|
+| Packet bytes asserted against E1.31, field by field over all three layers | ✅ `the_packet_is_the_specifications_packet_field_by_field` names every field at its offset — **Root:** preamble `0x0010` at 0–1, post-amble at 2–3, `ASC-E1.17\0\0\0` at 4–15, flags/length `0x726E` at 16–17, vector 4 at 18–21, CID at 22–37. **Framing:** flags/length `0x7258` at 38–39, vector 2 at 40–43, source name at 44–107, priority at 108, sync address at 109–110, sequence at 111, options at 112, universe at 113–114. **DMP:** flags/length `0x720B` at 115–116, vector `0x02`, address/data type `0xA1`, first property address, increment, value count `0x0201`, start code `0x00` at 125, 512 channels from 126. Each literal is asserted a second time against the constant it must equal (`flags_and_length(ROOT_PDU_BYTES)`, `VECTOR_ROOT_E131_DATA.to_be_bytes()`, `513u16.to_be_bytes()`, `ACN_PACKET_IDENTIFIER`), so a byte and its meaning cannot drift apart |
+| **Including CID stability across restarts** | ✅ `the_cid_is_the_same_after_a_restart` builds an output, sends, shuts it down, then builds a **new** output with a new socket from the same configuration and compares bytes 22–37 of the two datagrams. It holds by construction rather than by luck: there is no constructor anywhere in the crate that invents a CID. The other half is asserted too — `an_output_with_no_identity_refuses_to_connect`: the default CID is nil, a nil CID is a **disconnected** output, and the socket is never opened |
+| Multicast group computed for universes 1 **and 63999** | ✅ `the_multicast_group_is_the_universe_in_the_bottom_two_octets`: universe 1 → `239.255.0.1`, universe 63999 → **`239.255.249.255`**. Plus the carry cases a function written for a desk's 64 universes would never meet — 255 → `239.255.0.255`, 256 → `239.255.1.0` — and a `proptest` over the **whole** range 1…63999 asserting that the top two octets are 239.255 and the bottom two are the universe. Out-of-range values are refused: `SacnUniverse::new(0)` and `new(64_000)` are `None` |
+| Clean shutdown emits a stream-terminated packet | ✅ at both levels. On the driver: `shutting_down_ends_every_stream_it_started` — three packets per universe, options bit 6 set and no other bit, still this source's CID and this universe's priority, to the universe's own group. On the wire: `tests/sacn_wire.rs::stopping_the_driver_ends_the_stream_on_the_wire` reads them off a loopback socket after `OutputRunner::run` returns. **And each carries the next sequence number** — three identical ones would be discarded as duplicates by a conforming receiver, so only the first would end anything |
+| `cargo test -p prism-protocols` green without a network device | ✅ exit 0 — **231 lib tests** (57 of them new) + 17 integration tests, 0 failed, 7 ignored (the S8 hardware target). The only sockets involved are bound to `127.0.0.1` |
+| `cargo test --workspace` | ✅ exit 0 — **680 tests** across 24 targets, 12 ignored |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-protocols` **> 95 %** | ✅ **98.41 % lines**, 97.65 % regions, 97.75 % functions with no adapter attached — up from S9's comparable 97.91 %. `sacn.rs` at **100 % lines and 100 % functions**, `udp.rs` at 99.43 %, `artnet.rs` still 100 %. The whole remaining gap is the two FTDI backends, which is the FFI S8 recorded as unmeasurable without hardware |
+| CI green on the pushed commit | ▶ pending — filled in from the run itself, per `IMPLEMENTATION_PLAN.md` session protocol point 6. It is also the check that `sacn.rs` really is platform-neutral: it contains no `#[cfg]` at all and the Linux job runs it |
+| The bytes were checked on a datagram somebody received | ✅ `tests/sacn_wire.rs`: the engine's frame goes through the triple buffer, the runner and a real `UdpSocket`, and the 638 bytes are read back off a loopback socket — all three layers, the CID, the source name, the priority, the sequence and the patched channels listed literally. Two universes on one output arrive as two datagrams at two E1.31 universe numbers and two priorities |
+
+**Delivered:** one module and one method. `sacn` is the protocol — `Cid`,
+`Priority`, `SacnUniverse` with the multicast arithmetic, `SacnPort`,
+`SacnConfig`/`SacnDestination`, the packet builder, and `SacnOutput`, generic over
+both the socket and the clock. The method is `UdpSender::set_multicast_ttl`, the
+one thing a multicast *sender* needs that the S9 seam did not have.
+
+**The trait is untouched, for the third driver running.** `DmxOutput` is the same
+five methods, `OutputRunner` is unchanged, and the termination packets go out
+through `shutdown` — which S7 put in the trait for a different reason and which
+turns out to be exactly where a protocol's goodbye belongs.
+
+**What sACN has that Art-Net does not is an identity and an ending.** The CID is
+configuration rather than a random number, so a desk is the same source after a
+restart; and a stopped stream is *ended* rather than left to time out, which is
+the difference between a rig releasing a universe at once and holding a dead
+desk's look for two and a half seconds.
+
 ---
 
 ## 3. Coverage tracking
@@ -421,7 +459,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | — | |
-| `prism-protocols` | **> 95 %** | **97.91 % lines**, 96.89 % regions, 97.29 % functions without the adapter (what CI reproduces) — `artnet.rs` **100 %**, `udp.rs` 99.67 %, `ftdi.rs` and `output.rs` 100 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured this session and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S9) |
+| `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
 | `ui` | ≥ 85 % | — | |
@@ -600,6 +638,7 @@ Both are recorded as plain data so verification is a data update, not a refactor
 | Item | Blocks | Status |
 |---|---|---|
 | MCU note and CC numbers vs. real X-Touch | S20, and sign-off of S19 | ☐ unverified — banner in `docs/MCU_MAPPING.md` §2 |
+| sACN against a real receiver | nothing — S10 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received and the group address over the whole 1…63999 range. What only a gateway and a real switch can answer is whether the **multicast path** works end to end — IGMP snooping on the switch, and whether a hop limit of 1 reaches the venue's nodes. Both are held as data (`SacnDestination`, `SacnConfig::multicast_ttl`), so verifying them is a configuration change. **No test sends multicast on purpose:** a suite that put sACN on the network it runs on is the same fault as one that broadcasts. `ARCHITECTURE_SPEC.md` §14 |
 | ArtNet against a real node | nothing — S9 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received. What only a node can answer is whether it agrees about the port-address mapping (0-based or 1-based on that front panel) and whether it wants ArtSync. Both are held as data — `PortAddress` per universe and `ArtNetConfig::sync` — so verifying them is a configuration change, not a code change. `ARCHITECTURE_SPEC.md` §14 |
 | ~~SH-RS09B USB VID/PID and real frame rate~~ | — | ✅ **verified 2026-08-11 (S8)** — `0403:6001`, serial `B0037HIY`, `FT232R USB UART`, 35.5 Hz over 60 s. `DeviceProfile::SH_RS09B` carries `verified: true` and the tests assert the measurements. **Holding it as data paid for itself:** the whole verification was three fields and one test, with no code changed anywhere else — see `ARCHITECTURE_SPEC.md` §14 |
 
@@ -611,6 +650,16 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-11 | S10 | **A CID has to survive a restart, and there is nowhere yet to keep one — so the crate refuses to invent it.** E1.31 receivers track sources by CID. A desk that generates a fresh UUID at start-up is a *new source* at every start, and the old one goes on holding the universe until its 2.5 s network-data-loss timeout expires — two and a half seconds in which two equal-priority sources fight. Two desks *sharing* a CID is worse still. The tempting default, "generate one at start-up if none is configured", is exactly the failure | **No constructor in the crate produces a CID.** It is `SacnConfig::cid`, parsed from the canonical UUID text a configuration holds, and the default is nil — which is not an identity, so an output holding it **refuses to connect** rather than transmitting under the value every unconfigured desk would share. Both halves are asserted, and stability is by construction rather than by luck. **S11/S15 requirement, and it is a hard one:** the show file (or a machine-level configuration beside it) must carry the CID, and it must survive a show being copied to another machine *without* two machines ending up with the same one — a CID belongs to the **desk**, not to the show. Whichever of the two it is stored in, S15 must not regenerate it on save |
+| 2026-08-11 | S10 | **A stopped stream and an ended stream are different things, and only one of them is instant.** A receiver that simply stops hearing from a source waits out 2.5 s before releasing the universe, so a desk that closes its socket leaves the rig holding a dead source's look. E1.31 has a goodbye and Art-Net has none — which is why `DmxOutput::shutdown` earning its place is a finding rather than a formality: S7 put it in the trait to close a cable, and it turns out to be where a protocol's ending belongs | Three `Stream_Terminated` packets per active universe on `shutdown`, **each with the next sequence number**. That last part is the whole point: a conforming receiver discards a packet whose sequence has not moved on, so three identical packets are one packet and two duplicates — the redundancy the standard asks for would be worth nothing. Asserted on the driver and again on datagrams received over loopback after `OutputRunner::run` returns |
+| 2026-08-11 | S10 | **The terminated packet carries the last look, not a blackout, and that is a decision about who owns the question.** "The desk is stopping" and "the stage should go dark" are different statements, and a driver that blacked out on the way out would take the choice away from the level that has it | The data is unchanged and a receiver ignores it in a terminated packet anyway. `IMPLEMENTATION_PLAN.md` S17 already owns "shutdown with sACN termination and **configurable blackout-or-hold**": the daemon publishes a blackout frame *before* stopping the outputs if that is what the operator configured. **S17 requirement:** blackout is a frame, not a shutdown flag |
+| 2026-08-11 | S10 | **Multicast is the sACN default where broadcast is the Art-Net exception, and that is not an inconsistency.** The obvious reading of §7.2 — "network floods are the danger, so make the many-recipient mode opt-in" — would have made sACN unicast by default and broken the protocol's ordinary deployment | An sACN group carries **one universe**, so a switch that does IGMP snooping delivers it only to ports that asked for that universe; Art-Net's broadcast carries everything to everyone regardless. The difference is the switch, not the packet count. `SacnDestination::Multicast` is the default, unicast is available for venues that forbid multicast, and **broadcast does not exist** — the socket is never asked for the permission, asserted for both destinations |
+| 2026-08-11 | S10 | **A multicast *sender* needs one socket option and none of the rest.** The instinct at the seam was to add group membership — `join_multicast_v4` — and it would have been dead code: joining is how a **receiver** asks to be given datagrams, and this seam has no receive. What a sender does need is the hop limit, which defaults to 1 on every platform and silently confines the show to the local segment | `UdpSender::set_multicast_ttl`, the only addition to the S9 seam, plus `SacnConfig::multicast_ttl` (default 1) as data. A hop limit that could not be set is a **disconnected** output rather than a warning: the operator asked for a routed lighting network and would otherwise get datagrams that stop at the first router, under a green light. The outgoing interface needs nothing new — it is the `bind` address, which the seam already had |
+| 2026-08-11 | S10 | **No test may send a multicast datagram, which costs the one thing a loopback capture cannot check.** `tests/artnet_wire.rs` proves its bytes on a received datagram; the same trick with sACN's actual destination would put lighting data on the network the test suite is running on, and on Linux the loopback interface is not even a multicast interface | The wire target unicasts to a loopback socket — E1.31 permits unicast, so it is a real configuration and not a test-only mode — and the **group address per universe** is asserted against a recording socket instead, over the whole 1…63999 range. Recorded in §5 as the open verification item a real switch answers: IGMP snooping and whether a hop limit of 1 reaches the venue's gateways |
+| 2026-08-11 | S10 | **`last` should mean "what the receiver has", not "what the driver last built", and S9's version conflates them.** Art-Net records the look *before* the send and clears the timestamp if the send fails; that works, but it also means a look that failed and was then changed back is re-sent, and it left `last` holding data no receiver ever saw. The difference surfaced as a failing test of the **termination** packet, which must carry the look a receiver is actually holding | In `sacn.rs` nothing is written down until the datagram has gone out: `last` and `sent_at` describe the last datagram that really left. Suppression still cannot hide a failure — the record still shows the older look, which differs from the new frame — and a look that failed and reverted is correctly *not* re-sent. The sequence number is spent either way, which a receiver reads as a packet lost in the network, because it was. **Not back-ported to `artnet.rs`:** S9's behaviour is correct, merely coarser by one redundant datagram in a case that ends the same way, and reopening a closed session's driver to make two implementations rhyme is not worth the risk to a verified output |
+| 2026-08-11 | S10 | **E1.31's sequence wraps 255 → 0 and Art-Net's wraps 255 → 1, and the two rules look like the same rule.** Copying S9's counter would have skipped 0 forever — harmless-looking, and wrong: in Art-Net 0 means "this sender does not number its packets", in E1.31 it is an ordinary value | Counted per universe, `wrapping_add(1)`, asserted over 300 frames with element 256 read back as 0. The two drivers' counters are deliberately different and each says why in place. **The generalisable part:** the second implementation of a family of protocols is where copied assumptions go unnoticed, because the code looks right |
+| 2026-08-11 | S10 | **A 64-byte source name is a UTF-8 field, and truncating it by bytes can cut a character in half.** "Aula Bühnenlicht" and any German rig name is two bytes for the umlaut; a name whose 63rd byte lands mid-character would reach a receiver as a replacement character or be rejected outright | `source_name_field` truncates on a **character** boundary — 31 two-byte characters, not 63 bytes and a broken one — and always leaves the null terminator. Asserted with a name of 40 `ä`, decoded back as UTF-8 in the test so the assertion is about validity rather than about a byte count |
+| 2026-08-11 | S10 | **The Sync Address field exists and is transmitted as zero, deliberately.** Offering it as configuration without implementing E1.31 synchronisation would be a setting whose only effect is a dark rig: a receiver given a non-zero sync address waits for synchronisation packets before it acts on data, and this source sends none — the same trap as Art-Net's ArtSync, one level worse because there is no way to notice | The field is built rather than hard-coded, so it is asserted at a non-zero value at the packet level, and the output always passes 0. `Force_Synchronization` is never set for the same reason. **A later session** that implements universe synchronisation turns the constant into configuration, and owns sending the sync packets in the same change |
 | 2026-08-11 | S9 | **The flake S6 predicted in writing arrived, on a documentation-only commit.** `the_tick_holds_its_deadline_for_a_few_seconds` failed the Windows job of run **31495900648** with `p95 jitter was 16ms` against a 5 ms bound — 16 ms being one Windows scheduler quantum. The commit under test changed **one markdown file**; the identical tree was green in run 31495561058 twelve minutes earlier, the median was at its usual value, and a rerun of the same commit with no change at all passed. S6's note said this in advance: "S2's short run still carries a 2 % missed-tick budget and the same exposure; if it starts flapping this is the reason and this is the fix" | S6's remedy applied to S2's run. p95 over ~130 samples is the seventh-worst sample and on a shared two-core runner that is a scheduler stall, so the tail bound becomes **one tick period** — still failing a schedule that puts a twentieth of its ticks in the next slot, deaf to a tick that was late and whose frame went out anyway — and the 2 % missed-tick budget becomes **the share of the grid that ran** (≥ ¾), which is what an engine too slow for its own period actually destroys. The real tail number is unchanged and lives where the samples are: p99.9 = 200 µs over 26 401 ticks in the ten-minute run (§3). **Rule for later sessions:** a percentile is only a gate where the sample count supports it; a CI run of a hundred-odd samples can carry the body of a distribution and never its tail. Verified green as run **31497341333** |
 | 2026-08-11 | S9 | **"Refresh at least every 800 ms" cannot be implemented as "refresh when 800 ms have passed", and the difference is a whole cadence.** A driver only gets to decide at its own wake-up: asking `elapsed >= 800 ms` puts the datagram at the first cadence *after* 800 ms, so the real gap is 800 ms + one period — 818 ms at 44 Hz, and worse on any slower output. The guarantee is a maximum, and the obvious implementation misses it every single time | `ArtNetConfig::refresh_margin`, default one engine tick, and the rule is `elapsed + margin >= interval`. The test is the criterion rather than a proxy for it: ten seconds of a static rig through the real `OutputRunner`, measuring the **gap between datagrams**, asserted ≤ 800 ms — and ≥ 700 ms, so a driver that "fixed" it by sending every cadence would fail as well. **S10 requirement:** sACN's keep-alive has the same shape and the same trap |
 | 2026-08-11 | S9 | **ArtSync needs to know when a frame is finished, and `DmxOutput` has no such call.** The trait is five per-universe methods; the runner sends universe after universe and never says "that was the last one". Adding a sixth method was the obvious answer and was rejected — three drivers implement the trait, `OutputRunner` is written against it once, and S7 chose those five deliberately | The driver finds the end of a cycle itself, two ways: normally it is the **last universe in its own list**, and if that one never arrives — the engine does not publish it, so the runner skips it, which is exactly the `unmapped()` case S7 already reports — it is the moment a universe **comes round a second time**. Both paths are asserted. The trait is untouched, which was the constraint |
@@ -706,25 +755,28 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The engine now drives a real light *and* a network.** `Patch → Cue → Fade →
-Merge → Programmer → Masters → DMX bytes` reaches an FT232R at 35.5 Hz and an
-Art-Net node at the engine's own 44 Hz, both on measured numbers. The output
-side has two of its three protocols; the third is the one venues standardise on.
-Begin **S10** (`prism-protocols` — sACN/E1.31). Use the prompt in §8. It needs no
-hardware either: sACN is multicast UDP, and a socket on loopback answers
-everything except what a real receiver thinks.
+**Phase 2 is complete: the engine drives a real light and two networks.**
+`Patch → Cue → Fade → Merge → Programmer → Masters → DMX bytes` reaches an FT232R
+at 35.5 Hz, an Art-Net node at the engine's own 44 Hz and an sACN receiver at the
+same, all on measured numbers. What the output side does not have yet is anything
+to output: there is no show model, no patch a user can edit, and no command that
+changes one. Begin **S11** (`prism-core` — show model and command application).
+Use the prompt in §8.
 
-Carried into S10 and beyond:
-- **`DmxOutput` is five methods and stays that way.** S9 implemented the same five and inherited the thread, the reconnect backoff and the panic containment without touching `OutputRunner` — the point of S7's two extra methods, now demonstrated. sACN does the same. If something does not fit, it goes in this log rather than into the trait.
-- **`udp.rs` already exists and is the seam to reuse:** `UdpSender`, `SystemUdp`, `MockUdp` with its recording handle, and `classify` for `io::ErrorKind`. sACN needs multicast, which means one addition — joining/leaving a group or setting the TTL — and it belongs there rather than in the sACN module.
-- **Assert the bytes of a received datagram, not the calls.** S8's lesson, and S9's shape for it: unit tests on the packet, plus `tests/artnet_wire.rs` reading real datagrams off a loopback socket through the whole engine pipeline. Copy that target.
-- **A keep-alive interval is a maximum, so it fires early.** `ArtNetConfig::refresh_margin` and the reasoning behind it are in the decision log; E1.31's own keep-alive has the same trap.
-- **`ManualClock` cannot be shared** — it is a `Cell` with one owner. `tests/artnet_wire.rs::SharedClock` is the mutex-backed version for a test where the runner and the output must read the same simulated time.
-- Art-Net's port-address mapping and ArtSync are held as **data** (`PortAddress` per universe, `ArtNetConfig::sync`), so verifying them against a real node is a configuration change. sACN's universe numbering, priority and source name should be data for the same reason.
-- **A mock asserts the calls a driver makes, never the time between them.** S7's suite was green while the frame was malformed on the wire.
-- Everything about the SH-RS09B is one constant, `DeviceProfile::SH_RS09B`, and it carries measurements with `verified: true`. A profile for a device nobody has held should say so.
+Carried out of Phase 2 into the daemon sessions:
+- **`DmxOutput` is five methods and it stayed that way for three drivers.** Open DMX, Art-Net and sACN all implement the same five and all inherit `OutputRunner`'s thread, reconnect backoff and panic containment unchanged. Two things that looked like they needed a sixth method — Art-Net's end-of-frame for ArtSync, sACN's goodbye — did not: the first is found in the driver, the second belongs in `shutdown`. If a fourth output does not fit, that is a decision-log entry.
+- **The CID has to be stored somewhere and S11/S15 own the question.** It is a UUID identifying *this desk*, it must be stable across restarts, and it must **not** be duplicated by copying a show to a second machine. Today it is `SacnConfig::cid` with a nil default and an output that refuses to connect without one — see the decision log.
+- **S17 owns blackout-or-hold on shutdown, and it is a frame rather than a flag.** The sACN driver terminates its streams carrying the last look; a daemon that wants a dark stage publishes a blackout frame *before* stopping the outputs.
+- **S17 must not raise the process's priority, only the tick thread's** — the stress gate measured what happens otherwise (§3.1).
+- **S27's output editor shows things that are data on purpose:** Art-Net's port address as `net:sub:universe`, sACN's E1.31 universe and per-universe priority, the source name, the CID, and `OutputRunner::unmapped()` — a universe an output carries that the patch does not publish is a dark universe with a green light beside it.
+- **`OutputStatus::frames_sent` is not a packet count.** Both network outputs suppress an unchanged universe, so `datagrams_sent()` is the second number a status panel needs.
+- **Assert the bytes of a received datagram, not the calls.** S8's lesson; `tests/artnet_wire.rs` and `tests/sacn_wire.rs` are the shape. A mock asserts the calls a driver makes, never the time between them.
+- **A keep-alive interval is a maximum, so it fires early** — `refresh_margin` in both network configurations, and the reasoning is in the decision log.
+- **`ManualClock` cannot be shared** — it is a `Cell` with one owner. Both wire targets define a mutex-backed `SharedClock` for the case where a runner and its output must read the same simulated time.
+- **No test sends multicast or broadcast**, and that is a rule rather than an omission: a suite that put lighting data on the network it runs on is the fault §7.2 exists to prevent. What a real switch and gateway answer is in §5.
+- Everything about the SH-RS09B is one constant, `DeviceProfile::SH_RS09B`, carrying measurements with `verified: true`. A profile for a device nobody has held should say so.
 - The bring-up target (`tests/hardware.rs`) and §3.2's commands are the pattern for S20's X-Touch verification: `#[ignore]`d, documented, serialised behind a mutex, and driven by environment variables so a person can steer it.
-- `prism-protocols` runs its tests in the **Linux** CI job as well; the FTDI backends are behind `cfg(windows)` and their crates are declared per target. The network outputs have no `#[cfg]` at all, and S10 must keep it that way.
+- `prism-protocols` runs its tests in the **Linux** CI job as well; only the two FTDI backends are behind `cfg(windows)`. `udp.rs`, `artnet.rs` and `sacn.rs` contain no `#[cfg]` at all, and it must stay that way.
 - A driver thread wakes at its output's own cadence, never sleeps longer than one cadence, and re-sends the last frame when the engine has published nothing new. For a network output "re-sends" means the forced refresh — see the decision log.
 
 Carried from Phase 1:
@@ -754,122 +806,124 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S10 — `prism-protocols`: sACN (E1.31)**
+**Next up: S11 — `prism-core`: Show-Modell und Kommandoanwendung**
 
 ```text
-PrismDMX — Session S10: prism-protocols, sACN-Ausgabe (E1.31)
+PrismDMX — Session S11: prism-core, Show-Modell und Kommandoanwendung
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht keine Hardware. Ein UDP-Socket auf 127.0.0.1 und ein
-Mitschnitt reichen; ein echter sACN-Empfänger im Netz ist nett, aber kein
-Kriterium.
+Diese Session braucht keine Hardware und kein Netz. Sie ist reine Zustands- und
+Datenmodellarbeit in einem Crate, das heute nur aus einer Moduldokumentation
+besteht.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.9 und §2.10 (was S8 und
-                                            S9 geliefert haben) und die S9-Einträge
-                                            im Decision Log: dort steht, warum ein
-                                            Keep-alive-Intervall zu früh feuern
-                                            muss und warum das Trait unverändert
-                                            geblieben ist
+                                            besonders alle Einträge, die mit
+                                            „S11 requirement" oder „S11/S15"
+                                            markiert sind: das sind Auflagen
+                                            früherer Sessions an genau diese
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S10
-4. ARCHITECTURE_SPEC.md §3, §7, §7.2      — Threadmodell, das DmxOutput-Trait und
-                                            die Tabelle zu den Netzausgaben
-5. crates/prism-protocols/src/output.rs   — das DmxOutput-Trait (fünf Methoden)
-6. crates/prism-protocols/src/runner.rs   — der Treiberthread: Kadenz, Backoff,
-                                            catch_unwind, OutputStatus
-7. crates/prism-protocols/src/udp.rs      — die Socket-Naht: UdpSender,
-                                            SystemUdp, MockUdp, classify
-8. crates/prism-protocols/src/artnet.rs   — der zweite Treiber und die Vorlage
-                                            für diesen: Paketbau, Sequenz,
-                                            Änderungsunterdrückung, Refresh
-9. crates/prism-protocols/tests/artnet_wire.rs — wie ein Netzausgang end-to-end
-                                            geprüft wird: echte Datagramme über
-                                            Loopback, plus SharedClock
+                                            von S11
+4. ARCHITECTURE_SPEC.md §2, §5, §6        — Systemüberblick, DMX-Pipeline und das
+                                            vollständige Domänenmodell
+5. docs/IPC_PROTOCOL.md §5–§6             — die Command- und Delta-Wire-Typen, die
+                                            dieses Crate anwendet bzw. erzeugt
+6. crates/prism-domain/src/               — die Typen sind fertig: 47 exportierte
+                                            Typen, `Command` (23 Varianten),
+                                            `Delta` (7 Varianten), `Fixture`,
+                                            `FixtureType`, `Sequence`, `Cue`,
+                                            `Preset`, `Group`, `ProgrammerState`
+7. crates/prism-core/src/lib.rs           — heute nur Moduldokumentation; hier
+                                            entsteht alles
+8. crates/prism-engine/src/body.rs        — `MergeBody::for_patch`,
+                                            `load_sequence`, `load_groups`,
+                                            `load_programmer`: die Türen, durch
+                                            die ein Showmodell die Engine erreicht
 
-Stand nach S9 — nichts davon musst du neu bauen:
-- Die ganze Ausgabeseite steht: `DmxOutput` (id, universes, connect, send_frame,
-  health, shutdown), `OutputRunner`/`spawn` mit Reconnect-Backoff 100 ms → 5 s
-  und `catch_unwind`, `OutputStatus` für die Statusanzeige. Zwei Treiber nutzen
-  das bereits unverändert — Open DMX USB (am echten Gerät verifiziert, 35,5 Hz)
-  und ArtNet (44 Hz). **Das Trait bleibt wie es ist**; wenn sACN etwas braucht,
-  das nicht hineinpasst, ist das ein Eintrag für den Decision Log, keine stille
-  Erweiterung.
-- Die Socket-Naht existiert: `UdpSender` (bind/send_to/local_addr/close),
-  `SystemUdp` über `std::net::UdpSocket`, `MockUdp` mit Aufzeichnung und
-  Fehlerinjektion, `classify` für `io::ErrorKind`. Multicast fehlt dort noch —
-  das ist die eine Ergänzung, die diese Session an der Naht vornimmt.
-- `MockOutput` ist der Mock-Output-Modus aus §12; `tests/hardware.rs` zeigt, wie
-  hardwareabhängige Prüfungen aussehen (alles `#[ignore]`, Befehle in §3.2).
-- Coverage-Anforderung an prism-protocols ist unverändert **> 95 %**; gemessen
-  wird mit `cargo llvm-cov -p prism-protocols --summary-only`. Zuletzt: 97,91 %
-  Zeilen ohne angestecktes Gerät.
+Stand nach S10 — nichts davon musst du neu bauen:
+- `prism-domain` (S1) hält alle Domänentypen samt Serialisierung und
+  TypeScript-Bindings; 133 Tests, 99,8 % Zeilenabdeckung. Jeder `f64` ist in
+  beiden Richtungen gegen nicht-endliche Werte abgesichert.
+- `prism-engine` (S2–S6) ist vollständig: Tick, Triple Buffer, HTP/LTP-Merge,
+  DMX-Encoding, Cues und Fades, Programmer-Layer, Master. 44 Hz bei 64 Universen
+  unter Volllast gemessen, allokationsfrei im Tick.
+- `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
+  verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz), alle drei hinter
+  demselben `DmxOutput`-Trait mit Reconnect-Backoff und `catch_unwind`.
+- Es gibt noch **kein Showmodell**, keinen Patch, den jemand bearbeiten kann, und
+  keine Kommandoanwendung. Genau das ist S11.
 
-Aufgabe: Session S10 umsetzen — sACN (E1.31) als dritter DmxOutput.
+Aufgabe: Session S11 umsetzen — `prism-core`: Show-Modell und Kommandoanwendung.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S10):
-- sACN-Ausgabe, Multicast-Adressierung
-- Priorität pro Universum
-- Source Name aus dem Showfile
-- Termination-Paket beim sauberen Herunterfahren
+Umzusetzen (IMPLEMENTATION_PLAN.md S11):
+- Show-Modell: Patch, Gruppen, Presets, Sequenzen
+- Kommandovalidierung und -anwendung
+- Delta-Erzeugung
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Die Paket-Bytes sind gegen E1.31 zugesichert, Feld für Feld über alle drei
-  Ebenen (Root Layer, Framing Layer, DMP Layer): Preamble, ACN-Paket-ID,
-  Flags/Length, Vector, CID, Source Name, Priority, Sync Address, Sequence
-  Number, Options, Universe, DMP-Adress-/Typ-Felder, Startcode, Daten —
-  **einschließlich Stabilität der CID über Neustarts hinweg**
-- Die Multicast-Gruppenadresse ist für Universum 1 **und 63999** korrekt
-  berechnet und als Test zugesichert
-- Ein sauberes Herunterfahren sendet ein Stream-Terminated-Paket
-  (Options-Bit 6) — als Test zugesichert
-- `cargo test -p prism-protocols` ist grün, ohne Netzwerkgerät
+- Jedes `Command` aus der Show-Gruppe wird angewandt oder abgelehnt; eine
+  Ablehnung lässt den Zustand **byte-identisch** zurück — als Test zugesichert,
+  nicht als Argument
+- Delta-Erzeugung verifiziert: Deltas auf eine Kopie angewandt reproduzieren den
+  Quellzustand exakt
+- Patchkonflikte (überlappende Adressen) werden erkannt und gemeldet, nicht
+  stillschweigend akzeptiert
+- `cargo test -p prism-core` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
-- Abdeckung auf prism-protocols bleibt > 95 %, gemessen und in PROGRESS.md
-  eingetragen
+- Abdeckung auf `prism-core` **> 95 %**, gemessen mit
+  `cargo llvm-cov -p prism-core --summary-only` und in PROGRESS.md eingetragen
 
-Wichtige Randbedingungen:
-- **Kein Test darf ein Netzwerkgerät brauchen.** Ein UDP-Socket auf 127.0.0.1
-  ist erlaubt und erwünscht. Prüfe die **Bytes eines empfangenen Datagramms**,
-  nicht die Aufrufe eines Mocks — S8 hat teuer gelernt, dass ein Mock bestätigt,
-  welche Aufrufe ein Treiber macht, und nichts darüber sagt, was hinausgeht.
-  `tests/artnet_wire.rs` ist die Vorlage.
-- Zeitverhalten wird gegen einen simulierten Clock geprüft
-  (`prism_engine::ManualClock`, oder `SharedClock` aus `artnet_wire.rs`, wenn
-  Runner und Ausgang dieselbe Zeit lesen müssen) — nicht durch Warten.
-- Ein Keep-alive-Intervall ist eine **Obergrenze**: es muss eine Kadenz *vor*
-  Ablauf feuern, sonst liegt das Paket bei Intervall + Kadenz. Siehe
-  `ArtNetConfig::refresh_margin` und den Decision Log zu S9.
-- `UniverseId` ist im Projekt 1..=64 (`ARCHITECTURE_SPEC.md` §6). Die
-  Multicast-Berechnung ist trotzdem für den vollen E1.31-Bereich zu schreiben
-  und zu testen — 63999 ist ein Exit-Kriterium, und eine Funktion, die nur bis
-  64 stimmt, ist stillschweigend falsch.
-- Die CID ist eine UUID pro Sender und muss über Neustarts **stabil** sein,
-  sonst gilt der Sender einem Empfänger als neue Quelle. Wo sie herkommt, ist
-  eine Entscheidung: sie gehört ins Showfile bzw. in die Konfiguration, nicht in
-  eine Zufallszahl beim Start. Wenn dafür in dieser Session noch kein Ort
-  existiert, halte sie als Daten am Ausgang und trage die Konsequenz für S11/S15
-  in den Decision Log ein.
-- Priorität, Source Name und Universumsnummern sind **Daten**, keine Konstanten
-  im Code — aus demselben Grund, aus dem S9 die Art-Net-Portadresse als Daten
-  hält.
-- In `prism-protocols` gibt es für die Netzausgänge **kein** `#[cfg]`, und das
-  soll so bleiben: die Linux- und ARM64-Jobs bauen und testen denselben Code wie
-  Windows. Nur die beiden FTDI-Backends stehen hinter `cfg(windows)`.
+Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
+- **Überlappende Adressen sind kein Fehler.** Ein zweites Fixture auf dieselbe
+  Adresse zu patchen ist die übliche Art, eines zu klonen; die Engine (S4) lässt
+  es zu und macht das Ergebnis deterministisch. „Erkannt und gemeldet" heißt also
+  eine Konfliktliste, die die UI (S27) anzeigen kann — keine Ablehnung.
+- **Das Showfile bettet die verwendeten `FixtureType`s ein**, statt eine externe
+  Profilbibliothek zu referenzieren: eine Show muss in sich geschlossen sein,
+  sonst ändert sich der Rig unter einer gespeicherten Show. Auflage aus S1.
+- **Die sACN-CID braucht einen Ort.** Sie ist eine UUID, die *dieses Pult*
+  identifiziert, muss Neustarts überleben und darf sich **nicht** duplizieren,
+  wenn eine Show auf einen zweiten Rechner kopiert wird — zwei Sender mit
+  derselben CID sehen für einen Empfänger aus wie eine Quelle, die sich
+  widerspricht. Heute liegt sie in `SacnConfig::cid` mit nil-Default, und ein
+  Ausgang ohne CID verweigert die Verbindung. Entscheide, ob sie ins Showfile
+  oder in eine Maschinenkonfiguration daneben gehört, und trage die Entscheidung
+  in den Decision Log ein — S15 (Persistenz) darf sie beim Speichern nicht neu
+  erzeugen.
+- **Der Programmer wird nach `MergePlan`-Slot adressiert**, nicht nach Fixture
+  und Attribut. Diese Zahl ist ein Vertrag zwischen Core-Thread und Engine, und
+  ein Repatch macht jedes eingereihte Programmer-Kommando ungültig. Das
+  Auffangen ist Aufgabe des Daemons (S17), aber das Showmodell muss einen
+  Repatch überhaupt sichtbar machen.
+- **`MergeBody::for_patch` ist der Konstruktor**, der `MergePlan` und
+  `ChannelPlan` gemeinsam baut, damit sie nicht zwei verschiedene Rigs
+  beschreiben können. Ein zur Laufzeit ersetzter `MergeBody` erfordert außerdem,
+  die Framepuffer des Publishers zu blanken — siehe Decision Log zu S4.
+- **Der Programmer-Automat selbst — dreistufiges Clear, Store-Verhalten,
+  Selektion — ist S13**, nicht diese Session. S11 baut das Showmodell und die
+  Kommandoanwendung darunter.
+- Serialisierung ist fehlbar: nicht-endliche `f64` werden in beiden Richtungen
+  abgelehnt, JSON rundet Floats nicht bitgenau, und MessagePack muss mit
+  `to_vec_named` geschrieben werden (alles S1-Funde im Decision Log).
+- `prism-domain` hat ein optionales `proptest`-Feature mit `Arbitrary`-Impls für
+  jeden Typ — nutze `prism_domain::arb`, statt eigene Generatoren zu schreiben.
+- `prism-core` ist plattformneutral: **kein `#[cfg(target_os = ...)]`**. Das
+  Crate läuft im Linux-Job und im ARM64-Cross-Check der CI mit.
+- Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
+  Code.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S10-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S11-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S11 (`prism-core` — Show-Modell und Kommandoanwendung) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. feat(protocols): …
+  Session S12 (`prism-core` — Session State, D11) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. feat(core): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```

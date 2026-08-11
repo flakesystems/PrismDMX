@@ -22,6 +22,16 @@
 //! Putting the flag on `bind` rather than leaving it to the caller means the
 //! permission is granted in exactly one place, and that a test can assert the
 //! default configuration never asks for it.
+//!
+//! # Why multicast is one method and not a group membership
+//!
+//! sACN sends to `239.255.x.x` (`ARCHITECTURE_SPEC.md` §7.2), and a *sender*
+//! needs none of what multicast usually implies: joining a group is how a
+//! receiver asks to be given datagrams, and this seam has no receive. What a
+//! sender does need is the hop limit — [`UdpSender::set_multicast_ttl`] — which
+//! defaults to 1 on every platform and therefore confines the show to the local
+//! segment unless somebody says otherwise. The outgoing interface is chosen the
+//! way it already was: by the address passed to [`UdpSender::bind`].
 
 use core::fmt;
 use std::collections::VecDeque;
@@ -131,6 +141,19 @@ pub trait UdpSender: Send {
     /// [`classify`].
     fn send_to(&mut self, datagram: &[u8], target: SocketAddr) -> Result<usize, UdpError>;
 
+    /// Sets how many hops a multicast datagram from this socket may take.
+    ///
+    /// Transmit-side only, for the reason in this module's documentation. The
+    /// operating system's default is 1, which is right for a lighting network
+    /// that is one switch and wrong for a venue whose nodes are behind a
+    /// router — so it is asked for explicitly rather than inherited.
+    ///
+    /// # Errors
+    ///
+    /// [`UdpError::NotBound`] if there is no socket yet, or whatever the
+    /// operating system says, classified by [`classify`].
+    fn set_multicast_ttl(&mut self, ttl: u32) -> Result<(), UdpError>;
+
     /// The address datagrams are leaving from, once there is a socket.
     ///
     /// Worth having beyond tests: an output bound to the wrong interface is
@@ -156,6 +179,10 @@ impl<S: UdpSender + ?Sized> UdpSender for Box<S> {
 
     fn send_to(&mut self, datagram: &[u8], target: SocketAddr) -> Result<usize, UdpError> {
         (**self).send_to(datagram, target)
+    }
+
+    fn set_multicast_ttl(&mut self, ttl: u32) -> Result<(), UdpError> {
+        (**self).set_multicast_ttl(ttl)
     }
 
     fn local_addr(&self) -> Option<SocketAddr> {
@@ -211,6 +238,15 @@ impl UdpSender for SystemUdp {
             .map_err(|error| classify(error.kind()))
     }
 
+    fn set_multicast_ttl(&mut self, ttl: u32) -> Result<(), UdpError> {
+        let Some(socket) = self.socket.as_ref() else {
+            return Err(UdpError::NotBound);
+        };
+        socket
+            .set_multicast_ttl_v4(ttl)
+            .map_err(|error| classify(error.kind()))
+    }
+
     fn local_addr(&self) -> Option<SocketAddr> {
         self.socket
             .as_ref()
@@ -242,10 +278,12 @@ pub struct MockUdpHandle {
 struct MockUdpState {
     datagrams: Vec<(SocketAddr, Vec<u8>)>,
     binds: Vec<(SocketAddr, bool)>,
+    multicast_ttls: Vec<u32>,
     open: bool,
     closes: usize,
     bind_faults: VecDeque<UdpError>,
     send_faults: VecDeque<UdpError>,
+    ttl_faults: VecDeque<UdpError>,
 }
 
 /// Takes a lock without caring whether a previous holder panicked: the runner's
@@ -312,6 +350,17 @@ impl MockUdpHandle {
         lock(&self.state).binds.clone()
     }
 
+    /// Every multicast hop limit this socket has been asked for, in order.
+    ///
+    /// An empty list is an assertion in its own right: an output that unicasts
+    /// has no business touching a multicast option, and one that multicasts
+    /// must not leave the hop limit to whatever the machine happens to default
+    /// to.
+    #[must_use]
+    pub fn multicast_ttls(&self) -> Vec<u32> {
+        lock(&self.state).multicast_ttls.clone()
+    }
+
     /// Whether a socket is open.
     #[must_use]
     pub fn is_open(&self) -> bool {
@@ -335,6 +384,13 @@ impl MockUdpHandle {
     pub fn fail_send(&self, times: usize, error: UdpError) {
         lock(&self.state)
             .send_faults
+            .extend(std::iter::repeat_n(error, times));
+    }
+
+    /// Makes the next `times` attempts to set the multicast hop limit fail.
+    pub fn fail_multicast_ttl(&self, times: usize, error: UdpError) {
+        lock(&self.state)
+            .ttl_faults
             .extend(std::iter::repeat_n(error, times));
     }
 }
@@ -368,6 +424,15 @@ impl UdpSender for MockUdp {
                 Ok(datagram.len())
             }
         }
+    }
+
+    fn set_multicast_ttl(&mut self, ttl: u32) -> Result<(), UdpError> {
+        let mut state = lock(&self.state);
+        if !state.open {
+            return Err(UdpError::NotBound);
+        }
+        state.multicast_ttls.push(ttl);
+        state.ttl_faults.pop_front().map_or(Ok(()), Err)
     }
 
     fn local_addr(&self) -> Option<SocketAddr> {
@@ -451,6 +516,21 @@ mod tests {
             sender.send_to(b"nowhere", loopback()),
             Err(UdpError::NotBound)
         );
+    }
+
+    #[test]
+    fn a_real_socket_takes_a_multicast_hop_limit() {
+        // Set, never exercised: nothing in this repository's tests sends a
+        // multicast datagram, because a test suite that puts sACN on the
+        // network it runs on is the same fault as one that broadcasts. What is
+        // checked here is that the option reaches a real socket at all.
+        let mut sender = SystemUdp::new();
+        assert_eq!(sender.set_multicast_ttl(1), Err(UdpError::NotBound));
+        sender.bind(loopback(), false).unwrap();
+        assert_eq!(sender.set_multicast_ttl(1), Ok(()));
+        assert_eq!(sender.set_multicast_ttl(16), Ok(()));
+        sender.close();
+        assert_eq!(sender.set_multicast_ttl(1), Err(UdpError::NotBound));
     }
 
     #[test]
@@ -538,9 +618,14 @@ mod tests {
         let mut sender = MockUdp::new();
         let handle = sender.handle();
         assert!(!handle.is_open());
+        // Nothing can be asked of a socket that is not open, options included.
+        assert_eq!(sender.set_multicast_ttl(1), Err(UdpError::NotBound));
         sender.bind(loopback(), false).unwrap();
         assert!(handle.is_open());
         assert_eq!(handle.binds(), vec![(loopback(), false)]);
+        assert!(handle.multicast_ttls().is_empty());
+        sender.set_multicast_ttl(4).unwrap();
+        assert_eq!(handle.multicast_ttls(), vec![4]);
 
         let target: SocketAddr = "127.0.0.1:6454".parse().unwrap();
         assert_eq!(sender.send_to(&[1, 2, 3], target), Ok(3));
@@ -610,6 +695,8 @@ mod tests {
         let mut sender: Box<dyn UdpSender> = Box::new(inner);
         sender.bind(loopback(), false).unwrap();
         assert_eq!(sender.send_to(&[7; 8], loopback()), Ok(8));
+        assert_eq!(sender.set_multicast_ttl(2), Ok(()));
+        assert_eq!(handle.multicast_ttls(), vec![2]);
         assert_eq!(sender.local_addr(), Some(loopback()));
         sender.close();
         assert_eq!(handle.closes(), 1);
