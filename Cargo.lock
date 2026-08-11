@@ -345,6 +345,11 @@ name = "prism-core"
 version = "0.1.0"
 dependencies = [
  "prism-domain",
+ "prism-engine",
+ "proptest",
+ "rmp-serde",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

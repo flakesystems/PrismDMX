@@ -9,6 +9,24 @@ publish.workspace = true
 
 [dependencies]
 prism-domain = { path = "../prism-domain" }
+serde = { workspace = true }
+# The show is projected into `prism_domain::JsonValue` to build the JSON Patch
+# operations a `Delta::ShowPatch` carries. That projection needs a serialiser,
+# and S15 exports JSON from this crate anyway.
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# S1 put `arb` and the `Arbitrary` impls behind a feature so the crates above
+# could property-test against real domain values instead of growing their own
+# generators.
+prism-domain = { path = "../prism-domain", features = ["proptest"] }
+proptest = { workspace = true }
+rmp-serde = { workspace = true }
+# A development dependency only, and deliberately so: the show model must not
+# be able to reach into the engine at run time. What it buys is a test that the
+# two agree about what a legal patch is, rather than two copies of the rule
+# that drift apart — see `tests/show_to_engine.rs`.
+prism-engine = { path = "../prism-engine" }
 
 [lints]
 workspace = true

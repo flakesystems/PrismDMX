@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 9d009ab7bf8305269df41c20d32babae1c58ed523a83034f9dfe24fdba5f9080 # shrinks to edits = [EmbedType(FixtureType { id: "type/0", manufacturer: "", name: "", mode: "", footprint: 1, attributes: [] })]

@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
 **Last updated:** 2026-08-11
-**Current phase:** Phase 2 — Protocols
-**Current session:** S11 — `prism-core` show model and command application (not started; see §8 for the prompt that starts it)
-**Last completed:** S10 — sACN (E1.31) ✅ — **Phase 2 is complete: all three V1 outputs exist**
+**Current phase:** Phase 3 — Core state
+**Current session:** S12 — `prism-core` session state (D11) (not started; see §8 for the prompt that starts it)
+**Last completed:** S11 — `prism-core` show model and command application ✅ — **the daemon now has something to output**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -61,7 +61,7 @@
 ### Phase 3 — Core state
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
-| S11 | Show model, command application | ☐ | | |
+| S11 | Show model, command application | ✅ | 2026-08-11 | All exit criteria verified — see §2.12. 88 tests, coverage 99.9 % lines. Two mutation checks confirm the two central tests are not vacuous |
 | S12 | Session state (D11) | ☐ | | |
 | S13 | Programmer state machine | ☐ | | |
 | S14 | Oops journal | ☐ | | |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 11 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 12 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -445,6 +445,49 @@ restart; and a stopped stream is *ended* rather than left to time out, which is
 the difference between a rig releasing a universe at once and holding a dead
 desk's look for two and a half seconds.
 
+### 2.12 S11 verification record
+
+Measured on 2026-08-11, all exit criteria from `IMPLEMENTATION_PLAN.md` S11 and
+the session prompt. No hardware and no network: this crate is state and data.
+
+| Check | Result |
+|---|---|
+| Every `Command` in the show group applies or rejects | ✅ `tests/command_application.rs`: `the_two_groups_together_are_the_whole_protocol` asserts the twelve show commands and the eleven §4.4 session commands are **23 in total** and that `Command::is_session_command` agrees with the split, so a command added to the protocol has to be given a home here. `every_show_command_is_decided_rather_than_ignored` applies all twelve and demands each produce a non-empty `effects` list, which is what a command that was quietly dropped would fail. The applier's `match` names all 23 variants — no wildcard — so a new variant is a **compile error** rather than a silent rejection |
+| A rejection leaves the state **byte-identical**, as a test | ✅ taken literally: the show is serialised with `rmp_serde::to_vec_named` before and after and the two `Vec<u8>` compared, plus the two fields that are deliberately *not* serialised (`patch_revision`, the dirty flag), which a rejection could otherwise move invisibly. Twelve hand-written rejection cases, one per way a show command can be refused, each run against a clean **and** a dirty show; sixteen more on the direct-edit API S13/S15/S27 will call; and a `proptest` over `any::<Command>()` as the broad net. **Checked by mutation:** bumping the revision before validating turns four of the nine tests red |
+| Delta generation verified: deltas applied to a copy reproduce the source exactly | ✅ the copy is `ShowMirror`, an RFC 6902 applier over `prism_domain::JsonValue` — not test scaffolding, it is what a Rust client mirrors with. `tests/delta_round_trip.rs` compares the mirror with the show after **every** operation of a scripted build-up and tear-down, again after the same thing driven through `Show::apply`, and again over up to 24 arbitrary edits per case. The scripted run finishes by deserialising the mirror back into a `Show` and comparing the two byte for byte. **Checked by mutation:** dropping the JSON Pointer escaping fails the property in one shrink step, on a profile key containing `/` |
+| Patch conflicts detected and reported, not silently accepted | ✅ and **not refused**, which is the harder half: `Show::conflicts()` returns one `PatchConflict` per overlapping pair — universe, first and last shared channel, and which fixture **wins** — and `Show::apply` puts them in a `Delta::Notice` at `Warn` naming the winner. Asserted for a clone at the same address, a partial overlap, a narrow fixture inside a wide one, three fixtures on one address (three pairs), and the same address in another universe (none). `tests/show_to_engine.rs` asserts the winner the show *names* is the byte the **engine** puts on the wire, both ways round |
+| `cargo test -p prism-core` | ✅ exit 0 — **70 lib tests** + 18 integration tests across three targets, 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **768 tests** across 27 targets, 12 ignored (the S8 hardware target and the long engine runs) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-core` **> 95 %** | ✅ **99.91 % lines**, 99.26 % regions, 99.49 % functions. `command.rs` and `conflict.rs` at **100 % lines, regions and functions**, `mirror.rs` and `desk.rs` at 100 % lines, `show.rs` at 99.74 %. The residue is one monomorphisation of the generic JSON projection — the same measurement artefact S4 recorded — and `--show-missing-lines` reports no uncovered source line at all |
+| Platform-neutral | ✅ no `#[cfg]` of any kind in the crate. It is in the Linux job's list and in the ARM64 cross-check |
+| CI green on the pushed commit | ▶ not yet run — filled in after the push, per `IMPLEMENTATION_PLAN.md` session protocol point 6 |
+
+**Delivered:** five modules. `show` is the model — the patch, the **embedded**
+profiles, groups, presets, sequences and executors, with one validated
+operation per edit and the `JsonPatchOp`s that describe what it changed.
+`command` is `Show::apply`: validation, application, and an `Effect` list for
+the work the show model has decided but cannot itself carry out. `conflict` is
+what a patch sheet shows in red — overlapping addresses and dangling
+references, found and reported rather than refused. `mirror` is `ShowMirror`,
+the other end of the delta. `desk` is `MachineConfig`, which is where the sACN
+CID now lives.
+
+**The show model does not finish every command, and says so rather than
+pretending.** Five of the twelve show commands are the programmer's, whose state
+machine is S13; `Oops` and `Redo` are S14 and `SaveShow` is S15. All eight are
+still *decided* here: the show validates the half only it can see — that fixture
+12 is not patched, that preset 4 does not exist, that sequence 7 is not there to
+store into — and answers with an effect naming who finishes the job. That is why
+"applies or rejects" is a real criterion for all twelve rather than for four.
+
+**`prism-engine` is a development dependency, and only that.** The show model
+must not reach into the engine at run time — that wiring is S17's — but the two
+share one rule, "what is a legal patch", and two copies of a rule drift apart.
+`tests/show_to_engine.rs` holds them together: every patch the show accepts is
+one `MergeBody::for_patch` accepts, over arbitrary patches.
+
 ---
 
 ## 3. Coverage tracking
@@ -458,7 +501,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
-| `prism-core` | **> 95 %** (programmer) | — | |
+| `prism-core` | **> 95 %** (programmer) | **99.91 % lines**, 99.26 % regions, 99.49 % functions — `command.rs` and `conflict.rs` at **100 %** on all three, `mirror.rs` and `desk.rs` at 100 % lines, `show.rs` at 99.74 %. `--show-missing-lines` reports no uncovered source line; the residue is one monomorphisation of the generic JSON projection, the artefact S4 recorded | 2026-08-11 (S11) |
 | `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
@@ -650,6 +693,17 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-11 | S11 | **The sACN CID belongs to the machine, not to the show — and the question S10 left open has only one safe answer.** Storing it with the show fails at exactly the point that makes a second desk exist: copying a show *is* how a second machine comes to have one, on a stick, from a backup, or as the school's template for next term, and nothing in a show file can tell "this is the same desk" from "this is a copy". Two senders under one CID look to a receiver like one source contradicting itself, and no priority sorts that out | `prism_core::MachineConfig`, holding a `DeskId`, written beside the daemon's own settings and **never inside a `.prism` file**. A show arrives on a new machine with no identity in it and picks up the identity of the desk that opens it. Three rules follow and are written on the module: **S15 must not write it into the show and must not regenerate it on save** — `Show` has no field for it, which is the structural half, and `desk_id_is_not_show_content` is the asserted half; **S17 generates it once** on first start, because a UUID needs entropy and this crate is dependency-free by rule; and `DeskId::NIL` is **not** an identity, so `MachineConfig::is_configured` asks one layer up the same question `prism-protocols` already refuses to connect without |
+| 2026-08-11 | S11 | **One edit wrote the show before the last thing that could fail had run, and coverage is what found it.** `store_cue` inserted the cue into the sequence, sorted the list, and *then* built the JSON Patch operation — and building it is fallible, because `prism-domain` refuses a non-finite float on the way out (S1). A cue with a NaN fade time would have been stored **and** reported as an error. The only uncovered line in the crate was that `?`, which is what pointed at it; no test had reached it because nothing else in the suite constructs a NaN | The list is built beside the old one and swapped in only once the operation describing it exists. **The general rule, now written on the module: validate and encode before you write, because the encoding is the last thing that can fail.** Every other operation already had this shape; this one did not, and the byte-identical criterion was true by accident everywhere else. Three tests now drive the NaN path through `embed_fixture_type`, `store_cue` and `patch_fixture` |
+| 2026-08-11 | S11 | **`Command::ApplyPreset` carries a preset number and no pool, and `Preset.pool` files presets into pools where the number restarts.** Read literally, the two together make the command ambiguous: preset 4 in the colour pool and preset 4 in the position pool are different presets and the command cannot say which | **Preset numbers are unique across pools.** The pool is how a preset is filed and which encoder bank shows it; it is not part of its identity. That is the only reading under which `ApplyPreset` is well-defined, and it matches `PresetId` being a plain number on the wire. Written on `Show::store_preset`, which refuses a second preset with a number already used in another pool. **S28 requirement:** the preset pool UI numbers presets globally, not per pool |
+| 2026-08-11 | S11 | **A JSON Pointer into an array names a position, so a show whose collections were lists would rename things when one was deleted.** `/fixtures/3` would be the fourth *element*: remove fixture 1 and every pointer after it silently means a different fixture, which is a class of bug that survives review because every pointer still resolves | Every collection is an object keyed by the identifier the operator uses, so `/fixtures/3` is fixture 3 whatever else happens. Two consequences that had to be checked rather than assumed: an integer-keyed map **does** round-trip through both codecs here (unlike S1's finding, where the map was inside an internally tagged enum — a patch operation carries its key inside the pointer string, so the problem does not arise), and a profile key is **operator text**, so the pointer has to escape `~` and `/` per RFC 6901. The property test generates profile keys containing both, and removing the escaping fails it in one shrink step |
+| 2026-08-11 | S11 | **"Patch conflicts are detected and reported, not silently accepted" is not the same as "rejected", and reading it as rejection would have broken a technique in daily use.** S4 settled the engine half — a second fixture on the same address is how an operator clones one, and the higher fixture number wins the shared channel because its targets are written last | `Show::conflicts()` is a list the patch sheet (S27) can show: universe, first and last shared channel, both fixture numbers and which one wins. `Show::apply` puts the overlaps a patch *creates* into a `Delta::Notice` at `Warn`. `tests/show_to_engine.rs` asserts the winner the show names is the byte the engine actually writes, in both orders, so the two cannot disagree about the rule while agreeing about the words. `Show::issues()` reports the same way for references that have gone stale — a group member, a preset value, a cue part or an executor's sequence — which S5 and S6 both asked for: dropped silently, an operator cannot learn why something does nothing |
+| 2026-08-11 | S11 | **Delta generation cannot be verified without an applier, so one exists.** "A client that has applied every delta since its snapshot holds state identical to the daemon's" is a claim about two pieces of code, and a test that only checks the generator checks nothing | `ShowMirror`: RFC 6902 over `prism_domain::JsonValue`, plus `Delta::ExecutorState`, which carries show state without being JSON Patch and which a mirror that ignored it would drift on. It is not test scaffolding — the Web Remote (S31) and any Rust client mirror the show exactly this way. **Deliberately not all-or-nothing:** clients apply deltas without validating them because the daemon has already decided, so an operation that does not fit means the two have *already* diverged; `apply_all` stops at the first failure, names it, and the client re-snapshots. Copying the whole show per delta to protect a case in which the mirror is already wrong would buy nothing |
+| 2026-08-11 | S11 | **A repatch must not move a fixture back to the origin, and `PatchFixture` carries no geometry.** S1 defined the command as the five fields an operator supplies at patch time, with position, rotation and the inverts edited afterwards. Building a fresh `Fixture` from it — the obvious implementation — would un-hang a moving head from the ceiling and reset its place in the 3D view every time somebody corrected its address | `Show::apply` keeps the geometry and both inverts of the fixture already there and replaces only what the command carries. Asserted. **S27 requirement:** the patch sheet's address column edits the address, and must not round-trip a whole fixture through this command |
+| 2026-08-11 | S11 | **`Show::apply` returns effects rather than performing them, and that is what lets five commands owned by later sessions still be *decided* now.** The show model has no engine, no journal and no file. A command it cannot finish could have been left to the daemon entirely — and then "every command applies or rejects" would have been a criterion about four commands | `Applied { deltas, effects }`. `Effect::Programmer` (S13), `Undo`/`Redo` (S14), `Save` (S15), `Repatch`, `ReloadGroups`, `ReloadSequence`, and the three playback ones. **S17 requirement, and S5 asked for it in advance:** an executor with a cue list is *played* through `MergeBody`, never poked into `PlaybackLayer` — `Effect::ExecutorGo`/`ExecutorOff` is the validated intent, not the mechanism. **`Effect::Repatch` is two jobs, not one:** rebuild the `MergeBody` *and* blank the publisher's frame buffers, because the encoder leaves unpatched channels alone (S4). `Show::patch_revision()` is the number that moves, and it is what a daemon compares against to know its queued programmer commands — addressed by merge-plan slot (S6) — are stale |
+| 2026-08-11 | S11 | **`prism-engine` became a development dependency of `prism-core`, which is a smaller commitment than it looks and buys the one thing an argument could not.** The show validates a patch against `Fixture::last_address` and its own profile checks; the engine validates again when it builds the channel plan. Two copies of a rule drift, and a show that could be saved and then could not be played would be the worst way to find out | Dev-dependency only, so nothing at run time can reach the engine from here — the daemon still owns the wiring. `tests/show_to_engine.rs` asserts over arbitrary patches that everything the show accepts, `MergeBody::for_patch` accepts, and pins the three doors S17 will use: `FrameLayout` from `Show::universes()`, `for_patch` from `Show::patched()`, `load_groups` and `load_sequence` from the show's own pools |
+| 2026-08-11 | S11 | **An executor the show does not have is a rejection, not a no-op.** Executors are stored, not a fixed grid, so a fresh show has none and a master move or a Go names something that does not exist. Silence is the tempting answer and the wrong one | `UnknownExecutor` and `ExecutorHasNoSequence`. "The Go did nothing" is a complaint an operator cannot diagnose; "executor 3 has no sequence" is one they can. **S21/S26 requirement:** the surface and the executor bar only send playback commands for executors that exist, and show an empty slot as empty rather than sending into it |
+| 2026-08-11 | S11 | **The dirty flag travels when it changes, not on every edit.** `Delta::DirtyFlag` drives the console's Save LED, and an LED cannot be lit twice | `Show::apply` emits it only on the transition to unsaved, and `Show::mark_saved` returns whether it actually cleared anything. Deliberately **not** set by `record_executor_state`: an executor advancing a cue is not an unsaved edit, and a Save LED that lit because a cue followed on would teach an operator to ignore it. **S15 requirement:** `mark_saved` is called when the write has succeeded, not when it starts |
 | 2026-08-11 | S10 | **The short timing gate failed a third time, and the diagnostic finally said why: `probe thread turns: 0/s`.** It went red on the Windows job of this session's push — p95 **210 ms**, 23 of 133 ticks missed, median still 100 µs, identical tree green on a rerun — on a commit that touches no code in `prism-engine`. The probe line is the part that matters: the machine had **no core to spare at all**, which is the precondition of the measurement rather than a property of the schedule. `cargo test` runs a workspace's test binaries **in parallel**, and this commit adds one more (`sacn_wire`) — so S6's finding that "two timing tests in one binary measure each other" holds one level up as well, across targets, where a mutex cannot reach. The previous session had already loosened this bound from 5 ms to one tick period; 210 ms went straight through it | **The tail assertion is gone from the three-second run**, and what remains is what the sample count supports: the **median** (a schedule that drifts, sleeps by period instead of to a deadline, or wakes late every time moves it, and by far more than the margin) and the **share of the grid that ran** (≥ ¾). The distribution is still printed, so a strange run can be read. The tail number that means something is unchanged and lives where its 26 401 samples are: p99.9 = 200 µs in the ten-minute run (§3). **Rule, now for the third time and hopefully the last:** a percentile is a gate only where the sample count supports it — p95 over 130 samples is the seventh-worst sample, and on a shared two-core runner the seventh-worst is whatever else the runner was doing. **For later sessions:** every new test target makes this window noisier, so a wall-clock assertion that has to be true on CI belongs in the ten-minute runs, not beside the suite. Verified green on the first attempt as run **31506271867** |
 | 2026-08-11 | S10 | **A CID has to survive a restart, and there is nowhere yet to keep one — so the crate refuses to invent it.** E1.31 receivers track sources by CID. A desk that generates a fresh UUID at start-up is a *new source* at every start, and the old one goes on holding the universe until its 2.5 s network-data-loss timeout expires — two and a half seconds in which two equal-priority sources fight. Two desks *sharing* a CID is worse still. The tempting default, "generate one at start-up if none is configured", is exactly the failure | **No constructor in the crate produces a CID.** It is `SacnConfig::cid`, parsed from the canonical UUID text a configuration holds, and the default is nil — which is not an identity, so an output holding it **refuses to connect** rather than transmitting under the value every unconfigured desk would share. Both halves are asserted, and stability is by construction rather than by luck. **S11/S15 requirement, and it is a hard one:** the show file (or a machine-level configuration beside it) must carry the CID, and it must survive a show being copied to another machine *without* two machines ending up with the same one — a CID belongs to the **desk**, not to the show. Whichever of the two it is stored in, S15 must not regenerate it on save |
 | 2026-08-11 | S10 | **A stopped stream and an ended stream are different things, and only one of them is instant.** A receiver that simply stops hearing from a source waits out 2.5 s before releasing the universe, so a desk that closes its socket leaves the rig holding a dead source's look. E1.31 has a goodbye and Art-Net has none — which is why `DmxOutput::shutdown` earning its place is a finding rather than a formality: S7 put it in the trait to close a cable, and it turns out to be where a protocol's ending belongs | Three `Stream_Terminated` packets per active universe on `shutdown`, **each with the next sequence number**. That last part is the whole point: a conforming receiver discards a packet whose sequence has not moved on, so three identical packets are one packet and two duplicates — the redundancy the standard asks for would be worth nothing. Asserted on the driver and again on datagrams received over loopback after `OutputRunner::run` returns |
@@ -756,13 +810,39 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**Phase 2 is complete: the engine drives a real light and two networks.**
-`Patch → Cue → Fade → Merge → Programmer → Masters → DMX bytes` reaches an FT232R
-at 35.5 Hz, an Art-Net node at the engine's own 44 Hz and an sACN receiver at the
-same, all on measured numbers. What the output side does not have yet is anything
-to output: there is no show model, no patch a user can edit, and no command that
-changes one. Begin **S11** (`prism-core` — show model and command application).
-Use the prompt in §8.
+**There is a show now, and it reaches the engine.** `Show → MergeBody → frame`
+is asserted end to end, a command is applied or refused with the show left
+byte-identical either way, and every change comes back out as a delta that
+reproduces the show it came from. What is still missing above it is the console's
+operating state: which view is up, which windows are open, which executor page
+the faders are on. Begin **S12** (`prism-core` — session state, D11). Use the
+prompt in §8.
+
+Carried out of S11:
+- **`Show::apply` answers with `deltas` and `effects`, and the effects are S17's
+  to-do list.** `Repatch` means *rebuild the `MergeBody` and blank the
+  publisher's frame buffers*; `Programmer` means S13 finishes this one; `Undo`,
+  `Redo` and `Save` mean S14 and S15 do.
+- **`Show::patch_revision()` is the number a daemon watches.** The programmer is
+  addressed by merge-plan slot, so every queued programmer command is stale when
+  it moves.
+- **The sACN CID lives in `MachineConfig`, not in the show.** S15 must not write
+  it into a `.prism` file and must not regenerate it on save; S17 generates it
+  once on first start. See the decision log.
+- **Validate and encode before you write.** The JSON projection is the last thing
+  that can fail in an edit, and one operation had it in the wrong order — see the
+  decision log.
+- **`ShowMirror` is the applier a client uses**, and the reason delta generation
+  can be tested at all. `Delta::ExecutorState` has to be applied by hand: it is
+  show state that does not travel as JSON Patch.
+- **Preset numbers are unique across pools**, because `ApplyPreset` carries no
+  pool.
+- **Overlaps and dangling references are reported, never refused**:
+  `Show::conflicts()` and `Show::issues()` are what the patch sheet (S27) shows in
+  red, and the winner they name is the byte the engine writes.
+- `tests/common/mod.rs` in this crate is the pattern for shared integration
+  scenery: `#![allow(dead_code)]` at its head, because each target compiles its
+  own copy and uses a subset.
 
 Carried out of Phase 2 into the daemon sessions:
 - **`DmxOutput` is five methods and it stayed that way for three drivers.** Open DMX, Art-Net and sACN all implement the same five and all inherit `OutputRunner`'s thread, reconnect backoff and panic containment unchanged. Two things that looked like they needed a sixth method — Art-Net's end-of-frame for ArtSync, sACN's goodbye — did not: the first is found in the driver, the second belongs in `shutdown`. If a fourth output does not fit, that is a decision-log entry.
@@ -798,7 +878,7 @@ Carried from Phase 1:
 - `prismd` (S17) owns the translation from `prism_domain::Command` to `TickCommand`, must attach every output driver during setup (`FramePublisher::subscribe` allocates), and **must raise the tick thread's priority** — without it the deadline is not held, see §3.
 - `prism-protocols`: a driver thread wakes at its own output cadence rather than spinning near the engine — see the decision log. S7 implemented this; S9 and S10 inherit it.
 - `prism-ipc` (S16) must serialise MessagePack with `to_vec_named`, must enforce a **nesting depth limit** on decode, and must treat serialisation as fallible — see the decision log.
-- `prism-core` (S11) must embed the used fixture types in the show file — see the decision log.
+- `prism-core` (S11) embeds the used fixture types in the show file — done, see §2.12.
 - S15 must not assume bit-identical floats through a JSON export — see the decision log.
 
 ---
@@ -807,123 +887,130 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S11 — `prism-core`: Show-Modell und Kommandoanwendung**
+**Next up: S12 — `prism-core`: Session State (D11)**
 
 ```text
-PrismDMX — Session S11: prism-core, Show-Modell und Kommandoanwendung
+PrismDMX — Session S12: prism-core, Session State (D11)
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht keine Hardware und kein Netz. Sie ist reine Zustands- und
-Datenmodellarbeit in einem Crate, das heute nur aus einer Moduldokumentation
-besteht.
+Diese Session braucht keine Hardware und kein Netz. Sie ist reine Zustandsarbeit
+in einem Crate, das seit S11 ein vollständiges Showmodell enthält.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders alle Einträge, die mit
-                                            „S11 requirement" oder „S11/S15"
-                                            markiert sind: das sind Auflagen
-                                            früherer Sessions an genau diese
+                                            besonders §2.12 (was S11 geliefert hat)
+                                            und alle Decision-Log-Einträge, die mit
+                                            „S12" oder „D11" markiert sind
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S11
-4. ARCHITECTURE_SPEC.md §2, §5, §6        — Systemüberblick, DMX-Pipeline und das
-                                            vollständige Domänenmodell
-5. docs/IPC_PROTOCOL.md §5–§6             — die Command- und Delta-Wire-Typen, die
-                                            dieses Crate anwendet bzw. erzeugt
-6. crates/prism-domain/src/               — die Typen sind fertig: 47 exportierte
-                                            Typen, `Command` (23 Varianten),
-                                            `Delta` (7 Varianten), `Fixture`,
-                                            `FixtureType`, `Sequence`, `Cue`,
-                                            `Preset`, `Group`, `ProgrammerState`
-7. crates/prism-core/src/lib.rs           — heute nur Moduldokumentation; hier
-                                            entsteht alles
-8. crates/prism-engine/src/body.rs        — `MergeBody::for_patch`,
-                                            `load_sequence`, `load_groups`,
-                                            `load_programmer`: die Türen, durch
-                                            die ein Showmodell die Engine erreicht
+                                            von S12
+4. ARCHITECTURE_SPEC.md §4                — Session State vollständig: §4.1 was
+                                            dazugehört, §4.2 was ausdrücklich
+                                            nicht, §4.3 das Latenzbudget, §4.4 die
+                                            elf Kommandos
+5. docs/IPC_PROTOCOL.md §5–§6             — die Command- und Delta-Wire-Typen;
+                                            `SessionPatch` ist der Delta, den
+                                            diese Session erzeugt
+6. crates/prism-domain/src/session.rs     — `Session`, `View`, `WindowInstance`,
+                                            `WindowType` sind fertig (S1)
+7. crates/prism-core/src/                 — `show.rs`, `command.rs`, `conflict.rs`,
+                                            `mirror.rs`, `desk.rs`. `Show::apply`
+                                            ist das Vorbild: dieselbe Form noch
+                                            einmal, für die Session
 
-Stand nach S10 — nichts davon musst du neu bauen:
-- `prism-domain` (S1) hält alle Domänentypen samt Serialisierung und
-  TypeScript-Bindings; 133 Tests, 99,8 % Zeilenabdeckung. Jeder `f64` ist in
-  beiden Richtungen gegen nicht-endliche Werte abgesichert.
+Stand nach S11 — nichts davon musst du neu bauen:
+- `prism-domain` (S1): alle Domänentypen samt Serialisierung und
+  TypeScript-Bindings; 133 Tests. Jeder `f64` ist in beiden Richtungen gegen
+  nicht-endliche Werte abgesichert.
 - `prism-engine` (S2–S6) ist vollständig: Tick, Triple Buffer, HTP/LTP-Merge,
   DMX-Encoding, Cues und Fades, Programmer-Layer, Master. 44 Hz bei 64 Universen
   unter Volllast gemessen, allokationsfrei im Tick.
 - `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
-  verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz), alle drei hinter
-  demselben `DmxOutput`-Trait mit Reconnect-Backoff und `catch_unwind`.
-- Es gibt noch **kein Showmodell**, keinen Patch, den jemand bearbeiten kann, und
-  keine Kommandoanwendung. Genau das ist S11.
+  verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz).
+- `prism-core` (S11) hält das **Showmodell**: `Show` mit Patch, eingebetteten
+  `FixtureType`s, Gruppen, Presets, Sequenzen und Executors; `Show::apply` für
+  die Show-Gruppe der Kommandos; `ShowMirror` als RFC-6902-Applier;
+  `PatchConflict`/`ShowIssue`; `MachineConfig` mit der sACN-CID. 88 Tests,
+  99,9 % Zeilenabdeckung.
+- Es gibt noch **keinen Session-Zustand**: keine aktive View, keine offenen
+  Fenster, keine Executor-Seite. Genau das ist S12.
 
-Aufgabe: Session S11 umsetzen — `prism-core`: Show-Modell und Kommandoanwendung.
+Aufgabe: Session S12 umsetzen — `prism-core`: Session State (D11).
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S11):
-- Show-Modell: Patch, Gruppen, Presets, Sequenzen
-- Kommandovalidierung und -anwendung
-- Delta-Erzeugung
+Umzusetzen (IMPLEMENTATION_PLAN.md S12):
+- `Session` nach ARCHITECTURE_SPEC.md §4.1
+- alle Session-Kommandos aus §4.4
+- Session-Persistenz gemeinsam mit der Show
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Jedes `Command` aus der Show-Gruppe wird angewandt oder abgelehnt; eine
-  Ablehnung lässt den Zustand **byte-identisch** zurück — als Test zugesichert,
-  nicht als Argument
-- Delta-Erzeugung verifiziert: Deltas auf eine Kopie angewandt reproduzieren den
-  Quellzustand exakt
-- Patchkonflikte (überlappende Adressen) werden erkannt und gemeldet, nicht
-  stillschweigend akzeptiert
+- Jedes Session-Kommando wird angewandt und erzeugt einen `SessionPatch`;
+  eine Ablehnung lässt den Zustand **byte-identisch** zurück — als Test
+  zugesichert, nicht als Argument
+- Die Session übersteht Speichern und Laden: eine wieder geöffnete Show stellt
+  View, Fenster, Seite und Selektion exakt wieder her
+- Client-lokaler Zustand (§4.2) ist **nachweislich abwesend** — durch den Typ
+  zugesichert und ausdrücklich geprüft
 - `cargo test -p prism-core` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
-- Abdeckung auf `prism-core` **> 95 %**, gemessen mit
+- Abdeckung auf `prism-core` bleibt **> 95 %**, gemessen mit
   `cargo llvm-cov -p prism-core --summary-only` und in PROGRESS.md eingetragen
 
 Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **Überlappende Adressen sind kein Fehler.** Ein zweites Fixture auf dieselbe
-  Adresse zu patchen ist die übliche Art, eines zu klonen; die Engine (S4) lässt
-  es zu und macht das Ergebnis deterministisch. „Erkannt und gemeldet" heißt also
-  eine Konfliktliste, die die UI (S27) anzeigen kann — keine Ablehnung.
-- **Das Showfile bettet die verwendeten `FixtureType`s ein**, statt eine externe
-  Profilbibliothek zu referenzieren: eine Show muss in sich geschlossen sein,
-  sonst ändert sich der Rig unter einer gespeicherten Show. Auflage aus S1.
-- **Die sACN-CID braucht einen Ort.** Sie ist eine UUID, die *dieses Pult*
-  identifiziert, muss Neustarts überleben und darf sich **nicht** duplizieren,
-  wenn eine Show auf einen zweiten Rechner kopiert wird — zwei Sender mit
-  derselben CID sehen für einen Empfänger aus wie eine Quelle, die sich
-  widerspricht. Heute liegt sie in `SacnConfig::cid` mit nil-Default, und ein
-  Ausgang ohne CID verweigert die Verbindung. Entscheide, ob sie ins Showfile
-  oder in eine Maschinenkonfiguration daneben gehört, und trage die Entscheidung
-  in den Decision Log ein — S15 (Persistenz) darf sie beim Speichern nicht neu
-  erzeugen.
-- **Der Programmer wird nach `MergePlan`-Slot adressiert**, nicht nach Fixture
-  und Attribut. Diese Zahl ist ein Vertrag zwischen Core-Thread und Engine, und
-  ein Repatch macht jedes eingereihte Programmer-Kommando ungültig. Das
-  Auffangen ist Aufgabe des Daemons (S17), aber das Showmodell muss einen
-  Repatch überhaupt sichtbar machen.
-- **`MergeBody::for_patch` ist der Konstruktor**, der `MergePlan` und
-  `ChannelPlan` gemeinsam baut, damit sie nicht zwei verschiedene Rigs
-  beschreiben können. Ein zur Laufzeit ersetzter `MergeBody` erfordert außerdem,
-  die Framepuffer des Publishers zu blanken — siehe Decision Log zu S4.
-- **Der Programmer-Automat selbst — dreistufiges Clear, Store-Verhalten,
-  Selektion — ist S13**, nicht diese Session. S11 baut das Showmodell und die
-  Kommandoanwendung darunter.
+- **Der Session-Zustand liegt im Daemon, nicht im Client.** Das ist der ganze
+  Sinn von D11: das X-Touch fernsteuert nicht die UI, sondern ändert Zustand im
+  Daemon, der ein Delta an *alle* Clients schickt. Er muss deshalb auch dann
+  existieren und weiterleben, wenn gar kein Client verbunden ist.
+- **§4.2 ist eine Liste von Dingen, die nicht hineingehören** — Monitorzuordnung
+  eines Fensters, Scrollposition, Hover- und Drag-Zustand, 3D-Kamera,
+  UI-Zoomstufe. Das Exit-Kriterium verlangt, dass ihre Abwesenheit *am Typ*
+  ablesbar ist, nicht nur im Text.
+- **`Show::apply` ist die Vorlage.** Es validiert, wendet an, gibt Deltas und
+  `Effect`s zurück und lässt bei einer Ablehnung den Zustand byte-identisch.
+  `Show::apply` lehnt Session-Kommandos ausdrücklich mit
+  `ShowError::NotAShowCommand` ab; `prism_domain::Command::is_session_command`
+  ist das Prädikat, nach dem der Daemon (S17) verteilt. Die elf §4.4-Kommandos
+  sind im Applier namentlich aufgeführt, ohne Wildcard — ein neues Kommando im
+  Protokoll ist deshalb ein Compile-Fehler und keine stille Ablehnung.
+- **`ShowMirror` gibt es schon** und es ignoriert `SessionPatch` bislang
+  absichtlich. Wenn die Session-Deltas genauso geprüft werden sollen wie die der
+  Show — und das ist die einzige Art, „Deltas reproduzieren den Zustand" zu
+  belegen — dann braucht es dafür ein Gegenstück; sieh dir
+  `crates/prism-core/tests/delta_round_trip.rs` an, bevor du etwas Neues baust.
+- **Views sind gespeicherte Layouts, `openWindows` ist das aktuelle.**
+  `StoreView` schreibt das aktuelle Canvas in eine View, `SelectView` lädt eine.
+  Wo die Views selbst leben — in der Session oder in der Show — ist eine
+  Entscheidung dieser Session und gehört in den Decision Log.
+- **`SetExecutorPage` trägt ein beliebiges `u32` von jedem Client.**
+  `ExecutorId::from_page_and_slot` rechnet deshalb sättigend (S1-Fund); eine
+  Seitenzahl, die kein Executor sein kann, ist trotzdem eine Frage für die
+  Validierung.
+- **Persistenz ist S15**, aber das Kriterium „übersteht Speichern und Laden"
+  gehört hierher: es wird über Serialisierung und Deserialisierung des
+  Session-Typs geprüft, nicht über SQLite.
 - Serialisierung ist fehlbar: nicht-endliche `f64` werden in beiden Richtungen
   abgelehnt, JSON rundet Floats nicht bitgenau, und MessagePack muss mit
   `to_vec_named` geschrieben werden (alles S1-Funde im Decision Log).
+- **Validieren und kodieren, bevor geschrieben wird.** Die JSON-Projektion ist
+  das Letzte, was in einer Änderung fehlschlagen kann — S11 hatte genau dort
+  einen Fehler, siehe Decision Log.
 - `prism-domain` hat ein optionales `proptest`-Feature mit `Arbitrary`-Impls für
   jeden Typ — nutze `prism_domain::arb`, statt eigene Generatoren zu schreiben.
 - `prism-core` ist plattformneutral: **kein `#[cfg(target_os = ...)]`**. Das
   Crate läuft im Linux-Job und im ARM64-Cross-Check der CI mit.
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code.
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 hat zwei
+  seiner zentralen Tests durch eine absichtlich eingebaute Regression geprüft.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S11-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S12-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S12 (`prism-core` — Session State, D11) überschreiben
+  Session S13 (`prism-core` — Programmer-Automat) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(core): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)

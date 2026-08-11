@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc cd4b82828553e32a1639e7928d40c83a486f71c819631e9fd32bad98b83672da # shrinks to command = PatchFixture { id: FixtureId(0), name: "", type_id: "", universe: UniverseId(0), address: 0 }
