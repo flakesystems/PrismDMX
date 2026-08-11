@@ -60,9 +60,19 @@ pub enum Effect {
     /// addressed by merge-plan slot (S6): watch [`Show::patch_revision`].
     Repatch,
     /// The groups changed: `MergeBody::load_groups` again.
+    ///
+    /// No command in `docs/IPC_PROTOCOL.md` §5 stores a group, so [`Show::apply`]
+    /// never produces this today. It is what S13's store operations and S27's
+    /// group editor answer with when they call [`Show::store_group`] directly —
+    /// named here because the engine-side consequence of that edit belongs
+    /// beside the others, not in a comment in the daemon.
     ReloadGroups,
     /// A sequence changed: `MergeBody::load_sequence` again for every executor
     /// playing it.
+    ///
+    /// Produced by the same callers as [`Effect::ReloadGroups`], for the same
+    /// reason: `StoreCue` is validated here and finished by S13, which is what
+    /// then calls [`Show::store_cue`].
     ReloadSequence(SequenceId),
     /// Step an executor.
     ExecutorGo {

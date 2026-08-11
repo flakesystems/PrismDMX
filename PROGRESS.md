@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI verified green | ✅ | Latest: run **31506271867** on `532cd1b` (S10, timing gate) — all four jobs on the first attempt: Windows 4 m 45 s, Linux neutral 1 m 12 s, UI 40 s, ARM64 check 23 s. S10's feature commit: run **31500810174** on `3711902`, green on a rerun of the Windows job, which failed on `prism-engine`'s short timing gate rather than on anything in the commit — see the decision log. First verified: run **31346581991** |
+| 13 | CI verified green | ✅ | Latest: run **31522070040** on `3cc803a` (S11) — all four jobs on the first attempt: Windows 3 m 24 s, Linux neutral 1 m 10 s, UI 52 s, ARM64 check 25 s. Before that: run **31506271867** on `532cd1b` (S10, timing gate) — all four jobs on the first attempt: Windows 4 m 45 s, Linux neutral 1 m 12 s, UI 40 s, ARM64 check 23 s. S10's feature commit: run **31500810174** on `3711902`, green on a rerun of the Windows job, which failed on `prism-engine`'s short timing gate rather than on anything in the commit — see the decision log. First verified: run **31346581991** |
 | 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
@@ -462,7 +462,7 @@ the session prompt. No hardware and no network: this crate is state and data.
 | `cargo fmt --all --check` | ✅ exit 0 |
 | Coverage on `prism-core` **> 95 %** | ✅ **99.91 % lines**, 99.26 % regions, 99.49 % functions. `command.rs` and `conflict.rs` at **100 % lines, regions and functions**, `mirror.rs` and `desk.rs` at 100 % lines, `show.rs` at 99.74 %. The residue is one monomorphisation of the generic JSON projection — the same measurement artefact S4 recorded — and `--show-missing-lines` reports no uncovered source line at all |
 | Platform-neutral | ✅ no `#[cfg]` of any kind in the crate. It is in the Linux job's list and in the ARM64 cross-check |
-| CI green on the pushed commit | ▶ not yet run — filled in after the push, per `IMPLEMENTATION_PLAN.md` session protocol point 6 |
+| CI green on the pushed commit | ✅ run **31522070040** on `3cc803a` — all four jobs, zero non-success steps, green on the first attempt: Windows full build and test 3 m 24 s, Linux platform-neutral 1 m 10 s (which is where "`prism-core` is platform-neutral" is actually checked — the crate contains no `#[cfg]` at all), ARM64 cross-check 25 s, UI typecheck and build 52 s |
 
 **Delivered:** five modules. `show` is the model — the patch, the **embedded**
 profiles, groups, presets, sequences and executors, with one validated
