@@ -346,23 +346,23 @@ fn the_tick_holds_its_deadline_for_a_few_seconds() {
         "median jitter was {:?}",
         stats.jitter.percentile(0.50)
     );
-    // The tail is measured against **one tick period**, not against a few
-    // milliseconds, and that is a deliberate loosening rather than a tuned
-    // threshold. p95 over 130 samples is the seventh-worst one, and on a shared
-    // two-core runner the seventh-worst is a scheduler quantum: this assertion
-    // stood at 5 ms for seven sessions and then failed a **documentation-only**
-    // commit at exactly 16 ms, with the median still at its usual value and the
-    // identical tree green minutes earlier and green again on a rerun. What a
-    // period-sized bound still catches is a schedule that puts a twentieth of
-    // its ticks into the *next* slot while looking healthy in the middle, which
-    // is a real regression; anything below a period is a tick that was late and
-    // whose frame still went out on time. The number that matters is the ten
-    // minute run's p99.9, where 26 400 samples make it mean something.
-    assert!(
-        stats.jitter.percentile(0.95) < TICK_PERIOD,
-        "p95 jitter was {:?}, which is a whole tick period",
-        stats.jitter.percentile(0.95)
-    );
+    // **There is deliberately no tail assertion here, and the third failure is
+    // what settled it.** The bound stood at 5 ms for seven sessions, failed a
+    // documentation-only commit at 16 ms, was loosened to one whole tick period
+    // — and failed again two commits later at 210 ms, on a commit that touched
+    // no code in this crate, with the median still at 100 µs and the identical
+    // tree green on a rerun. That run printed `probe thread turns: 0/s`: the
+    // machine had no core to spare at all, which is the precondition of the
+    // measurement rather than a property of the schedule. `cargo test` runs the
+    // workspace's test binaries in parallel, so every target a later session
+    // adds is another thing this three-second window is measuring.
+    //
+    // A percentile is only a gate where the sample count supports it. p95 over
+    // ~130 samples is the seventh-worst one, and on a shared two-core runner the
+    // seventh-worst is whatever else the runner was doing. The tail number that
+    // means something is the ten-minute run's p99.9 = 200 µs over 26 401
+    // samples (`PROGRESS.md` §3), and it is asserted there. The distribution is
+    // still printed by `report` above, so a run that goes strange can be read.
     // The share of the grid that actually ran, rather than a missed-tick budget
     // over 130 ticks — the remedy S6 applied to the pipeline run, for the same
     // reason and now with a second instance of the same failure behind it. One
