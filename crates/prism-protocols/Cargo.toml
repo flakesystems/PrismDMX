@@ -13,6 +13,23 @@ prism-domain = { path = "../prism-domain" }
 # `FrameLayout` and the `Clock` a driver thread paces itself against.
 prism-engine = { path = "../prism-engine" }
 
+# The two Windows access paths of ARCHITECTURE_SPEC.md §7.1, and the only
+# platform-specific dependencies in the workspace. Declared per target so the
+# Linux test job and the ARM64 cross-check never see them: everything above
+# `FtdiBackend` is platform-neutral and is built and tested on both.
+#
+# `static` links FTDI's own D2XX library into the binary rather than depending
+# on whichever ftd2xx.dll a school's machine happens to have installed.
+[target.'cfg(windows)'.dependencies]
+libftd2xx = { version = "0.33", features = ["static"] }
+serialport = "4.9"
+
+[target.'cfg(windows)'.dev-dependencies]
+# The bring-up target reaches past the backend to time the library calls
+# themselves: "did this frame leave the port before the break was asserted?"
+# cannot be asked through a trait that deliberately hides the answer.
+libftd2xx = { version = "0.33", features = ["static"] }
+
 [dev-dependencies]
 # S1 put `arb` and the `Arbitrary` impls behind a feature so the crates above
 # could property-test against real domain values instead of growing their own

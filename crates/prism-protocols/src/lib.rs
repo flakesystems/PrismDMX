@@ -67,16 +67,25 @@
     )
 )]
 
+#[cfg(windows)]
+mod d2xx;
 mod device;
 mod ftdi;
 mod opendmx;
 mod output;
 mod runner;
+mod system;
+#[cfg(windows)]
+mod vcp;
 
-pub use device::{AccessPath, DeviceDescriptor, DeviceProfile, DmxTiming, SH_RS09B};
+#[cfg(windows)]
+pub use d2xx::D2xxBackend;
+pub use device::{
+    AccessPath, AttachedDevice, DeviceDescriptor, DeviceProfile, DmxTiming, SH_RS09B,
+};
 pub use ftdi::{
-    FlowControl, FtdiBackend, FtdiCall, FtdiError, MockFtdi, MockFtdiHandle, Parity, PortConfig,
-    StopBits, spin_wait,
+    BITS_PER_SLOT, FlowControl, FtdiBackend, FtdiCall, FtdiError, MockFtdi, MockFtdiHandle, Parity,
+    PortConfig, StopBits, spin_wait, transmission_time,
 };
 pub use opendmx::{DMX_PACKET_BYTES, OpenDmxUsb, START_CODE};
 pub use output::{DmxOutput, MockOutput, MockOutputHandle, OutputError};
@@ -84,3 +93,6 @@ pub use runner::{
     Backoff, BackoffConfig, OutputRunner, OutputStatus, OutputThread, RunnerConfig, StepOutcome,
     spawn,
 };
+pub use system::{FallbackFtdi, UnsupportedBackend, list_devices, system_backend};
+#[cfg(windows)]
+pub use vcp::VcpBackend;

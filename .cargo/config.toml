@@ -1,0 +1,28 @@
+# Workspace-wide cargo configuration.
+#
+# There is exactly one setting here, and it exists because of one dependency.
+#
+# `prism-protocols` links FTDI's D2XX library statically on Windows
+# (ARCHITECTURE_SPEC.md 7.1). Static linking is not a preference: `ftd2xx.dll`
+# ships with FTDI's driver package, and a dynamically linked daemon on a machine
+# without it would fail to start *at all* rather than falling back to the
+# virtual COM port - the import is resolved when the process loads, long before
+# any of our code can decide anything.
+#
+# FTDI's static library is built against the static C runtime and the rest of
+# the build uses the dynamic one, so the linker reports LNK4098. That is a
+# rustc lint (`linker_messages`), so with `-D warnings` it is an error rather
+# than a note. Excluding LIBCMT is the standard resolution and the correct one
+# here: everything then resolves against the dynamic runtime, and nothing in
+# this codebase frees memory that FTDI's library allocated.
+#
+# Note for packaging (S29): the other way to make the two agree is to build
+# everything with `-C target-feature=+crt-static`, which would also remove the
+# VC++ redistributable from the list of things a school has to install. That is
+# a decision about the whole workspace and belongs with the shell, not here.
+#
+# CI passes RUSTFLAGS in the environment, which *replaces* these rather than
+# adding to them, so `.github/workflows/ci.yml` repeats this argument in the
+# Windows job. Both places carry the same comment.
+[target.'cfg(windows)']
+rustflags = ["-Clink-arg=/NODEFAULTLIB:LIBCMT"]

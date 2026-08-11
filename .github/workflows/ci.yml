@@ -21,6 +21,14 @@ jobs:
   windows:
     name: Windows - full build and test
     runs-on: windows-latest
+    env:
+      # RUSTFLAGS from the environment replaces .cargo/config.toml's rustflags
+      # rather than adding to them, so the link argument has to be repeated
+      # here. It excludes the static C runtime that FTDI's statically linked
+      # D2XX library asks for; without it the linker reports LNK4098, which is
+      # a rustc lint and therefore an error under -D warnings. The reasoning is
+      # written out in .cargo/config.toml.
+      RUSTFLAGS: "-D warnings -Clink-arg=/NODEFAULTLIB:LIBCMT"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable

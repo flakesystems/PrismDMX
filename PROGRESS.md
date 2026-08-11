@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-11
 **Current phase:** Phase 2 — Protocols
-**Current session:** S8 — 🔌 Hardware bring-up SH-RS09B (not started; see §8 for the prompt that starts it)
-**Last completed:** S7 — `prism-protocols` `DmxOutput` trait and Open DMX USB ✅
+**Current session:** S9 — `prism-protocols` ArtNet (not started; see §8 for the prompt that starts it)
+**Last completed:** S8 — 🔌 Hardware bring-up SH-RS09B ✅ — **the adapter drives a real fixture**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -54,7 +54,7 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S7 | `DmxOutput` trait + Open DMX USB | ✅ | 2026-08-11 | All exit criteria verified — see §2.8. 92 tests, coverage 99.7 % lines. No real FTDI backend yet, on purpose — see the decision log |
-| S8 | 🔌 Hardware bring-up SH-RS09B | ☐ | | Needs the adapter + a fixture. Also owns the first real `FtdiBackend` |
+| S8 | 🔌 Hardware bring-up SH-RS09B | ✅ | 2026-08-11 | All exit criteria verified — see §2.9. **Found and fixed a real defect:** the break was landing inside the frame. 35.5 Hz measured, adapter verified `0403:6001` / `B0037HIY` |
 | S9 | ArtNet | ☐ | | |
 | S10 | sACN (E1.31) | ☐ | | |
 
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 8 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 9 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -335,6 +335,40 @@ plan permits platform code in this crate and the exit criteria never ask for a
 device. See the decision log — the seam is `FtdiBackend`, and S8 is where a
 cable exists to check one against.
 
+### 2.9 S8 verification record
+
+Measured on 2026-08-11 against the adapter itself — DSD TECH SH-RS09B, serial
+`B0037HIY` — with a Monacor WASH-42LED moving head on the line. All exit
+criteria from `IMPLEMENTATION_PLAN.md` S8 and the session prompt:
+
+| Check | Result |
+|---|---|
+| A real fixture responds correctly to a value ramp | ✅ **and it did not, at first.** With the driver as S7 left it the fixture strobed, went dark, or ran its own programme. The cause was a defect in the driver, not in the rig — see the decision log. With the frame timing corrected: a held value gives steady red, and a 12-second fade of the red channel is smooth. The visible staircase in a *slow* fade is 8-bit quantisation and was confirmed as such by running the same fade in 3 s, where it disappears |
+| Frame rate measured over 60 s and written into `ARCHITECTURE_SPEC.md` §7.1 | ✅ **35.53 Hz** through D2XX (2 132 frames in 60.01 s) and **38.35 Hz** through the virtual COM port (2 302 in 60.02 s). §7.1's estimate of 30–40 Hz is replaced by the measurement, and so is `DeviceProfile::SH_RS09B` |
+| USB VID/PID, serial and product string confirmed | ✅ `0403:6001`, serial `B0037HIY`, product string `FT232R USB UART`, device type FT232R. The product ID matched the guess. The strings stay out of the profile's matching rule — they are FTDI's, not the adapter's |
+| Decision recorded: D2XX vs. VCP on this machine | ✅ **D2XX**, and not for the reason one would expect: the VCP measured *faster*. Both drive the fixture correctly; D2XX is preferred because the latency timer and the USB transfer sizes are reachable through it and **unreachable through any serial API** — the registry on this machine had the 16 ms default. Written up in `ARCHITECTURE_SPEC.md` §7.1 |
+| Unplug during output: reconnect without restarting the daemon | ✅ with the cable physically pulled and replugged: the driver reported `Disconnected`, the process stayed up, and it **reconnected 4.3 s later** on its own — `unplugging_the_cable_reconnects_without_restarting_the_process` |
+| `ARCHITECTURE_SPEC.md` §14 and `PROGRESS.md` §5 ticked | ✅ both rows for the adapter are closed. `DeviceProfile::SH_RS09B.verified` is now `true`, and the test that asserted the opposite has been rewritten onto the measurements |
+| `cargo test -p prism-protocols` green **without** hardware | ✅ exit 0 — **119 lib tests** + 4 integration tests, 0 failed, **7 ignored** (the whole bring-up target). Nothing in the ordinary suite touches a device |
+| `cargo test --workspace` | ✅ exit 0 — 552 tests across 22 targets |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-protocols` **> 95 %** | ✅ **96.94 % lines without the adapter** — which is the figure CI can reproduce — and **99.30 % with it attached**, running the same suite with `--include-ignored`. Both are recorded because the difference *is* the FFI: 70 lines of library calls that no build server can execute |
+| Linux and ARM64 still build | ✅ the two backends are behind `cfg(windows)` and their crates are declared per target, so the Linux job and the ARM64 cross-check never see `libftd2xx` or `serialport` |
+| CI green on the pushed commit | ▶ not yet run — filled in from the actual run, per `IMPLEMENTATION_PLAN.md` session protocol point 6 |
+
+**Delivered:** three modules and a bring-up target. `d2xx` is FTDI's own driver,
+statically linked; `vcp` is the serial-port fallback; `system` is the policy
+that chooses between them — `FallbackFtdi`, which is generic over its two
+backends and is therefore tested against two mocks with no cable in the
+building. `tests/hardware.rs` is the only code in the repository that needs a
+device, every test in it is `#[ignore]`d, and §3.1 carries the commands.
+
+**The session's real product is a defect nobody would have found without the
+cable.** Every one of S7's 92 tests passed against the mock, and the frame they
+described was malformed on the wire. That is worth stating plainly: a mock
+asserts the calls a driver makes, never the time between them.
+
 ---
 
 ## 3. Coverage tracking
@@ -349,7 +383,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | — | |
-| `prism-protocols` | **> 95 %** | **99.72 % lines**, 99.67 % regions, 100 % functions | 2026-08-11 (S7) |
+| `prism-protocols` | **> 95 %** | **96.94 % lines** without the adapter (what CI reproduces) · **99.30 % lines**, 98.33 % regions with it attached, via `-- --include-ignored`. The difference is the FFI, which no build server can execute | 2026-08-11 (S8) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
 | `ui` | ≥ 85 % | — | |
@@ -364,7 +398,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Frame determinism | identical input → byte-identical frames | three runs of the same 100-tick script compared byte for byte on the driver's frames, 8 command changes, > 20 distinct frames | 2026-08-11 |
-| Open DMX frame rate | measure real rate on SH-RS09B | — · **S8.** The estimate it replaces is one constant: `DeviceProfile::SH_RS09B` in `crates/prism-protocols/src/device.rs`, `expected_rate_hz: (30, 40)` with `verified: false` beside it | |
+| Open DMX frame rate | measure real rate on SH-RS09B | **35.53 Hz** over 60 s through D2XX (2 132 frames), **38.35 Hz** through the virtual COM port. Both with the frame timing corrected; before the correction the same code reported 43.1 Hz, and that figure was the *symptom* — see the decision log. `DeviceProfile::SH_RS09B` now carries `verified: true` | 2026-08-11 (S8) |
 | Telemetry render | 64 universes @ 30 Hz, zero React re-renders | — | |
 
 **Thread priority is part of the tick jitter figure.** The same ten-minute run at
@@ -438,6 +472,67 @@ harness: a probe thread that yields on every iteration gets about 5.5 million
 turns a second on an idle machine and about 130 thousand on a saturated one, and
 the run fails if it looks idle.
 
+### 3.2 Running the hardware tests (S8)
+
+`crates/prism-protocols/tests/hardware.rs` is the only code in the repository
+that needs a device. Every test in it is `#[ignore]`d, so `cargo test` never
+touches an adapter; these are the commands that reproduce every number in §2.9.
+All of them need the SH-RS09B plugged in, and the ramp needs a fixture on the
+line. The tests take turns behind a mutex, so `--test-threads=1` is belt and
+braces rather than a requirement.
+
+Which adapter is attached, and what it calls itself:
+
+```bash
+cargo test -p prism-protocols --release --test hardware -- --ignored --nocapture the_adapter_on_this_machine
+```
+
+The sustained frame rate over sixty seconds, on both access paths:
+
+```bash
+cargo test -p prism-protocols --release --test hardware -- --ignored --nocapture --test-threads=1 the_sustained_frame_rate
+```
+
+Where the time in a frame goes — the diagnostic that found S8's defect. It
+prints, per frame, the cost of the break transfers, of `FT_Write`, and of the
+transmit queue that turned out to be no signal at all:
+
+```bash
+cargo test -p prism-protocols --release --test hardware -- --ignored --nocapture where_the_time_in_a_frame_actually_goes
+```
+
+Driving a fixture. `PRISM_DMX_CHANNELS` takes a channel (`7`), a range
+(`1-16`), `all`, or `sweep` to walk one channel at a time; `PRISM_DMX_HOLD`
+pins channels on top, which is how a wash light's master is held open while one
+colour is ramped. **Hold the master and drive one channel** — blind-ramping
+every channel walks a fixture into its own auto programme, which is exactly how
+S8 lost an hour:
+
+```powershell
+$env:PRISM_DMX_CHANNELS = "7"; $env:PRISM_DMX_HOLD = "6=100"; $env:PRISM_DMX_STEP_MS = "10000"
+cargo test -p prism-protocols --release --test hardware -- --ignored --nocapture a_fixture_follows_a_value_ramp
+```
+
+`PRISM_DMX_PATH` forces `d2xx` or `vcp` instead of the machine's preferred
+path, `PRISM_DMX_BREAK_US` and `PRISM_DMX_MAB_US` override the break timing,
+and `PRISM_DMX_SECONDS` shortens the rate runs.
+
+Unplugging the cable mid-show needs a pair of hands, so it asks for them:
+
+```powershell
+$env:PRISM_DMX_INTERACTIVE = "1"
+cargo test -p prism-protocols --release --test hardware -- --ignored --nocapture unplugging_the_cable
+```
+
+Coverage including everything the hardware reaches — the 99.30 % figure in §3.
+Without the adapter this fails, which is the point of the `#[ignore]`s:
+
+```bash
+cargo llvm-cov -p prism-protocols --summary-only -- --include-ignored
+```
+
+### 3.3 The `loom` models
+
 The `loom` models replace the standard atomics with instrumented ones, so they are
 a different build of the crate rather than a different test. Under `--cfg loom`
 the ordinary unit tests are compiled out, so this runs the models and nothing else:
@@ -467,7 +562,7 @@ Both are recorded as plain data so verification is a data update, not a refactor
 | Item | Blocks | Status |
 |---|---|---|
 | MCU note and CC numbers vs. real X-Touch | S20, and sign-off of S19 | ☐ unverified — banner in `docs/MCU_MAPPING.md` §2 |
-| SH-RS09B USB VID/PID and real frame rate | S8 | ☐ unverified — estimate in `ARCHITECTURE_SPEC.md` §7.1, and since S7 also in code as `DeviceProfile::SH_RS09B` (`crates/prism-protocols/src/device.rs`). One constant, with `verified: false` on it and a test that says so, so verification is a data update in one place |
+| ~~SH-RS09B USB VID/PID and real frame rate~~ | — | ✅ **verified 2026-08-11 (S8)** — `0403:6001`, serial `B0037HIY`, `FT232R USB UART`, 35.5 Hz over 60 s. `DeviceProfile::SH_RS09B` carries `verified: true` and the tests assert the measurements. **Holding it as data paid for itself:** the whole verification was three fields and one test, with no code changed anywhere else — see `ARCHITECTURE_SPEC.md` §14 |
 
 ---
 
@@ -477,6 +572,15 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-11 | S8 | **The break was landing inside the frame, and every one of S7's 92 tests passed while it did.** A fixture on the line strobed, went dark, or ran its own programme, and the driver looked perfect. The measurement that settled it: `FT_Write` returns after **20.0 ms** of a frame that takes **22.572 ms** to transmit, and `FT_GetStatus`'s transmit queue reads **zero on the first poll of every single frame** — it reports the *driver's* queue, not the chip's shift register, so the "wait for the queue to drain" written first was waiting for nothing. A DMX break is a USB **control** transfer and does not queue behind bulk data, so it was being asserted on top of the tail of the frame still going out | The backends wait out the **computed** transmission time — `bytes × 11 bits ÷ baud`, which is arithmetic and does not lie — plus a 2 ms margin, before returning from `write`. The contract is now written on `FtdiBackend::write`: *must not return before the bytes have left the port*. Both backends honour it, `transmission_time` is a tested pure function, and the fixture went from strobing to steady. **S9/S10 requirement:** ArtNet and sACN have no break and no such hazard, but the lesson generalises — a mock asserts the calls a driver makes, never the time between them |
+| 2026-08-11 | S8 | **43 Hz was the symptom, not the good news.** Before the fix the driver measured 43.1 Hz, comfortably above `ARCHITECTURE_SPEC.md` §7.1's 30–40 Hz estimate, and that should have been the first clue: 513 bytes at 250 kBaud is 22.572 ms, so 23.2 ms per frame leaves 0.6 ms for a break sequence that measured **3 ms**. The data was still flowing *during* the break | The corrected driver runs at **35.5 Hz**, and the arithmetic closes: 3 ms of break transfers + 22.6 ms of data + 2 ms of margin = 27.6 ms. §7.1's estimate was right about the band and wrong about why. **Recorded as a rule:** on this hardware a frame rate above about 40 Hz means the frame is not being framed |
+| 2026-08-11 | S8 | **D2XX is the preferred path, and the rate is not the reason.** Both paths drive the fixture correctly, and the virtual COM port measured *faster* — 38.4 Hz against 35.5 Hz, which is entirely the safety margin D2XX is given | D2XX wins because it can **configure the port at all**: the latency timer and the USB transfer sizes are reachable through it and unreachable through any serial API. On the bring-up machine the registry held the FTDI default of **16 ms**, which §7.1 calls fatal, and nothing in `serialport` can change it. A path that cannot set the settings that matter is a fallback, not a default. Written up in §7.1 |
+| 2026-08-11 | S8 | **A fixture is a poor oracle, and an hour went into learning it.** Sweeping one channel at a time made the head "blink red twice"; ramping every channel made it light up. Neither was a response to the values — the manual (Monacor WASH-42LED, 13-channel mode) puts a **strobe band at 135–239 on the dimmer channel** and **auto programmes on channel 13**, so a ramp crosses the strobe band twice on its way up and back, and an all-channels ramp drives the fixture into its own programme | The bring-up target grew `PRISM_DMX_HOLD`, and the rule is written beside it: **hold the master, drive one channel**, never blind-ramp a whole universe. Get the fixture's channel table before drawing conclusions from it. **S27 requirement:** the patch UI should show the fixture type's channel table beside the fixture, because this is the operator's version of the same hour |
+| 2026-08-11 | S8 | **A slow fade on an 8-bit channel is visibly stepped, and that is the protocol rather than a fault.** 256 values over 12 seconds is 47 ms a step | Confirmed rather than assumed, by running the same fade in 3 s where the steps vanish. It is also why `prism-engine` interpolates fades in 16 bit (S5) and why a 16-bit dimmer is worth patching where a fixture offers one. **S28 requirement:** a fade time long enough to expose 8-bit steps is a thing the cue editor could warn about |
+| 2026-08-11 | S8 | **`LNK4098` is a rustc lint, and CI runs `-D warnings`.** FTDI's static D2XX library is built against the static C runtime while everything else uses the dynamic one, so the linker reports a conflict — and `linker_messages` is a *lint*, which means the Windows job would have failed on this commit rather than warned | `/NODEFAULTLIB:LIBCMT` in a new `.cargo/config.toml`, and repeated in the Windows CI job because `RUSTFLAGS` from the environment **replaces** the config's rustflags rather than adding to them. Static linking is kept deliberately: `ftd2xx.dll` ships with FTDI's driver, and a dynamically linked daemon on a machine without it would fail to start *at all* rather than falling back to the COM port — the import is resolved when the process loads, long before any of our code can decide anything. **S29 requirement:** `-C target-feature=+crt-static` would make the two runtimes agree *and* remove the VC++ redistributable from what a school has to install; that is a decision about the whole workspace and belongs with the shell |
+| 2026-08-11 | S8 | **Four hardware tests failed inside a third of a second, racing for one cable.** `cargo test` runs a target's tests on several threads and there is exactly one adapter | A `static ADAPTER: Mutex<()>` held for the whole of every test that touches it — the same remedy S6 applied to the timing tests, for the same reason, and preferred over a note telling people to pass `--test-threads=1` |
+| 2026-08-11 | S8 | Coverage cannot mean one number for a crate that is half FFI | Recorded as **two**: 96.94 % lines with no adapter attached, which is what CI reproduces, and 99.30 % with one, running the same suite under `--include-ignored`. The gap is 70 lines of library calls that no build server can execute, and hiding it behind an `--ignore-filename-regex` would have made the crate look better and mean less |
+| 2026-08-11 | S8 | Linux still has no FTDI backend, and pretending otherwise would be worse than saying so | `FtdiError::Unsupported` and `UnsupportedBackend`: the crate builds, links and answers everywhere, and a Linux daemon says clearly why it cannot send rather than failing to compile or hitting a `todo!()`. It is deliberately **not** a lost link, so a runner does not spend its life reconnecting to a platform that will never have one. **A later session** writes the libftdi path, on the Raspberry Pi it is meant for (D10) — the same rule as S7: no backend without a device to verify it against |
 | 2026-08-11 | S7 | **No real FTDI backend was written, and that is a decision rather than an omission.** The plan permits platform code in this crate and `ARCHITECTURE_SPEC.md` §7.1 names the crates — `libftd2xx` on Windows, `rusb`/libftdi on Linux. Neither can be exercised by anything: no test may require hardware (`CLAUDE.md`), no CI job has an adapter, and `cargo clippy --workspace --all-targets` does not build code behind a non-default feature. A backend written now would be untested code against a device with an **unverified product ID**, shipping under a green tick | S7 delivers the seam and everything above it; **S8 owns the first real backend**, with a cable on the bench to check it against, and starts by verifying the descriptor it is supposed to open. The confinement §10.1 asks for is already in place and already tested: `AccessPath::preferred()` is the only `#[cfg]` in the crate, both branches are asserted, and `prism-protocols` now runs its tests in the **Linux** CI job as well — which is what will fail on the commit that lets platform-specific logic leak above `FtdiBackend` |
 | 2026-08-11 | S7 | **`ARCHITECTURE_SPEC.md` §7's trait is three methods and a driver thread needs five.** The same section requires "exponential reconnect backoff" from every driver, and a reconnect that only the concrete type knows how to perform cannot be expressed in a thread body written once for every kind of output. Nor can "send the frame this output is for" without asking which universes it carries | `DmxOutput` adds `connect`, `shutdown` and `universes`. The gain is that `OutputRunner` is one piece of code for Open DMX, ArtNet and sACN alike, so S9 and S10 inherit the backoff and the panic containment instead of each writing their own. **S9/S10 requirement:** a network output implements the same five, and the runner is not rewritten |
 | 2026-08-11 | S7 | **The break delay had to become a backend call, and `thread::sleep` cannot implement it.** The break is 110 µs and the mark-after-break 16 µs; the Windows timer granularity is between 1 ms and 15.6 ms, so a sleeping driver would spend most of a frame period in the two delays and cap the output somewhere in the teens of hertz. It also has to be *observable*, or the exit criterion's "SetBreakOn → delay → SetBreakOff" is two assertions that cannot be interleaved | `FtdiBackend::wait` is part of the trait with `spin_wait` as its default: a spin under a millisecond, a sleep plus a spin above it (DMX512 permits a break of up to a second). `MockFtdi` overrides it to record, so the sequence is one `assert_eq!` on one list. **S8 requirement:** measure whether the spin is what limits the rate, or whether the two USB control transfers are |
@@ -554,20 +658,20 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The output side exists, and nothing has driven a cable yet.** `Patch → Cue →
-Fade → Merge → Programmer → Masters → DMX bytes → break/MAB → 513 bytes` runs
-end to end against a mock cable, with the reconnect and panic behaviour asserted
-rather than described. What is missing is the last inch: a `FtdiBackend` that
-opens a real FT232R, and the two numbers nobody has read off one. Begin **S8**
-(🔌 hardware bring-up, SH-RS09B). Use the prompt in §8. It needs the adapter and
-a DMX fixture on the bench.
+**The engine now drives a real light.** `Patch → Cue → Fade → Merge →
+Programmer → Masters → DMX bytes → break/MAB → 513 bytes → an FT232R → a moving
+head` works end to end, on measured numbers rather than estimated ones. What
+Open DMX cannot give is 44 Hz — 35.5 Hz is this hardware's ceiling — so the next
+step is the output that can. Begin **S9** (`prism-protocols` — ArtNet). Use the
+prompt in §8. It needs no hardware: a socket and a packet capture are enough.
 
-Carried into S8 and beyond, from S7:
-- **`DmxOutput` has five methods, not §7's three:** `connect`, `shutdown` and `universes` are additions, so that one `OutputRunner` serves every output. S9 and S10 implement the same five and inherit the thread, the backoff and the panic containment.
-- **Everything about the SH-RS09B is one constant:** `DeviceProfile::SH_RS09B` in `crates/prism-protocols/src/device.rs` — descriptor, port parameters, break and mark-after-break, expected rate, and `verified: false`. A test asserts that flag is still false, so S8 has to come back to exactly one place.
-- `FtdiBackend` is the only thing in the crate that may be platform-specific, and `AccessPath::preferred()` already chooses D2XX on Windows and libftdi elsewhere. `prism-protocols` now runs its tests in the **Linux** CI job too — a real backend must not break that.
-- `FtdiBackend::wait` is part of the trait because the break timing is part of the frame. Its default spins; `thread::sleep` cannot express 110 µs on Windows.
-- `MockFtdi` records the whole call sequence and can fail any operation, mid-frame included. S8 should drive the *same* assertions against a real backend rather than writing new ones.
+Carried into S9 and beyond:
+- **`DmxOutput` has five methods, not §7's three:** `connect`, `shutdown` and `universes` are additions, so that one `OutputRunner` serves every output. S9 and S10 implement the same five and inherit the thread, the reconnect backoff and the panic containment — none of that should be written again.
+- **A mock asserts the calls a driver makes, never the time between them.** S7's suite was green while the frame was malformed on the wire. For a network output the analogue is a packet capture: assert the *bytes of the datagram*, not just that a send happened.
+- **`FtdiBackend::write` must not return before the bytes have left the port**, and both backends honour it by waiting out `transmission_time`. A UDP socket has no such hazard, but `ArtSync` and the 800 ms forced refresh are the same *kind* of requirement: timing that no unit test will notice being wrong.
+- Everything about the SH-RS09B is one constant, `DeviceProfile::SH_RS09B`, and it now carries measurements with `verified: true`. A profile for a device nobody has held should say so.
+- The bring-up target (`tests/hardware.rs`) and §3.2's commands are the pattern for S20's X-Touch verification: `#[ignore]`d, documented, serialised behind a mutex, and driven by environment variables so a person can steer it.
+- `prism-protocols` runs its tests in the **Linux** CI job as well; the FTDI backends are behind `cfg(windows)` and their crates are declared per target. Anything S9 adds must keep that true.
 - A driver thread wakes at its output's own cadence (`RunnerConfig::for_profile`), never sleeps longer than one cadence, and re-sends the last frame when the engine has published nothing new.
 
 Carried from Phase 1:
@@ -597,110 +701,101 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S8 — 🔌 Hardware bring-up: DSD TECH SH-RS09B**
+**Next up: S9 — `prism-protocols`: ArtNet**
 
 ```text
-PrismDMX — Session S8: Hardware-Bring-up des DSD TECH SH-RS09B
+PrismDMX — Session S9: prism-protocols, ArtNet-Ausgabe
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht Hardware: den USB-DMX-Adapter DSD TECH SH-RS09B und
-mindestens ein DMX-Gerät (Dimmer, LED-Par o. ä.) mit XLR-Kabel. Ohne beides
-kann sie nicht abgeschlossen werden. Ist die Hardware nicht da, brich ab und
-trage das in PROGRESS.md §4 als Blocker ein, statt Kriterien für erfüllt zu
-erklären, die niemand gemessen hat.
+Diese Session braucht keine Hardware. Ein Socket und ein Mitschnitt reichen;
+ein zweites Gerät im Netz ist nett, aber kein Kriterium.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.8 (was S7 geliefert hat),
-                                            §5 (die zwei unverifizierten Angaben)
-                                            und der Decision Log zu S7
+                                            besonders §2.8 und §2.9 (was S7 und S8
+                                            geliefert haben) und der Decision Log
+                                            zu S8: dort steht, warum ein grüner
+                                            Mock-Testlauf nichts über das Timing
+                                            auf der Leitung aussagt
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S8
-4. ARCHITECTURE_SPEC.md §7, §7.1, §10.1   — das DmxOutput-Trait, die vollständige
-                                            SH-RS09B-Tabelle und die Regel, wo
-                                            plattformabhängiger Code stehen darf
-5. crates/prism-protocols/src/device.rs   — die Adapterdaten als eine Konstante:
-                                            VID/PID, Portparameter, Break/MAB,
-                                            erwartete Rate, `verified: false`
-6. crates/prism-protocols/src/ftdi.rs     — das FtdiBackend-Trait und MockFtdi
-7. crates/prism-protocols/src/opendmx.rs  — der Treiber: Portaufbau, Break/MAB,
-                                            513-Byte-Paket
-8. crates/prism-protocols/src/runner.rs   — der Treiberthread: Kadenz, Backoff,
+                                            von S9
+4. ARCHITECTURE_SPEC.md §3, §7, §7.2      — Threadmodell, das DmxOutput-Trait und
+                                            die Tabelle zu den Netzausgaben
+5. crates/prism-protocols/src/output.rs   — das DmxOutput-Trait (fünf Methoden)
+6. crates/prism-protocols/src/runner.rs   — der Treiberthread: Kadenz, Backoff,
                                             catch_unwind, OutputStatus
+7. crates/prism-protocols/src/opendmx.rs  — der erste Treiber, als Vorlage dafür,
+                                            wie ein DmxOutput aussieht
+8. crates/prism-engine/src/triple_buffer.rs — FrameSubscriber: wie ein Treiber
+                                            Frames abholt
 
-Stand nach S7 — nichts davon musst du neu bauen:
-- Die ganze Ausgabekette existiert und ist gegen ein Mock-Kabel geprüft:
-  `DmxOutput` (id, universes, connect, send_frame, health, shutdown),
-  `OpenDmxUsb` mit Break → 110 µs → Break aus → 16 µs → 513 Bytes mit Startcode
-  0x00, und `OutputRunner`/`spawn` mit Reconnect-Backoff 100 ms → 5 s und
-  `catch_unwind`. 92 Tests, 99,7 % Zeilenabdeckung, alles ohne Hardware.
-- `MockFtdi` zeichnet die komplette Aufruffolge auf und kann jede Operation
-  scheitern lassen, auch mitten im Frame. Die Zusicherungen dafür stehen schon
-  da; sie sind die Vorlage für die Prüfung eines echten Backends.
-- **Was fehlt, ist genau ein Stück: ein `FtdiBackend`, das ein echtes FT232R
-  öffnet.** Das war in S7 Absicht — siehe Decision Log — weil weder ein Test
-  noch CI eines ausführen kann und die Product-ID unverifiziert ist.
+Stand nach S8 — nichts davon musst du neu bauen:
+- Die ganze Ausgabeseite steht und ist am echten Gerät verifiziert: `DmxOutput`
+  (id, universes, connect, send_frame, health, shutdown), `OutputRunner`/`spawn`
+  mit Reconnect-Backoff 100 ms → 5 s und `catch_unwind`, `OutputStatus` für die
+  Statusanzeige. Ein neuer Ausgang implementiert dieselben fünf Methoden und
+  erbt Thread, Backoff und Panik-Eindämmung — schreib das nicht noch einmal.
+- Open DMX USB läuft mit gemessenen 35,5 Hz auf einem DSD TECH SH-RS09B und
+  bewegt eine echte Lampe. ArtNet ist der Ausgang, der die 44 Hz der Engine
+  wirklich mitgeht (ARCHITECTURE_SPEC.md §3.2).
+- `MockOutput` ist der Mock-Output-Modus aus §12; `tests/hardware.rs` zeigt, wie
+  hardwareabhängige Prüfungen aussehen (alles `#[ignore]`, Befehle in §3.2).
+- Coverage-Anforderung an prism-protocols ist unverändert **> 95 %**; gemessen
+  wird mit `cargo llvm-cov -p prism-protocols --summary-only`.
 
-Aufgabe: Session S8 umsetzen — Annahmen durch Messungen ersetzen.
+Aufgabe: Session S9 umsetzen — ArtNet als zweiter DmxOutput.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S8):
-- USB-VID/PID, Seriennummer und Produktstring des angeschlossenen Adapters
-  auslesen und in `DeviceProfile::SH_RS09B` eintragen
-- Das erste echte `FtdiBackend`: D2XX unter Windows (`libftd2xx`), Fallback VCP
-  (`serialport` mit `set_break`/`clear_break`). Hinter `#[cfg]`, so dass
-  `cargo check --workspace --target aarch64-unknown-linux-gnu` und der
-  Linux-Testjob grün bleiben — `prism-protocols` läuft seit S7 auch dort
-- Nachhaltige Framerate über 60 s messen und die Schätzung (30–40 Hz) ersetzen
-- Entscheidung D2XX vs. VCP auf dieser Maschine festhalten
+Umzusetzen (IMPLEMENTATION_PLAN.md S9):
+- ArtNet-Ausgabe (ArtDmx), **Unicast als Voreinstellung**
+- optionales ArtSync
+- erzwungene Vollbild-Auffrischung mindestens alle 800 ms, auch wenn sich nichts
+  ändert
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Ein echtes Gerät reagiert korrekt auf eine Werterampe (0 → 255 → 0), sichtbar
-  am Gerät und nicht nur im Log
-- Die Framerate ist über 60 s gemessen und steht in ARCHITECTURE_SPEC.md §7.1
-  statt der Schätzung, und in `DeviceProfile::SH_RS09B.expected_rate_hz`
-- `verified: true` in `DeviceProfile::SH_RS09B`, und der Test, der bisher das
-  Gegenteil behauptet (`the_adapter_profile_still_says_it_is_unverified`),
-  ist auf die gemessenen Werte umgeschrieben
-- Abziehen während der Ausgabe: der Treiber verbindet sich ohne Neustart des
-  Prozesses wieder — mit echtem Kabel nachgestellt, nicht mit dem Mock
-- ARCHITECTURE_SPEC.md §14 und PROGRESS.md §5: die Zeile für den Adapter ist
-  abgehakt
-- `cargo test -p prism-protocols` ist grün, weiterhin ohne Hardware
+- Die Paket-Bytes sind gegen die ArtNet-Spezifikation zugesichert, Feld für
+  Feld: ID, OpCode, Protokollversion, Sequence, Physical, SubUni/Net, Length,
+  Daten — **einschließlich Überlauf der Sequenznummer** (255 → 1, nicht 0)
+- Der Auffrischungs-Timer ist geprüft: ein Universum, das sich nicht ändert,
+  sendet trotzdem mindestens alle 800 ms
+- Broadcast ist opt-in und niemals Voreinstellung — als Test zugesichert
+- `cargo test -p prism-protocols` ist grün, ohne Netzwerkgerät
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
-- Abdeckung auf `prism-protocols` bleibt > 95 %, gemessen mit
-  `cargo llvm-cov -p prism-protocols --summary-only`
+- Abdeckung auf prism-protocols bleibt > 95 %, gemessen und in PROGRESS.md
+  eingetragen
 
 Wichtige Randbedingungen:
-- **Kein Test darf Hardware brauchen.** Alles, was den echten Adapter anfasst,
-  gehört hinter `#[ignore]` oder in ein eigenes Binary, das man von Hand
-  startet — und der Befehl dafür gehört nach PROGRESS.md §3.1, wie bei den
-  langen Läufen der Engine. Ein Kriterium, das niemand nachvollziehen kann,
-  ist keine Messung.
-- Die Logik über `FtdiBackend` bleibt plattformneutral. `#[cfg(target_os = …)]`
-  darf nur die Backend-Auswahl betreffen (ARCHITECTURE_SPEC.md §10.1);
-  `AccessPath::preferred()` ist die Stelle, die das heute schon tut.
-- Neue Abhängigkeiten (`libftd2xx`, `serialport`) müssen so eingebunden werden,
-  dass der ARM64-Cross-Check und der Linux-Job weiter bauen — plattformbedingte
-  `[target.'cfg(…)'.dependencies]`, keine Windows-Kiste im Standardpfad.
-- Messe die Rate an dem, was wirklich auf dem Draht war — die Zahl, die zählt,
-  ist die der abgeschlossenen 513-Byte-Schreibvorgänge pro Sekunde, nicht die
-  der Aufrufe.
-- Wenn die gemessene Rate deutlich unter 30 Hz liegt, prüfe zuerst den Latency
-  Timer (1 ms, nicht die 16 ms Voreinstellung) und die USB-Transfergröße; beide
-  stehen in `PortConfig::DMX512`.
+- **Kein Test darf ein Netzwerkgerät brauchen.** Ein UDP-Socket auf 127.0.0.1
+  ist erlaubt und erwünscht: sende an einen selbst gebundenen Socket und prüfe
+  die empfangenen Bytes. Alles, was einen echten ArtNet-Knoten braucht, gehört
+  hinter `#[ignore]` mit dem Befehl in PROGRESS.md §3.2.
+- **Prüfe die Bytes, nicht die Aufrufe.** S8 hat teuer gelernt, dass ein Mock
+  bestätigt, welche Aufrufe ein Treiber macht, aber nichts über das aussagt,
+  was tatsächlich hinausgeht. Bei einem Netzausgang ist die Entsprechung der
+  Mitschnitt: ein empfangenes Datagramm, Byte für Byte zugesichert.
+- Broadcast flutet Schulnetze — deshalb Unicast als Voreinstellung. Der Test
+  dazu ist kein Formalismus: er ist die Zusicherung, dass niemand später
+  versehentlich die Voreinstellung dreht.
+- Die 800-ms-Auffrischung ist gegen einen simulierten Clock zu prüfen
+  (`prism_engine::ManualClock`), nicht durch Warten. Der `OutputRunner` ist
+  genau dafür über `Clock` generisch.
+- Das Trait `DmxOutput` bleibt wie es ist. Wenn ArtNet etwas braucht, das nicht
+  hineinpasst, ist das eine Entscheidung für den Decision Log — nicht eine
+  stille Erweiterung.
+- Ein ArtNet-Ausgang trägt **mehrere** Universen (anders als Open DMX USB);
+  `universes()` gibt sie alle zurück, und der Runner bildet sie bereits auf die
+  Frame-Positionen ab.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S8-Status, die gemessenen Zahlen (Rate, VID/PID,
-  Seriennummer), Decision Log bei Abweichungen oder Funden, die spätere
-  Sessions betreffen, und §5 abhaken
+- PROGRESS.md aktualisieren: S9-Status, gemessene Coverage, Decision Log bei
+  Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S9 (`prism-protocols` — ArtNet) überschreiben
+  Session S10 (`prism-protocols` — sACN/E1.31) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(protocols): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)

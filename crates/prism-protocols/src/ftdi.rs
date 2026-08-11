@@ -122,6 +122,14 @@ pub enum FtdiError {
     /// The port could not be configured. Refusing to send is the only safe
     /// answer: a port at the wrong baud rate puts noise on a live DMX line.
     Config,
+    /// This platform has no backend for FTDI hardware yet.
+    ///
+    /// `ARCHITECTURE_SPEC.md` §7.1 names libftdi as the Linux path, and S8
+    /// verified the Windows one against a real cable. Until a machine exists to
+    /// verify the Linux one on, asking for a cable there is answered rather
+    /// than pretended: the crate builds and its logic is tested everywhere, and
+    /// only the last inch is missing.
+    Unsupported,
     /// A write returned having moved fewer bytes than it was given, which on a
     /// DMX line is a truncated frame rather than a partial success.
     ShortWrite {
@@ -148,6 +156,7 @@ impl fmt::Display for FtdiError {
             Self::Disconnected => write!(f, "the FTDI device is no longer attached"),
             Self::Io => write!(f, "the FTDI device refused the operation"),
             Self::Config => write!(f, "the FTDI port could not be configured"),
+            Self::Unsupported => write!(f, "this platform has no FTDI backend"),
             Self::ShortWrite { wrote, expected } => {
                 write!(f, "the FTDI device took {wrote} of {expected} bytes")
             }
@@ -190,6 +199,14 @@ pub trait FtdiBackend: Send {
 
     /// Writes bytes to the line and answers how many it moved.
     ///
+    /// **Must not return before the bytes have left the port.** The next thing
+    /// the driver does is assert a break, and a break is a USB control
+    /// transfer: it does not queue behind bulk data, so one asserted while the
+    /// frame is still going out lands *inside* it. Every implementation
+    /// therefore either waits for the hardware or waits out
+    /// [`transmission_time`] — see `d2xx`, where measurement showed the
+    /// hardware's own answer to be no answer at all.
+    ///
     /// # Errors
     ///
     /// [`FtdiError::Disconnected`] if the cable has gone, [`FtdiError::Io`]
@@ -222,6 +239,73 @@ pub trait FtdiBackend: Send {
     fn wait(&mut self, duration: Duration) {
         spin_wait(duration);
     }
+}
+
+/// A boxed backend is a backend.
+///
+/// What this buys is a driver whose cable is chosen at run time:
+/// `OpenDmxUsb<Box<dyn FtdiBackend>>` can hold D2XX on one machine and the
+/// virtual COM port on the next, which is exactly the fallback
+/// `ARCHITECTURE_SPEC.md` §7.1 asks for. Without it the choice would have to be
+/// made at compile time, which is the one place it cannot be made.
+impl<B: FtdiBackend + ?Sized> FtdiBackend for Box<B> {
+    fn open(&mut self, device: &DeviceDescriptor) -> Result<(), FtdiError> {
+        (**self).open(device)
+    }
+
+    fn configure(&mut self, port: &PortConfig) -> Result<(), FtdiError> {
+        (**self).configure(port)
+    }
+
+    fn set_break(&mut self, on: bool) -> Result<(), FtdiError> {
+        (**self).set_break(on)
+    }
+
+    fn write(&mut self, data: &[u8]) -> Result<usize, FtdiError> {
+        (**self).write(data)
+    }
+
+    fn purge(&mut self) -> Result<(), FtdiError> {
+        (**self).purge()
+    }
+
+    fn close(&mut self) {
+        (**self).close();
+    }
+
+    fn wait(&mut self, duration: Duration) {
+        (**self).wait(duration);
+    }
+}
+
+/// Bits on the wire per byte at DMX512's framing: one start bit, eight data
+/// bits, two stop bits.
+pub const BITS_PER_SLOT: u32 = 11;
+
+/// How long `bytes` take to leave a port at `baud`, exactly.
+///
+/// This is the number a backend needs and cannot get from the operating
+/// system. A write call returns when the *driver* has accepted the bytes,
+/// which on Windows measured a good two milliseconds before the last of them
+/// had left the port — and the next thing an Open DMX driver does is assert a
+/// break, which is a USB control transfer and does not queue behind bulk data.
+/// A break asserted early lands inside the frame still going out.
+///
+/// So the wire time is computed rather than asked for: 513 bytes at 250 000
+/// baud is 22.572 ms, and no amount of buffering changes that.
+#[must_use]
+pub fn transmission_time(bytes: usize, baud: u32) -> Duration {
+    let bits = u64::try_from(bytes)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(u64::from(BITS_PER_SLOT));
+    // `checked_div` rather than `/`: a port that has been opened but not
+    // configured yet has no baud rate, and dividing by zero on a driver thread
+    // is not a way to find that out.
+    let nanos = bits
+        .saturating_mul(1_000_000_000)
+        .checked_div(u64::from(baud))
+        .unwrap_or(0);
+    Duration::from_nanos(nanos)
 }
 
 /// Waits without giving the thread up for anything under a millisecond.
@@ -535,7 +619,7 @@ impl FtdiBackend for MockFtdi {
 mod tests {
     use super::{
         FlowControl, FtdiBackend, FtdiCall, FtdiError, MockFtdi, Parity, PortConfig, StopBits,
-        spin_wait,
+        spin_wait, transmission_time,
     };
     use crate::device::SH_RS09B;
     use std::time::{Duration, Instant};
@@ -581,6 +665,7 @@ mod tests {
             ),
             (FtdiError::Io, "the FTDI device refused the operation"),
             (FtdiError::Config, "the FTDI port could not be configured"),
+            (FtdiError::Unsupported, "this platform has no FTDI backend"),
             (
                 FtdiError::ShortWrite {
                     wrote: 12,
@@ -604,6 +689,9 @@ mod tests {
         assert!(FtdiError::Disconnected.is_link_lost());
         assert!(!FtdiError::Io.is_link_lost());
         assert!(!FtdiError::Config.is_link_lost());
+        // A platform with no backend is not a cable that fell out, and a
+        // runner must not spend its life reconnecting to one.
+        assert!(!FtdiError::Unsupported.is_link_lost());
         assert!(
             !FtdiError::ShortWrite {
                 wrote: 1,
@@ -739,6 +827,29 @@ mod tests {
     }
 
     #[test]
+    fn a_dmx_frame_takes_twenty_two_and_a_half_milliseconds_on_the_wire() {
+        // The number the whole break sequence hangs on. 513 bytes at 250 000
+        // baud, eleven bits each: 5643 bits, 22.572 ms. A write that returns
+        // before this has elapsed has left data in flight, and a break
+        // asserted on top of it lands inside the frame.
+        let frame = transmission_time(513, 250_000);
+        assert_eq!(frame, Duration::from_nanos(22_572_000));
+        // A shorter universe is proportionally quicker; the arithmetic is not
+        // special-cased for full frames.
+        assert_eq!(transmission_time(1, 250_000), Duration::from_nanos(44_000));
+        assert_eq!(transmission_time(0, 250_000), Duration::ZERO);
+        assert_eq!(transmission_time(513, 500_000), frame / 2);
+    }
+
+    #[test]
+    fn a_port_at_no_baud_rate_has_nothing_to_wait_for() {
+        // A backend that has opened a device but not configured it yet has no
+        // baud rate to divide by, and dividing by zero on a driver thread is
+        // not an option.
+        assert_eq!(transmission_time(513, 0), Duration::ZERO);
+    }
+
+    #[test]
     fn the_real_wait_does_not_return_early() {
         // Loose on purpose: this asserts the floor, not the ceiling. There is no
         // jitter measurement anywhere in this crate, so nothing here can be made
@@ -802,6 +913,37 @@ mod tests {
         assert_eq!(bare.purge(), Ok(()));
         assert_eq!(bare.write(&[0u8; 513]), Ok(513));
         bare.close();
+    }
+
+    #[test]
+    fn a_boxed_backend_is_a_backend() {
+        // Which cable a driver holds is decided at run time — D2XX on one
+        // machine, the virtual COM port on the next — so the driver has to be
+        // able to hold a boxed one.
+        let ftdi = MockFtdi::new();
+        let handle = ftdi.handle();
+        let mut boxed: Box<dyn FtdiBackend> = Box::new(ftdi);
+        boxed.open(&SH_RS09B.device).unwrap();
+        boxed.configure(&PortConfig::DMX512).unwrap();
+        boxed.purge().unwrap();
+        boxed.set_break(true).unwrap();
+        boxed.wait(Duration::from_micros(110));
+        boxed.set_break(false).unwrap();
+        assert_eq!(boxed.write(&[0u8; 513]), Ok(513));
+        boxed.close();
+        assert_eq!(
+            handle.calls(),
+            vec![
+                FtdiCall::Open(SH_RS09B.device),
+                FtdiCall::Configure(PortConfig::DMX512),
+                FtdiCall::Purge,
+                FtdiCall::SetBreakOn,
+                FtdiCall::Wait(Duration::from_micros(110)),
+                FtdiCall::SetBreakOff,
+                FtdiCall::Write(vec![0u8; 513]),
+                FtdiCall::Close,
+            ]
+        );
     }
 
     #[test]

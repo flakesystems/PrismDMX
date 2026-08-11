@@ -1,13 +1,18 @@
 //! What is known about the cable, in one table.
 //!
-//! Two of the numbers below have never been read off a real device: the USB
+//! Two of the numbers below had never been read off a real device: the USB
 //! product ID and the achievable frame rate. `PROGRESS.md` §5 and
-//! `ARCHITECTURE_SPEC.md` §14 both record them as open, and both say the same
+//! `ARCHITECTURE_SPEC.md` §14 recorded them as open, and both said the same
 //! thing about how they should be held — as plain data, so that verifying them
-//! is an edit to a table rather than a refactor. That is what this module is.
-//! Session **S8** puts the adapter on the bench, replaces the estimates with
-//! measurements and flips [`DeviceProfile::verified`]; nothing outside this file
-//! should need to change when it does.
+//! is an edit to a table rather than a refactor. That is what this module is,
+//! and **S8 turned out the way that design hoped**: the whole verification was
+//! three fields and one test.
+//!
+//! Measured on 2026-08-11 against the adapter itself, serial `B0037HIY`:
+//! `0403:6001`, product string `FT232R USB UART`, and **35.5 Hz sustained over
+//! sixty seconds** through D2XX — with the frame timing corrected, see
+//! [`DmxTiming`]. The product ID matched the guess; the rate did not, and the
+//! reason it did not is the most useful thing S8 found.
 
 use core::fmt;
 use std::time::Duration;
@@ -140,6 +145,56 @@ impl fmt::Display for DeviceDescriptor {
     }
 }
 
+/// A device found on the bus, as a backend reports it.
+///
+/// Platform-neutral on purpose: D2XX answers with an index and a description,
+/// a COM port with a name, libftdi with a bus address. What a caller wants to
+/// know is the same in all three cases, so the shape is the same and only the
+/// `path` differs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachedDevice {
+    /// USB vendor ID as read from the device.
+    pub vendor_id: u16,
+    /// USB product ID as read from the device.
+    pub product_id: u16,
+    /// Serial number string, if the device has one.
+    pub serial: Option<String>,
+    /// Product or description string, if the device has one.
+    pub product: Option<String>,
+    /// How this platform names the device — a COM port, a `/dev` node, a D2XX
+    /// index. For display and for logs; matching goes by the fields above.
+    pub path: Option<String>,
+}
+
+impl AttachedDevice {
+    /// Whether this device is the one a descriptor asks for.
+    #[must_use]
+    pub fn matches(&self, descriptor: &DeviceDescriptor) -> bool {
+        descriptor.matches(
+            self.vendor_id,
+            self.product_id,
+            self.product.as_deref(),
+            self.serial.as_deref(),
+        )
+    }
+}
+
+impl fmt::Display for AttachedDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:04x}:{:04x}", self.vendor_id, self.product_id)?;
+        if let Some(serial) = &self.serial {
+            write!(f, " serial {serial}")?;
+        }
+        if let Some(product) = &self.product {
+            write!(f, " \"{product}\"")?;
+        }
+        if let Some(path) = &self.path {
+            write!(f, " at {path}")?;
+        }
+        Ok(())
+    }
+}
+
 /// The timing of one DMX512 frame, as the host has to generate it.
 ///
 /// `ARCHITECTURE_SPEC.md` §7.1: there is no microcontroller in this cable, so
@@ -160,6 +215,12 @@ pub struct DmxTiming {
     /// Not a limit the hardware enforces — 513 bytes at 250 kBaud is 22.6 ms of
     /// pure data on its own — but the cadence the driver thread wakes on, so it
     /// paces itself instead of spinning next to the engine.
+    ///
+    /// **Measured, not chosen.** A frame on this adapter costs 22.6 ms of data,
+    /// about 3 ms for the two USB control transfers that make the break, and
+    /// the safety margin the D2XX backend adds before it lets the next break
+    /// through. That comes to 28 ms, and the sustained rate over a minute is
+    /// 35.5 Hz.
     pub min_frame_interval: Duration,
 }
 
@@ -174,24 +235,32 @@ pub struct DeviceProfile {
     pub port: PortConfig,
     /// How to time a frame on it.
     pub timing: DmxTiming,
-    /// The frame rate this adapter is expected to sustain, in whole hertz.
+    /// The frame rate this adapter sustains, in whole hertz, as the two access
+    /// paths measured it.
     ///
     /// `ARCHITECTURE_SPEC.md` §7.1 and §3.2: for Open DMX USB this is *below*
     /// the engine's 44 Hz and that is a property of the hardware rather than a
     /// fault. The UI states it when the output is created rather than hiding
     /// it.
     pub expected_rate_hz: (u32, u32),
-    /// Whether the two numbers above have been read off a real device.
+    /// Whether the numbers above have been read off a real device.
     ///
-    /// `false` until S8 measures them. Kept as a field rather than as a comment
-    /// so that a UI, a log line or a later test can ask.
+    /// `true` since S8 measured them. Kept as a field rather than as a comment
+    /// so that a UI, a log line or a later test can ask — a profile for an
+    /// adapter nobody has held should be able to say so.
     pub verified: bool,
 }
 
 impl DeviceProfile {
-    /// The adapter `ARCHITECTURE_SPEC.md` §7.1 makes mandatory for V1.
+    /// The adapter `ARCHITECTURE_SPEC.md` §7.1 makes mandatory for V1,
+    /// **as measured on 2026-08-11** (S8).
     ///
-    /// The product ID and the rate range are **estimates**; `verified` says so.
+    /// The strings are deliberately left as "any": `FT232R USB UART` is what
+    /// FTDI's own chip reports, not something DSD TECH programmed, so
+    /// requiring it would match every FT232R in the world and exclude a cable
+    /// somebody has relabelled. The serial number is what tells two adapters
+    /// apart, and it belongs to the cable rather than to the model — see
+    /// [`DeviceDescriptor::with_serial`].
     pub const SH_RS09B: Self = Self {
         name: "DSD TECH SH-RS09B",
         device: DeviceDescriptor {
@@ -204,10 +273,10 @@ impl DeviceProfile {
         timing: DmxTiming {
             break_time: Duration::from_micros(110),
             mark_after_break: Duration::from_micros(16),
-            min_frame_interval: Duration::from_millis(25),
+            min_frame_interval: Duration::from_millis(28),
         },
-        expected_rate_hz: (30, 40),
-        verified: false,
+        expected_rate_hz: (35, 38),
+        verified: true,
     };
 }
 
@@ -216,31 +285,60 @@ pub const SH_RS09B: DeviceProfile = DeviceProfile::SH_RS09B;
 
 #[cfg(test)]
 mod tests {
-    use super::{AccessPath, DeviceDescriptor, SH_RS09B};
+    use super::{AccessPath, AttachedDevice, DeviceDescriptor, SH_RS09B};
     use std::time::Duration;
 
     #[test]
-    fn the_adapter_profile_is_the_table_in_the_specification() {
-        // ARCHITECTURE_SPEC.md §7.1, rows "Device discovery" and "Frame".
+    fn the_adapter_profile_is_what_the_adapter_reported() {
+        // Read off the device on 2026-08-11 (S8), serial B0037HIY, and not
+        // copied from ARCHITECTURE_SPEC.md §7.1 - which guessed the product ID
+        // right and the frame rate wrong.
         assert_eq!(SH_RS09B.name, "DSD TECH SH-RS09B");
         assert_eq!(SH_RS09B.device.vendor_id, 0x0403);
         assert_eq!(SH_RS09B.device.product_id, 0x6001);
         assert_eq!(SH_RS09B.timing.break_time, Duration::from_micros(110));
         assert_eq!(SH_RS09B.timing.mark_after_break, Duration::from_micros(16));
-        assert_eq!(SH_RS09B.expected_rate_hz, (30, 40));
     }
 
     #[test]
-    fn the_adapter_profile_still_says_it_is_unverified() {
-        // PROGRESS.md §5 and ARCHITECTURE_SPEC.md §14: the product ID and the
-        // rate are estimates until S8 puts the cable on a bench. This assertion
-        // is the thing S8 has to come back and change, which is the point of
-        // it: the claim "verified" cannot be made anywhere else.
+    fn the_adapter_profile_carries_measurements_rather_than_estimates() {
+        // The assertion S7 left behind said the opposite, on purpose: nothing
+        // could claim these were known until somebody had the cable. This is
+        // the same guard from the other side - 35.5 Hz sustained over sixty
+        // seconds through D2XX and 38.4 Hz through the virtual COM port, so
+        // the recorded band is 35 to 38 and it is a measurement.
         let shipped = SH_RS09B;
+        assert!(shipped.verified);
+        assert_eq!(shipped.expected_rate_hz, (35, 38));
+        assert_eq!(shipped.timing.min_frame_interval, Duration::from_millis(28));
+    }
+
+    #[test]
+    fn the_recorded_rate_and_the_recorded_frame_interval_agree() {
+        // Two numbers for the same fact, so they are checked against each
+        // other: 28 ms between frame starts is 35.7 Hz, which has to land
+        // inside the band the profile claims.
+        let (low, high) = SH_RS09B.expected_rate_hz;
+        let interval = SH_RS09B.timing.min_frame_interval.as_secs_f64();
+        let implied = 1.0 / interval;
         assert!(
-            !shipped.verified,
-            "S8 measures the product ID and the frame rate; until it has, \
-             nothing may claim they are known"
+            implied >= f64::from(low) - 1.0 && implied <= f64::from(high) + 1.0,
+            "a {interval:?} interval implies {implied:.1} Hz, outside {low}..={high}"
+        );
+    }
+
+    #[test]
+    fn the_profile_matches_any_adapter_of_this_type_and_not_one_cable() {
+        // The strings the chip reports are FTDI's, not DSD TECH's: requiring
+        // "FT232R USB UART" would match every FT232R ever made and exclude a
+        // relabelled one. Pinning a particular cable is `with_serial`, and it
+        // is the operator's decision rather than the profile's.
+        assert_eq!(SH_RS09B.device.product, None);
+        assert_eq!(SH_RS09B.device.serial, None);
+        assert!(
+            SH_RS09B
+                .device
+                .matches(0x0403, 0x6001, Some("FT232R USB UART"), Some("B0037HIY"))
         );
     }
 
@@ -291,6 +389,60 @@ mod tests {
         assert!(named.matches(0x0403, 0x6001, Some("SH-RS09B"), None));
         assert!(!named.matches(0x0403, 0x6001, Some("FT232R USB UART"), None));
         assert!(!named.matches(0x0403, 0x6001, None, None));
+    }
+
+    #[test]
+    fn an_attached_device_is_matched_against_the_descriptor() {
+        let found = AttachedDevice {
+            vendor_id: 0x0403,
+            product_id: 0x6001,
+            serial: Some("B0037HIY".to_owned()),
+            product: Some("FT232R USB UART".to_owned()),
+            path: Some("COM3".to_owned()),
+        };
+        assert!(found.matches(&SH_RS09B.device));
+        assert!(found.matches(&SH_RS09B.device.with_serial("B0037HIY")));
+        assert!(!found.matches(&SH_RS09B.device.with_serial("OTHER")));
+
+        let other = AttachedDevice {
+            product_id: 0x6015,
+            ..found.clone()
+        };
+        assert!(!other.matches(&SH_RS09B.device));
+        // A device with no strings at all still matches a descriptor that asks
+        // for none, which is how a first bring-up finds an adapter.
+        let bare = AttachedDevice {
+            serial: None,
+            product: None,
+            path: None,
+            ..found
+        };
+        assert!(bare.matches(&SH_RS09B.device));
+    }
+
+    #[test]
+    fn an_attached_device_prints_everything_that_identifies_it() {
+        let found = AttachedDevice {
+            vendor_id: 0x0403,
+            product_id: 0x6001,
+            serial: Some("B0037HIY".to_owned()),
+            product: Some("FT232R USB UART".to_owned()),
+            path: Some("COM3".to_owned()),
+        };
+        assert_eq!(
+            found.to_string(),
+            "0403:6001 serial B0037HIY \"FT232R USB UART\" at COM3"
+        );
+        assert_eq!(
+            AttachedDevice {
+                serial: None,
+                product: None,
+                path: None,
+                ..found
+            }
+            .to_string(),
+            "0403:6001"
+        );
     }
 
     #[test]
