@@ -20,12 +20,18 @@
 //!   prism-engine                       prism-protocols
 //!   ────────────                       ───────────────
 //!   FramePublisher ──▶ [`FrameSubscriber`] ──▶ [`OutputRunner`] ──▶ [`DmxOutput`]
-//!        44 Hz          triple buffer,          own cadence,          [`OpenDmxUsb`]
-//!                       wait-free               catch_unwind,              │
-//!                                               reconnect backoff          ▼
-//!                                                                   [`FtdiBackend`]
-//!                                                                   D2XX / libftdi
-//!                                                                   / [`MockFtdi`]
+//!        44 Hz          triple buffer,          own cadence,          ├── [`OpenDmxUsb`]
+//!                       wait-free               catch_unwind,         │      │
+//!                                               reconnect backoff     │      ▼
+//!                                                                     │  [`FtdiBackend`]
+//!                                                                     │  D2XX / libftdi
+//!                                                                     │  / [`MockFtdi`]
+//!                                                                     └── [`ArtNetOutput`]
+//!                                                                            │
+//!                                                                            ▼
+//!                                                                        [`UdpSender`]
+//!                                                                        [`SystemUdp`]
+//!                                                                        / [`MockUdp`]
 //! ```
 //!
 //! The engine publishes at a fixed 44 Hz and never waits for an output. An
@@ -67,6 +73,7 @@
     )
 )]
 
+mod artnet;
 #[cfg(windows)]
 mod d2xx;
 mod device;
@@ -75,9 +82,15 @@ mod opendmx;
 mod output;
 mod runner;
 mod system;
+mod udp;
 #[cfg(windows)]
 mod vcp;
 
+pub use artnet::{
+    ART_DMX_BYTES, ART_DMX_HEADER, ART_NET_ID, ART_NET_PORT, ART_SYNC_BYTES, ArtNetConfig,
+    ArtNetOutput, Destination, OP_DMX, OP_SYNC, PROTOCOL_VERSION, PortAddress, art_sync,
+    write_art_dmx,
+};
 #[cfg(windows)]
 pub use d2xx::D2xxBackend;
 pub use device::{
@@ -94,5 +107,6 @@ pub use runner::{
     spawn,
 };
 pub use system::{FallbackFtdi, UnsupportedBackend, list_devices, system_backend};
+pub use udp::{MockUdp, MockUdpHandle, SystemUdp, UdpError, UdpSender, classify};
 #[cfg(windows)]
 pub use vcp::VcpBackend;

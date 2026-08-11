@@ -368,8 +368,25 @@ The cable is an **FTDI FT232R with no microcontroller**. There is no widget firm
 
 | Protocol | Crate | Notes |
 |---|---|---|
-| ArtNet | `artnet_protocol` | **Unicast by default** — broadcast floods school networks; optional ArtSync; full-frame refresh at least every 800 ms even without changes |
+| ArtNet | **none — written in `artnet.rs` (S9)** | **Unicast by default** — broadcast floods school networks; optional ArtSync; full-frame refresh at least every 800 ms even without changes |
 | sACN (E1.31) | `sacn` | Multicast `239.255.x.x`, per-universe priority, source name from the show file, termination packet on clean shutdown |
+
+**ArtNet as built (S9).** ArtDmx is 530 bytes and its header is 18 of them, which
+is less code than the seam an external crate would need — so the packet is built
+here, field by field, against the specification, and asserted the same way. The
+socket is `std::net::UdpSocket` behind a `UdpSender` trait, so the packet bytes
+are checked with no network present *and* checked again on a datagram received
+over loopback.
+
+| Aspect | Approach |
+|---|---|
+| Addressing | Fifteen-bit `PortAddress` (Net · Sub-Net · Universe). Default mapping is **universe N → port address N − 1**, since PrismDMX numbers universes from 1 and Art-Net from 0; overridable per universe, because nodes disagree |
+| Sequence | Per port address, 1 → 255 → **1**. Never 0, which is the value that tells a node this sender does not number its packets |
+| When a datagram goes out | On change, and otherwise as the forced refresh. An unchanged universe sent every cadence is the broadcast flood in a quieter form: at 44 Hz, 64 universes is 1.5 MB/s of nothing |
+| Refresh timing | The 800 ms is a **maximum gap**, so the refresh goes out one cadence *early* (`refresh_margin`, default one engine tick). Refreshing at 800 ms exactly would put the datagram at 800 ms + one cadence |
+| ArtSync | Off by default: a node that understands it stops displaying data until one arrives. When on, it follows the last universe of each frame and goes to **the same addresses the data went to** — enabling it must not turn a unicast configuration into a broadcasting one |
+| Broadcast | Opt-in by name (`Destination::Broadcast`), and the only thing that asks the socket for broadcast permission |
+| Rate | 44 Hz, i.e. the engine's own — this is the output §3.2 means when it says the network protocols keep up |
 
 ### 7.3 Later
 Enttec USB Pro protocol over VCP. It uses the same `DmxOutput` boundary and is purely additive.
@@ -483,9 +500,10 @@ Every hardware interface sits behind a trait (`DmxOutput`, `MidiPort`, `FtdiBack
 
 ## 14. Open items requiring hardware verification
 
-Both are isolated as plain table data so verification is a data update, not a refactor.
+All of them are isolated as plain table data so verification is a data update, not a refactor.
 
 | Item | Where | What to do |
 |---|---|---|
+| ArtNet against a real node | §7.2 and [`crates/prism-protocols/src/artnet.rs`](crates/prism-protocols/src/artnet.rs) | The packet is asserted field by field against the specification and on a received datagram, which is everything a socket can answer. What only a node can answer is whether *it* agrees: the port-address mapping (0-based or 1-based on that manufacturer's front panel) and whether it needs ArtSync. Both are configuration, not code — `PortAddress` and `ArtNetConfig::sync` |
 | MCU note and CC numbers | [`docs/MCU_MAPPING.md`](docs/MCU_MAPPING.md) | Capture with a MIDI monitor on the real X-Touch and reconcile against the Behringer manual **before** the codec is considered complete |
 | ~~SH-RS09B USB VID/PID and achievable frame rate~~ | §7.1 and `DeviceProfile::SH_RS09B` in [`crates/prism-protocols/src/device.rs`](crates/prism-protocols/src/device.rs) | ✅ **Done 2026-08-11 (S8).** `0403:6001`, serial `B0037HIY`, `FT232R USB UART`; 35.5 Hz sustained over 60 s through D2XX. The constant now carries `verified: true` and the tests assert the measurements. Verifying it was an edit to three fields and one test, which is what holding it as data was for |

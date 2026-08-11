@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-11
 **Current phase:** Phase 2 — Protocols
-**Current session:** S9 — `prism-protocols` ArtNet (not started; see §8 for the prompt that starts it)
-**Last completed:** S8 — 🔌 Hardware bring-up SH-RS09B ✅ — **the adapter drives a real fixture**
+**Current session:** S10 — `prism-protocols` sACN/E1.31 (not started; see §8 for the prompt that starts it)
+**Last completed:** S9 — ArtNet ✅ — **the first output that keeps up with the engine**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -55,7 +55,7 @@
 |---|---|---|---|---|
 | S7 | `DmxOutput` trait + Open DMX USB | ✅ | 2026-08-11 | All exit criteria verified — see §2.8. 92 tests, coverage 99.7 % lines. No real FTDI backend yet, on purpose — see the decision log |
 | S8 | 🔌 Hardware bring-up SH-RS09B | ✅ | 2026-08-11 | All exit criteria verified — see §2.9. **Found and fixed a real defect:** the break was landing inside the frame. 35.5 Hz measured, adapter verified `0403:6001` / `B0037HIY` |
-| S9 | ArtNet | ☐ | | |
+| S9 | ArtNet | ✅ | 2026-08-11 | All exit criteria verified — see §2.10. 184 tests, coverage 97.9 % lines on the crate with `artnet.rs` at **100 %**. Packet asserted field by field *and* on a datagram received over loopback |
 | S10 | sACN (E1.31) | ☐ | | |
 
 ### Phase 3 — Core state
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 9 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 10 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -369,6 +369,43 @@ cable.** Every one of S7's 92 tests passed against the mock, and the frame they
 described was malformed on the wire. That is worth stating plainly: a mock
 asserts the calls a driver makes, never the time between them.
 
+### 2.10 S9 verification record
+
+Measured on 2026-08-11, all exit criteria from `IMPLEMENTATION_PLAN.md` S9 and
+the session prompt. No network device was involved in any of it: the captures
+are datagrams received on `127.0.0.1`.
+
+| Check | Result |
+|---|---|
+| Packet bytes asserted against the specification, field by field | ✅ `the_packet_is_the_specifications_packet_field_by_field` names every field at its offset — ID at 0–7, OpCode `0x5000` **low byte first** at 8–9, protocol version 14 **high byte first** at 10–11, Sequence at 12, Physical at 13, SubUni at 14, Net at 15, Length `0x0200` at 16–17, 512 channels from 18. Each literal is asserted a second time against the constant it must equal (`OP_DMX.to_le_bytes()`, `PROTOCOL_VERSION.to_be_bytes()`, `512u16.to_be_bytes()`), so a byte and its meaning cannot drift apart. ArtSync has the same treatment |
+| **Including sequence number wraparound: 255 → 1, not 0** | ✅ `sequence_numbers_count_from_one_and_wrap_to_one` drives 300 changed frames and reads the sequence byte out of all 300 datagrams: element 0 is 1, 254 is 255, **255 is 1**, 256 is 2, and 0 appears nowhere in the list. Plus `every_universe_counts_its_own_sequence`, because the specification counts per port address and a shared counter would look like reordering to a node |
+| Refresh timer: a static universe still emits at least every 800 ms | ✅ measured as a **gap between datagrams**, not as a call count, and at two levels. On the driver: ten seconds of a rig at rest on a `ManualClock`, longest gap ≤ 800 ms. Through the `OutputRunner` at the engine's own cadence (`tests/artnet_wire.rs`): 440 frames sent by the runner, **13 datagrams**, longest gap ≤ 800 ms and ≥ 700 ms — so it is a keep-alive rather than a stream. The naive implementation fails this: see the decision log |
+| Broadcast is opt-in, never the default — asserted | ✅ three ways. `broadcast_is_never_the_default`: the default `Destination` is `Unicast(vec![])`, `is_broadcast()` is false, and the socket is **never asked for broadcast permission** — the flag `bind` receives is recorded and asserted false. `broadcast_has_to_be_asked_for_by_name`: only `Destination::Broadcast` produces `bind(_, true)`. And `an_output_that_is_never_told_where_to_send_stays_red`: an unfinished configuration is a disconnected output, not a broadcasting one |
+| `cargo test -p prism-protocols` green without a network device | ✅ exit 0 — **174 lib tests** (55 of them new) + 10 integration tests, 0 failed, 7 ignored (the S8 hardware target). The only sockets involved are bound to `127.0.0.1`; nothing in the suite sends a datagram off the machine |
+| `cargo test --workspace` | ✅ exit 0 — **616 tests** across 23 targets |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-protocols` **> 95 %** | ✅ **97.91 % lines**, 96.89 % regions, 97.29 % functions with no adapter attached — up from S8's comparable 96.94 %. `artnet.rs` at **100 % lines** and 99.88 % regions, `udp.rs` at 99.67 %. The whole remaining gap is the two FTDI backends, which is the FFI S8 already recorded as unmeasurable without hardware |
+| The bytes were checked on a datagram somebody received | ✅ `tests/artnet_wire.rs`: the engine's frame goes through the triple buffer, the runner and a real `UdpSocket`, and the 530 bytes are read back off a loopback socket and asserted — header, port address, sequence, and the patched channels listed literally. Two universes on one output arrive as two datagrams with port addresses 0 and 1 |
+
+**Delivered:** two modules. `udp` is the seam — `UdpSender` with `SystemUdp` over
+`std::net::UdpSocket`, `MockUdp` recording every datagram and failing wherever a
+test asks, and a `classify` that turns an `io::ErrorKind` into "the network is
+gone" or "this datagram was refused". `artnet` is the protocol — `PortAddress`,
+the packet builders, `ArtNetConfig`/`Destination`, and `ArtNetOutput`, which is
+generic over both the socket and the clock.
+
+**Nothing above `DmxOutput` was touched.** The trait is the same five methods S7
+defined, `OutputRunner` is unchanged, and an Art-Net output inherits the thread,
+the reconnect backoff and the panic containment exactly as S7 intended — the
+first evidence that the extra two methods paid for themselves. It carries
+several universes where the cable carries one, and the runner already knew how
+to do that.
+
+**The rate is the point.** Open DMX tops out at 35.5 Hz (§2.9); this output runs
+at `RunnerConfig::default()`, which is the engine's own 22.727 ms period, and
+sends about thirteen datagrams a second per universe while nothing moves.
+
 ---
 
 ## 3. Coverage tracking
@@ -383,7 +420,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | — | |
-| `prism-protocols` | **> 95 %** | **96.94 % lines** without the adapter (what CI reproduces) · **99.30 % lines**, 98.33 % regions with it attached, via `-- --include-ignored`. The difference is the FFI, which no build server can execute | 2026-08-11 (S8) |
+| `prism-protocols` | **> 95 %** | **97.91 % lines**, 96.89 % regions, 97.29 % functions without the adapter (what CI reproduces) — `artnet.rs` **100 %**, `udp.rs` 99.67 %, `ftdi.rs` and `output.rs` 100 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured this session and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S9) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
 | `ui` | ≥ 85 % | — | |
@@ -562,6 +599,7 @@ Both are recorded as plain data so verification is a data update, not a refactor
 | Item | Blocks | Status |
 |---|---|---|
 | MCU note and CC numbers vs. real X-Touch | S20, and sign-off of S19 | ☐ unverified — banner in `docs/MCU_MAPPING.md` §2 |
+| ArtNet against a real node | nothing — S9 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received. What only a node can answer is whether it agrees about the port-address mapping (0-based or 1-based on that front panel) and whether it wants ArtSync. Both are held as data — `PortAddress` per universe and `ArtNetConfig::sync` — so verifying them is a configuration change, not a code change. `ARCHITECTURE_SPEC.md` §14 |
 | ~~SH-RS09B USB VID/PID and real frame rate~~ | — | ✅ **verified 2026-08-11 (S8)** — `0403:6001`, serial `B0037HIY`, `FT232R USB UART`, 35.5 Hz over 60 s. `DeviceProfile::SH_RS09B` carries `verified: true` and the tests assert the measurements. **Holding it as data paid for itself:** the whole verification was three fields and one test, with no code changed anywhere else — see `ARCHITECTURE_SPEC.md` §14 |
 
 ---
@@ -572,6 +610,14 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-11 | S9 | **"Refresh at least every 800 ms" cannot be implemented as "refresh when 800 ms have passed", and the difference is a whole cadence.** A driver only gets to decide at its own wake-up: asking `elapsed >= 800 ms` puts the datagram at the first cadence *after* 800 ms, so the real gap is 800 ms + one period — 818 ms at 44 Hz, and worse on any slower output. The guarantee is a maximum, and the obvious implementation misses it every single time | `ArtNetConfig::refresh_margin`, default one engine tick, and the rule is `elapsed + margin >= interval`. The test is the criterion rather than a proxy for it: ten seconds of a static rig through the real `OutputRunner`, measuring the **gap between datagrams**, asserted ≤ 800 ms — and ≥ 700 ms, so a driver that "fixed" it by sending every cadence would fail as well. **S10 requirement:** sACN's keep-alive has the same shape and the same trap |
+| 2026-08-11 | S9 | **ArtSync needs to know when a frame is finished, and `DmxOutput` has no such call.** The trait is five per-universe methods; the runner sends universe after universe and never says "that was the last one". Adding a sixth method was the obvious answer and was rejected — three drivers implement the trait, `OutputRunner` is written against it once, and S7 chose those five deliberately | The driver finds the end of a cycle itself, two ways: normally it is the **last universe in its own list**, and if that one never arrives — the engine does not publish it, so the runner skips it, which is exactly the `unmapped()` case S7 already reports — it is the moment a universe **comes round a second time**. Both paths are asserted. The trait is untouched, which was the constraint |
+| 2026-08-11 | S9 | **Sending an unchanged universe every cadence is the broadcast flood wearing a smaller hat.** §7.2 makes broadcast opt-in because 530 bytes × 44 Hz × universes to every machine on the segment is a denial of service performed by the lighting desk — but the same arithmetic applies to unicast at 64 universes: 1.5 MB/s of "nothing has changed" | A universe goes out when its data changes and otherwise on the forced refresh, which is what `ARCHITECTURE_SPEC.md` §7.2's 800 ms is *for* rather than an extra. Measured: a static rig produces 13 datagrams in ten seconds where the runner sent 440 frames. **Consequence for the UI (S27):** `OutputStatus::frames_sent` counts frames the runner handed over, not packets — `ArtNetOutput::datagrams_sent` is the second number, and a status panel that showed only the first would be describing the wrong thing |
+| 2026-08-11 | S9 | **A datagram that failed was not sent, and the suppression has to be told.** With change detection, a refused send that had already recorded "this look is on the wire" would leave the failed look sitting out the whole refresh interval — up to 800 ms of the wrong picture behind a green light, because the next frame is identical and therefore suppressed | A failed send clears that universe's record, so the next frame goes out whatever it contains. Same on reconnect, for the same reason one level up: a node that has been away must not be told "nothing has changed since a datagram you never received". Both asserted |
+| 2026-08-11 | S9 | **`ARCHITECTURE_SPEC.md` §7.2 names the `artnet_protocol` crate, and no dependency was added.** ArtDmx is an 18-byte header and 512 bytes of data; the seam that would let an external crate's types be asserted against the specification is larger than the code it would replace, and the exit criterion is a **byte-for-byte** assertion against the document — which is much easier to trust when the bytes are written in one place beside the field names | The packet is built in `artnet.rs`, spelled out field by field, and every literal is asserted against the constant it must equal so the two cannot drift. §7.2 updated. The dependency count of the crate is unchanged: `prism-protocols` still pulls in nothing platform-neutral beyond the two workspace crates. **S10 note:** the same question arrives for `sacn`, and E1.31 has a root layer, a framing layer and a DMP layer plus a CID — bigger, but the same reasoning applies to the assertion, not automatically to the dependency |
+| 2026-08-11 | S9 | **The clock had to go into the output, not just the runner.** The 800 ms refresh is the driver's decision and `send_frame` carries no time; the runner's clock is the runner's | `ArtNetOutput` is generic over `prism_engine::Clock` exactly as `OutputRunner` is, defaulting to `SystemClock`. In the end-to-end test the two share one clock, which `ManualClock` cannot do — it is a `Cell` and belongs to one owner — so `tests/artnet_wire.rs` defines a `SharedClock` over a mutex. Worth knowing before writing the same test again in S10 |
+| 2026-08-11 | S9 | **PrismDMX numbers universes from 1 and Art-Net numbers port addresses from 0, and nodes disagree about which one their front panel means.** Guessing either way produces a rig where every universe is off by one, which looks like a patch error rather than an addressing one | Default mapping is universe N → port address N − 1, documented and asserted; the mapping is data (`ArtNetOutput::with_ports`) so a node that counts the other way is a configuration change. Recorded in `ARCHITECTURE_SPEC.md` §14 as an open verification item that blocks nothing, because it is data. **S27 requirement:** the output editor shows the port address as `net:sub:universe`, which is what a node's display shows |
+| 2026-08-11 | S9 | **ArtSync is specified as a broadcast, and this output does not broadcast it.** One 14-byte packet tells every node on the network to display what it is holding, which is why the specification broadcasts it — but sending it that way would mean switching ArtSync on silently turned a unicast configuration into a broadcasting one | The sync goes to the addresses the data went to. §7.2's "unicast by default" is the stronger requirement of the two, and a controller unicasting to a known set of nodes is exactly the case where the sync can be unicast as well. Written on `ArtNetConfig::sync` and asserted |
 | 2026-08-11 | S8 | **The break was landing inside the frame, and every one of S7's 92 tests passed while it did.** A fixture on the line strobed, went dark, or ran its own programme, and the driver looked perfect. The measurement that settled it: `FT_Write` returns after **20.0 ms** of a frame that takes **22.572 ms** to transmit, and `FT_GetStatus`'s transmit queue reads **zero on the first poll of every single frame** — it reports the *driver's* queue, not the chip's shift register, so the "wait for the queue to drain" written first was waiting for nothing. A DMX break is a USB **control** transfer and does not queue behind bulk data, so it was being asserted on top of the tail of the frame still going out | The backends wait out the **computed** transmission time — `bytes × 11 bits ÷ baud`, which is arithmetic and does not lie — plus a 2 ms margin, before returning from `write`. The contract is now written on `FtdiBackend::write`: *must not return before the bytes have left the port*. Both backends honour it, `transmission_time` is a tested pure function, and the fixture went from strobing to steady. **S9/S10 requirement:** ArtNet and sACN have no break and no such hazard, but the lesson generalises — a mock asserts the calls a driver makes, never the time between them |
 | 2026-08-11 | S8 | **43 Hz was the symptom, not the good news.** Before the fix the driver measured 43.1 Hz, comfortably above `ARCHITECTURE_SPEC.md` §7.1's 30–40 Hz estimate, and that should have been the first clue: 513 bytes at 250 kBaud is 22.572 ms, so 23.2 ms per frame leaves 0.6 ms for a break sequence that measured **3 ms**. The data was still flowing *during* the break | The corrected driver runs at **35.5 Hz**, and the arithmetic closes: 3 ms of break transfers + 22.6 ms of data + 2 ms of margin = 27.6 ms. §7.1's estimate was right about the band and wrong about why. **Recorded as a rule:** on this hardware a frame rate above about 40 Hz means the frame is not being framed |
 | 2026-08-11 | S8 | **D2XX is the preferred path, and the rate is not the reason.** Both paths drive the fixture correctly, and the virtual COM port measured *faster* — 38.4 Hz against 35.5 Hz, which is entirely the safety margin D2XX is given | D2XX wins because it can **configure the port at all**: the latency timer and the USB transfer sizes are reachable through it and unreachable through any serial API. On the bring-up machine the registry held the FTDI default of **16 ms**, which §7.1 calls fatal, and nothing in `serialport` can change it. A path that cannot set the settings that matter is a fallback, not a default. Written up in §7.1 |
@@ -658,21 +704,26 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The engine now drives a real light.** `Patch → Cue → Fade → Merge →
-Programmer → Masters → DMX bytes → break/MAB → 513 bytes → an FT232R → a moving
-head` works end to end, on measured numbers rather than estimated ones. What
-Open DMX cannot give is 44 Hz — 35.5 Hz is this hardware's ceiling — so the next
-step is the output that can. Begin **S9** (`prism-protocols` — ArtNet). Use the
-prompt in §8. It needs no hardware: a socket and a packet capture are enough.
+**The engine now drives a real light *and* a network.** `Patch → Cue → Fade →
+Merge → Programmer → Masters → DMX bytes` reaches an FT232R at 35.5 Hz and an
+Art-Net node at the engine's own 44 Hz, both on measured numbers. The output
+side has two of its three protocols; the third is the one venues standardise on.
+Begin **S10** (`prism-protocols` — sACN/E1.31). Use the prompt in §8. It needs no
+hardware either: sACN is multicast UDP, and a socket on loopback answers
+everything except what a real receiver thinks.
 
-Carried into S9 and beyond:
-- **`DmxOutput` has five methods, not §7's three:** `connect`, `shutdown` and `universes` are additions, so that one `OutputRunner` serves every output. S9 and S10 implement the same five and inherit the thread, the reconnect backoff and the panic containment — none of that should be written again.
-- **A mock asserts the calls a driver makes, never the time between them.** S7's suite was green while the frame was malformed on the wire. For a network output the analogue is a packet capture: assert the *bytes of the datagram*, not just that a send happened.
-- **`FtdiBackend::write` must not return before the bytes have left the port**, and both backends honour it by waiting out `transmission_time`. A UDP socket has no such hazard, but `ArtSync` and the 800 ms forced refresh are the same *kind* of requirement: timing that no unit test will notice being wrong.
-- Everything about the SH-RS09B is one constant, `DeviceProfile::SH_RS09B`, and it now carries measurements with `verified: true`. A profile for a device nobody has held should say so.
+Carried into S10 and beyond:
+- **`DmxOutput` is five methods and stays that way.** S9 implemented the same five and inherited the thread, the reconnect backoff and the panic containment without touching `OutputRunner` — the point of S7's two extra methods, now demonstrated. sACN does the same. If something does not fit, it goes in this log rather than into the trait.
+- **`udp.rs` already exists and is the seam to reuse:** `UdpSender`, `SystemUdp`, `MockUdp` with its recording handle, and `classify` for `io::ErrorKind`. sACN needs multicast, which means one addition — joining/leaving a group or setting the TTL — and it belongs there rather than in the sACN module.
+- **Assert the bytes of a received datagram, not the calls.** S8's lesson, and S9's shape for it: unit tests on the packet, plus `tests/artnet_wire.rs` reading real datagrams off a loopback socket through the whole engine pipeline. Copy that target.
+- **A keep-alive interval is a maximum, so it fires early.** `ArtNetConfig::refresh_margin` and the reasoning behind it are in the decision log; E1.31's own keep-alive has the same trap.
+- **`ManualClock` cannot be shared** — it is a `Cell` with one owner. `tests/artnet_wire.rs::SharedClock` is the mutex-backed version for a test where the runner and the output must read the same simulated time.
+- Art-Net's port-address mapping and ArtSync are held as **data** (`PortAddress` per universe, `ArtNetConfig::sync`), so verifying them against a real node is a configuration change. sACN's universe numbering, priority and source name should be data for the same reason.
+- **A mock asserts the calls a driver makes, never the time between them.** S7's suite was green while the frame was malformed on the wire.
+- Everything about the SH-RS09B is one constant, `DeviceProfile::SH_RS09B`, and it carries measurements with `verified: true`. A profile for a device nobody has held should say so.
 - The bring-up target (`tests/hardware.rs`) and §3.2's commands are the pattern for S20's X-Touch verification: `#[ignore]`d, documented, serialised behind a mutex, and driven by environment variables so a person can steer it.
-- `prism-protocols` runs its tests in the **Linux** CI job as well; the FTDI backends are behind `cfg(windows)` and their crates are declared per target. Anything S9 adds must keep that true.
-- A driver thread wakes at its output's own cadence (`RunnerConfig::for_profile`), never sleeps longer than one cadence, and re-sends the last frame when the engine has published nothing new.
+- `prism-protocols` runs its tests in the **Linux** CI job as well; the FTDI backends are behind `cfg(windows)` and their crates are declared per target. The network outputs have no `#[cfg]` at all, and S10 must keep it that way.
+- A driver thread wakes at its output's own cadence, never sleeps longer than one cadence, and re-sends the last frame when the engine has published nothing new. For a network output "re-sends" means the forced refresh — see the decision log.
 
 Carried from Phase 1:
 - The whole pipeline is on `MergeBody`. `load_sequence`, `load_groups` and `load_programmer` are the set-up doors and all three allocate; everything else arrives as a `TickCommand`.
@@ -701,66 +752,79 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S9 — `prism-protocols`: ArtNet**
+**Next up: S10 — `prism-protocols`: sACN (E1.31)**
 
 ```text
-PrismDMX — Session S9: prism-protocols, ArtNet-Ausgabe
+PrismDMX — Session S10: prism-protocols, sACN-Ausgabe (E1.31)
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht keine Hardware. Ein Socket und ein Mitschnitt reichen;
-ein zweites Gerät im Netz ist nett, aber kein Kriterium.
+Diese Session braucht keine Hardware. Ein UDP-Socket auf 127.0.0.1 und ein
+Mitschnitt reichen; ein echter sACN-Empfänger im Netz ist nett, aber kein
+Kriterium.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.8 und §2.9 (was S7 und S8
-                                            geliefert haben) und der Decision Log
-                                            zu S8: dort steht, warum ein grüner
-                                            Mock-Testlauf nichts über das Timing
-                                            auf der Leitung aussagt
+                                            besonders §2.9 und §2.10 (was S8 und
+                                            S9 geliefert haben) und die S9-Einträge
+                                            im Decision Log: dort steht, warum ein
+                                            Keep-alive-Intervall zu früh feuern
+                                            muss und warum das Trait unverändert
+                                            geblieben ist
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S9
+                                            von S10
 4. ARCHITECTURE_SPEC.md §3, §7, §7.2      — Threadmodell, das DmxOutput-Trait und
                                             die Tabelle zu den Netzausgaben
 5. crates/prism-protocols/src/output.rs   — das DmxOutput-Trait (fünf Methoden)
 6. crates/prism-protocols/src/runner.rs   — der Treiberthread: Kadenz, Backoff,
                                             catch_unwind, OutputStatus
-7. crates/prism-protocols/src/opendmx.rs  — der erste Treiber, als Vorlage dafür,
-                                            wie ein DmxOutput aussieht
-8. crates/prism-engine/src/triple_buffer.rs — FrameSubscriber: wie ein Treiber
-                                            Frames abholt
+7. crates/prism-protocols/src/udp.rs      — die Socket-Naht: UdpSender,
+                                            SystemUdp, MockUdp, classify
+8. crates/prism-protocols/src/artnet.rs   — der zweite Treiber und die Vorlage
+                                            für diesen: Paketbau, Sequenz,
+                                            Änderungsunterdrückung, Refresh
+9. crates/prism-protocols/tests/artnet_wire.rs — wie ein Netzausgang end-to-end
+                                            geprüft wird: echte Datagramme über
+                                            Loopback, plus SharedClock
 
-Stand nach S8 — nichts davon musst du neu bauen:
-- Die ganze Ausgabeseite steht und ist am echten Gerät verifiziert: `DmxOutput`
-  (id, universes, connect, send_frame, health, shutdown), `OutputRunner`/`spawn`
-  mit Reconnect-Backoff 100 ms → 5 s und `catch_unwind`, `OutputStatus` für die
-  Statusanzeige. Ein neuer Ausgang implementiert dieselben fünf Methoden und
-  erbt Thread, Backoff und Panik-Eindämmung — schreib das nicht noch einmal.
-- Open DMX USB läuft mit gemessenen 35,5 Hz auf einem DSD TECH SH-RS09B und
-  bewegt eine echte Lampe. ArtNet ist der Ausgang, der die 44 Hz der Engine
-  wirklich mitgeht (ARCHITECTURE_SPEC.md §3.2).
+Stand nach S9 — nichts davon musst du neu bauen:
+- Die ganze Ausgabeseite steht: `DmxOutput` (id, universes, connect, send_frame,
+  health, shutdown), `OutputRunner`/`spawn` mit Reconnect-Backoff 100 ms → 5 s
+  und `catch_unwind`, `OutputStatus` für die Statusanzeige. Zwei Treiber nutzen
+  das bereits unverändert — Open DMX USB (am echten Gerät verifiziert, 35,5 Hz)
+  und ArtNet (44 Hz). **Das Trait bleibt wie es ist**; wenn sACN etwas braucht,
+  das nicht hineinpasst, ist das ein Eintrag für den Decision Log, keine stille
+  Erweiterung.
+- Die Socket-Naht existiert: `UdpSender` (bind/send_to/local_addr/close),
+  `SystemUdp` über `std::net::UdpSocket`, `MockUdp` mit Aufzeichnung und
+  Fehlerinjektion, `classify` für `io::ErrorKind`. Multicast fehlt dort noch —
+  das ist die eine Ergänzung, die diese Session an der Naht vornimmt.
 - `MockOutput` ist der Mock-Output-Modus aus §12; `tests/hardware.rs` zeigt, wie
   hardwareabhängige Prüfungen aussehen (alles `#[ignore]`, Befehle in §3.2).
 - Coverage-Anforderung an prism-protocols ist unverändert **> 95 %**; gemessen
-  wird mit `cargo llvm-cov -p prism-protocols --summary-only`.
+  wird mit `cargo llvm-cov -p prism-protocols --summary-only`. Zuletzt: 97,91 %
+  Zeilen ohne angestecktes Gerät.
 
-Aufgabe: Session S9 umsetzen — ArtNet als zweiter DmxOutput.
+Aufgabe: Session S10 umsetzen — sACN (E1.31) als dritter DmxOutput.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S9):
-- ArtNet-Ausgabe (ArtDmx), **Unicast als Voreinstellung**
-- optionales ArtSync
-- erzwungene Vollbild-Auffrischung mindestens alle 800 ms, auch wenn sich nichts
-  ändert
+Umzusetzen (IMPLEMENTATION_PLAN.md S10):
+- sACN-Ausgabe, Multicast-Adressierung
+- Priorität pro Universum
+- Source Name aus dem Showfile
+- Termination-Paket beim sauberen Herunterfahren
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Die Paket-Bytes sind gegen die ArtNet-Spezifikation zugesichert, Feld für
-  Feld: ID, OpCode, Protokollversion, Sequence, Physical, SubUni/Net, Length,
-  Daten — **einschließlich Überlauf der Sequenznummer** (255 → 1, nicht 0)
-- Der Auffrischungs-Timer ist geprüft: ein Universum, das sich nicht ändert,
-  sendet trotzdem mindestens alle 800 ms
-- Broadcast ist opt-in und niemals Voreinstellung — als Test zugesichert
+- Die Paket-Bytes sind gegen E1.31 zugesichert, Feld für Feld über alle drei
+  Ebenen (Root Layer, Framing Layer, DMP Layer): Preamble, ACN-Paket-ID,
+  Flags/Length, Vector, CID, Source Name, Priority, Sync Address, Sequence
+  Number, Options, Universe, DMP-Adress-/Typ-Felder, Startcode, Daten —
+  **einschließlich Stabilität der CID über Neustarts hinweg**
+- Die Multicast-Gruppenadresse ist für Universum 1 **und 63999** korrekt
+  berechnet und als Test zugesichert
+- Ein sauberes Herunterfahren sendet ein Stream-Terminated-Paket
+  (Options-Bit 6) — als Test zugesichert
 - `cargo test -p prism-protocols` ist grün, ohne Netzwerkgerät
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
@@ -769,33 +833,40 @@ Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreff
 
 Wichtige Randbedingungen:
 - **Kein Test darf ein Netzwerkgerät brauchen.** Ein UDP-Socket auf 127.0.0.1
-  ist erlaubt und erwünscht: sende an einen selbst gebundenen Socket und prüfe
-  die empfangenen Bytes. Alles, was einen echten ArtNet-Knoten braucht, gehört
-  hinter `#[ignore]` mit dem Befehl in PROGRESS.md §3.2.
-- **Prüfe die Bytes, nicht die Aufrufe.** S8 hat teuer gelernt, dass ein Mock
-  bestätigt, welche Aufrufe ein Treiber macht, aber nichts über das aussagt,
-  was tatsächlich hinausgeht. Bei einem Netzausgang ist die Entsprechung der
-  Mitschnitt: ein empfangenes Datagramm, Byte für Byte zugesichert.
-- Broadcast flutet Schulnetze — deshalb Unicast als Voreinstellung. Der Test
-  dazu ist kein Formalismus: er ist die Zusicherung, dass niemand später
-  versehentlich die Voreinstellung dreht.
-- Die 800-ms-Auffrischung ist gegen einen simulierten Clock zu prüfen
-  (`prism_engine::ManualClock`), nicht durch Warten. Der `OutputRunner` ist
-  genau dafür über `Clock` generisch.
-- Das Trait `DmxOutput` bleibt wie es ist. Wenn ArtNet etwas braucht, das nicht
-  hineinpasst, ist das eine Entscheidung für den Decision Log — nicht eine
-  stille Erweiterung.
-- Ein ArtNet-Ausgang trägt **mehrere** Universen (anders als Open DMX USB);
-  `universes()` gibt sie alle zurück, und der Runner bildet sie bereits auf die
-  Frame-Positionen ab.
+  ist erlaubt und erwünscht. Prüfe die **Bytes eines empfangenen Datagramms**,
+  nicht die Aufrufe eines Mocks — S8 hat teuer gelernt, dass ein Mock bestätigt,
+  welche Aufrufe ein Treiber macht, und nichts darüber sagt, was hinausgeht.
+  `tests/artnet_wire.rs` ist die Vorlage.
+- Zeitverhalten wird gegen einen simulierten Clock geprüft
+  (`prism_engine::ManualClock`, oder `SharedClock` aus `artnet_wire.rs`, wenn
+  Runner und Ausgang dieselbe Zeit lesen müssen) — nicht durch Warten.
+- Ein Keep-alive-Intervall ist eine **Obergrenze**: es muss eine Kadenz *vor*
+  Ablauf feuern, sonst liegt das Paket bei Intervall + Kadenz. Siehe
+  `ArtNetConfig::refresh_margin` und den Decision Log zu S9.
+- `UniverseId` ist im Projekt 1..=64 (`ARCHITECTURE_SPEC.md` §6). Die
+  Multicast-Berechnung ist trotzdem für den vollen E1.31-Bereich zu schreiben
+  und zu testen — 63999 ist ein Exit-Kriterium, und eine Funktion, die nur bis
+  64 stimmt, ist stillschweigend falsch.
+- Die CID ist eine UUID pro Sender und muss über Neustarts **stabil** sein,
+  sonst gilt der Sender einem Empfänger als neue Quelle. Wo sie herkommt, ist
+  eine Entscheidung: sie gehört ins Showfile bzw. in die Konfiguration, nicht in
+  eine Zufallszahl beim Start. Wenn dafür in dieser Session noch kein Ort
+  existiert, halte sie als Daten am Ausgang und trage die Konsequenz für S11/S15
+  in den Decision Log ein.
+- Priorität, Source Name und Universumsnummern sind **Daten**, keine Konstanten
+  im Code — aus demselben Grund, aus dem S9 die Art-Net-Portadresse als Daten
+  hält.
+- In `prism-protocols` gibt es für die Netzausgänge **kein** `#[cfg]`, und das
+  soll so bleiben: die Linux- und ARM64-Jobs bauen und testen denselben Code wie
+  Windows. Nur die beiden FTDI-Backends stehen hinter `cfg(windows)`.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S9-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S10-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S10 (`prism-protocols` — sACN/E1.31) überschreiben
+  Session S11 (`prism-core` — Show-Modell und Kommandoanwendung) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(protocols): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
