@@ -13,3 +13,74 @@
 //! platform: D2XX on Windows, libftdi on Linux.
 //!
 //! Sessions **S7-S10**.
+//!
+//! # Shape
+//!
+//! ```text
+//!   prism-engine                       prism-protocols
+//!   ────────────                       ───────────────
+//!   FramePublisher ──▶ [`FrameSubscriber`] ──▶ [`OutputRunner`] ──▶ [`DmxOutput`]
+//!        44 Hz          triple buffer,          own cadence,          [`OpenDmxUsb`]
+//!                       wait-free               catch_unwind,              │
+//!                                               reconnect backoff          ▼
+//!                                                                   [`FtdiBackend`]
+//!                                                                   D2XX / libftdi
+//!                                                                   / [`MockFtdi`]
+//! ```
+//!
+//! The engine publishes at a fixed 44 Hz and never waits for an output. An
+//! output reads the *most recent* frame at whatever rate its hardware allows
+//! and re-sends it when the engine has published nothing new — a DMX line has
+//! to keep being driven, and `ARCHITECTURE_SPEC.md` §3.2 says a slow adapter
+//! must fall behind rather than hold the show up.
+//!
+//! # Nothing here needs hardware
+//!
+//! `CLAUDE.md` requires every test to run deterministically with no device
+//! attached, and this is the crate where that is hardest and matters most. It
+//! is arranged so that the only code that touches USB is a [`FtdiBackend`]
+//! implementation:
+//!
+//! - [`OpenDmxUsb`] holds the DMX512 knowledge — the port parameters, the break
+//!   and mark-after-break, the 513-byte packet — and talks to a backend.
+//! - [`MockFtdi`] is a backend that records the call sequence and fails
+//!   whenever a test tells it to, including in the middle of a frame.
+//! - [`MockOutput`] is the same idea one level up: a whole `DmxOutput` for
+//!   driving the daemon headlessly.
+//! - [`OutputRunner`] is the thread body, and it is stepped against a
+//!   `prism_engine::Clock`, so a reconnect backoff of 100 ms → 5 s is asserted
+//!   in microseconds of real time rather than waited out.
+//!
+//! There is deliberately **no timing measurement** in this crate's tests. Every
+//! assertion about time here is a floor ("this did not return early") or is
+//! taken on a simulated clock; the jitter gates live in `prism-engine`, behind
+//! the mutex that stops two timing runs measuring each other.
+
+#![cfg_attr(
+    not(test),
+    deny(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::indexing_slicing,
+        clippy::integer_division,
+    )
+)]
+
+mod device;
+mod ftdi;
+mod opendmx;
+mod output;
+mod runner;
+
+pub use device::{AccessPath, DeviceDescriptor, DeviceProfile, DmxTiming, SH_RS09B};
+pub use ftdi::{
+    FlowControl, FtdiBackend, FtdiCall, FtdiError, MockFtdi, MockFtdiHandle, Parity, PortConfig,
+    StopBits, spin_wait,
+};
+pub use opendmx::{DMX_PACKET_BYTES, OpenDmxUsb, START_CODE};
+pub use output::{DmxOutput, MockOutput, MockOutputHandle, OutputError};
+pub use runner::{
+    Backoff, BackoffConfig, OutputRunner, OutputStatus, OutputThread, RunnerConfig, StepOutcome,
+    spawn,
+};

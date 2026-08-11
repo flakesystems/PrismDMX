@@ -266,6 +266,8 @@ name = "prism-protocols"
 version = "0.1.0"
 dependencies = [
  "prism-domain",
+ "prism-engine",
+ "proptest",
 ]
 
 [[package]]

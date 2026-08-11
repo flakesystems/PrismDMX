@@ -485,4 +485,4 @@ Both are isolated as plain table data so verification is a data update, not a re
 | Item | Where | What to do |
 |---|---|---|
 | MCU note and CC numbers | [`docs/MCU_MAPPING.md`](docs/MCU_MAPPING.md) | Capture with a MIDI monitor on the real X-Touch and reconcile against the Behringer manual **before** the codec is considered complete |
-| SH-RS09B USB VID/PID and achievable frame rate | §7.1 | Read the descriptors from the connected adapter; measure the sustained frame rate and record the real figure |
+| SH-RS09B USB VID/PID and achievable frame rate | §7.1 and `DeviceProfile::SH_RS09B` in [`crates/prism-protocols/src/device.rs`](crates/prism-protocols/src/device.rs) | Read the descriptors from the connected adapter; measure the sustained frame rate and record the real figure. The code holds it as one constant carrying `verified: false`, and a test asserts that flag, so verifying it is an edit in one place |

@@ -50,6 +50,13 @@ jobs:
 
       # These crates must never contain #[cfg(target_os = ...)]. Running their
       # tests on a second platform is what proves it.
+      #
+      # prism-protocols is the exception that has to be here anyway: section
+      # 10.1 does allow it platform code, but only for backend selection - the
+      # DMX logic above the FtdiBackend trait must stay neutral, and every one
+      # of its tests runs against a mock with no hardware attached. If a real
+      # backend ever fails to build on Linux, that belongs behind a #[cfg]
+      # rather than behind removing this line.
       - name: Test platform-neutral crates
         run: >
           cargo test
@@ -58,6 +65,7 @@ jobs:
           -p prism-core
           -p prism-surface
           -p prism-ipc
+          -p prism-protocols
 
   linux-arm64-check:
     name: Linux ARM64 - cross-compile check
