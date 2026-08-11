@@ -8,6 +8,22 @@
 //!
 //! Sessions **S11-S15**.
 //!
+//! # What S12 delivers
+//!
+//! - [`SessionState`] - the operating state of `ARCHITECTURE_SPEC.md` section
+//!   4.1 and the views it selects between: which layout is up, which windows
+//!   are open, which executor page the faders are on, what the command line
+//!   reads. It lives here, in the daemon, and goes on living when no client is
+//!   connected - which is the whole of decision **D11**.
+//! - [`SessionState::apply`] - the eleven interface commands of section 4.4,
+//!   each applied or rejected, each answering with the `Delta::SessionPatch`
+//!   every attached client follows.
+//! - [`SessionMirror`] - the other end of that delta, on the same
+//!   [`JsonMirror`] engine as [`ShowMirror`].
+//! - [`ShowFile`] - a show and the session it was left in, saved together and
+//!   reopened together, plus the routing that sends a command to whichever of
+//!   the two owns it.
+//!
 //! # What S11 delivers
 //!
 //! - [`Show`] - the patch, the embedded fixture types, groups, presets,
@@ -39,7 +55,9 @@
 mod command;
 mod conflict;
 mod desk;
+mod file;
 mod mirror;
+mod session;
 mod show;
 #[cfg(test)]
 mod testkit;
@@ -47,5 +65,7 @@ mod testkit;
 pub use command::{Applied, Effect, show_patch_ops};
 pub use conflict::{PatchConflict, ShowIssue};
 pub use desk::{DeskId, InvalidDeskId, MachineConfig};
-pub use mirror::{MirrorError, ShowMirror};
+pub use file::{ShowFile, ShowFileError};
+pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
+pub use session::{SessionError, SessionState, session_patch_ops};
 pub use show::{Show, ShowError};

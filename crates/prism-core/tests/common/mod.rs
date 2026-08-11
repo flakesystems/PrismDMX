@@ -6,11 +6,12 @@
 //! otherwise fail the `-D warnings` build.
 #![allow(dead_code)]
 
-use prism_core::Show;
+use prism_core::{SessionState, Show};
 use prism_domain::{
     AttributeDef, AttributeType, Command, Cue, CuePart, CueTrigger, Executor,
-    ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, Fixture, FixtureId, FixtureType,
-    Group, GroupId, Preset, PresetId, PresetValue, Sequence, SequenceId, UniverseId, Vec3,
+    ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FeatureGroup, Fixture, FixtureId,
+    FixtureType, Group, GroupId, ParamDirection, Preset, PresetId, PresetValue, SelectionMode,
+    Sequence, SequenceId, UniverseId, Vec3, ViewId, WindowInstanceId, WindowType,
 };
 
 /// An 8-bit attribute at a given offset, with everything else neutral.
@@ -151,6 +152,83 @@ pub fn patch_command(id: u32, universe: u32, address: u16) -> Command {
     }
 }
 
+/// The twelve commands of the show group (`docs/IPC_PROTOCOL.md` §5), each in a
+/// form that [`populated_show`] can apply.
+pub fn show_commands() -> Vec<Command> {
+    vec![
+        Command::SelectFixtures {
+            ids: vec![FixtureId::new(1)],
+            mode: SelectionMode::Set,
+        },
+        Command::SetAttribute {
+            attribute: AttributeType::Red,
+            value: 65535,
+            relative: false,
+        },
+        Command::ApplyPreset {
+            preset_id: PresetId::new(4),
+        },
+        Command::ClearProgrammer,
+        Command::StoreCue {
+            sequence_id: SequenceId::new(1),
+            cue_number: "3".to_owned(),
+        },
+        Command::ExecutorGo {
+            executor_id: ExecutorId::new(0),
+            direction: prism_domain::GoDirection::Next,
+        },
+        Command::ExecutorOff {
+            executor_id: ExecutorId::new(0),
+        },
+        Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(0),
+            level: 32768,
+        },
+        patch_command(9, 3, 1),
+        Command::Oops,
+        Command::Redo,
+        Command::SaveShow,
+    ]
+}
+
+/// The eleven interface commands of `ARCHITECTURE_SPEC.md` §4.4, each in a form
+/// that changes something in a [`populated_session`].
+pub fn session_commands() -> Vec<Command> {
+    vec![
+        Command::SelectView {
+            view_id: ViewId::new(2),
+        },
+        Command::StoreView {
+            view_id: ViewId::new(3),
+            name: "Playback".to_owned(),
+        },
+        Command::OpenWindow {
+            window: WindowType::SequenceSheet,
+            params: None,
+        },
+        Command::CloseWindow {
+            instance_id: WindowInstanceId::new(1),
+        },
+        Command::FocusWindow {
+            instance_id: WindowInstanceId::new(1),
+        },
+        Command::SetExecutorPage { page: 1 },
+        Command::SelectExecutor {
+            executor_id: ExecutorId::new(3),
+        },
+        Command::SetEncoderBank {
+            group: FeatureGroup::Color,
+        },
+        Command::SetProgrammerPage { page: 2 },
+        Command::SelectProgrammerParam {
+            direction: ParamDirection::Next,
+        },
+        Command::CommandLineInput {
+            text: "1 thru 4 at full".to_owned(),
+        },
+    ]
+}
+
 /// A show with one of everything, saved — so a test starts from a clean dirty
 /// flag and every kind of reference resolves.
 pub fn populated_show() -> Show {
@@ -179,4 +257,20 @@ pub fn populated_show() -> Show {
     show.store_executor(executor(1, None)).unwrap();
     show.mark_saved();
     show
+}
+
+/// A session with a canvas, a stored view that is *not* the canvas, and the
+/// dirty flag cleared — so every §4.4 command has something to change and a
+/// test starts from a clean Save LED.
+///
+/// Windows 1 and 2 are the stored view 2; window 3 was opened afterwards, which
+/// is what makes `SelectView(2)` a visible change rather than a no-op.
+pub fn populated_session() -> SessionState {
+    let mut session = SessionState::new();
+    session.open_window(WindowType::FixtureSheet, None).unwrap();
+    session.open_window(WindowType::Patch, None).unwrap();
+    session.store_view(ViewId::new(2), "Programming").unwrap();
+    session.open_window(WindowType::Groups, None).unwrap();
+    session.mark_saved();
+    session
 }

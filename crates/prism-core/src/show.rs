@@ -876,9 +876,18 @@ fn put(path: String, value: &impl Serialize, existed: bool) -> Result<JsonPatchO
 
 /// Projects anything serialisable into the domain's own JSON value.
 fn to_json(value: &impl Serialize) -> Result<JsonValue, ShowError> {
-    let value = serde_json::to_value(value)
-        .map_err(|error| ShowError::NotRepresentable(error.to_string()))?;
-    serde_json::from_value(value).map_err(|error| ShowError::NotRepresentable(error.to_string()))
+    project(value).map_err(ShowError::NotRepresentable)
+}
+
+/// The projection itself, without an error type attached to it.
+///
+/// Shared with [`crate::SessionState`], which has to make the same trip and
+/// reports it as its own error. Fallible for the reason S1 recorded: a
+/// non-finite float has no wire form, and `prism-domain` refuses one in both
+/// directions.
+pub(crate) fn project(value: &impl Serialize) -> Result<JsonValue, String> {
+    let value = serde_json::to_value(value).map_err(|error| error.to_string())?;
+    serde_json::from_value(value).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

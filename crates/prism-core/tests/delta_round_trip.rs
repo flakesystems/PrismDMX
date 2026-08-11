@@ -1,26 +1,32 @@
-//! S11 exit criterion: applying the deltas to a copy reproduces the source
-//! state exactly.
+//! S11 and S12 exit criterion: applying the deltas to a copy reproduces the
+//! source state exactly.
 //!
-//! The copy is a [`ShowMirror`] — the same applier a Rust client would use —
-//! started from a snapshot of an empty show and never given anything but the
-//! operations the show model emitted. If the two agree at the end of a hundred
-//! random edits, then `docs/IPC_PROTOCOL.md` §6's promise ("a client that has
-//! applied every delta since its snapshot holds state identical to the
-//! daemon's") holds for the show half.
+//! The copy is a [`ShowMirror`] or a [`SessionMirror`] — the same appliers a
+//! Rust client would use — started from a snapshot of an empty show or a fresh
+//! session and never given anything but the operations the model emitted. If
+//! the two agree at the end of a hundred random edits, then
+//! `docs/IPC_PROTOCOL.md` §6's promise ("a client that has applied every delta
+//! since its snapshot holds state identical to the daemon's") holds — for the
+//! show half and, since S12, for the session half, which is the half **D11**
+//! depends on: a view switched from the X-Touch reaches every screen as a
+//! `SessionPatch` and nothing else.
 //!
 //! Both paths are checked, because they are different code: the direct edits
-//! S13, S15 and S27 will call, and [`Show::apply`], which wraps them in deltas.
+//! S13, S15 and S27 will call, and the appliers, which wrap them in deltas.
 
 mod common;
 
 use common::{
-    cue, dimmer_type, executor, fixture, group, par_type, patch_command, preset, sequence,
+    cue, dimmer_type, executor, fixture, group, par_type, patch_command, populated_session, preset,
+    sequence,
 };
-use prism_core::{Show, ShowMirror, show_patch_ops};
+use prism_core::{
+    SessionMirror, SessionState, Show, ShowMirror, session_patch_ops, show_patch_ops,
+};
 use prism_domain::{
     AttributeType, Command, Cue, CuePart, Delta, Executor, ExecutorId, Fixture, FixtureId,
-    FixtureType, Group, GroupId, JsonPatchOp, Preset, PresetId, PresetValue, Sequence, SequenceId,
-    UniverseId,
+    FixtureType, Group, GroupId, JsonPatchOp, ParamDirection, Preset, PresetId, PresetValue,
+    Sequence, SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 use proptest::prelude::*;
 
@@ -379,5 +385,188 @@ proptest! {
         prop_assert_eq!(mirror.value(), &show.to_json().unwrap());
         // Never a test of an empty show that nothing happened to.
         prop_assert!(applied >= 2);
+    }
+}
+
+/// A mirror of a session, and the session it mirrors.
+struct SessionPair {
+    session: SessionState,
+    mirror: SessionMirror,
+}
+
+impl SessionPair {
+    fn new() -> Self {
+        let session = populated_session();
+        let mirror = SessionMirror::new(session.to_json().unwrap());
+        Self { session, mirror }
+    }
+
+    /// Applies a command, feeds the mirror the delta it produced, and asserts
+    /// the two still describe the same session.
+    fn apply(&mut self, command: &Command) {
+        let applied = self
+            .session
+            .apply(command)
+            .unwrap_or_else(|error| panic!("{command:?} was refused: {error}"));
+        for delta in &applied.deltas {
+            self.mirror.apply_delta(delta).unwrap();
+        }
+        assert!(
+            !session_patch_ops(&applied.deltas).is_empty(),
+            "{command:?} changed nothing"
+        );
+        self.agree();
+    }
+
+    fn agree(&self) {
+        assert_eq!(
+            self.mirror.value(),
+            &self.session.to_json().unwrap(),
+            "the mirror and the session have diverged"
+        );
+    }
+}
+
+#[test]
+fn a_scripted_session_is_reproduced_command_by_command() {
+    let mut pair = SessionPair::new();
+    pair.agree();
+
+    // Every one of §4.4's eleven, in an order in which each changes something.
+    pair.apply(&Command::OpenWindow {
+        window: WindowType::SequenceSheet,
+        params: None,
+    });
+    pair.apply(&Command::OpenWindow {
+        window: WindowType::PresetPool,
+        params: Some(std::collections::BTreeMap::from([(
+            // A key with the two characters a JSON Pointer escapes, because a
+            // window parameter is the one piece of operator text in here.
+            "pool/name~1".to_owned(),
+            prism_domain::JsonValue::String("Colour".to_owned()),
+        )])),
+    });
+    pair.apply(&Command::FocusWindow {
+        instance_id: WindowInstanceId::new(1),
+    });
+    pair.apply(&Command::CloseWindow {
+        instance_id: WindowInstanceId::new(2),
+    });
+    pair.apply(&Command::StoreView {
+        view_id: ViewId::new(3),
+        name: "Playback".to_owned(),
+    });
+    pair.apply(&Command::SelectView {
+        view_id: ViewId::new(2),
+    });
+    pair.apply(&Command::SetExecutorPage { page: 4 });
+    pair.apply(&Command::SelectExecutor {
+        executor_id: ExecutorId::new(35),
+    });
+    pair.apply(&Command::SetEncoderBank {
+        group: prism_domain::FeatureGroup::Position,
+    });
+    pair.apply(&Command::SetProgrammerPage { page: 2 });
+    pair.apply(&Command::SelectProgrammerParam {
+        direction: ParamDirection::Next,
+    });
+    pair.apply(&Command::CommandLineInput {
+        text: "1 thru 4 at full".to_owned(),
+    });
+
+    // Storing over a view, which is a replace rather than an add.
+    pair.apply(&Command::StoreView {
+        view_id: ViewId::new(3),
+        name: "Playback 2".to_owned(),
+    });
+
+    // A session that reached this point through deltas alone is the session
+    // itself, right down to the bytes S15 will write.
+    let rebuilt: SessionState =
+        serde_json::from_value(serde_json::to_value(pair.mirror.value()).unwrap()).unwrap();
+    assert_eq!(
+        rmp_serde::to_vec_named(&rebuilt).unwrap(),
+        rmp_serde::to_vec_named(&pair.session).unwrap()
+    );
+}
+
+#[test]
+fn the_two_mirrors_ignore_each_others_deltas() {
+    // One connection carries both patches, so each mirror has to leave the
+    // other's alone — a `SessionPatch` applied to the show document would fail
+    // on `/session`, and a mirror that guessed would corrupt itself.
+    let session = populated_session();
+    let mut show_mirror = ShowMirror::new(Show::new().to_json().unwrap());
+    let mut session_mirror = SessionMirror::new(session.to_json().unwrap());
+
+    let mut show = Show::new();
+    let show_ops = show.embed_fixture_type(par_type()).unwrap();
+    let mut moved = session;
+    let session_ops = moved.set_executor_page(3).unwrap();
+
+    let deltas = [
+        Delta::ShowPatch { ops: show_ops },
+        Delta::SessionPatch { ops: session_ops },
+        Delta::DirtyFlag {
+            unsaved_changes: true,
+        },
+        Delta::Notice {
+            level: prism_domain::NoticeLevel::Warn,
+            message: "overlap".to_owned(),
+        },
+        Delta::ProgrammerChanged {
+            state: prism_domain::ProgrammerState::default(),
+        },
+        Delta::OutputHealth {
+            output_id: prism_domain::OutputId::new(0),
+            health: prism_domain::OutputHealth::Ok,
+        },
+    ];
+    for delta in &deltas {
+        show_mirror.apply_delta(delta).unwrap();
+        session_mirror.apply_delta(delta).unwrap();
+    }
+    assert_eq!(show_mirror.value(), &show.to_json().unwrap());
+    assert_eq!(session_mirror.value(), &moved.to_json().unwrap());
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(96))]
+
+    /// The exit criterion over arbitrary commands: whatever the session
+    /// accepted, the deltas it emitted put a mirror in exactly the same place.
+    ///
+    /// Show commands are in the stream on purpose — they are what the daemon's
+    /// router hands the wrong way round if it ever gets the predicate wrong,
+    /// and they must produce no session delta at all.
+    #[test]
+    fn session_deltas_reproduce_the_session_they_came_from(
+        commands in proptest::collection::vec(any::<Command>(), 1..24)
+    ) {
+        let mut session = populated_session();
+        let mut mirror = SessionMirror::new(session.to_json().unwrap());
+        let mut applied = 0usize;
+
+        for command in commands {
+            if let Ok(outcome) = session.apply(&command) {
+                if !outcome.deltas.is_empty() {
+                    applied += 1;
+                }
+                for delta in &outcome.deltas {
+                    mirror.apply_delta(delta).unwrap();
+                }
+                prop_assert!(!command.is_session_command() || outcome.effects.is_empty());
+            }
+            prop_assert_eq!(mirror.value(), &session.to_json().unwrap());
+        }
+
+        // A run in which nothing was ever accepted would assert nothing, so the
+        // property is closed with an edit that cannot be refused.
+        for delta in &session.apply(&Command::CommandLineInput { text: "go".to_owned() }).unwrap().deltas {
+            mirror.apply_delta(delta).unwrap();
+        }
+        applied += 1;
+        prop_assert_eq!(mirror.value(), &session.to_json().unwrap());
+        prop_assert!(applied >= 1);
     }
 }

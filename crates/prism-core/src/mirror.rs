@@ -1,15 +1,17 @@
-//! The other end of a delta: a client's mirror of the show.
+//! The other end of a delta: a client's mirror of the daemon's state.
 //!
 //! `docs/IPC_PROTOCOL.md` §6 promises that "a client that has applied every
 //! delta since its snapshot holds state identical to the daemon's". That is a
 //! claim about two pieces of code — the generator here and an applier over
-//! there — and it can only be checked by having both. [`ShowMirror`] is the
-//! applier: RFC 6902 over [`JsonValue`], plus the two deltas that carry show
-//! state without being JSON Patch.
+//! there — and it can only be checked by having both. [`JsonMirror`] is the
+//! applier: RFC 6902 over [`JsonValue`]. [`ShowMirror`] and [`SessionMirror`]
+//! are that engine plus the knowledge of which delta belongs to which document
+//! — the `Snapshot` of §4.1 carries the show and the session as two documents,
+//! and each has its own patch delta.
 //!
 //! It is not test scaffolding. The Web Remote and any Rust client mirror the
-//! show exactly this way, and `tests/delta_round_trip.rs` is what holds the
-//! generator to its promise.
+//! daemon exactly this way, and `tests/delta_round_trip.rs` is what holds the
+//! generator to its promise, for both halves.
 //!
 //! # A failed operation is a bug, and says so
 //!
@@ -86,26 +88,28 @@ impl core::error::Error for MirrorError {}
 /// A client's copy of the show, kept in step by deltas alone.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShowMirror {
-    root: JsonValue,
+    inner: JsonMirror,
 }
 
 impl ShowMirror {
     /// A mirror of a snapshot.
     #[must_use]
     pub const fn new(root: JsonValue) -> Self {
-        Self { root }
+        Self {
+            inner: JsonMirror::new(root),
+        }
     }
 
     /// What the mirror currently holds.
     #[must_use]
     pub const fn value(&self) -> &JsonValue {
-        &self.root
+        self.inner.value()
     }
 
     /// The mirrored document, consuming the mirror.
     #[must_use]
     pub fn into_value(self) -> JsonValue {
-        self.root
+        self.inner.into_value()
     }
 
     /// Applies one delta.
@@ -115,8 +119,8 @@ impl ShowMirror {
     /// so a client does not have to diff the show to draw a moving executor
     /// bar, and a mirror that ignored it would drift on exactly those fields.
     /// Every other delta describes something that is not show state
-    /// (`SessionPatch`, `ProgrammerChanged`, `OutputHealth`, `DirtyFlag`,
-    /// `Notice`) and is ignored here.
+    /// (`SessionPatch`, which is [`SessionMirror`]'s, `ProgrammerChanged`,
+    /// `OutputHealth`, `DirtyFlag`, `Notice`) and is ignored here.
     ///
     /// # Errors
     ///
@@ -146,6 +150,146 @@ impl ShowMirror {
             | Delta::DirtyFlag { .. }
             | Delta::Notice { .. } => Ok(()),
         }
+    }
+
+    /// Applies operations in order, stopping at the first that does not fit.
+    ///
+    /// # Errors
+    ///
+    /// [`MirrorError`] for the operation that failed. Earlier operations stay
+    /// applied — see the module documentation.
+    pub fn apply_all(&mut self, ops: &[JsonPatchOp]) -> Result<(), MirrorError> {
+        self.inner.apply_all(ops)
+    }
+
+    /// Applies one RFC 6902 operation.
+    ///
+    /// # Errors
+    ///
+    /// [`MirrorError`] if the operation does not fit the document.
+    pub fn apply(&mut self, op: &JsonPatchOp) -> Result<(), MirrorError> {
+        self.inner.apply(op)
+    }
+
+    /// The value at a pointer.
+    ///
+    /// # Errors
+    ///
+    /// [`MirrorError`] if the pointer is malformed or names nothing.
+    pub fn get(&self, path: &str) -> Result<&JsonValue, MirrorError> {
+        self.inner.get(path)
+    }
+}
+
+/// A client's copy of the **session**, kept in step by deltas alone.
+///
+/// The other half of D11: a client that has applied every `SessionPatch` since
+/// its snapshot shows the view, the windows, the page and the selection the
+/// daemon holds — which is what makes a view switched from the X-Touch appear
+/// on every screen at once. The document is
+/// [`SessionState::to_json`](crate::SessionState::to_json).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionMirror {
+    inner: JsonMirror,
+}
+
+impl SessionMirror {
+    /// A mirror of a snapshot.
+    #[must_use]
+    pub const fn new(root: JsonValue) -> Self {
+        Self {
+            inner: JsonMirror::new(root),
+        }
+    }
+
+    /// What the mirror currently holds.
+    #[must_use]
+    pub const fn value(&self) -> &JsonValue {
+        self.inner.value()
+    }
+
+    /// The mirrored document, consuming the mirror.
+    #[must_use]
+    pub fn into_value(self) -> JsonValue {
+        self.inner.into_value()
+    }
+
+    /// Applies one delta.
+    ///
+    /// `SessionPatch` is applied as JSON Patch; every other delta describes
+    /// something that is not session state and is ignored, exactly as
+    /// [`ShowMirror`] ignores this one.
+    ///
+    /// # Errors
+    ///
+    /// [`MirrorError`] if an operation does not fit the document.
+    pub fn apply_delta(&mut self, delta: &Delta) -> Result<(), MirrorError> {
+        match delta {
+            Delta::SessionPatch { ops } => self.apply_all(ops),
+            Delta::ShowPatch { .. }
+            | Delta::ExecutorState { .. }
+            | Delta::ProgrammerChanged { .. }
+            | Delta::OutputHealth { .. }
+            | Delta::DirtyFlag { .. }
+            | Delta::Notice { .. } => Ok(()),
+        }
+    }
+
+    /// Applies operations in order, stopping at the first that does not fit.
+    ///
+    /// # Errors
+    ///
+    /// [`MirrorError`] for the operation that failed.
+    pub fn apply_all(&mut self, ops: &[JsonPatchOp]) -> Result<(), MirrorError> {
+        self.inner.apply_all(ops)
+    }
+
+    /// Applies one RFC 6902 operation.
+    ///
+    /// # Errors
+    ///
+    /// [`MirrorError`] if the operation does not fit the document.
+    pub fn apply(&mut self, op: &JsonPatchOp) -> Result<(), MirrorError> {
+        self.inner.apply(op)
+    }
+
+    /// The value at a pointer.
+    ///
+    /// # Errors
+    ///
+    /// [`MirrorError`] if the pointer is malformed or names nothing.
+    pub fn get(&self, path: &str) -> Result<&JsonValue, MirrorError> {
+        self.inner.get(path)
+    }
+}
+
+/// RFC 6902 over a [`JsonValue`]: the engine both mirrors are made of.
+///
+/// Public because a client with a document of its own — the Web Remote's
+/// outputs and health, say — needs the same applier, and because two copies of
+/// a JSON Patch implementation is exactly the kind of duplication that drifts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JsonMirror {
+    root: JsonValue,
+}
+
+impl JsonMirror {
+    /// A mirror of a snapshot.
+    #[must_use]
+    pub const fn new(root: JsonValue) -> Self {
+        Self { root }
+    }
+
+    /// What the mirror currently holds.
+    #[must_use]
+    pub const fn value(&self) -> &JsonValue {
+        &self.root
+    }
+
+    /// The mirrored document, consuming the mirror.
+    #[must_use]
+    pub fn into_value(self) -> JsonValue {
+        self.root
     }
 
     /// Applies operations in order, stopping at the first that does not fit.
@@ -337,7 +481,7 @@ fn is_inside(from: &str, path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{MirrorError, ShowMirror};
+    use super::{MirrorError, SessionMirror, ShowMirror};
     use prism_domain::{Delta, ExecutorId, JsonPatchOp, JsonValue};
     use std::collections::BTreeMap;
 
@@ -799,5 +943,64 @@ mod tests {
         ] {
             assert!(!error.to_string().is_empty(), "{error:?}");
         }
+    }
+
+    #[test]
+    fn a_session_mirror_is_the_same_applier_over_the_session_document() {
+        // The session's own document, and every method a client calls on it.
+        let mut mirror = SessionMirror::new(JsonValue::Object(BTreeMap::from([
+            (
+                "session".to_owned(),
+                JsonValue::Object(BTreeMap::from([(
+                    "executorPage".to_owned(),
+                    JsonValue::Int(0),
+                )])),
+            ),
+            ("views".to_owned(), JsonValue::Object(BTreeMap::new())),
+        ])));
+
+        mirror
+            .apply(&JsonPatchOp::Replace {
+                path: "/session/executorPage".to_owned(),
+                value: JsonValue::Int(3),
+            })
+            .unwrap();
+        assert_eq!(
+            mirror.get("/session/executorPage").unwrap(),
+            &JsonValue::Int(3)
+        );
+        assert_eq!(
+            mirror.get("/session/nothing"),
+            Err(MirrorError::NoSuchPath("/session/nothing".to_owned()))
+        );
+
+        mirror
+            .apply_delta(&Delta::SessionPatch {
+                ops: vec![JsonPatchOp::Add {
+                    path: "/views/2".to_owned(),
+                    value: JsonValue::String("Programming".to_owned()),
+                }],
+            })
+            .unwrap();
+        // A delta belonging to the other document changes nothing here, and an
+        // operation that does not fit is still reported.
+        mirror
+            .apply_delta(&Delta::ShowPatch {
+                ops: vec![JsonPatchOp::Remove {
+                    path: "/session".to_owned(),
+                }],
+            })
+            .unwrap();
+        assert_eq!(
+            mirror.apply_delta(&Delta::SessionPatch {
+                ops: vec![JsonPatchOp::Replace {
+                    path: "/views/9".to_owned(),
+                    value: JsonValue::Null,
+                }],
+            }),
+            Err(MirrorError::NoSuchPath("/views/9".to_owned()))
+        );
+
+        assert_eq!(mirror.value(), &mirror.clone().into_value());
     }
 }

@@ -13,12 +13,14 @@
 
 mod common;
 
-use common::{executor, fixture, group, par_type, patch_command, populated_show, preset, sequence};
+use common::{
+    executor, fixture, group, par_type, patch_command, populated_show, preset, sequence,
+    session_commands, show_commands,
+};
 use prism_core::{Effect, Show, ShowError};
 use prism_domain::{
-    AttributeType, Command, Delta, ExecutorId, FeatureGroup, FixtureId, GoDirection,
-    ParamDirection, PresetId, SelectionMode, SequenceId, UniverseId, ViewId, WindowInstanceId,
-    WindowType,
+    AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, PresetId, SelectionMode,
+    SequenceId, UniverseId,
 };
 use proptest::prelude::*;
 
@@ -29,82 +31,6 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
         show.patch_revision(),
         show.is_dirty(),
     )
-}
-
-/// The twelve commands of the show group (`docs/IPC_PROTOCOL.md` §5), each in a
-/// form that `populated_show` can apply.
-fn show_commands() -> Vec<Command> {
-    vec![
-        Command::SelectFixtures {
-            ids: vec![FixtureId::new(1)],
-            mode: SelectionMode::Set,
-        },
-        Command::SetAttribute {
-            attribute: AttributeType::Red,
-            value: 65535,
-            relative: false,
-        },
-        Command::ApplyPreset {
-            preset_id: PresetId::new(4),
-        },
-        Command::ClearProgrammer,
-        Command::StoreCue {
-            sequence_id: SequenceId::new(1),
-            cue_number: "3".to_owned(),
-        },
-        Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
-            direction: GoDirection::Next,
-        },
-        Command::ExecutorOff {
-            executor_id: ExecutorId::new(0),
-        },
-        Command::SetExecutorMaster {
-            executor_id: ExecutorId::new(0),
-            level: 32768,
-        },
-        patch_command(9, 3, 1),
-        Command::Oops,
-        Command::Redo,
-        Command::SaveShow,
-    ]
-}
-
-/// The eleven session commands of `ARCHITECTURE_SPEC.md` §4.4.
-fn session_commands() -> Vec<Command> {
-    vec![
-        Command::SelectView {
-            view_id: ViewId::new(1),
-        },
-        Command::StoreView {
-            view_id: ViewId::new(1),
-            name: "Programming".to_owned(),
-        },
-        Command::OpenWindow {
-            window: WindowType::Patch,
-            params: None,
-        },
-        Command::CloseWindow {
-            instance_id: WindowInstanceId::new(1),
-        },
-        Command::FocusWindow {
-            instance_id: WindowInstanceId::new(1),
-        },
-        Command::SetExecutorPage { page: 1 },
-        Command::SelectExecutor {
-            executor_id: ExecutorId::new(0),
-        },
-        Command::SetEncoderBank {
-            group: FeatureGroup::Color,
-        },
-        Command::SetProgrammerPage { page: 1 },
-        Command::SelectProgrammerParam {
-            direction: ParamDirection::Next,
-        },
-        Command::CommandLineInput {
-            text: "1 thru 4 at full".to_owned(),
-        },
-    ]
 }
 
 #[test]

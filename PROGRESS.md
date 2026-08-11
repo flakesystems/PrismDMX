@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-11
 **Current phase:** Phase 3 — Core state
-**Current session:** S12 — `prism-core` session state (D11) (not started; see §8 for the prompt that starts it)
-**Last completed:** S11 — `prism-core` show model and command application ✅ — **the daemon now has something to output**
+**Current session:** S13 — `prism-core` programmer state machine (not started; see §8 for the prompt that starts it)
+**Last completed:** S12 — `prism-core` session state (D11) ✅ — **the console can now operate the interface**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -62,7 +62,7 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S11 | Show model, command application | ✅ | 2026-08-11 | All exit criteria verified — see §2.12. 88 tests, coverage 99.9 % lines. Two mutation checks confirm the two central tests are not vacuous |
-| S12 | Session state (D11) | ☐ | | |
+| S12 | Session state (D11) | ✅ | 2026-08-11 | All exit criteria verified — see §2.13. 125 tests, coverage 99.94 % lines with `session.rs` and `file.rs` at **100 %**. Two mutation checks confirm the two central tests are not vacuous |
 | S13 | Programmer state machine | ☐ | | |
 | S14 | Oops journal | ☐ | | |
 | S15 | SQLite persistence | ☐ | | |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 12 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 13 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -488,6 +488,48 @@ share one rule, "what is a legal patch", and two copies of a rule drift apart.
 `tests/show_to_engine.rs` holds them together: every patch the show accepts is
 one `MergeBody::for_patch` accepts, over arbitrary patches.
 
+### 2.13 S12 verification record
+
+Measured on 2026-08-11, all exit criteria from `IMPLEMENTATION_PLAN.md` S12 and
+the session prompt. No hardware and no network: this session is state.
+
+| Check | Result |
+|---|---|
+| Every session command applies and emits a `SessionPatch` | ✅ `tests/session_commands.rs`: `every_session_command_applies_and_emits_a_session_patch` applies all eleven §4.4 commands against a session in which each of them has something to change, and demands a **non-empty** operation list from every one — an empty answer is what a command that was quietly dropped would give. `the_eleven_commands_of_section_4_4_are_the_session_group` pins the count at eleven and re-checks the 11 + 12 = 23 split against `Command::is_session_command`. The applier's `match` names all 23 variants without a wildcard, in the opposite direction to `Show::apply`, so a command added to the protocol is a **compile error in both** |
+| A rejection leaves the state **byte-identical**, as a test | ✅ taken literally, as in S11: `rmp_serde::to_vec_named` before and after, plus the dirty flag, which is not part of the bytes. Five hand-written cases, one per way a session command can be refused, each run against a clean **and** a dirty session; the twelve show commands, each refused with `NotASessionCommand`; and a `proptest` over arbitrary command sequences as the broad net. **Checked by mutation:** moving the executor-page validation to *after* the write — the S11-shaped bug — turns the byte-identical test and the invariant property red |
+| Delta generation verified: deltas applied to a copy reproduce the source | ✅ the copy is `SessionMirror`, the sibling `ShowMirror` needed and did not have. `tests/delta_round_trip.rs` compares the mirror with the session after **every** one of a scripted run through all eleven commands, then deserialises the mirror back into a `SessionState` and compares the two byte for byte; and again over up to 24 arbitrary commands per case, show commands included, which is what the daemon's router hands the wrong way round if the predicate is ever wrong. `the_two_mirrors_ignore_each_others_deltas` drives both mirrors from one delta stream. **Checked by mutation:** dropping the `focusedWindow` operation from the diff fails both session round-trip tests and neither show one |
+| The session survives save and load | ✅ `the_session_survives_save_and_load`: a session driven through eight commands and a window placement, written as a `ShowFile` beside a populated show, read back, re-encoded and compared byte for byte — then **every field the criterion names asserted one by one** (view, windows, focus, executor page, selected executor, encoder bank, programmer page, parameter index, command line, the stored view's window count and the placed window's geometry), so a round trip that was equal for the wrong reason cannot pass. Through MessagePack and through JSON, which is S15's export path |
+| Client-local state (§4.2) is provably absent | ✅ three ways. **By the type:** the session is `prism_domain::Session` plus a map of `View`, and neither has a field for a monitor, a scroll position, a hover, a drag, a camera or a zoom. **By the document:** `client_local_state_is_absent_from_the_session_document` asserts the exact eleven members of §4.1 and the two members of the document root, then walks **every object key anywhere** in a populated session — windows and stored views included — and fails on any that contains one of §4.2's words. **At the door:** `WindowInstance::params` is the one open bag, so `OpenWindow` refuses `monitor`, `screenIndex`, `scrollTop`, `hoverTarget`, `dragging`, `cameraPosition` and `uiZoom` with `ClientLocalParam`, while `pool` still goes through |
+| `cargo test -p prism-core` | ✅ exit 0 — **95 lib tests** + 30 integration tests across four targets, 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **805 tests** across 28 targets, 12 ignored (the S8 hardware target and the long engine runs) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-core` **> 95 %** | ✅ **99.94 % lines**, 99.07 % regions, 99.65 % functions — up from S11's 99.91 %. `session.rs` and `file.rs` at **100 % lines**, `command.rs`, `conflict.rs` and `testkit.rs` at 100 % on all three, `mirror.rs` back to **100 % lines** after the split. The two remaining uncovered lines in the crate are S11's monomorphisation artefact in `show.rs` |
+| Platform-neutral | ✅ still no `#[cfg]` of any kind in the crate |
+| CI green on the pushed commit | ▶ pending — recorded below once the run this commit triggers has finished |
+
+**Delivered:** two modules and a split. `session` is `SessionState` — the §4.1
+state, the views it selects between, the eleven §4.4 commands, and a direct API
+for the things a client does that no command carries. `file` is `ShowFile`: the
+show and its session, saved together, plus the routing on
+`Command::is_session_command` that D11 describes and S17 would otherwise write a
+third copy of. `mirror` grew `SessionMirror` beside `ShowMirror`, both on one
+`JsonMirror`, because two copies of an RFC 6902 applier is exactly the kind of
+duplication that drifts.
+
+**The session is now the second thing the daemon is authoritative about, and it
+is deliberately not part of the first.** A show command and a session command are
+validated by different appliers, travel as different deltas and are mirrored by
+different clients' documents. What holds them together is `ShowFile`, which is
+one file on disk and one Save LED.
+
+**One edit in the module can write the session, and it is the one that also
+encodes.** `SessionState::commit` takes the successor an edit built beside the
+current state, diffs it field by field, encodes the operations, and only then
+swaps it in — so S11's "validate and encode before you write" is a property of
+the module rather than a rule each of the twelve edits has to remember, and
+change detection comes with it.
+
 ---
 
 ## 3. Coverage tracking
@@ -501,7 +543,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
-| `prism-core` | **> 95 %** (programmer) | **99.91 % lines**, 99.26 % regions, 99.49 % functions — `command.rs` and `conflict.rs` at **100 %** on all three, `mirror.rs` and `desk.rs` at 100 % lines, `show.rs` at 99.74 %. `--show-missing-lines` reports no uncovered source line; the residue is one monomorphisation of the generic JSON projection, the artefact S4 recorded | 2026-08-11 (S11) |
+| `prism-core` | **> 95 %** (programmer) | **99.94 % lines**, 99.07 % regions, 99.65 % functions — `session.rs`, `file.rs` and `mirror.rs` at **100 % lines**, `command.rs`, `conflict.rs` and `testkit.rs` at 100 % on all three, `desk.rs` 100 % lines, `show.rs` 99.74 %. The only two uncovered lines in the crate are one monomorphisation of the generic JSON projection in `show.rs`, the artefact S4 recorded | 2026-08-11 (S12) |
 | `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
@@ -693,6 +735,17 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-11 | S12 | **The views live in the session, not in the show, and the protocol says so twice before the argument even starts.** `ARCHITECTURE_SPEC.md` §4.1 lists `activeViewId` in the session but never says where the views themselves are kept, and a view is stored content that looks like show content — the school builds three layouts once and uses them all term | `SessionState` holds them, keyed by view number. Three things point the same way: `docs/IPC_PROTOCOL.md` §6 annotates `SessionPatch` with "**views**, windows, pages, selection", so a view stored into the show would travel as the wrong delta *and* contradict the exit criterion; `Command::is_undoable` already excludes every session command from the Oops journal (S14), so a view stored into the show would be a show edit undo deliberately cannot reach, which is the asymmetry that turns into a bug report; and §4.4's closing note gives the reason multi-session exists at all — "two operators can work with **independent views**". **S15 requirement:** the views are in the session half of the file, so a show imported into another session does not bring another operator's layouts with it |
+| 2026-08-11 | S12 | **A `SessionPatch` needs a document to point into, and the session is not one object but two.** JSON Patch is only meaningful against a root, and §4.1's `Snapshot { show, session, ... }` already treats show and session as separate documents | The session document is `{ "session": …, "views": … }`: `/session/executorPage` is the §4.1 state and `/views/3` is one stored layout. Views are keyed by **number**, for exactly S11's reason — a pointer into an array names a position, so a list would silently renumber every view after a deleted one. `SessionMirror` is the applier on the other end, and `the_two_mirrors_ignore_each_others_deltas` asserts that one connection's delta stream leaves each mirror with only its own half: a `SessionPatch` applied to the show document would fail on `/session`, and a mirror that guessed would corrupt itself |
+| 2026-08-11 | S12 | **`ShowMirror` had to grow a sibling, and two copies of RFC 6902 would have been the third mistake of this kind in the project.** The session needs the same applier over a different document and a different delta | The engine is `JsonMirror`, public because a client with a document of its own needs it too; `ShowMirror` and `SessionMirror` are that engine plus the knowledge of which delta belongs to which document. The split cost nine delegating lines each and no behaviour: S11's mirror tests are unchanged and still pass |
+| 2026-08-11 | S12 | **One Save LED, two sources — and only one of the eleven session commands is authoring rather than operating.** Paging the fader bank, focusing a window or moving the encoder bank changes state that is saved with the show, so the naive reading makes every console keypress an unsaved change. A Save LED that lit because somebody paged the faders would teach an operator to ignore it, which is the S11 finding about executors advancing, one level up | `SessionState::is_dirty` is set by `store_view` **and nothing else**, and the lamp itself is `ShowFile::is_dirty` — the two flags together. `ShowFile::apply` is where `Delta::DirtyFlag` is decided: it drops the one `Show::apply` raises for its own half and emits one only when the **pair** transitions, so a show edit behind an already-stored view does not light the lamp twice. `mark_saved` clears both, because a save writes both |
+| 2026-08-11 | S12 | **A command that changes nothing must not produce a delta, and the jog wheel is the ordinary case rather than the edge case.** `SelectProgrammerParam { Prev }` at parameter 0 saturates; `SetExecutorPage` to the page already shown changes nothing. An empty `SessionPatch` broadcast to every client is a message that says nothing, at whatever rate an operator turns a wheel | Change detection lives in one place: every edit builds its successor beside the current state and hands it to `SessionState::commit`, which diffs field by field, encodes, and only then swaps. That is also where S11's "validate and encode before you write" is enforced for the whole module rather than per edit — `place_window` with a NaN coordinate is refused with the session untouched, asserted on the bytes. **The rule for the exit criterion:** all eleven commands are tested from a state in which each has something to change, and the no-op cases are tested separately for emitting nothing |
+| 2026-08-11 | S12 | **§4.2's absence is structural everywhere except one open bag, and that bag is `params`.** `WindowInstance.params` is `Map<string, unknown>` by design — it is how a preset pool window says which pool it shows — so a client could put its scroll position in there and it would become shared state, silently, past a type that has no field for it | Checked at the door: `OpenWindow` refuses a parameter key containing `monitor`, `screen`, `scroll`, `hover`, `drag`, `camera` or `zoom`, matched on the lower-cased key. It is a deny-list and therefore not a proof — the module says so in place — but it turns the one hole in the criterion from an invitation into a refusal that names the rule. Note that a phaser editor's time zoom and a 3D camera are **genuinely** §4.2 state, so refusing them is correct rather than merely defensive. **S25 requirement:** window-local view state stays in the client |
+| 2026-08-11 | S12 | **No §4.4 command carries a window's geometry, and position and size are session state all the same.** §4.1 puts "type, position, size on the canvas" in the session; §4.4's eleven commands open, close and focus windows and never move one. Read literally, a window could only ever have the default geometry the daemon chose for it | `SessionState::place_window` is the direct API, validated and delta-emitting like every other edit, and `DEFAULT_WINDOW` is where a console-opened window lands. **S25 requirement, and it is a protocol change:** dragging a window on one screen has to move it on every other, so the canvas needs a command carrying geometry — an addition to `docs/IPC_PROTOCOL.md` §5, not something the UI can do locally without breaking D3 |
+| 2026-08-11 | S12 | **The executor page is validated and the programmer page is not, and the asymmetry is the S1 finding rather than an oversight.** `SetExecutorPage` carries an arbitrary `u32` from any client and `ExecutorId::from_page_and_slot` multiplies it by eight **saturating** — so above `(u32::MAX − 7) / 8` all eight slots of a page fold onto one executor, which is a fader bank where every fader drives the same thing | Refused as `ExecutorPageOutOfRange`, written as a round trip — `from_page_and_slot(page, 7).page() != page` — so the check is the saturation itself rather than a second copy of the arithmetic. Both boundaries are asserted: 536 870 911 is accepted and its last slot is exactly `u32::MAX`, 536 870 912 is not. The **programmer** page is accepted unbounded, because nothing is derived from it by arithmetic that can fold two pages into one; what is on a page at all is the programmer's question, and that is S13 |
+| 2026-08-11 | S12 | **`SelectExecutor` is deliberately not validated against the show, where S11's playback commands are.** The obvious symmetry — an executor the show does not have is a rejection — would break the ordinary way an operator assigns a sequence: select the empty slot, then store into it | Accepted for any executor number, and the direct API takes an `Option` so the daemon can *clear* a selection when the executor it names is deleted. The distinction is worth stating: a Go into an empty executor is a command that cannot do anything, and selecting one is a command that has already done everything it claims to |
+| 2026-08-11 | S12 | **A window number is derived from the session's own content rather than counted, and one number is therefore reusable.** A serialised counter would have to be restored above the content it numbers or it hands out a number a loaded view already uses | The next number is one past the highest in use **anywhere** — the canvas and every stored view — so a number a view remembers is never reissued and loading a view can never collide with what is already open. A number no view remembers *is* reused once its window closes, which is a deliberate trade: the race it leaves is a stale `CloseWindow` closing the wrong window, which the operator sees and undoes by opening it again. `NoWindowNumberLeft` is the refusal when the space really is exhausted, rather than a second window quietly sharing a number |
+| 2026-08-11 | S12 | **`CommandLineInput` carries the whole line, not a keystroke, and `SelectView` always reloads.** Both are readings the protocol leaves open, and the other reading is broken in each case: an append-only command line has no backspace and no clear, and a `SelectView` that skipped the reload when the view was already active would take away the gesture an operator uses to get their layout back after moving things around | Written on the two methods. `activeViewId` therefore names the view last **selected**, not a promise that the canvas still equals it — which is what `StoreView` exists to reconcile, and why storing a view does not change the active one. Two invariants come with it and are asserted as properties over arbitrary command sequences: the focused window is always one that is open (the focus follows a loaded layout, and falls to the next in front when the focused window closes), and the active view always exists — which is why a fresh session already has one |
 | 2026-08-11 | S11 | **The sACN CID belongs to the machine, not to the show — and the question S10 left open has only one safe answer.** Storing it with the show fails at exactly the point that makes a second desk exist: copying a show *is* how a second machine comes to have one, on a stick, from a backup, or as the school's template for next term, and nothing in a show file can tell "this is the same desk" from "this is a copy". Two senders under one CID look to a receiver like one source contradicting itself, and no priority sorts that out | `prism_core::MachineConfig`, holding a `DeskId`, written beside the daemon's own settings and **never inside a `.prism` file**. A show arrives on a new machine with no identity in it and picks up the identity of the desk that opens it. Three rules follow and are written on the module: **S15 must not write it into the show and must not regenerate it on save** — `Show` has no field for it, which is the structural half, and `desk_id_is_not_show_content` is the asserted half; **S17 generates it once** on first start, because a UUID needs entropy and this crate is dependency-free by rule; and `DeskId::NIL` is **not** an identity, so `MachineConfig::is_configured` asks one layer up the same question `prism-protocols` already refuses to connect without |
 | 2026-08-11 | S11 | **One edit wrote the show before the last thing that could fail had run, and coverage is what found it.** `store_cue` inserted the cue into the sequence, sorted the list, and *then* built the JSON Patch operation — and building it is fallible, because `prism-domain` refuses a non-finite float on the way out (S1). A cue with a NaN fade time would have been stored **and** reported as an error. The only uncovered line in the crate was that `?`, which is what pointed at it; no test had reached it because nothing else in the suite constructs a NaN | The list is built beside the old one and swapped in only once the operation describing it exists. **The general rule, now written on the module: validate and encode before you write, because the encoding is the last thing that can fail.** Every other operation already had this shape; this one did not, and the byte-identical criterion was true by accident everywhere else. Three tests now drive the NaN path through `embed_fixture_type`, `store_cue` and `patch_fixture` |
 | 2026-08-11 | S11 | **`Command::ApplyPreset` carries a preset number and no pool, and `Preset.pool` files presets into pools where the number restarts.** Read literally, the two together make the command ambiguous: preset 4 in the colour pool and preset 4 in the position pool are different presets and the command cannot say which | **Preset numbers are unique across pools.** The pool is how a preset is filed and which encoder bank shows it; it is not part of its identity. That is the only reading under which `ApplyPreset` is well-defined, and it matches `PresetId` being a plain number on the wire. Written on `Show::store_preset`, which refuses a second preset with a number already used in another pool. **S28 requirement:** the preset pool UI numbers presets globally, not per pool |
@@ -810,13 +863,34 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**There is a show now, and it reaches the engine.** `Show → MergeBody → frame`
-is asserted end to end, a command is applied or refused with the show left
-byte-identical either way, and every change comes back out as a delta that
-reproduces the show it came from. What is still missing above it is the console's
-operating state: which view is up, which windows are open, which executor page
-the faders are on. Begin **S12** (`prism-core` — session state, D11). Use the
-prompt in §8.
+**The console can operate the interface now, and the show still reaches the
+engine.** A `SelectView` from the X-Touch changes state in the daemon, comes back
+out as a `SessionPatch`, and a mirror fed nothing but those deltas is the session
+byte for byte — with no client connected at any point. What is still missing is
+the operator's own layer: the selection, the sparse attribute values, the
+three-stage Clear. Begin **S13** (`prism-core` — programmer state machine). Use
+the prompt in §8.
+
+Carried out of S12:
+- **`ShowFile` is the routing D11 describes, and S17 should use it rather than
+  matching on command variants a third time.** `Command::is_session_command`
+  decides; both appliers answer with the same `Applied`.
+- **The Save LED is `ShowFile::is_dirty`** — the show's flag or the session's,
+  and only `StoreView` sets the session's. `ShowFile::apply` already keeps
+  `Delta::DirtyFlag` to the transitions of the pair.
+- **Views live in the session**, keyed by number, and travel as `SessionPatch`
+  on `/views/<number>`. See the decision log for the three reasons.
+- **S25 needs a protocol command for window geometry.** `place_window` is the
+  state operation and no §4.4 command carries a position — dragging a window is
+  session state, so it cannot stay in the client.
+- **`SessionMirror` and `ShowMirror` sit on one `JsonMirror`.** A client's
+  document is mirrored by whichever knows the delta; each ignores the other's.
+- **A session edit that changes nothing emits nothing**, and `SessionState::commit`
+  is the single place that decides both that and the encode-before-write order.
+- **S13 resets the jog wheel through `set_programmer_param_index`** when the
+  selection changes: the parameter index is session state, not programmer state,
+  and a wheel left pointing at a parameter the new selection does not have is a
+  console that lies.
 
 Carried out of S11:
 - **`Show::apply` answers with `deltas` and `effects`, and the effects are S17's
@@ -887,71 +961,76 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S12 — `prism-core`: Session State (D11)**
+**Next up: S13 — `prism-core`: Programmer-Automat**
 
 ```text
-PrismDMX — Session S12: prism-core, Session State (D11)
+PrismDMX — Session S13: prism-core, Programmer-Automat
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Diese Session braucht keine Hardware und kein Netz. Sie ist reine Zustandsarbeit
-in einem Crate, das seit S11 ein vollständiges Showmodell enthält.
+in einem Crate, das seit S11 ein Showmodell und seit S12 einen Session-Zustand
+enthält.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.12 (was S11 geliefert hat)
-                                            und alle Decision-Log-Einträge, die mit
-                                            „S12" oder „D11" markiert sind
+                                            besonders §2.12 und §2.13 (was S11 und
+                                            S12 geliefert haben) und alle
+                                            Decision-Log-Einträge, die mit „S13"
+                                            markiert sind
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S12
-4. ARCHITECTURE_SPEC.md §4                — Session State vollständig: §4.1 was
-                                            dazugehört, §4.2 was ausdrücklich
-                                            nicht, §4.3 das Latenzbudget, §4.4 die
-                                            elf Kommandos
-5. docs/IPC_PROTOCOL.md §5–§6             — die Command- und Delta-Wire-Typen;
-                                            `SessionPatch` ist der Delta, den
-                                            diese Session erzeugt
-6. crates/prism-domain/src/session.rs     — `Session`, `View`, `WindowInstance`,
-                                            `WindowType` sind fertig (S1)
-7. crates/prism-core/src/                 — `show.rs`, `command.rs`, `conflict.rs`,
-                                            `mirror.rs`, `desk.rs`. `Show::apply`
-                                            ist das Vorbild: dieselbe Form noch
-                                            einmal, für die Session
+                                            von S13
+4. docs/DMX_MERGE.md §3 und §8            — der Programmer: was sparse bedeutet,
+                                            der dreistufige Clear samt
+                                            Rücksetzregel, und wie der Programmer
+                                            im Merge gewinnt
+5. ARCHITECTURE_SPEC.md §6                — `ProgrammerState` im Domänenmodell,
+                                            und §5 für die Stelle im Tick
+6. crates/prism-domain/src/programmer.rs  — `ProgrammerState`, `ProgrammerValue`,
+                                            `ProgrammerValueSource`, `ClearStage`
+                                            sind fertig (S1)
+7. crates/prism-core/src/                 — `show.rs`, `command.rs`, `session.rs`,
+                                            `file.rs`, `mirror.rs`. `Show::apply`
+                                            und `SessionState::apply` sind das
+                                            Vorbild: dieselbe Form ein drittes
+                                            Mal, für den Programmer
 
-Stand nach S11 — nichts davon musst du neu bauen:
+Stand nach S12 — nichts davon musst du neu bauen:
 - `prism-domain` (S1): alle Domänentypen samt Serialisierung und
   TypeScript-Bindings; 133 Tests. Jeder `f64` ist in beiden Richtungen gegen
-  nicht-endliche Werte abgesichert.
+  nicht-endliche Werte abgesichert. `ProgrammerState.values` ist eine
+  verschachtelte `BTreeMap`, reist aber flach — und `set_value`/`clear_value`
+  sind die einzigen erlaubten Wege hinein (S1-Fund, siehe Decision Log).
 - `prism-engine` (S2–S6) ist vollständig: Tick, Triple Buffer, HTP/LTP-Merge,
-  DMX-Encoding, Cues und Fades, Programmer-Layer, Master. 44 Hz bei 64 Universen
-  unter Volllast gemessen, allokationsfrei im Tick.
+  DMX-Encoding, Cues und Fades, Programmer-*Layer*, Master. 44 Hz bei 64
+  Universen unter Volllast, allokationsfrei im Tick. Der Programmer erreicht den
+  Tick als **MergePlan-Slotnummer**, nicht als Fixture plus Attribut.
 - `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
   verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz).
-- `prism-core` (S11) hält das **Showmodell**: `Show` mit Patch, eingebetteten
-  `FixtureType`s, Gruppen, Presets, Sequenzen und Executors; `Show::apply` für
-  die Show-Gruppe der Kommandos; `ShowMirror` als RFC-6902-Applier;
-  `PatchConflict`/`ShowIssue`; `MachineConfig` mit der sACN-CID. 88 Tests,
-  99,9 % Zeilenabdeckung.
-- Es gibt noch **keinen Session-Zustand**: keine aktive View, keine offenen
-  Fenster, keine Executor-Seite. Genau das ist S12.
+- `prism-core` (S11/S12): `Show` mit Patch, eingebetteten `FixtureType`s,
+  Gruppen, Presets, Sequenzen und Executors; `SessionState` mit View, Fenstern,
+  Executor-Seite und Selektion; `ShowFile` als beides zusammen samt Routing nach
+  `Command::is_session_command`; `ShowMirror`/`SessionMirror` auf einem
+  `JsonMirror`. 125 Tests, 99,94 % Zeilenabdeckung.
+- Es gibt noch **keinen Programmer-Zustand**: keine Selektion, keine sparsen
+  Werte, keinen Clear-Automaten. Genau das ist S13.
 
-Aufgabe: Session S12 umsetzen — `prism-core`: Session State (D11).
+Aufgabe: Session S13 umsetzen — `prism-core`: Programmer-Automat.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S12):
-- `Session` nach ARCHITECTURE_SPEC.md §4.1
-- alle Session-Kommandos aus §4.4
-- Session-Persistenz gemeinsam mit der Show
+Umzusetzen (IMPLEMENTATION_PLAN.md S13):
+- Selektion (Fixtures, `SelectionMode` Set/Add/Toggle)
+- sparse Attributwerte
+- Feature-Group-Tracking
+- dreistufiger Clear
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Jedes Session-Kommando wird angewandt und erzeugt einen `SessionPatch`;
-  eine Ablehnung lässt den Zustand **byte-identisch** zurück — als Test
-  zugesichert, nicht als Argument
-- Die Session übersteht Speichern und Laden: eine wieder geöffnete Show stellt
-  View, Fenster, Seite und Selektion exakt wieder her
-- Client-lokaler Zustand (§4.2) ist **nachweislich abwesend** — durch den Typ
-  zugesichert und ausdrücklich geprüft
+- Der dreistufige Clear ist über **alle** Übergänge getestet, einschließlich der
+  Regel, dass eine andere Programmer-Interaktion die Stufe auf 0 zurücksetzt
+- `ApplyPreset` hält `presetRef` fest, damit Cues live-updatebar bleiben
+- Der Programmer ist sparse: ein nicht angefasstes Attribut ist **abwesend**,
+  nicht 0 — als Test zugesichert
 - `cargo test -p prism-core` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
@@ -959,58 +1038,66 @@ Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreff
   `cargo llvm-cov -p prism-core --summary-only` und in PROGRESS.md eingetragen
 
 Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **Der Session-Zustand liegt im Daemon, nicht im Client.** Das ist der ganze
-  Sinn von D11: das X-Touch fernsteuert nicht die UI, sondern ändert Zustand im
-  Daemon, der ein Delta an *alle* Clients schickt. Er muss deshalb auch dann
-  existieren und weiterleben, wenn gar kein Client verbunden ist.
-- **§4.2 ist eine Liste von Dingen, die nicht hineingehören** — Monitorzuordnung
-  eines Fensters, Scrollposition, Hover- und Drag-Zustand, 3D-Kamera,
-  UI-Zoomstufe. Das Exit-Kriterium verlangt, dass ihre Abwesenheit *am Typ*
-  ablesbar ist, nicht nur im Text.
-- **`Show::apply` ist die Vorlage.** Es validiert, wendet an, gibt Deltas und
-  `Effect`s zurück und lässt bei einer Ablehnung den Zustand byte-identisch.
-  `Show::apply` lehnt Session-Kommandos ausdrücklich mit
-  `ShowError::NotAShowCommand` ab; `prism_domain::Command::is_session_command`
-  ist das Prädikat, nach dem der Daemon (S17) verteilt. Die elf §4.4-Kommandos
-  sind im Applier namentlich aufgeführt, ohne Wildcard — ein neues Kommando im
-  Protokoll ist deshalb ein Compile-Fehler und keine stille Ablehnung.
-- **`ShowMirror` gibt es schon** und es ignoriert `SessionPatch` bislang
-  absichtlich. Wenn die Session-Deltas genauso geprüft werden sollen wie die der
-  Show — und das ist die einzige Art, „Deltas reproduzieren den Zustand" zu
-  belegen — dann braucht es dafür ein Gegenstück; sieh dir
+- **Sparse ist keine Optimierung, sondern die Bedeutung der Schicht.**
+  `docs/DMX_MERGE.md` §3: ein abwesendes Attribut heißt „die Playbacks
+  entscheiden", ein anwesendes ist ein absoluter Override. Ein Programmer, der
+  beim Selektieren Nullen anlegt, schwärzt die Bühne.
+- **`Show::apply` und `SessionState::apply` sind die Vorlage.** Beide
+  validieren, wenden an, geben Deltas (und `Effect`s) zurück und lassen bei einer
+  Ablehnung den Zustand byte-identisch. Beide zählen alle 23 Kommandos namentlich
+  auf, ohne Wildcard. Fünf Show-Kommandos — `SelectFixtures`, `SetAttribute`,
+  `ApplyPreset`, `ClearProgrammer`, `StoreCue` — werden heute in `Show::apply`
+  nur zur Hälfte entschieden und mit `Effect::Programmer` beantwortet: **diese
+  Session macht die andere Hälfte**, und wo genau der Programmer sitzt (eigener
+  Typ neben `Show` und `SessionState`, gehalten von `ShowFile`) ist eine
+  Entscheidung dieser Session für den Decision Log.
+- **Der Programmer-Delta ist `Delta::ProgrammerChanged` und trägt den ganzen
+  Zustand** (`docs/IPC_PROTOCOL.md` §6: „Sent whole: it is small and sparse") —
+  also *kein* JSON Patch. `ShowMirror` und `SessionMirror` ignorieren ihn beide;
+  wenn der Zustand genauso geprüft werden soll wie Show und Session, sieh dir
   `crates/prism-core/tests/delta_round_trip.rs` an, bevor du etwas Neues baust.
-- **Views sind gespeicherte Layouts, `openWindows` ist das aktuelle.**
-  `StoreView` schreibt das aktuelle Canvas in eine View, `SelectView` lädt eine.
-  Wo die Views selbst leben — in der Session oder in der Show — ist eine
-  Entscheidung dieser Session und gehört in den Decision Log.
-- **`SetExecutorPage` trägt ein beliebiges `u32` von jedem Client.**
-  `ExecutorId::from_page_and_slot` rechnet deshalb sättigend (S1-Fund); eine
-  Seitenzahl, die kein Executor sein kann, ist trotzdem eine Frage für die
-  Validierung.
-- **Persistenz ist S15**, aber das Kriterium „übersteht Speichern und Laden"
-  gehört hierher: es wird über Serialisierung und Deserialisierung des
-  Session-Typs geprüft, nicht über SQLite.
+- **`StoreCue` speichert den Programmer als Cue-Parts** — S5 hat das entschieden
+  (Cues tracken, weil der Programmer sparse ist). `Show::store_cue` existiert und
+  validiert; diese Session liefert, was hineingeht.
+- **`presetRef` ist der Grund, warum `ProgrammerValueSource` drei Werte hat.**
+  Ein aus einem Preset gesetzter Wert bleibt mit ihm verbunden, damit ein später
+  geändertes Preset die Cues mitzieht. Preset-Nummern sind **poolübergreifend
+  eindeutig** (S11-Entscheidung), weil `ApplyPreset` keinen Pool trägt.
+- **Der Parameter-Index des Jogwheels ist Session-Zustand, nicht
+  Programmer-Zustand.** Wenn sich die Selektion ändert, ändert sich, welche
+  Parameter es gibt: `SessionState::set_programmer_param_index` ist der Weg, ihn
+  zurückzusetzen.
+- **Der Weg in den Tick ist die Slotnummer.** `prism-engine` adressiert
+  Programmerwerte über `MergePlan`-Slots (S6-Fund), und ein Repatch macht jedes
+  wartende Kommando ungültig — `Show::patch_revision()` ist die Zahl, die sich
+  dabei bewegt. Diese Session baut den Zustand, nicht die Übersetzung; die ist
+  S17.
+- **`ProgrammerState.values` verliert ein Fixture, dessen letztes Attribut
+  gelöscht wird** — das ist eine Invariante aus S1 und wird von `set_value` und
+  `clear_value` durchgesetzt. Nicht direkt in die Map schreiben.
 - Serialisierung ist fehlbar: nicht-endliche `f64` werden in beiden Richtungen
   abgelehnt, JSON rundet Floats nicht bitgenau, und MessagePack muss mit
   `to_vec_named` geschrieben werden (alles S1-Funde im Decision Log).
 - **Validieren und kodieren, bevor geschrieben wird.** Die JSON-Projektion ist
   das Letzte, was in einer Änderung fehlschlagen kann — S11 hatte genau dort
-  einen Fehler, siehe Decision Log.
+  einen Fehler; S12 hat die Regel in `SessionState::commit` an eine Stelle
+  gezogen, statt sie pro Edit zu wiederholen.
 - `prism-domain` hat ein optionales `proptest`-Feature mit `Arbitrary`-Impls für
   jeden Typ — nutze `prism_domain::arb`, statt eigene Generatoren zu schreiben.
 - `prism-core` ist plattformneutral: **kein `#[cfg(target_os = ...)]`**. Das
   Crate läuft im Linux-Job und im ARM64-Cross-Check der CI mit.
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 hat zwei
-  seiner zentralen Tests durch eine absichtlich eingebaute Regression geprüft.
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 und S12 haben
+  ihre zentralen Tests jeweils durch eine absichtlich eingebaute Regression
+  geprüft.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S12-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S13-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S13 (`prism-core` — Programmer-Automat) überschreiben
+  Session S14 (`prism-core` — Oops-Journal) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(core): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
