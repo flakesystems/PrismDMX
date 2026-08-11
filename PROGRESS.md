@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI verified green | ✅ | Latest: run **31522070040** on `3cc803a` (S11) — all four jobs on the first attempt: Windows 3 m 24 s, Linux neutral 1 m 10 s, UI 52 s, ARM64 check 25 s. Before that: run **31506271867** on `532cd1b` (S10, timing gate) — all four jobs on the first attempt: Windows 4 m 45 s, Linux neutral 1 m 12 s, UI 40 s, ARM64 check 23 s. S10's feature commit: run **31500810174** on `3711902`, green on a rerun of the Windows job, which failed on `prism-engine`'s short timing gate rather than on anything in the commit — see the decision log. First verified: run **31346581991** |
+| 13 | CI verified green | ✅ | Latest: run **31531687277** on `3db01dd` (S12) — all four jobs on the first attempt: Windows 3 m 56 s, Linux neutral 1 m 11 s, UI 44 s, ARM64 check 21 s. Before that: run **31522070040** on `3cc803a` (S11) — all four jobs on the first attempt: Windows 3 m 24 s, Linux neutral 1 m 10 s, UI 52 s, ARM64 check 25 s. Before that: run **31506271867** on `532cd1b` (S10, timing gate) — all four jobs on the first attempt: Windows 4 m 45 s, Linux neutral 1 m 12 s, UI 40 s, ARM64 check 23 s. S10's feature commit: run **31500810174** on `3711902`, green on a rerun of the Windows job, which failed on `prism-engine`'s short timing gate rather than on anything in the commit — see the decision log. First verified: run **31346581991** |
 | 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
@@ -506,7 +506,7 @@ the session prompt. No hardware and no network: this session is state.
 | `cargo fmt --all --check` | ✅ exit 0 |
 | Coverage on `prism-core` **> 95 %** | ✅ **99.94 % lines**, 99.07 % regions, 99.65 % functions — up from S11's 99.91 %. `session.rs` and `file.rs` at **100 % lines**, `command.rs`, `conflict.rs` and `testkit.rs` at 100 % on all three, `mirror.rs` back to **100 % lines** after the split. The two remaining uncovered lines in the crate are S11's monomorphisation artefact in `show.rs` |
 | Platform-neutral | ✅ still no `#[cfg]` of any kind in the crate |
-| CI green on the pushed commit | ▶ pending — recorded below once the run this commit triggers has finished |
+| CI green on the pushed commit | ✅ run **31531687277** on `3db01dd` — all four jobs, zero non-success steps, green on the first attempt: Windows full build and test 3 m 56 s, Linux platform-neutral 1 m 11 s (which is where "`prism-core` is platform-neutral" is actually checked — the crate contains no `#[cfg]` at all), UI typecheck and build 44 s, ARM64 cross-check 21 s |
 
 **Delivered:** two modules and a split. `session` is `SessionState` — the §4.1
 state, the views it selects between, the eleven §4.4 commands, and a direct API
