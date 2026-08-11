@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI verified green | ✅ | Latest: run **31456114786** on `176c674` (S8). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
+| 13 | CI verified green | ✅ | Latest: run **31495561058** on `4284ae1` (S9). First verified: run **31346581991** — all four jobs: Windows 55 s, ARM64 check 20 s, UI 15 s, Linux neutral 14 s. No annotations |
 | 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
@@ -386,6 +386,7 @@ are datagrams received on `127.0.0.1`.
 | `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
 | `cargo fmt --all --check` | ✅ exit 0 |
 | Coverage on `prism-protocols` **> 95 %** | ✅ **97.91 % lines**, 96.89 % regions, 97.29 % functions with no adapter attached — up from S8's comparable 96.94 %. `artnet.rs` at **100 % lines** and 99.88 % regions, `udp.rs` at 99.67 %. The whole remaining gap is the two FTDI backends, which is the FFI S8 already recorded as unmeasurable without hardware |
+| CI green on the pushed commit | ✅ run **31495561058** on `4284ae1` — all four jobs, zero non-success steps: Windows full build and test 2 m 50 s, Linux platform-neutral 1 m 5 s, UI typecheck and build 48 s, ARM64 cross-check 17 s. Green on the first attempt, which is also the check that the new modules really are platform-neutral: the Linux job runs `prism-protocols`, and `udp.rs` and `artnet.rs` contain no `#[cfg]` at all |
 | The bytes were checked on a datagram somebody received | ✅ `tests/artnet_wire.rs`: the engine's frame goes through the triple buffer, the runner and a real `UdpSocket`, and the 530 bytes are read back off a loopback socket and asserted — header, port address, sequence, and the patched channels listed literally. Two universes on one output arrive as two datagrams with port addresses 0 and 1 |
 
 **Delivered:** two modules. `udp` is the seam — `UdpSender` with `SystemUdp` over
