@@ -8,13 +8,15 @@
 //!
 //! # What the show model can and cannot finish
 //!
-//! Five of the twelve show commands are the operator's *programmer*, whose
-//! state machine is S13: `SelectFixtures`, `SetAttribute`, `ApplyPreset`,
-//! `ClearProgrammer` and `StoreCue`. The show model still has something to say
-//! about all five, and it is the half that only the show knows — that fixture
-//! 12 is not patched, that preset 4 does not exist, that sequence 7 is not
-//! there to store into. It validates that half, changes nothing, and answers
-//! [`Effect::Programmer`]. S13 does the rest through [`Show`]'s own operations.
+//! Five of the twelve show commands are the operator's *programmer*:
+//! `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` and
+//! `StoreCue`. The show model still has something to say about all five, and it
+//! is the half that only the show knows — that fixture 12 is not patched, that
+//! preset 4 does not exist, that sequence 7 is not there to store into. It
+//! validates that half, changes nothing, and answers [`Effect::Programmer`].
+//! [`crate::Programmer`] holds the other half, and
+//! [`ShowFile::apply`](crate::ShowFile::apply) is where the two are composed —
+//! so a daemon applying a command through the file never sees the seam.
 //!
 //! `Oops`, `Redo` and `SaveShow` are the same shape one layer further out: the
 //! journal is S14 and persistence is S15, so they are validated as far as the
@@ -62,17 +64,17 @@ pub enum Effect {
     /// The groups changed: `MergeBody::load_groups` again.
     ///
     /// No command in `docs/IPC_PROTOCOL.md` §5 stores a group, so [`Show::apply`]
-    /// never produces this today. It is what S13's store operations and S27's
-    /// group editor answer with when they call [`Show::store_group`] directly —
-    /// named here because the engine-side consequence of that edit belongs
-    /// beside the others, not in a comment in the daemon.
+    /// never produces this today. It is what S27's group editor answers with
+    /// when it calls [`Show::store_group`] directly — named here because the
+    /// engine-side consequence of that edit belongs beside the others, not in a
+    /// comment in the daemon.
     ReloadGroups,
     /// A sequence changed: `MergeBody::load_sequence` again for every executor
     /// playing it.
     ///
-    /// Produced by the same callers as [`Effect::ReloadGroups`], for the same
-    /// reason: `StoreCue` is validated here and finished by S13, which is what
-    /// then calls [`Show::store_cue`].
+    /// `StoreCue` is validated here and finished by
+    /// [`ShowFile::apply`](crate::ShowFile::apply), which builds the cue out of
+    /// the programmer, calls [`Show::store_cue`] and answers with this.
     ReloadSequence(SequenceId),
     /// Step an executor.
     ExecutorGo {
@@ -93,8 +95,12 @@ pub enum Effect {
         /// The new level.
         level: u16,
     },
-    /// The programmer state machine (S13) owns the rest of this command. The
-    /// show model has already checked everything it can see.
+    /// [`crate::Programmer`] owns the rest of this command. The show model has
+    /// already checked everything it can see.
+    ///
+    /// [`ShowFile::apply`](crate::ShowFile::apply) carries it out and removes
+    /// it from the answer, so this effect only ever reaches a caller who
+    /// applied the command to a bare [`Show`].
     Programmer,
     /// Undo the last undoable command — the Oops journal, S14.
     Undo,

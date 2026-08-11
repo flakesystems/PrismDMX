@@ -17,11 +17,11 @@
 mod common;
 
 use common::{
-    cue, dimmer_type, executor, fixture, group, par_type, patch_command, populated_session, preset,
-    sequence,
+    cue, dimmer_type, executor, fixture, group, par_type, patch_command, populated_session,
+    populated_show, preset, sequence,
 };
 use prism_core::{
-    SessionMirror, SessionState, Show, ShowMirror, session_patch_ops, show_patch_ops,
+    SessionMirror, SessionState, Show, ShowFile, ShowMirror, session_patch_ops, show_patch_ops,
 };
 use prism_domain::{
     AttributeType, Command, Cue, CuePart, Delta, Executor, ExecutorId, Fixture, FixtureId,
@@ -568,5 +568,150 @@ proptest! {
         applied += 1;
         prop_assert_eq!(mirror.value(), &session.to_json().unwrap());
         prop_assert!(applied >= 1);
+    }
+}
+
+/// A client's copy of the programmer.
+///
+/// There is deliberately no `ProgrammerMirror` in the crate, because there is
+/// nothing for one to do: `Delta::ProgrammerChanged` carries the state whole —
+/// `docs/IPC_PROTOCOL.md` §6, "sent whole: it is small and sparse" — so
+/// applying it *is* the assignment below, and a JSON Patch applier would be a
+/// document nobody points into. What does have to be checked is the other half
+/// of the promise, and it is the half a whole-state delta makes easy to get
+/// wrong: a client told nothing must have missed nothing.
+#[derive(Debug, Default, PartialEq)]
+struct ProgrammerMirror {
+    state: prism_domain::ProgrammerState,
+}
+
+impl ProgrammerMirror {
+    fn apply_delta(&mut self, delta: &Delta) {
+        if let Delta::ProgrammerChanged { state } = delta {
+            self.state = state.clone();
+        }
+    }
+}
+
+/// A show file and the three mirrors a client keeps of it.
+struct FilePair {
+    file: ShowFile,
+    show: ShowMirror,
+    session: SessionMirror,
+    programmer: ProgrammerMirror,
+}
+
+impl FilePair {
+    fn new() -> Self {
+        let file = ShowFile {
+            show: populated_show(),
+            session: populated_session(),
+            ..ShowFile::new()
+        };
+        Self {
+            show: ShowMirror::new(file.show.to_json().unwrap()),
+            session: SessionMirror::new(file.session.to_json().unwrap()),
+            programmer: ProgrammerMirror::default(),
+            file,
+        }
+    }
+
+    /// Applies a command and feeds every mirror every delta, exactly as a
+    /// connection does — each mirror takes what is its own and ignores the rest.
+    fn apply(&mut self, command: &Command) {
+        let applied = self
+            .file
+            .apply(command)
+            .unwrap_or_else(|error| panic!("{command:?} was refused: {error}"));
+        for delta in &applied.deltas {
+            self.show.apply_delta(delta).unwrap();
+            self.session.apply_delta(delta).unwrap();
+            self.programmer.apply_delta(delta);
+        }
+        self.agree();
+    }
+
+    fn agree(&self) {
+        assert_eq!(self.show.value(), &self.file.show.to_json().unwrap());
+        assert_eq!(self.session.value(), &self.file.session.to_json().unwrap());
+        assert_eq!(
+            rmp_serde::to_vec_named(&self.programmer.state).unwrap(),
+            rmp_serde::to_vec_named(self.file.programmer.state()).unwrap(),
+            "the mirror and the programmer have diverged"
+        );
+    }
+}
+
+#[test]
+fn a_scripted_programmer_is_reproduced_command_by_command() {
+    let mut pair = FilePair::new();
+    pair.agree();
+
+    pair.apply(&Command::SelectFixtures {
+        ids: vec![FixtureId::new(1), FixtureId::new(2)],
+        mode: prism_domain::SelectionMode::Set,
+    });
+    pair.apply(&Command::SetAttribute {
+        attribute: AttributeType::Red,
+        value: 65535,
+        relative: false,
+    });
+    pair.apply(&Command::SetAttribute {
+        attribute: AttributeType::Green,
+        value: -4096,
+        relative: true,
+    });
+    pair.apply(&Command::SelectFixtures {
+        ids: vec![FixtureId::new(3)],
+        mode: prism_domain::SelectionMode::Add,
+    });
+    pair.apply(&Command::ApplyPreset {
+        preset_id: PresetId::new(4),
+    });
+    // A store writes the show, so this one command moves two documents at once.
+    pair.apply(&Command::StoreCue {
+        sequence_id: SequenceId::new(1),
+        cue_number: "3".to_owned(),
+    });
+    // And the three stages of the Clear, the last of which moves the session.
+    for _ in 0..3 {
+        pair.apply(&Command::ClearProgrammer);
+    }
+
+    assert!(pair.file.programmer.state().is_empty());
+    assert_eq!(pair.programmer.state, *pair.file.programmer.state());
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    /// The whole protocol against one file: whatever was accepted, a client
+    /// that applied every delta holds all three documents exactly.
+    ///
+    /// The programmer is the one that a "changes nothing, says nothing" rule
+    /// can break silently — a state that moved without a delta leaves every
+    /// client wrong until the next one arrives — so it is compared after
+    /// **every** command, accepted or refused.
+    #[test]
+    fn one_delta_stream_reproduces_all_three_documents(
+        commands in proptest::collection::vec(any::<Command>(), 1..24)
+    ) {
+        let mut pair = FilePair::new();
+        for command in commands {
+            if let Ok(applied) = pair.file.apply(&command) {
+                for delta in &applied.deltas {
+                    pair.show.apply_delta(delta).unwrap();
+                    pair.session.apply_delta(delta).unwrap();
+                    pair.programmer.apply_delta(delta);
+                }
+                // The effect naming the programmer is carried out here, never
+                // handed on: no caller of `ShowFile::apply` has to know that
+                // two models decided one command.
+                prop_assert!(!applied.effects.contains(&prism_core::Effect::Programmer));
+            }
+            prop_assert_eq!(pair.show.value(), &pair.file.show.to_json().unwrap());
+            prop_assert_eq!(pair.session.value(), &pair.file.session.to_json().unwrap());
+            prop_assert_eq!(&pair.programmer.state, pair.file.programmer.state());
+        }
     }
 }

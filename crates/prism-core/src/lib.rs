@@ -8,6 +8,19 @@
 //!
 //! Sessions **S11-S15**.
 //!
+//! # What S13 delivers
+//!
+//! - [`Programmer`] - the operator's live edit: the selection, the **sparse**
+//!   set of touched values, the feature groups they fall under, and the
+//!   three-stage Clear. An attribute nobody has touched is *absent*, which is
+//!   what tells the merge to let the playbacks decide.
+//! - [`Programmer::apply`] - the five commands `Show::apply` validates but
+//!   cannot finish, finished. [`ShowFile::apply`] composes the two, so a
+//!   daemon never sees the seam.
+//! - [`Programmer::cue`] - what `StoreCue` puts into a sequence: the touched
+//!   values as cue parts, `presetRef`s intact so the cue stays live-updatable,
+//!   merged onto the cue that is already there.
+//!
 //! # What S12 delivers
 //!
 //! - [`SessionState`] - the operating state of `ARCHITECTURE_SPEC.md` section
@@ -48,15 +61,15 @@
 //!
 //! # What lives elsewhere
 //!
-//! The programmer state machine is **S13**, the Oops journal **S14**, session
-//! state **S12** and persistence **S15**. The show model is what all four sit
-//! on: it validates, it applies, and it says what changed.
+//! The Oops journal is **S14** and persistence **S15**. The show model is what
+//! both sit on: it validates, it applies, and it says what changed.
 
 mod command;
 mod conflict;
 mod desk;
 mod file;
 mod mirror;
+mod programmer;
 mod session;
 mod show;
 #[cfg(test)]
@@ -67,5 +80,6 @@ pub use conflict::{PatchConflict, ShowIssue};
 pub use desk::{DeskId, InvalidDeskId, MachineConfig};
 pub use file::{ShowFile, ShowFileError};
 pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
+pub use programmer::{Programmer, ProgrammerError};
 pub use session::{SessionError, SessionState, session_patch_ops};
 pub use show::{Show, ShowError};

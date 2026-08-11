@@ -322,6 +322,29 @@ impl Show {
         })
     }
 
+    /// The definition of one attribute of one patched fixture.
+    ///
+    /// The programmer (S13) asks this twice for every value it writes: for the
+    /// home value a relative move starts from, and for the feature group the
+    /// attribute is filed under — which is the *profile's* answer rather than
+    /// the attribute name's, the distinction S6 had to make before the masters
+    /// could be written. `None` means the fixture is not patched, or its
+    /// profile has no such attribute, which are the same answer to "may this
+    /// value exist": no.
+    #[must_use]
+    pub fn attribute_def(
+        &self,
+        fixture: prism_domain::FixtureId,
+        attribute: prism_domain::AttributeType,
+    ) -> Option<&prism_domain::AttributeDef> {
+        let fixture = self.fixtures.get(&fixture)?;
+        self.fixture_types
+            .get(&fixture.type_id)?
+            .attributes
+            .iter()
+            .find(|def| def.attribute == attribute)
+    }
+
     /// The universes the patch occupies, ascending and without repeats.
     ///
     /// What a `prism_engine::FrameLayout` is built from: a universe nothing is

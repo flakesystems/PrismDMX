@@ -14,6 +14,25 @@
 //! matching on command variants a second time — a third copy of that list is a
 //! third place to forget a new command.
 //!
+//! # The programmer is the third half, and it is composed rather than routed
+//!
+//! Five commands — `SelectFixtures`, `SetAttribute`, `ApplyPreset`,
+//! `ClearProgrammer` and `StoreCue` — are decided by *two* models. The show
+//! validates the half only it can see (fixture 12 is not patched, preset 4 does
+//! not exist, sequence 7 is not there to store into) and answers
+//! [`Effect::Programmer`]; this type carries out the rest and drops the effect,
+//! so a daemon applying a command here never has to know that the work was
+//! split. It also owns the two places where a programmer change reaches into
+//! the *session*: the jog wheel's parameter index when the selection changes,
+//! and the page state on the third press of Clear.
+//!
+//! # The programmer is deliberately not in the file
+//!
+//! [`ShowFile::programmer`] is `#[serde(skip)]`. See
+//! [`crate::Programmer`] for why: it is the operator's unstored edit, it
+//! overrides every playback absolutely, and it is not an unsaved change to the
+//! show.
+//!
 //! # One Save LED, two sources
 //!
 //! The show is dirty when it has unsaved edits (S11); the session is dirty when
@@ -30,23 +49,26 @@
 //! copy it — see that module for why. **S15 requirement:** this type is what a
 //! `.prism` file holds, and it has no field for a desk.
 
-use prism_domain::{Command, Delta};
+use prism_domain::{ClearStage, Command, Delta, NoticeLevel};
 use serde::{Deserialize, Serialize};
 
-use crate::command::Applied;
+use crate::command::{Applied, Effect};
+use crate::programmer::{Programmer, ProgrammerError};
 use crate::session::{SessionError, SessionState};
 use crate::show::{Show, ShowError};
 
 /// Why a command could not be applied to a show file.
 ///
-/// One error type over both appliers, so a caller can route a command without
-/// knowing in advance which half will answer.
+/// One error type over all three appliers, so a caller can route a command
+/// without knowing in advance which half will answer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShowFileError {
     /// The show refused it.
     Show(ShowError),
     /// The session refused it.
     Session(SessionError),
+    /// The programmer refused it.
+    Programmer(ProgrammerError),
 }
 
 impl core::fmt::Display for ShowFileError {
@@ -54,6 +76,7 @@ impl core::fmt::Display for ShowFileError {
         match self {
             Self::Show(error) => error.fmt(f),
             Self::Session(error) => error.fmt(f),
+            Self::Programmer(error) => error.fmt(f),
         }
     }
 }
@@ -72,6 +95,12 @@ impl From<SessionError> for ShowFileError {
     }
 }
 
+impl From<ProgrammerError> for ShowFileError {
+    fn from(error: ProgrammerError) -> Self {
+        Self::Programmer(error)
+    }
+}
+
 /// A show and the session it is operated in.
 ///
 /// The fields are public because the two models are edited directly by the
@@ -86,6 +115,14 @@ pub struct ShowFile {
     /// multi-session daemon turns this into a map keyed by `SessionId` — which
     /// is a change to the file format, and therefore S15's.
     pub session: SessionState,
+    /// The programmer: the operator's live, unstored edit.
+    ///
+    /// Not part of the file, and `ARCHITECTURE_SPEC.md` §4.4 puts it here
+    /// rather than beside the show: "V1 has exactly one session and the
+    /// programmer belongs to it". A multi-session daemon gets one programmer
+    /// per session, which is the same change to this type as the session map.
+    #[serde(skip)]
+    pub programmer: Programmer,
 }
 
 impl ShowFile {
@@ -118,8 +155,8 @@ impl ShowFile {
     ///
     /// # Errors
     ///
-    /// [`ShowFileError`] if the command was refused. Neither half is changed
-    /// after an error.
+    /// [`ShowFileError`] if the command was refused. No half is changed after
+    /// an error.
     pub fn apply(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
         let was_dirty = self.is_dirty();
         let mut applied = if command.is_session_command() {
@@ -127,6 +164,17 @@ impl ShowFile {
         } else {
             self.show.apply(command)?
         };
+        if applied.effects.contains(&Effect::Programmer) {
+            // The show has decided its half and named who finishes the job.
+            // That somebody is here, so the effect is carried out rather than
+            // handed on.
+            applied
+                .effects
+                .retain(|effect| *effect != Effect::Programmer);
+            let finished = self.finish_programmer(command)?;
+            applied.deltas.extend(finished.deltas);
+            applied.effects.extend(finished.effects);
+        }
         // The show applier raises the flag for its own half; here the flag is
         // the pair, so its own answer is replaced by the pair's transition.
         applied
@@ -139,13 +187,79 @@ impl ShowFile {
         }
         Ok(applied)
     }
+
+    /// The half of a programmer command the show could not finish.
+    ///
+    /// Order matters and is the S11 rule one level up: the fallible, *writing*
+    /// step goes first. `StoreCue` builds a cue out of the programmer and puts
+    /// it into the show, and a refusal there must leave the programmer exactly
+    /// as it was — so the programmer's own state moves only once the show has
+    /// accepted.
+    fn finish_programmer(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
+        let mut applied = Applied::default();
+        if let Command::StoreCue {
+            sequence_id,
+            cue_number,
+        } = command
+        {
+            let unresolved = self.programmer.unresolved(&self.show);
+            let cue = self.programmer.cue(&self.show, *sequence_id, cue_number)?;
+            let ops = self.show.store_cue(*sequence_id, cue)?;
+            applied.deltas.push(Delta::ShowPatch { ops });
+            applied.effects.push(Effect::ReloadSequence(*sequence_id));
+            if !unresolved.is_empty() {
+                // S6 asked for this in as many words: a value dropped silently
+                // is one an operator cannot learn about.
+                let dropped: Vec<String> = unresolved
+                    .iter()
+                    .map(|(fixture, attribute)| format!("fixture {fixture} {attribute:?}"))
+                    .collect();
+                applied.deltas.push(Delta::Notice {
+                    level: NoticeLevel::Warn,
+                    message: format!(
+                        "{} programmer value(s) the patch no longer has were not stored: {}",
+                        dropped.len(),
+                        dropped.join(", ")
+                    ),
+                });
+            }
+        }
+
+        let selection_before = self.programmer.state().selection.clone();
+        applied
+            .deltas
+            .extend(self.programmer.apply(command, &self.show)?.deltas);
+
+        // A new selection is a new list of parameters, so the wheel goes back
+        // to the first of them — S12 put the index in the session and asked
+        // this session to reset it through the session's own edit.
+        let mut session_ops = if self.programmer.state().selection == selection_before {
+            Vec::new()
+        } else {
+            self.session.set_programmer_param_index(0)?
+        };
+        // The third press of Clear takes the page state with it
+        // (`docs/DMX_MERGE.md` §3.1), and the page state is the session's.
+        if matches!(command, Command::ClearProgrammer)
+            && self.programmer.state().clear_stage == ClearStage::Idle
+        {
+            session_ops.extend(self.session.set_programmer_page(0)?);
+            session_ops.extend(self.session.set_programmer_param_index(0)?);
+        }
+        if !session_ops.is_empty() {
+            applied
+                .deltas
+                .push(Delta::SessionPatch { ops: session_ops });
+        }
+        Ok(applied)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{ShowFile, ShowFileError};
     use crate::testkit::{fixture, par_type};
-    use crate::{SessionError, ShowError};
+    use crate::{ProgrammerError, SessionError, ShowError};
     use prism_domain::{Command, Delta, ViewId, WindowInstanceId, WindowType};
 
     fn file() -> ShowFile {
@@ -176,17 +290,25 @@ mod tests {
         ));
         assert_eq!(file.session.session().open_windows.len(), 2);
 
+        // A programmer command is decided by the show and finished here, so
+        // the effect that named the finisher is gone by the time a daemon sees
+        // the answer.
         let applied = file
             .apply(&Command::SelectFixtures {
                 ids: vec![prism_domain::FixtureId::new(1)],
                 mode: prism_domain::SelectionMode::Set,
             })
             .unwrap();
-        assert_eq!(applied.effects, vec![crate::Effect::Programmer]);
+        assert!(applied.effects.is_empty());
+        assert!(matches!(
+            applied.deltas.as_slice(),
+            [Delta::ProgrammerChanged { .. }]
+        ));
+        assert_eq!(file.programmer.state().selection.len(), 1);
     }
 
     #[test]
-    fn a_refusal_from_either_half_is_one_error_type() {
+    fn a_refusal_from_any_half_is_one_error_type() {
         let mut file = file();
         assert_eq!(
             file.apply(&Command::CloseWindow {
@@ -204,7 +326,21 @@ mod tests {
                 prism_domain::PresetId::new(9)
             )))
         );
-        // Both read as themselves.
+        // The show has nothing to say about an empty programmer — the sequence
+        // exists and the cue number is a cue number — so this refusal can only
+        // come from the third half.
+        file.show
+            .store_sequence(crate::testkit::sequence(1, Vec::new()))
+            .unwrap();
+        assert_eq!(
+            file.apply(&Command::StoreCue {
+                sequence_id: prism_domain::SequenceId::new(1),
+                cue_number: "1".to_owned(),
+            }),
+            Err(ShowFileError::Programmer(ProgrammerError::NothingToStore))
+        );
+
+        // All three read as themselves.
         assert_eq!(
             ShowFileError::from(ShowError::NotAShowCommand).to_string(),
             ShowError::NotAShowCommand.to_string()
@@ -212,6 +348,10 @@ mod tests {
         assert_eq!(
             ShowFileError::from(SessionError::NotASessionCommand).to_string(),
             SessionError::NotASessionCommand.to_string()
+        );
+        assert_eq!(
+            ShowFileError::from(ProgrammerError::NothingToStore).to_string(),
+            ProgrammerError::NothingToStore.to_string()
         );
     }
 

@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-12
 **Current phase:** Phase 3 — Core state
-**Current session:** S13 — `prism-core` programmer state machine (not started; see §8 for the prompt that starts it)
-**Last completed:** S12 — `prism-core` session state (D11) ✅ — **the console can now operate the interface**
+**Current session:** S14 — `prism-core` Oops journal (not started; see §8 for the prompt that starts it)
+**Last completed:** S13 — `prism-core` programmer state machine ✅ — **the operator's own layer exists**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -63,7 +63,7 @@
 |---|---|---|---|---|
 | S11 | Show model, command application | ✅ | 2026-08-11 | All exit criteria verified — see §2.12. 88 tests, coverage 99.9 % lines. Two mutation checks confirm the two central tests are not vacuous |
 | S12 | Session state (D11) | ✅ | 2026-08-11 | All exit criteria verified — see §2.13. 125 tests, coverage 99.94 % lines with `session.rs` and `file.rs` at **100 %**. Two mutation checks confirm the two central tests are not vacuous |
-| S13 | Programmer state machine | ☐ | | |
+| S13 | Programmer state machine | ✅ | 2026-08-12 | All exit criteria verified — see §2.14. 166 tests, coverage 99.89 % lines. Three mutation checks confirm the three central tests are not vacuous |
 | S14 | Oops journal | ☐ | | |
 | S15 | SQLite persistence | ☐ | | |
 
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 13 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 14 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -530,6 +530,51 @@ swaps it in — so S11's "validate and encode before you write" is a property of
 the module rather than a rule each of the twelve edits has to remember, and
 change detection comes with it.
 
+### 2.14 S13 verification record
+
+Measured on 2026-08-12, all exit criteria from `IMPLEMENTATION_PLAN.md` S13 and
+the session prompt. No hardware and no network: this session is the operator's
+own layer.
+
+| Check | Result |
+|---|---|
+| Three-stage clear tested through **all** transitions, including the reset-to-0 rule on unrelated interaction | ✅ `tests/programmer.rs`: `the_three_stage_clear_runs_through_every_transition` walks 0 → 1 → 2 → 0 and **round again**, asserting at each step what survives and what goes — the selection outlives the first press, the active feature group outlives the second, and the third takes the feature group *and* the session's page state with it. `any_other_programmer_interaction_puts_the_clear_stage_back_to_zero` drives four interactions from **both** non-zero stages. The fifth interaction, `StoreCue`, is the exception that proves the rule and has a test of its own: the only way to a non-zero stage is a Clear, and the first Clear has already emptied the values, so a store from stage 1 or 2 is refused before the stage matters — `a_store_can_never_meet_a_non_zero_clear_stage` asserts that, and that the refusal does not move the stage either. **Checked by mutation:** taking the reset out of the one place that performs it turns the interaction test red |
+| `ApplyPreset` records `presetRef` so cues stay live-updatable | ✅ asserted at both ends. `applying_a_preset_records_the_preset_reference` reads the value, its `Preset` source and its `presetRef` out of the programmer; `a_preset_reaches_the_cue_with_its_link_intact` stores it and reads the link out of the **cue** in the show, which is where "live-updatable" actually lives. The other half is asserted too — `a_manual_change_on_top_of_a_preset_breaks_the_link`, because a value the operator has since moved by hand must *not* follow a later edit of the preset. **Checked by mutation:** dropping `presetRef` when the cue part is built turns the cue test red and nothing else |
+| The programmer is sparse: an untouched attribute is **absent**, not 0 | ✅ four tests and a property. `selecting_fixtures_creates_no_values_at_all` (a programmer that laid down zeros on selection would black the stage out); `an_untouched_attribute_is_absent_rather_than_zero`, which checks absence on a fixture that *is* selected and *does* have the attribute, on one that is not selected, and that the whole map is two fixtures with one attribute each; `an_attribute_the_fixture_does_not_have_is_not_written` (a PAR has no pan); and `setting_an_attribute_with_nothing_selected_changes_nothing`. The property `the_invariants_hold_however_the_programmer_is_driven` runs up to 24 arbitrary programmer commands and asserts after **every** one that no fixture maps to an empty attribute map (the S1 invariant), that nothing is selected twice or unpatched, and that every value the programmer holds is one the show can still resolve. **Checked by mutation:** letting a value be written for an attribute the profile does not define turns three of them red |
+| `cargo test -p prism-core` | ✅ exit 0 — **109 lib tests** + 57 integration tests across five targets, 0 failed, 0 ignored |
+| `cargo test --workspace` | ⚠️ **845 of 846 pass** across 29 targets, 12 ignored (the S8 hardware target and the long engine runs). The one failure is `prism-engine`'s `the_tick_holds_its_deadline_for_a_few_seconds`, and it is the flake S10 predicted in writing rather than anything this session changed: `cargo test` runs a workspace's test binaries **in parallel**, this session adds the 29th, and the diagnostic the test prints for exactly this case says `probe thread turns: 0/s` — the machine had no core to spare, which is the measurement's precondition and not a property of the engine. Run alone, the target passes in 8 s (2 passed, 4 ignored), twice. Recorded rather than hidden; see the decision log |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-core` **> 95 %** | ✅ **99.89 % lines**, 98.98 % regions, 99.42 % functions. `command.rs`, `conflict.rs`, `desk.rs`, `file.rs`, `mirror.rs`, `session.rs` and `testkit.rs` at **100 % lines**, `programmer.rs` 99.43 %, `show.rs` 99.87 % — and `--show-missing-lines` reports **no uncovered source line at all**, so the residue is the monomorphisation artefact S4 measured and S11 recorded, now in two files instead of one. The first measurement read 99.81 %, and — for the fifth session running — none of *that* gap was a missing test of real behaviour either: it was two validation guards `Show::apply` reaches first, a preset value for an attribute a selected fixture does not have, and one error-display arm. All four now have tests, and the two guards matter to the direct callers S14, S17 and S27 will be |
+| Delta generation, the third document | ✅ `tests/delta_round_trip.rs` grew a `FilePair`: one command stream through `ShowFile::apply`, **three** mirrors fed every delta, each taking its own and ignoring the rest. A scripted run through selection, absolute and relative attribute moves, a preset, a store and all three Clear presses, then `one_delta_stream_reproduces_all_three_documents` over up to 24 arbitrary commands, comparing all three after every one. There is deliberately no `ProgrammerMirror` in the crate: `ProgrammerChanged` carries the state whole, so applying it *is* an assignment — what needed asserting was the other half, that a client told nothing has missed nothing |
+| Platform-neutral | ✅ still no `#[cfg]` of any kind in the crate |
+| CI green on the pushed commit | ✅ run **31547070983** on `06c7f57` — all four jobs, zero non-success steps, green on the first attempt: Windows full build and test 3 m 46 s, Linux platform-neutral 1 m 8 s (where "`prism-core` is platform-neutral" is actually checked), UI typecheck and build 1 m 2 s, ARM64 cross-check 23 s |
+
+**Delivered:** one module and the composition around it. `programmer` is
+[`Programmer`]: the selection with its three modes, the sparse values, the
+feature groups they fall under, the three-stage Clear, and `cue`, which is what
+`StoreCue` puts into a sequence. `ShowFile` holds it beside the show and the
+session and is where the five split commands are put back together —
+`Effect::Programmer` is now carried out rather than handed on. `Show` grew one
+query, `attribute_def`, which is the show's knowledge the programmer needs twice
+for every value it writes.
+
+**Five commands are decided by two models, and the seam is closed in one
+place.** S11 left `SelectFixtures`, `SetAttribute`, `ApplyPreset`,
+`ClearProgrammer` and `StoreCue` validated but unfinished, answering
+`Effect::Programmer`. `ShowFile::apply` now finishes them, drops the effect and
+merges the deltas, so a daemon applying a command through the file never learns
+that the work was split — and the show applier is unchanged, so a caller with a
+bare `Show` still gets the effect that names the finisher.
+
+**The programmer is not in the file, and the Save LED is the argument.** A
+programmer restored from disk would be an absolute override of every playback,
+applied to a rig the moment a show opened. The structural half is that setting a
+value is not an edit to the show (S11), so a persisted programmer would change
+the file's bytes without the lamp ever lighting — `the_programmer_is_not_part_of_the_show_file`
+asserts both: the bytes are identical with a full programmer and an empty one,
+and `is_dirty()` stays false.
+
 ---
 
 ## 3. Coverage tracking
@@ -543,7 +588,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
-| `prism-core` | **> 95 %** (programmer) | **99.94 % lines**, 99.07 % regions, 99.65 % functions — `session.rs`, `file.rs` and `mirror.rs` at **100 % lines**, `command.rs`, `conflict.rs` and `testkit.rs` at 100 % on all three, `desk.rs` 100 % lines, `show.rs` 99.74 %. The only two uncovered lines in the crate are one monomorphisation of the generic JSON projection in `show.rs`, the artefact S4 recorded | 2026-08-11 (S12) |
+| `prism-core` | **> 95 %** (programmer) | **99.89 % lines**, 98.98 % regions, 99.42 % functions — `command.rs`, `conflict.rs`, `desk.rs`, `file.rs`, `mirror.rs`, `session.rs` and `testkit.rs` at **100 % lines**, `programmer.rs` 99.43 %, `show.rs` 99.87 %. `--show-missing-lines` reports no uncovered source line at all: the four counted lines are monomorphisations, the artefact S4 first measured | 2026-08-12 (S13) |
 | `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
@@ -735,6 +780,16 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-12 | S13 | **The programmer is a third model beside the show and the session, and it is deliberately not in the file.** Where it lives was left open on purpose, and both obvious answers are wrong: inside `Show` it would travel as a `ShowPatch` (the protocol gives it its own delta), and inside `SessionState` it would travel as a `SessionPatch` and be part of the document `/session` points into | `prism_core::Programmer`, held by `ShowFile` beside the other two, `#[serde(skip)]`. `ARCHITECTURE_SPEC.md` §4.4 puts it there in as many words — "V1 has exactly one session and the programmer belongs to it" — so a multi-session daemon gets one programmer per session, the same change as the session map. **Not persisted, and the Save LED is the argument rather than taste:** setting a value is not an edit to the show (S11 asserted that `SetAttribute` leaves it clean), so a programmer inside the file would change the file's bytes without the lamp ever lighting — and a programmer restored from disk is an absolute override of every playback, applied to a rig the moment the show opens and asked for by nobody. Both halves asserted: the bytes are identical with a full programmer and an empty one. **S15 requirement:** the `.prism` schema has no table for it |
+| 2026-08-12 | S13 | **Five commands are decided by two models, and the composition belongs in one place or it will be written three times.** S11 left `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` and `StoreCue` validated-but-unfinished, answering `Effect::Programmer`. Two of them also reach into a *third* model: a new selection resets the jog wheel, and the third press of Clear resets the page state, both of which are session state (S12) | `ShowFile::apply` carries out `Effect::Programmer`, drops it from the answer, and merges the deltas — so a daemon applying a command through the file never learns the work was split, and `Show::apply` is unchanged for a caller holding a bare show. The order inside it is S11's rule one level up: **the fallible, writing step goes first**, so a `StoreCue` the show refuses leaves the programmer byte-identical. `Programmer::apply` is the third exhaustive match over all 23 commands, in the third direction, so a command added to the protocol is now a compile error in three places |
+| 2026-08-12 | S13 | **A store *merges* into the cue that is there, and `StoreCue` cannot say otherwise.** The programmer is sparse by specification, so a store carries only what was touched this time; overwriting would delete every value in the cue the operator did not happen to touch — data loss the command has no field to ask for. The same reasoning keeps an existing cue's name, times and trigger: a store is about the look | Merged, asserted, and written on `Programmer::cue`. A new cue starts with **no name and no fade**, because a store is a snapshot rather than a statement about time. **S28 requirement, and it is a protocol change:** Merge / Overwrite / Remove is a real distinction on a console, and offering it means adding a mode to `StoreCue` in `docs/IPC_PROTOCOL.md` §5. **Storing an empty programmer is refused** (`NothingToStore`) rather than writing a cue that does nothing — the S11 rule about silence, applied to the one gesture where an operator would otherwise get a cue number that goes dark |
+| 2026-08-12 | S13 | **A relative move needs a base and `prism-core` cannot see the one the operator is looking at.** An encoder turn on an attribute the programmer is not yet holding has to start somewhere, and the value on stage is whatever the *playbacks* resolved to — which lives in the engine, one process boundary away | It starts from the attribute's **home** value, which is the bottom of the merge stack and the only base this crate can know, and from the held value once there is one. Both asserted, along with saturation at either end for a wheel spun hard. **S17/S27 requirement:** "grab what the playback is doing" is a different gesture, it needs the engine's resolved value, and it already has a name in the domain — `ProgrammerValueSource::Recalled`, which is the one of the three sources nothing produces yet |
+| 2026-08-12 | S13 | **`ApplyPreset` applies to the selection, and a preset value for an unselected fixture is not applied.** The other reading — apply every value the preset holds — is tempting because a preset already names its fixtures, and it would make the command work with nothing selected | `ARCHITECTURE_SPEC.md` §6 and `docs/IPC_PROTOCOL.md` §5 both define it as "apply a preset to the current selection", and a preset holding a value *per fixture* is what makes that the useful reading: the operator selects the heads they mean and recalls the look stored for them. A value for a fixture that is not selected, or for an attribute the selected fixture's profile does not define, is skipped rather than refused — the same rule as `SetAttribute`, because a preset outlives the rig it was recorded on. **A manual change on top of a preset value breaks the link:** it is no longer the preset's value, so a later edit of the preset must not move it, and `presetRef` is exactly the promise that it would |
+| 2026-08-12 | S13 | **The Clear stage resets on every interaction, which makes one of the five reset paths unreachable — and that is worth a test rather than a comment.** The rule in `docs/DMX_MERGE.md` §3.1 is "the stage resets to 0 on any other programmer interaction". Written per command it is four copies; written once it turns out that a *store* can never observe a non-zero stage at all, because the only way to one is a Clear and the first Clear has already emptied the programmer | The reset lives in one place — the successor every non-Clear edit starts from — and `a_store_can_never_meet_a_non_zero_clear_stage` asserts the unreachability instead of leaving a plausible-looking branch untested: the store is refused with `NothingToStore` and the stage does not move either. The rule covers the **direct** API as well as the command path, so an S27 fixture sheet writing a value has the same effect on the button as an encoder does |
+| 2026-08-12 | S13 | **`Delta::ProgrammerChanged` carries the whole state, so nothing tells the daemon *what* changed — and the engine is addressed per slot.** S6 fixed that the tick receives one `MergePlan` slot at a time; the delta the protocol defines is the opposite shape, deliberately ("sent whole: it is small and sparse"), and it is the shape a *client* wants | **S17 requirement:** the daemon keeps the state it last sent to the engine and diffs against `Programmer::state()` to build `TickCommand::SetProgrammerValue`/`ClearProgrammerValue`, or reloads the whole layer through `MergeBody::load_programmer` — which allocates and is therefore set-up work, not something to do per encoder turn. **S16 requirement:** `docs/IPC_PROTOCOL.md` §4.1's `Snapshot` carries the show and the session and **not** the programmer, so a client connecting mid-programming would see an empty one; either the snapshot grows a third document or the daemon sends a `ProgrammerChanged` immediately after it |
+| 2026-08-12 | S13 | **A programmer value the show can no longer resolve is dropped at store time and *reported*, which is what S6 asked for by name.** A fixture can be unpatched, or its profile replaced by a mode without that attribute, while the operator's value sits in the programmer; `Show::store_cue` would refuse the whole cue over it | `Programmer::unresolved` lists them, `Programmer::cue` leaves them out, and `ShowFile::apply` puts them in a `Delta::Notice` at `Warn` naming each one. A `presetRef` to a preset that has since been deleted is dropped the same way and the **value kept** — which is exactly what S11's `Show::remove_preset` already does to the cue parts that referenced it. **S27 requirement:** the programmer window shows an unresolved value in red rather than hiding it, because an operator who cannot see it cannot understand why it does nothing |
+| 2026-08-12 | S13 | **`activeFeatureGroup` and the session's `encoderBank` are two fields that look like one, and defining the first as a copy of the second would have been a bug factory.** §4.1 gives the session an encoder bank; §6 gives the programmer an active feature group. Kept in step they are duplicated state; left alone they need a meaning | The programmer's group is the group of the attribute it last **touched**, filed under the profile's `featureGroup` rather than the attribute's name (S6). The encoder bank stays what the encoders are showing and is never written from here. `Programmer::feature_groups` is the related query — which groups the programmer holds values for at all, in encoder-bank order — and **S26 requirement:** that is what the encoder bar marks, so an operator can see they have touched colour while looking at the position bank |
+| 2026-08-12 | S13 | **The short timing gate went red on the development machine, and S10 predicted this session would be the one that did it.** S10's entry ends: "every new test target makes this window noisier". This session adds the **29th** test target, and `cargo test --workspace` now fails `the_tick_holds_its_deadline_for_a_few_seconds` on a four-core machine with nothing else running — 45 of 132 ticks missed, median jitter 4.6 ms, and the line that settles it, printed by the test for exactly this purpose: **`probe thread turns: 0/s`**. The machine had no core to spare, which is the measurement's precondition rather than a property of the engine. Run alone the target passes in 8 s, twice, on the same tree | Recorded rather than hidden, and **not fixed here**: `prism-engine`'s gates are not this session's to loosen, and the honest remedy is a decision about what a timing assertion can mean beside a suite that now starts 29 binaries at once. **Requirement for the next session that touches `prism-engine`:** either the short run refuses to assert when its own probe says the machine is starved — which is the inverse of the check the ten-minute stress gate already makes — or it moves behind `#[ignore]` with the other long runs, where §3.1's commands run it alone. The tail number that means something is unchanged and lives where its 26 401 samples are (§3). **Meanwhile:** run a failing timing test alone **before** looking at the diff, and never beside a coverage build |
 | 2026-08-11 | S12 | **The views live in the session, not in the show, and the protocol says so twice before the argument even starts.** `ARCHITECTURE_SPEC.md` §4.1 lists `activeViewId` in the session but never says where the views themselves are kept, and a view is stored content that looks like show content — the school builds three layouts once and uses them all term | `SessionState` holds them, keyed by view number. Three things point the same way: `docs/IPC_PROTOCOL.md` §6 annotates `SessionPatch` with "**views**, windows, pages, selection", so a view stored into the show would travel as the wrong delta *and* contradict the exit criterion; `Command::is_undoable` already excludes every session command from the Oops journal (S14), so a view stored into the show would be a show edit undo deliberately cannot reach, which is the asymmetry that turns into a bug report; and §4.4's closing note gives the reason multi-session exists at all — "two operators can work with **independent views**". **S15 requirement:** the views are in the session half of the file, so a show imported into another session does not bring another operator's layouts with it |
 | 2026-08-11 | S12 | **A `SessionPatch` needs a document to point into, and the session is not one object but two.** JSON Patch is only meaningful against a root, and §4.1's `Snapshot { show, session, ... }` already treats show and session as separate documents | The session document is `{ "session": …, "views": … }`: `/session/executorPage` is the §4.1 state and `/views/3` is one stored layout. Views are keyed by **number**, for exactly S11's reason — a pointer into an array names a position, so a list would silently renumber every view after a deleted one. `SessionMirror` is the applier on the other end, and `the_two_mirrors_ignore_each_others_deltas` asserts that one connection's delta stream leaves each mirror with only its own half: a `SessionPatch` applied to the show document would fail on `/session`, and a mirror that guessed would corrupt itself |
 | 2026-08-11 | S12 | **`ShowMirror` had to grow a sibling, and two copies of RFC 6902 would have been the third mistake of this kind in the project.** The session needs the same applier over a different document and a different delta | The engine is `JsonMirror`, public because a client with a document of its own needs it too; `ShowMirror` and `SessionMirror` are that engine plus the knowledge of which delta belongs to which document. The split cost nine delegating lines each and no behaviour: S11's mirror tests are unchanged and still pass |
@@ -863,13 +918,36 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The console can operate the interface now, and the show still reaches the
-engine.** A `SelectView` from the X-Touch changes state in the daemon, comes back
-out as a `SessionPatch`, and a mirror fed nothing but those deltas is the session
-byte for byte — with no client connected at any point. What is still missing is
-the operator's own layer: the selection, the sparse attribute values, the
-three-stage Clear. Begin **S13** (`prism-core` — programmer state machine). Use
-the prompt in §8.
+**The operator's own layer exists now.** Selecting fixtures, turning an
+attribute, recalling a preset, clearing in three stages and storing the result
+into a cue all work end to end through `ShowFile::apply`, and a client that
+applied nothing but the deltas holds the show, the session **and** the programmer
+exactly. What is still missing is the way back: nothing can be undone. Begin
+**S14** (`prism-core` — Oops journal). Use the prompt in §8.
+
+Carried out of S13:
+- **`ShowFile` holds three models and composes them.** A programmer command is
+  validated by the show, finished by the programmer, and may move the session as
+  well; `Effect::Programmer` is carried out here and never handed on.
+- **The programmer is not in the file** (`#[serde(skip)]`), and the Save LED is
+  the reason: setting a value is not an edit to the show. **S15 has no table for
+  it.**
+- **`Programmer::restore` is S14's door.** Every programmer command is undoable,
+  and the inverse of one is the state that was there before — small and sparse
+  enough to journal whole, Clear stage included.
+- **S17 must diff the programmer**, because `Delta::ProgrammerChanged` carries
+  the whole state and the engine is addressed per `MergePlan` slot.
+- **S16: the `Snapshot` of `docs/IPC_PROTOCOL.md` §4.1 carries no programmer.**
+  Either it grows a third document or the daemon sends a `ProgrammerChanged`
+  straight after it.
+- **S28: `StoreCue` has no mode**, so a store merges. Merge / Overwrite / Remove
+  is a protocol addition.
+- **`prism-engine`'s short timing test now fails inside `cargo test --workspace`
+  on a four-core machine**, because the suite starts 29 test binaries at once and
+  the test's own probe reports no core available. It passes when its target runs
+  alone. The next session that touches `prism-engine` owns the fix — see the
+  decision log for the two options. Until then: re-run a failing timing test
+  alone before reading the diff, and never beside a coverage build.
 
 Carried out of S12:
 - **`ShowFile` is the routing D11 describes, and S17 should use it rather than
@@ -961,76 +1039,80 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S13 — `prism-core`: Programmer-Automat**
+
+**Next up: S14 — `prism-core`: Oops-Journal**
 
 ```text
-PrismDMX — Session S13: prism-core, Programmer-Automat
+PrismDMX — Session S14: prism-core, Oops-Journal
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Diese Session braucht keine Hardware und kein Netz. Sie ist reine Zustandsarbeit
-in einem Crate, das seit S11 ein Showmodell und seit S12 einen Session-Zustand
-enthält.
+in einem Crate, das seit S11 ein Showmodell, seit S12 einen Session-Zustand und
+seit S13 einen Programmer enthält.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.12 und §2.13 (was S11 und
-                                            S12 geliefert haben) und alle
+                                            besonders §2.12, §2.13 und §2.14 (was
+                                            S11, S12 und S13 geliefert haben),
+                                            §7 „Carried out of S13" und alle
                                             Decision-Log-Einträge, die mit „S13"
                                             markiert sind
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S13
-4. docs/DMX_MERGE.md §3 und §8            — der Programmer: was sparse bedeutet,
-                                            der dreistufige Clear samt
-                                            Rücksetzregel, und wie der Programmer
-                                            im Merge gewinnt
-5. ARCHITECTURE_SPEC.md §6                — `ProgrammerState` im Domänenmodell,
-                                            und §5 für die Stelle im Tick
-6. crates/prism-domain/src/programmer.rs  — `ProgrammerState`, `ProgrammerValue`,
-                                            `ProgrammerValueSource`, `ClearStage`
-                                            sind fertig (S1)
-7. crates/prism-core/src/                 — `show.rs`, `command.rs`, `session.rs`,
-                                            `file.rs`, `mirror.rs`. `Show::apply`
-                                            und `SessionState::apply` sind das
-                                            Vorbild: dieselbe Form ein drittes
-                                            Mal, für den Programmer
+                                            von S14
+4. ARCHITECTURE_SPEC.md §6.1              — Oops: `UndoRecord` mit Inverse und
+                                            betroffenem Scope, 200er-Ring, und
+                                            was ausdrücklich **nicht** undoable
+                                            ist
+5. docs/IPC_PROTOCOL.md §5 und §6         — `Command::Oops`/`Redo` und die
+                                            Deltas, die ein Undo erzeugen muss
+6. crates/prism-domain/src/command.rs     — `Command::is_undoable` ist fertig
+                                            (S1) und ist die Definition, welche
+                                            Kommandos ins Journal gehören
+7. crates/prism-core/src/                 — `show.rs`, `session.rs`,
+                                            `programmer.rs`, `file.rs`,
+                                            `command.rs`, `mirror.rs`.
+                                            `ShowFile::apply` ist die Tür, durch
+                                            die alles geht
 
-Stand nach S12 — nichts davon musst du neu bauen:
+Stand nach S13 — nichts davon musst du neu bauen:
 - `prism-domain` (S1): alle Domänentypen samt Serialisierung und
   TypeScript-Bindings; 133 Tests. Jeder `f64` ist in beiden Richtungen gegen
-  nicht-endliche Werte abgesichert. `ProgrammerState.values` ist eine
-  verschachtelte `BTreeMap`, reist aber flach — und `set_value`/`clear_value`
-  sind die einzigen erlaubten Wege hinein (S1-Fund, siehe Decision Log).
+  nicht-endliche Werte abgesichert. `Command::is_undoable` schließt die drei
+  Playback-Kommandos, `Oops`, `Redo`, `SaveShow` und **alle elf
+  Session-Kommandos** aus.
 - `prism-engine` (S2–S6) ist vollständig: Tick, Triple Buffer, HTP/LTP-Merge,
-  DMX-Encoding, Cues und Fades, Programmer-*Layer*, Master. 44 Hz bei 64
-  Universen unter Volllast, allokationsfrei im Tick. Der Programmer erreicht den
-  Tick als **MergePlan-Slotnummer**, nicht als Fixture plus Attribut.
+  DMX-Encoding, Cues und Fades, Programmer-Layer, Master. 44 Hz bei 64
+  Universen unter Volllast, allokationsfrei im Tick.
 - `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
   verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz).
-- `prism-core` (S11/S12): `Show` mit Patch, eingebetteten `FixtureType`s,
+- `prism-core` (S11–S13): `Show` mit Patch, eingebetteten `FixtureType`s,
   Gruppen, Presets, Sequenzen und Executors; `SessionState` mit View, Fenstern,
-  Executor-Seite und Selektion; `ShowFile` als beides zusammen samt Routing nach
-  `Command::is_session_command`; `ShowMirror`/`SessionMirror` auf einem
-  `JsonMirror`. 125 Tests, 99,94 % Zeilenabdeckung.
-- Es gibt noch **keinen Programmer-Zustand**: keine Selektion, keine sparsen
-  Werte, keinen Clear-Automaten. Genau das ist S13.
+  Executor-Seite und Selektion; `Programmer` mit Selektion, sparsen Werten,
+  Feature-Groups und dreistufigem Clear; `ShowFile` als alle drei zusammen samt
+  Routing und Komposition; `ShowMirror`/`SessionMirror` auf einem `JsonMirror`.
+  164 Tests, > 99,8 % Zeilenabdeckung.
+- Es gibt noch **kein Journal**: `Command::Oops` und `Command::Redo` werden von
+  `Show::apply` validiert und mit `Effect::Undo`/`Effect::Redo` beantwortet,
+  und niemand führt sie aus. Genau das ist S14.
 
-Aufgabe: Session S13 umsetzen — `prism-core`: Programmer-Automat.
+Aufgabe: Session S14 umsetzen — `prism-core`: Oops-Journal.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S13):
-- Selektion (Fixtures, `SelectionMode` Set/Add/Toggle)
-- sparse Attributwerte
-- Feature-Group-Tracking
-- dreistufiger Clear
+Umzusetzen (IMPLEMENTATION_PLAN.md S14):
+- Undo-Records mit Inversen
+- Ring mit 200 Einträgen
+- Redo
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Der dreistufige Clear ist über **alle** Übergänge getestet, einschließlich der
-  Regel, dass eine andere Programmer-Interaktion die Stufe auf 0 zurücksetzt
-- `ApplyPreset` hält `presetRef` fest, damit Cues live-updatebar bleiben
-- Der Programmer ist sparse: ein nicht angefasstes Attribut ist **abwesend**,
-  nicht 0 — als Test zugesichert
+- Property-Test: *n* zufällige Kommandos anwenden, *n*-mal Oops, der Zustand ist
+  byte-für-byte der Startzustand
+- Redo nach Undo führt zurück auf den Zustand nach dem Kommando
+- Playback- und Session-Kommandos sind **ausgeschlossen** — zugesichert durch
+  einen Test, der zeigt, dass ein Executor-Go gefolgt von Oops den Executor
+  weiterlaufen lässt
+- Ringüberlauf verwirft den ältesten Eintrag, ohne das Journal zu beschädigen
 - `cargo test -p prism-core` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
@@ -1038,66 +1120,70 @@ Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreff
   `cargo llvm-cov -p prism-core --summary-only` und in PROGRESS.md eingetragen
 
 Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **Sparse ist keine Optimierung, sondern die Bedeutung der Schicht.**
-  `docs/DMX_MERGE.md` §3: ein abwesendes Attribut heißt „die Playbacks
-  entscheiden", ein anwesendes ist ein absoluter Override. Ein Programmer, der
-  beim Selektieren Nullen anlegt, schwärzt die Bühne.
-- **`Show::apply` und `SessionState::apply` sind die Vorlage.** Beide
-  validieren, wenden an, geben Deltas (und `Effect`s) zurück und lassen bei einer
-  Ablehnung den Zustand byte-identisch. Beide zählen alle 23 Kommandos namentlich
-  auf, ohne Wildcard. Fünf Show-Kommandos — `SelectFixtures`, `SetAttribute`,
-  `ApplyPreset`, `ClearProgrammer`, `StoreCue` — werden heute in `Show::apply`
-  nur zur Hälfte entschieden und mit `Effect::Programmer` beantwortet: **diese
-  Session macht die andere Hälfte**, und wo genau der Programmer sitzt (eigener
-  Typ neben `Show` und `SessionState`, gehalten von `ShowFile`) ist eine
-  Entscheidung dieser Session für den Decision Log.
-- **Der Programmer-Delta ist `Delta::ProgrammerChanged` und trägt den ganzen
-  Zustand** (`docs/IPC_PROTOCOL.md` §6: „Sent whole: it is small and sparse") —
-  also *kein* JSON Patch. `ShowMirror` und `SessionMirror` ignorieren ihn beide;
-  wenn der Zustand genauso geprüft werden soll wie Show und Session, sieh dir
-  `crates/prism-core/tests/delta_round_trip.rs` an, bevor du etwas Neues baust.
-- **`StoreCue` speichert den Programmer als Cue-Parts** — S5 hat das entschieden
-  (Cues tracken, weil der Programmer sparse ist). `Show::store_cue` existiert und
-  validiert; diese Session liefert, was hineingeht.
-- **`presetRef` ist der Grund, warum `ProgrammerValueSource` drei Werte hat.**
-  Ein aus einem Preset gesetzter Wert bleibt mit ihm verbunden, damit ein später
-  geändertes Preset die Cues mitzieht. Preset-Nummern sind **poolübergreifend
-  eindeutig** (S11-Entscheidung), weil `ApplyPreset` keinen Pool trägt.
-- **Der Parameter-Index des Jogwheels ist Session-Zustand, nicht
-  Programmer-Zustand.** Wenn sich die Selektion ändert, ändert sich, welche
-  Parameter es gibt: `SessionState::set_programmer_param_index` ist der Weg, ihn
-  zurückzusetzen.
-- **Der Weg in den Tick ist die Slotnummer.** `prism-engine` adressiert
-  Programmerwerte über `MergePlan`-Slots (S6-Fund), und ein Repatch macht jedes
-  wartende Kommando ungültig — `Show::patch_revision()` ist die Zahl, die sich
-  dabei bewegt. Diese Session baut den Zustand, nicht die Übersetzung; die ist
-  S17.
-- **`ProgrammerState.values` verliert ein Fixture, dessen letztes Attribut
-  gelöscht wird** — das ist eine Invariante aus S1 und wird von `set_value` und
-  `clear_value` durchgesetzt. Nicht direkt in die Map schreiben.
+- **`ShowFile` ist die Tür.** `ShowFile::apply` routet nach
+  `Command::is_session_command`, führt `Effect::Programmer` selbst aus und
+  liefert `Applied { deltas, effects }`. Das Journal gehört an dieselbe Stelle:
+  ein Undo muss Show, Session und Programmer in *einem* Schritt zurücknehmen
+  können, weil ein einziges Kommando alle drei bewegt (`StoreCue` schreibt den
+  Show-Cue **und** setzt die Clear-Stufe; `SelectFixtures` bewegt Programmer und
+  Session).
+- **Der Programmer ist klein und sparse und lässt sich ganz journalisieren.**
+  `Programmer::restore(state)` existiert genau dafür und setzt die Clear-Stufe
+  mit zurück — S13 hat sie als S14s Tür gebaut. Für den Show-Teil ist ein
+  ganzer Klon dagegen teuer: `ARCHITECTURE_SPEC.md` §6.1 verlangt einen
+  **kompakten** `UndoRecord` mit Inverse und Scope, nicht 200 Kopien der Show.
+- **Ein Undo muss Deltas erzeugen wie jedes andere Kommando.** Clients spiegeln
+  ausschließlich über Deltas (`ShowMirror`, `SessionMirror` und im Fall des
+  Programmers der ganze Zustand); ein Undo, das den Zustand ändert, ohne es zu
+  sagen, lässt jeden Client falsch stehen. `crates/prism-core/tests/delta_round_trip.rs`
+  ist die Stelle, die das prüft — dort steht bereits ein `FilePair`, das alle
+  drei Dokumente gegen einen Delta-Strom hält.
+- **Ablehnung lässt den Zustand byte-identisch** — S11, S12 und S13 haben das
+  jeweils wörtlich als Test (`rmp_serde::to_vec_named` vorher/nachher). Ein
+  Journal, das bei einem fehlgeschlagenen Undo halb zurückgerollt hat, wäre der
+  schlimmste Fall davon.
+- **`Effect::Repatch` und `Effect::ReloadSequence` gelten auch für ein Undo.**
+  Wer eine rückgängig gemachte Patch-Änderung nicht an die Engine meldet, lässt
+  das Rig auf dem alten Stand stehen; `Show::patch_revision()` bewegt sich dabei
+  weiter nach vorn, nie zurück.
+- **Der Save-Dirty-Flag ist Teil des Zustands, aber nicht der Bytes.** S11/S12
+  vergleichen ihn separat. Ein Undo bis zurück auf den gespeicherten Stand macht
+  die Datei nicht wieder „sauber" — das zu behaupten wäre eine Lüge über die
+  Platte.
+- **Was nicht ins Journal gehört, steht schon im Code:** `Command::is_undoable`.
+  Playback-Aktionen und alle §4.4-Session-Kommandos sind ausgeschlossen, damit
+  ein Undo während einer laufenden Show weder Licht ändert, das die Operatorin
+  gerade fährt, noch ihr Fenster wegzieht.
 - Serialisierung ist fehlbar: nicht-endliche `f64` werden in beiden Richtungen
   abgelehnt, JSON rundet Floats nicht bitgenau, und MessagePack muss mit
   `to_vec_named` geschrieben werden (alles S1-Funde im Decision Log).
 - **Validieren und kodieren, bevor geschrieben wird.** Die JSON-Projektion ist
   das Letzte, was in einer Änderung fehlschlagen kann — S11 hatte genau dort
   einen Fehler; S12 hat die Regel in `SessionState::commit` an eine Stelle
-  gezogen, statt sie pro Edit zu wiederholen.
+  gezogen, S13 in `Programmer::commit`.
 - `prism-domain` hat ein optionales `proptest`-Feature mit `Arbitrary`-Impls für
   jeden Typ — nutze `prism_domain::arb`, statt eigene Generatoren zu schreiben.
 - `prism-core` ist plattformneutral: **kein `#[cfg(target_os = ...)]`**. Das
   Crate läuft im Linux-Job und im ARM64-Cross-Check der CI mit.
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 und S12 haben
-  ihre zentralen Tests jeweils durch eine absichtlich eingebaute Regression
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11, S12 und S13
+  haben ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
   geprüft.
+- **`cargo test --workspace` scheitert derzeit an einem Timing-Test von
+  `prism-engine`, und das liegt nicht am Code.** Die Suite startet inzwischen 29
+  Test-Binaries gleichzeitig; `the_tick_holds_its_deadline_for_a_few_seconds`
+  meldet dann selbst `probe thread turns: 0/s` — die Maschine hatte keinen Kern
+  frei, was die Voraussetzung der Messung ist. Allein läuft das Target grün
+  (`cargo test -p prism-engine --test realtime`). Der Decision Log nennt die zwei
+  Optionen für die Behebung; wer `prism-engine` anfasst, erledigt sie mit.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S13-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S14-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S14 (`prism-core` — Oops-Journal) überschreiben
+  Session S15 (`prism-core` — SQLite-Persistenz) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(core): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)

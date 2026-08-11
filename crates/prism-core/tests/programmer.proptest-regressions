@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc bfed6d9bb063a4713cc8842b7f773bbe5d60553478963ec7b97c7203e836f1e7 # shrinks to commands = [SelectFixtures { ids: [FixtureId(1)], mode: Set }, SetAttribute { attribute: Dimmer, value: 0, relative: false }]

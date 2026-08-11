@@ -174,6 +174,7 @@ fn the_session_survives_save_and_load() {
     let file = ShowFile {
         show: populated_show(),
         session: session.clone(),
+        ..ShowFile::new()
     };
 
     // The wire codec the show file is written with (S1: `to_vec_named`).
@@ -336,6 +337,7 @@ fn the_save_led_is_the_show_and_the_session_together() {
     let mut file = ShowFile {
         show: populated_show(),
         session: populated_session(),
+        ..ShowFile::new()
     };
     assert!(!file.is_dirty());
 
