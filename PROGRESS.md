@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-12
 **Current phase:** Phase 3 — Core state
-**Current session:** S14 — `prism-core` Oops journal (not started; see §8 for the prompt that starts it)
-**Last completed:** S13 — `prism-core` programmer state machine ✅ — **the operator's own layer exists**
+**Current session:** S15 — `prism-core` SQLite persistence (not started; see §8 for the prompt that starts it)
+**Last completed:** S14 — `prism-core` Oops journal ✅ — **the way back exists**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -64,7 +64,7 @@
 | S11 | Show model, command application | ✅ | 2026-08-11 | All exit criteria verified — see §2.12. 88 tests, coverage 99.9 % lines. Two mutation checks confirm the two central tests are not vacuous |
 | S12 | Session state (D11) | ✅ | 2026-08-11 | All exit criteria verified — see §2.13. 125 tests, coverage 99.94 % lines with `session.rs` and `file.rs` at **100 %**. Two mutation checks confirm the two central tests are not vacuous |
 | S13 | Programmer state machine | ✅ | 2026-08-12 | All exit criteria verified — see §2.14. 166 tests, coverage 99.89 % lines. Three mutation checks confirm the three central tests are not vacuous |
-| S14 | Oops journal | ☐ | | |
+| S14 | Oops journal | ✅ | 2026-08-12 | All exit criteria verified — see §2.15. 192 tests, coverage 99.88 % lines. Three mutation checks confirm the three central tests are not vacuous |
 | S15 | SQLite persistence | ☐ | | |
 
 ### Phase 4 — IPC and daemon
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 14 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 15 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -575,6 +575,48 @@ the file's bytes without the lamp ever lighting — `the_programmer_is_not_part_
 asserts both: the bytes are identical with a full programmer and an empty one,
 and `is_dirty()` stays false.
 
+### 2.15 S14 verification record
+
+Measured on 2026-08-12, all exit criteria from `IMPLEMENTATION_PLAN.md` S14 and
+the session prompt. No hardware and no network: this session is the way back.
+
+| Check | Result |
+|---|---|
+| Property test: apply *n* commands, undo *n* times, the state is the start state **byte for byte** | ✅ `tests/oops.rs`: `undoing_every_command_returns_the_state_it_started_in` applies up to 23 generated commands, presses Oops once per journal entry and compares `rmp_serde::to_vec_named` of the whole `ShowFile` — plus the programmer, which S13 deliberately keeps **out** of those bytes and which would otherwise be the half nobody checked. *n* is the number of entries rather than of commands, and that is the criterion rather than a weakening of it: a command that was refused, and one that was accepted and moved nothing, are not steps. The generator is four parts commands the show can actually apply to one part `any::<Command>()` filtered to the undoable ones — an arbitrary `PatchFixture` names a profile no show has, so a purely arbitrary run would journal almost nothing and assert almost nothing |
+| Redo after undo returns to the post-command state | ✅ the same property continues: after the undos it presses Redo once per entry and compares against the state the commands left, then asserts the next Redo is refused. Scripted beside it in `a_redo_puts_back_exactly_what_the_oops_took_away`, where the cue count of the sequence is read at each of the three points, and in `a_command_after_an_undo_forgets_the_redo`, which is the other half of the rule: a new step forgets the branch the operator left |
+| Playback and session commands are **excluded**, asserted with an executor Go followed by Oops | ✅ `a_running_executor_survives_an_oops`: a patch is journaled, then a master is moved to 32768, then a Go is issued and the engine's answer recorded — and the Oops takes back **the patch**, leaves `is_active`, `current_cue_index` and `master_level` exactly where they were, and produces no playback effect. `SetExecutorMaster` is the sharp case and the reason the record is a scope: an executor master **is** show state, written into the show by a command, so a journal that snapshotted the show would take the operator's fader back down with the patch. `a_session_command_is_never_taken_back` is the other half: all eleven §4.4 commands are applied, none is journaled, and the Oops leaves the session's bytes untouched |
+| Ring overflow drops the oldest without corrupting the journal | ✅ `the_ring_drops_the_oldest_entry_and_stays_usable` applies **250** patch commands, asserts the journal holds exactly 200, walks all 200 back and lands byte-identically on the state after command 50 — then asserts the 201st Oops is refused, that the fifty dropped commands are still applied, and that 200 Redos return to the state after command 250. Beside it `journal::tests::the_ring_holds_two_hundred_and_drops_the_oldest` checks the ring itself. **Checked by mutation:** dropping from the back instead of the front turns the unit test red |
+| `cargo test -p prism-core` | ✅ exit 0 — **116 lib tests** + 76 integration tests across six targets, 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **872 tests** across 30 targets, 12 ignored (the S8 hardware target and the long engine runs). Green on the first attempt, timing gate included |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-core` **> 95 %** | ✅ **99.88 % lines**, 98.94 % regions, 99.48 % functions. `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % lines, regions and functions**, `mirror.rs`, `desk.rs` and `session.rs` at 100 % lines, `file.rs` 99.75 %, `show.rs` 99.87 %, `programmer.rs` 99.43 % — and `--show-missing-lines` reports **no uncovered source line at all**, so the five counted lines are the monomorphisation artefact S4 measured and S11 recorded. The first measurement read 99.73 % and, for the sixth session running, the gap was not a missing test either — see the decision log |
+| An undo produces deltas like any other command | ✅ `tests/delta_round_trip.rs` grew `an_undo_and_a_redo_reach_all_three_mirrors`: a run that moves the show, the programmer and the session is walked all the way back and all the way forward again through `FilePair`, which compares all three mirrors after **every** command. The arbitrary-command property in the same file now generates `Oops` and `Redo` too, because they are two of the twenty-three |
+| An undo reaches the engine | ✅ `undoing_a_patch_reports_the_repatch_and_the_change` asserts `Effect::Repatch` and the `Remove` operation on `/fixtures/9`, and that `patch_revision` moved **forward** rather than back; `undoing_a_store_reloads_the_sequence` asserts `Effect::ReloadSequence` |
+| A refusal leaves the state byte-identical | ✅ taken literally, as in S11, S12 and S13. `an_oops_with_an_empty_journal_changes_nothing` for the empty journal; `an_undo_that_is_refused_leaves_everything_where_it_was` and `a_redo_that_is_refused_leaves_everything_where_it_was` for the reachable failure — a cue part names a fixture, so unpatching that fixture makes the older cue list something `Show::store_sequence` refuses. Both assert the record is still in the journal afterwards and that the same press goes through once the fixture is back. **Checked by mutation:** dropping the record instead of putting it back turns the undo test red |
+| Platform-neutral | ✅ still no `#[cfg]` of any kind in the crate |
+| CI green on the pushed commit | ▶ pending — filled in from the run itself once it has finished |
+
+**Delivered:** one module and the door it hangs on. `journal` is [`Journal`], the
+200-entry ring of `ARCHITECTURE_SPEC.md` §6.1, and [`UndoRecord`] — a command, an
+[`UndoScope`] and the state before and after it over exactly that scope.
+`ShowFile::apply` files a step for every command `Command::is_undoable` admits
+and carries out `Oops` and `Redo`, dropping `Effect::Undo` and `Effect::Redo`
+from the answer exactly as it drops `Effect::Programmer`.
+
+**Six commands are undoable, and the scope is what makes the other seventeen
+safe.** A record covers one fixture's patch entry (`PatchFixture`), or one
+sequence plus the programmer and its page state (`StoreCue`), or the programmer
+and its page state (the four other programmer commands). Nothing else. That is
+why an Oops cannot move an executor master — which is show state, and which a
+journal of show snapshots would have taken back along with everything else.
+
+**An undo is a command like any other, from the outside.** It emits `ShowPatch`,
+`ProgrammerChanged` and `SessionPatch` deltas, answers `Repatch` and
+`ReloadSequence`, moves `patch_revision` forward, and leaves the Save LED lit —
+undoing back to the state that was last written does not put the file back on
+disk, and saying otherwise would be a lie about the platter.
+
 ---
 
 ## 3. Coverage tracking
@@ -588,7 +630,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
-| `prism-core` | **> 95 %** (programmer) | **99.89 % lines**, 98.98 % regions, 99.42 % functions — `command.rs`, `conflict.rs`, `desk.rs`, `file.rs`, `mirror.rs`, `session.rs` and `testkit.rs` at **100 % lines**, `programmer.rs` 99.43 %, `show.rs` 99.87 %. `--show-missing-lines` reports no uncovered source line at all: the four counted lines are monomorphisations, the artefact S4 first measured | 2026-08-12 (S13) |
+| `prism-core` | **> 95 %** (programmer) | **99.88 % lines**, 98.94 % regions, 99.48 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `file.rs` 99.75 %, `show.rs` 99.87 %, `programmer.rs` 99.43 %. `--show-missing-lines` reports no uncovered source line at all: the five counted lines are monomorphisations, the artefact S4 first measured | 2026-08-12 (S14) |
 | `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
@@ -780,6 +822,17 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-12 | S14 | **A journal of show snapshots cannot honour both sentences of §6.1 at once, and `SetExecutorMaster` is where the two collide.** The obvious Oops journal is a stack of two hundred copies of the show. §6.1's first sentence asks for a *compact* record "holding the inverse and the affected scope"; its second excludes playback actions, "so undo during a running show does not change light the operator is currently driving". An executor master **is** show state — it lives in `Executor::masterLevel` and is written by a command — and it is excluded from the journal. Snapshot the show and undoing a patch takes the fader the operator moved after it back down with it | The record is a scope: one fixture's patch entry for `PatchFixture`, one sequence plus the programmer and its page state for `StoreCue`, the programmer and its page state for the four other programmer commands. Six commands, and nothing else in the show is ever touched by an Oops. Asserted rather than argued: `a_running_executor_survives_an_oops` moves a master to 32768, starts an executor, records the engine's answer, and demands that the Oops take back **the patch** and leave all three alone. **S17 requirement:** the daemon has no journal of its own — it dispatches through `ShowFile::apply`, which is where `Oops` and `Redo` are carried out |
+| 2026-08-12 | S14 | **A record holds two images rather than one inverse, and that is what makes Redo cheap rather than clever.** An inverse alone answers Oops; Redo then needs the state *after* the command, which would have to be derived by inverting the inverse | Both images are to hand at the moment the command is applied — one read before it, one after — and they are the same shape, so `restore(before)` is Oops and `restore(after)` is Redo, one function. The cost is that a `StoreCue` record carries two copies of one cue list; the alternative was a second code path that has to agree with the first about what an inverse means |
+| 2026-08-12 | S14 | **The session's programmer page is inside the scope of a programmer command, and that does not contradict the exclusion of the session commands.** §6.1 excludes the eleven §4.4 commands so that an undo does not pull windows out from under the operator. But S13 made two §4.1 fields — `programmerPage` and `programmerParamIndex` — move as a *side effect* of a programmer command: a new selection resets the jog wheel, the third Clear resets both. Leaving them out of the scope would make "the state is the start state byte for byte" false | They are in the scope, and the reasoning is the same one S13 used to reset them: the index is a cursor into the parameters of a *selection*, so an undo that restored the selection and left the wheel pointing into it would restore half a state. The eleven commands themselves remain unjournaled, which `a_session_command_is_never_taken_back` asserts by applying all of them and finding the journal still holding one entry |
+| 2026-08-12 | S14 | **A test fixture whose fields are all zero cannot tell a restore from a no-op — and that nearly hid the finding above.** The first version of `tests/oops.rs` built its file with the programmer page and the jog wheel at 0. Every reset in the code sets them *to* 0, so a journal that never recorded them at all passed the whole property test: restoring 0 over 0 changes nothing | The fixture now starts at page 3, index 5, with the reason written above it. **Checked by mutation:** dropping the page image from the scope turns three tests red with the new fixture and **none** with the old one. The general rule is worth stating, because it is not specific to this session: a fixture built out of default values cannot distinguish "restored correctly" from "never touched" |
+| 2026-08-12 | S14 | **`Command::is_undoable` is the definition and `ShowFile::image` is a second statement of it, so the two are held together by a test.** The scope function is the fourth exhaustive match over all twenty-three commands in this crate, in a fourth direction — so a command *added* to the protocol is a compile error here as it is in the three appliers. What a compiler cannot catch is a command that exists in both lists and is classified differently in each | `a_command_has_a_scope_exactly_when_it_is_undoable` asserts `!image(c).is_empty() == c.is_undoable()` for all twenty-three and pins the undoable count at six. A command given a scope but left out of `is_undoable` would be journaled against the protocol; one added there and forgotten here would file an empty record that takes nothing back |
+| 2026-08-12 | S14 | **A command that was accepted and changed nothing is not a step.** The obvious rule is "one command, one record", and it puts the operator in front of an Oops button that does nothing the first time they press it — so they press it again and lose the edit they actually meant to take back | A record is filed only when its before-image and after-image differ (`UndoRecord::is_a_step`). A refused command files nothing either, which follows from the write happening after the validation. Both asserted in `nothing_is_journaled_for_a_command_that_changed_nothing`, including the case that looks like a change and is not: repatching a fixture exactly where it already is |
+| 2026-08-12 | S14 | **A refused undo has to leave the state byte-identical, and the record has to stay in the journal.** The failure is reachable rather than hypothetical: a cue part names a fixture, so unpatching that fixture (S27's patch sheet, or a hand-edited file) makes an older cue list something `Show::store_sequence` refuses to store | The show images are restored in their own pass **before** the programmer and the session, so a refusal happens before anything has been written; and the record is put back where it came from, so the same Oops goes through once the fixture is patched again. Asserted in both directions (`an_undo_that_is_refused_...`, `a_redo_that_is_refused_...`). **Checked by mutation:** dropping the record instead of putting it back turns the undo test red. The pass ordering is belt and braces *today* — the only record with a show image is `StoreCue`'s, and its desk half never moves — and it is documented as being kept for the scopes S27 and S28 will add |
+| 2026-08-12 | S14 | **An undo is a command like any other from the outside, and the three ways it could quietly not be are all live.** A client mirrors state through deltas only; the engine rebuilds the patch on `Effect::Repatch` and a cue list on `Effect::ReloadSequence`; and the Save LED is a claim about the disk | All three are asserted. `tests/delta_round_trip.rs` walks a run that moved all three documents all the way back and all the way forward with three mirrors following. `undoing_a_patch_reports_the_repatch_and_the_change` demands `Repatch` and a `patch_revision` that moved **forward** — a rebuild is needed whichever direction the patch changed in, and a revision that went backwards would let a stale queued programmer command look current. And undoing back to the state that was last written leaves the lamp lit: `undoing_back_to_the_saved_state_does_not_clean_the_file` |
+| 2026-08-12 | S14 | **The journal is not in the file, and a reopened show has nothing to undo.** A record is an assertion that the state *was* something. Restored from disk beside a file that may have been edited by hand since, its inverse would describe a show that no longer exists, and the first Oops would write it back | `#[serde(skip)]`, asserted by `the_journal_is_not_part_of_the_show_file`. **S15 requirement:** a loader that deserialises a whole `ShowFile` gets an empty journal for free; one that replaces `file.show` and `file.session` **in place** must call `Journal::clear`. Everything on `Journal` that adds or takes an entry is `pub(crate)`, so the field can be public — a caller can read it and clear it, and cannot invent history |
+| 2026-08-12 | S14 | **Coverage was raised by deleting code the design does not need, for the sixth session running.** The first measurement read 99.73 % with `file.rs` at 98.31 %, and every uncovered line was unreachable by construction rather than untested: two "skip this image if it already matches" guards (a record is only filed when its images moved, so a show image in a record always differs) and the arm that removes a sequence whose image is absent (no command in `docs/IPC_PROTOCOL.md` §5 creates or deletes a sequence, and `StoreCue` refuses a missing one outright) | The guards were deleted and `Image::Sequence` lost its `Option`, which removed the branch rather than excusing it. 99.88 % lines, `file.rs` at 99.75 %, `journal.rs` at 100 % on all three counts, and `--show-missing-lines` reporting no uncovered source line at all. **S28 requirement:** a command that creates or deletes a sequence is when `Image::Sequence` grows an absence of its own, exactly as `Image::Fixture` already has one |
+| 2026-08-12 | S14 | **The exit criterion says "*n* random commands", and the honest reading is *n* random **undoable** commands.** A non-undoable command interleaved into the run changes state the journal is forbidden to reach, so "undo *n* times and the state is the start state" would be false by design rather than by defect | The property generates from the undoable commands only — four parts commands this show can actually apply to one part `any::<Command>()` filtered, because an arbitrary `PatchFixture` names a profile no show has and a purely arbitrary run would journal almost nothing. The excluded half is covered by the two tests that exist for it, which is where it belongs: an executor that goes on running, and a session that does not move |
 | 2026-08-12 | S13 | **The programmer is a third model beside the show and the session, and it is deliberately not in the file.** Where it lives was left open on purpose, and both obvious answers are wrong: inside `Show` it would travel as a `ShowPatch` (the protocol gives it its own delta), and inside `SessionState` it would travel as a `SessionPatch` and be part of the document `/session` points into | `prism_core::Programmer`, held by `ShowFile` beside the other two, `#[serde(skip)]`. `ARCHITECTURE_SPEC.md` §4.4 puts it there in as many words — "V1 has exactly one session and the programmer belongs to it" — so a multi-session daemon gets one programmer per session, the same change as the session map. **Not persisted, and the Save LED is the argument rather than taste:** setting a value is not an edit to the show (S11 asserted that `SetAttribute` leaves it clean), so a programmer inside the file would change the file's bytes without the lamp ever lighting — and a programmer restored from disk is an absolute override of every playback, applied to a rig the moment the show opens and asked for by nobody. Both halves asserted: the bytes are identical with a full programmer and an empty one. **S15 requirement:** the `.prism` schema has no table for it |
 | 2026-08-12 | S13 | **Five commands are decided by two models, and the composition belongs in one place or it will be written three times.** S11 left `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` and `StoreCue` validated-but-unfinished, answering `Effect::Programmer`. Two of them also reach into a *third* model: a new selection resets the jog wheel, and the third press of Clear resets the page state, both of which are session state (S12) | `ShowFile::apply` carries out `Effect::Programmer`, drops it from the answer, and merges the deltas — so a daemon applying a command through the file never learns the work was split, and `Show::apply` is unchanged for a caller holding a bare show. The order inside it is S11's rule one level up: **the fallible, writing step goes first**, so a `StoreCue` the show refuses leaves the programmer byte-identical. `Programmer::apply` is the third exhaustive match over all 23 commands, in the third direction, so a command added to the protocol is now a compile error in three places |
 | 2026-08-12 | S13 | **A store *merges* into the cue that is there, and `StoreCue` cannot say otherwise.** The programmer is sparse by specification, so a store carries only what was touched this time; overwriting would delete every value in the cue the operator did not happen to touch — data loss the command has no field to ask for. The same reasoning keeps an existing cue's name, times and trigger: a store is about the look | Merged, asserted, and written on `Programmer::cue`. A new cue starts with **no name and no fade**, because a store is a snapshot rather than a statement about time. **S28 requirement, and it is a protocol change:** Merge / Overwrite / Remove is a real distinction on a console, and offering it means adding a mode to `StoreCue` in `docs/IPC_PROTOCOL.md` §5. **Storing an empty programmer is refused** (`NothingToStore`) rather than writing a cue that does nothing — the S11 rule about silence, applied to the one gesture where an operator would otherwise get a cue number that goes dark |
@@ -918,12 +971,42 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The operator's own layer exists now.** Selecting fixtures, turning an
-attribute, recalling a preset, clearing in three stages and storing the result
-into a cue all work end to end through `ShowFile::apply`, and a client that
-applied nothing but the deltas holds the show, the session **and** the programmer
-exactly. What is still missing is the way back: nothing can be undone. Begin
-**S14** (`prism-core` — Oops journal). Use the prompt in §8.
+**The way back exists now.** Every command the protocol calls undoable can be
+taken back and put back again, across all three models at once, with the deltas
+and effects that tell a client and the engine about it — and an Oops during a
+running show moves neither the executor the operator is driving nor the window
+they are looking at. What is still missing is the disk: a show that is closed is
+a show that is gone. Begin **S15** (`prism-core` — SQLite persistence). Use the
+prompt in §8.
+
+Carried out of S14:
+- **`ShowFile::apply` is the door for the journal too.** It files a step for
+  every undoable command and carries out `Oops` and `Redo`, dropping
+  `Effect::Undo` and `Effect::Redo` exactly as it drops `Effect::Programmer`.
+  **S17 must not write a second journal** — it dispatches here.
+- **A record is a scope, not a snapshot**: one fixture's patch entry, or one
+  sequence plus the programmer and its page state, or the programmer and its
+  page state. That is what keeps an Oops off an executor master, which is show
+  state and is deliberately not undoable.
+- **The journal is not in the file.** `#[serde(skip)]`. **S15 requirement:** a
+  loader that replaces `file.show` and `file.session` in place calls
+  `Journal::clear`; one that deserialises a whole `ShowFile` gets an empty
+  journal for free. There is no table for it in the schema.
+- **New *state* is not caught by the compiler, only new *commands* are.** The
+  four exhaustive matches make a new `Command` a compile error in four places,
+  including `ShowFile::image`. A new field that an existing command can move —
+  S27's patch sheet, S28's cue editor — has to be added to that command's scope
+  by hand, or the Oops will silently not reach it. The property test in
+  `tests/oops.rs` is what would catch it.
+- **S28: a command that creates or deletes a sequence** means `Image::Sequence`
+  grows an absence of its own, as `Image::Fixture` already has one.
+- **S26: `UndoRecord::command()` names the Oops on the console** — "Oops: Store
+  Cue" tells an operator what is about to happen; "Oops" alone asks them to
+  guess. `UndoRecord::scope()` is the rest of that label.
+- **A test fixture built out of default values cannot tell a restore from a
+  no-op.** `tests/oops.rs` starts its session with a non-zero programmer page
+  for that reason; the version that started at zero passed the whole property
+  test with the page missing from the journal entirely.
 
 Carried out of S13:
 - **`ShowFile` holds three models and composes them.** A programmer command is
@@ -1040,79 +1123,80 @@ Carried from Phase 1:
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
 
-**Next up: S14 — `prism-core`: Oops-Journal**
+**Next up: S15 — `prism-core`: SQLite-Persistenz**
 
 ```text
-PrismDMX — Session S14: prism-core, Oops-Journal
+PrismDMX — Session S15: prism-core, SQLite-Persistenz
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht keine Hardware und kein Netz. Sie ist reine Zustandsarbeit
-in einem Crate, das seit S11 ein Showmodell, seit S12 einen Session-Zustand und
-seit S13 einen Programmer enthält.
+Diese Session braucht keine Hardware und kein Netz, aber zum ersten Mal in
+diesem Crate die Platte. Bis hierher lebt alles im Speicher: ein Show, das
+geschlossen wird, ist ein Show, das weg ist.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.12, §2.13 und §2.14 (was
-                                            S11, S12 und S13 geliefert haben),
-                                            §7 „Carried out of S13" und alle
-                                            Decision-Log-Einträge, die mit „S13"
-                                            markiert sind
+                                            besonders §2.12 bis §2.15 (was S11 bis
+                                            S14 geliefert haben), §7 „Carried out
+                                            of S14" und alle Decision-Log-Einträge,
+                                            die eine „S15 requirement" nennen —
+                                            davon gibt es mehrere, und sie sind
+                                            der eigentliche Auftrag
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S14
-4. ARCHITECTURE_SPEC.md §6.1              — Oops: `UndoRecord` mit Inverse und
-                                            betroffenem Scope, 200er-Ring, und
-                                            was ausdrücklich **nicht** undoable
-                                            ist
-5. docs/IPC_PROTOCOL.md §5 und §6         — `Command::Oops`/`Redo` und die
-                                            Deltas, die ein Undo erzeugen muss
-6. crates/prism-domain/src/command.rs     — `Command::is_undoable` ist fertig
-                                            (S1) und ist die Definition, welche
-                                            Kommandos ins Journal gehören
-7. crates/prism-core/src/                 — `show.rs`, `session.rs`,
-                                            `programmer.rs`, `file.rs`,
-                                            `command.rs`, `mirror.rs`.
-                                            `ShowFile::apply` ist die Tür, durch
-                                            die alles geht
+                                            von S15
+4. ARCHITECTURE_SPEC.md §6, §10, §12      — Domänenmodell, Lebenszyklus,
+                                            Testpolitik
+5. crates/prism-core/src/                 — `file.rs` ist die Datei, um die es
+                                            geht: `ShowFile` = `Show` +
+                                            `SessionState` (+ `Programmer` und
+                                            `Journal`, beide `#[serde(skip)]`).
+                                            Dazu `show.rs`, `session.rs`,
+                                            `desk.rs`
+6. crates/prism-core/tests/session_commands.rs — `the_session_survives_save_and_load`
+                                            ist der bestehende Round-Trip durch
+                                            MessagePack **und** JSON; S15 setzt
+                                            SQLite daneben
 
-Stand nach S13 — nichts davon musst du neu bauen:
+Stand nach S14 — nichts davon musst du neu bauen:
 - `prism-domain` (S1): alle Domänentypen samt Serialisierung und
   TypeScript-Bindings; 133 Tests. Jeder `f64` ist in beiden Richtungen gegen
-  nicht-endliche Werte abgesichert. `Command::is_undoable` schließt die drei
-  Playback-Kommandos, `Oops`, `Redo`, `SaveShow` und **alle elf
-  Session-Kommandos** aus.
-- `prism-engine` (S2–S6) ist vollständig: Tick, Triple Buffer, HTP/LTP-Merge,
-  DMX-Encoding, Cues und Fades, Programmer-Layer, Master. 44 Hz bei 64
-  Universen unter Volllast, allokationsfrei im Tick.
+  nicht-endliche Werte abgesichert.
+- `prism-engine` (S2–S6) ist vollständig: 44 Hz bei 64 Universen unter Volllast,
+  allokationsfrei im Tick.
 - `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
   verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz).
-- `prism-core` (S11–S13): `Show` mit Patch, eingebetteten `FixtureType`s,
+- `prism-core` (S11–S14): `Show` mit Patch, eingebetteten `FixtureType`s,
   Gruppen, Presets, Sequenzen und Executors; `SessionState` mit View, Fenstern,
-  Executor-Seite und Selektion; `Programmer` mit Selektion, sparsen Werten,
-  Feature-Groups und dreistufigem Clear; `ShowFile` als alle drei zusammen samt
-  Routing und Komposition; `ShowMirror`/`SessionMirror` auf einem `JsonMirror`.
-  164 Tests, > 99,8 % Zeilenabdeckung.
-- Es gibt noch **kein Journal**: `Command::Oops` und `Command::Redo` werden von
-  `Show::apply` validiert und mit `Effect::Undo`/`Effect::Redo` beantwortet,
-  und niemand führt sie aus. Genau das ist S14.
+  Executor-Seite und Selektion; `Programmer` mit dreistufigem Clear; `ShowFile`
+  als alle drei zusammen samt Routing und Komposition;
+  `ShowMirror`/`SessionMirror`; und seit S14 das Oops-Journal — ein 200er-Ring
+  aus `UndoRecord`s, die den Zustand vor und nach einem Kommando über genau den
+  `UndoScope` halten, den das Kommando berührt hat. 192 Tests, 99,88 %
+  Zeilenabdeckung.
+- Es gibt noch **keine Persistenz**: `Command::SaveShow` wird von `Show::apply`
+  validiert und mit `Effect::Save` beantwortet, und niemand führt ihn aus.
+  Genau das ist S15.
 
-Aufgabe: Session S14 umsetzen — `prism-core`: Oops-Journal.
+Aufgabe: Session S15 umsetzen — `prism-core`: SQLite-Persistenz.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S14):
-- Undo-Records mit Inversen
-- Ring mit 200 Einträgen
-- Redo
+Umzusetzen (IMPLEMENTATION_PLAN.md S15):
+- `.prism`-Schema mit `user_version`-Migrationen
+- WAL
+- Autosave alle 30 s in eine Recovery-Kopie
+- Dirty-Flag
+- JSON-Export/-Import
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Property-Test: *n* zufällige Kommandos anwenden, *n*-mal Oops, der Zustand ist
-  byte-für-byte der Startzustand
-- Redo nach Undo führt zurück auf den Zustand nach dem Kommando
-- Playback- und Session-Kommandos sind **ausgeschlossen** — zugesichert durch
-  einen Test, der zeigt, dass ein Executor-Go gefolgt von Oops den Executor
-  weiterlaufen lässt
-- Ringüberlauf verwirft den ältesten Eintrag, ohne das Journal zu beschädigen
+- Save/Load-Round-Trip: das geladene Show ist byte-identisch mit dem
+  gespeicherten, Sessions eingeschlossen
+- **Crash-Sicherheit:** den Prozess mitten im Schreiben töten; die Datei lässt
+  sich weiterhin öffnen und enthält den letzten committeten Stand
+- Migrationspfad von einer Version-1-Datei auf Version 2, getestet mit einer
+  Fixture-Datei
+- Das Dirty-Flag treibt die `DirtyFlag`-Deltas korrekt (das ist die Save-LED des
+  X-Touch)
 - `cargo test -p prism-core` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
@@ -1120,70 +1204,71 @@ Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreff
   `cargo llvm-cov -p prism-core --summary-only` und in PROGRESS.md eingetragen
 
 Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **`ShowFile` ist die Tür.** `ShowFile::apply` routet nach
-  `Command::is_session_command`, führt `Effect::Programmer` selbst aus und
-  liefert `Applied { deltas, effects }`. Das Journal gehört an dieselbe Stelle:
-  ein Undo muss Show, Session und Programmer in *einem* Schritt zurücknehmen
-  können, weil ein einziges Kommando alle drei bewegt (`StoreCue` schreibt den
-  Show-Cue **und** setzt die Clear-Stufe; `SelectFixtures` bewegt Programmer und
-  Session).
-- **Der Programmer ist klein und sparse und lässt sich ganz journalisieren.**
-  `Programmer::restore(state)` existiert genau dafür und setzt die Clear-Stufe
-  mit zurück — S13 hat sie als S14s Tür gebaut. Für den Show-Teil ist ein
-  ganzer Klon dagegen teuer: `ARCHITECTURE_SPEC.md` §6.1 verlangt einen
-  **kompakten** `UndoRecord` mit Inverse und Scope, nicht 200 Kopien der Show.
-- **Ein Undo muss Deltas erzeugen wie jedes andere Kommando.** Clients spiegeln
-  ausschließlich über Deltas (`ShowMirror`, `SessionMirror` und im Fall des
-  Programmers der ganze Zustand); ein Undo, das den Zustand ändert, ohne es zu
-  sagen, lässt jeden Client falsch stehen. `crates/prism-core/tests/delta_round_trip.rs`
-  ist die Stelle, die das prüft — dort steht bereits ein `FilePair`, das alle
-  drei Dokumente gegen einen Delta-Strom hält.
-- **Ablehnung lässt den Zustand byte-identisch** — S11, S12 und S13 haben das
-  jeweils wörtlich als Test (`rmp_serde::to_vec_named` vorher/nachher). Ein
-  Journal, das bei einem fehlgeschlagenen Undo halb zurückgerollt hat, wäre der
-  schlimmste Fall davon.
-- **`Effect::Repatch` und `Effect::ReloadSequence` gelten auch für ein Undo.**
-  Wer eine rückgängig gemachte Patch-Änderung nicht an die Engine meldet, lässt
-  das Rig auf dem alten Stand stehen; `Show::patch_revision()` bewegt sich dabei
-  weiter nach vorn, nie zurück.
-- **Der Save-Dirty-Flag ist Teil des Zustands, aber nicht der Bytes.** S11/S12
-  vergleichen ihn separat. Ein Undo bis zurück auf den gespeicherten Stand macht
-  die Datei nicht wieder „sauber" — das zu behaupten wäre eine Lüge über die
-  Platte.
-- **Was nicht ins Journal gehört, steht schon im Code:** `Command::is_undoable`.
-  Playback-Aktionen und alle §4.4-Session-Kommandos sind ausgeschlossen, damit
-  ein Undo während einer laufenden Show weder Licht ändert, das die Operatorin
-  gerade fährt, noch ihr Fenster wegzieht.
-- Serialisierung ist fehlbar: nicht-endliche `f64` werden in beiden Richtungen
-  abgelehnt, JSON rundet Floats nicht bitgenau, und MessagePack muss mit
-  `to_vec_named` geschrieben werden (alles S1-Funde im Decision Log).
-- **Validieren und kodieren, bevor geschrieben wird.** Die JSON-Projektion ist
-  das Letzte, was in einer Änderung fehlschlagen kann — S11 hatte genau dort
-  einen Fehler; S12 hat die Regel in `SessionState::commit` an eine Stelle
-  gezogen, S13 in `Programmer::commit`.
+- **`prism-core` ist plattformneutral: kein `#[cfg(target_os = ...)]`.** Das
+  Crate läuft im Linux-Job **und** im ARM64-Cross-Check der CI
+  (`cargo check --workspace --target aarch64-unknown-linux-gnu`). Eine
+  SQLite-Abhängigkeit mit C-Anteil (`rusqlite`, `libsqlite3-sys`) muss dort
+  durchkommen; prüfe das früh und lokal, nicht erst im CI-Lauf am Ende. Wenn
+  eine Variante (gebündeltes C, vorinstalliertes SQLite, reines Rust) das nicht
+  schafft, ist die Wahl der Abhängigkeit ein Decision-Log-Eintrag und keine
+  stille Anpassung der CI.
+- **Was nicht in die Datei gehört, ist bereits entschieden und begründet:** der
+  `Programmer` (S13 — ein aus der Datei wiederhergestellter Programmer wäre ein
+  absoluter Override über jedem Playback, angewandt in dem Moment, in dem das
+  Show geöffnet wird), das `Journal` (S14 — ein Record ist eine Behauptung über
+  den Zustand *dieses* Laufs), und die Desk-Identität samt sACN-CID (S11 —
+  `MachineConfig`, neben den Einstellungen des Daemons, **nicht** im Show; sie
+  darf beim Kopieren eines Shows nicht mitkopiert und beim Speichern nicht neu
+  erzeugt werden). Das Schema hat für keines von dreien eine Tabelle.
+- **Ein Loader, der `file.show` und `file.session` an Ort und Stelle ersetzt,
+  muss `Journal::clear` aufrufen.** Wer stattdessen eine ganze `ShowFile`
+  deserialisiert, bekommt ein leeres Journal geschenkt (`#[serde(skip)]`).
+- **`ShowFile::mark_saved` wird gerufen, wenn der Schreibvorgang *erfolgreich*
+  war, nicht wenn er beginnt.** Es gibt zurück, ob sich das Flag wirklich
+  geändert hat, damit nur dann ein `Delta::DirtyFlag` gesendet wird, wenn es
+  Neuigkeiten gibt. Die Lampe ist `ShowFile::is_dirty` — Show *oder* Session.
+- **Ein Undo bis zurück auf den gespeicherten Stand macht die Datei nicht wieder
+  sauber** (S14). Das ist gewollt und getestet; die Persistenz darf daran nichts
+  ändern.
+- **JSON rundet Floats nicht bitgenau** (S1-Fund): ein JSON-Export darf **nicht**
+  als bit-identisch angenommen werden, es sei denn, die Werte werden mit
+  begrenzter Präzision geschrieben. MessagePack ist exakt, muss aber mit
+  `rmp_serde::to_vec_named` geschrieben werden. Nicht-endliche `f64` werden in
+  beiden Richtungen abgelehnt — Serialisierung ist fehlbar und muss so behandelt
+  werden.
+- **Validieren und kodieren, bevor geschrieben wird**, und **eine Ablehnung
+  lässt den Zustand byte-identisch**: S11, S12, S13 und S14 haben das jeweils
+  wörtlich als Test (`rmp_serde::to_vec_named` vorher/nachher). Für S15 heißt
+  das zusätzlich: ein fehlgeschlagener Schreibvorgang darf weder das Dirty-Flag
+  löschen noch die Datei beschädigen.
+- **Die Views liegen in der Session-Hälfte der Datei** (S12), damit ein Show,
+  das in eine andere Session importiert wird, nicht die Layouts einer anderen
+  Operatorin mitbringt.
 - `prism-domain` hat ein optionales `proptest`-Feature mit `Arbitrary`-Impls für
   jeden Typ — nutze `prism_domain::arb`, statt eigene Generatoren zu schreiben.
-- `prism-core` ist plattformneutral: **kein `#[cfg(target_os = ...)]`**. Das
-  Crate läuft im Linux-Job und im ARM64-Cross-Check der CI mit.
+- **Ein Test-Fixture aus lauter Default-Werten kann „korrekt wiederhergestellt"
+  nicht von „nie angefasst" unterscheiden** (S14-Fund). Für einen
+  Save/Load-Round-Trip ist das die zentrale Falle: das gespeicherte Show muss in
+  jedem Feld etwas *anderes* als den Default enthalten.
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11, S12 und S13
-  haben ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S14 haben
+  ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
   geprüft.
 - **Ein roter Timing-Test ist zuerst eine Frage an die Maschine, nicht an den
-  Code.** `the_tick_holds_its_deadline_for_a_few_seconds` fiel in S13 zweimal aus,
-  beide Male weil der Rechner nebenher beschäftigt war (einmal ein
+  Code.** `the_tick_holds_its_deadline_for_a_few_seconds` fiel in S13 zweimal
+  aus, beide Male weil der Rechner nebenher beschäftigt war (einmal ein
   Coverage-Build, einmal ein Spiel und ein Video). Der Test druckt dafür selbst
   `probe thread turns: N/s`: erst diese Zeile lesen, dann das Target allein
   laufen lassen (`cargo test -p prism-engine --test realtime`), dann den Diff
-  verdächtigen. Auf einer ruhigen Maschine sind alle 846 Tests grün.
+  verdächtigen. Auf einer ruhigen Maschine sind alle 872 Tests grün.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S14-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S15-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S15 (`prism-core` — SQLite-Persistenz) überschreiben
+  Session S16 (`prism-ipc` — Framing und Transporte) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(core): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)

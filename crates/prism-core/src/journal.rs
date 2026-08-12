@@ -1,0 +1,413 @@
+//! The Oops journal — `ARCHITECTURE_SPEC.md` §6.1.
+//!
+//! > Applying a command produces a compact `UndoRecord` holding the inverse and
+//! > the affected scope, kept in a 200-entry ring buffer.
+//!
+//! # Why the scope is the whole design, and not bookkeeping
+//!
+//! The obvious journal is a stack of two hundred copies of the show. It is
+//! wrong twice. It is expensive — a show is the patch, the embedded profiles
+//! and every stored look — and, far worse, it takes back things the operator
+//! never asked to take back. `SetExecutorMaster` **is** show state: an executor
+//! master lives in the show and is written by a command. It is also, by
+//! `Command::is_undoable`, deliberately *not* undoable, because §6.1 forbids an
+//! undo from changing light the operator is currently driving. A snapshot
+//! journal cannot honour both facts at once: undoing a patch would pull the
+//! fader the operator moved after it back down with it.
+//!
+//! So a record names what its command touched and carries only that:
+//!
+//! | Command | Scope |
+//! |---|---|
+//! | `PatchFixture` | that one fixture's patch entry |
+//! | `StoreCue` | that one sequence, the programmer, the programmer's page state |
+//! | `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` | the programmer and its page state |
+//!
+//! Those six are exactly the undoable commands: the twenty-three of
+//! `docs/IPC_PROTOCOL.md` §5 less the three playback actions, less `Oops`,
+//! `Redo` and `SaveShow`, less the eleven §4.4 session commands.
+//!
+//! # Why the record holds two images rather than one inverse
+//!
+//! Undo needs the state before the command; redo needs the state after it. Both
+//! are the same shape, both are already to hand at the moment the command is
+//! applied, and computing the second from the first would mean inverting an
+//! inverse — so a record is a before-image and an after-image of the same
+//! scope. Restoring one *is* applying the inverse.
+//!
+//! # The programmer is journaled whole, and the show is not
+//!
+//! `docs/DMX_MERGE.md` §3 makes the programmer sparse by specification, so its
+//! whole state is a selection, a handful of touched values and a button stage —
+//! small enough that describing a change to it would cost more than copying it.
+//! S13 built [`Programmer::restore`](crate::Programmer::restore) for exactly
+//! this. A show is the opposite, which is why a show image is one fixture or one
+//! sequence.
+//!
+//! # Not persisted
+//!
+//! A record describes a step between two states of *this* show in *this* run of
+//! the daemon. Restored from disk beside a file that may have been edited by
+//! hand since, its inverse would be an assertion about a show that no longer
+//! exists — so [`ShowFile`](crate::ShowFile) keeps the journal `#[serde(skip)]`
+//! and a reopened show has nothing to undo. **S15 requirement:** a loader that
+//! replaces the models in place calls [`Journal::clear`]; one that deserialises
+//! a fresh file gets an empty journal for free.
+
+use core::fmt;
+use std::collections::VecDeque;
+
+use prism_domain::{Command, Fixture, FixtureId, ProgrammerState, Sequence, SequenceId};
+
+/// Why an Oops or a Redo could not be carried out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JournalError {
+    /// Nothing has been done that this journal can take back.
+    NothingToUndo,
+    /// Nothing has been taken back that this journal can put back.
+    NothingToRedo,
+}
+
+impl fmt::Display for JournalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NothingToUndo => write!(f, "there is nothing to undo"),
+            Self::NothingToRedo => write!(f, "there is nothing to redo"),
+        }
+    }
+}
+
+impl core::error::Error for JournalError {}
+
+/// The part of the state one record covers — §6.1's "affected scope".
+///
+/// What a client shows beside an Oops button, and what makes the exclusion of
+/// the playback commands real rather than promised: a record that names one
+/// fixture cannot move an executor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum UndoScope {
+    /// One fixture's entry in the patch.
+    Fixture(FixtureId),
+    /// One sequence, with its cues.
+    Sequence(SequenceId),
+    /// The programmer, whole.
+    Programmer,
+    /// The session's programmer page and jog-wheel parameter index — the two
+    /// §4.1 fields a programmer command reaches into (S13).
+    ProgrammerPage,
+}
+
+/// One piece of state, as it stood at one moment.
+///
+/// Private to the crate: the images are what the journal restores, and a caller
+/// able to build one could write any state it liked into the show without going
+/// through the validation every edit otherwise passes. [`UndoRecord::scope`] is
+/// the public half.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Image {
+    /// The patch entry for a fixture. `None`: it was not patched.
+    ///
+    /// The absence is a real case and not defensive: patching a fixture for the
+    /// first time has "not patched" as its inverse.
+    Fixture(FixtureId, Option<Fixture>),
+    /// A sequence and its cues.
+    ///
+    /// Not optional, where a fixture is. The only command that images a
+    /// sequence is `StoreCue`, and `Show::apply` refuses it outright if the
+    /// sequence is not there — so a *stored* record's sequence always existed,
+    /// both before the command and after it. Nothing in
+    /// `docs/IPC_PROTOCOL.md` §5 creates or deletes a sequence; S28's editor
+    /// will, and that is when this grows an absence of its own.
+    Sequence(Sequence),
+    /// The whole programmer state, Clear stage included.
+    Programmer(ProgrammerState),
+    /// The session's page state.
+    ProgrammerPage {
+        /// `Session::programmer_page`.
+        page: u32,
+        /// `Session::programmer_param_index`.
+        param_index: u32,
+    },
+}
+
+impl Image {
+    /// What this image is an image of.
+    pub(crate) const fn scope(&self) -> UndoScope {
+        match self {
+            Self::Fixture(id, _) => UndoScope::Fixture(*id),
+            Self::Sequence(sequence) => UndoScope::Sequence(sequence.id),
+            Self::Programmer(_) => UndoScope::Programmer,
+            Self::ProgrammerPage { .. } => UndoScope::ProgrammerPage,
+        }
+    }
+}
+
+/// One step, and how to take it back or take it again.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UndoRecord {
+    command: Command,
+    before: Vec<Image>,
+    after: Vec<Image>,
+}
+
+impl UndoRecord {
+    /// A record over one scope, imaged before and after.
+    pub(crate) const fn new(command: Command, before: Vec<Image>, after: Vec<Image>) -> Self {
+        Self {
+            command,
+            before,
+            after,
+        }
+    }
+
+    /// The command that produced this step.
+    ///
+    /// **S26 requirement:** this is what names the Oops on the console — "Oops:
+    /// Store Cue" tells an operator what is about to happen, where "Oops" alone
+    /// asks them to guess.
+    #[must_use]
+    pub const fn command(&self) -> &Command {
+        &self.command
+    }
+
+    /// What this record covers, in the order it is restored.
+    #[must_use]
+    pub fn scope(&self) -> Vec<UndoScope> {
+        self.before.iter().map(Image::scope).collect()
+    }
+
+    /// The state as it was before the command.
+    pub(crate) fn before(&self) -> &[Image] {
+        &self.before
+    }
+
+    /// The state as it was after the command.
+    pub(crate) fn after(&self) -> &[Image] {
+        &self.after
+    }
+
+    /// Whether the command changed anything at all in its own scope.
+    ///
+    /// A command that was accepted and moved nothing is not a step: an operator
+    /// pressing Oops after one would watch nothing happen and press it again,
+    /// losing the edit they actually meant to take back.
+    pub(crate) fn is_a_step(&self) -> bool {
+        self.before != self.after
+    }
+}
+
+/// The 200-entry ring of `ARCHITECTURE_SPEC.md` §6.1, and the redo stack beside
+/// it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Journal {
+    /// Steps taken, oldest first. Bounded by [`Journal::CAPACITY`].
+    done: VecDeque<UndoRecord>,
+    /// Steps taken back, most recently undone last. Bounded by `done`, which is
+    /// the only thing that fills it.
+    undone: Vec<UndoRecord>,
+}
+
+impl Journal {
+    /// How many steps can be taken back — §6.1's ring.
+    ///
+    /// Two hundred edits is far more than a session of programming between
+    /// saves, and the bound exists so that a desk left running for a week
+    /// cannot grow a journal until it runs out of memory.
+    pub const CAPACITY: usize = 200;
+
+    /// An empty journal.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// How many steps can be taken back.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.done.len()
+    }
+
+    /// Whether there is anything to take back.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.done.is_empty()
+    }
+
+    /// How many steps can be put back.
+    #[must_use]
+    pub fn redo_len(&self) -> usize {
+        self.undone.len()
+    }
+
+    /// The step the next Oops would take back.
+    #[must_use]
+    pub fn undoable(&self) -> Option<&UndoRecord> {
+        self.done.back()
+    }
+
+    /// The step the next Redo would put back.
+    #[must_use]
+    pub fn redoable(&self) -> Option<&UndoRecord> {
+        self.undone.last()
+    }
+
+    /// Forgets everything. **S15 requirement:** loading a show calls this.
+    pub fn clear(&mut self) {
+        self.done.clear();
+        self.undone.clear();
+    }
+
+    /// Files a step, dropping the oldest if the ring is full.
+    ///
+    /// A new step also forgets the redo stack: the operator has taken a
+    /// different branch, and putting back a command from the branch they left
+    /// would interleave two histories into one that never happened.
+    pub(crate) fn push(&mut self, record: UndoRecord) {
+        self.undone.clear();
+        if self.done.len() == Self::CAPACITY {
+            self.done.pop_front();
+        }
+        self.done.push_back(record);
+    }
+
+    /// Takes the newest step off the undo stack.
+    pub(crate) fn take_undo(&mut self) -> Option<UndoRecord> {
+        self.done.pop_back()
+    }
+
+    /// Takes the newest step off the redo stack.
+    pub(crate) fn take_redo(&mut self) -> Option<UndoRecord> {
+        self.undone.pop()
+    }
+
+    /// Puts a step back where an undo found it — a restore that was refused, or
+    /// one that has just been redone.
+    pub(crate) fn put_undo(&mut self, record: UndoRecord) {
+        self.done.push_back(record);
+    }
+
+    /// Puts a step on the redo stack — one that has just been undone, or a redo
+    /// that was refused.
+    pub(crate) fn put_redo(&mut self, record: UndoRecord) {
+        self.undone.push(record);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Image, Journal, JournalError, UndoRecord, UndoScope};
+    use prism_domain::{Command, FixtureId, ProgrammerState, Sequence, SequenceId};
+
+    fn record(id: u32) -> UndoRecord {
+        UndoRecord::new(
+            Command::ClearProgrammer,
+            vec![Image::Fixture(FixtureId::new(id), None)],
+            vec![Image::Programmer(ProgrammerState::default())],
+        )
+    }
+
+    #[test]
+    fn the_ring_holds_two_hundred_and_drops_the_oldest() {
+        let mut journal = Journal::new();
+        assert!(journal.is_empty());
+        for id in 0..u32::try_from(Journal::CAPACITY).unwrap() + 50 {
+            journal.push(record(id));
+        }
+        assert_eq!(journal.len(), Journal::CAPACITY);
+        assert!(!journal.is_empty());
+        // The newest is the last one pushed and the oldest is the fifty-first,
+        // so the ring dropped from the front rather than refusing at the back.
+        assert_eq!(
+            journal.undoable().map(UndoRecord::scope),
+            Some(vec![UndoScope::Fixture(FixtureId::new(249))])
+        );
+        let mut taken = Vec::new();
+        while let Some(entry) = journal.take_undo() {
+            taken.push(entry.scope());
+        }
+        assert_eq!(taken.len(), Journal::CAPACITY);
+        assert_eq!(
+            taken.last(),
+            Some(&vec![UndoScope::Fixture(FixtureId::new(50))])
+        );
+    }
+
+    #[test]
+    fn a_new_step_forgets_the_redo_stack() {
+        let mut journal = Journal::new();
+        journal.push(record(1));
+        let undone = journal.take_undo().unwrap();
+        journal.put_redo(undone);
+        assert_eq!(journal.redo_len(), 1);
+        assert!(journal.redoable().is_some());
+
+        journal.push(record(2));
+        assert_eq!(journal.redo_len(), 0);
+        assert!(journal.redoable().is_none());
+        assert!(journal.take_redo().is_none());
+    }
+
+    #[test]
+    fn a_step_that_was_refused_goes_back_where_it_came_from() {
+        let mut journal = Journal::new();
+        journal.push(record(1));
+        let taken = journal.take_undo().unwrap();
+        assert_eq!(journal.len(), 0);
+        journal.put_undo(taken);
+        assert_eq!(journal.len(), 1);
+
+        journal.clear();
+        assert!(journal.is_empty());
+        assert_eq!(journal.redo_len(), 0);
+    }
+
+    #[test]
+    fn a_record_names_its_command_its_scope_and_whether_it_moved_anything() {
+        let entry = record(1);
+        assert_eq!(entry.command(), &Command::ClearProgrammer);
+        assert_eq!(entry.scope(), vec![UndoScope::Fixture(FixtureId::new(1))]);
+        assert!(entry.is_a_step());
+        assert_eq!(
+            entry.before()[0].scope(),
+            UndoScope::Fixture(FixtureId::new(1))
+        );
+        assert_eq!(entry.after()[0].scope(), UndoScope::Programmer);
+
+        let unchanged = UndoRecord::new(
+            Command::ClearProgrammer,
+            vec![Image::ProgrammerPage {
+                page: 0,
+                param_index: 0,
+            }],
+            vec![Image::ProgrammerPage {
+                page: 0,
+                param_index: 0,
+            }],
+        );
+        assert!(!unchanged.is_a_step());
+        assert_eq!(unchanged.scope(), vec![UndoScope::ProgrammerPage]);
+    }
+
+    #[test]
+    fn a_sequence_image_names_its_sequence() {
+        let image = Image::Sequence(Sequence {
+            id: SequenceId::new(3),
+            name: "Sequence 3".to_owned(),
+            cues: Vec::new(),
+            looping: false,
+        });
+        assert_eq!(image.scope(), UndoScope::Sequence(SequenceId::new(3)));
+    }
+
+    #[test]
+    fn the_two_refusals_read_as_themselves() {
+        assert_eq!(
+            JournalError::NothingToUndo.to_string(),
+            "there is nothing to undo"
+        );
+        assert_eq!(
+            JournalError::NothingToRedo.to_string(),
+            "there is nothing to redo"
+        );
+    }
+}

@@ -682,6 +682,59 @@ fn a_scripted_programmer_is_reproduced_command_by_command() {
     assert_eq!(pair.programmer.state, *pair.file.programmer.state());
 }
 
+/// An undo changes state, so it has to say so — in deltas, like everything
+/// else. A client that mirrored the command and not its Oops would hold a show
+/// that no longer exists and would go on drawing it until it reconnected.
+#[test]
+fn an_undo_and_a_redo_reach_all_three_mirrors() {
+    let mut pair = FilePair::new();
+
+    pair.apply(&Command::SelectFixtures {
+        ids: vec![FixtureId::new(1), FixtureId::new(2)],
+        mode: prism_domain::SelectionMode::Set,
+    });
+    pair.apply(&Command::SetAttribute {
+        attribute: AttributeType::Red,
+        value: 65535,
+        relative: false,
+    });
+    // A patch, which is the show document, and a store, which is the show and
+    // the programmer at once.
+    pair.apply(&patch_command(9, 3, 1));
+    pair.apply(&Command::StoreCue {
+        sequence_id: SequenceId::new(1),
+        cue_number: "3".to_owned(),
+    });
+    // And the third Clear, which is the session as well — so walking back from
+    // here crosses all three documents.
+    for _ in 0..3 {
+        pair.apply(&Command::ClearProgrammer);
+    }
+    let programmed = pair.file.show.to_json().unwrap();
+
+    // `FilePair::apply` compares all three mirrors after every command, so the
+    // walk itself is the assertion.
+    for _ in 0..pair.file.journal.len() {
+        pair.apply(&Command::Oops);
+    }
+    assert!(pair.file.show.fixture(FixtureId::new(9)).is_none());
+    assert_eq!(
+        pair.file
+            .show
+            .sequence(SequenceId::new(1))
+            .unwrap()
+            .cues
+            .len(),
+        2
+    );
+
+    for _ in 0..pair.file.journal.redo_len() {
+        pair.apply(&Command::Redo);
+    }
+    assert_eq!(pair.show.value(), &programmed);
+    assert_eq!(pair.programmer.state, *pair.file.programmer.state());
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 

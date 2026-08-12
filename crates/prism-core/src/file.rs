@@ -33,6 +33,17 @@
 //! overrides every playback absolutely, and it is not an unsaved change to the
 //! show.
 //!
+//! # The journal belongs at the same door, for the same reason
+//!
+//! One command moves all three models — `StoreCue` writes a cue *and* moves the
+//! Clear stage, `SelectFixtures` moves the programmer *and* the session's jog
+//! wheel — so an undo that could only reach one of them would take a command
+//! half back. [`ShowFile::apply`] is the only place that sees all three, so it
+//! is where a step is recorded and where `Command::Oops` and `Command::Redo`
+//! are carried out; `Effect::Undo` and `Effect::Redo` are dropped from the
+//! answer exactly as [`Effect::Programmer`] is. See [`crate::Journal`] for what
+//! a record holds and why it is a scope rather than a copy of the show.
+//!
 //! # One Save LED, two sources
 //!
 //! The show is dirty when it has unsaved edits (S11); the session is dirty when
@@ -53,6 +64,7 @@ use prism_domain::{ClearStage, Command, Delta, NoticeLevel};
 use serde::{Deserialize, Serialize};
 
 use crate::command::{Applied, Effect};
+use crate::journal::{Image, Journal, JournalError, UndoRecord};
 use crate::programmer::{Programmer, ProgrammerError};
 use crate::session::{SessionError, SessionState};
 use crate::show::{Show, ShowError};
@@ -69,6 +81,8 @@ pub enum ShowFileError {
     Session(SessionError),
     /// The programmer refused it.
     Programmer(ProgrammerError),
+    /// There was nothing to undo or nothing to redo.
+    Journal(JournalError),
 }
 
 impl core::fmt::Display for ShowFileError {
@@ -77,6 +91,7 @@ impl core::fmt::Display for ShowFileError {
             Self::Show(error) => error.fmt(f),
             Self::Session(error) => error.fmt(f),
             Self::Programmer(error) => error.fmt(f),
+            Self::Journal(error) => error.fmt(f),
         }
     }
 }
@@ -98,6 +113,12 @@ impl From<SessionError> for ShowFileError {
 impl From<ProgrammerError> for ShowFileError {
     fn from(error: ProgrammerError) -> Self {
         Self::Programmer(error)
+    }
+}
+
+impl From<JournalError> for ShowFileError {
+    fn from(error: JournalError) -> Self {
+        Self::Journal(error)
     }
 }
 
@@ -123,6 +144,17 @@ pub struct ShowFile {
     /// per session, which is the same change to this type as the session map.
     #[serde(skip)]
     pub programmer: Programmer,
+    /// The Oops journal: the steps that can be taken back.
+    ///
+    /// Public like the three models, and readable like them — but only
+    /// [`Self::apply`] can *file* a step. A record is an assertion that the
+    /// state was once something, and a caller able to write one could put any
+    /// state it liked into the show without passing the validation every edit
+    /// otherwise passes, so everything on [`Journal`] that adds or takes an
+    /// entry is `pub(crate)`. What is left to a caller is reading it and
+    /// [`Journal::clear`].
+    #[serde(skip)]
+    pub journal: Journal,
 }
 
 impl ShowFile {
@@ -151,14 +183,18 @@ impl ShowFile {
         show || session
     }
 
-    /// Routes a command to the applier that owns it and applies it.
+    /// Routes a command to the applier that owns it, applies it, and files the
+    /// step it took.
     ///
     /// # Errors
     ///
     /// [`ShowFileError`] if the command was refused. No half is changed after
-    /// an error.
+    /// an error, and nothing is journaled.
     pub fn apply(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
         let was_dirty = self.is_dirty();
+        // Before anything is written: the state a later Oops has to put back.
+        // Empty unless the command is undoable — see [`Self::image`].
+        let before = self.image(command);
         let mut applied = if command.is_session_command() {
             self.session.apply(command)?
         } else {
@@ -168,13 +204,20 @@ impl ShowFile {
             // The show has decided its half and named who finishes the job.
             // That somebody is here, so the effect is carried out rather than
             // handed on.
-            applied
-                .effects
-                .retain(|effect| *effect != Effect::Programmer);
             let finished = self.finish_programmer(command)?;
-            applied.deltas.extend(finished.deltas);
-            applied.effects.extend(finished.effects);
+            applied.absorb(Effect::Programmer, finished);
         }
+        // The same shape one layer further out: the show validates `Oops` and
+        // `Redo` and names the journal, and the journal is here.
+        if applied.effects.contains(&Effect::Undo) {
+            let undone = self.undo()?;
+            applied.absorb(Effect::Undo, undone);
+        }
+        if applied.effects.contains(&Effect::Redo) {
+            let redone = self.redo()?;
+            applied.absorb(Effect::Redo, redone);
+        }
+        self.record(command, before);
         // The show applier raises the flag for its own half; here the flag is
         // the pair, so its own answer is replaced by the pair's transition.
         applied
@@ -250,6 +293,210 @@ impl ShowFile {
             applied
                 .deltas
                 .push(Delta::SessionPatch { ops: session_ops });
+        }
+        Ok(applied)
+    }
+
+    // -- the journal ------------------------------------------------------
+
+    /// The pieces of state this command can change — `ARCHITECTURE_SPEC.md`
+    /// §6.1's "affected scope", read off the command before it is applied and
+    /// again afterwards.
+    ///
+    /// Empty for a command that is not undoable, and that is the whole of the
+    /// exclusion: a playback action produces no image, so it produces no
+    /// record, so an Oops cannot reach it. `Command::is_undoable` remains the
+    /// definition rather than this list —
+    /// `a_command_has_a_scope_exactly_when_it_is_undoable` holds the two
+    /// together over all twenty-three commands, so a new command cannot be
+    /// given a scope here and left out of the list there, or the reverse.
+    fn image(&self, command: &Command) -> Vec<Image> {
+        match command {
+            Command::PatchFixture { id, .. } => {
+                vec![Image::Fixture(*id, self.show.fixture(*id).cloned())]
+            }
+            Command::SelectFixtures { .. }
+            | Command::SetAttribute { .. }
+            | Command::ApplyPreset { .. }
+            | Command::ClearProgrammer => self.programmer_image(),
+            Command::StoreCue { sequence_id, .. } => {
+                // A sequence that is not there is not imaged, and the record is
+                // never filed either: `Show::apply` refuses the command before
+                // anything is written. See [`Image::Sequence`].
+                let mut images: Vec<Image> = self
+                    .show
+                    .sequence(*sequence_id)
+                    .cloned()
+                    .map(Image::Sequence)
+                    .into_iter()
+                    .collect();
+                images.extend(self.programmer_image());
+                images
+            }
+            // The three playback actions, the two journal commands, the save
+            // and the eleven §4.4 session commands — named rather than caught
+            // by a wildcard, so a command added to the protocol is a compile
+            // error here as well as in the three appliers.
+            Command::ExecutorGo { .. }
+            | Command::ExecutorOff { .. }
+            | Command::SetExecutorMaster { .. }
+            | Command::Oops
+            | Command::Redo
+            | Command::SaveShow
+            | Command::SelectView { .. }
+            | Command::StoreView { .. }
+            | Command::OpenWindow { .. }
+            | Command::CloseWindow { .. }
+            | Command::FocusWindow { .. }
+            | Command::SetExecutorPage { .. }
+            | Command::SelectExecutor { .. }
+            | Command::SetEncoderBank { .. }
+            | Command::SetProgrammerPage { .. }
+            | Command::SelectProgrammerParam { .. }
+            | Command::CommandLineInput { .. } => Vec::new(),
+        }
+    }
+
+    /// The programmer and the session's page state, which is the pair every
+    /// programmer command can move — [`Self::finish_programmer`] resets the jog
+    /// wheel when the selection changes and the page on the third Clear.
+    ///
+    /// **The page state is in the scope even though it is session state**, and
+    /// that does not contradict §6.1's exclusion of the session *commands*. The
+    /// exclusion is about an undo pulling windows out from under the operator;
+    /// this is the cursor into the parameters of a selection, which S13 resets
+    /// precisely *because* a new selection makes the old index meaningless. An
+    /// undo that put the selection back and left the wheel pointing into it
+    /// would restore half a state.
+    fn programmer_image(&self) -> Vec<Image> {
+        vec![
+            Image::Programmer(self.programmer.state().clone()),
+            Image::ProgrammerPage {
+                page: self.session.session().programmer_page,
+                param_index: self.session.session().programmer_param_index,
+            },
+        ]
+    }
+
+    /// Files the step a command has just taken, if it took one.
+    fn record(&mut self, command: &Command, before: Vec<Image>) {
+        if before.is_empty() {
+            return;
+        }
+        let record = UndoRecord::new(command.clone(), before, self.image(command));
+        if record.is_a_step() {
+            self.journal.push(record);
+        }
+    }
+
+    /// Takes the newest step back.
+    fn undo(&mut self) -> Result<Applied, ShowFileError> {
+        let record = self
+            .journal
+            .take_undo()
+            .ok_or(JournalError::NothingToUndo)?;
+        let restored = self.restore(record.before());
+        match restored {
+            Ok(applied) => {
+                self.journal.put_redo(record);
+                Ok(applied)
+            }
+            // Refused, and therefore not taken: the record goes back where it
+            // was so the operator can press Oops again once the reason is gone.
+            Err(error) => {
+                self.journal.put_undo(record);
+                Err(error)
+            }
+        }
+    }
+
+    /// Puts the newest step that was taken back, back.
+    fn redo(&mut self) -> Result<Applied, ShowFileError> {
+        let record = self
+            .journal
+            .take_redo()
+            .ok_or(JournalError::NothingToRedo)?;
+        let restored = self.restore(record.after());
+        match restored {
+            Ok(applied) => {
+                self.journal.put_undo(record);
+                Ok(applied)
+            }
+            Err(error) => {
+                self.journal.put_redo(record);
+                Err(error)
+            }
+        }
+    }
+
+    /// Puts an image of the state back, and says what changed.
+    ///
+    /// **The fallible half goes first**, in its own pass: a show write is the
+    /// only piece of a restore that can be refused — a cue list naming a
+    /// fixture somebody has since unpatched, a fixture whose profile has been
+    /// replaced — and a refusal must leave every model byte-identical rather
+    /// than half walked back. Restoring the programmer cannot fail, and the two
+    /// session fields are `u32`s whose projection cannot either.
+    ///
+    /// The ordering is belt and braces *today* and is kept for what comes next:
+    /// the only record that holds a show image and a desk image at once is
+    /// `StoreCue`'s, and its desk half never changes — a store leaves the
+    /// selection alone, and S13 proved that a store can never meet a non-zero
+    /// Clear stage. A scope that grows (S27's patch sheet, S28's cue editor)
+    /// would make the order load-bearing, and finding that out by way of a
+    /// half-applied undo is not a good way to find it out.
+    ///
+    /// An image that is already what the state holds is skipped, so an undo
+    /// that moves one of the three models does not broadcast a delta about the
+    /// other two, or light the Save LED over a show it did not touch.
+    fn restore(&mut self, images: &[Image]) -> Result<Applied, ShowFileError> {
+        let mut applied = Applied::default();
+        for image in images {
+            match image {
+                Image::Fixture(id, fixture) => {
+                    let ops = match fixture {
+                        Some(fixture) => self.show.patch_fixture(fixture.clone())?,
+                        None => self.show.unpatch_fixture(*id)?,
+                    };
+                    applied.deltas.push(Delta::ShowPatch { ops });
+                    // The patch changed, whichever direction it changed in: the
+                    // `MergeBody` has to be rebuilt and the publisher's frame
+                    // buffers blanked exactly as they do for the command that
+                    // is being taken back (S4).
+                    applied.effects.push(Effect::Repatch);
+                }
+                Image::Sequence(sequence) => {
+                    let ops = self.show.store_sequence(sequence.clone())?;
+                    applied.deltas.push(Delta::ShowPatch { ops });
+                    applied.effects.push(Effect::ReloadSequence(sequence.id));
+                }
+                Image::Programmer(_) | Image::ProgrammerPage { .. } => {}
+            }
+        }
+        // A show image is written unconditionally, and does not need to ask
+        // first whether it would change anything: a record is only filed when
+        // its images actually moved, and a show image is the only image a
+        // command with one can have moved. The two below *are* asked, because
+        // both change-detect internally and a programmer command routinely
+        // moves one of them and not the other.
+        for image in images {
+            match image {
+                Image::Programmer(state) => {
+                    if self.programmer.restore(state.clone()) {
+                        applied.deltas.push(Delta::ProgrammerChanged {
+                            state: self.programmer.state().clone(),
+                        });
+                    }
+                }
+                Image::ProgrammerPage { page, param_index } => {
+                    let mut ops = self.session.set_programmer_page(*page)?;
+                    ops.extend(self.session.set_programmer_param_index(*param_index)?);
+                    if !ops.is_empty() {
+                        applied.deltas.push(Delta::SessionPatch { ops });
+                    }
+                }
+                Image::Fixture(..) | Image::Sequence(_) => {}
+            }
         }
         Ok(applied)
     }
@@ -420,5 +667,112 @@ mod tests {
         assert_eq!(file.show.fixtures().count(), 0);
         assert_eq!(file.session.views().count(), 1);
         assert!(!file.is_dirty());
+        assert!(file.journal.is_empty());
+    }
+
+    /// `ShowFile::image` and `Command::is_undoable` are two statements of one
+    /// rule — what the Oops journal reaches — and this is what holds them
+    /// together.
+    ///
+    /// A command given a scope here but left out of the list there would be
+    /// journaled while the protocol says it is not; one added there and
+    /// forgotten here would be journaled as an empty record that takes nothing
+    /// back. Both matches are exhaustive, so a *new* command is a compile
+    /// error in both; this test is for the two of them disagreeing about a
+    /// command they both already name.
+    #[test]
+    fn a_command_has_a_scope_exactly_when_it_is_undoable() {
+        use prism_domain::{
+            AttributeType, ExecutorId, FeatureGroup, FixtureId, GoDirection, ParamDirection,
+            PresetId, SelectionMode, SequenceId,
+        };
+
+        let file = file();
+        // docs/IPC_PROTOCOL.md §5, all twenty-three.
+        let commands = [
+            Command::SelectFixtures {
+                ids: vec![FixtureId::new(1)],
+                mode: SelectionMode::Set,
+            },
+            Command::SetAttribute {
+                attribute: AttributeType::Red,
+                value: 0,
+                relative: false,
+            },
+            Command::ApplyPreset {
+                preset_id: PresetId::new(1),
+            },
+            Command::ClearProgrammer,
+            Command::StoreCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+            },
+            Command::ExecutorGo {
+                executor_id: ExecutorId::new(0),
+                direction: GoDirection::Next,
+            },
+            Command::ExecutorOff {
+                executor_id: ExecutorId::new(0),
+            },
+            Command::SetExecutorMaster {
+                executor_id: ExecutorId::new(0),
+                level: 0,
+            },
+            Command::PatchFixture {
+                id: FixtureId::new(1),
+                name: String::new(),
+                type_id: "generic.rgbw.par".to_owned(),
+                universe: prism_domain::UniverseId::new(1),
+                address: 1,
+            },
+            Command::Oops,
+            Command::Redo,
+            Command::SaveShow,
+            Command::SelectView {
+                view_id: ViewId::new(1),
+            },
+            Command::StoreView {
+                view_id: ViewId::new(1),
+                name: String::new(),
+            },
+            Command::OpenWindow {
+                window: WindowType::Patch,
+                params: None,
+            },
+            Command::CloseWindow {
+                instance_id: WindowInstanceId::new(1),
+            },
+            Command::FocusWindow {
+                instance_id: WindowInstanceId::new(1),
+            },
+            Command::SetExecutorPage { page: 0 },
+            Command::SelectExecutor {
+                executor_id: ExecutorId::new(0),
+            },
+            Command::SetEncoderBank {
+                group: FeatureGroup::Color,
+            },
+            Command::SetProgrammerPage { page: 0 },
+            Command::SelectProgrammerParam {
+                direction: ParamDirection::Next,
+            },
+            Command::CommandLineInput {
+                text: String::new(),
+            },
+        ];
+        assert_eq!(commands.len(), 23);
+        let mut undoable = 0;
+        for command in &commands {
+            assert_eq!(
+                !file.image(command).is_empty(),
+                command.is_undoable(),
+                "{command:?}"
+            );
+            undoable += usize::from(command.is_undoable());
+        }
+        // The five programmer commands and the patch: twenty-three less the
+        // three playback actions, `Oops`, `Redo`, `SaveShow` and the eleven
+        // §4.4 session commands.
+        assert_eq!(undoable, 6);
     }
 }

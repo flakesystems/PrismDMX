@@ -18,9 +18,11 @@
 //! [`ShowFile::apply`](crate::ShowFile::apply) is where the two are composed —
 //! so a daemon applying a command through the file never sees the seam.
 //!
-//! `Oops`, `Redo` and `SaveShow` are the same shape one layer further out: the
-//! journal is S14 and persistence is S15, so they are validated as far as the
-//! show can see them and answered with an effect.
+//! `Oops`, `Redo` and `SaveShow` are the same shape one layer further out. The
+//! journal lives on [`ShowFile`](crate::ShowFile), because taking a command
+//! back means taking it back in all three models at once; persistence is S15.
+//! Both are validated as far as the show can see them and answered with an
+//! effect.
 //!
 //! The three playback commands are not show state at all — an executor running
 //! is the engine's business — so they validate against the show and answer with
@@ -102,9 +104,16 @@ pub enum Effect {
     /// it from the answer, so this effect only ever reaches a caller who
     /// applied the command to a bare [`Show`].
     Programmer,
-    /// Undo the last undoable command — the Oops journal, S14.
+    /// Undo the last undoable command — the Oops journal.
+    ///
+    /// [`ShowFile::apply`](crate::ShowFile::apply) carries it out and removes
+    /// it from the answer, exactly as it does [`Effect::Programmer`]: an undo
+    /// has to reach the show, the session and the programmer in one step, and
+    /// the file is the only thing that holds all three. This effect therefore
+    /// only ever reaches a caller who applied `Oops` to a bare [`Show`], which
+    /// has no journal to consult.
     Undo,
-    /// Redo the last undone command — S14.
+    /// Redo the last undone command — the same, in the other direction.
     Redo,
     /// Write the show to disk — S15. The daemon calls [`Show::mark_saved`] when
     /// the write has succeeded, not before.
@@ -127,6 +136,19 @@ impl Applied {
             deltas: Vec::new(),
             effects: vec![effect],
         }
+    }
+
+    /// Drops an effect that has just been carried out and merges what carrying
+    /// it out produced.
+    ///
+    /// The three effects [`ShowFile::apply`](crate::ShowFile::apply) answers
+    /// itself — [`Effect::Programmer`], [`Effect::Undo`] and [`Effect::Redo`] —
+    /// leave the same way: a caller applying a command through the file never
+    /// learns that two models decided it.
+    pub(crate) fn absorb(&mut self, effect: Effect, finished: Self) {
+        self.effects.retain(|found| *found != effect);
+        self.deltas.extend(finished.deltas);
+        self.effects.extend(finished.effects);
     }
 }
 

@@ -8,6 +8,18 @@
 //!
 //! Sessions **S11-S15**.
 //!
+//! # What S14 delivers
+//!
+//! - [`Journal`] - the Oops journal of `ARCHITECTURE_SPEC.md` section 6.1: a
+//!   200-entry ring of [`UndoRecord`]s, each holding the state before and after
+//!   one command over exactly the [`UndoScope`] that command touched. A scope
+//!   rather than a copy of the show, because an executor master is show state
+//!   that an undo must **not** move.
+//! - [`ShowFile::apply`] carries out `Command::Oops` and `Command::Redo`, and
+//!   files a step for every command `Command::is_undoable` admits. An undo
+//!   emits the same deltas and effects as the command it takes back, so a
+//!   client mirrors it and the engine hears about it.
+//!
 //! # What S13 delivers
 //!
 //! - [`Programmer`] - the operator's live edit: the selection, the **sparse**
@@ -61,13 +73,14 @@
 //!
 //! # What lives elsewhere
 //!
-//! The Oops journal is **S14** and persistence **S15**. The show model is what
-//! both sit on: it validates, it applies, and it says what changed.
+//! Persistence is **S15**. The show model is what it sits on, as the journal
+//! does: it validates, it applies, and it says what changed.
 
 mod command;
 mod conflict;
 mod desk;
 mod file;
+mod journal;
 mod mirror;
 mod programmer;
 mod session;
@@ -79,6 +92,7 @@ pub use command::{Applied, Effect, show_patch_ops};
 pub use conflict::{PatchConflict, ShowIssue};
 pub use desk::{DeskId, InvalidDeskId, MachineConfig};
 pub use file::{ShowFile, ShowFileError};
+pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
 pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
 pub use programmer::{Programmer, ProgrammerError};
 pub use session::{SessionError, SessionState, session_patch_ops};
