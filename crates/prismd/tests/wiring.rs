@@ -223,21 +223,62 @@ async fn an_output_that_falls_over_is_reported_to_every_client() {
     });
 
     // The cable comes out and stays out, and it does so **while the daemon is
-    // running**. Both halves matter: the failed send is what takes the
-    // interface down, the failed reconnections are what keep it down for longer
-    // than the housekeeping interval, and the timing is because `run` reads the
-    // health it starts from — an output that had already gone before the loop
-    // began would be the state it was told to expect rather than a change.
+    // running**. The failed send is what takes the interface down; the failed
+    // reconnections are what keep it down for longer than the housekeeping
+    // interval.
+    //
+    // **Two conditions have to hold before it can come out, and a fixed 200 ms
+    // sleep was guessing at both.** S18 reproduced the guess failing by running
+    // this file under six CPU burners:
+    //
+    // - *the client has to be listening.* A delta goes to the clients connected
+    //   when it happens and is never replayed to one that arrives afterwards.
+    // - *the cable has to have been in long enough to be noticed.* The daemon
+    //   learns an output's health by **polling** it every housekeeping interval
+    //   (500 ms), so a state that appears and disappears between two polls was
+    //   never there as far as any client is concerned. On a loaded runner the
+    //   driver reported connected and the cable came out in the same interval:
+    //   the daemon's before and after were both `Disconnected`, there was no
+    //   edge, and the test sat until its deadline having proved nothing. That
+    //   is a fact about a poll rather than a defect — the light always
+    //   converges on the current health — but it is a fact a test has to
+    //   respect.
     let cable = daemon.recorded_outputs()[0].clone();
+    let server = daemon.server().clone();
+    let status = daemon.desk().outputs()[0].status.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        /// Longer than two housekeeping intervals, so the daemon cannot have
+        /// missed the interface coming up.
+        const CONNECTED_FOR: Duration = Duration::from_millis(1_200);
+
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+        let mut up_since = None;
+        loop {
+            match (status.health(), up_since) {
+                (OutputHealth::Ok, None) => up_since = Some(tokio::time::Instant::now()),
+                (OutputHealth::Ok, Some(_)) => {}
+                _ => up_since = None,
+            }
+            let settled = up_since.is_some_and(|since| since.elapsed() >= CONNECTED_FOR);
+            if (settled && server.client_count().await > 0)
+                || tokio::time::Instant::now() >= deadline
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
         cable.fail_connect(64, OutputError::Disconnected);
         cable.fail_send(1, OutputError::Disconnected);
     });
 
+    // Thirty seconds rather than ten, and it is a deadline rather than a wait:
+    // the cable now stays in for over a second before it comes out, and on a
+    // machine slow enough for that to matter the daemon then has a poll and a
+    // broadcast to do. A budget that is only just enough is a test that fails
+    // for the wrong reason.
     let health = tokio::select! {
         result = watching => result.unwrap(),
-        () = daemon.run(Some(Duration::from_secs(10)), std::future::pending()) => {
+        () = daemon.run(Some(Duration::from_secs(30)), std::future::pending()) => {
             panic!("nobody was told the output had gone")
         }
     };

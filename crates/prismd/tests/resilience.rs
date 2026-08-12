@@ -126,6 +126,28 @@ async fn next_event(client: &mut Client) -> Option<ClientEvent> {
     }
 }
 
+/// Reads whatever is already waiting for this client, and nothing more.
+///
+/// **A "fast client" is one that is being read**, and a client nobody is
+/// polling is indistinguishable from one that has stopped reading — which is
+/// the whole subject of the backpressure gate, and which the first version of
+/// that test got wrong: while it waited for the *slow* client to fall behind, it
+/// was not reading the fast one either, so on a CI runner both had dropped
+/// exactly 28 telemetry frames and the comparison between them said nothing.
+/// The deadline is short because "already waiting" is the question; a client
+/// with nothing to read answers in a millisecond.
+async fn drain_ready(client: &mut Client) -> usize {
+    let mut read = 0;
+    while read < 64 {
+        match tokio::time::timeout(Duration::from_millis(1), client.next_event()).await {
+            Ok(Some(Ok(_))) => read += 1,
+            Ok(Some(Err(error))) => panic!("the connection reported {error}"),
+            Ok(None) | Err(_) => break,
+        }
+    }
+    read
+}
+
 /// Sends a command and waits for its `Ack`, applying everything that arrives on
 /// the way to `apply`.
 ///
@@ -626,6 +648,9 @@ async fn a_slow_client_loses_telemetry_and_no_commands_and_nobody_else_notices()
     // about the client being behind, not about how big a pipe buffer is on
     // whichever operating system this is running on.
     until("the slow client to fall behind the telemetry", async || {
+        // The fast client is read on every turn of this wait, because that is
+        // the only thing that makes it the fast one. See `drain_ready`.
+        drain_ready(&mut fast).await;
         server.stats(slow_id).await.is_some_and(|stats| {
             stats.telemetry_dropped > stats.telemetry_sent && stats.telemetry_dropped >= 20
         })
@@ -661,8 +686,12 @@ async fn a_slow_client_loses_telemetry_and_no_commands_and_nobody_else_notices()
 
     let slow_stats = server.stats(slow_id).await.expect("still connected");
     let fast_stats = server.stats(fast_id).await.expect("still connected");
+    // A ratio rather than "fewer": the claim is that the fast client is not
+    // behind *in the way the slow one is*, and one frame lost to a scheduler
+    // hiccup on a busy runner is not that. With the slow client at twenty or
+    // more, this leaves the fast one at most four.
     assert!(
-        fast_stats.telemetry_dropped < slow_stats.telemetry_dropped,
+        fast_stats.telemetry_dropped * 4 < slow_stats.telemetry_dropped,
         "the fast client dropped {} telemetry frames and the slow one {}",
         fast_stats.telemetry_dropped,
         slow_stats.telemetry_dropped
@@ -701,10 +730,12 @@ async fn a_slow_client_loses_telemetry_and_no_commands_and_nobody_else_notices()
     }
     assert_eq!(seen, pages, "a control message was dropped or reordered");
     println!(
-        "backpressure: the slow client was given {} of {} telemetry frames and {} dropped",
+        "backpressure: the slow client was given {} of {} telemetry frames and dropped {}; \
+         the fast client dropped {}",
         telemetry,
         slow_stats.telemetry_sent + slow_stats.telemetry_dropped,
         slow_stats.telemetry_dropped,
+        fast_stats.telemetry_dropped,
     );
 
     // The rig ran through the whole of it.
