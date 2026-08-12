@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
 **Last updated:** 2026-08-12
-**Current phase:** Phase 3 — Core state
-**Current session:** S15 — `prism-core` SQLite persistence (not started; see §8 for the prompt that starts it)
-**Last completed:** S14 — `prism-core` Oops journal ✅ — **the way back exists**
+**Current phase:** Phase 4 — IPC and daemon
+**Current session:** S16 — `prism-ipc` framing and transports (not started; see §8 for the prompt that starts it)
+**Last completed:** S15 — `prism-core` SQLite persistence ✅ — **a show survives being closed**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -65,7 +65,7 @@
 | S12 | Session state (D11) | ✅ | 2026-08-11 | All exit criteria verified — see §2.13. 125 tests, coverage 99.94 % lines with `session.rs` and `file.rs` at **100 %**. Two mutation checks confirm the two central tests are not vacuous |
 | S13 | Programmer state machine | ✅ | 2026-08-12 | All exit criteria verified — see §2.14. 166 tests, coverage 99.89 % lines. Three mutation checks confirm the three central tests are not vacuous |
 | S14 | Oops journal | ✅ | 2026-08-12 | All exit criteria verified — see §2.15. 192 tests, coverage 99.88 % lines. Three mutation checks confirm the three central tests are not vacuous |
-| S15 | SQLite persistence | ☐ | | |
+| S15 | SQLite persistence | ✅ | 2026-08-12 | All exit criteria verified — see §2.16. 225 tests, coverage 99.47 % lines. Five mutation checks confirm the five central tests are not vacuous. **Phase 3 is complete** |
 
 ### Phase 4 — IPC and daemon
 | Session | Title | Status | Date | Note |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 15 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 16 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -617,6 +617,48 @@ journal of show snapshots would have taken back along with everything else.
 undoing back to the state that was last written does not put the file back on
 disk, and saying otherwise would be a lie about the platter.
 
+### 2.16 S15 verification record
+
+Measured on 2026-08-12, all exit criteria from `IMPLEMENTATION_PLAN.md` S15 and
+the session prompt. No hardware and no network — but for the first time in this
+crate, the platter.
+
+| Check | Result |
+|---|---|
+| Save/load round trip: the loaded show is **byte-identical** to the saved one, sessions included | ✅ `tests/persistence.rs`: `a_saved_show_comes_back_byte_identical` compares `rmp_serde::to_vec_named` of the whole `ShowFile` before the save and after the load, then asserts **every** field the criterion is about one by one — the 16-bit attribute's fine offset, a fixture's position and rotation and its two inverts, universe 64, a preset's colour, a looping sequence, cue `2.5`'s trigger time, a cue part's `presetRef`, an executor's master level and cue index, and all eleven §4.1 session fields plus a placed window's geometry. Beside it a `proptest`, `any_show_the_model_accepts_survives_the_platter`, over arbitrary fixtures and arbitrary cue lists. **The fixture is deliberately free of default values**, which is S14's finding taken as a rule: a show built out of zeros cannot tell "restored correctly" from "never touched". **Checked by mutation:** dropping the preset table from the writer turns it red |
+| **Crash safety:** kill the process mid-write; the file still opens and holds the last committed state | ✅ `a_process_killed_mid_write_leaves_the_last_committed_state` re-invokes the test binary as a child that saves a **different** show in a loop, waits for it to say it has started, and kills it — `TerminateProcess`, no unwinding, no destructors, no `sqlite3_close`. Six kills at 17 to 211 ms. After each: `PRAGMA integrity_check`, then the file is asserted to be **exactly one of the two shows and never a mixture**, which is what a write without a transaction produces. The evidence that this is a crash rather than a tidy exit is read off the corpse: the child writes a marker before each save and after each commit, and the run reports `crash test: 6 kills, 5 inside a save, 6 after a commit, largest write-ahead log 3534992 bytes`. **Checked by mutation:** writing the same rows without a transaction turns it red on the second kill |
+| Migration from a version-1 file to version 2, tested with a **fixture file** | ✅ `crates/prism-core/tests/fixtures/version-1.prism` is checked in and frozen — a migration checked against a file the current code has just written is a migration checked against itself. `a_version_one_file_migrates_to_version_two` copies it (opening it is what migrates it), asserts `user_version` moves 1 → 2, that all six show tables came across, and that the half version 1 never had opens as the session a fresh desk starts in. `store::tests::the_frozen_fixture_is_the_show_it_was_written_from` is the exhaustive half: the migrated show compared byte for byte against the fixture it was written from, so a table that quietly went missing fails there rather than in a spot check. **Checked by mutation:** a `migrate` that only ever builds a new file turns it red |
+| The dirty flag drives the `DirtyFlag` deltas (the X-Touch Save LED) | ✅ `the_lamp_goes_out_when_the_write_succeeds_and_only_then`: a successful save answers with exactly one `Delta::DirtyFlag { unsaved_changes: false }`, a second save answers with **nothing** (an LED cannot be turned off twice), an edit lights it again, and `SaveShow` still answers `Effect::Save` — asking for a save is not the same as having saved. The other half is `store::tests::a_write_that_fails_leaves_the_lamp_lit_and_the_file_as_it_was`, where another writer holds the database: the save fails, the lamp stays lit, the file on disk is byte-identical, and the same save goes through once the lock is released. **Checked by mutation:** moving `mark_saved` to before the commit turns that test red. And S14's rule still holds: `an_undo_back_to_the_saved_state_still_leaves_the_lamp_lit` |
+| `cargo test -p prism-core` | ✅ exit 0 — **133 lib tests** + 92 integration tests across seven targets, 0 failed, 2 ignored (the crash test's child and the fixture regenerator) |
+| `cargo test --workspace` | ✅ exit 0 — **905 tests** across 31 targets, 14 ignored (the S8 hardware target, the long engine runs, and the two above). Green on the first attempt, timing gate included |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-core` **> 95 %** | ✅ **99.47 % lines**, 98.07 % regions, 98.51 % functions. `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. `--show-missing-lines` reports ten lines, and they are two kinds: **eight** are the `#[ignore]`d regenerator that rewrites the frozen fixture, and **two** are the error arms of a table count and of encoding one session — the same `?`-propagation residue S11 and S14 recorded. The first measurement read 96.93 %, and for the seventh session running the gap was not a missing test of real behaviour either — see the decision log |
+| The programmer, the journal and the desk identity are **not** in the file | ✅ structurally (the schema has no table for any of them) and by test: `a_reopened_show_is_clean_and_has_nothing_to_undo` fills both and asserts that a load empties them, because a loader that replaces the show in place would otherwise leave an absolute override standing over a rig that has just changed. **Checked by mutation:** dropping `Journal::clear` and the programmer reset turns it red. `desk_id_is_not_show_content` (S11) is unchanged and still passes |
+| A failed write leaves the state byte-identical and the file undamaged | ✅ as above, and the encoding — the last step that can fail, S11's finding — happens **before** the transaction is opened. Damage is reported rather than read past: a row that does not decode, a row filed under a key that is not its own, a session pointing at a view the file does not have or focusing a window that is not open, a database that belongs to another application, a file written by a newer PrismDMX, a path that is not there, and a file system that cannot carry a write-ahead log are seven separate refusals with seven separate messages |
+| Platform-neutral | ✅ still no `#[cfg]` of any kind in the crate. The ARM64 cross-check now needs a C cross-compiler, which is a property of the *dependency* rather than of this crate — see the decision log |
+| CI green on the pushed commit | ⏳ not yet run — the feature commit is pushed and watched next, per `IMPLEMENTATION_PLAN.md` session protocol point 6. This row is filled in from the run, not from expectation |
+
+**Delivered:** one module. `store` is the `.prism` file — [`ShowStore`], the
+schema and its `user_version` migrations, the write-ahead log, the save and the
+load; [`Autosave`], the thirty-second policy; and `export_json`/`import_json`,
+the interchange format. `Show::from_parts` and `SessionState::from_parts` are
+the two doors it builds through, and they are `pub(crate)`: a file is read into
+the models directly rather than replayed through their edit operations.
+
+**A load is not a replay, and the reason is a show that is legal to hold and
+illegal to store.** S11 decided that a dangling reference is reported rather
+than refused, so a cue list naming a fixture somebody unpatched afterwards is an
+ordinary show — and `Show::store_sequence` would turn it down. A loader built
+out of the edit API would refuse to open the file it had itself written. What
+the file *is* checked for is what only a file can be wrong about.
+
+**SQLite is here for the write, not for the queries.** A school's show is a few
+hundred kilobytes and nothing queries it; what the dependency buys is one
+transaction over a write-ahead log, which is the whole of the crash-safety
+criterion. That is why the crash test asserts atomicity — one show or the other,
+never a mixture — rather than merely that the file reopens.
+
 ---
 
 ## 3. Coverage tracking
@@ -630,7 +672,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
-| `prism-core` | **> 95 %** (programmer) | **99.88 % lines**, 98.94 % regions, 99.48 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `file.rs` 99.75 %, `show.rs` 99.87 %, `programmer.rs` 99.43 %. `--show-missing-lines` reports no uncovered source line at all: the five counted lines are monomorphisations, the artefact S4 first measured | 2026-08-12 (S14) |
+| `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
 | `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | — | |
@@ -822,6 +864,14 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-12 | S15 | **SQLite is C, and the ARM64 cross-check is where that stops being an implementation detail.** Three variants were weighed and two were tried on this machine before a line of the module was written, which is what the session prompt asked for. **Bundled** (`rusqlite` with the SQLite amalgamation compiled in) builds on Windows and Linux and fails `cargo check --workspace --target aarch64-unknown-linux-gnu` with `failed to find tool "aarch64-linux-gnu-gcc"` — a build script has to *compile* `sqlite3.c` for the target even though `cargo check` never links. **A preinstalled SQLite** removes the C compilation and replaces it with a system library that has to exist on every machine a show file is opened on, Windows included, which it does not. **Pure Rust** exists — `turso` 0.8.0-pre.4, `limbo_core` 0.0.22 — and is a pre-1.0 reimplementation of the write-ahead log this session's crash-safety criterion is entirely about | **Bundled, and the ARM64 job installs `gcc-aarch64-linux-gnu`.** The reasoning is that a file format a school's shows live in should be the same SQLite everywhere, pinned in the binary rather than supplied by a distribution — and that a cross-compile of a workspace containing C needs a cross C toolchain, which is a missing tool rather than the portability break this job exists to catch. The alternative — leaving the job to fail — would have retired the check that `prism-core` contains no `#[cfg]`. **`prism-core` is unchanged in the respect that matters:** no `#[cfg]` of any kind, and the Linux job still runs its tests. **S17/S29 requirement:** a Raspberry Pi build compiles this natively and needs no cross toolchain, but a *cross*-build for the Pi does, and the packaging session owns saying so |
+| 2026-08-12 | S15 | **A load cannot be a replay of the edit operations, because a show that is legal to hold is not always legal to store.** The obvious loader rebuilds the show by calling `patch_fixture`, `store_preset`, `store_sequence` and the rest, and gets validation for free. It also refuses to open files it wrote itself: S11 decided that a dangling reference is *reported* rather than refused, so unpatching a fixture a cue part names leaves an ordinary show that `Show::store_sequence` turns down (S14 relied on exactly that to test a refused undo) | `Show::from_parts` and `SessionState::from_parts`, `pub(crate)`, building the collections directly. What the file is checked for instead is what only a file can be wrong about: a row that does not decode, a row filed under a key that is not the identifier inside it, a session naming a view the file does not have or focusing a window that is not open. Everything else is `Show::issues()`' job, exactly as it is for a show edited into that state in front of the operator. **S27 requirement:** the patch sheet shows those issues after a load as it does after an edit — a show that opens with a warning is better than one that will not open |
+| 2026-08-12 | S15 | **One row per entity rather than one blob per file, and the argument is what a damaged sector costs.** A show is small enough that a single MessagePack blob in one row would have worked and been half the code | Eight tables keyed by the number the operator uses. A row that will not decode costs **one sequence**, and the error names it (`sequence row 5: …`); a single blob is a file that is either readable or not. The keys are the same keys `Show` holds its collections under, so a load is a walk rather than a rebuild — and the shape a later session needs to write only what changed is already there. **The documents are MessagePack and not JSON**, which is S1's finding applied to the platter: `serde_json`'s parser is not correctly rounded, so a fixture's position would come back a unit in the last place from where it was hung, and "byte-identical" would be false for every rig with a 3D view |
+| 2026-08-12 | S15 | **A save that succeeded and a tidy-up that failed are two different things, and the Save LED is what makes the difference matter.** `ShowStore::save` discards the recovery copy after committing. The first version returned that failure as the save's failure — so a recovery copy that could not be removed (a permission, a file somebody had open) left the show *written* and the lamp *lit*, which is the one lie the lamp must never tell. Found by a test written for the coverage of an error arm, not by review | The save answers `Ok` with a `Delta::Notice` at `Warn` naming the copy that outlived its show, beside the `DirtyFlag` that goes out because the show really is on the platter. It is the S11 rule about silence in a new place: an autosave copy that survives its own show would be offered to the operator at the next start as unsaved work that is not unsaved |
+| 2026-08-12 | S15 | **An autosave is not a save, and the timer starts at the edit rather than at start-up.** Two readings were available and both are wrong: writing the recovery copy every thirty seconds regardless leaves a desk writing files all evening while nothing changes, and starting the clock when the daemon did makes the first autosave land *immediately* after a long clean spell | `Autosave::poll(now, dirty)` — the interval runs from the moment the file became dirty, resets when it is saved, and answering yes spends the interval whether the caller acts on it or not (a disk that has just refused is not persuaded 22 ms later). It owns no clock and no thread, because `prism-core` owns neither; the daemon passes the time since it started, which is what makes "thirty seconds" assertable on a simulated clock instead of by waiting. **`write_recovery` deliberately does not call `mark_saved`:** the operator asked for *their* file to be written, and until it is, the lamp is telling the truth |
+| 2026-08-12 | S15 | **`Effect::Save` is the one effect `ShowFile::apply` does not carry out, and that is a boundary rather than an omission.** S13 and S14 both absorbed their effect (`Programmer`, `Undo`, `Redo`) into the file, so the symmetric move would have been to give `ShowFile` a store and let `SaveShow` write | A show file has a path, a disk and a failure mode, and the model that decides what a show *is* deliberately holds none of the three — an `apply` that could block on a network drive would be a state machine that sometimes takes five seconds. `Effect::Save` reaches the daemon, which answers it with `ShowStore::save`, and that function returns the deltas so the flag transition still travels exactly once. **S17 requirement:** the daemon holds the `ShowStore`, carries out `Effect::Save`, and polls `Autosave` on the same timer it does everything else |
+| 2026-08-12 | S15 | **A migration fixture written by the code under test is a migration tested against itself.** The plan asks for "a version-1 file, tested with a fixture file", and the cheap reading is to write one in the test's set-up | `crates/prism-core/tests/fixtures/version-1.prism` is checked in, frozen, and un-ignored explicitly in `.gitignore`. It is copied before it is opened, because **opening is what migrates it** — a test that left it at version 2 would pass exactly once. Its provenance is a function (`write_version_one`) that a second, non-frozen test also exercises, so the fixture is reproducible without being regenerated. The catch worth writing down for whoever adds version 3: the *documents* inside a frozen file are MessagePack of the domain types as they were, so a domain change that breaks decoding is a migration that has to re-encode rows, not merely add tables |
+| 2026-08-12 | S15 | **Coverage was raised by testing behaviour nobody had asked about, for the seventh session running.** The first measurement read 96.93 % with `store.rs` at 88.71 %. Two of the gaps were the session invariants the loader checks and the write-ahead log guard — neither of which had a test, both of which are real: a file whose session names a view it does not have, and a file system that cannot carry a WAL (an in-memory database says so, and so does a network share, which is exactly where a school would put its shows) | Six tests added, and one of them found the recovery-copy defect above. 99.47 % lines. What is left is ten lines: eight in the `#[ignore]`d regenerator, and two `?` arms — a table count and the encoding of one session — that no input can reach, the same residue S11 and S14 recorded. **The rule that keeps holding:** the uncovered line is where the defect is, and "it is only an error path" has now been wrong seven times |
 | 2026-08-12 | S14 | **A journal of show snapshots cannot honour both sentences of §6.1 at once, and `SetExecutorMaster` is where the two collide.** The obvious Oops journal is a stack of two hundred copies of the show. §6.1's first sentence asks for a *compact* record "holding the inverse and the affected scope"; its second excludes playback actions, "so undo during a running show does not change light the operator is currently driving". An executor master **is** show state — it lives in `Executor::masterLevel` and is written by a command — and it is excluded from the journal. Snapshot the show and undoing a patch takes the fader the operator moved after it back down with it | The record is a scope: one fixture's patch entry for `PatchFixture`, one sequence plus the programmer and its page state for `StoreCue`, the programmer and its page state for the four other programmer commands. Six commands, and nothing else in the show is ever touched by an Oops. Asserted rather than argued: `a_running_executor_survives_an_oops` moves a master to 32768, starts an executor, records the engine's answer, and demands that the Oops take back **the patch** and leave all three alone. **S17 requirement:** the daemon has no journal of its own — it dispatches through `ShowFile::apply`, which is where `Oops` and `Redo` are carried out |
 | 2026-08-12 | S14 | **A record holds two images rather than one inverse, and that is what makes Redo cheap rather than clever.** An inverse alone answers Oops; Redo then needs the state *after* the command, which would have to be derived by inverting the inverse | Both images are to hand at the moment the command is applied — one read before it, one after — and they are the same shape, so `restore(before)` is Oops and `restore(after)` is Redo, one function. The cost is that a `StoreCue` record carries two copies of one cue list; the alternative was a second code path that has to agree with the first about what an inverse means |
 | 2026-08-12 | S14 | **The session's programmer page is inside the scope of a programmer command, and that does not contradict the exclusion of the session commands.** §6.1 excludes the eleven §4.4 commands so that an undo does not pull windows out from under the operator. But S13 made two §4.1 fields — `programmerPage` and `programmerParamIndex` — move as a *side effect* of a programmer command: a new selection resets the jog wheel, the third Clear resets both. Leaving them out of the scope would make "the state is the start state byte for byte" false | They are in the scope, and the reasoning is the same one S13 used to reset them: the index is a cursor into the parameters of a *selection*, so an undo that restored the selection and left the wheel pointing into it would restore half a state. The eleven commands themselves remain unjournaled, which `a_session_command_is_never_taken_back` asserts by applying all of them and finding the journal still holding one entry |
@@ -971,13 +1021,41 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The way back exists now.** Every command the protocol calls undoable can be
-taken back and put back again, across all three models at once, with the deltas
-and effects that tell a client and the engine about it — and an Oops during a
-running show moves neither the executor the operator is driving nor the window
-they are looking at. What is still missing is the disk: a show that is closed is
-a show that is gone. Begin **S15** (`prism-core` — SQLite persistence). Use the
-prompt in §8.
+**A show now survives being closed, and being killed.** `prism-core` is
+complete: the show model, the session, the programmer, the Oops journal and the
+`.prism` file they are written into — one transaction over a write-ahead log, so
+that a process killed mid-save leaves a file holding the last committed state
+and never a mixture of two shows. **Phase 3 is finished.** What is missing is a
+way for anything to talk to any of it: the daemon has no wire. Begin **S16**
+(`prism-ipc` — framing and transports). Use the prompt in §8.
+
+Carried out of S15:
+- **`ShowStore` is the only thing in the crate that touches a disk, and it holds
+  no clock and no thread.** `Effect::Save` is deliberately *not* absorbed by
+  `ShowFile::apply` the way `Programmer`, `Undo` and `Redo` are: a file has a
+  path, a disk and a failure mode. **S17 holds the store**, answers
+  `Effect::Save` with `ShowStore::save`, and polls `Autosave` on its own timer.
+- **`save` returns the deltas**, so the `DirtyFlag` transition still travels
+  exactly once, and a `Notice` comes with it when the recovery copy could not be
+  cleared away. `mark_saved` is called when the commit has **returned**.
+- **A load replaces the show and the session and empties the programmer and the
+  journal.** Both describe the show that was open a moment ago. It answers with
+  `Repatch`, `ReloadGroups` and one `ReloadSequence` per sequence, which is
+  S17's to-do list after opening a file.
+- **The `.prism` schema is eight tables and a `user_version`.** A new version is
+  an entry appended to `MIGRATIONS`; nothing in that list is ever edited, and
+  `FORMAT_VERSION` is its length so the two cannot drift. A file from a newer
+  build is refused rather than guessed at.
+- **The documents inside the rows are MessagePack**, which is S1's finding on
+  the platter: a JSON export is not bit-exact for floats, so `export_json` is
+  the interchange format and the `.prism` file is the authoritative one.
+- **The migration fixture is frozen and is copied before it is opened**, because
+  opening a file is what migrates it. **A domain change that breaks decoding of
+  an old row is a migration that re-encodes**, not one that adds a table.
+- **The workspace contains C now.** `rusqlite` with the bundled amalgamation;
+  the ARM64 cross-check installs `gcc-aarch64-linux-gnu` for it. A native Pi
+  build needs nothing extra, a cross-build for one does — **S29's packaging
+  owns saying that out loud**.
 
 Carried out of S14:
 - **`ShowFile::apply` is the door for the journal too.** It files a step for
@@ -988,10 +1066,9 @@ Carried out of S14:
   sequence plus the programmer and its page state, or the programmer and its
   page state. That is what keeps an Oops off an executor master, which is show
   state and is deliberately not undoable.
-- **The journal is not in the file.** `#[serde(skip)]`. **S15 requirement:** a
-  loader that replaces `file.show` and `file.session` in place calls
-  `Journal::clear`; one that deserialises a whole `ShowFile` gets an empty
-  journal for free. There is no table for it in the schema.
+- **The journal is not in the file.** `#[serde(skip)]`, and S15 gave it no
+  table: `ShowStore::load` replaces `file.show` and `file.session` in place and
+  calls `Journal::clear` — asserted, and checked by mutation.
 - **New *state* is not caught by the compiler, only new *commands* are.** The
   four exhaustive matches make a new `Command` a compile error in four places,
   including `ShowFile::image`. A new field that an existing command can move —
@@ -1061,9 +1138,9 @@ Carried out of S11:
 - **`Show::patch_revision()` is the number a daemon watches.** The programmer is
   addressed by merge-plan slot, so every queued programmer command is stale when
   it moves.
-- **The sACN CID lives in `MachineConfig`, not in the show.** S15 must not write
-  it into a `.prism` file and must not regenerate it on save; S17 generates it
-  once on first start. See the decision log.
+- **The sACN CID lives in `MachineConfig`, not in the show.** S15 wrote the file
+  and gave it no table for a desk, and does not regenerate anything on save;
+  S17 generates the identity once on first start. See the decision log.
 - **Validate and encode before you write.** The JSON projection is the last thing
   that can fail in an edit, and one operation had it in the wrong order — see the
   decision log.
@@ -1081,7 +1158,7 @@ Carried out of S11:
 
 Carried out of Phase 2 into the daemon sessions:
 - **`DmxOutput` is five methods and it stayed that way for three drivers.** Open DMX, Art-Net and sACN all implement the same five and all inherit `OutputRunner`'s thread, reconnect backoff and panic containment unchanged. Two things that looked like they needed a sixth method — Art-Net's end-of-frame for ArtSync, sACN's goodbye — did not: the first is found in the driver, the second belongs in `shutdown`. If a fourth output does not fit, that is a decision-log entry.
-- **The CID has to be stored somewhere and S11/S15 own the question.** It is a UUID identifying *this desk*, it must be stable across restarts, and it must **not** be duplicated by copying a show to a second machine. Today it is `SacnConfig::cid` with a nil default and an output that refuses to connect without one — see the decision log.
+- **The CID belongs to the desk, and the question is settled.** It is a UUID identifying *this machine*, stable across restarts, and it must **not** be duplicated by copying a show to a second machine — so it is `prism_core::MachineConfig` (S11) and the `.prism` file has no table for it (S15). `SacnConfig::cid` still defaults to nil and an output holding a nil CID refuses to connect; **S17 generates one on first start** and writes it beside the daemon's settings.
 - **S17 owns blackout-or-hold on shutdown, and it is a frame rather than a flag.** The sACN driver terminates its streams carrying the last look; a daemon that wants a dark stage publishes a blackout frame *before* stopping the outputs.
 - **S17 must not raise the process's priority, only the tick thread's** — the stress gate measured what happens otherwise (§3.1).
 - **S27's output editor shows things that are data on purpose:** Art-Net's port address as `net:sub:universe`, sACN's E1.31 universe and per-universe priority, the source name, the CID, and `OutputRunner::unmapped()` — a universe an output carries that the patch does not publish is a dark universe with a green light beside it.
@@ -1114,7 +1191,7 @@ Carried from Phase 1:
 - `prism-protocols`: a driver thread wakes at its own output cadence rather than spinning near the engine — see the decision log. S7 implemented this; S9 and S10 inherit it.
 - `prism-ipc` (S16) must serialise MessagePack with `to_vec_named`, must enforce a **nesting depth limit** on decode, and must treat serialisation as fallible — see the decision log.
 - `prism-core` (S11) embeds the used fixture types in the show file — done, see §2.12.
-- S15 must not assume bit-identical floats through a JSON export — see the decision log.
+- A JSON export is **not** bit-identical in its floats (S1), which is why the `.prism` file holds MessagePack and `export_json` is documented as the interchange format — done, see §2.16.
 
 ---
 
@@ -1122,154 +1199,147 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-
-**Next up: S15 — `prism-core`: SQLite-Persistenz**
+**Next up: S16 — `prism-ipc`: Framing und Transporte**
 
 ```text
-PrismDMX — Session S15: prism-core, SQLite-Persistenz
+PrismDMX — Session S16: prism-ipc, Framing und Transporte
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht keine Hardware und kein Netz, aber zum ersten Mal in
-diesem Crate die Platte. Bis hierher lebt alles im Speicher: ein Show, das
-geschlossen wird, ist ein Show, das weg ist.
+Diese Session braucht keine Hardware und keine Platte, aber zum ersten Mal in
+diesem Projekt ein Socket. Bis hierher gibt es einen Motor, drei Ausgänge und
+einen vollständigen Zustand — und nichts, worüber irgendjemand mit ihnen reden
+könnte.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.12 bis §2.15 (was S11 bis
-                                            S14 geliefert haben), §7 „Carried out
-                                            of S14" und alle Decision-Log-Einträge,
-                                            die eine „S15 requirement" nennen —
-                                            davon gibt es mehrere, und sie sind
-                                            der eigentliche Auftrag
+                                            besonders §2.16 (was S15 geliefert
+                                            hat), §7 „Carried out of S15" und
+                                            alle Decision-Log-Einträge, die eine
+                                            „S16 requirement" nennen — davon gibt
+                                            es mehrere, und sie sind ein Teil des
+                                            Auftrags
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S15
-4. ARCHITECTURE_SPEC.md §6, §10, §12      — Domänenmodell, Lebenszyklus,
-                                            Testpolitik
-5. crates/prism-core/src/                 — `file.rs` ist die Datei, um die es
-                                            geht: `ShowFile` = `Show` +
-                                            `SessionState` (+ `Programmer` und
-                                            `Journal`, beide `#[serde(skip)]`).
-                                            Dazu `show.rs`, `session.rs`,
-                                            `desk.rs`
-6. crates/prism-core/tests/session_commands.rs — `the_session_survives_save_and_load`
-                                            ist der bestehende Round-Trip durch
-                                            MessagePack **und** JSON; S15 setzt
-                                            SQLite daneben
+                                            von S16
+4. docs/IPC_PROTOCOL.md                   — **das Pflichtenheft dieser Session**,
+                                            vollständig: §2 Transporte, §3
+                                            Framing, §4 Nachrichtentypen und
+                                            Handshake, §5/§6 Command und Delta,
+                                            §7 Telemetrie, §8 Backpressure,
+                                            §9 Tests
+5. ARCHITECTURE_SPEC.md §1 (D2, D3, D11), §2, §10.1, §12
+6. crates/prism-ipc/src/lib.rs            — bisher nur Moduldokumentation; das
+                                            Crate ist leer
+7. crates/prism-domain/src/wire.rs und    — `Command` (23 Varianten) und `Delta`
+   crates/prism-domain/src/lib.rs           (7 Varianten) sind fertig und
+                                            getestet; sie sind die Nutzlast
 
-Stand nach S14 — nichts davon musst du neu bauen:
+Stand nach S15 — nichts davon musst du neu bauen:
 - `prism-domain` (S1): alle Domänentypen samt Serialisierung und
   TypeScript-Bindings; 133 Tests. Jeder `f64` ist in beiden Richtungen gegen
-  nicht-endliche Werte abgesichert.
+  nicht-endliche Werte abgesichert, und Serialisierung ist deshalb fehlbar.
 - `prism-engine` (S2–S6) ist vollständig: 44 Hz bei 64 Universen unter Volllast,
   allokationsfrei im Tick.
 - `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
   verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz).
-- `prism-core` (S11–S14): `Show` mit Patch, eingebetteten `FixtureType`s,
-  Gruppen, Presets, Sequenzen und Executors; `SessionState` mit View, Fenstern,
-  Executor-Seite und Selektion; `Programmer` mit dreistufigem Clear; `ShowFile`
-  als alle drei zusammen samt Routing und Komposition;
-  `ShowMirror`/`SessionMirror`; und seit S14 das Oops-Journal — ein 200er-Ring
-  aus `UndoRecord`s, die den Zustand vor und nach einem Kommando über genau den
-  `UndoScope` halten, den das Kommando berührt hat. 192 Tests, 99,88 %
-  Zeilenabdeckung.
-- Es gibt noch **keine Persistenz**: `Command::SaveShow` wird von `Show::apply`
-  validiert und mit `Effect::Save` beantwortet, und niemand führt ihn aus.
-  Genau das ist S15.
+- `prism-core` (S11–S15) ist vollständig: `Show`, `SessionState`, `Programmer`,
+  das Oops-Journal und seit S15 die `.prism`-Datei — SQLite mit WAL,
+  `user_version`-Migrationen, Autosave-Politik, Dirty-Flag und JSON-Export.
+  225 Tests, 99,47 % Zeilenabdeckung.
+- Insgesamt 905 Tests im Workspace, alle grün, CI vierfarbig grün.
 
-Aufgabe: Session S15 umsetzen — `prism-core`: SQLite-Persistenz.
+Aufgabe: Session S16 umsetzen — `prism-ipc`: Framing und Transporte.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S15):
-- `.prism`-Schema mit `user_version`-Migrationen
-- WAL
-- Autosave alle 30 s in eine Recovery-Kopie
-- Dirty-Flag
-- JSON-Export/-Import
+Umzusetzen (IMPLEMENTATION_PLAN.md S16):
+- längenpräfigiertes MessagePack-Framing
+- Named-Pipe- bzw. Unix-Domain-Socket-Transport
+- WebSocket-Transport
+- Client- und Server-Hälfte
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Save/Load-Round-Trip: das geladene Show ist byte-identisch mit dem
-  gespeicherten, Sessions eingeschlossen
-- **Crash-Sicherheit:** den Prozess mitten im Schreiben töten; die Datei lässt
-  sich weiterhin öffnen und enthält den letzten committeten Stand
-- Migrationspfad von einer Version-1-Datei auf Version 2, getestet mit einer
-  Fixture-Datei
-- Das Dirty-Flag treibt die `DirtyFlag`-Deltas korrekt (das ist die Save-LED des
-  X-Touch)
-- `cargo test -p prism-core` ist grün
+- Framing-Round-Trip als Property-Test über beliebige Nachrichten
+- Ein übergroßer Frame schließt die Verbindung **ohne große Allokation** — das
+  ist eine Aussage über den Speicher, nicht nur über den Rückgabewert, und
+  gehört entsprechend gemessen (`prism-engine` hat mit dem zählenden Allokator
+  ein Muster dafür, siehe `crates/prism-engine/tests/tick_allocations.rs`)
+- **Transport-Parität:** dieselbe Testsuite läuft identisch über beide
+  Transporte
+- `cargo test -p prism-ipc` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
-- Abdeckung auf `prism-core` bleibt **> 95 %**, gemessen mit
-  `cargo llvm-cov -p prism-core --summary-only` und in PROGRESS.md eingetragen
+- Abdeckung auf `prism-ipc` **≥ 85 %**, gemessen mit
+  `cargo llvm-cov -p prism-ipc --summary-only` und in PROGRESS.md eingetragen
 
 Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **`prism-core` ist plattformneutral: kein `#[cfg(target_os = ...)]`.** Das
-  Crate läuft im Linux-Job **und** im ARM64-Cross-Check der CI
-  (`cargo check --workspace --target aarch64-unknown-linux-gnu`). Eine
-  SQLite-Abhängigkeit mit C-Anteil (`rusqlite`, `libsqlite3-sys`) muss dort
-  durchkommen; prüfe das früh und lokal, nicht erst im CI-Lauf am Ende. Wenn
-  eine Variante (gebündeltes C, vorinstalliertes SQLite, reines Rust) das nicht
-  schafft, ist die Wahl der Abhängigkeit ein Decision-Log-Eintrag und keine
-  stille Anpassung der CI.
-- **Was nicht in die Datei gehört, ist bereits entschieden und begründet:** der
-  `Programmer` (S13 — ein aus der Datei wiederhergestellter Programmer wäre ein
-  absoluter Override über jedem Playback, angewandt in dem Moment, in dem das
-  Show geöffnet wird), das `Journal` (S14 — ein Record ist eine Behauptung über
-  den Zustand *dieses* Laufs), und die Desk-Identität samt sACN-CID (S11 —
-  `MachineConfig`, neben den Einstellungen des Daemons, **nicht** im Show; sie
-  darf beim Kopieren eines Shows nicht mitkopiert und beim Speichern nicht neu
-  erzeugt werden). Das Schema hat für keines von dreien eine Tabelle.
-- **Ein Loader, der `file.show` und `file.session` an Ort und Stelle ersetzt,
-  muss `Journal::clear` aufrufen.** Wer stattdessen eine ganze `ShowFile`
-  deserialisiert, bekommt ein leeres Journal geschenkt (`#[serde(skip)]`).
-- **`ShowFile::mark_saved` wird gerufen, wenn der Schreibvorgang *erfolgreich*
-  war, nicht wenn er beginnt.** Es gibt zurück, ob sich das Flag wirklich
-  geändert hat, damit nur dann ein `Delta::DirtyFlag` gesendet wird, wenn es
-  Neuigkeiten gibt. Die Lampe ist `ShowFile::is_dirty` — Show *oder* Session.
-- **Ein Undo bis zurück auf den gespeicherten Stand macht die Datei nicht wieder
-  sauber** (S14). Das ist gewollt und getestet; die Persistenz darf daran nichts
-  ändern.
-- **JSON rundet Floats nicht bitgenau** (S1-Fund): ein JSON-Export darf **nicht**
-  als bit-identisch angenommen werden, es sei denn, die Werte werden mit
-  begrenzter Präzision geschrieben. MessagePack ist exakt, muss aber mit
-  `rmp_serde::to_vec_named` geschrieben werden. Nicht-endliche `f64` werden in
-  beiden Richtungen abgelehnt — Serialisierung ist fehlbar und muss so behandelt
-  werden.
+- **MessagePack muss mit `rmp_serde::to_vec_named` geschrieben werden** (S1).
+  `Command` und `Delta` sind intern getaggte Enums (`#[serde(tag = "t")]`), und
+  MessagePacks Standard-Array-Kodierung von Structs kann kein Tag tragen.
+- **Beim Dekodieren ist eine Verschachtelungstiefe zu begrenzen** (S1-Fund, und
+  bislang die einzige offene „S16 requirement" mit Sicherheitsbezug):
+  `JsonValue` ist rekursiv, eine bösartige Nutzlast kann beim Dekodieren den
+  Stack sprengen, und ein Stack-Overflow bricht den Prozess ab — mitsamt DMX.
+  `serde_json` hat ein Limit (128 Ebenen), MessagePack hat keines.
+- **Serialisierung ist fehlbar und muss so behandelt werden.** Ein
+  nicht-endlicher `f64` wird in beiden Richtungen abgelehnt.
+- **Der `Snapshot` aus §4.1 trägt Show und Session, aber keinen Programmer**
+  (S13-Fund). Entweder wächst der Snapshot um ein drittes Dokument, oder der
+  Daemon schickt direkt danach ein `Delta::ProgrammerChanged` — die Entscheidung
+  gehört ins Decision Log, nicht in einen Kommentar.
+- **Der Daemon ist die einzige Autorität (D3), und das Protokoll ist deshalb
+  asymmetrisch:** Clients schicken Absichten, der Daemon schickt Tatsachen. Kein
+  Client rechnet Zustand aus, den der Daemon dann übernehmen soll.
+- **Plattformcode ist eine offene Frage, die diese Session entscheiden muss.**
+  `ARCHITECTURE_SPEC.md` §10.1 erlaubt `#[cfg(target_os = ...)]` ausdrücklich
+  nur in `prism-protocols` und `prism-app` — und ein Named Pipe unter Windows
+  neben einem Unix-Domain-Socket unter Linux ist genau das. Die CI führt
+  `cargo test -p prism-ipc` **im Linux-Job** aus und `cargo check --workspace
+  --target aarch64-unknown-linux-gnu` im ARM64-Job, also muss beides
+  durchkommen. Wie der Transport hinter einer Abstraktion verschwindet (ein
+  Trait wie `DmxOutput` in S7, mit einer In-Memory-Implementierung für die
+  Tests) ist die eigentliche Designfrage dieser Session, und die Antwort ist ein
+  Decision-Log-Eintrag.
+- **Neue Abhängigkeiten müssen den ARM64-Cross-Check bestehen** — der Workspace
+  enthält seit S15 C (`rusqlite` mit gebündeltem SQLite), und der ARM64-Job
+  installiert dafür `gcc-aarch64-linux-gnu`. Eine asynchrone Laufzeit (`tokio`)
+  und ein WebSocket-Server (`axum`, so nennt es §2) sind große Abhängigkeiten:
+  prüfe früh und lokal, dass sie im Cross-Check durchgehen, und begründe die
+  Wahl im Decision Log.
+- **Backpressure ist Teil des Protokolls, nicht des Daemons** (§8): Telemetrie
+  wird zusammengefasst und notfalls verworfen, Kommandos **nie**. Ein Client,
+  dessen Steuerkanal volläuft, wird mit einem `Reject` getrennt. S18 misst das
+  als Gate; S16 muss den Mechanismus dafür bereitstellen.
+- **Telemetrie ist binär und fest formatiert** (§7), nicht MessagePack. Sie darf
+  in dieser Session als Rahmen definiert, muss aber nicht gefüllt werden — was
+  gemessen wird, weiß erst S17. Was hier entschieden wird, ist der Kanal.
 - **Validieren und kodieren, bevor geschrieben wird**, und **eine Ablehnung
-  lässt den Zustand byte-identisch**: S11, S12, S13 und S14 haben das jeweils
-  wörtlich als Test (`rmp_serde::to_vec_named` vorher/nachher). Für S15 heißt
-  das zusätzlich: ein fehlgeschlagener Schreibvorgang darf weder das Dirty-Flag
-  löschen noch die Datei beschädigen.
-- **Die Views liegen in der Session-Hälfte der Datei** (S12), damit ein Show,
-  das in eine andere Session importiert wird, nicht die Layouts einer anderen
-  Operatorin mitbringt.
+  lässt den Zustand byte-identisch**: S11 bis S15 haben das jeweils wörtlich als
+  Test.
 - `prism-domain` hat ein optionales `proptest`-Feature mit `Arbitrary`-Impls für
   jeden Typ — nutze `prism_domain::arb`, statt eigene Generatoren zu schreiben.
-- **Ein Test-Fixture aus lauter Default-Werten kann „korrekt wiederhergestellt"
-  nicht von „nie angefasst" unterscheiden** (S14-Fund). Für einen
-  Save/Load-Round-Trip ist das die zentrale Falle: das gespeicherte Show muss in
-  jedem Feld etwas *anderes* als den Default enthalten.
+- **Ein Test-Fixture aus lauter Default-Werten kann „korrekt übertragen" nicht
+  von „nie angefasst" unterscheiden** (S14-Fund, in S15 als Regel bestätigt).
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S14 haben
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S15 haben
   ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
-  geprüft.
+  geprüft — S15 hat auf diesem Weg einen echten Fehler gefunden.
 - **Ein roter Timing-Test ist zuerst eine Frage an die Maschine, nicht an den
   Code.** `the_tick_holds_its_deadline_for_a_few_seconds` fiel in S13 zweimal
-  aus, beide Male weil der Rechner nebenher beschäftigt war (einmal ein
-  Coverage-Build, einmal ein Spiel und ein Video). Der Test druckt dafür selbst
-  `probe thread turns: N/s`: erst diese Zeile lesen, dann das Target allein
-  laufen lassen (`cargo test -p prism-engine --test realtime`), dann den Diff
-  verdächtigen. Auf einer ruhigen Maschine sind alle 872 Tests grün.
+  aus, beide Male weil der Rechner nebenher beschäftigt war. Der Test druckt
+  dafür selbst `probe thread turns: N/s`: erst diese Zeile lesen, dann das
+  Target allein laufen lassen (`cargo test -p prism-engine --test realtime`),
+  dann den Diff verdächtigen. Auf einer ruhigen Maschine sind alle 905 Tests
+  grün.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S15-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S16-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S16 (`prism-ipc` — Framing und Transporte) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. feat(core): …
+  Session S17 (`prismd` — Daemon-Binary) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. feat(ipc): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```

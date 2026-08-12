@@ -115,8 +115,15 @@ pub enum Effect {
     Undo,
     /// Redo the last undone command — the same, in the other direction.
     Redo,
-    /// Write the show to disk — S15. The daemon calls [`Show::mark_saved`] when
-    /// the write has succeeded, not before.
+    /// Write the show to disk.
+    ///
+    /// Unlike [`Effect::Programmer`], [`Effect::Undo`] and [`Effect::Redo`],
+    /// this one is **not** carried out by
+    /// [`ShowFile::apply`](crate::ShowFile::apply) and reaches the daemon: a
+    /// show file has a path, a disk and a failure mode, and the model that
+    /// decides what a show *is* deliberately holds none of the three. The
+    /// answer to it is [`ShowStore::save`](crate::ShowStore::save), which marks
+    /// the file saved when the commit has returned and not before.
     Save,
 }
 

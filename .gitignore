@@ -23,6 +23,11 @@ ui/src/bindings/
 *.prism.backup
 /recovery/
 
+# ...except the frozen file S15's migration test reads. It is a version-1
+# `.prism` file, written once and never again: a migration checked against a
+# file the current code has just produced is a migration checked against itself.
+!crates/prism-core/tests/fixtures/*.prism
+
 # Coverage and profiling
 /coverage/
 *.profraw

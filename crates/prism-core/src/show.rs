@@ -241,6 +241,47 @@ impl Show {
         Self::default()
     }
 
+    /// The show a `.prism` file's rows add up to.
+    ///
+    /// Deliberately **not** built by replaying the validated edits above, and
+    /// the reason is a show that is legal to hold and not legal to store: S11
+    /// decided that a dangling reference is reported rather than refused, so a
+    /// cue list naming a fixture somebody unpatched afterwards is an ordinary
+    /// show that [`Show::store_sequence`] would nonetheless turn down. A loader
+    /// built out of the edit operations would refuse to open the file it had
+    /// itself written. What the file is checked for instead is what only the
+    /// file can be wrong about — a row that does not decode, or one filed under
+    /// a key that is not its own — and [`Show::issues`] reports the rest to the
+    /// operator exactly as it does for a show that was edited into that state
+    /// in front of them.
+    ///
+    /// The caller has checked that every key is the identifier its value
+    /// carries; [`crate::ShowStore`] is the only one, and it is what the check
+    /// belongs to because it is the only layer that knows a key can come from
+    /// somewhere other than the value.
+    pub(crate) fn from_parts(
+        fixture_types: BTreeMap<String, FixtureType>,
+        fixtures: BTreeMap<prism_domain::FixtureId, Fixture>,
+        groups: BTreeMap<GroupId, Group>,
+        presets: BTreeMap<PresetId, Preset>,
+        sequences: BTreeMap<SequenceId, Sequence>,
+        executors: BTreeMap<ExecutorId, Executor>,
+    ) -> Self {
+        Self {
+            fixture_types,
+            fixtures,
+            groups,
+            presets,
+            sequences,
+            executors,
+            // Neither is show content (see the module documentation): a show
+            // that has just been read has nothing unsaved in it, and the
+            // revision counts this run's patch changes.
+            patch_revision: 0,
+            dirty: false,
+        }
+    }
+
     // -- queries ----------------------------------------------------------
 
     /// The profiles this show carries.

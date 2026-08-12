@@ -215,6 +215,22 @@ impl SessionState {
         }
     }
 
+    /// The session a `.prism` file's rows add up to.
+    ///
+    /// The caller has checked the two invariants this type is otherwise
+    /// responsible for — that the active view exists and that the focused
+    /// window is open — because they are what a *file* can be wrong about, and
+    /// [`crate::ShowStore`] is what has the row to name in the complaint.
+    pub(crate) const fn from_parts(session: Session, views: BTreeMap<ViewId, View>) -> Self {
+        Self {
+            session,
+            views,
+            // Not session content: a session that has just been read has
+            // nothing unstored in it.
+            dirty: false,
+        }
+    }
+
     // -- queries ----------------------------------------------------------
 
     /// The §4.1 state itself.

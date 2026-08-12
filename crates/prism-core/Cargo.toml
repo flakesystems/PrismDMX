@@ -9,10 +9,24 @@ publish.workspace = true
 
 [dependencies]
 prism-domain = { path = "../prism-domain" }
+# The `.prism` file. `bundled` compiles SQLite's own amalgamation into the
+# binary rather than linking whatever the machine happens to have: a show file
+# has to open on a Windows desk, on a Raspberry Pi and on a machine that has
+# never heard of SQLite, and a file format is not something to leave to a
+# distribution's packaging. The cost is a C dependency in an otherwise pure
+# workspace, which the ARM64 cross-check has to compile for its target — see
+# `PROGRESS.md`'s decision log for the three variants that were weighed.
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { workspace = true }
+# The show and the session are written into the file as MessagePack, one
+# document per row. S1's finding is the reason it is not JSON: `serde_json`'s
+# parser is not correctly rounded, so a float would come back one ULP away from
+# the value that was saved, and "byte-identical after a round trip" would be
+# false for every fixture that has a position.
+rmp-serde = { workspace = true }
 # The show is projected into `prism_domain::JsonValue` to build the JSON Patch
 # operations a `Delta::ShowPatch` carries. That projection needs a serialiser,
-# and S15 exports JSON from this crate anyway.
+# and it is also the export format `prism_core::export_json` writes.
 serde_json = { workspace = true }
 
 [dev-dependencies]
@@ -22,6 +36,10 @@ serde_json = { workspace = true }
 prism-domain = { path = "../prism-domain", features = ["proptest"] }
 proptest = { workspace = true }
 rmp-serde = { workspace = true }
+# Show files under test go into a directory that removes itself, including
+# after a panic — a suite that leaves half-written databases behind is one that
+# starts failing for reasons that have nothing to do with the code.
+tempfile = "3"
 # A development dependency only, and deliberately so: the show model must not
 # be able to reach into the engine at run time. What it buys is a test that the
 # two agree about what a legal patch is, rather than two copies of the rule

@@ -117,6 +117,89 @@ pub(crate) fn preset(id: u32, fixture: u32, attribute: AttributeType, value: u16
     }
 }
 
+/// The show `tests/fixtures/version-1.prism` was written from.
+///
+/// It has something in every one of the six tables version 1 defines, and none
+/// of it is at a default value — a migration checked against an empty show
+/// cannot tell a table that was carried across from one that was dropped. The
+/// numbers here are the ones `tests/persistence.rs` asserts after the
+/// migration, and they are frozen for the same reason the file is: see
+/// `store::tests::rewrites_the_version_one_fixture`.
+pub(crate) fn migration_fixture() -> crate::ShowFile {
+    let mut file = crate::ShowFile::new();
+    file.show.embed_fixture_type(par_type()).unwrap();
+    file.show.embed_fixture_type(dimmer_type()).unwrap();
+    file.show
+        .embed_fixture_type(FixtureType {
+            id: "generic.head".to_owned(),
+            manufacturer: "Aula".to_owned(),
+            name: "Wash Head".to_owned(),
+            mode: "6ch".to_owned(),
+            footprint: 6,
+            attributes: vec![
+                AttributeDef {
+                    attribute: AttributeType::Pan,
+                    feature_group: prism_domain::FeatureGroup::Position,
+                    coarse_offset: 0,
+                    fine_offset: Some(1),
+                    default_value: 32768,
+                    merge_mode: prism_domain::MergeMode::Ltp,
+                    invert: true,
+                    physical_from: -270.0,
+                    physical_to: 270.0,
+                },
+                attribute(AttributeType::Tilt, 2),
+                attribute(AttributeType::Dimmer, 3),
+            ],
+        })
+        .unwrap();
+    for (id, type_id, universe, address, x) in [
+        (1u32, "generic.head", 1u32, 1u16, 1.5f64),
+        (2, "generic.head", 1, 7, -3.75),
+        (3, "generic.rgbw.par", 2, 21, 0.125),
+        (4, "generic.dimmer", 64, 512, 8.0),
+    ] {
+        let mut hung = fixture(id, type_id, universe, address);
+        hung.position = Vec3 {
+            x,
+            y: 4.5,
+            z: -2.25,
+        };
+        hung.rotation = Vec3 {
+            x: 0.0,
+            y: 180.0,
+            z: 90.5,
+        };
+        hung.invert_pan = id % 2 == 0;
+        file.show.patch_fixture(hung).unwrap();
+    }
+    file.show
+        .store_group(prism_domain::Group {
+            id: prism_domain::GroupId::new(7),
+            name: "Front Wash".to_owned(),
+            fixtures: vec![FixtureId::new(1), FixtureId::new(3)],
+        })
+        .unwrap();
+    file.show
+        .store_preset(preset(12, 3, AttributeType::Red, 65535))
+        .unwrap();
+    file.show
+        .store_sequence(sequence(
+            5,
+            vec![
+                cue("1", 3, AttributeType::Red, 65535),
+                cue("2.5", 1, AttributeType::Pan, 12345),
+            ],
+        ))
+        .unwrap();
+    let mut running = executor(17, Some(5));
+    running.master_level = 40000;
+    running.is_active = true;
+    running.current_cue_index = Some(1);
+    file.show.store_executor(running).unwrap();
+    file
+}
+
 /// An executor, optionally playing a sequence.
 pub(crate) fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
     Executor {

@@ -85,9 +85,21 @@ jobs:
           targets: aarch64-unknown-linux-gnu
       - uses: Swatinem/rust-cache@v2
 
-      # `cargo check` does not link, so no cross-linker is needed here. This
-      # catches the realistic failure - platform-specific code leaking into a
-      # crate that is supposed to be neutral.
+      # `cargo check` does not link, so no cross-linker is needed - but since
+      # S15 the workspace contains C: prism-core depends on rusqlite with the
+      # bundled SQLite amalgamation, and a build script has to *compile*
+      # sqlite3.c for the target even when nothing is linked. Without a cross
+      # compiler cc-rs stops with "failed to find tool aarch64-linux-gnu-gcc",
+      # which is a missing toolchain rather than a portability break, and the
+      # difference matters: this job exists to catch the second.
+      #
+      # The reasoning behind accepting a C dependency at all - and what the
+      # alternatives were - is in PROGRESS.md's decision log under S15.
+      - name: Cross C toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      # This catches the realistic failure - platform-specific code leaking
+      # into a crate that is supposed to be neutral.
       - name: Check
         run: cargo check --workspace --target aarch64-unknown-linux-gnu
 

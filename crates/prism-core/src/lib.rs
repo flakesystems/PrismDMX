@@ -8,6 +8,24 @@
 //!
 //! Sessions **S11-S15**.
 //!
+//! # What S15 delivers
+//!
+//! - [`ShowStore`] - the `.prism` file. One SQLite database per show, one row
+//!   per fixture, group, preset, sequence, executor and stored view, written
+//!   inside a single transaction over a write-ahead log so that a process
+//!   killed mid-save leaves a file that still opens and holds the last
+//!   committed state.
+//! - [`ShowStore::save`] and [`ShowStore::load`] - the round trip the exit
+//!   criterion is about: what comes back is what was written, byte for byte,
+//!   session included. `mark_saved` is called when the commit has returned, so
+//!   a failed write leaves the Save LED lit.
+//! - [`Autosave`] and [`ShowStore::write_recovery`] - a copy beside the show,
+//!   written every thirty seconds while there is anything unsaved, which does
+//!   **not** count as having saved.
+//! - [`export_json`] and [`import_json`] - the interchange format, and the one
+//!   place that says out loud what S1 measured: JSON is not bit-exact for
+//!   floats, so the `.prism` file is the authoritative one.
+//!
 //! # What S14 delivers
 //!
 //! - [`Journal`] - the Oops journal of `ARCHITECTURE_SPEC.md` section 6.1: a
@@ -73,8 +91,10 @@
 //!
 //! # What lives elsewhere
 //!
-//! Persistence is **S15**. The show model is what it sits on, as the journal
-//! does: it validates, it applies, and it says what changed.
+//! The threads, the clock and the file paths. [`Autosave`] is a policy that is
+//! asked a question and answers it; nothing in this crate sleeps, and nothing
+//! decides where a show lives. That is `prismd`'s (S17), which is also where
+//! `Effect::Save` is turned into a call to [`ShowStore::save`].
 
 mod command;
 mod conflict;
@@ -85,6 +105,7 @@ mod mirror;
 mod programmer;
 mod session;
 mod show;
+mod store;
 #[cfg(test)]
 mod testkit;
 
@@ -97,3 +118,4 @@ pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
 pub use programmer::{Programmer, ProgrammerError};
 pub use session::{SessionError, SessionState, session_patch_ops};
 pub use show::{Show, ShowError};
+pub use store::{Autosave, MIGRATIONS, ShowStore, StoreError, export_json, import_json};

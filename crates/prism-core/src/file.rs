@@ -57,8 +57,9 @@
 //!
 //! The desk identity. [`MachineConfig`](crate::MachineConfig) holds the sACN
 //! CID, it is written beside the daemon's settings, and copying a show must not
-//! copy it — see that module for why. **S15 requirement:** this type is what a
-//! `.prism` file holds, and it has no field for a desk.
+//! copy it — see that module for why. This type is what a `.prism` file holds,
+//! and it has no field for a desk; the schema in [`crate::ShowStore`] has no
+//! table for one either, nor for the programmer or the journal.
 
 use prism_domain::{ClearStage, Command, Delta, NoticeLevel};
 use serde::{Deserialize, Serialize};
@@ -173,8 +174,10 @@ impl ShowFile {
     /// Records that the file has been written to disk.
     ///
     /// Returns whether the flag actually changed, so the daemon only sends a
-    /// `Delta::DirtyFlag` when there is news. **S15 requirement:** called when
-    /// the write has succeeded, not when it starts.
+    /// `Delta::DirtyFlag` when there is news.
+    /// [`ShowStore::save`](crate::ShowStore::save) is what calls it, and it
+    /// calls it when the commit has **returned** — a write that failed leaves
+    /// the lamp lit, because nothing was saved.
     pub const fn mark_saved(&mut self) -> bool {
         // Both, always: a save writes both halves, so leaving either flag
         // standing would light the lamp over a file that is on disk.
