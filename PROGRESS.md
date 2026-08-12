@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-12
 **Current phase:** Phase 4 — IPC and daemon
-**Current session:** S16 — `prism-ipc` framing and transports (not started; see §8 for the prompt that starts it)
-**Last completed:** S15 — `prism-core` SQLite persistence ✅ — **a show survives being closed**
+**Current session:** S17 — `prismd` daemon binary (not started; see §8 for the prompt that starts it)
+**Last completed:** S16 — `prism-ipc` framing and transports ✅ — **the daemon has a wire**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -70,7 +70,7 @@
 ### Phase 4 — IPC and daemon
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
-| S16 | `prism-ipc` framing and transports | ☐ | | |
+| S16 | `prism-ipc` framing and transports | ✅ | 2026-08-12 | All exit criteria verified — see §2.17. 131 tests, coverage 98.43 % lines. Three mutation checks confirm the three central tests are not vacuous, and one of them **aborted the process** — which is exactly the failure the nesting-depth limit exists to prevent |
 | S17 | `prismd` daemon binary | ☐ | | |
 | S18 | D2 gate — resilience | ☐ | | Mandatory gate |
 
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 16 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 17 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -659,6 +659,55 @@ transaction over a write-ahead log, which is the whole of the crash-safety
 criterion. That is why the crash test asserts atomicity — one show or the other,
 never a mixture — rather than merely that the file reopens.
 
+### 2.17 S16 verification record
+
+Measured on 2026-08-12, all exit criteria from `IMPLEMENTATION_PLAN.md` S16 and
+the session prompt. No hardware and no platter — for the first time in this
+project, a socket.
+
+| Check | Result |
+|---|---|
+| Framing round-trip **property test over arbitrary messages** | ✅ `tests/framing.rs`: six properties at 256 cases each over generated `ClientMessage` and `ServerMessage`, which means all 23 `Command` variants, all 7 `Delta` variants, arbitrary `JsonValue` trees inside the patch deltas, arbitrary programmer states and arbitrary snapshots — from `prism_domain`'s `proptest` feature rather than from generators written here. The round trip goes through the **whole frame** and reads the length back out of the header, because encoding a payload and decoding the same payload leaves the one number the framing adds untested. Two further properties pin what the prefix is for: that it describes exactly the payload behind it, and that two frames back to back stay two frames. **Checked by mutation:** encoding with `to_vec` instead of `to_vec_named` turns `the_payload_is_a_map_carrying_the_tag_and_the_field_names` red |
+| An oversized frame closes the connection **without a large allocation** | ✅ `tests/oversized_frame.rs`, with the counting allocator `prism-engine` established in S2, extended to record the **largest single request** — which is the number this criterion is actually about. Refusing a header announcing four gigabytes cost **1 allocator call and 0 bytes**; reading a legitimate frame of exactly `MAX_FRAME_BYTES` through the same reader cost **1 048 576 bytes**, and the test asserts both, because an absolute ceiling would be a claim about the runtime's own bookkeeping as much as about this crate's. Two guard tests prove the probe can see a four-megabyte allocation and reports nothing for an empty window. **Checked by mutation:** allocating the body before checking the length — which leaves every functional test passing, `an_oversized_frame_closes_the_connection` included — makes the probe read **4 294 967 295 bytes** and turns the test red |
+| **Transport parity:** the same suite over both transports | ✅ `tests/transport_parity.rs`. Not two suites that resemble each other: **one** function, `the_full_suite`, called three times — named pipe, WebSocket, and the in-process duplex. It takes a `Desk`, which is the same type whichever transport built it, because every transport becomes a `Wire` and nothing above that line knows which. Seven scenarios: the handshake serving the world, a command applied and answered in that order, a refused command, a version mismatch, a delta reaching every client, telemetry arriving decoded, and a client leaving without taking anything with it. Beside it, "results must be identical" taken literally: one scripted session recorded over each transport as the **encoded bytes** of every message the client received, and the three recordings compared. **Checked by mutation:** truncating one byte in the WebSocket pump turns both the WebSocket run and the byte-identity test red |
+| A nesting depth is limited on decode (S1's open security requirement) | ✅ `scan.rs` walks the payload with an **explicit stack** before `serde` sees it, so the check cannot itself overflow, and refuses past 128 levels — `serde_json`'s limit, against the same attack. Sixteen tests cover every MessagePack format family byte for byte, the limit exactly at 128 and at 129, and a hundred-thousand-level payload that costs a hundred thousand and one bytes to write. **Checked by mutation, and this is the one that matters:** decoding without the scan does not merely give the wrong answer — `a_hostile_delta_is_refused_rather_than_decoded` **aborts the test process with `STATUS_STACK_OVERFLOW`**. Twelve bytes from an unauthenticated socket, and in `prismd` the DMX output would go with it |
+| `cargo test -p prism-ipc` | ✅ exit 0 — **113 lib tests** + 18 integration tests across four targets, 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **1 036 tests** across 35 targets, 14 ignored (unchanged: the S8 hardware target, the long engine runs, the crash test's child and the fixture regenerator). Green on the first attempt, timing gate included |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-ipc` **≥ 85 %** | ✅ **98.43 % lines**, 97.43 % regions, 99.45 % functions. `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**; `message.rs` 99.55 %, `server.rs` 99.50 %, `frame.rs` 99.51 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `transport/mod.rs` 99.09 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. `--show-missing-lines` reports 47 lines and they are four kinds: `?`-propagation arms, `panic!` arms inside tests that pass, the **`#[cfg(unix)]` half of `local.rs`** — which the Linux CI job covers and this machine cannot — and the client-side WebSocket pump's text and error arms. Raising the figure from 97.96 % found two behaviours nobody had asked about, and both were real; see the decision log |
+| New dependencies pass the ARM64 cross-check | ✅ checked **before a line of the crate was written**, as the prompt asked: `cargo check -p prism-ipc --all-targets --target aarch64-unknown-linux-gnu` succeeds with `tokio`, `axum`, `tokio-tungstenite`, `futures-util`, `serde_bytes` and `rmp-serde`. None of them compiles C, so unlike S15's SQLite this needs no cross toolchain and the CI job is unchanged. That command compiles the `#[cfg(unix)]` branches of `local.rs`, which is what makes it a portability check rather than a formality |
+| CI green on the pushed commit | *(recorded below once the run has completed)* |
+
+**Delivered:** eight modules. `frame` and `scan` are the wire format — the length
+prefix, the size limit, the depth limit, and the three refusals in the order they
+happen in. `message` is `docs/IPC_PROTOCOL.md` §4: two envelopes rather than one,
+because a type that could carry either would let a client send a `Delta`.
+`telemetry` is §7's channel — a 16-byte header and one 514-byte section per
+universe, versioned so a later session can add to it. `backpressure` is §8 as a
+plain state machine with no clock and no channel, so *which message is dropped
+when* is a unit test rather than a race. `transport` is the three transports and
+the one thing they all become; `server` and `client` are the two halves.
+
+**The transport disappears into a value, not behind a trait.** S7 hid three DMX
+drivers behind `DmxOutput`, and the same question here has a different answer:
+the three things being hidden are two byte streams and a message stream, in an
+async world where a trait with `async fn` is not object-safe. So each transport
+module spawns a pump that owns its socket and hands back a `Wire` — payloads out
+through one channel, payloads in through another. Parity is then not something to
+check but something that holds by construction, and `transport/memory.rs` is a
+real transport rather than a stub, which is what makes the handshake, the
+backpressure policy and every error path testable with no socket and no port.
+
+**The parity suite found a defect that only a named pipe has.** A reader that
+stops only at end of stream keeps its half of the socket alive, and a socket
+closes only when both halves are dropped — and shutting down the writing half of
+a *split* Windows named pipe does not close the pipe. A client that disconnected
+while the daemon happened to be saying nothing therefore stayed in the daemon's
+client list for ever. It passed over the duplex and over WebSocket and failed
+over the pipe, which is the whole argument for running one suite over three
+transports rather than three suites over three transports.
+
 ---
 
 ## 3. Coverage tracking
@@ -675,7 +724,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
 | `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
-| `prism-ipc` | ≥ 85 % | — | |
+| `prism-ipc` | ≥ 85 % | **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
 | `ui` | ≥ 85 % | — | |
 
 ### Performance gates
@@ -864,6 +913,19 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-12 | S16 | **The nesting-depth limit is not a hardening measure, it is the difference between an error and a dead console — and that was measured rather than argued.** S1 left it as the one open security requirement: `JsonValue` is recursive, serde buffers the content of an internally tagged enum before any domain code runs, and MessagePack has no depth limit of its own. A payload of a hundred thousand nested arrays costs a hundred thousand and one bytes to write | `scan::depth_of` walks the payload with an **explicit stack** before `serde` sees it and refuses past 128 levels — `serde_json`'s limit, against the same attack. A wrapping `Deserializer` would not have worked: the recursion to be stopped happens *inside* serde's own buffering, one layer below anywhere a wrapper could count. **The mutation check is the finding.** With the scan removed, `a_hostile_delta_is_refused_rather_than_decoded` does not fail — it **aborts the process with `STATUS_STACK_OVERFLOW`**, which in `prismd` takes the DMX output with it. Twelve bytes from an unauthenticated socket. The scan doubles as a structural check, so a truncated frame, the reserved byte `0xc1` and trailing rubbish are all found before a value is built |
+| 2026-08-12 | S16 | **`tokio` and `axum` are large dependencies, and the question was settled by the specification before it was settled by taste.** `ARCHITECTURE_SPEC.md` §3 names the runtime in the threading table — `core-main (async, tokio)` — and `docs/IPC_PROTOCOL.md` §2 names `axum` for the WebSocket listener. The alternatives were real: a synchronous, thread-based crate with `tungstenite` in blocking mode would have matched the rest of the workspace, and the daemon's other threads are threads | Taken as specified, for two reasons beyond the specification. `tokio`'s `net` feature carries **both** local transports — Windows named pipes and Unix domain sockets — so the platform split becomes a dependency feature rather than FFI we would have to write, and the workspace forbids `unsafe_code`. And `axum` hands back a `Router`, so S31's Web Remote adds routes to the listener that already exists instead of opening a second port to firewall. **The ARM64 cross-check was run before a line of the crate was written**, as the prompt asked: all five new dependencies check clean for `aarch64-unknown-linux-gnu`, and none of them compiles C, so the CI job needs no change — unlike S15's SQLite. The engine tick stays on its own OS thread at its own priority; nothing about §3.1 changes |
+| 2026-08-12 | S16 | **`ARCHITECTURE_SPEC.md` §10.1 allows `#[cfg(target_os = …)]` in two crates and this is a third, so the exception is drawn as narrowly as it can be.** A named pipe under Windows beside a Unix domain socket under Linux is exactly the kind of split §10.1 exists to contain, and there is no way to have the transport §2 specifies without it | Two `#[cfg]` blocks, both in `transport/local.rs`, both selecting a type: `NamedPipeServer` or `UnixListener`, `ClientOptions::open` or `UnixStream::connect`. Both hand back the same `Wire` through the same `stream::spawn`, and the framing, the handshake, the backpressure policy, the server and the client are **one code path on every target**. The case is the same one §10.1 makes for the FTDI backend, and it is kept honest the same way: CI runs `cargo test -p prism-ipc` in the **Linux** job, so the Unix branches are compiled *and executed* on every commit while the Windows job does the same for the pipe. `ARCHITECTURE_SPEC.md` §10.1 has been amended to name the crate rather than leaving the rule quietly broken |
+| 2026-08-12 | S16 | **The transport hides behind a value, not behind a trait, and that is the design question the session was set.** S7's answer for three DMX drivers was a five-method `DmxOutput`. It does not transfer: the three things being hidden here are two byte streams and a message stream, every operation is `async`, and a trait with `async fn` is not object-safe — so a `dyn Transport` would have meant `async-trait` and a boxed future per message, or an enum that has to be extended in three places for every new transport | `Wire`: a pair of channels and a pump task that owns the socket. Each transport module's whole job is to produce one. The parity criterion then stops being something to check and becomes something that holds by construction — `Server` and `Client` **cannot** tell which transport they are on, because the type does not carry the information. The second consequence is the one that pays: `transport::memory::pair()` is a `Wire` over `tokio::io::duplex`, a real transport rather than a stub, so the handshake, the backpressure policy and every error path are testable with no socket, no port and nothing left behind by a panicking test. That is S7's actual lesson — choose the abstraction so the tests can implement it too |
+| 2026-08-12 | S16 | **The framing is not identical across the two transports, and §3's sentence had to be corrected rather than obeyed.** §2 says *both transports carry identical framing*; §3 defines framing as a `u32` little-endian length followed by MessagePack. Putting that prefix inside a WebSocket binary message would be a second copy of a number the WebSocket frame header already carries | The **payload** is identical, byte for byte, and `tests/transport_parity.rs` asserts exactly that by recording a scripted session over each transport and comparing the encodings. The prefix is not, because two lengths that can disagree is precisely the ambiguity a protocol whose purpose is that neither end guesses should not have. What is genuinely shared is the **limit**: `MAX_FRAME_BYTES` is checked against the length prefix on a stream and handed to the WebSocket implementation as `max_message_size` on a WebSocket — in both cases against what the peer *announced*, before a buffer for it exists. `docs/IPC_PROTOCOL.md` §2 and §3 now say this |
+| 2026-08-12 | S16 | **The `Snapshot` grew a third document rather than being followed by a delta, and §9 is what decides it.** S13 left the choice open: §4.1's snapshot carries the show and the session and not the programmer, so a client connecting mid-programming sees an empty one. Either the snapshot grows, or the daemon sends a `ProgrammerChanged` straight after it | The snapshot grows. §9's *snapshot completeness* row asks that a fresh client's snapshot equal the state an existing client reached by accumulating deltas — and `ProgrammerChanged` **is** one of those deltas, so under the other reading that criterion is false for the programmer unless it is rewritten to exclude it. The world arrives in one message. The show and the session travel as **documents** rather than as models for a separate reason: `ShowPatch` and `SessionPatch` are RFC 6902 operations and an operation is only meaningful against a document root, which is the value `prism_core::ShowMirror` already applies them to — and it is also what keeps `prism-ipc` on `prism-domain` alone, rather than putting the whole show model behind the wire format |
+| 2026-08-12 | S16 | **Telemetry travels inside the MessagePack envelope as an opaque byte string, which satisfies §7 and §3 at once.** §7 says telemetry is *binary, fixed layout — not MessagePack maps*; §3 says message types are distinguished by the tagged enum in the payload and **not** by a separate header byte. Read together they appear to ask for a channel discriminator that §3 forbids | `ServerMessage::Telemetry { data }`, where `data` is a MessagePack `bin` holding a fixed-layout frame. The envelope is the one tagged enum, the content is not a map, and the cost is about ten bytes per frame — against 32 KiB of levels at 64 universes. Without `serde_bytes` it would have been one MessagePack integer per channel, which is what the test asserts it is not. The layout is a 16-byte header and one 514-byte section per universe, **versioned**: a frame announcing a layout this build does not know is dropped rather than guessed at, which a droppable channel can afford. What is measured beside the levels is S17's to decide; S16 decided the channel |
+| 2026-08-12 | S16 | **A command carries a sequence number and the answers echo it — an addition to §5, and the fader bank is the reason.** §4 lists `Ack` and `Reject` as reliable daemon-to-client messages and §5 says a command that cannot be applied yields a `Reject`. Neither says which command | `ClientMessage::Command { seq, command }`, echoed in `Ack { seq }` and `Reject { seq: Some(..) }`. The number is per connection, and the daemon stores it and never interprets it. Without it, a client with several commands in flight — the normal case for eight faders — learns only that *something* was refused. `Reject` carries `seq: None` when the refusal is about the connection rather than about a message, which is what distinguishes a rejected command from a rejected client |
+| 2026-08-12 | S16 | **A payload the daemon cannot decode is not a reason to disconnect, and an oversized frame is — the line is about the framing rather than about how bad the message was.** The first implementation had a `FrameError::is_fatal` that called a too-deep or malformed payload fatal, which reads as severity and is the wrong question | `FrameError::loses_the_frame_boundary`, and only `TooLarge` does: it is read *from* the length prefix, so where the next frame begins is no longer known and every byte after it is rubbish of unknown length. Everything else concerns a payload the framing already delimited — the next frame starts exactly where it always would — so the peer is answered with `Reject { reason: Undecodable }` and the connection carries on. The case that decides it is an honest client of the wrong version: disconnecting it would hide the reason, and a hostile one gets a refusal per message rather than a way to be disconnected on purpose |
+| 2026-08-12 | S16 | **A reader that stops only at end of stream leaks a Windows named pipe, and the transport parity suite is what found it.** A socket closes when **both** halves are dropped, and shutting down the writing half of a *split* named pipe does not close the pipe. So a client that disconnected while the daemon happened to be saying nothing left the daemon blocked on a handle that would never produce another byte — and in the client list for ever, which is a leak in the process §8 promises will *free the client's state and carry on* | The read loop also stops when the `Wire`'s receiving half has been dropped: nowhere left to deliver to, read half released, socket closed on both sides. It passed over the in-memory duplex and over WebSocket and failed **only** over the pipe, which is the argument for one suite run three times rather than three suites — a per-transport suite would have been written against the transport it was testing and would have had no reason to try this |
+| 2026-08-12 | S16 | **The `Reject` that ends a connection is best-effort; the disconnection is not.** §8 disconnects a client whose control queue filled — and a client whose control queue filled is exactly the client that has stopped reading, so the message explaining why cannot reach it. Waiting for it to reach it is waiting for ever, in a task still holding a socket and a place in the client list | `ServerConfig::goodbye`, one second by default, bounds both the wait for room on the transport and the final flush. The connection then closes regardless. `tests/backpressure.rs` asserts the message *does* arrive for the case it exists for — a client that falls behind and then starts reading again — and `a_client_that_never_takes_its_rejection_is_dropped_anyway` asserts the connection ends for the client that never does. Found while writing the second of those, which without the deadline never returned |
+| 2026-08-12 | S16 | **`to_vec_named` cannot be verified by a Rust round trip, and the first version of the test tried to.** S1's requirement is that MessagePack be written with named fields, because the compact array encoding of a struct has nowhere to put an internally tagged enum's `t`. The obvious test — encode compactly, fail to decode — **passes nothing**: `rmp-serde`'s deserialiser accepts the array form and reads it back correctly | Asserted on the bytes. The named payload is a map, and contains `t` and `executorId`; the compact one is an array, and contains neither. The reason the distinction matters is not visible from inside Rust at all: the other end of this wire is TypeScript reading `ui/src/bindings/`, where `Command` is an object with a `t`, and `["ExecutorOff", 3]` is not that object. **Checked by mutation:** switching `encode` to `to_vec` turns the byte assertion red and leaves every round-trip property green |
+| 2026-08-12 | S16 | **Coverage was raised by testing behaviour nobody had asked about, for the eighth session running.** The first measurement read 97.96 % lines. Two of the gaps were reachable and real: a client sending an oversized frame *after* a successful handshake (the daemon's side of §3, which no test had exercised — the framing's own test asserts it from the wire's side), and a first message that is well-formed MessagePack and not a `ClientMessage` | Three tests added, 98.43 % lines, and one dead method deleted rather than excused — `Wire::shutdown_within` had no caller, so it went, which is S14's rule about removing a branch instead of covering it. What is left is `?` arms, `panic!` arms inside tests that pass, and the `#[cfg(unix)]` half of `local.rs`, which this machine cannot execute and the Linux job does. **The rule that keeps holding:** the uncovered line is where the defect is, and "it is only an error path" has now been wrong eight times |
 | 2026-08-12 | S15 | **SQLite is C, and the ARM64 cross-check is where that stops being an implementation detail.** Three variants were weighed and two were tried on this machine before a line of the module was written, which is what the session prompt asked for. **Bundled** (`rusqlite` with the SQLite amalgamation compiled in) builds on Windows and Linux and fails `cargo check --workspace --target aarch64-unknown-linux-gnu` with `failed to find tool "aarch64-linux-gnu-gcc"` — a build script has to *compile* `sqlite3.c` for the target even though `cargo check` never links. **A preinstalled SQLite** removes the C compilation and replaces it with a system library that has to exist on every machine a show file is opened on, Windows included, which it does not. **Pure Rust** exists — `turso` 0.8.0-pre.4, `limbo_core` 0.0.22 — and is a pre-1.0 reimplementation of the write-ahead log this session's crash-safety criterion is entirely about | **Bundled, and the ARM64 job installs `gcc-aarch64-linux-gnu`.** The reasoning is that a file format a school's shows live in should be the same SQLite everywhere, pinned in the binary rather than supplied by a distribution — and that a cross-compile of a workspace containing C needs a cross C toolchain, which is a missing tool rather than the portability break this job exists to catch. The alternative — leaving the job to fail — would have retired the check that `prism-core` contains no `#[cfg]`. **`prism-core` is unchanged in the respect that matters:** no `#[cfg]` of any kind, and the Linux job still runs its tests. **S17/S29 requirement:** a Raspberry Pi build compiles this natively and needs no cross toolchain, but a *cross*-build for the Pi does, and the packaging session owns saying so |
 | 2026-08-12 | S15 | **A load cannot be a replay of the edit operations, because a show that is legal to hold is not always legal to store.** The obvious loader rebuilds the show by calling `patch_fixture`, `store_preset`, `store_sequence` and the rest, and gets validation for free. It also refuses to open files it wrote itself: S11 decided that a dangling reference is *reported* rather than refused, so unpatching a fixture a cue part names leaves an ordinary show that `Show::store_sequence` turns down (S14 relied on exactly that to test a refused undo) | `Show::from_parts` and `SessionState::from_parts`, `pub(crate)`, building the collections directly. What the file is checked for instead is what only a file can be wrong about: a row that does not decode, a row filed under a key that is not the identifier inside it, a session naming a view the file does not have or focusing a window that is not open. Everything else is `Show::issues()`' job, exactly as it is for a show edited into that state in front of the operator. **S27 requirement:** the patch sheet shows those issues after a load as it does after an edit — a show that opens with a warning is better than one that will not open |
 | 2026-08-12 | S15 | **One row per entity rather than one blob per file, and the argument is what a damaged sector costs.** A show is small enough that a single MessagePack blob in one row would have worked and been half the code | Eight tables keyed by the number the operator uses. A row that will not decode costs **one sequence**, and the error names it (`sequence row 5: …`); a single blob is a file that is either readable or not. The keys are the same keys `Show` holds its collections under, so a load is a walk rather than a rebuild — and the shape a later session needs to write only what changed is already there. **The documents are MessagePack and not JSON**, which is S1's finding applied to the platter: `serde_json`'s parser is not correctly rounded, so a fixture's position would come back a unit in the last place from where it was hung, and "byte-identical" would be false for every rig with a 3D view |
@@ -1021,13 +1083,50 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**A show now survives being closed, and being killed.** `prism-core` is
-complete: the show model, the session, the programmer, the Oops journal and the
-`.prism` file they are written into — one transaction over a write-ahead log, so
-that a process killed mid-save leaves a file holding the last committed state
-and never a mixture of two shows. **Phase 3 is finished.** What is missing is a
-way for anything to talk to any of it: the daemon has no wire. Begin **S16**
-(`prism-ipc` — framing and transports). Use the prompt in §8.
+**The daemon has a wire.** `prism-ipc` is complete: length-prefixed
+MessagePack with a size limit and a nesting-depth limit, a named pipe on Windows
+beside a Unix domain socket elsewhere, a WebSocket over `axum`, the backpressure
+policy of §8, and the server and client halves — all of it above one
+transport-independent `Wire`, so the same suite runs identically over three
+transports. What is missing is a process to run any of it in: there is a motor,
+three outputs, a complete state and now a wire, and nothing that holds them
+together. Begin **S17** (`prismd` — the daemon binary). Use the prompt in §8.
+
+Carried out of S16:
+- **`ServerHandler` is the whole of what S17 has to supply**: `snapshot`,
+  `command`, and the two default hooks `connected` and `disconnected`. The
+  server holds no show and no engine on purpose — a server with an opinion about
+  whether a command is valid would be a second source of truth. Implement it
+  over `prism_core::ShowFile` plus the engine's command queue.
+- **`CommandOutcome::Applied { deltas }` is broadcast to *every* client and the
+  `Ack` goes to one**, in that order: the fact before the receipt. `ShowFile::apply`
+  already answers with exactly those deltas, so the two fit together without a
+  translation layer.
+- **The `Snapshot` carries three documents — show, session and programmer** — and
+  the show and the session are `JsonValue` documents, because that is what a
+  `ShowPatch` is an RFC 6902 operation *against*. S17 builds them from
+  `prism_core`'s projections; `outputs` and `health` are the daemon's own.
+- **`Endpoint` is what goes in the lock file of §2.2.** `LocalListener::endpoint()`
+  and `WebSocketListener::endpoint()` produce it, and
+  `Endpoint::needs_a_token()` answers whether §2.1 requires one — a listener not
+  on loopback does. **Binding does not remove a stale socket file**, deliberately:
+  deciding a previous daemon is dead is a PID liveness question and belongs to
+  S17's takeover, not to a transport that would defeat the single-instance
+  guarantee by sweeping up whatever it found.
+- **`local::scratch_address(label)` exists for tests** — a pipe name or socket
+  path nothing else is using, with the process id in it. S17's tests need it too.
+  The real daemon does *not* use it: its endpoint has to be findable.
+- **A client that is not reading cannot be told why it was disconnected.**
+  `ServerConfig::goodbye` bounds both the wait for room and the final flush, and
+  the connection closes regardless. S18 measures the mechanism; S16 built it and
+  `crates/prism-ipc/tests/backpressure.rs` shows it working through a socket.
+- **`TelemetryFrame` is the channel, not its contents.** Header, version, a
+  reserved byte and one 514-byte section per universe. S17 decides what is
+  measured beside the levels and fills it; `encode_into` takes a buffer so a
+  frame at 30 Hz costs no allocation after the first.
+- **The engine tick is unaffected by any of this.** `prism-ipc` is async and
+  `tokio`-based; the tick is still an OS thread that S17 must raise to high
+  priority (§3.1 and §3), and nothing in this crate runs on it.
 
 Carried out of S15:
 - **`ShowStore` is the only thing in the crate that touches a disk, and it holds
@@ -1199,147 +1298,163 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S16 — `prism-ipc`: Framing und Transporte**
+**Next up: S17 — `prismd`: das Daemon-Binary**
 
 ```text
-PrismDMX — Session S16: prism-ipc, Framing und Transporte
+PrismDMX — Session S17: prismd, das Daemon-Binary
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht keine Hardware und keine Platte, aber zum ersten Mal in
-diesem Projekt ein Socket. Bis hierher gibt es einen Motor, drei Ausgänge und
-einen vollständigen Zustand — und nichts, worüber irgendjemand mit ihnen reden
-könnte.
+Diese Session baut zum ersten Mal einen Prozess. Bis hierher gibt es einen
+Motor, drei Ausgänge, einen vollständigen Zustand, eine Datei und eine Leitung —
+acht Crates, die alles können und die niemand startet. `prismd` ist das
+Programm, das sie hält.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.16 (was S15 geliefert
-                                            hat), §7 „Carried out of S15" und
+                                            besonders §2.17 (was S16 geliefert
+                                            hat), §7 „Carried out of S16" und
                                             alle Decision-Log-Einträge, die eine
-                                            „S16 requirement" nennen — davon gibt
-                                            es mehrere, und sie sind ein Teil des
-                                            Auftrags
+                                            „S17 requirement" nennen — davon gibt
+                                            es viele, aus jeder Session seit S11,
+                                            und sie sind ein Teil des Auftrags
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S16
-4. docs/IPC_PROTOCOL.md                   — **das Pflichtenheft dieser Session**,
-                                            vollständig: §2 Transporte, §3
-                                            Framing, §4 Nachrichtentypen und
-                                            Handshake, §5/§6 Command und Delta,
-                                            §7 Telemetrie, §8 Backpressure,
-                                            §9 Tests
-5. ARCHITECTURE_SPEC.md §1 (D2, D3, D11), §2, §10.1, §12
-6. crates/prism-ipc/src/lib.rs            — bisher nur Moduldokumentation; das
-                                            Crate ist leer
-7. crates/prism-domain/src/wire.rs und    — `Command` (23 Varianten) und `Delta`
-   crates/prism-domain/src/lib.rs           (7 Varianten) sind fertig und
-                                            getestet; sie sind die Nutzlast
+                                            von S17
+4. ARCHITECTURE_SPEC.md §2 (Systemüberblick), §3 (Threading-Modell, besonders
+   §3.1 und §3.2), §5 (Pipeline), §7 (Ausgänge), §10.3 (Lebenszyklus,
+   Single-Instance, Shutdown), §12
+5. docs/IPC_PROTOCOL.md §2.2 (Discovery und Lock-File), §4 (Handshake und
+   Snapshot), §8 (Backpressure und Ausfall), §9 (Tests)
+6. crates/prismd/src/main.rs              — bisher nur ein Rumpf
+7. crates/prism-ipc/src/server.rs         — `ServerHandler` ist genau das, was
+                                            diese Session zu liefern hat
+8. crates/prism-core/src/file.rs und store.rs — `ShowFile::apply` ist die Tür,
+                                            `ShowStore` die Platte, `Autosave`
+                                            die Politik
+9. crates/prism-engine/src/lib.rs         — `Engine`, `TickCommand`,
+                                            `FramePublisher`, `MergeBody`
 
-Stand nach S15 — nichts davon musst du neu bauen:
+Stand nach S16 — nichts davon musst du neu bauen:
 - `prism-domain` (S1): alle Domänentypen samt Serialisierung und
-  TypeScript-Bindings; 133 Tests. Jeder `f64` ist in beiden Richtungen gegen
-  nicht-endliche Werte abgesichert, und Serialisierung ist deshalb fehlbar.
+  TypeScript-Bindings; 133 Tests.
 - `prism-engine` (S2–S6) ist vollständig: 44 Hz bei 64 Universen unter Volllast,
   allokationsfrei im Tick.
 - `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
-  verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz).
+  verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz), jeweils hinter
+  `DmxOutput` mit `OutputRunner` für Thread, Reconnect-Backoff und
+  Panic-Eindämmung.
 - `prism-core` (S11–S15) ist vollständig: `Show`, `SessionState`, `Programmer`,
-  das Oops-Journal und seit S15 die `.prism`-Datei — SQLite mit WAL,
-  `user_version`-Migrationen, Autosave-Politik, Dirty-Flag und JSON-Export.
-  225 Tests, 99,47 % Zeilenabdeckung.
-- Insgesamt 905 Tests im Workspace, alle grün, CI vierfarbig grün.
+  das Oops-Journal und die `.prism`-Datei. 225 Tests.
+- `prism-ipc` (S16) ist vollständig: längenpräfigiertes MessagePack mit Größen-
+  und Verschachtelungsgrenze, Named Pipe bzw. Unix-Domain-Socket, WebSocket über
+  `axum`, Backpressure nach §8, Server- und Client-Hälfte — alles über einem
+  transportunabhängigen `Wire`. 131 Tests, 98,43 % Zeilenabdeckung.
+- Insgesamt 1036 Tests im Workspace, alle grün, CI vierfarbig grün.
 
-Aufgabe: Session S16 umsetzen — `prism-ipc`: Framing und Transporte.
+Aufgabe: Session S17 umsetzen — `prismd`: das Daemon-Binary.
 
-Umzusetzen (IMPLEMENTATION_PLAN.md S16):
-- längenpräfigiertes MessagePack-Framing
-- Named-Pipe- bzw. Unix-Domain-Socket-Transport
-- WebSocket-Transport
-- Client- und Server-Hälfte
+Umzusetzen (IMPLEMENTATION_PLAN.md S17):
+- Verdrahtung von Engine, Core, Ausgängen und IPC
+- Lock-File mit PID und Endpunkt; Single-Instance-Garantie; Übernahme eines
+  veralteten Lock-Files
+- CLI für den kopflosen Betrieb
+- Shutdown mit sACN-Terminierung und konfigurierbarem Blackout-oder-Halten
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Framing-Round-Trip als Property-Test über beliebige Nachrichten
-- Ein übergroßer Frame schließt die Verbindung **ohne große Allokation** — das
-  ist eine Aussage über den Speicher, nicht nur über den Rückgabewert, und
-  gehört entsprechend gemessen (`prism-engine` hat mit dem zählenden Allokator
-  ein Muster dafür, siehe `crates/prism-engine/tests/tick_allocations.rs`)
-- **Transport-Parität:** dieselbe Testsuite läuft identisch über beide
-  Transporte
-- `cargo test -p prism-ipc` ist grün
+- Der Daemon startet, lädt eine Show, gibt DMX auf einen Mock-Treiber aus,
+  **ohne dass sich jemals ein Client verbindet**
+- Eine zweite Instanz erkennt die erste und weigert sich zu starten — als Test
+  behauptet, nicht als Absicht beschrieben
+- Ein veraltetes Lock-File (getöteter Prozess) wird erkannt und übernommen
+- Der Handshake liefert einen `Snapshot` mit Show **und** Session
+- `cargo test -p prismd` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
-- Abdeckung auf `prism-ipc` **≥ 85 %**, gemessen mit
-  `cargo llvm-cov -p prism-ipc --summary-only` und in PROGRESS.md eingetragen
+- Abdeckung auf `prismd` gemessen mit `cargo llvm-cov -p prismd --summary-only`
+  und in PROGRESS.md eingetragen
 
 Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **MessagePack muss mit `rmp_serde::to_vec_named` geschrieben werden** (S1).
-  `Command` und `Delta` sind intern getaggte Enums (`#[serde(tag = "t")]`), und
-  MessagePacks Standard-Array-Kodierung von Structs kann kein Tag tragen.
-- **Beim Dekodieren ist eine Verschachtelungstiefe zu begrenzen** (S1-Fund, und
-  bislang die einzige offene „S16 requirement" mit Sicherheitsbezug):
-  `JsonValue` ist rekursiv, eine bösartige Nutzlast kann beim Dekodieren den
-  Stack sprengen, und ein Stack-Overflow bricht den Prozess ab — mitsamt DMX.
-  `serde_json` hat ein Limit (128 Ebenen), MessagePack hat keines.
-- **Serialisierung ist fehlbar und muss so behandelt werden.** Ein
-  nicht-endlicher `f64` wird in beiden Richtungen abgelehnt.
-- **Der `Snapshot` aus §4.1 trägt Show und Session, aber keinen Programmer**
-  (S13-Fund). Entweder wächst der Snapshot um ein drittes Dokument, oder der
-  Daemon schickt direkt danach ein `Delta::ProgrammerChanged` — die Entscheidung
-  gehört ins Decision Log, nicht in einen Kommentar.
-- **Der Daemon ist die einzige Autorität (D3), und das Protokoll ist deshalb
-  asymmetrisch:** Clients schicken Absichten, der Daemon schickt Tatsachen. Kein
-  Client rechnet Zustand aus, den der Daemon dann übernehmen soll.
-- **Plattformcode ist eine offene Frage, die diese Session entscheiden muss.**
-  `ARCHITECTURE_SPEC.md` §10.1 erlaubt `#[cfg(target_os = ...)]` ausdrücklich
-  nur in `prism-protocols` und `prism-app` — und ein Named Pipe unter Windows
-  neben einem Unix-Domain-Socket unter Linux ist genau das. Die CI führt
-  `cargo test -p prism-ipc` **im Linux-Job** aus und `cargo check --workspace
-  --target aarch64-unknown-linux-gnu` im ARM64-Job, also muss beides
-  durchkommen. Wie der Transport hinter einer Abstraktion verschwindet (ein
-  Trait wie `DmxOutput` in S7, mit einer In-Memory-Implementierung für die
-  Tests) ist die eigentliche Designfrage dieser Session, und die Antwort ist ein
-  Decision-Log-Eintrag.
-- **Neue Abhängigkeiten müssen den ARM64-Cross-Check bestehen** — der Workspace
-  enthält seit S15 C (`rusqlite` mit gebündeltem SQLite), und der ARM64-Job
-  installiert dafür `gcc-aarch64-linux-gnu`. Eine asynchrone Laufzeit (`tokio`)
-  und ein WebSocket-Server (`axum`, so nennt es §2) sind große Abhängigkeiten:
-  prüfe früh und lokal, dass sie im Cross-Check durchgehen, und begründe die
-  Wahl im Decision Log.
-- **Backpressure ist Teil des Protokolls, nicht des Daemons** (§8): Telemetrie
-  wird zusammengefasst und notfalls verworfen, Kommandos **nie**. Ein Client,
-  dessen Steuerkanal volläuft, wird mit einem `Reject` getrennt. S18 misst das
-  als Gate; S16 muss den Mechanismus dafür bereitstellen.
-- **Telemetrie ist binär und fest formatiert** (§7), nicht MessagePack. Sie darf
-  in dieser Session als Rahmen definiert, muss aber nicht gefüllt werden — was
-  gemessen wird, weiß erst S17. Was hier entschieden wird, ist der Kanal.
-- **Validieren und kodieren, bevor geschrieben wird**, und **eine Ablehnung
-  lässt den Zustand byte-identisch**: S11 bis S15 haben das jeweils wörtlich als
-  Test.
-- `prism-domain` hat ein optionales `proptest`-Feature mit `Arbitrary`-Impls für
-  jeden Typ — nutze `prism_domain::arb`, statt eigene Generatoren zu schreiben.
+- **Der Tick-*Thread* braucht hohe Priorität, nicht der Prozess** (S2/S6-Fund,
+  gemessen): bei Standardpriorität verfehlte derselbe Zehn-Minuten-Lauf 45 Ticks
+  mit p99.9 = 54 ms, mit hoher Priorität keinen einzigen mit p99.9 = 200 µs.
+  `prism-engine` darf seine Priorität nicht selbst setzen — es ist per Regel
+  plattformneutral —, **also gehört das hierher**. Und nur der Thread: eine
+  Prioritätsklasse gilt für alle Threads des Prozesses, und PROGRESS.md §3.1
+  beschreibt, was dann passiert.
+- **`Effect::Save` ist der eine Effekt, den `ShowFile::apply` nicht ausführt**
+  (S15). Der Daemon hält den `ShowStore`, beantwortet ihn mit `ShowStore::save`
+  — was die Deltas zurückgibt, damit der `DirtyFlag`-Übergang genau einmal
+  reist — und pollt `Autosave` auf demselben Timer wie alles andere.
+- **Kein zweites Journal** (S14): der Daemon dispatcht durch `ShowFile::apply`,
+  dort werden `Oops` und `Redo` ausgeführt.
+- **Der Programmer muss gegen den zuletzt an die Engine geschickten Stand
+  gediffed werden** (S13): `Delta::ProgrammerChanged` trägt den ganzen Zustand,
+  die Engine wird pro `MergePlan`-Slot adressiert. `MergeBody::load_programmer`
+  allokiert und ist deshalb Einrichtungsarbeit, nichts pro Encoder-Drehung.
+- **`Show::patch_revision()` ist die Zahl, die der Daemon beobachtet** (S11):
+  jedes gequeuete Programmer-Kommando ist veraltet, sobald sie sich bewegt. Und
+  ein Austausch der `MergeBody` zur Laufzeit muss die Framepuffer des Publishers
+  leeren, sonst bleiben ungepatchte Kanäle stehen.
+- **Ein Laden ist kein Replay** (S15): `ShowStore::load` antwortet mit
+  `Repatch`, `ReloadGroups` und einem `ReloadSequence` pro Sequenz — das ist die
+  To-do-Liste nach dem Öffnen einer Datei.
+- **Die sACN-CID gehört der Maschine, nicht der Show** (S10/S11):
+  `prism_core::MachineConfig`, einmal beim ersten Start erzeugt und neben den
+  Einstellungen des Daemons abgelegt. Ein Ausgang mit einer Null-CID weigert
+  sich zu verbinden.
+- **Blackout-oder-Halten beim Herunterfahren ist ein Frame, kein Flag** (S10):
+  der sACN-Treiber beendet seine Streams mit dem letzten Look; ein Daemon, der
+  eine dunkle Bühne will, veröffentlicht **vorher** ein Blackout-Frame und
+  stoppt dann die Ausgänge.
+- **`ServerHandler` ist die ganze Schnittstelle zu `prism-ipc`** (S16), und die
+  Reihenfolge steht fest: Deltas an **alle** Clients, danach das `Ack` an einen.
+  Der `Snapshot` trägt drei Dokumente — Show, Session und Programmer —, und Show
+  und Session sind `JsonValue`-Dokumente, weil ein `ShowPatch` eine
+  RFC-6902-Operation *gegen* sie ist.
+- **Das Lock-File ist die Single-Instance-Garantie, und das Binden allein ist
+  sie nicht** (S16): `LocalListener::bind` räumt eine übrig gebliebene
+  Socket-Datei absichtlich **nicht** weg, weil „der vorige Daemon ist tot" eine
+  PID-Lebendigkeitsfrage ist. Diese Session besitzt die Übernahme. Unter Windows
+  verweigert `first_pipe_instance` zusätzlich die zweite Instanz auf
+  Betriebssystemebene.
+- **`local::scratch_address(label)` gibt es für Tests** — ein Pipe-Name bzw.
+  Socket-Pfad, den nichts anderes benutzt. Der echte Daemon benutzt ihn nicht:
+  sein Endpunkt muss auffindbar sein und steht im Lock-File (§2.2).
+- **`prismd` darf `#[cfg(target_os = ...)]` nicht enthalten**, außer wo
+  ARCHITECTURE_SPEC.md §10.1 es erlaubt — und es erlaubt es dort nicht. Die
+  Thread-Priorität ist der Punkt, an dem das weh tut: sie ist plattformabhängig
+  und muss trotzdem irgendwo hin. Wie das gelöst wird, ist ein
+  Decision-Log-Eintrag. Die CI führt `cargo check --workspace --target
+  aarch64-unknown-linux-gnu` aus, also muss es dort durchkommen; der ARM64-Job
+  installiert für SQLite bereits `gcc-aarch64-linux-gnu`.
 - **Ein Test-Fixture aus lauter Default-Werten kann „korrekt übertragen" nicht
-  von „nie angefasst" unterscheiden** (S14-Fund, in S15 als Regel bestätigt).
+  von „nie angefasst" unterscheiden** (S14-Fund, seit S15 Regel).
+- **Validieren und kodieren, bevor geschrieben wird**, und **eine Ablehnung
+  lässt den Zustand byte-identisch**: S11 bis S16 haben das jeweils wörtlich als
+  Test.
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S15 haben
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S16 haben
   ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
-  geprüft — S15 hat auf diesem Weg einen echten Fehler gefunden.
+  geprüft — S15 und S16 haben auf diesem Weg echte Fehler gefunden, und S16s
+  Gegenprobe hat den Testprozess mit einem Stack-Overflow abgeschossen.
 - **Ein roter Timing-Test ist zuerst eine Frage an die Maschine, nicht an den
   Code.** `the_tick_holds_its_deadline_for_a_few_seconds` fiel in S13 zweimal
   aus, beide Male weil der Rechner nebenher beschäftigt war. Der Test druckt
   dafür selbst `probe thread turns: N/s`: erst diese Zeile lesen, dann das
   Target allein laufen lassen (`cargo test -p prism-engine --test realtime`),
-  dann den Diff verdächtigen. Auf einer ruhigen Maschine sind alle 905 Tests
+  dann den Diff verdächtigen. Auf einer ruhigen Maschine sind alle 1036 Tests
   grün.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S16-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S17-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S17 (`prismd` — Daemon-Binary) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. feat(ipc): …
+  Session S18 (D2-Gate — Resilienz) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. feat(prismd): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```

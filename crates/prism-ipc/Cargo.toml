@@ -9,6 +9,39 @@ publish.workspace = true
 
 [dependencies]
 prism-domain = { path = "../prism-domain" }
+serde = { workspace = true }
+# Telemetry travels as an opaque byte string inside the envelope (docs/
+# IPC_PROTOCOL.md section 7). Without serde_bytes a Vec<u8> becomes a
+# MessagePack array of integers - one byte per element plus a tag.
+serde_bytes = "0.11"
+rmp-serde = { workspace = true }
+# ARCHITECTURE_SPEC.md section 3 names the runtime: `core-main (async, tokio)`.
+# `net` carries both local transports - Unix domain sockets and Windows named
+# pipes - so the platform split is a dependency feature rather than our FFI.
+tokio = { version = "1.49", features = [
+    "rt",
+    "rt-multi-thread",
+    "net",
+    "io-util",
+    "sync",
+    "time",
+    "macros",
+] }
+# docs/IPC_PROTOCOL.md section 2 names axum for the WebSocket listener. The
+# server half is a Router, so S31's Web Remote adds routes to it rather than
+# running a second listener.
+axum = { version = "0.8", default-features = false, features = [
+    "ws",
+    "tokio",
+    "http1",
+] }
+tokio-tungstenite = "0.29"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+
+[dev-dependencies]
+prism-domain = { path = "../prism-domain", features = ["proptest"] }
+proptest = { workspace = true }
+tokio = { version = "1.49", features = ["test-util"] }
 
 [lints]
 workspace = true

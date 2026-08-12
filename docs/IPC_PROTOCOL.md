@@ -21,7 +21,9 @@ Every client is equivalent. The desktop shell, the Web Remote and the X-Touch su
 | Named pipe (Windows) / Unix domain socket (Linux, macOS) | Desktop shell on the same machine | Lowest latency, no TCP stack, no port to firewall, no accidental network exposure |
 | WebSocket over `axum` | Web Remote, remote clients | Works from any browser; binds `127.0.0.1` by default |
 
-Both transports carry identical framing and identical messages. Transport choice is not visible above `prism-ipc`.
+Both transports carry identical **payloads** and identical messages. Transport choice is not visible above `prism-ipc` — every transport produces a `Wire`, which is a duplex of byte payloads, and the server, the client, the handshake and the backpressure policy are one code path above it.
+
+The length prefix of §3 belongs to the byte-stream transports. A WebSocket binary message already carries its own length, and a second copy of the same number inside it would be two lengths that can disagree. What both transports share is the **limit**: `MAX_FRAME_BYTES` is checked against the length prefix on a stream, and given to the WebSocket implementation as `max_message_size` on a WebSocket — in both cases before a buffer for the body exists. *(S16)*
 
 ### 2.1 Network exposure
 
@@ -41,9 +43,11 @@ The WebSocket listener binds to loopback unless the user explicitly enables LAN 
 └──────────────┴───────────────────────────┘
 ```
 
-- **MessagePack** (`rmp-serde`) — compact, schema-free enough to evolve, and fast to decode in both Rust and the browser.
-- **Maximum frame size** is enforced on both sides. An oversized frame closes the connection rather than allocating.
+- **MessagePack** (`rmp-serde`) — compact, schema-free enough to evolve, and fast to decode in both Rust and the browser. Written with `to_vec_named`: `Command` and `Delta` are internally tagged, and the compact array encoding of a struct has nowhere to put the tag *(S1)*.
+- **Maximum frame size** is enforced on both sides, and it is 1 MiB. An oversized frame closes the connection rather than allocating: the length is checked before a body buffer exists, which is a claim about memory and is measured as one *(S16, `crates/prism-ipc/tests/oversized_frame.rs`)*.
+- **Maximum nesting depth** is enforced on decode, and it is 128 levels — the same limit `serde_json` applies, against the same attack. `JsonValue` is recursive and MessagePack has no limit of its own, so a payload of a few kilobytes can nest a hundred thousand deep; a stack overflow is not recoverable in Rust and would take the DMX output with it. The depth is established by walking the payload with an explicit stack **before** `serde` sees it, because the recursion to be stopped happens inside serde's own buffering of an internally tagged enum *(S1 finding, S16 implementation)*.
 - Message types are distinguished by a tagged enum inside the payload, not by a separate header byte.
+- **Serialisation is fallible.** A non-finite `f64` is refused in both directions *(S1)*, so a message that cannot be encoded is reported rather than emitted.
 
 ---
 
@@ -58,6 +62,10 @@ The WebSocket listener binds to loopback unless the user explicitly enables LAN 
 | `Telemetry` | daemon → client | **droppable**, coalesced |
 | `Ack` / `Reject` | daemon → client | reliable |
 
+There are two envelopes, not one: `ClientMessage` carries `Hello` and `Command`, `ServerMessage` carries the rest. A type that could carry either would let a client send a `Delta`, and **D3** says it cannot *(S16)*.
+
+A `Command` carries a `seq`, and `Ack` and `Reject` echo it. The daemon stores that number and never interprets it; it exists because with several commands in flight — the normal case for a fader bank — an unaddressed rejection tells a client only that *something* failed *(S16)*.
+
 ### 4.1 Handshake
 
 ```mermaid
@@ -68,7 +76,7 @@ sequenceDiagram
     alt version mismatch
         D-->>C: Reject { reason }
     else accepted
-        D-->>C: Snapshot { show, session, outputs, health }
+        D-->>C: Snapshot { show, session, programmer, outputs, health }
         loop while connected
             C->>D: Command
             D-->>C: Delta
@@ -77,7 +85,11 @@ sequenceDiagram
     end
 ```
 
-The `Snapshot` carries **both** the show model and the session state. This is what makes a UI restart an ordinary reconnect rather than a special case: the client asks for the world, receives it, and resumes. It is also what makes **D11** work — a view switched from the X-Touch while the UI was closed is simply part of the snapshot the UI receives when it comes back.
+The `Snapshot` carries **three** documents: the show model, the session state and the programmer. This is what makes a UI restart an ordinary reconnect rather than a special case: the client asks for the world, receives it, and resumes. It is also what makes **D11** work — a view switched from the X-Touch while the UI was closed is simply part of the snapshot the UI receives when it comes back.
+
+> **The programmer is the third document, and it was added in S16.** S13 found the gap: the programmer is a model of its own with a delta of its own, so a client connecting mid-programming would have seen an empty one. It could have been closed by sending a `ProgrammerChanged` immediately after the snapshot. It is closed in the snapshot instead, because §9's *snapshot completeness* row — a fresh client's snapshot equals the state an existing client reached by accumulating deltas — is false for the programmer under the other reading. The world arrives in one message, or that criterion has to be rewritten.
+
+The show and the session travel as **documents** rather than as models, because `ShowPatch` and `SessionPatch` are RFC 6902 operations and an operation is only meaningful against a document root. `prism_core::ShowMirror` and `SessionMirror` apply them to exactly these two values.
 
 ### 4.2 Version negotiation
 
@@ -154,6 +166,10 @@ Telemetry is separate from the control channel because it is high-rate, lossy by
 | Encoding | Binary, fixed layout — not MessagePack maps |
 | Loss policy | Coalesced per client; **dropped** when a client cannot keep up |
 
+**The envelope is MessagePack and the content is not.** A telemetry frame travels as `ServerMessage::Telemetry { data }`, where `data` is a MessagePack *byte string* holding a fixed-layout binary frame. Both sentences above hold: the envelope is the one tagged enum §3 asks for, and the payload is not a MessagePack map. The alternative — a channel discriminator in the framing — is what §3 rules out. The cost is about ten bytes per frame *(S16)*.
+
+The layout is a 16-byte header (`"PTLM"`, layout version, one reserved byte, universe count, sequence number, little-endian) followed by one 514-byte section per universe (number, then 512 levels). A frame announcing a layout version this build does not know is **dropped**, not guessed at — which telemetry can afford, being droppable by definition. What is measured beside the levels is S17's to decide; the channel and its room to grow are S16's.
+
 **Clients must not put telemetry into reactive state.** In the React UI it is written to refs and rendered on `<canvas>`. 64 universes × 512 channels at 30 Hz through React state would make the interface unusable — this is the reason the second channel exists at all, and it is a rendering concern, not a change to where authority lives.
 
 ---
@@ -170,17 +186,22 @@ Telemetry is separate from the control channel because it is high-rate, lossy by
 
 A client is never a dependency of the engine. Disconnecting every client leaves DMX output completely unaffected — that is the property **D2** exists to provide, and §9 tests it directly.
 
+**The `Reject` that ends a connection is best-effort; the disconnection is not.** The commonest reason to send one is the first row of that table — the client's control queue filled because it stopped reading — and a client that has stopped reading is exactly the client that cannot be told why. The daemon waits `ServerConfig::goodbye` (one second by default) for the message to reach the socket and then closes regardless, because the alternative is holding a connection it has already given up on for as long as the process lives *(S16)*.
+
+**A message the daemon cannot decode is not a disconnection.** If the framing delivered a whole payload and it was not a message this version understands, the frame boundary is intact: the client is answered with `Reject { reason: Undecodable }` and the connection carries on. Only a fault that loses the frame boundary — an oversized frame — ends it. The distinction matters because the first case is reachable by an honest client of the wrong version, and disconnecting it would hide the reason *(S16)*.
+
 ---
 
 ## 9. Testing
 
 | Test | Method |
 |---|---|
-| Framing round trip | Property test over arbitrary messages: encode → decode → equal |
-| Oversized frame | Assert connection closes without a large allocation |
+| Framing round trip | Property test over arbitrary messages: encode → decode → equal *(S16: `tests/framing.rs`, through the whole frame, reading the length back out of the header)* |
+| Oversized frame | Assert connection closes without a large allocation *(S16: `tests/oversized_frame.rs` counts what the allocator was asked for; the functional assertion passes for the wrong implementation too)* |
+| Nesting depth | Assert a payload nested past 128 levels is refused **before** it is deserialised, and that one at 128 is not *(S16)* |
 | Handshake | Version match, mismatch, and missing token on a LAN-bound listener |
 | Snapshot completeness | Apply a random command sequence, then assert a fresh client's snapshot equals the state reached by an existing client's accumulated deltas |
 | **IPC resilience (D2 gate)** | Start the daemon with a mock output, connect a client, kill it mid-show, reconnect — assert the output frame sequence has **no gap** across the whole run |
 | **Surface → UI (D11 gate)** | Drive `SelectView` and `OpenWindow` from a mock MIDI source with **no client connected**; connect afterwards and assert both appear in the snapshot |
 | Backpressure | Attach a deliberately slow client; assert telemetry is dropped, commands are not, and other clients are unaffected |
-| Transport parity | Run the full suite over both named pipe / UDS and WebSocket; results must be identical |
+| Transport parity | Run the full suite over both named pipe / UDS and WebSocket; results must be identical *(S16: one suite, called three times — the third transport is the in-process duplex — plus a scripted session recorded over each and compared as bytes)* |
