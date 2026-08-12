@@ -303,6 +303,18 @@ impl Daemon {
         &self.recordings
     }
 
+    /// The IPC server, for a caller that wants to know about the connections.
+    ///
+    /// Cheap to clone, and every clone is a handle onto the same set of clients
+    /// — which is what lets S18's backpressure gate watch the queue counters of
+    /// a client while the daemon it belongs to is running, and what a status
+    /// panel (S27) will read one row per connection from. It is deliberately
+    /// not a way to *serve* anything: the accept loops are the daemon's.
+    #[must_use]
+    pub const fn server(&self) -> &Server {
+        &self.server
+    }
+
     /// Where clients are told to find this daemon.
     #[must_use]
     pub fn endpoints(&self) -> String {

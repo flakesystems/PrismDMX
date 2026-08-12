@@ -136,9 +136,28 @@ pub struct MockOutputHandle {
     state: Arc<Mutex<MockState>>,
 }
 
+/// One frame a [`MockOutput`] was given, and when.
+///
+/// **The time is what makes the recording an assertion rather than a tally.**
+/// `ARCHITECTURE_SPEC.md` §12's D2 gate asks that *the output frame sequence has
+/// no gap across the whole run*, and a list of frames with no times in it cannot
+/// answer that: a driver sends on its own cadence, so one frame fewer is
+/// ordinary jitter while four hundred milliseconds of silence is a stage that
+/// stopped. The instant is recorded where the frame was accepted, on the driver
+/// thread, so nothing a test does afterwards can move it.
+#[derive(Debug, Clone)]
+pub struct FrameRecord {
+    /// When the output was given this frame.
+    pub at: std::time::Instant,
+    /// Which universe it was for.
+    pub universe: UniverseId,
+    /// The 512 channels, as they were on the wire.
+    pub data: Vec<u8>,
+}
+
 #[derive(Default)]
 struct MockState {
-    frames: Vec<(UniverseId, Vec<u8>)>,
+    frames: Vec<FrameRecord>,
     connect_attempts: usize,
     shutdowns: usize,
     connect_faults: VecDeque<OutputError>,
@@ -178,10 +197,22 @@ impl MockOutput {
 }
 
 impl MockOutputHandle {
+    /// Every frame accepted so far, in order, with the time it arrived.
+    ///
+    /// See [`FrameRecord`]: this is what the D2 gate is asserted against.
+    #[must_use]
+    pub fn timeline(&self) -> Vec<FrameRecord> {
+        lock(&self.state).frames.clone()
+    }
+
     /// Every frame accepted so far, in order.
     #[must_use]
     pub fn frames(&self) -> Vec<(UniverseId, Vec<u8>)> {
-        lock(&self.state).frames.clone()
+        lock(&self.state)
+            .frames
+            .iter()
+            .map(|record| (record.universe, record.data.clone()))
+            .collect()
     }
 
     /// How many frames have been accepted.
@@ -193,7 +224,10 @@ impl MockOutputHandle {
     /// The most recent frame accepted.
     #[must_use]
     pub fn last_frame(&self) -> Option<(UniverseId, Vec<u8>)> {
-        lock(&self.state).frames.last().cloned()
+        lock(&self.state)
+            .frames
+            .last()
+            .map(|record| (record.universe, record.data.clone()))
     }
 
     /// How many times the output has been asked to connect, successfully or
@@ -299,7 +333,11 @@ impl DmxOutput for MockOutput {
             match state.send_faults.pop_front() {
                 Some(error) => Some(error),
                 None => {
-                    state.frames.push((universe, data.to_vec()));
+                    state.frames.push(FrameRecord {
+                        at: std::time::Instant::now(),
+                        universe,
+                        data: data.to_vec(),
+                    });
                     None
                 }
             }
@@ -387,6 +425,38 @@ mod tests {
         assert_eq!(frames[0].0, universe(1));
         assert_eq!(frames[0].1, vec![1u8; 512]);
         assert_eq!(handle.last_frame(), Some((universe(2), vec![2u8; 512])));
+    }
+
+    /// The recording says *when*, which is what the D2 gate reads it for: a
+    /// list of frames with no times in it cannot tell a driver's own cadence
+    /// from a stage that stopped.
+    #[test]
+    fn a_mock_output_records_when_each_frame_arrived() {
+        let mut output = output(&[1]);
+        let handle = output.handle();
+        output.connect().unwrap();
+
+        let before = std::time::Instant::now();
+        output.send_frame(universe(1), &[1; 512]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        output.send_frame(universe(1), &[2; 512]).unwrap();
+        let after = std::time::Instant::now();
+
+        let timeline = handle.timeline();
+        assert_eq!(timeline.len(), 2);
+        assert_eq!(timeline[0].universe, universe(1));
+        assert_eq!(timeline[0].data, vec![1_u8; 512]);
+        assert!(timeline[0].at >= before && timeline[1].at <= after);
+        assert!(
+            timeline[1].at.duration_since(timeline[0].at) >= std::time::Duration::from_millis(5),
+            "the gap between two frames is the quantity the gate measures"
+        );
+        // A frame that was refused was never on the wire and is not in the
+        // timeline either — otherwise a gap could be filled by a failure.
+        handle.fail_send(1, OutputError::Faulted);
+        let _ = output.send_frame(universe(1), &[3; 512]);
+        assert_eq!(handle.timeline().len(), 2);
+        assert!(format!("{:?}", timeline[0]).contains("FrameRecord"));
     }
 
     #[test]

@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-12
 **Current phase:** Phase 4 — IPC and daemon
-**Current session:** S18 — D2 gate, resilience (not started; see §8 for the prompt that starts it)
-**Last completed:** S17 — `prismd`, the daemon binary ✅ — **there is a process**
+**Current session:** S19 — `prism-surface`, the MCU codec (not started; see §8 for the prompt that starts it)
+**Last completed:** S18 — the D2 gate ✅ — **killing a client mid-show costs the rig nothing, and it is asserted on recorded frames**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -72,7 +72,7 @@
 |---|---|---|---|---|
 | S16 | `prism-ipc` framing and transports | ✅ | 2026-08-12 | All exit criteria verified — see §2.17. 131 tests, coverage 98.43 % lines. Three mutation checks confirm the three central tests are not vacuous, and one of them **aborted the process** — which is exactly the failure the nesting-depth limit exists to prevent |
 | S17 | `prismd` daemon binary | ✅ | 2026-08-12 | All exit criteria verified — see §2.18. 95 tests, coverage 93.84 % lines. Five mutation checks; a sixth changed nothing, which is itself in the decision log. **Phase 4's daemon exists: there is a process** |
-| S18 | D2 gate — resilience | ☐ | | Mandatory gate |
+| S18 | D2 gate — resilience | ✅ | 2026-08-12 | All exit criteria verified — see §2.19. **The mandatory gate for D2 passes.** 6 new tests, coverage 94.73 % lines on `prismd`. Four mutation checks; the first of them is the reason "no gap" is two claims rather than one |
 
 ### Phase 5 — Surface
 | Session | Title | Status | Date | Note |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 18 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 19 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -760,6 +760,45 @@ is in the decision log because it is a fact about the design: diffing the
 programmer before the rebuild rather than after is belt and braces, and what
 actually holds is `MergeBody::load_programmer` in `build_body`.
 
+### 2.19 S18 verification record
+
+Measured on 2026-08-12, all exit criteria from `IMPLEMENTATION_PLAN.md` S18 and
+the session prompt. The first session whose product is a **proof** rather than a
+feature: `ARCHITECTURE_SPEC.md` §12's mandatory gate for D2.
+
+| Check | Result |
+|---|---|
+| A client is **killed mid-show** and the frame sequence has no gap across the whole run | ✅ `tests/resilience.rs::a_client_killed_mid_show_costs_the_rig_nothing`, on the frames the mock driver was given rather than on anything watched. The show is genuinely running when the client dies — the client's own `Go` started the sequence on executor 0, so the light being asserted afterwards is *the light the dead client asked for*. The kill is an `abort` of the task holding the connection, with messages already queued for it: the socket goes without a goodbye, which is what `Client::disconnect` deliberately is not. **"No gap" is two claims and the decision log says why:** no silence longer than 250 ms between consecutive frames for a universe (**measured 24–51 ms over three runs — one output cadence**), and the look never changing by itself from the frame it is first complete on. 76 of the 78 recorded frames are after the kill, and the test asserts the kill fell inside the recorded window, because otherwise every other assertion is about a run that never met the failure |
+| The client comes back and re-snapshots onto a state identical to the daemon's | ✅ `a_killed_client_comes_back_to_the_state_it_had_accumulated`, which is also §9's *snapshot completeness* row — the same claim from both ends. A client accumulates a nine-command script into `ShowMirror`, `SessionMirror` and the programmer **by deltas alone**, is killed holding that state, and a fresh client's snapshot is compared against all three documents. The script moves every asserted value off its starting one (S14's rule), and includes a `PatchFixture`, which rebuilds the whole engine under a watching client |
+| A protocol version mismatch produces an explicit `Reject`, never undefined behaviour | ✅ `a_client_of_the_wrong_version_is_refused_in_words_and_the_show_goes_on`, over the daemon's real listener rather than through a duplex. **Both directions** — an interface built against a newer engine and one built against an older — because a half-updated installation is the ordinary case, and the refusal has to name **both** version numbers or an operator cannot tell which half to update. The daemon is then asserted to be unaffected: nobody was ever connected, the rig went on being driven, and a client of the right version is served immediately afterwards |
+| Backpressure: a slow client loses telemetry, loses **no** command, and does not affect other clients | ✅ `a_slow_client_loses_telemetry_and_no_commands_and_nobody_else_notices`, against a running daemon at §7's real 30 Hz over a rig of 24 patched universes — a telemetry frame is 514 bytes per universe, so a client that stops reading fills a socket buffer in a fraction of a second instead of ten. Three measurements, because the three claims fail separately: the slow client **loses more telemetry frames than it is given** (21 dropped against 17 delivered) and is never disconnected over it; the fast client's **40 command round trips complete in 27–59 ms** while the slow one reads nothing; and when the slow client starts reading again it receives **all 40 control deltas, in order and complete**, each carrying a distinguishable value so the check is not a count |
+| `cargo test -p prismd` | ✅ exit 0 — **80 lib tests** + 21 integration tests across three targets (7 + 6 + 8), 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **1 140 tests** across 40 targets, 14 ignored (unchanged: the S8 hardware target, the long engine runs, the crash test's child and the fixture regenerator) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 — and `stable` has not moved since S17, unlike between S16 and S17. The one thing it did catch is worth keeping: `print_stdout` is denied workspace-wide, and this suite *measures*, so it carries the same allowance `prism-engine`'s timing tests do — a figure quoted in this file has to be reproducible with `--nocapture` |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prismd` **≥ 85 %** | ✅ **94.73 % lines**, 94.81 % regions, 96.36 % functions — the same figure as S17 to within a rounding of the test bodies (94.80 % then), and for the same reason: `main.rs` is 0 % and is 40 of the 146 uncovered lines. Without it the crate reads **96.16 %**. `prism-protocols` was re-measured because `MockOutput` changed — **98.43 % lines** with `output.rs` at **100 % on all three** — and `prism-ipc` because `ServerHandle` grew a method: **98.46 % lines**, `server.rs` up from 99.50 % to 99.53 % |
+| CI green on the pushed commit | ▶ not yet — the commit is being pushed as this is written, and the figure goes in here once the run has finished. **The Linux job is the interesting half:** it runs this whole gate over a Unix domain socket rather than a named pipe, which is what makes the 250 ms silence bound a claim about the daemon rather than about Windows |
+
+**Delivered: one test target and three affordances, and that ratio is the
+point.** `crates/prismd/tests/resilience.rs` is 700 lines of assertions; what it
+needed from the rest of the workspace was `MockOutputHandle::timeline` (every
+frame **with the time it arrived**), `ServerHandle::clients` (which connections
+exist, so a counter can be asked for by name) and `Daemon::server`. Nothing in
+the daemon had to change for the gate to pass, which is the result S17 was
+hoping for and could not claim.
+
+**The gate was checked by four deliberate regressions, and the first one is why
+the criterion has two halves.** Blacking the stage out when the last client
+disconnects — three words in `DeskHandler::disconnected` — leaves the frame
+timing *perfect*: 79 frames, longest gap 24 ms, no silence anywhere, and a dark
+stage. A gate written only about timing would have passed it. The other three:
+stopping the outputs once the last client has gone turns the gate red on the
+frames that never arrive; swallowing the `ExecutorState` delta turns the
+reconnect test red with `isActive: false` against `true`, which is a client
+silently drifting from the daemon; and making telemetry non-droppable turns the
+backpressure test red, because the counter that says a picture was dropped never
+moves and the client is disconnected on a full control queue instead.
+
 ---
 
 ## 3. Coverage tracking
@@ -774,10 +813,10 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
-| `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
+| `prism-protocols` | **> 95 %** | **98.43 % lines** (S18, re-measured because `MockOutput` grew a timestamped recording — `output.rs` is at **100 % lines, regions and functions**). S10's measurement, whose reasoning still holds: **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
-| `prism-ipc` | ≥ 85 % | **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
-| `prismd` | ≥ 85 % | **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 | 2026-08-12 (S17) |
+| `prism-ipc` | ≥ 85 % | **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
+| `prismd` | ≥ 85 % | **94.73 % lines**, 94.81 % regions, 96.36 % functions (S18) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
 | `ui` | ≥ 85 % | — | |
 
 ### Performance gates
@@ -976,6 +1015,10 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-12 | S18 | **"No gap" is two claims, and a mutation check is what proved one of them is not enough.** The criterion says *the output frame sequence has no gap across the whole run*, and the obvious reading is about the frames arriving. It is the wrong half on its own: a daemon that blacks the stage out when its last client disconnects — three words in `DeskHandler::disconnected` — produces a **perfect** recording, 79 frames, longest gap 24 ms, no silence anywhere, and a dark hall. The mirror-image defect is a daemon that freezes holding a good frame, which any content-only assertion passes | Both, and neither is optional. **(1) No silence:** consecutive frames for one universe are never more than **250 ms** apart — eleven output cadences, against a measured 24–51 ms — over the whole run, with the kill asserted to fall *inside* the recorded window. **(2) No unbidden darkness:** from the frame the show's look is first complete on, every later frame still carries it, the light in question being the one the *dead client* asked for. The 250 ms is chosen against the failure rather than against the jitter: an output coupled to a client stalls for as long as the client takes to die, which is not 250 ms, and a DMX receiver holds its last look for about a second. **This needed a change in `prism-protocols`:** `MockOutputHandle::frames()` had no times in it, and a list of frames without times cannot tell a driver's own cadence from a stage that stopped — so `MockOutput` records a `FrameRecord { at, universe, data }` and `timeline()` is what the gate reads |
+| 2026-08-12 | S18 | **The gate passed without a line of the daemon changing, and that is the result rather than an anticlimax.** S18 was set up as a session that might find defects — S8 found one in the break timing, S15 found one in the save path, S16 found a leaked named pipe. This one found none: `prismd` was already a process in which a client's death touches nothing but a log line and a `HashMap` entry | What the session delivered is a **proof** and three affordances the proof needed: `MockOutputHandle::timeline` (`prism-protocols`), `ServerHandle::clients` (`prism-ipc` — a per-client counter that can only be read by a caller who already knows the id is a counter nothing outside the module can read), and `Daemon::server`. Worth recording because the temptation in a gate session is to add machinery so that something has been built. The architecture is what was being tested, and the four deliberate regressions are the evidence the tests would have said so |
+| 2026-08-12 | S18 | **A killed client and a client that said goodbye are different tests, and the difference is what the D2 gate is about.** `Client::disconnect` flushes and shuts the socket down in order; S17's snapshot test uses it and it proves the polite case. The case D2 means is the machine being switched off | The client lives in a task that is **aborted while it is waiting**, with messages already queued for it that it will never read: the socket closes with no goodbye, mid-conversation, under backpressure. The daemon is then asserted to have *let go* — `client_count()` back to zero — which is S16's leaked named pipe stated as a test at the daemon level rather than at the transport's. The same shape is used for the reconnect criterion, so what a fresh client is compared against is a state a **dead** client had accumulated |
+| 2026-08-12 | S18 | **Backpressure could not be measured against the real daemon until the show was made wider, and the reason is arithmetic rather than design.** §7's telemetry frame is 514 bytes per **patched** universe. Against the three-fixture test rig — two universes, about a kilobyte a frame at 30 Hz — a client that stops reading takes several seconds to fill a socket buffer, and the first version of the test asserted `telemetry_dropped > 0` and was satisfied by **two** dropped frames, which is not a client that is behind | The backpressure gate opens a rig across **24 patched universes** (`common::write_wide_show`), so a frame is about twelve kilobytes and the buffer fills in a fraction of a second; and the assertion is scale-free rather than a count — the slow client must have **dropped more frames than it was given** (measured: 21 against 17). Scale-free on purpose: how big a socket buffer is differs between a Windows named pipe and a Unix domain socket, and CI runs this on both. The other two thirds of §8's sentence are measured separately because they fail separately — 40 command round trips in 27–59 ms for the client that *is* reading, and all 40 control deltas in order for the slow one once it comes back |
 | 2026-08-12 | S17 | **The liveness check is a file lock, not a process id — and that is stronger rather than merely more convenient.** `ARCHITECTURE_SPEC.md` §10.3 says a stale lock file is "detected through a PID liveness check". Two things are wrong with taking that literally. A **process id is reusable**: a daemon killed at three o'clock and a text editor started at four can have the same number, and a probe would then report a stale lock as live for ever — a desk that refuses to start and cannot say why. And a probe is **platform code**: `kill(pid, 0)` and `OpenProcess` are two implementations of one question, both need `unsafe` or a `#[cfg]`, and §10.1 allows this crate neither | `std::fs::File::try_lock`, stabilised in Rust 1.89: an advisory lock the operating system releases when the process ends, *including when it is killed*, which is the case the criterion is about. A second daemon does not ask whether process 4711 is alive, it asks whether anybody is holding the guard, and that answer cannot be wrong. The workspace `rust-version` moves 1.85 → 1.89 for it. **Two files, and that is the one wrinkle:** an exclusive lock on Windows stops *other processes reading the locked bytes*, and the whole point of §2.2's file is that clients read it — so the lock is held on an empty `prismd.guard` and the discovery document is an ordinary `prismd.lock` beside it. The process id is still written into it, because §2.2 says so and because it is what a person looks at; it is reported, not believed. **Checked by mutation:** removing the refusal on `WouldBlock` turns `a_second_daemon_is_refused_and_told_where_the_first_one_is` red |
 | 2026-08-12 | S17 | **The frame layout is the desk's whole universe range, not the show's — because a `FramePublisher`'s layout is fixed for its lifetime.** Every output thread and the telemetry channel is a subscriber attached before the tick starts (S2: `subscribe` allocates), and the layout is decided when the publisher is built. A layout built from `Show::universes()` would therefore mean that patching a fixture into a universe the show did not have yet takes effect **only after a restart** — in the middle of a get-in, which is exactly when a rig gains a universe | `frame_layout(count)` covers universes 1..=`count`, default 64 (`UniverseId::MAX`), overridable with `--universes`. The cost is 512 bytes of frame per unpatched universe, copied once per subscriber per tick: 32 KiB a frame at the full 64, which is the size S6's stress gate was measured at. **Telemetry is filtered back down to the universes the show actually patches**, because 64 universes at 30 Hz is a megabyte a second of nothing to every client, and `docs/IPC_PROTOCOL.md` §7's channel is droppable rather than free. The alternative — rebuilding the publisher and every output thread on a layout change — would have terminated the sACN streams mid-show to add a universe |
 | 2026-08-12 | S17 | **A rebuild replaces the whole `MergeBody`, and the tick thread neither allocates nor frees to accept it.** Everything that changes what the engine *is* allocates and says so: `MergeBody::for_patch`, `load_groups`, `load_sequence`, `load_programmer`. None may run on the tick (§3.1). Reaching into a body that lives on the tick thread is therefore not available, and the body cannot be moved without something standing in its place | The core thread builds a new body and leaves it in `BodySwap`. The tick reads **one atomic per tick** to find out whether there is one — free, and false almost always — and takes it with a `try_lock` that never blocks: a failed attempt costs a compare-and-swap and the body arrives 23 ms later. The body it replaces goes back the same way, so the *deallocation* is the core thread's too. The frame is blanked on the tick the new body arrives, which is the half of `Effect::Repatch` S11 named and the easy one to forget — the encoder writes only patched channels, so an unpatched one would keep what the old rig put there. **Checked by mutation:** dropping the blank turns three tests red, including `an_unpatched_channel_does_not_keep_what_the_old_rig_put_there`. **The cost, and it is a real one: a rebuild stops every playback**, where `MergeBody::load_sequence` alone stops only the executor whose cue list changed — `CuePlayer::load` leaves *its* playback stopped by design (S5), so the difference is about the other executors. **S28 requirement:** a cue editor that stores while a show is running wants a job mailbox carrying a prepared `SequencePlan` and returning the old one for the core thread to drop, rather than a whole body |
@@ -1158,18 +1201,41 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**There is a process.** `prismd` starts, takes the machine's single-instance
-lock, generates the desk's identity if it has none, opens a show, builds a merge
-body out of it, raises a tick thread to the priority §3 asks for, attaches every
-output, opens the listeners its command line asked for, publishes where it is,
-and drives DMX **with nobody connected** — which is D2 stated as a running
-program rather than as a diagram. A client that turns up is served the world and
-can go away again without the rig noticing.
+**D2 is proved.** A client connects, starts a sequence, and is killed where it
+stands — and the frames the rig was given afterwards are unbroken in time and
+unchanged in content, including the light the dead client asked for. It comes
+back to a state identical to the daemon's; a client of the wrong version is
+turned away in words that name both versions; and a client that stops reading
+loses pictures, loses no commands, and is invisible to the client beside it.
+Every one of those is asserted on something recorded, not on something watched.
 
-What has not been *proved* is the sentence the whole two-process design exists
-for. S17 asserts that a daemon runs without a client; **S18 asserts that killing
-one mid-show costs nothing**, on captured frames rather than by watching. Begin
-**S18** (the D2 gate — resilience). Use the prompt in §8.
+**Phase 4 is complete.** Begin **S19** (`prism-surface` — the MCU codec), which
+is where the desk grows a pair of hands. Use the prompt in §8.
+
+Carried out of S18:
+- **`MockOutputHandle::timeline()` is the shape every later gate should be
+  written against.** `FrameRecord { at, universe, data }` — the time is what
+  turns a list of frames into an assertion about a stage. `frames()` is still
+  there and is now a projection of it.
+- **"No gap" is two claims** — no silence over 250 ms, and the look never
+  changing by itself — because a mutation check proved a timing-only gate passes
+  a daemon that blacks out on disconnection. Any later gate about output
+  continuity inherits both halves.
+- **`ServerHandle::clients()` names the connections**, so `stats(id)` is
+  readable from outside; `Daemon::server()` hands the whole server to a status
+  panel (S27) or a test.
+- **A killed client is a task that is aborted**, not `Client::disconnect`. Every
+  later resilience test should kill rather than disconnect, and should then
+  assert `client_count()` returns to zero — that is S16's leaked pipe, one level
+  up.
+- **A backpressure test needs a wide show.** Telemetry is 514 bytes per patched
+  universe; against a two-universe rig nothing is under pressure for seconds.
+  `common::write_wide_show` is the fixture, and the assertion is *more dropped
+  than delivered* rather than a count, because CI measures this over a named
+  pipe and a Unix domain socket.
+- **`prismd` needed no change to pass its own gate.** The next session to touch
+  the daemon should know the resilience suite is a *regression* suite now: it
+  will notice anything that couples a client's life to the rig.
 
 Carried out of S17:
 - **`Daemon::recorded_outputs()` is what S18's gate is written against.** Every
@@ -1404,149 +1470,155 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S18 — das D2-Gate: Resilienz**
+**Next up: S19 — `prism-surface`: der MCU-Codec**
 
 ```text
-PrismDMX — Session S18: das D2-Gate, Resilienz
+PrismDMX — Session S19: prism-surface, der MCU-Codec
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Seit S17 gibt es einen Prozess. `prismd` startet, nimmt die Single-Instance-
-Sperre, öffnet eine Show, hebt einen Tick-Thread auf hohe Priorität, hängt die
-Ausgänge an, öffnet seine Listener und gibt DMX aus — auch dann, wenn sich nie
-ein Client verbindet. Was damit *behauptet*, aber noch nicht *bewiesen* ist, ist
-der eine Satz, für den die ganze Zwei-Prozess-Architektur existiert: dass das
-Sterben eines Clients mitten in der Show nichts kostet. Diese Session beweist
-ihn — an aufgezeichneten Frames, nicht durch Zusehen.
+Mit S18 ist Phase 4 fertig: es gibt einen Daemon, der DMX ausgibt, und es ist
+*bewiesen* — an aufgezeichneten Frames —, dass das Sterben eines Clients mitten
+in der Show das Licht weder anhält noch verändert. Was dem Pult jetzt fehlt,
+sind Hände. Diese Session baut die unterste der drei Schichten, mit denen ein
+Behringer X-Touch an PrismDMX hängt: den MIDI-Codec. Reine Bytes zu logischen
+Ereignissen und zurück, ohne eine Zeile Domänenlogik.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
-                                            und Teststandards
+                                            und Teststandards. §"Testing Policy"
+                                            verlangt >95 % Abdeckung für diese
+                                            Kiste, und die Zeile über MIDI
+                                            ("ein ungültiges Paket darf nie
+                                            fehlschlagen") ist hier das Thema
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.18 (was S17 geliefert
-                                            hat), §7 „Carried out of S17" und
-                                            alle Decision-Log-Einträge, die eine
-                                            „S18 requirement" nennen
+                                            besonders §2.19 (was S18 geliefert
+                                            hat), §5 (die MCU-Tabellen sind
+                                            **unverifiziert** — das ist der
+                                            wichtigste Satz für diese Session)
+                                            und §7 „Carried out of S18"
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S18
-4. ARCHITECTURE_SPEC.md §1 (Entscheidung D2), §3 (Threading-Modell), §10.3
-   (Lebenszyklus), §12 (Testpolitik — die Zeile „IPC resilience (D2)" ist das
-   Gate dieser Session)
-5. docs/IPC_PROTOCOL.md §4.2 (Versionsverhandlung), §7 (Telemetrie), §8
-   (Backpressure und Ausfall), §9 (Tests — die Zeilen „IPC resilience (D2 gate)"
-   und „Backpressure")
-6. crates/prismd/src/daemon.rs            — `Daemon::start`, `run`, `shutdown`
-                                            und `recorded_outputs`
-7. crates/prismd/tests/daemon.rs und tests/wiring.rs — die Muster, an die sich
-                                            neue Tests anhängen
-8. crates/prism-ipc/src/backpressure.rs und server.rs — die Politik aus §8 als
-                                            Zustandsmaschine, plus
-                                            `ServerHandle::stats`
-9. crates/prism-protocols/src/output.rs   — `MockOutput`/`MockOutputHandle`:
-                                            jede Frame, in Reihenfolge
+                                            von S19 und S20
+4. docs/MCU_MAPPING.md — die ganze Datei, sie ist die Spezifikation dieser
+   Session: §1 (die drei Schichten und warum sie getrennt sind), §2 (die
+   Protokolltabellen, **mit dem UNVERIFIED-Banner**), §2.3 (die vier
+   Robustheitsanforderungen an den Codec), §6 (Testtabelle), §7 (die
+   Hardware-Checkliste, die S20 abarbeitet)
+5. ARCHITECTURE_SPEC.md §1 (Entscheidungen D6, D8, D11), §3 (Threading-Modell —
+   der Surface-Thread), §10.1 (welche Kisten `#[cfg(target_os = ...)]` dürfen),
+   §12 (Testpolitik — die Zeile „Unit (MCU codec)"), §14 (offene
+   Verifikationspunkte)
+6. crates/prism-surface/src/lib.rs        — heute nur Moduldokumentation; das
+                                            ist der Platz, auf den gebaut wird
+7. crates/prism-protocols/src/sacn.rs und artnet.rs — das Muster für einen
+                                            Byte-Codec in diesem Projekt: jedes
+                                            Feld einzeln behauptet, Tabellen als
+                                            Daten, keine Zahl im Code versteckt
+8. crates/prism-engine/tests/tick_allocations.rs — der zählende Allocator, mit
+                                            dem „keine Allokation" gemessen und
+                                            nicht behauptet wird
+9. crates/prism-domain/src/lib.rs         — die Typen, auf die `prism-surface`
+                                            heute allein angewiesen ist
 
-Stand nach S17 — nichts davon musst du neu bauen:
+Stand nach S18 — nichts davon musst du neu bauen:
 - `prism-domain` (S1), `prism-engine` (S2–S6), `prism-protocols` (S7–S10),
-  `prism-core` (S11–S15) und `prism-ipc` (S16) sind vollständig.
-- `prismd` (S17) ist eine Bibliothek mit einem dreißigzeiligen Binary darauf:
-  `lock` (Single-Instance und Discovery-Datei), `machine` (Pult-Identität),
-  `paths`, `engine` (Tick-Thread, Priorität, Body-Übergabe), `core`
-  (`ShowFile` + `ShowStore` + Effekte), `server` (der `ServerHandler`),
-  `daemon` (Aufbau, Timer, Telemetrie, Shutdown), `cli`, `log`.
-  95 Tests, 94,80 % Zeilenabdeckung.
-- Insgesamt 1132 Tests im Workspace, alle grün, CI vierfarbig grün.
+  `prism-core` (S11–S15), `prism-ipc` (S16) und `prismd` (S17) sind vollständig.
+- S18 hat das D2-Gate bewiesen (`crates/prismd/tests/resilience.rs`) und dafür
+  drei Kleinigkeiten ergänzt: `MockOutputHandle::timeline()`,
+  `ServerHandle::clients()` und `Daemon::server()`.
+- Insgesamt 1140 Tests im Workspace, alle grün, CI vierfarbig grün.
+- `crates/prism-surface` existiert als Kiste mit einer `lib.rs` voller
+  Moduldokumentation und **ohne eine Zeile Code**. Ihre einzige Abhängigkeit ist
+  `prism-domain`. Sie ist plattformneutral und wird im Linux-CI-Job mitgetestet.
 
-Aufgabe: Session S18 umsetzen — das D2-Gate.
+Aufgabe: Session S19 umsetzen — Schicht 1 aus docs/MCU_MAPPING.md, der MCU-Codec.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Ein Client verbindet sich und wird **mitten in der Show getötet**: die Folge
-  der ausgegebenen Frames hat über den **ganzen Lauf** keine Lücke — an
-  aufgezeichneten Frames behauptet, nicht von Hand beobachtet
-- Der Client verbindet sich erneut und re-snapshottet auf einen Zustand, der mit
-  dem des Daemons identisch ist
-- Eine Protokollversions-Abweichung erzeugt ein ausdrückliches `Reject`, niemals
-  undefiniertes Verhalten
-- Backpressure: ein absichtlich langsamer Client verliert Telemetrie, verliert
-  **kein** Kommando und beeinflusst andere Clients nicht
-- `cargo test -p prismd` ist grün
+- Tabellengetriebene Round-Trip-Tests: Bytes → Ereignis → Bytes, in **beiden**
+  Richtungen byte-gleich
+- Running Status wird identisch dekodiert wie ein ausgeschriebenes Statusbyte
+- Fuzzing mit abgeschnittenen und außerhalb des Bereichs liegenden Nachrichten:
+  kein Panic, **kein Allokationswachstum**, korrekte Verwurf-Zähler
+- SysEx über mehrere Pakete verteilt setzt sich wieder zusammen; ein
+  unabgeschlossenes SysEx läuft in einen Timeout und wird verworfen
+- `cargo test -p prism-surface` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
-- Abdeckung auf `prismd` gemessen mit `cargo llvm-cov -p prismd --summary-only`
-  und in PROGRESS.md eingetragen
+- Abdeckung auf `prism-surface` **> 95 %**, gemessen mit
+  `cargo llvm-cov -p prism-surface --summary-only` und in PROGRESS.md eingetragen
 
-Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **„Keine Lücke" braucht eine Definition, und die zu wählen ist ein Teil der
-  Aufgabe.** `MockOutputHandle::frames()` gibt jede Frame in Reihenfolge zurück,
-  und `Daemon::recorded_outputs()` gibt es genau dafür. Eine fehlende Frame in
-  dieser Liste allein sagt wenig, weil ein Treiber auf eigener Kadenz sendet —
-  brauchbar ist eine Aussage über die *zeitlichen Abstände* oder darüber, dass
-  der Look nie unbeabsichtigt auf Null fällt. Was auch immer gewählt wird: es
-  gehört in den Decision Log, und ein Test, der „keine Lücke" so definiert, dass
-  er nicht scheitern kann, ist keiner.
-- **Ein Test darf keine echte Hardware anfassen** (CLAUDE.md), und **kein Test
-  darf Multicast oder Broadcast senden** (S10). Der Mock-Ausgang ist der Modus,
-  den ARCHITECTURE_SPEC.md §12 dafür vorsieht.
-- **Die Daemon-Tests nehmen einander abwechselnd dran**
-  (`common::one_daemon_at_a_time` in `crates/prismd/tests/common/mod.rs`). Ein
-  Daemon besitzt einen Echtzeit-Tick-Thread; mehrere in einem Prozess messen
-  einander statt den Daemon — das ist S6s Fund eine Ebene höher, und in S17 ist
-  genau daran ein Test gescheitert, der mit Timing nichts zu tun hatte.
-- **Ein getöteter Client ist nicht dasselbe wie ein sauber getrennter.**
-  `Client::disconnect` ist der saubere Fall; das Fallenlassen der Verbindung
-  ohne Abmeldung ist der Fall, den D2 meint. S16 hat dafür bezahlt: ein Leser,
-  der nur am Streamende aufhört, hat eine Windows-Named-Pipe geleakt.
-- **Backpressure ist bereits gebaut und getestet, aber nicht *gemessen*** (S16):
-  `crates/prism-ipc/tests/backpressure.rs` zeigt die Politik durch einen Socket;
-  `ServerHandle::stats(client)` liefert die Zähler. Was fehlt, ist die Aussage
-  über *andere* Clients — dass ein langsamer keinen schnellen bremst.
-- **`ServerConfig::goodbye` begrenzt beides**: das Warten auf Platz und das
-  letzte Flushen. Die Nachricht ist Best-Effort, die Trennung nicht.
-- **Der `Snapshot` trägt drei Dokumente** — Show, Session und Programmer —, und
-  §9s Zeile *snapshot completeness* ist die zweite Hälfte des zweiten
-  Exit-Kriteriums: der Snapshot eines frischen Clients muss gleich dem Zustand
-  sein, den ein bestehender Client durch akkumulierte Deltas erreicht hat.
-  `prism_core::ShowMirror` und `SessionMirror` sind die Applier dafür.
-- **`Delta::ExecutorState` trägt heute keinen Cue-Index, den der Daemon nicht
-  ohnehin schon hatte** (S17): es gibt noch keinen Rückkanal vom Tick. Wenn
-  diese Session einen braucht, hat `TickHealth` die Form — Atomics, vom
-  Tick-Body geschrieben, vom Daemon gelesen.
-- **Ein Wiederaufbau der `MergeBody` stoppt alle Playbacks** (S17). Falls das
-  Gate eine laufende Sequenz über den ganzen Lauf hinweg braucht, darf während
-  des Laufs nichts gepatcht oder gespeichert werden — oder die Schuld aus dem
-  Decision Log wird hier eingelöst statt in S28.
-- **`prismd` darf `#[cfg(target_os = ...)]` nicht enthalten** (ARCHITECTURE_SPEC.md
-  §10.1 nennt die Kiste nicht), und die CI führt `cargo test -p prismd` seit S17
-  auch im **Linux**-Job aus — dort über einen Unix-Domain-Socket statt über eine
-  Named Pipe.
+Wichtige Randbedingungen:
+- **Die Zahlen in §2 sind unverifiziert, und das ist eine Entwurfsvorgabe, kein
+  Mangel.** S20 hält sie mit einem MIDI-Monitor gegen ein echtes Gerät. Damit
+  diese Verifikation eine *Datenänderung* bleibt und kein Refactoring, gehören
+  Notennummern, CC-Nummern und Kanäle in eine **Tabelle als Daten** — so wie S8
+  es mit `DeviceProfile::SH_RS09B` vorgemacht hat: dort waren es am Ende drei
+  Felder und ein Test. Eine Zahl, die in einem `match` steht, ist an der
+  falschen Stelle.
+- **Der Codec ist rein.** `docs/MCU_MAPPING.md` §1: „MIDI bytes ↔ logical
+  control events. Pure, no domain logic, no state beyond the running-status
+  parser." Kein `Command`, kein Show-Modell, keine Session — das ist Schicht 3
+  und gehört zu S21/S22.
+- **„Keine Allokation" wird gemessen, nicht behauptet.** §2.3: *the codec
+  allocates nothing per message; it writes into caller-provided buffers*.
+  `crates/prism-engine/tests/tick_allocations.rs` und
+  `crates/prism-ipc/tests/oversized_frame.rs` haben beide einen zählenden
+  globalen Allocator; S16 hat dabei gelernt, dass eine funktional richtige
+  Implementierung die falsche sein kann und nur der Zähler den Unterschied
+  sieht. Der SysEx-Puffer ist die eine Ausnahme, und er hat eine Obergrenze.
+- **Ein verworfenes Paket wird gezählt, nicht verschwiegen.** CLAUDE.md verlangt
+  strukturiertes Logging statt `println!`, und S10/S11 haben mehrfach
+  aufgeschrieben, warum ein stilles Verwerfen die schlimmere Variante ist: was
+  niemand zählt, kann niemand suchen. Die Zähler sind Teil der Schnittstelle.
+- **Round-Trip heißt in beide Richtungen byte-gleich**, und S16 hat gelernt,
+  woran ein Round-Trip-Test vorbeimessen kann: `to_vec` und `to_vec_named`
+  liefern beide etwas, das sich wieder einlesen lässt — erst die Behauptung
+  über die **Bytes** hat den Unterschied gesehen. Für 14-Bit-Pitch-Bend (LSB
+  zuerst!) und die Vorzeichen-Betrag-Kodierung der V-Pots gilt dasselbe.
+- **Property-Tests, wo eine Tabelle nicht reicht.** `prism-domain` hat ein
+  `proptest`-Feature, das `prism-engine` und `prism-ipc` beide benutzen; für
+  „jedes gültige Ereignis kodiert und dekodiert sich wieder zu sich selbst" ist
+  das die passende Form.
+- **Kein Test darf echte Hardware anfassen** (CLAUDE.md). Alle Tests laufen
+  gegen einen Mock-MIDI-Port; ein X-Touch am USB-Port dieses Rechners darf von
+  `cargo test` nichts merken. Die Hardware-Session ist S20.
+- **`prism-surface` ist plattformneutral** (ARCHITECTURE_SPEC.md §10.1 nennt sie
+  nicht), und die CI führt ihre Tests im Linux-Job aus. Eine MIDI-*Anbindung*
+  (`midir` o. ä.) ist plattformabhängig und gehört **nicht** in diese Session:
+  S19 ist der Codec, also Bytes hinein und Bytes hinaus.
+- **Neue Abhängigkeiten vor der ersten Zeile gegen ARM64 prüfen** — S15 und S16
+  haben das jeweils vorher getan und einmal einen fehlenden C-Compiler dabei
+  gefunden: `cargo check -p prism-surface --all-targets --target
+  aarch64-unknown-linux-gnu`.
 - **Ein Test-Fixture aus lauter Default-Werten kann „korrekt übertragen" nicht
-  von „nie angefasst" unterscheiden** (S14-Fund, seit S15 Regel).
-- **Jedes Warten in einem Test braucht eine Frist.** S16 hat einen Test
-  gepusht, der auf eine Nachricht wartete, die niemand versprochen hatte; der
-  CI-Job stand vierzig Minuten. Der Workflow hat seitdem `timeout-minutes`.
+  von „nie angefasst" unterscheiden** (S14-Fund, seit S15 Regel). Für einen
+  Codec heißt das: keine Nullen als Testwerte, kein Kanal 1, keine Note 0.
+- **Jedes Warten in einem Test braucht eine Frist.** Der SysEx-Timeout ist die
+  Stelle, an der das hier auftaucht — und er gehört an eine `Clock`, so wie
+  `prism-protocols::OutputRunner` seine Backoff-Politik gegen `ManualClock`
+  testbar gemacht hat, statt eine echte Sekunde zu warten.
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S17 haben
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S18 haben
   ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
-  geprüft. S17 hat dabei gelernt, dass auch eine Gegenprobe, die **nichts** rot
-  macht, ein Ergebnis ist — sie sagt, welche der beiden Zeilen trägt.
-- **Ein roter Timing-Test ist zuerst eine Frage an die Maschine, nicht an den
-  Code.** `the_tick_holds_its_deadline_for_a_few_seconds` fiel in S13 zweimal
-  aus, beide Male weil der Rechner nebenher beschäftigt war. Der Test druckt
-  dafür selbst `probe thread turns: N/s`: erst diese Zeile lesen, dann das
-  Target allein laufen lassen (`cargo test -p prism-engine --test realtime`),
-  dann den Diff verdächtigen.
+  geprüft. S18 hat dabei den lehrreichsten Fall gehabt: eine Mutation, die das
+  Kriterium *formal* erfüllte und trotzdem falsch war — die Prüfung hat das
+  Kriterium verändert, nicht den Code.
 - **Clippy bewegt sich.** S17 musste acht bereits vorhandene Zeilen in drei
-  anderen Crates anfassen, weil `stable` seit S16 einen neuen Lint mitbringt.
-  Ein „war letztes Mal grün" ist kein Beleg; die Prüfung jetzt laufen lassen.
+  anderen Kisten anfassen, weil `stable` einen neuen Lint mitbrachte. Ein „war
+  letztes Mal grün" ist kein Beleg; die Prüfung jetzt laufen lassen. `print!`
+  und `println!` sind workspace-weit verboten (`print_stdout = "warn"` plus
+  `-D warnings`); ein Test, der eine Messung ausgibt, trägt die Ausnahme
+  ausdrücklich.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
-  Node 24.11). Der Workspace verlangt seit S17 `rust-version = "1.89"`
-  (`File::try_lock`). Es ist kein weiteres Setup nötig.
+  Node 24.11, `cargo-llvm-cov`). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S18-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S19-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S19 (`prism-surface` — MCU-Codec) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. test(ipc): …
+  Session S20 (🔌 Hardware-Verifikation X-Touch) überschreiben — und dort
+  ausdrücklich vermerken, dass diese Session ein Gerät braucht
+- Mit Conventional-Commit-Message committen, z. B. feat(surface): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```

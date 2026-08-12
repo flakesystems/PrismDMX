@@ -103,7 +103,7 @@ pub use ftdi::{
     PortConfig, StopBits, spin_wait, transmission_time,
 };
 pub use opendmx::{DMX_PACKET_BYTES, OpenDmxUsb, START_CODE};
-pub use output::{DmxOutput, MockOutput, MockOutputHandle, OutputError};
+pub use output::{DmxOutput, FrameRecord, MockOutput, MockOutputHandle, OutputError};
 pub use runner::{
     Backoff, BackoffConfig, OutputRunner, OutputStatus, OutputThread, RunnerConfig, StepOutcome,
     spawn,

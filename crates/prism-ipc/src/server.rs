@@ -451,6 +451,19 @@ impl ServerHandle {
         self.inner.clients.lock().await.len()
     }
 
+    /// Which clients are connected, oldest first.
+    ///
+    /// A status panel (S27) shows one row per connection, and S18's gate needs
+    /// to name a particular one to ask [`Self::stats`] about it — a counter that
+    /// can only be read by a caller who already knows the id is a counter
+    /// nothing outside this module can read at all. Ordered by id, which is the
+    /// order the connections were accepted in.
+    pub async fn clients(&self) -> Vec<ClientId> {
+        let mut ids: Vec<ClientId> = self.inner.clients.lock().await.keys().copied().collect();
+        ids.sort_unstable();
+        ids
+    }
+
     /// The queue counters for one client, for a status panel and for S18's gate.
     pub async fn stats(&self, id: ClientId) -> Option<OutboundStats> {
         let clients = self.inner.clients.lock().await;
@@ -1059,9 +1072,49 @@ mod tests {
         let stats = server.stats(ClientId(1)).await.unwrap();
         assert_eq!(stats.telemetry_sent, 1);
         assert_eq!(server.stats(ClientId(999)).await, None);
+        assert_eq!(server.clients().await, vec![ClientId(1)]);
 
         drop(client);
         task.await.unwrap();
+    }
+
+    /// A caller that wants a client's counters has to be able to find out which
+    /// clients there are, and in which order they arrived.
+    #[tokio::test]
+    async fn the_connected_clients_are_listed_oldest_first() {
+        let handler = std::sync::Arc::new(Recording::default());
+        let server = server(&handler);
+        assert!(server.clients().await.is_empty());
+
+        let mut clients = Vec::new();
+        let mut tasks = Vec::new();
+        for _ in 0..3 {
+            let (mut client, daemon) = memory::pair();
+            tasks.push(server.spawn(daemon));
+            client.send_message(&hello()).await.unwrap();
+            let _snapshot = client
+                .recv_message::<ServerMessage>()
+                .await
+                .unwrap()
+                .unwrap();
+            clients.push(client);
+        }
+        assert_eq!(
+            server.clients().await,
+            vec![ClientId(1), ClientId(2), ClientId(3)]
+        );
+
+        // The middle one leaves, and the list is what is left rather than what
+        // there once was.
+        clients.remove(1);
+        tasks.remove(1).await.unwrap();
+        assert_eq!(server.clients().await, vec![ClientId(1), ClientId(3)]);
+
+        drop(clients);
+        for task in tasks {
+            task.await.unwrap();
+        }
+        assert!(server.clients().await.is_empty());
     }
 
     /// §3, from the daemon's side: an oversized frame closes the connection.

@@ -146,6 +146,42 @@ pub fn write_show(path: &Path) {
     store.save(&mut file).unwrap();
 }
 
+/// How many universes the wide rig spans.
+///
+/// Sized by what it is for rather than by realism, though it is realistic
+/// enough: a telemetry frame carries 514 bytes per **patched** universe
+/// (`docs/IPC_PROTOCOL.md` §7), so twenty-four of them is about twelve
+/// kilobytes thirty times a second — enough that a client which has stopped
+/// reading fills a socket buffer in a fraction of a second instead of several.
+/// A backpressure test that took ten seconds to reach the state it is about
+/// would be a test nobody runs.
+pub const WIDE_UNIVERSES: u32 = 24;
+
+/// How many commands the backpressure gate sends past a client that is not
+/// reading.
+///
+/// Comfortably under `prism_ipc::DEFAULT_CONTROL_QUEUE`, because the claim being
+/// measured is *no control message is dropped* — a client pushed past the queue
+/// limit is disconnected on purpose and would be measuring the other half of §8.
+pub const SLOW_CLIENT_COMMANDS: u32 = 40;
+
+/// The rig of [`show_file`] with one more dimmer in every universe up to
+/// `universes`, written to a `.prism` file.
+///
+/// Patched rather than merely configured: `prismd` filters telemetry down to the
+/// universes the show actually patches, so a wide *layout* over a narrow show
+/// would carry exactly as little as before.
+pub fn write_wide_show(path: &Path, universes: u32) {
+    let mut file = show_file();
+    for universe in 3..=universes {
+        file.show
+            .patch_fixture(fixture(100 + universe, "generic.dimmer", universe, 1))
+            .unwrap();
+    }
+    let mut store = ShowStore::open(path).unwrap();
+    store.save(&mut file).unwrap();
+}
+
 /// The last frame the output was given for one universe.
 ///
 /// Not simply the last frame: an output carrying several universes sends them
