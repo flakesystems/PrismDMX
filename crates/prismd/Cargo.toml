@@ -7,6 +7,19 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# A library beside the binary, so the daemon can be started inside a test
+# process. `tests/` links a crate's *library* target and a binary has none, and
+# the exit criteria for this session — a daemon that runs with no client, a
+# second instance that refuses to start, a stale lock file that is taken over —
+# are all statements about a running daemon.
+[lib]
+name = "prismd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "prismd"
+path = "src/main.rs"
+
 [dependencies]
 prism-core = { path = "../prism-core" }
 prism-domain = { path = "../prism-domain" }
@@ -14,6 +27,39 @@ prism-engine = { path = "../prism-engine" }
 prism-ipc = { path = "../prism-ipc" }
 prism-protocols = { path = "../prism-protocols" }
 prism-surface = { path = "../prism-surface" }
+serde = { workspace = true }
+# The machine configuration is a file a technician reads and occasionally
+# edits, so it is JSON rather than the MessagePack the show file uses.
+serde_json = { workspace = true }
+# ARCHITECTURE_SPEC.md section 3 names the runtime for `core-main`. The engine
+# tick is not on it: that is an OS thread of its own, at a priority of its own.
+tokio = { version = "1.49", features = [
+    "rt",
+    "rt-multi-thread",
+    "net",
+    "sync",
+    "time",
+    "signal",
+    "macros",
+] }
+# The desk identity is a UUID and a UUID needs entropy. `prism-core` is
+# dependency-free by rule and says so in as many words (`desk.rs`): it parses,
+# holds and formats a `DeskId`, and one is generated here.
+getrandom = "0.4"
+# Where the platform code for the tick thread's priority lives, and the reason
+# it is a dependency at all: `prismd` may contain no `#[cfg(target_os = ...)]`
+# (ARCHITECTURE_SPEC.md section 10.1), raising a thread's priority is
+# `SetThreadPriority` on Windows and `pthread_setschedparam` elsewhere, and the
+# workspace forbids `unsafe_code`. The same move S16 made with tokio's `net`
+# feature for the named pipe and the Unix domain socket.
+thread-priority = "3"
+
+[dev-dependencies]
+prism-ipc = { path = "../prism-ipc" }
+# Show files and lock files under test go into a directory that removes itself,
+# including after a panic.
+tempfile = "3"
+tokio = { version = "1.49", features = ["test-util"] }
 
 [lints]
 workspace = true

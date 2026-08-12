@@ -31,7 +31,11 @@ The WebSocket listener binds to loopback unless the user explicitly enables LAN 
 
 ### 2.2 Discovery
 
-`prismd` writes a lock file into the user data directory containing its PID and the IPC endpoint. Clients read it to find the daemon. A stale file left by a crash is detected with a PID liveness check and replaced. This same file provides the single-instance guarantee described in `ARCHITECTURE_SPEC.md` §10.3 — two daemons driving the same output must be structurally impossible.
+`prismd` writes a lock file into the user data directory containing its PID and the IPC endpoint. Clients read it to find the daemon. A stale file left by a crash is detected and replaced. This same file provides the single-instance guarantee described in `ARCHITECTURE_SPEC.md` §10.3 — two daemons driving the same output must be structurally impossible.
+
+**As built (S17).** `prismd.lock` is the document: `{ pid, local?, websocket?, token? }`, as JSON, rewritten whenever a listener binds — so an endpoint in it is one that already exists. Beside it is `prismd.guard`, an empty file the daemon holds an advisory lock on for its whole life; that lock is the single-instance guarantee and the staleness check at once, because the operating system releases it when the process ends, killed or not. The two are separate files because an exclusive lock on Windows would stop clients reading the document. `ARCHITECTURE_SPEC.md` §10.3 has the rest of the reasoning, including why the process id is reported rather than believed.
+
+The local endpoint is `prism_ipc::local::daemon_address(label)`, where the label is derived from the data directory — so two user accounts on one machine do not ask for the same pipe name, and a client that knows the directory can work out the address without reading anything. Reading the file is still the way to do it: that is what makes discovery one file rather than two programs agreeing about a hash.
 
 ---
 

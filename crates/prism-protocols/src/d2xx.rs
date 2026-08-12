@@ -170,7 +170,7 @@ const fn data_format(port: &PortConfig) -> Result<(BitsPerWord, FtStopBits, FtPa
 /// the break timing is broken up by the USB stack instead of by us.
 const fn transfer_size(port: &PortConfig) -> Result<u32, FtdiError> {
     let size = port.write_transfer_size;
-    if size < 64 || size > 64 * 1024 || size % 64 != 0 {
+    if size < 64 || size > 64 * 1024 || !size.is_multiple_of(64) {
         return Err(FtdiError::Config);
     }
     Ok(size)

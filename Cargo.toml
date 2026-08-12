@@ -5,7 +5,12 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+# Raised from 1.85 in S17. `std::fs::File::try_lock` was stabilised in 1.89 and
+# it is what `prismd` uses for the single-instance guarantee: an advisory lock
+# the operating system releases when the process ends is a liveness check that
+# needs no platform code, where asking whether a process id is alive does.
+# `PROGRESS.md`'s decision log has the reasoning.
+rust-version = "1.89"
 license = "MIT"
 publish = false
 

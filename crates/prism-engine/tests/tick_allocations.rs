@@ -263,8 +263,8 @@ fn patch(layout: &FrameLayout, fixture_type: &FixtureType, count: u32) -> Vec<Fi
             address: ((index % per_universe) * footprint) as u16 + 1,
             position: Vec3::ZERO,
             rotation: Vec3::ZERO,
-            invert_pan: index % 2 == 0,
-            invert_tilt: index % 2 == 0,
+            invert_pan: index.is_multiple_of(2),
+            invert_tilt: index.is_multiple_of(2),
         })
         .collect()
 }
@@ -320,7 +320,7 @@ fn a_tick_running_the_merge_makes_no_allocator_call_either() {
             let executor = ExecutorId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::SetExecutorActive {
                 executor,
-                on: index % 2 == 0,
+                on: index.is_multiple_of(2),
             });
             let _ = producer.push(TickCommand::SetExecutorLevel {
                 executor,
@@ -377,7 +377,7 @@ fn a_tick_running_the_encoder_as_well_makes_no_allocator_call_either() {
             let executor = ExecutorId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::SetExecutorActive {
                 executor,
-                on: index % 2 == 0,
+                on: index.is_multiple_of(2),
             });
             let _ = producer.push(TickCommand::SetExecutorLevel {
                 executor,
@@ -510,7 +510,7 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
             // release path and the activation path are measured too.
             let _ = producer.push(TickCommand::SetExecutorActive {
                 executor: ExecutorId::new(u32::from(index % 8) + 1),
-                on: index % 32 != 0,
+                on: !index.is_multiple_of(32),
             });
             engine.run_ticks(&clock, 1);
             subscriber.refresh();
@@ -611,9 +611,9 @@ fn a_tick_with_the_programmer_and_the_masters_makes_no_allocator_call_either() {
             // The programmer filling up and being cleared out again, which is
             // the operation a naive implementation would allocate for.
             let slot = u32::from(index) % 768;
-            let _ = producer.push(if index % 5 == 0 {
+            let _ = producer.push(if index.is_multiple_of(5) {
                 TickCommand::ClearProgrammerValue { slot }
-            } else if index % 64 == 0 {
+            } else if index.is_multiple_of(64) {
                 TickCommand::ClearProgrammer
             } else {
                 TickCommand::SetProgrammerValue { slot, value: index }

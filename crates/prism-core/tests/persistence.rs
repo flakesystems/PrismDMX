@@ -92,8 +92,8 @@ fn hung(id: u32, type_id: &str, universe: u32, address: u16, x: f64) -> Fixture 
             y: 180.0,
             z: 90.5,
         },
-        invert_pan: id % 2 == 0,
-        invert_tilt: id % 3 == 0,
+        invert_pan: id.is_multiple_of(2),
+        invert_tilt: id.is_multiple_of(3),
     }
 }
 

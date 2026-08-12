@@ -195,6 +195,39 @@ pub async fn connect(address: &str) -> io::Result<Wire> {
     ))
 }
 
+/// The address a daemon listens on, for a caller that has a label to
+/// distinguish its instance by.
+///
+/// The platform split of this module, in the one place a *findable* address is
+/// needed: a pipe name under Windows, a socket path elsewhere. The label is
+/// what stops two daemons on one machine — two user accounts, each with their
+/// own data directory — from asking for the same name; `prismd` derives it from
+/// its data directory so that a client which knows the directory can work out
+/// the address without reading anything.
+///
+/// It is still written into the lock file of §2.2, because that is what makes
+/// discovery a matter of reading one file rather than of two programs agreeing
+/// about a hash.
+///
+/// The socket goes under the temporary directory rather than beside the show,
+/// for the reason [`scratch_address`] gives: the kernel limits a Unix socket
+/// path to about a hundred bytes, and a user's home directory can be most of
+/// that on its own.
+#[must_use]
+pub fn daemon_address(label: &str) -> String {
+    #[cfg(windows)]
+    {
+        format!(r"\\.\pipe\prismdmx-{label}")
+    }
+    #[cfg(unix)]
+    {
+        std::env::temp_dir()
+            .join(format!("prismdmx-{label}.sock"))
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
 /// An address nothing else is using.
 ///
 /// Named for what it is: a scratch endpoint. Tests need one per test, because a
@@ -304,6 +337,28 @@ mod tests {
         let first = LocalListener::bind(&address).unwrap();
         assert!(LocalListener::bind(&address).is_err());
         drop(first);
+    }
+
+    /// The address a daemon publishes has to be the same one every time it
+    /// starts, or the lock file of §2.2 is the only way to find it and a client
+    /// that has lost the file has lost the daemon.
+    #[tokio::test]
+    async fn a_daemon_address_is_stable_for_a_label_and_different_between_labels() {
+        use super::daemon_address;
+
+        assert_eq!(daemon_address("aula"), daemon_address("aula"));
+        assert_ne!(daemon_address("aula"), daemon_address("studio"));
+        assert!(daemon_address("aula").contains("aula"));
+        assert!(!daemon_address("aula").contains(&std::process::id().to_string()));
+
+        // And it is an address a listener actually takes.
+        let mut listener = LocalListener::bind(&daemon_address("prismd-test-label")).unwrap();
+        let address = listener.address().to_owned();
+        let dialling = tokio::spawn(async move { connect(&address).await.unwrap() });
+        let mut server_side = listener.accept().await.unwrap();
+        let client_side = dialling.await.unwrap();
+        client_side.send(vec![4]).await.unwrap();
+        assert_eq!(server_side.recv().await, Some(Ok(vec![4])));
     }
 
     #[test]

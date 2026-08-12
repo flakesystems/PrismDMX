@@ -65,6 +65,14 @@ jobs:
       # These crates must never contain #[cfg(target_os = ...)]. Running their
       # tests on a second platform is what proves it.
       #
+      # prismd is in the list from S17 for exactly that reason: section 10.1
+      # does not name it, so the daemon has none - and the three places it would
+      # otherwise have needed some (the user data directory, the tick thread's
+      # priority, the IPC endpoint) are resolved from the environment, from a
+      # dependency, and from prism-ipc respectively. Its tests here run against
+      # a Unix domain socket where the Windows job runs them against a named
+      # pipe, which is what keeps that claim honest.
+      #
       # prism-protocols is the exception that has to be here anyway: section
       # 10.1 does allow it platform code, but only for backend selection - the
       # DMX logic above the FtdiBackend trait must stay neutral, and every one
@@ -80,6 +88,7 @@ jobs:
           -p prism-surface
           -p prism-ipc
           -p prism-protocols
+          -p prismd
 
   linux-arm64-check:
     name: Linux ARM64 - cross-compile check

@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-12
 **Current phase:** Phase 4 — IPC and daemon
-**Current session:** S17 — `prismd` daemon binary (not started; see §8 for the prompt that starts it)
-**Last completed:** S16 — `prism-ipc` framing and transports ✅ — **the daemon has a wire**
+**Current session:** S18 — D2 gate, resilience (not started; see §8 for the prompt that starts it)
+**Last completed:** S17 — `prismd`, the daemon binary ✅ — **there is a process**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -71,7 +71,7 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S16 | `prism-ipc` framing and transports | ✅ | 2026-08-12 | All exit criteria verified — see §2.17. 131 tests, coverage 98.43 % lines. Three mutation checks confirm the three central tests are not vacuous, and one of them **aborted the process** — which is exactly the failure the nesting-depth limit exists to prevent |
-| S17 | `prismd` daemon binary | ☐ | | |
+| S17 | `prismd` daemon binary | ✅ | 2026-08-12 | All exit criteria verified — see §2.18. 95 tests, coverage 93.84 % lines. Five mutation checks; a sixth changed nothing, which is itself in the decision log. **Phase 4's daemon exists: there is a process** |
 | S18 | D2 gate — resilience | ☐ | | Mandatory gate |
 
 ### Phase 5 — Surface
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 17 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 18 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -708,6 +708,58 @@ client list for ever. It passed over the duplex and over WebSocket and failed
 over the pipe, which is the whole argument for running one suite over three
 transports rather than three suites over three transports.
 
+### 2.18 S17 verification record
+
+Measured on 2026-08-12, all exit criteria from `IMPLEMENTATION_PLAN.md` S17 and
+the session prompt. The first session that produces a **process** rather than a
+library.
+
+| Check | Result |
+|---|---|
+| The daemon starts, loads a show, outputs DMX to a mock driver, **with no client ever connecting** | ✅ `tests/daemon.rs::a_daemon_loads_a_show_and_drives_dmx_with_no_client_connected`. The show on the platter is the show in memory — three fixtures, not an empty one — and the assertion is on the **frames the driver was given**, because a daemon that held a show and published nothing would pass every other test in the file. It then runs for a second under its own timers with nobody attached and is asked what the tick managed: **44 Hz, within a window of 30 to 55**. A second rather than the fifty milliseconds it takes to see a frame, and that is S10's rule about percentiles applied to a mean — `tick_hz` is ticks over uptime, and over a short window the milliseconds between the engine starting and the clock starting are a measurable share of it |
+| A second instance detects the first and refuses to start — **asserted** | ✅ twice, at both levels. `lock.rs::a_second_daemon_is_refused_and_told_where_the_first_one_is` asserts the lock itself; `tests/daemon.rs::a_second_daemon_refuses_to_start_and_says_where_the_first_one_is` starts two real daemons on one data directory and asserts the refusal **names the process that has it** and, more to the point, that **the first daemon goes on driving the rig** while the second is turned away — two daemons on one output is the failure being prevented, so the test says what did *not* happen as well as what did. **Checked by mutation:** removing the refusal on `WouldBlock` turns it red |
+| A stale lock file (killed process) is detected and taken over | ✅ `tests/daemon.rs::a_lock_file_from_a_killed_daemon_is_taken_over`. The kill is simulated the only way one process can: the file system is put in exactly the state the operating system leaves it in when it reaps a daemon — the discovery document still there naming process 4711, a Unix socket file beside it, and **nothing holding the guard**. The new daemon takes it, rewrites the document with its own process id, and removes the socket file `LocalListener::bind` deliberately does not (S16 left that here). **Checked by mutation:** leaving the socket file turns it red |
+| The handshake serves a `Snapshot` with show **and** session | ✅ `tests/daemon.rs::a_client_connects_and_is_served_the_show_and_the_session`, over a real named pipe, with `prism_ipc::Client` doing the handshake — the client finds the daemon by **reading the lock file**, which is §2.2 exercised rather than described. Both documents are read the way a client reads them, through `prism_core::JsonMirror`. The session is deliberately **not** at its defaults (page 3, a command line with text in it), because a fixture built out of default values cannot tell "carried correctly" from "never touched" (S14). The programmer is there too, which is S16's third document. And the connection is a working one: a command reaches the show, the `ProgrammerChanged` delta arrives **before** the `Ack`, and the daemon goes on driving the rig after the client disconnects |
+| Shutdown with sACN termination and **configurable blackout-or-hold** | ✅ `tests/daemon.rs::a_daemon_told_to_black_out_publishes_a_blackout_before_it_stops` runs the same daemon twice and asserts the **last frame the output was actually given**: 255 with `--hold-on-exit`, 0 with `--blackout-on-exit`. Blackout is a frame and not a flag (S10), so the daemon publishes one and waits for the drivers to send it before stopping them; the sACN termination is `OutputRunner`'s, which runs `DmxOutput::shutdown` and is what carries the last look. **Checked by mutation:** stopping the outputs without giving the frame time to leave turns it red |
+| The desk identity is generated once and then kept (S10/S11's requirement) | ✅ `a_desk_identity_is_made_once_and_then_kept` starts and stops two daemons over one data directory and asserts the file is **byte-identical** — a fresh CID at every start is a new sACN source at every start, with the old one holding the universe for 2.5 s while the two fight. `tests/wiring.rs::an_sacn_output_unicast_carries_this_desks_identity` asserts the sixteen bytes in the E1.31 root layer **are** the identity in `machine.json` |
+| `cargo test -p prismd` | ✅ exit 0 — **80 lib tests** + 15 integration tests across two targets, 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **1 132 tests** across 37 targets, 14 ignored (unchanged: the S8 hardware target, the long engine runs, the crash test's child and the fixture regenerator) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 — and it took a fix to eight *pre-existing* lines in three other crates, because `stable` has moved since S16 and `manual_is_multiple_of` is new. See the decision log: a check that passed on Tuesday is not a check that passes on Thursday |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prismd` **≥ 85 %** | ✅ **94.80 % lines**, 94.83 % regions, 96.35 % functions. `main.rs` is 0 % and is 40 of the 144 uncovered lines — it is the process entry point and a binary target has no tests, which is why the daemon is a library with a binary on top; without it the crate reads **96.19 %**. The rest is four kinds, and each is a rule rather than an omission: the **Open DMX arm** (`CLAUDE.md`: no test may need a device, and this machine has the adapter S8 measured), the **sACN multicast destination** (S10: no test may put lighting data on the network it runs on — so the sACN output *is* tested, unicast to a loopback socket, which §7.2 names as the configuration for a venue that forbids multicast), error arms no input can reach, and the `Err` half of raising the tick thread's priority |
+| The daemon contains no `#[cfg(target_os = …)]` | ✅ and CI now runs `cargo test -p prismd` in the **Linux** job, where the same tests run over a Unix domain socket rather than a named pipe. The three places it would have needed one — the user data directory, the tick thread's priority, the IPC endpoint — are each in the decision log |
+| New dependencies pass the ARM64 cross-check | ✅ checked **before a line of the crate was written**, as the prompt asked: `thread-priority` 3.1 and `getrandom` 0.4 both compile for `aarch64-unknown-linux-gnu` and neither compiles C, so the CI job is unchanged. (The workspace as a whole cannot be cross-checked on this machine — `rusqlite`'s amalgamation wants `aarch64-linux-gnu-gcc`, which is what the ARM64 job installs — so the two new crates were checked on their own) |
+| CI green on the pushed commit | ⏳ RECORDED AFTER THE PUSH |
+
+**Delivered:** ten modules and a thirty-line binary. `lock` is the
+single-instance guarantee and §2.2's discovery file; `machine` is the desk
+identity; `paths` is where a daemon keeps its files, resolved from the
+environment rather than from a `#[cfg]`; `engine` is the tick thread, its
+priority and the hand-off of a rebuilt merge body; `core` is `ShowFile` plus
+`ShowStore` plus every effect that follows from a command; `server` is the one
+`ServerHandler` S16 asked for; `daemon` is the assembly, the timers, the
+telemetry channel and the shutdown; `cli` is sixteen options and a `--help` that
+is the documentation; `log` is the levelled logger `CLAUDE.md` requires.
+
+**The tick thread is the only thread in the process with a deadline, and it is
+the only one raised.** S6 measured both halves of that sentence — 45 missed
+ticks at ordinary priority, and 7 484 missed when the whole *process* was raised
+and the load came from inside it — so `prismd` raises the thread from inside
+itself and leaves the runtime, the driver threads and the surface alone.
+
+**Everything that changes what the engine is happens on the core thread.** A
+repatch, a group edit, a stored cue and a load all rebuild the whole
+`MergeBody`; the tick reads one atomic per tick to notice, takes the new body
+with a `try_lock` that never blocks, and hands the old one back to be freed
+somewhere that is allowed to free things. The frame is blanked on the tick the
+new body arrives, which is the half of `Effect::Repatch` S11 named and the easy
+one to forget.
+
+**Five mutation checks turned tests red and a sixth turned nothing red**, which
+is in the decision log because it is a fact about the design: diffing the
+programmer before the rebuild rather than after is belt and braces, and what
+actually holds is `MergeBody::load_programmer` in `build_body`.
+
 ---
 
 ## 3. Coverage tracking
@@ -725,6 +777,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-protocols` | **> 95 %** | **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | — | |
 | `prism-ipc` | ≥ 85 % | **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
+| `prismd` | ≥ 85 % | **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 | 2026-08-12 (S17) |
 | `ui` | ≥ 85 % | — | |
 
 ### Performance gates
@@ -745,8 +798,18 @@ the shell's default priority missed 45 ticks and had a p99.9 of 54 ms. The engin
 is not the difference: a three-minute run with *no* subscriber threads at all
 still stalled every twenty seconds or so, which is the Windows scheduler
 preempting a normal-priority thread. `prism-engine` cannot set its own priority —
-it is platform-neutral by rule — so **S17 must raise the tick thread's priority in
-`prismd`**, and the figure above is measured in that configuration.
+it is platform-neutral by rule — so the tick thread's priority is raised in
+`prismd`, and the figure above is measured in that configuration.
+
+**S17 does that**, in `crates/prismd/src/engine.rs`: the tick thread's first act
+is `thread_priority::set_current_thread_priority(Max)` on **itself**, so the
+process keeps its ordinary class and the runtime, the driver threads and the
+surface stay where they were. A refusal — an unprivileged Linux container, which
+is what D10's Raspberry Pi is — is a `WARN` and not a failure to start. The
+long-run figures above have **not** been re-measured through `prismd`; they are
+`prism-engine`'s own, taken the way §3.1 describes, and the daemon reproducing
+them at 64 universes over ten minutes is a measurement S18 or later should take
+rather than one this session claims.
 
 Measured on: Windows 11 26200, Rust 1.97.1 msvc, release profile, engine plus four
 subscriber threads polling at 5 ms, machine otherwise idle but not quiesced.
@@ -913,6 +976,16 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-12 | S17 | **The liveness check is a file lock, not a process id — and that is stronger rather than merely more convenient.** `ARCHITECTURE_SPEC.md` §10.3 says a stale lock file is "detected through a PID liveness check". Two things are wrong with taking that literally. A **process id is reusable**: a daemon killed at three o'clock and a text editor started at four can have the same number, and a probe would then report a stale lock as live for ever — a desk that refuses to start and cannot say why. And a probe is **platform code**: `kill(pid, 0)` and `OpenProcess` are two implementations of one question, both need `unsafe` or a `#[cfg]`, and §10.1 allows this crate neither | `std::fs::File::try_lock`, stabilised in Rust 1.89: an advisory lock the operating system releases when the process ends, *including when it is killed*, which is the case the criterion is about. A second daemon does not ask whether process 4711 is alive, it asks whether anybody is holding the guard, and that answer cannot be wrong. The workspace `rust-version` moves 1.85 → 1.89 for it. **Two files, and that is the one wrinkle:** an exclusive lock on Windows stops *other processes reading the locked bytes*, and the whole point of §2.2's file is that clients read it — so the lock is held on an empty `prismd.guard` and the discovery document is an ordinary `prismd.lock` beside it. The process id is still written into it, because §2.2 says so and because it is what a person looks at; it is reported, not believed. **Checked by mutation:** removing the refusal on `WouldBlock` turns `a_second_daemon_is_refused_and_told_where_the_first_one_is` red |
+| 2026-08-12 | S17 | **The frame layout is the desk's whole universe range, not the show's — because a `FramePublisher`'s layout is fixed for its lifetime.** Every output thread and the telemetry channel is a subscriber attached before the tick starts (S2: `subscribe` allocates), and the layout is decided when the publisher is built. A layout built from `Show::universes()` would therefore mean that patching a fixture into a universe the show did not have yet takes effect **only after a restart** — in the middle of a get-in, which is exactly when a rig gains a universe | `frame_layout(count)` covers universes 1..=`count`, default 64 (`UniverseId::MAX`), overridable with `--universes`. The cost is 512 bytes of frame per unpatched universe, copied once per subscriber per tick: 32 KiB a frame at the full 64, which is the size S6's stress gate was measured at. **Telemetry is filtered back down to the universes the show actually patches**, because 64 universes at 30 Hz is a megabyte a second of nothing to every client, and `docs/IPC_PROTOCOL.md` §7's channel is droppable rather than free. The alternative — rebuilding the publisher and every output thread on a layout change — would have terminated the sACN streams mid-show to add a universe |
+| 2026-08-12 | S17 | **A rebuild replaces the whole `MergeBody`, and the tick thread neither allocates nor frees to accept it.** Everything that changes what the engine *is* allocates and says so: `MergeBody::for_patch`, `load_groups`, `load_sequence`, `load_programmer`. None may run on the tick (§3.1). Reaching into a body that lives on the tick thread is therefore not available, and the body cannot be moved without something standing in its place | The core thread builds a new body and leaves it in `BodySwap`. The tick reads **one atomic per tick** to find out whether there is one — free, and false almost always — and takes it with a `try_lock` that never blocks: a failed attempt costs a compare-and-swap and the body arrives 23 ms later. The body it replaces goes back the same way, so the *deallocation* is the core thread's too. The frame is blanked on the tick the new body arrives, which is the half of `Effect::Repatch` S11 named and the easy one to forget — the encoder writes only patched channels, so an unpatched one would keep what the old rig put there. **Checked by mutation:** dropping the blank turns three tests red, including `an_unpatched_channel_does_not_keep_what_the_old_rig_put_there`. **The cost, and it is a real one: a rebuild stops every playback**, where `MergeBody::load_sequence` alone stops only the executor whose cue list changed — `CuePlayer::load` leaves *its* playback stopped by design (S5), so the difference is about the other executors. **S28 requirement:** a cue editor that stores while a show is running wants a job mailbox carrying a prepared `SequencePlan` and returning the old one for the core thread to drop, rather than a whole body |
+| 2026-08-12 | S17 | **`prismd` contains no `#[cfg(target_os = …)]`, and the three places it would have needed one were each solved rather than avoided.** §10.1 names `prism-protocols`, `prism-app` and `prism-ipc`'s `transport/local.rs`, and not this crate | **The user data directory** is resolved from the *environment* — `PRISMD_DATA_DIR`, then `APPDATA`, then `XDG_DATA_HOME`, then `HOME` — which is what the platform conventions are actually written in, and `paths::data_dir` takes the environment as a **function** rather than reading it, because `std::env::set_var` is `unsafe` in edition 2024 and the workspace forbids `unsafe_code`: a test that set `APPDATA` could not be written and one that passes a lookup can. **The tick thread's priority** is the `thread-priority` crate's, which is the same move S16 made with tokio's `net` feature for the pipe and the socket: a dependency whose whole purpose is to hold that split, and it cross-compiles clean for `aarch64-unknown-linux-gnu` and compiles no C. **The IPC endpoint** is `prism_ipc::local::daemon_address(label)`, added to the module §10.1 already exempts; the label is a hash of the data directory, so two accounts on one machine do not ask for the same pipe name. CI runs `cargo test -p prismd` in the **Linux** job from this session, which is what keeps the claim honest |
+| 2026-08-12 | S17 | **Only the tick *thread* is raised, and a refusal is not fatal.** S6 measured both halves: at the shell's default priority the same ten-minute run missed **45 ticks with a p99.9 of 54 ms**, and with the whole *process* raised — a Windows priority class applies to every thread in it — the stress gate missed **7 484 of 26 455** with a median jitter of one scheduler quantum | `thread_priority::set_current_thread_priority(Max)` is called by the tick thread itself, once, as its first act; the runtime, the driver threads and the surface stay ordinary. **A refusal is logged at `WARN` and the daemon carries on**, because an unprivileged Linux container refuses it and D10's Raspberry Pi is exactly that — a daemon that would not start over it is a daemon that does not run on the machine D10 exists for |
+| 2026-08-12 | S17 | **`prismd` is a library with a binary on top, and that is what makes the exit criteria assertable at all.** Every criterion this session was set is a statement about a *running process* — it drives DMX with no client, a second instance refuses, a stale lock is taken over, the handshake serves the world — and `tests/` links a crate's **library** target, of which a binary has none | `src/lib.rs` is the daemon; `src/main.rs` is thirty lines that read a command line, build the runtime and wait. `main.rs` is consequently the one file in the crate with no coverage at all, which is honest rather than hidden: what is in it is `--help`, `--version`, the two `eprintln!`s a person sees when a daemon will not start, and `tokio::signal::ctrl_c`. The interesting half of that file — the run loop — is `daemon::Daemon::run`, and it is tested |
+| 2026-08-12 | S17 | **Several daemons in one test process measure each other, which is S6's finding one level up.** Eight `#[tokio::test]`s each starting a daemon means eight tick threads at the priority §3 asks for, each spinning for the last millisecond of every 22.7 ms slot, on a machine with four cores. It showed up as a client task that never got a core to run on: `an_output_that_falls_over_is_reported_to_every_client` passed alone and timed out beside its neighbours | The daemon tests take turns behind a mutex, the way `prism-protocols`' hardware tests do (`common::one_daemon_at_a_time`). Worth writing down because the diagnosis is not obvious from the failure: the test that failed was about output health and had nothing to do with timing, and the first two things suspected were the housekeeping interval and the mock's reconnect — both of which were fine. **The rule S6 stated for two timing tests in one binary holds for two real-time *threads* in one process**, and a daemon has one by design |
+| 2026-08-12 | S17 | **A new clippy lint failed the whole workspace on code nobody had touched, and the cause is that `stable` moved.** `manual_is_multiple_of` fired eight times across `prism-engine`, `prism-core` and `prism-protocols` — all of it code that was green when S16 pushed it. CI pins `dtolnay/rust-toolchain@stable`, so the same run would have failed there | Fixed everywhere rather than allowed. The entry exists because it is the S16 lesson in a different disguise: **a check that passed on Tuesday is not a check that passes on Thursday**, and the only thing that establishes the workspace is clean is running it now. A session that had trusted "clippy was green last time" would have pushed a red build and spent the first CI run finding out why |
+| 2026-08-12 | S17 | **One mutation check did *not* go red, and that is the finding.** Diffing the programmer *before* the rebuild instead of after — putting slot indices from the plan that has just been replaced onto the wire — leaves all 78 tests green. The reason is that `rebuild` reloads the whole programmer into the new body through `MergeBody::load_programmer` and resets what the engine is believed to hold, so the diff afterwards has nothing to say | The ordering is **belt and braces**, exactly as S14 recorded of its own pass ordering, and it is documented as such rather than defended as load-bearing. What *is* load-bearing is the reload: removing `load_programmer` from `build_body` turns `a_programmer_value_survives_a_repatch_and_lands_on_the_new_slot` red. Worth recording because a mutation that changes nothing is evidence about the design, not a gap in the tests — and the next session to touch this should know which of the two lines is holding the roof up |
+| 2026-08-12 | S17 | **`Delta::ExecutorState` carries the cue index the *show* holds, because there is no channel back from the tick yet.** The daemon knows what it dispatched — a Go makes an executor active, an Off makes it inactive — and `Show::record_executor_state` is where that is written down. What cue a playback has reached, and when a `Follow` moved it on by itself, is `CuePlayer` state on the tick thread | The active flag travels and the cue index is whatever the show already had. **S18/S26 requirement:** an executor bar that shows the current cue needs a reverse channel — the same shape as `TickHealth`, atomics written by the tick body and read by the daemon — and until it exists a `Follow` cue advancing is invisible to a client. Not invented here, because a number the daemon guessed at would be worse than one it does not claim to have |
 | 2026-08-12 | S16 | **A local check that is skipped reports nothing, and `&&` is how it gets skipped.** The second CI attempt failed on one clippy warning — `unnecessary qualification`, from an import added while fixing the hang. It had been run locally as `cargo fmt --all --check && echo FMT_OK && cargo clippy … ; echo CLIPPY_OK`, and the formatting check failed on an import order, so the `&&` chain stopped before clippy — while the `;` after it printed `CLIPPY_OK` regardless | Read as "clippy passed", which it had not. The two checks are independent and are now run independently, each with its own exit code printed. Worth recording because it is not a Rust mistake or a CI mistake: a status line that can say a check succeeded without the check having run is worse than no status line, and it is the same failure mode as a test fixture of default values — something that cannot distinguish "passed" from "never happened" |
 | 2026-08-12 | S16 | **A test that can hang is worse than a test that fails, and the first CI run proved it.** `telemetry_is_coalesced_and_the_counters_say_how_much_was_dropped` read a **fixed number of messages** off a client that is behind by construction — and how many get through such a client is precisely the quantity that test says nothing is guaranteed about. Nine arrived on this machine; on a two-core runner fewer did, and both the Windows and the Linux job sat in the `Test` step until they were cancelled by hand, 40 minutes in, with no output because a job's log is not readable until it ends | Every receive in the integration tests now has a deadline, so a message that never comes is a named failure in seconds rather than a job that stops. The telemetry test drains what actually arrived instead of counting to eight. **And the workflow grew `timeout-minutes`** — 20 for Windows, 15 for the rest — because the default is six hours and the next hang should cost twenty minutes, not a day. Two things are worth writing down beyond the fix: the local suite passed serialised, under load and at `--test-threads=1`, so *reproduce it locally* was not available; and cancelling the run is what made the log readable, which is how the failing test was identified in one minute after 40 of guessing |
 | 2026-08-12 | S16 | **The nesting-depth limit is not a hardening measure, it is the difference between an error and a dead console — and that was measured rather than argued.** S1 left it as the one open security requirement: `JsonValue` is recursive, serde buffers the content of an internally tagged enum before any domain code runs, and MessagePack has no depth limit of its own. A payload of a hundred thousand nested arrays costs a hundred thousand and one bytes to write | `scan::depth_of` walks the payload with an **explicit stack** before `serde` sees it and refuses past 128 levels — `serde_json`'s limit, against the same attack. A wrapping `Deserializer` would not have worked: the recursion to be stopped happens *inside* serde's own buffering, one layer below anywhere a wrapper could count. **The mutation check is the finding.** With the scan removed, `a_hostile_delta_is_refused_rather_than_decoded` does not fail — it **aborts the process with `STATUS_STACK_OVERFLOW`**, which in `prismd` takes the DMX output with it. Twelve bytes from an unauthenticated socket. The scan doubles as a structural check, so a truncated frame, the reserved byte `0xc1` and trailing rubbish are all found before a value is built |
@@ -1085,14 +1158,45 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The daemon has a wire.** `prism-ipc` is complete: length-prefixed
-MessagePack with a size limit and a nesting-depth limit, a named pipe on Windows
-beside a Unix domain socket elsewhere, a WebSocket over `axum`, the backpressure
-policy of §8, and the server and client halves — all of it above one
-transport-independent `Wire`, so the same suite runs identically over three
-transports. What is missing is a process to run any of it in: there is a motor,
-three outputs, a complete state and now a wire, and nothing that holds them
-together. Begin **S17** (`prismd` — the daemon binary). Use the prompt in §8.
+**There is a process.** `prismd` starts, takes the machine's single-instance
+lock, generates the desk's identity if it has none, opens a show, builds a merge
+body out of it, raises a tick thread to the priority §3 asks for, attaches every
+output, opens the listeners its command line asked for, publishes where it is,
+and drives DMX **with nobody connected** — which is D2 stated as a running
+program rather than as a diagram. A client that turns up is served the world and
+can go away again without the rig noticing.
+
+What has not been *proved* is the sentence the whole two-process design exists
+for. S17 asserts that a daemon runs without a client; **S18 asserts that killing
+one mid-show costs nothing**, on captured frames rather than by watching. Begin
+**S18** (the D2 gate — resilience). Use the prompt in §8.
+
+Carried out of S17:
+- **`Daemon::recorded_outputs()` is what S18's gate is written against.** Every
+  `--mock-output` the daemon opened hands back a `MockOutputHandle`, and the
+  frames it was given are in order and complete. *Assert the output frame
+  sequence has no gap across the whole run* is a statement about that list.
+- **The daemon tests take turns behind `common::one_daemon_at_a_time`.** A
+  daemon owns a real-time tick thread, and several in one process measure each
+  other rather than the daemon — S6's finding one level up. Any new target that
+  starts a daemon takes the same turn.
+- **A rebuild replaces the whole `MergeBody`,** built on the core thread and
+  handed over through an atomic and a `try_lock` that never blocks. The tick
+  neither allocates nor frees to accept it. It also **stops every playback**,
+  which is the debt S28 inherits.
+- **The frame layout is the desk's whole universe range**, fixed for the
+  publisher's lifetime; telemetry is filtered back down to the universes the
+  show patches. `--universes` changes the range.
+- **`prismd` has no `#[cfg(target_os = …)]`,** and CI runs its tests in the
+  Linux job to keep that true. The three places it would have needed one are in
+  the decision log.
+- **`Delta::ExecutorState` carries no cue index the daemon did not already
+  have.** There is no channel back from the tick yet; S18 or S26 builds one, in
+  the shape `TickHealth` already has.
+- **The CLI is the daemon's whole configuration** (`--help` is the
+  documentation), and S29's shell will spawn a daemon by passing the same
+  arguments. `--run-for` exists so a daemon can be started in a test or a CI job
+  without being interrupted by hand.
 
 Carried out of S16:
 - **`ServerHandler` is the whole of what S17 has to supply**: `snapshot`,
@@ -1300,77 +1404,70 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S17 — `prismd`: das Daemon-Binary**
+**Next up: S18 — das D2-Gate: Resilienz**
 
 ```text
-PrismDMX — Session S17: prismd, das Daemon-Binary
+PrismDMX — Session S18: das D2-Gate, Resilienz
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session baut zum ersten Mal einen Prozess. Bis hierher gibt es einen
-Motor, drei Ausgänge, einen vollständigen Zustand, eine Datei und eine Leitung —
-acht Crates, die alles können und die niemand startet. `prismd` ist das
-Programm, das sie hält.
+Seit S17 gibt es einen Prozess. `prismd` startet, nimmt die Single-Instance-
+Sperre, öffnet eine Show, hebt einen Tick-Thread auf hohe Priorität, hängt die
+Ausgänge an, öffnet seine Listener und gibt DMX aus — auch dann, wenn sich nie
+ein Client verbindet. Was damit *behauptet*, aber noch nicht *bewiesen* ist, ist
+der eine Satz, für den die ganze Zwei-Prozess-Architektur existiert: dass das
+Sterben eines Clients mitten in der Show nichts kostet. Diese Session beweist
+ihn — an aufgezeichneten Frames, nicht durch Zusehen.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.17 (was S16 geliefert
-                                            hat), §7 „Carried out of S16" und
+                                            besonders §2.18 (was S17 geliefert
+                                            hat), §7 „Carried out of S17" und
                                             alle Decision-Log-Einträge, die eine
-                                            „S17 requirement" nennen — davon gibt
-                                            es viele, aus jeder Session seit S11,
-                                            und sie sind ein Teil des Auftrags
+                                            „S18 requirement" nennen
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S17
-4. ARCHITECTURE_SPEC.md §2 (Systemüberblick), §3 (Threading-Modell, besonders
-   §3.1 und §3.2), §5 (Pipeline), §7 (Ausgänge), §10.3 (Lebenszyklus,
-   Single-Instance, Shutdown), §12
-5. docs/IPC_PROTOCOL.md §2.2 (Discovery und Lock-File), §4 (Handshake und
-   Snapshot), §8 (Backpressure und Ausfall), §9 (Tests)
-6. crates/prismd/src/main.rs              — bisher nur ein Rumpf
-7. crates/prism-ipc/src/server.rs         — `ServerHandler` ist genau das, was
-                                            diese Session zu liefern hat
-8. crates/prism-core/src/file.rs und store.rs — `ShowFile::apply` ist die Tür,
-                                            `ShowStore` die Platte, `Autosave`
-                                            die Politik
-9. crates/prism-engine/src/lib.rs         — `Engine`, `TickCommand`,
-                                            `FramePublisher`, `MergeBody`
+                                            von S18
+4. ARCHITECTURE_SPEC.md §1 (Entscheidung D2), §3 (Threading-Modell), §10.3
+   (Lebenszyklus), §12 (Testpolitik — die Zeile „IPC resilience (D2)" ist das
+   Gate dieser Session)
+5. docs/IPC_PROTOCOL.md §4.2 (Versionsverhandlung), §7 (Telemetrie), §8
+   (Backpressure und Ausfall), §9 (Tests — die Zeilen „IPC resilience (D2 gate)"
+   und „Backpressure")
+6. crates/prismd/src/daemon.rs            — `Daemon::start`, `run`, `shutdown`
+                                            und `recorded_outputs`
+7. crates/prismd/tests/daemon.rs und tests/wiring.rs — die Muster, an die sich
+                                            neue Tests anhängen
+8. crates/prism-ipc/src/backpressure.rs und server.rs — die Politik aus §8 als
+                                            Zustandsmaschine, plus
+                                            `ServerHandle::stats`
+9. crates/prism-protocols/src/output.rs   — `MockOutput`/`MockOutputHandle`:
+                                            jede Frame, in Reihenfolge
 
-Stand nach S16 — nichts davon musst du neu bauen:
-- `prism-domain` (S1): alle Domänentypen samt Serialisierung und
-  TypeScript-Bindings; 133 Tests.
-- `prism-engine` (S2–S6) ist vollständig: 44 Hz bei 64 Universen unter Volllast,
-  allokationsfrei im Tick.
-- `prism-protocols` (S7–S10) ist vollständig: Open DMX USB (am echten Gerät
-  verifiziert, 35,5 Hz), ArtNet und sACN (beide 44 Hz), jeweils hinter
-  `DmxOutput` mit `OutputRunner` für Thread, Reconnect-Backoff und
-  Panic-Eindämmung.
-- `prism-core` (S11–S15) ist vollständig: `Show`, `SessionState`, `Programmer`,
-  das Oops-Journal und die `.prism`-Datei. 225 Tests.
-- `prism-ipc` (S16) ist vollständig: längenpräfigiertes MessagePack mit Größen-
-  und Verschachtelungsgrenze, Named Pipe bzw. Unix-Domain-Socket, WebSocket über
-  `axum`, Backpressure nach §8, Server- und Client-Hälfte — alles über einem
-  transportunabhängigen `Wire`. 131 Tests, 98,43 % Zeilenabdeckung.
-- Insgesamt 1036 Tests im Workspace, alle grün, CI vierfarbig grün.
+Stand nach S17 — nichts davon musst du neu bauen:
+- `prism-domain` (S1), `prism-engine` (S2–S6), `prism-protocols` (S7–S10),
+  `prism-core` (S11–S15) und `prism-ipc` (S16) sind vollständig.
+- `prismd` (S17) ist eine Bibliothek mit einem dreißigzeiligen Binary darauf:
+  `lock` (Single-Instance und Discovery-Datei), `machine` (Pult-Identität),
+  `paths`, `engine` (Tick-Thread, Priorität, Body-Übergabe), `core`
+  (`ShowFile` + `ShowStore` + Effekte), `server` (der `ServerHandler`),
+  `daemon` (Aufbau, Timer, Telemetrie, Shutdown), `cli`, `log`.
+  95 Tests, 94,80 % Zeilenabdeckung.
+- Insgesamt 1132 Tests im Workspace, alle grün, CI vierfarbig grün.
 
-Aufgabe: Session S17 umsetzen — `prismd`: das Daemon-Binary.
-
-Umzusetzen (IMPLEMENTATION_PLAN.md S17):
-- Verdrahtung von Engine, Core, Ausgängen und IPC
-- Lock-File mit PID und Endpunkt; Single-Instance-Garantie; Übernahme eines
-  veralteten Lock-Files
-- CLI für den kopflosen Betrieb
-- Shutdown mit sACN-Terminierung und konfigurierbarem Blackout-oder-Halten
+Aufgabe: Session S18 umsetzen — das D2-Gate.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Der Daemon startet, lädt eine Show, gibt DMX auf einen Mock-Treiber aus,
-  **ohne dass sich jemals ein Client verbindet**
-- Eine zweite Instanz erkennt die erste und weigert sich zu starten — als Test
-  behauptet, nicht als Absicht beschrieben
-- Ein veraltetes Lock-File (getöteter Prozess) wird erkannt und übernommen
-- Der Handshake liefert einen `Snapshot` mit Show **und** Session
+- Ein Client verbindet sich und wird **mitten in der Show getötet**: die Folge
+  der ausgegebenen Frames hat über den **ganzen Lauf** keine Lücke — an
+  aufgezeichneten Frames behauptet, nicht von Hand beobachtet
+- Der Client verbindet sich erneut und re-snapshottet auf einen Zustand, der mit
+  dem des Daemons identisch ist
+- Eine Protokollversions-Abweichung erzeugt ein ausdrückliches `Reject`, niemals
+  undefiniertes Verhalten
+- Backpressure: ein absichtlich langsamer Client verliert Telemetrie, verliert
+  **kein** Kommando und beeinflusst andere Clients nicht
 - `cargo test -p prismd` ist grün
 - `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
 - `cargo fmt --all --check` ist sauber
@@ -1378,85 +1475,78 @@ Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreff
   und in PROGRESS.md eingetragen
 
 Wichtige Randbedingungen — alle stehen ausführlich im Decision Log:
-- **Der Tick-*Thread* braucht hohe Priorität, nicht der Prozess** (S2/S6-Fund,
-  gemessen): bei Standardpriorität verfehlte derselbe Zehn-Minuten-Lauf 45 Ticks
-  mit p99.9 = 54 ms, mit hoher Priorität keinen einzigen mit p99.9 = 200 µs.
-  `prism-engine` darf seine Priorität nicht selbst setzen — es ist per Regel
-  plattformneutral —, **also gehört das hierher**. Und nur der Thread: eine
-  Prioritätsklasse gilt für alle Threads des Prozesses, und PROGRESS.md §3.1
-  beschreibt, was dann passiert.
-- **`Effect::Save` ist der eine Effekt, den `ShowFile::apply` nicht ausführt**
-  (S15). Der Daemon hält den `ShowStore`, beantwortet ihn mit `ShowStore::save`
-  — was die Deltas zurückgibt, damit der `DirtyFlag`-Übergang genau einmal
-  reist — und pollt `Autosave` auf demselben Timer wie alles andere.
-- **Kein zweites Journal** (S14): der Daemon dispatcht durch `ShowFile::apply`,
-  dort werden `Oops` und `Redo` ausgeführt.
-- **Der Programmer muss gegen den zuletzt an die Engine geschickten Stand
-  gediffed werden** (S13): `Delta::ProgrammerChanged` trägt den ganzen Zustand,
-  die Engine wird pro `MergePlan`-Slot adressiert. `MergeBody::load_programmer`
-  allokiert und ist deshalb Einrichtungsarbeit, nichts pro Encoder-Drehung.
-- **`Show::patch_revision()` ist die Zahl, die der Daemon beobachtet** (S11):
-  jedes gequeuete Programmer-Kommando ist veraltet, sobald sie sich bewegt. Und
-  ein Austausch der `MergeBody` zur Laufzeit muss die Framepuffer des Publishers
-  leeren, sonst bleiben ungepatchte Kanäle stehen.
-- **Ein Laden ist kein Replay** (S15): `ShowStore::load` antwortet mit
-  `Repatch`, `ReloadGroups` und einem `ReloadSequence` pro Sequenz — das ist die
-  To-do-Liste nach dem Öffnen einer Datei.
-- **Die sACN-CID gehört der Maschine, nicht der Show** (S10/S11):
-  `prism_core::MachineConfig`, einmal beim ersten Start erzeugt und neben den
-  Einstellungen des Daemons abgelegt. Ein Ausgang mit einer Null-CID weigert
-  sich zu verbinden.
-- **Blackout-oder-Halten beim Herunterfahren ist ein Frame, kein Flag** (S10):
-  der sACN-Treiber beendet seine Streams mit dem letzten Look; ein Daemon, der
-  eine dunkle Bühne will, veröffentlicht **vorher** ein Blackout-Frame und
-  stoppt dann die Ausgänge.
-- **`ServerHandler` ist die ganze Schnittstelle zu `prism-ipc`** (S16), und die
-  Reihenfolge steht fest: Deltas an **alle** Clients, danach das `Ack` an einen.
-  Der `Snapshot` trägt drei Dokumente — Show, Session und Programmer —, und Show
-  und Session sind `JsonValue`-Dokumente, weil ein `ShowPatch` eine
-  RFC-6902-Operation *gegen* sie ist.
-- **Das Lock-File ist die Single-Instance-Garantie, und das Binden allein ist
-  sie nicht** (S16): `LocalListener::bind` räumt eine übrig gebliebene
-  Socket-Datei absichtlich **nicht** weg, weil „der vorige Daemon ist tot" eine
-  PID-Lebendigkeitsfrage ist. Diese Session besitzt die Übernahme. Unter Windows
-  verweigert `first_pipe_instance` zusätzlich die zweite Instanz auf
-  Betriebssystemebene.
-- **`local::scratch_address(label)` gibt es für Tests** — ein Pipe-Name bzw.
-  Socket-Pfad, den nichts anderes benutzt. Der echte Daemon benutzt ihn nicht:
-  sein Endpunkt muss auffindbar sein und steht im Lock-File (§2.2).
-- **`prismd` darf `#[cfg(target_os = ...)]` nicht enthalten**, außer wo
-  ARCHITECTURE_SPEC.md §10.1 es erlaubt — und es erlaubt es dort nicht. Die
-  Thread-Priorität ist der Punkt, an dem das weh tut: sie ist plattformabhängig
-  und muss trotzdem irgendwo hin. Wie das gelöst wird, ist ein
-  Decision-Log-Eintrag. Die CI führt `cargo check --workspace --target
-  aarch64-unknown-linux-gnu` aus, also muss es dort durchkommen; der ARM64-Job
-  installiert für SQLite bereits `gcc-aarch64-linux-gnu`.
+- **„Keine Lücke" braucht eine Definition, und die zu wählen ist ein Teil der
+  Aufgabe.** `MockOutputHandle::frames()` gibt jede Frame in Reihenfolge zurück,
+  und `Daemon::recorded_outputs()` gibt es genau dafür. Eine fehlende Frame in
+  dieser Liste allein sagt wenig, weil ein Treiber auf eigener Kadenz sendet —
+  brauchbar ist eine Aussage über die *zeitlichen Abstände* oder darüber, dass
+  der Look nie unbeabsichtigt auf Null fällt. Was auch immer gewählt wird: es
+  gehört in den Decision Log, und ein Test, der „keine Lücke" so definiert, dass
+  er nicht scheitern kann, ist keiner.
+- **Ein Test darf keine echte Hardware anfassen** (CLAUDE.md), und **kein Test
+  darf Multicast oder Broadcast senden** (S10). Der Mock-Ausgang ist der Modus,
+  den ARCHITECTURE_SPEC.md §12 dafür vorsieht.
+- **Die Daemon-Tests nehmen einander abwechselnd dran**
+  (`common::one_daemon_at_a_time` in `crates/prismd/tests/common/mod.rs`). Ein
+  Daemon besitzt einen Echtzeit-Tick-Thread; mehrere in einem Prozess messen
+  einander statt den Daemon — das ist S6s Fund eine Ebene höher, und in S17 ist
+  genau daran ein Test gescheitert, der mit Timing nichts zu tun hatte.
+- **Ein getöteter Client ist nicht dasselbe wie ein sauber getrennter.**
+  `Client::disconnect` ist der saubere Fall; das Fallenlassen der Verbindung
+  ohne Abmeldung ist der Fall, den D2 meint. S16 hat dafür bezahlt: ein Leser,
+  der nur am Streamende aufhört, hat eine Windows-Named-Pipe geleakt.
+- **Backpressure ist bereits gebaut und getestet, aber nicht *gemessen*** (S16):
+  `crates/prism-ipc/tests/backpressure.rs` zeigt die Politik durch einen Socket;
+  `ServerHandle::stats(client)` liefert die Zähler. Was fehlt, ist die Aussage
+  über *andere* Clients — dass ein langsamer keinen schnellen bremst.
+- **`ServerConfig::goodbye` begrenzt beides**: das Warten auf Platz und das
+  letzte Flushen. Die Nachricht ist Best-Effort, die Trennung nicht.
+- **Der `Snapshot` trägt drei Dokumente** — Show, Session und Programmer —, und
+  §9s Zeile *snapshot completeness* ist die zweite Hälfte des zweiten
+  Exit-Kriteriums: der Snapshot eines frischen Clients muss gleich dem Zustand
+  sein, den ein bestehender Client durch akkumulierte Deltas erreicht hat.
+  `prism_core::ShowMirror` und `SessionMirror` sind die Applier dafür.
+- **`Delta::ExecutorState` trägt heute keinen Cue-Index, den der Daemon nicht
+  ohnehin schon hatte** (S17): es gibt noch keinen Rückkanal vom Tick. Wenn
+  diese Session einen braucht, hat `TickHealth` die Form — Atomics, vom
+  Tick-Body geschrieben, vom Daemon gelesen.
+- **Ein Wiederaufbau der `MergeBody` stoppt alle Playbacks** (S17). Falls das
+  Gate eine laufende Sequenz über den ganzen Lauf hinweg braucht, darf während
+  des Laufs nichts gepatcht oder gespeichert werden — oder die Schuld aus dem
+  Decision Log wird hier eingelöst statt in S28.
+- **`prismd` darf `#[cfg(target_os = ...)]` nicht enthalten** (ARCHITECTURE_SPEC.md
+  §10.1 nennt die Kiste nicht), und die CI führt `cargo test -p prismd` seit S17
+  auch im **Linux**-Job aus — dort über einen Unix-Domain-Socket statt über eine
+  Named Pipe.
 - **Ein Test-Fixture aus lauter Default-Werten kann „korrekt übertragen" nicht
   von „nie angefasst" unterscheiden** (S14-Fund, seit S15 Regel).
-- **Validieren und kodieren, bevor geschrieben wird**, und **eine Ablehnung
-  lässt den Zustand byte-identisch**: S11 bis S16 haben das jeweils wörtlich als
-  Test.
+- **Jedes Warten in einem Test braucht eine Frist.** S16 hat einen Test
+  gepusht, der auf eine Nachricht wartete, die niemand versprochen hatte; der
+  CI-Job stand vierzig Minuten. Der Workflow hat seitdem `timeout-minutes`.
 - Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S16 haben
+  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S17 haben
   ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
-  geprüft — S15 und S16 haben auf diesem Weg echte Fehler gefunden, und S16s
-  Gegenprobe hat den Testprozess mit einem Stack-Overflow abgeschossen.
+  geprüft. S17 hat dabei gelernt, dass auch eine Gegenprobe, die **nichts** rot
+  macht, ein Ergebnis ist — sie sagt, welche der beiden Zeilen trägt.
 - **Ein roter Timing-Test ist zuerst eine Frage an die Maschine, nicht an den
   Code.** `the_tick_holds_its_deadline_for_a_few_seconds` fiel in S13 zweimal
   aus, beide Male weil der Rechner nebenher beschäftigt war. Der Test druckt
   dafür selbst `probe thread turns: N/s`: erst diese Zeile lesen, dann das
   Target allein laufen lassen (`cargo test -p prism-engine --test realtime`),
-  dann den Diff verdächtigen. Auf einer ruhigen Maschine sind alle 1036 Tests
-  grün.
+  dann den Diff verdächtigen.
+- **Clippy bewegt sich.** S17 musste acht bereits vorhandene Zeilen in drei
+  anderen Crates anfassen, weil `stable` seit S16 einen neuen Lint mitbringt.
+  Ein „war letztes Mal grün" ist kein Beleg; die Prüfung jetzt laufen lassen.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
-  Node 24.11). Es ist kein weiteres Setup nötig.
+  Node 24.11). Der Workspace verlangt seit S17 `rust-version = "1.89"`
+  (`File::try_lock`). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S17-Status, gemessene Coverage, Decision Log bei
+- PROGRESS.md aktualisieren: S18-Status, gemessene Coverage, Decision Log bei
   Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S18 (D2-Gate — Resilienz) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. feat(prismd): …
+  Session S19 (`prism-surface` — MCU-Codec) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. test(ipc): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```
