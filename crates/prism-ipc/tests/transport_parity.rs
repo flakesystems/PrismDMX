@@ -463,7 +463,7 @@ async fn a_client_that_leaves_takes_nothing_with_it(transport: Transport) {
         if desk.server.client_count().await == 1 {
             break;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
     assert_eq!(desk.server.client_count().await, 1, "{transport:?}");
 
