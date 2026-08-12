@@ -21,6 +21,11 @@ jobs:
   windows:
     name: Windows - full build and test
     runs-on: windows-latest
+    # A hung test costs a whole job otherwise. S16 pushed one that blocked on a
+    # message a two-core runner never delivered, and the run sat there until it
+    # was cancelled by hand; the fix was in the test, and this is so the next
+    # one of those fails in twenty minutes instead of six hours.
+    timeout-minutes: 20
     env:
       # RUSTFLAGS from the environment replaces .cargo/config.toml's rustflags
       # rather than adding to them, so the link argument has to be repeated
@@ -51,6 +56,7 @@ jobs:
   linux-neutral:
     name: Linux - platform-neutral crates
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -78,6 +84,7 @@ jobs:
   linux-arm64-check:
     name: Linux ARM64 - cross-compile check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -106,6 +113,7 @@ jobs:
   ui:
     name: UI - typecheck, build, test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ui

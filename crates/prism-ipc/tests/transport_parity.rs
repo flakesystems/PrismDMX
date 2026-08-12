@@ -29,6 +29,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use prism_domain::{
     Command, Delta, ExecutorId, FeatureGroup, FixtureId, JsonValue, NoticeLevel, OutputHealth,
@@ -279,12 +280,23 @@ impl Drop for Desk {
     }
 }
 
-/// Waits for the next event, failing rather than hanging if the daemon has gone.
+/// How long to wait for an event before deciding none is coming.
+///
+/// Generous, because this runs on a shared two-core CI runner as well as here,
+/// and short enough that a suite which has gone wrong says so in seconds. **A
+/// test that can hang is worse than a test that fails**, because a failure names
+/// itself and a hang costs whatever the job is allowed to run for — which S16
+/// learned by doing it.
+const PATIENCE: Duration = Duration::from_secs(20);
+
+/// Waits for the next event, failing rather than hanging if the daemon has gone
+/// or has nothing to say.
 async fn next(client: &mut Client) -> ClientEvent {
-    match client.next_event().await {
-        Some(Ok(event)) => event,
-        Some(Err(error)) => panic!("the daemon reported {error}"),
-        None => panic!("the daemon closed the connection"),
+    match tokio::time::timeout(PATIENCE, client.next_event()).await {
+        Ok(Some(Ok(event))) => event,
+        Ok(Some(Err(error))) => panic!("the daemon reported {error}"),
+        Ok(None) => panic!("the daemon closed the connection"),
+        Err(_) => panic!("the daemon said nothing for {PATIENCE:?}"),
     }
 }
 

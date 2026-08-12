@@ -84,6 +84,25 @@ async fn until(mut condition: impl AsyncFnMut() -> bool) -> bool {
     false
 }
 
+/// How long a test waits for a message before deciding none is coming.
+///
+/// **Every receive in this file has a deadline, and one of them did not.** The
+/// first version of `telemetry_is_coalesced_…` read a fixed number of messages
+/// off a client that is behind by construction, which is a count nothing
+/// guarantees: on this machine nine arrived, on a two-core CI runner fewer did,
+/// and the test blocked for as long as the job was allowed to run. A test that
+/// can hang is worse than a test that fails, because a failure names itself.
+const PATIENCE: Duration = Duration::from_millis(500);
+
+/// The next message, or `None` if the connection closed or nothing came.
+async fn next(client: &mut prism_ipc::Wire) -> Option<ServerMessage> {
+    match tokio::time::timeout(PATIENCE, client.recv_message::<ServerMessage>()).await {
+        Ok(Some(Ok(message))) => Some(message),
+        Ok(Some(Err(error))) => panic!("the connection reported {error}"),
+        Ok(None) | Err(_) => None,
+    }
+}
+
 /// §8: a client whose control queue fills is disconnected with a `Reject`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_client_that_stops_reading_is_disconnected_and_told_why() {
@@ -121,7 +140,7 @@ async fn a_client_that_stops_reading_is_disconnected_and_told_why() {
     // a client that never read at all might be disconnected without ever
     // learning why. A client that comes back is the case the message exists for.
     let mut messages = Vec::new();
-    while let Some(Ok(message)) = client.recv_message::<ServerMessage>().await {
+    while let Some(message) = next(&mut client).await {
         messages.push(message);
     }
     assert!(
@@ -175,12 +194,8 @@ async fn a_client_that_stops_reading_does_not_take_the_others_with_it() {
         .await
         .unwrap();
     assert!(matches!(
-        healthy
-            .recv_message::<ServerMessage>()
-            .await
-            .unwrap()
-            .unwrap(),
-        ServerMessage::Snapshot { .. }
+        next(&mut healthy).await,
+        Some(ServerMessage::Snapshot { .. })
     ));
 
     // The one that does not.
@@ -198,7 +213,7 @@ async fn a_client_that_stops_reading_does_not_take_the_others_with_it() {
         server.broadcast(notice(n)).await;
         // The healthy client keeps up, which is what makes this a test about the
         // deaf one rather than about both of them being behind.
-        let _ = healthy.recv_message::<ServerMessage>().await;
+        let _ = next(&mut healthy).await;
     }
 
     assert!(
@@ -213,16 +228,15 @@ async fn a_client_that_stops_reading_does_not_take_the_others_with_it() {
         })
         .await;
     let mut found = false;
-    for _ in 0..600 {
-        match healthy.recv_message::<ServerMessage>().await {
-            Some(Ok(ServerMessage::Delta {
-                delta: Delta::DirtyFlag { .. },
-            })) => {
-                found = true;
-                break;
+    while let Some(message) = next(&mut healthy).await {
+        if matches!(
+            message,
+            ServerMessage::Delta {
+                delta: Delta::DirtyFlag { .. }
             }
-            Some(Ok(_)) => {}
-            other => panic!("the healthy client's connection ended: {other:?}"),
+        ) {
+            found = true;
+            break;
         }
     }
     assert!(found, "the healthy client stopped receiving");
@@ -277,18 +291,19 @@ async fn telemetry_is_coalesced_and_the_counters_say_how_much_was_dropped() {
 
     // What did reach the client is a *newer* frame than the first one, because
     // the queue holds one and it is always the latest.
+    //
+    // Everything that arrived, not a fixed number of messages: how many get
+    // through a client that is behind by construction is exactly the quantity
+    // this test says nothing is guaranteed about, and the first version of it
+    // read eight and blocked on a two-core runner waiting for the ninth.
     let mut latest = None;
-    for _ in 0..8 {
-        match client.recv_message::<ServerMessage>().await {
-            Some(Ok(ServerMessage::Telemetry { data })) => {
-                latest = Some(prism_ipc::TelemetryFrame::decode(&data).unwrap().sequence);
-            }
-            Some(Ok(_)) => {}
-            _ => break,
+    while let Some(message) = next(&mut client).await {
+        if let ServerMessage::Telemetry { data } = message {
+            latest = Some(prism_ipc::TelemetryFrame::decode(&data).unwrap().sequence);
         }
     }
     assert!(
         latest.is_some_and(|sequence| sequence > 0),
-        "the client was served a stale frame: {latest:?}"
+        "the client was served a stale frame, or none at all: {latest:?}"
     );
 }
