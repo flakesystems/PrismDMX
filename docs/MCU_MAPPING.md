@@ -454,8 +454,8 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 | Strip display | colour, name and value of the executor | — | — |
 | Main fader | `XFade` of the selected executor | Engine | yes — Empty / Master / XFade |
 | Flip button | `Go+` of the selected executor | Engine | yes |
-| Play / Stop / Forward / Backward | On / Off / Go+ / Go− on the selected executor | Engine | yes |
-| Record | `Clear` (three-stage) | Programmer | yes |
+| **Play / Stop / Forward / Backward** | On / Off / Go+ / Go− on the selected executor | Engine | yes — **and this row is the one to spend carefully: it is the part of the panel that stays PrismDMX's in shared operation (§4.3), so it wants live-show functions, free assignments included** |
+| **Record** | `Clear` (three-stage) | Programmer | yes — same section, same reasoning |
 | **Faderbank ◀▶** | executor **page** down / up — 8 per page (D7) | **Session** | — |
 | **Channel ◀▶** | **switch UI view** — `SelectView` (D8) | **Session** | — |
 | **Zoom ▲▼** | programmer page up / down | **Session** | — |
@@ -510,31 +510,57 @@ listening to MC input, permanently. In practice the reliably-ours set is:
 | The whole transport section — Rewind, Forward, Stop, Play, Record | 91–95 |
 | The jog wheel | CC 60 |
 
-Everything else — the eight strips, the faders, the encoders, the F-keys, the
-bank and channel buttons — is the sound console's in that mode, and a binding
-placed on it is a binding that will never fire.
+These reach PrismDMX **permanently**, whichever host the surface is currently
+showing. Everything else follows the switch.
 
-**Three consequences, in order of how expensive they are to get wrong.**
+**The rest of the panel is not lost — it is one button away.** The operator can
+switch the whole surface to MC at any time (with the reserved SMPTE/Beats button,
+below), and then every strip, fader, encoder and F-key is PrismDMX's, exactly as
+in the dedicated deployment; the sound console is simply not operable meanwhile.
+So the split is **not** a restriction on what the profile may contain.
 
-1. **The default profile must stay usable when it is reduced to five buttons and
-   a wheel.** `Play`, `Stop`, `Forward`, `Rewind`, `Record` and the jog wheel are
-   the whole console in that mode, so what they do has to be worth having on its
-   own: go, off, next, previous, a clear, and a wheel that moves the selected
-   parameter. §4.1's assignments already put exactly those there, which is luck
-   rather than judgement, and it should now be treated as a constraint — **do not
-   move an operating function off the transport section** without knowing this.
-2. **D7 and D8 assume a whole panel.** `Faderbank ◀▶` (executor paging) and
-   `Channel ◀▶` (`SelectView`) are outside the guaranteed set, so in the shared
-   mode there is no surface path to paging or to switching views. That is not a
-   fault in D7 or D8 — the dedicated MC deployment still has them — but a shared
-   deployment needs those reachable elsewhere, and the UI and the Web Remote are
-   where they are.
+What the permanently-MC set buys is different and more valuable: **no switching**.
+Whatever sits on the transport section and the jog wheel is in reach *during a
+show*, without taking the sound desk away from whoever is using it.
+
+**Three consequences.**
+
+1. **The transport section is the always-hot part of the console, so what sits
+   there should be worth having mid-show.** Not "everything important must fit
+   into five buttons" — nothing has to fit, because the full surface is a button
+   press away — but "these five are the ones reachable without a mode change, so
+   spend them on live-show work". That includes **freely assignable buttons**:
+   an operator will want a *tap for speed* against a particular speed master, a
+   macro, or a look for a moment in the show on the keys that are always in reach,
+   and that is a better use of them than a transport metaphor PrismDMX does not
+   have. §4.1's defaults (go / off / next / previous / clear) are a reasonable
+   starting point rather than a fixed layout, and that row is already marked
+   configurable.
+2. **Nothing is unreachable, but D7 and D8 need a mode change.** `Faderbank ◀▶`
+   (executor paging) and `Channel ◀▶` (`SelectView`) sit outside the permanent
+   set, so in shared operation they cost a switch to the full surface. That is
+   fine for paging and view changes, which are setup-shaped rather than
+   cue-shaped; it is a reason not to put anything *time-critical* there, and it
+   is why the UI and the Web Remote keep their own paths to both.
 3. **Feedback must not assume it owns a control.** The shadow model may only
-   drive LEDs for controls MC actually holds; lighting a strip's Select LED in
-   shared mode is either ignored or, worse, fights the sound console's own
-   feedback. S21 should hold the ownership set as **data on the profile**, in the
-   same way `unlit_buttons` is, so that "which controls are ours" is one edit
-   rather than a condition scattered through the diffing.
+   drive LEDs for controls MC actually holds at that moment; lighting a strip's
+   Select LED while the surface is showing the sound console is either ignored
+   or, worse, fights that console's own feedback. S21 should hold the ownership
+   set as **data on the profile**, in the same way `unlit_buttons` is, so that
+   "which controls are ours" is one edit rather than a condition scattered
+   through the diffing.
+
+**What "tap for speed" needs, and does not have yet.** `LearnSpeed` exists today
+only as an *executor button* function (`ExecutorButtonFunction` in
+`ARCHITECTURE_SPEC.md` §6, and `XTouch.txt`, which offers it on a strip's buttons
+but not on the selected executor's). A tap against a **speed master** is a
+different target, and speed masters are named in `docs/DMX_MERGE.md` §4 item 3 —
+playback rate, applied in step 2 of the tick — but **nothing implements them and
+no domain type carries one**. So this is a forward dependency rather than
+something S22 can bind: the session that builds speed masters owes a command to
+tap one, and the transport row's function list should grow `LearnSpeed` when it
+exists. Recorded here so that the requirement is not rediscovered from the
+operator a second time.
 
 **SMPTE/Beats (note 53) is reserved and must never be bound.** In the combined
 mode **it is the button that switches the surface between the two hosts** — it is

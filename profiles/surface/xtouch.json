@@ -49,7 +49,9 @@
       "Global.Rewind", "Global.FastForward", "Global.Stop", "Global.Play", "Global.Record",
       "Global.Jog"
     ],
-    "consequence": "Everything else - strips, faders, encoders, F-keys, bank and channel buttons - belongs to the sound console in that mode, and a binding on it will never fire. The transport section and the jog wheel therefore have to be worth having on their own, and feedback must not drive LEDs for controls MC does not hold."
+    "consequence": "Everything else - strips, faders, encoders, F-keys, bank and channel buttons - follows the operator's switch between the two hosts. Nothing is unreachable: SMPTE/Beats gives PrismDMX the whole surface at any time. What the permanent set buys is that it needs NO switch, which is what matters during a show.",
+    "designGoal": "The transport section is the always-hot part of the console, so spend it on live-show work - free assignments included, such as a tap for speed against a particular speed master, a macro, or a look. It is explicitly NOT a requirement that everything important fit into five buttons. The bindings below are a reasonable starting point, not a layout.",
+    "feedbackRule": "The shadow model may only drive LEDs for controls MC currently holds. Lighting a strip LED while the surface is showing the sound console is ignored at best, and fights that console's own feedback at worst."
   },
 
   "reserved": [
@@ -123,7 +125,8 @@
     "SetExecutorMaster carries level: u16, and this surface reports 0..16380 in steps of 4 rather than 0..16383. Scale against verification.measured.faderMaxReported, or a fader against its end stop yields 99.98 per cent.",
     "The Encoder Assign section has six buttons and docs/MCU_MAPPING.md section 4.1 names five feature groups. AssignInstrument is left unbound rather than doubled up.",
     "Global.NameValue and Global.SmpteBeats are deliberately unbound - see 'reserved'. SmpteBeats must stay unbound and a loader should refuse a profile that binds it; NameValue is merely a bad idea.",
-    "The transport section and the jog wheel are the only controls guaranteed to reach PrismDMX in the combined Xctl+MC mode. Their bindings above happen to be the ones worth having in isolation - go, off, next, previous, clear, and a wheel on the selected parameter - and that should now be treated as a constraint rather than as luck.",
-    "D7 (executor paging on Faderbank) and D8 (SelectView on Channel) sit outside that guaranteed set, so in shared mode there is no surface path to either. Both need to stay reachable from the UI and the Web Remote."
+    "The transport section and the jog wheel are the controls that reach PrismDMX without a mode switch (see sharedMode). Their function list should therefore grow the live-show entries an operator actually wants there - above all a tap for speed - rather than staying transport-shaped.",
+    "A tap for speed has no target yet. LearnSpeed exists only as an ExecutorButtonFunction, and speed masters are named in docs/DMX_MERGE.md section 4 item 3 with nothing implementing them and no domain type carrying one. S22 must not invent the command; the session that builds speed masters owes the type, the command and the function-list entry.",
+    "D7 (executor paging on Faderbank) and D8 (SelectView on Channel) sit outside the permanent set, so in shared operation they cost a switch to the full surface. Acceptable for setup-shaped work, and a reason not to put anything time-critical there."
   ]
 }

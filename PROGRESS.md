@@ -1259,7 +1259,8 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
-| 2026-08-13 | S20 | **The X-Touch is to be run in the combined Xctl+MC mode, driving the venue's sound console and PrismDMX at the same time — and then most of the panel is not ours.** Stated by the operator after the session's measurements, and marked as such: everything in §2.7 was read off the desk, this was not. In that mode the surface splits the panel between the two hosts, and only what Xctl leaves unused keeps driving MC output and listening to MC input — **in practice the transport section (notes 91–95) and the jog wheel (CC 60)** | `docs/MCU_MAPPING.md` §4.3, written as a constraint on layer 3 rather than as a note. Three consequences. **The default profile has to stay usable when it is reduced to five buttons and a wheel** — §4.1 already puts go / off / next / previous / clear and the selected parameter there, which is luck, and is now a rule: do not move an operating function off the transport section. **D7 and D8 assume a whole panel** — executor paging and `SelectView` sit outside the guaranteed set, so a shared deployment has no surface path to either and the UI and Web Remote must keep them. **Feedback must not assume it owns a control**: S21 should hold the ownership set as data on the profile, the way `unlit_buttons` is, rather than as a condition scattered through the diffing. Nothing in §2 changes — the MC half of the combined mode is the same MC — so this costs no measurement, only assumptions |
+| 2026-08-13 | S20 | **"Tap for speed" on a speed master is a wanted binding and has no target to bind to.** The operator's use for the always-available transport section is free assignment — a tap tempo against *different speed masters*, a macro, a look. Today `LearnSpeed` exists only as an **executor button** function (`ExecutorButtonFunction` in `ARCHITECTURE_SPEC.md` §6; `XTouch.txt` offers it on a strip's buttons and not even on the selected executor's), and **speed masters** are named in `docs/DMX_MERGE.md` §4 item 3 — playback rate, applied in step 2 of the tick — with nothing implementing them and no domain type carrying one | A **forward dependency**, recorded so it is not rediscovered from the operator a second time. S22 must not invent the command: binding a tap needs a speed master to tap. The session that builds speed masters owes (a) the domain type, (b) a command to tap one, and (c) an entry in the transport row's function list — `docs/MCU_MAPPING.md` §4.1 and §4.3. Until then the transport row keeps its executor defaults, which are usable and are explicitly not a layout |
+| 2026-08-13 | S20 | **The X-Touch is to be run in the combined Xctl+MC mode, driving the venue's sound console and PrismDMX at the same time — and then most of the panel is not ours.** Stated by the operator after the session's measurements, and marked as such: everything in §2.7 was read off the desk, this was not. In that mode the surface splits the panel between the two hosts, and only what Xctl leaves unused keeps driving MC output and listening to MC input — **in practice the transport section (notes 91–95) and the jog wheel (CC 60)** | `docs/MCU_MAPPING.md` §4.3. **And it is a convenience rather than a restriction** — the first draft of that section got this backwards and was corrected the same day: the operator can switch the whole surface to MC at any time with the SMPTE button, so nothing is unreachable and the profile may contain whatever it likes. What the permanent set buys is **no switching**, which is what matters *during a show*. So: **the transport section is the always-hot part of the console and should be spent on live-show work, free assignments included** — a tap for speed against a particular speed master, a macro, a look — rather than on a transport metaphor PrismDMX does not have; §4.1's defaults are a starting point, not a layout. **D7 and D8 cost a mode change**, which is fine for paging and view switching (setup-shaped, not cue-shaped) and is a reason not to put anything time-critical there. **Feedback must not assume it owns a control**: S21 should hold the ownership set as data on the profile, the way `unlit_buttons` is, rather than as a condition scattered through the diffing. Nothing in §2 changes — the MC half of the combined mode is the same MC — so this costs no measurement, only assumptions |
 | 2026-08-13 | S20 | **SMPTE/Beats (note 53) is reserved and must never be bound.** In the combined Xctl+MC mode it is the button that **switches the surface between the two hosts** — the operator's way back to the sound desk. A console that binds it is a console somebody has to power-cycle to escape | Left unbound **in every mode**, not only the shared one, so that one profile is safe on a desk whose mode nobody has checked; `profiles/surface/xtouch.json` carries it in a `reserved` block with `bindable: false`, and S22's loader should refuse a profile that binds it rather than merely defaulting away from it. A quiet corroboration, offered as consistency rather than proof: note 53 is one of the two buttons S20 measured to have **no LED at all**, which is what one would expect of a button the firmware keeps for itself — though Name/Value has no LED either and switches nothing |
 | 2026-08-13 | S20 | **The X-Touch can stop transmitting while it goes on receiving, and only a power cycle brings it back.** Flooding it with 63-byte scribble strip writes *while device-query replies are outstanding* loses 17–34 of 64 replies and then kills its MIDI transmitter outright: no buttons, no faders, no SysEx. It keeps **receiving perfectly** — text written in that state appears on the display. Closing and reopening the port does not help; a fresh process does not help. It happened **twice out of two attempts**, and each half of the recipe is harmless alone: 64 small messages back to back lose nothing, 64 large ones with nothing asked of the desk are fine, and even large-plus-query is fine if each reply is waited for. A 2000-message flood while an operator swept a fader did not hang it but **thinned the inbound stream from ~40 to ~11 messages a second** | Three things for S21, all in `docs/MCU_MAPPING.md` §2.7 and §5.3. **Pace the outbound path** — §5.2's 30 Hz coalescing against a shadow model is not an optimisation, it is what keeps the desk out of this state, and a minimum gap belongs in the send queue. **Never poll the handshake**: the device query is the only reply the surface generates, and the failure needs replies in flight. And **silence is a fault state that §5.3 did not cover** — it assumed disappearance, where the port stays open and writes still land. A surface layer that only watches for disconnection would show a green light beside a dead console, so it must notice a desk that has gone quiet and say *power-cycle it*, because reconnecting is the one thing that will not work |
 | 2026-08-13 | S20 | **The X-Touch's faders are 12-bit inside a 14-bit field.** Every one of 576 captured positions is a multiple of 4; the low byte only ever takes the 32 values `00,04,…,7C`; the top of travel is **16380** and 16383 is never sent. No source mentions it. The motor accepts all 16 384 values — it simply cannot report that finely | `McuProfile::fader_step` and `max_reported_position()`, with the reasoning in the field's own documentation: a layer that turns an inbound position into a percentage by dividing by 16383 gives **99.98 %** for a fader against its end stop, and an executor master that cannot reach full is wrong in a way an operator will find and nobody will be able to explain. S21 scales against the profile, not against `FADER_MAX` |
@@ -1522,16 +1523,29 @@ Carried out of S20:
   because a pastel is still the colour it is a pastel of) and the eight values it
   maps onto are now confirmed: bit 0 red, bit 1 green, bit 2 blue, and bits above
   that are masked away by the surface — there is no inverted variant in MC mode.
-- **Most of the panel will not be ours.** The desk is to be run in the X-Touch's
-  combined **Xctl+MC** mode, driving the venue's sound console *and* PrismDMX at
-  once, and then only what Xctl leaves unused reaches MC — in practice **the
-  transport section (91–95) and the jog wheel (CC 60)**. `docs/MCU_MAPPING.md`
-  §4.3 has it in full, including the two things it costs: D7's paging and D8's
-  `SelectView` sit outside that set, and the shadow model must not drive LEDs for
-  controls MC does not hold. **S21 should hold the ownership set as data on the
-  profile**, the way `unlit_buttons` is, rather than as a condition threaded
-  through the diffing. This is the operator's account and not a measurement —
-  §7's checklist records it as an open item.
+- **In shared operation only part of the panel is permanently ours.** The desk is
+  to be run in the X-Touch's combined **Xctl+MC** mode, driving the venue's sound
+  console *and* PrismDMX at once. Only what Xctl leaves unused reaches MC
+  permanently — in practice **the transport section (91–95) and the jog wheel
+  (CC 60)** — and everything else follows the operator's switch between the two
+  hosts. **Nothing is unreachable**: pressing SMPTE/Beats gives PrismDMX the whole
+  surface. What the permanent set buys is *no switching*, which is what matters
+  mid-show, so those five buttons and the wheel want live-show functions and free
+  assignments rather than a transport metaphor. D7's paging and D8's `SelectView`
+  cost a mode change, which is fine for setup-shaped work and a reason not to put
+  anything time-critical there. **S21's part:** the shadow model must not drive
+  LEDs for controls MC does not currently hold, and the ownership set belongs as
+  **data on the profile**, the way `unlit_buttons` is, rather than as a condition
+  threaded through the diffing. `docs/MCU_MAPPING.md` §4.3 has it in full. This is
+  the operator's account and not a measurement — §7's checklist records it as an
+  open item.
+- **A tap for speed has nowhere to land yet.** The intended use of those
+  always-available keys includes a tap tempo against different **speed masters**,
+  and neither exists: `LearnSpeed` is only an executor-button function today, and
+  speed masters are named in `docs/DMX_MERGE.md` §4 item 3 with nothing
+  implementing them. S22 must not invent the command — the session that builds
+  speed masters owes the type, the command and the entry in the transport row's
+  function list.
 - **Never bind SMPTE/Beats (note 53).** In the shared mode it is the button that
   switches the surface between the two hosts, so binding it strands the operator
   away from their sound desk. Unbound in *every* mode, so one profile is safe on a
@@ -1985,15 +1999,18 @@ Wichtige Randbedingungen — die drei ersten sind Befunde von S20 am echten Ger�
   zwei Tasten ohne LED, und unter den Encodern sitzt auf diesem Gerät gar keine
   Lampe (Bit 6 des Ring-Werts leuchtet nichts).
 - **Das Pult wird später im kombinierten Xctl/MC-Modus laufen und dabei
-  gleichzeitig das Tonpult des Hauses bedienen.** Dann gehört das meiste Bedienfeld
-  dem anderen Host: nur was Xctl ungenutzt lässt, steuert weiterhin dauerhaft den
-  MC-Ausgang und hört auf MC-Eingaben — in der Praxis **die Transportsektion
-  (Noten 91–95) und das Jog-Rad (CC 60)**. `docs/MCU_MAPPING.md` §4.3 hat die
-  Einzelheiten. Zwei Folgen für diese Session: das Schattenmodell darf **keine
-  LEDs von Kontrollen ansteuern, die MC nicht gehören**, und die Zugehörigkeit
-  gehört als **Daten ans Profil** (wie `unlit_buttons`) statt als Bedingung
-  quer durch das Diffing. Das ist die Auskunft des Betreibers, keine Messung —
-  §7 der Mapping-Datei führt es als offenen Punkt.
+  gleichzeitig das Tonpult des Hauses bedienen.** Dauerhaft bei PrismDMX bleibt
+  nur, was Xctl ungenutzt lässt — in der Praxis **die Transportsektion
+  (Noten 91–95) und das Jog-Rad (CC 60)**; alles andere folgt der Umschaltung
+  zwischen den beiden Hosts. **Unerreichbar ist dabei nichts**: die Taste
+  SMPTE/Beats gibt PrismDMX jederzeit die volle Oberfläche. Der Gewinn der
+  dauerhaften Menge ist, dass man *nicht umschalten muss* — genau das, worauf es
+  während einer Show ankommt. `docs/MCU_MAPPING.md` §4.3 hat die Einzelheiten.
+  Zwei Folgen für diese Session: das Schattenmodell darf **keine LEDs von
+  Kontrollen ansteuern, die MC gerade nicht gehören**, und die Zugehörigkeit
+  gehört als **Daten ans Profil** (wie `unlit_buttons`) statt als Bedingung quer
+  durch das Diffing. Das ist die Auskunft des Betreibers, keine Messung — §7 der
+  Mapping-Datei führt es als offenen Punkt.
 - **Die Taste SMPTE/Beats (Note 53) wird nie belegt.** Im geteilten Modus schaltet
   sie die Oberfläche zwischen den beiden Hosts um; wer sie belegt, nimmt dem
   Operator den Weg zurück ans Tonpult. In **jedem** Modus unbelegt, damit ein
