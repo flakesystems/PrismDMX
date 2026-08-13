@@ -12,7 +12,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -47,8 +47,20 @@ export interface Daemon {
   kill: () => Promise<void>;
 }
 
+/** What else a daemon may be told to be. */
+export interface DaemonOptions {
+  /** A show file to open, instead of the empty one in the data directory. */
+  readonly show?: string;
+  /** How many universes the frame layout carries. */
+  readonly universes?: number;
+}
+
 /** Starts a daemon on `port`, in `dataDir` if one is given. */
-export async function startDaemon(port: number, dataDir?: string): Promise<Daemon> {
+export async function startDaemon(
+  port: number,
+  dataDir?: string,
+  options: DaemonOptions = {},
+): Promise<Daemon> {
   const directory = dataDir ?? mkdtempSync(join(tmpdir(), "prismdmx-e2e-"));
   const child: ChildProcess = spawn(
     binary(),
@@ -61,6 +73,8 @@ export async function startDaemon(port: number, dataDir?: string): Promise<Daemo
       "--no-local",
       "--log-level",
       "warn",
+      ...(options.show === undefined ? [] : ["--show", options.show]),
+      ...(options.universes === undefined ? [] : ["--universes", String(options.universes)]),
     ],
     { stdio: "ignore" },
   );
@@ -83,6 +97,22 @@ export async function startDaemon(port: number, dataDir?: string): Promise<Daemo
 /** Removes a daemon's data directory once nothing is using it. */
 export function forget(dataDir: string): void {
   rmSync(dataDir, { recursive: true, force: true });
+}
+
+/**
+ * Copies a committed show fixture into a directory of its own and answers with
+ * the path a daemon should open.
+ *
+ * A **copy**, because a daemon writes to the show it opens — it autosaves, and
+ * it keeps a recovery file beside it — and a test that let it write to the
+ * fixture would leave the working tree changed and the next run measuring
+ * something else.
+ */
+export function showFixture(name: string): { show: string; dataDir: string } {
+  const dataDir = mkdtempSync(join(tmpdir(), "prismdmx-e2e-"));
+  const show = join(dataDir, name);
+  copyFileSync(join(ROOT, "ui", "tests", "fixtures", name), show);
+  return { show, dataDir };
 }
 
 /**

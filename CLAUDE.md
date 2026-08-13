@@ -23,7 +23,7 @@ PrismDMX is a high-reliability, real-time DMX control software designed for miss
     -   DMX Engine: Pure calculation, HTP/LTP merging, playback execution, timing. No direct UI dependencies.
     -   Programmer: State machine tracking active user tweaks before storing them into presets/cues.
     -   Surface Controller (MCU): Bi-directional translation between Mackie Control MIDI messages and internal PrismDMX action dispatchers.
-    -   UI Layer: Reactive, high-density visualization rendering data from state hooks.
+    -   UI Layer: Reactive, high-density visualization rendering data from state hooks. Make sure the UI is built like an in device screen, so avoid scrolling outside the canvas with a design focused on reliability and fast recognition of sections instead of asthetics (don't make it completely ugly though). 
 
 3.  Immutability & Predictable State: Use immutable state updates for UI-facing state to guarantee fast re-renders and deterministic undo/redo (Oops engine).
 

@@ -2,7 +2,14 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "target": "es2023",
-    "lib": ["ES2023"],
+    /*
+     * `DOM` is here for one reason: the bodies of `page.evaluate` run *in the
+     * browser*, and S24's end-to-end spec reads pixels back off a canvas to
+     * check that the picture is a picture. Everything else in this project is
+     * Node and must not touch a DOM global — which the tooling cannot enforce
+     * once the library is listed, so it is written down here instead.
+     */
+    "lib": ["ES2023", "DOM"],
     "types": ["node"],
     "skipLibCheck": true,
 

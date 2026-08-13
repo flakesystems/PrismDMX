@@ -35,6 +35,13 @@ ui/src/bindings/
 # file the current code has just produced is a migration checked against itself.
 !crates/prism-core/tests/fixtures/*.prism
 
+# ...and the 64-universe rig S24's end-to-end suite starts a daemon on. The
+# frame budget is measured against 64 *real* universes at 30 Hz, and the only
+# way to have those in a browser is a show that patches them. Written by
+# `cargo test -p prismd --test ui_telemetry -- --ignored` and opened by a test
+# on every commit, so a format change fails in Rust rather than in Chromium.
+!ui/tests/fixtures/*.prism
+
 # Coverage and profiling
 /coverage/
 *.profraw

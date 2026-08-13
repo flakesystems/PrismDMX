@@ -15,6 +15,7 @@ import App from "./App";
 import { createDesk } from "./desk";
 import "./index.css";
 import { DeskProvider } from "./store/context";
+import { TelemetryProvider } from "./telemetry/panel";
 
 const desk = createDesk();
 desk.start();
@@ -27,7 +28,15 @@ if (container === null) {
 createRoot(container).render(
   <StrictMode>
     <DeskProvider store={desk.store}>
-      <App />
+      {/*
+        The telemetry channel is handed to the tree as a *device* — a sink, and
+        the defaults for how to draw it — rather than as state. There is nothing
+        in it to subscribe to, which is `docs/IPC_PROTOCOL.md` §7's last
+        paragraph made impossible to break rather than merely written down.
+      */}
+      <TelemetryProvider channel={{ sink: desk.telemetry }}>
+        <App />
+      </TelemetryProvider>
     </DeskProvider>
   </StrictMode>,
 );

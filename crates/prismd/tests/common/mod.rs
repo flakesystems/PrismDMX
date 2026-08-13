@@ -199,6 +199,69 @@ pub fn last_frame_of(
         .map(|(_, data)| data)
 }
 
+/* -------------------------------------------------------------------------- */
+/* Base64, so a recorded payload can live in a text file                      */
+/* -------------------------------------------------------------------------- */
+
+const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Standard base64 with padding (RFC 4648 §4).
+///
+/// Eleven lines rather than a dependency, for the reason the recordings exist at
+/// all: a fixture regenerated next year has to come out byte for byte the same,
+/// and that is a shorter promise to keep here than across a version bump.
+pub fn encode_base64(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let (a, b, c) = (
+            u32::from(chunk[0]),
+            chunk.get(1).map_or(0, |byte| u32::from(*byte)),
+            chunk.get(2).map_or(0, |byte| u32::from(*byte)),
+        );
+        let triple = (a << 16) | (b << 8) | c;
+        for shift in [18, 12, 6, 0] {
+            let index = usize::try_from((triple >> shift) & 0x3f).unwrap_or(0);
+            out.push(char::from(ALPHABET[index]));
+        }
+        let written = out.len();
+        for missing in chunk.len()..3 {
+            out.replace_range(written - 3 + missing..written - 2 + missing, "=");
+        }
+    }
+    out
+}
+
+/// The other direction, refusing anything that is not base64.
+pub fn decode_base64(text: &str) -> Vec<u8> {
+    let mut bits = 0_u32;
+    let mut held = 0_u32;
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    for character in text.bytes() {
+        if character == b'=' {
+            break;
+        }
+        let index = ALPHABET
+            .iter()
+            .position(|letter| *letter == character)
+            .unwrap_or_else(|| panic!("{} is not base64", char::from(character)));
+        bits = (bits << 6) | u32::try_from(index).unwrap_or(0);
+        held += 6;
+        if held >= 8 {
+            held -= 8;
+            out.push(u8::try_from((bits >> held) & 0xff).unwrap_or(0));
+        }
+    }
+    out
+}
+
+/// Where the interface's fixtures live, from a test target in this crate.
+pub fn ui_fixture(name: &str) -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join("ui/tests/fixtures")
+        .join(name)
+}
+
 /// The local endpoint, read the way `docs/IPC_PROTOCOL.md` §2.2 says a client
 /// reads it: out of the lock file the daemon wrote.
 pub fn local_address(data_dir: &Path) -> String {

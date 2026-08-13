@@ -145,6 +145,36 @@
   color: var(--ink);
 }
 
+/*
+ * The level view. Sized in `vh` rather than left to its content, because the
+ * canvas has no content: a canvas with no height is a canvas that draws
+ * nothing, and `CLAUDE.md` asks for a screen that does not scroll — so the
+ * picture is given a share of the window and the renderer fits 64 universes
+ * into whatever that turns out to be.
+ */
+.panel-telemetry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+}
+
+.telemetry-canvas {
+  display: block;
+  width: 100%;
+  height: 34vh;
+  min-height: 140px;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  background: #0b0e13;
+}
+
+.telemetry-readout {
+  margin: 0;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 .notice-warn {
   color: var(--warn);
 }

@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-08-13
+**Last updated:** 2026-08-14
 **Current phase:** Phase 6 — User interface
-**Current session:** S24 — `ui` telemetry channel (not started — see §8 for the prompt that starts it)
-**Last completed:** S23 — `ui` foundation ✅ — **the interface has a client, a mirror and an honest disconnected state: a recorded delta stream from a real daemon is replayed into the mirror and lands on the daemon's own snapshot, and a daemon killed under a real browser leaves nothing of itself on the screen**
+**Current session:** S25 — `ui` canvas, windows, views (not started — see §8 for the prompt that starts it)
+**Last completed:** S24 — `ui` telemetry channel ✅ — **the second channel is the picture: 64 universes at 30 Hz off a real daemon reach a canvas and cost React nothing, counted over three hundred frames, and the whole frame — decode and paint — is 0.30 ms median and 1.10 ms at the 99th percentile against a budget of 8**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -86,7 +86,7 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S23 | UI foundation | ✅ | 2026-08-13 | All exit criteria verified — see §2.24. **A delta stream recorded off a running daemon, replayed through the TypeScript mirror, reaches the daemon's own snapshot** — twelve cases, 93 deltas; and a real `prismd` killed under Chromium leaves no value on the screen. 158 UI tests, coverage **98.60 % lines**, zero `any`, no state-management dependency |
-| S24 | Telemetry channel | ☐ | | |
+| S24 | Telemetry channel | ✅ | 2026-08-14 | All exit criteria verified — see §2.25. **Zero React commits over 300 frames of 64 universes, counted with a `<Profiler>`; 0.30 ms median and 1.10 ms p99 for decode *and* paint, measured in Chromium against a real `prismd` publishing 64 real universes.** The decoder is held to `TelemetryFrame::decode`'s own answers on recorded frames; 77 new UI tests, coverage **98.91 % lines** on `ui/src`. Four mutation checks; one of them is what says the render counter counts |
 | S25 | Canvas, windows, views | ☐ | | |
 | S26 | Executor bar, encoder bar, console | ☐ | | |
 | S27 | Patch and fixture sheet | ☐ | | |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 23 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 24 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -1185,6 +1185,77 @@ object identical. S24 decodes the fixed-layout frame and renders it on a canvas;
 the sink is where that starts, and `deskEvents` deliberately has no
 `onTelemetry`, so the store cannot be wired to it by accident.
 
+### 2.25 S24 verification record
+
+Measured on 2026-08-14, all exit criteria from `IMPLEMENTATION_PLAN.md` S24 and
+the session prompt. The session that makes the second channel worth having, and
+the first one whose central claim is a number that has to be *counted* rather
+than argued.
+
+| Check | Result |
+|---|---|
+| **64 universes at 30 Hz sustained with zero React re-renders — asserted with a render counter** | ✅ `ui/src/telemetry/render.test.tsx`: a `<Profiler>` round the **whole interface**, a real `Connection` over the fake socket, and **300 frames of the recorded 64-universe frame** — ten seconds at §7's rate, 9.8 MB of levels through the MessagePack envelope. The commit count after the three-hundredth frame is **the same number it was after the handshake**. Not "the panel did not re-render": *nothing did*. And it was not zero work — the surface recorded 300 blits, one per frame, and the chrome was drawn **once** |
+| The counter counts | ✅ mutation: a `useState` setter called from the readout callback — the smallest realistic way to get telemetry into reactive state — turns **two** of the three tests in that file red. Three more mutations are recorded below |
+| **Frame budget: the canvas render stays under 8 ms at 64 universes** | ✅ **0.30 ms median, 1.10 ms p99**, over 163 frames — and 0.20 ms / 1.00 ms on the run before it. Measured in **Chromium against a real `prismd`** publishing **64 real universes** at 30.2 Hz over a WebSocket (`ui/e2e/telemetry.spec.ts`), with `performance.now()` round the whole per-frame cost: reading the 32 912-byte frame *and* drawing it. The rig is `ui/tests/fixtures/wide-rig.prism`, a show patched across all 64 universes — the daemon filters telemetry down to the universes a show actually patches, so a wide *layout* over a narrow show would have measured nothing. The assertion is on the p99, not the mean: the worst frame in four seconds is what an 8 ms budget is about |
+| The picture is a picture, not a readout that agrees with itself | ✅ the same spec reads the canvas bitmap back with `getImageData` and counts lit pixels. A readout can be right about a blank canvas |
+| **Dropped telemetry degrades smoothly and never desynchronises control state** | ✅ three ways. **Structurally:** the decode happens on the *paint* side of the sink, in a loop whose only output is a canvas, so a malformed frame cannot reach the store, the connection or the mirror. **Asserted:** 180 malformed frames — every case `prism-ipc` itself refuses — through a real connection leave the commit count unchanged, the status *Connected*, the notices empty and the documents intact; the delta sent afterwards arrives and moves the readout. **Visibly:** the last readable picture stays on the canvas, the fault is counted by kind, and the log says so **once** per kind rather than thirty times a second |
+| A frame is a picture of now | ✅ the sink keeps the latest payload and no queue, and the loop draws a payload once: three frames arriving between two animation frames cost **one** paint, and the two that were skipped are counted as *lost* from their sequence numbers. A picture that has stopped arriving is **dimmed** after 600 ms and says *not live*; a picture from a daemon that has gone is taken off the canvas altogether, because the sink was cleared with the connection |
+| **The decoder is checked against `prism_ipc::TelemetryFrame::encode`, not against itself** | ✅ `ui/tests/fixtures/telemetry-recording.json`, written by the new `crates/prismd/tests/ui_telemetry.rs` off **two running daemons**: four frames from the three-dimmer rig with all 512 levels of each universe written out, one frame from the 64-universe rig described by an FNV-1a digest per universe, and six malformed frames. **Every expectation in the file is `TelemetryFrame::decode`'s own answer.** There is no encoder in `ui/src/telemetry` and there is not meant to be: nothing in a client ever sends telemetry, so an encoder could only exist to feed the decoder its own idea of the format |
+| The recording cannot go stale quietly, and is not vacuous | ✅ two guards in Rust, on every `cargo test`: every payload is decoded with this build's layout, compared against the recorded expectation **and re-encoded back to the same bytes**; and a second test says the frames are of a rig that is lit — 64 universes in order, none of them dark, three distinct levels across the narrow frames, a sequence number that moves, and levels past channel 256, which is where a stride error hides. The regenerator is `#[ignore]`d, like `prism-core`'s frozen migration fixture |
+| **The layout constants are checked from Rust** | ✅ `crates/prism-ipc/tests/interface_telemetry.rs` `include_str!`s `ui/src/telemetry/frame.ts` and asserts `TELEMETRY_VERSION`, `TELEMETRY_HEADER_BYTES`, `CHANNELS_PER_UNIVERSE`, the section stride as *the number plus its levels*, the magic, `UniverseId::MAX`, all three fault names and the fact that the decoder answers with a fault rather than a frame. The same shape as S23's `interface_protocol.rs` |
+| A layout version this build does not know is **dropped**, not guessed at | ✅ from a recorded frame with its version byte raised: the fault is `unknown-version`, naming both versions, and the view keeps the last frame it could read. Asserted against the fault `prism_ipc` gave for those exact bytes |
+| `npx tsc -b --force` clean with `strict: true`, **no `any` anywhere** | ✅ exit 0. `any` appears **nowhere** in `ui/src` or `ui/e2e`. This session's shipped code contains **no type assertion at all**; the one `as` it adds is in `canvas.test.ts`, on an object that file constructed three lines above — the allowance S23's four test assertions carry. `tsconfig.node.json` gained the `DOM` library for one reason, written down in the file: the bodies of `page.evaluate` run in the browser |
+| `npm run build`, `npm run lint`, `npm run test` clean | ✅ all three exit 0. The build is 244 kB (77 kB gzipped), up 9 kB on S23 — this session adds no dependency, and a canvas needs no library. `oxlint` reports nothing. **235 tests in 22 files**, up from 158 in 15 |
+| `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check` | ✅ all three exit 0 — **1 439 tests across 52 targets**, 16 ignored. Seven of them are this session's: 3 in the new `prism-ipc/tests/interface_telemetry.rs` and 4 in the new `prismd/tests/ui_telemetry.rs` (one of them the ignored regenerator) |
+| **Coverage on what this session wrote** | ✅ **98.91 % lines**, 94.08 % branches, **100 % functions** over `ui/src` (235 tests, `vitest` + Testing Library), up from S23's 98.60 %. The new module reads **99.45 % lines, 100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The two uncovered lines in `panel.tsx` were read rather than counted: a canvas ref that is `null` at the moment the effect runs, and the `typeof window === "undefined"` arm of the resize fallback — neither reachable from inside a browser or a jsdom test |
+| A test never touches a device | ✅ the unit suite has no canvas either: `LevelSurface` is the seam, and `RecordingSurface` keeps the pixels, so the raster is asserted *per channel* rather than looked at. The end-to-end suite starts `prismd --mock-output`, the daemon's headless mode |
+| CI green on the pushed commit | ✅ run **REPLACE_RUN** on `REPLACE_SHA` — see the last row of §1 |
+
+**What was built, in four layers.**
+
+**1. `telemetry/frame.ts` — the layout, read in place.** A view rather than a
+value: it keeps the payload and an index of where each universe's levels begin,
+and reads the levels where they lie. Nothing is copied, nothing is parsed into
+objects, and the only allocation per frame is the `DataView` over the header. The
+sequence is a `bigint`, because the field is a `u64` and a `number` is exact only
+to 2^53 — the range is not needed, but a decoder that quietly narrowed a wire
+field is the kind of thing that is right until it is not.
+
+**2. `telemetry/painter.ts` — one pixel per channel.** The levels become an RGBA
+block 512 wide and one row per universe — 32 768 writes through a 256-entry
+palette — and that block is blitted into the grid, scaled, with smoothing off.
+The alternative is 32 768 `fillRect` calls for the same picture. The palette's
+byte order is worked out at run time rather than assumed. Beside the grid: a peak
+meter per universe, universe numbers in the gutter and a channel ruler, all drawn
+**only when they change**.
+
+**3. `telemetry/driver.ts` — the loop, and where the rule is kept.** The sink
+holds the latest payload; an animation frame decodes *that one payload* and draws
+it. No state is set, no context is published, no component is told anything. One
+line of text reaches the DOM, written with `textContent` by hand — which is also
+what the end-to-end suite reads the frame budget out of.
+
+**4. `telemetry/panel.tsx` — a canvas, a line, and no state.** The channel comes
+down the tree as a **device** — a sink, and the defaults for how to schedule and
+where to draw — rather than as state, so there is nothing in the context to
+subscribe to. The canvas's size is client-local (`ARCHITECTURE_SPEC.md` §4.2)
+and lives in the element and a ref; no command is sent about it.
+
+**Four mutation checks.** A `useState` setter in the readout callback turns two
+render tests red — that is what says the counter counts. Shifting the raster by
+one channel turns the two pixel tests red. Redrawing on every animation frame
+rather than on a new payload turns the coalescing test, the staleness test *and*
+the render counter red. Counting a sequence gap as the whole difference rather
+than what was missed turns two stats tests red.
+
+**Two fixtures were added and both are written by Rust.**
+`ui/tests/fixtures/telemetry-recording.json` is the frames and their meanings;
+`ui/tests/fixtures/wide-rig.prism` is a show patched across all 64 universes, and
+it is the only honest way to have 64 of them in a browser. Both are regenerated
+by `cargo test -p prismd --test ui_telemetry -- --ignored`, and both are opened
+by non-ignored tests on every commit — a show format that moved would fail in
+Rust rather than in Chromium months later.
+
 ---
 
 ## 3. Coverage tracking
@@ -1203,7 +1274,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-surface` | **> 95 %** | **99.30 % lines**, 98.68 % regions, 98.46 % functions (S22, with layer 3 and the bindings target) — `accel.rs`, `midi.rs`, `model.rs` and `control.rs` at **100 % lines**, `binding.rs` **99.85 %** / 98.72 % regions, `profile.rs` 99.39 %, `color.rs` 99.32 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. Three uncovered lines in the new module were found by reading the report — the `action()` arms for the two faders and the wheel, which every test had reached through `command()` instead — and became a test rather than an exception. S21's measurement: **99.20 % lines**, 98.66 % regions, 98.28 % functions (with layer 2 and two new targets) — `accel.rs`, `model.rs`, `control.rs` and `midi.rs` at **100 % lines**, `color.rs` 99.32 %, `profile.rs` 99.27 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. The crate grew by about 1 500 lines and the figure moved by six hundredths of a point, which is the point of measuring it. The 33 uncovered lines are the *cannot happen* arms a crate that denies `panic!` has to write — `let Some(...) else { return … }` on an array the diff has already bounded — plus `panic!` arms in tests that pass; three genuinely unreachable branches found while reading the report were **removed** rather than covered (§2.22). S20's measurement: **99.26 % lines**, 98.62 % regions, 98.01 % functions (with the recorded-capture target added) — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.94 %, `codec.rs` 98.71 %, `feedback.rs` 98.30 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. S19 measured **99.24 % lines**, 98.58 % regions, 97.94 % functions; two unreachable branches found while reading that report were removed rather than covered — see §2.20. **The figure does not include `tools/xtouch-probe`**, which is not a workspace member and has no tests: it is the instrument, not the product | 2026-08-13 (S20) |
 | `prism-ipc` | ≥ 85 % | **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
 | `prismd` | ≥ 85 % | **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
-| `ui` | ≥ 85 % | **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-13 (S23) |
+| `ui` | ≥ 85 % | **98.91 % lines**, 94.08 % branches, **100 % functions**, 98.94 % statements (S24, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; 235 tests in 22 files). The new `telemetry/` module reads **99.45 % lines** and **100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The eleven uncovered lines across the whole tree were read, not counted: S23's nine *cannot happen* arms, plus a canvas ref that is `null` when the effect runs and the `typeof window === "undefined"` arm of the resize fallback. The end-to-end suite (Playwright, **3** tests) is **not** in this figure. S23's measurement: **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-13 (S23) |
 
 ### Performance gates
 
@@ -1216,7 +1287,8 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Frame determinism | identical input → byte-identical frames | three runs of the same 100-tick script compared byte for byte on the driver's frames, 8 command changes, > 20 distinct frames | 2026-08-11 |
 | Open DMX frame rate | measure real rate on SH-RS09B | **35.53 Hz** over 60 s through D2XX (2 132 frames), **38.35 Hz** through the virtual COM port. Both with the frame timing corrected; before the correction the same code reported 43.1 Hz, and that figure was the *symptom* — see the decision log. `DeviceProfile::SH_RS09B` now carries `verified: true` | 2026-08-11 (S8) |
-| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | — | |
+| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-14 (S24) |
+| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. See the note below | 2026-08-14 (S24) |
 
 **Thread priority is part of the tick jitter figure.** The same ten-minute run at
 the shell's default priority missed 45 ticks and had a p99.9 of 54 ms. The engine
@@ -1238,6 +1310,42 @@ rather than one this session claims.
 
 Measured on: Windows 11 26200, Rust 1.97.1 msvc, release profile, engine plus four
 subscriber threads polling at 5 ms, machine otherwise idle but not quiesced.
+
+**The two telemetry figures, and how to re-run them.** *Zero re-renders* is a
+count, not a judgement: `ui/src/telemetry/render.test.tsx` wraps the whole
+interface in a `<Profiler>`, delivers 300 telemetry frames of the recorded
+64-universe frame through a real `Connection`, and asserts the commit count is
+the one it had after the handshake. It is an ordinary unit test —
+`npm run test` in `ui/` — and it runs on every commit. A mutation that puts a
+`useState` setter in the readout callback turns it red, which is what says the
+counter is measuring something.
+
+The **frame budget** cannot be measured in `jsdom`, which has no rasteriser, so
+it is measured where it matters:
+
+```bash
+npx playwright test telemetry
+```
+
+in `ui/`, after `npx playwright install chromium`. It starts a real `prismd` on a
+copy of `ui/tests/fixtures/wide-rig.prism` — a show patched across all 64
+universes, because the daemon only publishes the universes a show actually
+patches — serves the production build, and lets the interface run for about five
+seconds. The interface times its own frames with `performance.now()` **around the
+decode and the paint together**, keeps a four-second window of them, and writes
+median and p99 into the readout line, which the spec parses, asserts against the
+8 ms budget and prints:
+
+```text
+[telemetry] 64 universes · 30.2 Hz · paint 0.30 ms (p99 1.10 ms) · 163 frames · 1 lost
+```
+
+Measured on: Windows 11 26200, Chromium 141 via Playwright 1.62, the daemon a
+**debug** build (which is what the CI job runs too), the browser at its default
+1280 × 720 viewport, machine otherwise idle but not quiesced. *Lost* frames are
+not a fault: §8 says the daemon coalesces and drops, and one or two in five
+seconds is that mechanism working. What must be zero is *dropped* — frames that
+arrived and could not be read — and it is asserted as zero.
 
 ### 3.1 Running the long tests
 
@@ -1502,6 +1610,14 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-14 | S24 | **The decode belongs on the *paint* side of the sink, and putting it there is what makes the third exit criterion structural.** The obvious place to decode a telemetry frame is where it arrives — in the connection's `onTelemetry`, beside every other message. Two things are wrong with that. It is work done for pictures nobody sees: telemetry arrives at 30 Hz, a background tab paints at 0 Hz, and the browser decides which. And it puts the decoder on the *control* side of the sink, where a malformed frame is one mistake away from the store | `TelemetrySink.accept` stays what S23 built — it takes bytes and holds the latest — and the decode happens in the animation-frame loop, whose only outputs are a canvas and one `textContent`. *Dropped telemetry never desynchronises control state* stops being a promise about care and becomes a fact about which side of a boundary the code is on. It is still asserted: 180 malformed frames through a real connection, then a delta that has to arrive |
+| 2026-08-14 | S24 | **There is no telemetry encoder in the interface, and that is a decision rather than an omission.** The natural way to test a decoder is to build frames to feed it — and a TypeScript encoder feeding a TypeScript decoder passes with the header misread, the endianness reversed and the stride wrong, as long as all three are wrong together. It is the trap S19 (round trips), S20 (recorded round trips), S21 (self-classifying messages) and S23 (self-computed patches) each found in their own layer | The bytes come from `prism_ipc::TelemetryFrame::encode` off two running daemons, and **every expectation is `TelemetryFrame::decode`'s own answer**, written into `ui/tests/fixtures/telemetry-recording.json` beside the payload. `ui/src/telemetry` contains no encoder at all, which is also correct on its own terms: §4 makes `Telemetry` daemon → client, so a client that could build one would be a client that could lie about the rig |
+| 2026-08-14 | S24 | **Measuring an 8 ms frame budget needs 64 real universes, and the daemon will not publish universes a show does not patch.** `prismd` filters telemetry down to `patched_universes()` (S17, and for a good reason: 64 universes of nothing at 30 Hz is a megabyte a second on a school network). So a daemon started with `--universes 64` and an empty show publishes **none**, and the protocol has no command that embeds a fixture type — a client cannot patch its way to a wide rig | A 64-universe show is a committed fixture, `ui/tests/fixtures/wide-rig.prism`, written by the same `#[ignore]`d regenerator as the frame recording and opened by a non-ignored Rust test on every commit. `.gitignore`'s `*.prism` gained a second exception, beside S15's frozen migration file. The end-to-end spec copies it before starting a daemon on it, because a daemon writes to the show it opens |
+| 2026-08-14 | S24 | **The canvas is a device, so it is an argument — and `jsdom` is why that is not merely tidy.** `getContext("2d")` answers `null` in `jsdom`, so a test that painted on a real canvas would skip itself, and the raster arithmetic — the part where a stride error puts universe 64's levels a channel to the left — would be checked by nobody | `LevelSurface` is five operations with no canvas types in them: `clear`, `fill`, `label`, `blit`, and the two sizes. `canvasSurface` is the browser's, `RecordingSurface` keeps the pixels, and `painter.test.ts` asserts **every one of 32 768 pixels** against the frame it was drawn from. What is left — the code that turns those five operations into canvas calls — is covered by `canvas.test.ts` against a context it constructs, which is the one type assertion this session's tests make |
+| 2026-08-14 | S24 | **The picture is a raster, not a tree of elements, and the difference is 32 768 canvas calls.** One `fillRect` per channel is the obvious rendering and it is 32 768 calls into the canvas API per frame, thirty times a second | One pixel per channel through a 256-entry palette into an `ImageData` 512 wide, blitted into the grid rectangle scaled with smoothing off: one `putImageData` and one `drawImage` for the whole picture. The `ImageData` is kept between frames — `createImageData` is 131 kB at 64 universes, which is four megabytes a second of rubbish for the collector to deal with in the middle of a show — and the palette's byte order is derived at run time rather than assumed. Measured: **0.30 ms** median for decode *and* paint |
+| 2026-08-14 | S24 | **A dropped frame and a stale picture want different answers, and "clear the canvas" is wrong for both.** A frame that cannot be read is one missing picture; the last good one is still the best answer until the next arrives. A channel that has stopped arriving is different — what is on the canvas may be minutes old, and an operator reading it as current is the failure this whole panel exists to avoid | Three states, and each says so. A dropped frame leaves the picture standing and counts the fault by kind (logged **once** per kind, not thirty times a second). A picture older than 600 ms is **dimmed where it stands** and the readout begins *not live* — *these were the levels a second ago* is worth more than an empty rectangle, as long as it cannot be mistaken for now. A connection that has gone clears the sink, and the picture goes with the readouts, which is S23's rule about stale values applied to pixels |
+| 2026-08-14 | S24 | **The telemetry channel reaches the tree as a *device*, not as state — and that is what makes the rule impossible to break rather than merely written down.** A context carrying a decoded frame, or a hook answering with one, would put 32 768 numbers into React's dependency graph without anybody deciding to | `TelemetryContext` carries a sink, a scheduler and a way of getting a surface. Nothing in it changes, ever, so nothing a component reads from it can cause a render; there is no `useTelemetryFrame` because there is nothing to subscribe to. `deskEvents` still has no `onTelemetry`, which is S23's guard, and the render counter is the measurement that says the two together work |
+| 2026-08-14 | S24 | **The sequence number is a `u64` and JavaScript's `number` is exact to 2^53.** Nothing here needs the range — thirty frames a second reaches 2^53 in nine million years — and narrowing it would never be noticed | Read with `getBigUint64` and kept as a `bigint`; the gap arithmetic is done in `bigint` and narrowed once, in the one place it could overflow if it were not. A decoder that quietly narrows a wire field is the kind of thing that is right until it is not, and this one costs nothing |
 | 2026-08-13 | S23 | **Neither Zustand nor Immer is in the interface, and the plan named both.** Immer exists to make a deep update read like a mutation — but the show and the session are patched by **RFC 6902 operations against a document root**, so the update is `applyOps`, which already answers with a new document that shares every untouched container by reference. A draft proxy in front of that is a second immutability mechanism over data that is already immutable, and it would have to reconcile with a patch applier that does not use it. Zustand is a store with selector subscriptions, which React 19 has as `useSyncExternalStore` | `store/desk.ts` is about a hundred lines and `store/hooks.ts` is forty, both testable with no renderer. The measurement that decided it: a `replace` on one fixture's name leaves every *other* fixture object identical by reference, which is what a selector compares — asserted in `mirror/patch.test.ts`. The other half of the argument is that the interface ships inside a Tauri bundle (S29), so a dependency here is one an operator installs |
 | 2026-08-13 | S23 | **`@msgpack/msgpack` was taken, and a hand-written codec was not.** The daemon uses `rmp-serde`; the browser needs the other half. Writing it by hand would put a second implementation of a binary format in the project, in the language where a decoding mistake is silent, and there is nothing project-specific about MessagePack | One runtime dependency, no dependencies of its own, and it decodes into `unknown` — which is exactly the shape the readers want, because the checking that matters is *is this a message* and not *is this MessagePack*. Its decoder walks with an explicit stack rather than recursing, so the attack `prism-ipc`'s `scan.rs` guards against cannot overflow the JavaScript stack; the depth limit in `shape.ts` is about what happens afterwards, when the value is walked as a document. **Checked rather than assumed:** the recording carries thirteen client messages encoded by `rmp-serde` and the browser reproduces all thirteen byte for byte |
 | 2026-08-13 | S23 | **A TypeScript string union is erased at run time, and a decoder needs the values.** `ts-rs` renders a unit-only enum as `"Dimmer" \| "Position" \| …`, which is right for a type and useless to code deciding whether the string it just read off a socket *is* one. Writing the lists by hand in `ui` would have been a second enumeration to keep in step — the drift the generated bindings exist to prevent | `prism_domain::export::write_variants` emits `ui/src/bindings/variants.ts`, and it derives each list **from the generated union itself** rather than from a second enumeration in Rust: it reads back the `.ts` file `ts-rs` has just written. Fourteen tables come out of it for free, including the ones no session has needed yet, and `MergeMode` proves the method — its variants travel as `HTP`/`LTP` because of a `rename_all`, and a table written from the Rust identifiers would have type-checked and never matched a message |
@@ -1729,20 +1845,63 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**Phase 6 has begun, and the interface has a foundation rather than a demo.**
-An IPC client that speaks the daemon's own bytes — checked byte for byte against
-payloads `rmp-serde` wrote — a JSON Patch mirror that reproduces the daemon's
-state from a **recorded delta stream**, a read model with no state-management
-dependency in it, and a disconnected state that is honest: when the engine goes,
-the values go with it.
+**The interface now has both channels, and the second one is the reason there
+are two.** A fixed-layout binary frame decoded in place, 64 universes drawn as a
+raster on a `<canvas>`, and a control state that cannot be disturbed by any of
+it — because the decoder lives on the paint side of the sink, where nothing it
+does can reach the store.
 
-**The two exit criteria are tests rather than claims.** The first is
-`ui/src/mirror/recording.test.ts` against twelve sequences a running `prismd`
-actually produced, ending on the snapshot a *second client* was served. The
-second is asserted twice — in jsdom against a fake socket, and in Chromium
-against a `prismd` that is **killed** and restarted.
+**Both exit criteria are numbers rather than claims.** *Zero re-renders* is a
+`<Profiler>` count over 300 frames of 64 universes, and a mutation check says the
+counter counts. *Under 8 ms* is 0.30 ms median and 1.10 ms p99, measured in
+Chromium against a real `prismd` publishing 64 real universes at 30 Hz, with the
+command to re-run it in §3.
 
-**Begin S24** (`ui` — telemetry channel). Use the prompt in §8.
+**Begin S25** (`ui` — canvas, windows, views). Use the prompt in §8.
+
+Carried out of S24:
+- **Telemetry must stay out of React, and there are now two guards.** S23's:
+  `deskEvents` has no `onTelemetry` and a hundred frames cost the store zero
+  notifications. S24's: `ui/src/telemetry/render.test.tsx` counts **React
+  commits** over 300 frames of 64 universes and requires the number not to move.
+  A view that wants levels reads them in the paint loop, from
+  `TelemetryFrameView`; it does not ask a hook for them, because there is no hook
+  to ask.
+- **The telemetry channel arrives as a context carrying a *device*.**
+  `TelemetryContext` holds a sink, and optionally a scheduler, a clock and a way
+  of building a surface — which is how the tests replace all three. Nothing in it
+  ever changes. S25's window system should hand the same object down; a second
+  provider per window is fine, because a provider publishes nothing.
+- **The frame budget is measured in Chromium, not in jsdom**, and the way to
+  re-run it is `npx playwright test telemetry` (§3). If S25 or S26 puts more on
+  the canvas, that spec is where the cost shows up — it asserts a p99, so a
+  regression that only bites on one frame in a hundred still fails it.
+- **`ui/tests/fixtures/wide-rig.prism` is a committed show file**, and the only
+  way to have 64 universes of telemetry in a browser: the daemon publishes the
+  universes a show *patches*, not the ones the layout has room for. It and
+  `telemetry-recording.json` are both rewritten by
+  `cargo test -p prismd --test ui_telemetry -- --ignored`, and both are opened by
+  non-ignored Rust tests on every commit. A session that changes the show format,
+  the telemetry layout or `TelemetryFrame` should expect to regenerate them — and
+  to read the diff, because that diff *is* the change.
+- **`LevelSurface` is the drawing seam, and S25's canvas should use it or
+  something like it.** Five operations, no canvas types, `RecordingSurface` on
+  the other side. It is what lets `painter.test.ts` assert all 32 768 pixels
+  rather than that something was drawn, and it is why the whole renderer is
+  covered in a runtime with no rasteriser in it.
+- **Client-local state has its first real instance and it stayed local.**
+  `ARCHITECTURE_SPEC.md` §4.2 names zoom, scroll and camera; the canvas's pixel
+  size is the same kind of thing, and it lives in the element and a ref with no
+  command sent about it. S25 has the harder version of this question — a window's
+  *position* is session state (§4.1) and its scroll offset is not.
+- **`tsconfig.node.json` now includes the `DOM` library**, for the bodies of
+  `page.evaluate`, which run in the browser. Everything else under that config is
+  Node and must not touch a DOM global; the tooling cannot enforce that any more,
+  so it is written down in the file.
+- **The panel is a diagnostic, not the level view S25 will want.** It is one
+  section in a column: a grid, a peak meter per universe and a line of numbers.
+  When windows exist it belongs in one, sized by the window rather than by `vh`.
+  What should survive the move is the arrangement, not the layout.
 
 Carried out of S23:
 - **The telemetry channel already arrives, and it must stay out of React.**
@@ -2253,133 +2412,152 @@ Paste everything below into a fresh session.
 
 ---
 
-PrismDMX — Session S24: `ui` — Telemetriekanal
+```
+PrismDMX — Session S25: `ui` — Canvas, Fenster, Views
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Der Daemon läuft allein und wird von einem Pult bedient (D2 in S18, D11 in S22).
-Seit S23 hat die Oberfläche ein Fundament: einen IPC-Client, der die Bytes des
-Daemons spricht, einen Spiegel, der einen aufgezeichneten Delta-Strom auf den
-Snapshot des Daemons abbildet, und einen ehrlichen Zustand bei
-Verbindungsverlust. Was fehlt, ist der zweite Kanal — und der ist der Grund,
-warum es überhaupt zwei gibt.
+Der Daemon hält den Zustand, das Pult bedient ihn ohne Oberfläche (D2 in S18,
+D11 in S22), und seit S23/S24 hat die Oberfläche beide Kanäle: einen Spiegel,
+der dem Daemon folgt, und ein Bild der Ausgabe, das nie durch React geht. Was
+fehlt, ist die Oberfläche selbst — und ihr entscheidender Punkt ist, wo ihr
+Layout wohnt. Nicht hier.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
                                   Teststandards. Besonders: `strict: true`,
                                   **kein `any`**, explizite Interfaces für alle
                                   Domänentypen, kein `console.log` in
-                                  Produktionscode (strukturierter Logger mit
-                                  Leveln), ≥ 85 % Coverage global
+                                  Produktionscode, ≥ 85 % Coverage global — und
+                                  der Absatz zur UI-Schicht: eine Oberfläche wie
+                                  ein Gerätebildschirm, **kein Scrollen
+                                  außerhalb des Canvas**, schnelles Erkennen der
+                                  Bereiche vor Ästhetik
 2. PROGRESS.md                  — Stand, Decision Log, gemessene Zahlen;
-                                  besonders §2.24 (was S23 gebaut hat), §2.17
-                                  (`prism-ipc`: Framing, Backpressure,
-                                  Telemetrie-Layout), §3 (Coverage und
-                                  Performance-Gates, inklusive der noch leeren
-                                  Zeile „Telemetry render") und §7 „Carried out
-                                  of S23" — diese Liste ist Teil der
+                                  besonders §2.25 (was S24 gebaut hat), §2.24
+                                  (S23), §2.13 (`prism-core`: Session-Zustand,
+                                  D11), §3 (Coverage und Performance-Gates) und
+                                  §7 „Carried out of S24" **und** „Carried out
+                                  of S23" — diese beiden Listen sind Teil der
                                   Anforderungen
-3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S24
-4. docs/IPC_PROTOCOL.md §7      — **vollständig**, und §3 dazu. Das ist die
-                                  Spezifikation dieser Session: Rate, Inhalt,
-                                  Kodierung, Verlustpolitik, das feste
-                                  Binärlayout und der letzte Absatz, der eine
-                                  Regel ist und keine Empfehlung
-5. ARCHITECTURE_SPEC.md §2 (Systemüberblick — der Pfeil `ENG → CV`), §3.2
-   (Bildrate, genau gesagt), §5 (Pipeline) und §12 (Testpolitik)
-6. crates/prism-ipc/src/telemetry.rs — das Layout in Rust: `TelemetryFrame`,
-                                  `UniverseLevels`, `TELEMETRY_HEADER_BYTES`,
-                                  `TELEMETRY_VERSION`, und was `decode` mit
-                                  einer unbekannten Layoutversion macht
-7. crates/prismd/src/daemon.rs  — wer die Frames erzeugt, wie oft, und welche
-                                  Universen darin vorkommen
-8. ui/src/ipc/telemetry.ts      — die Senke aus S23: sie hält den letzten
-                                  Payload und kann **niemanden benachrichtigen**.
-                                  Dazu ui/src/ipc/connection.ts (`onTelemetry`)
-                                  und ui/src/store/desk.ts (`deskEvents` hat
-                                  bewusst kein `onTelemetry`)
-9. ui/src/mirror/recording.test.ts und crates/prismd/tests/ui_recording.rs —
-                                  wie in diesem Projekt gegen eine **Aufnahme
-                                  des Daemons** getestet wird statt gegen die
-                                  eigene Erwartung
+3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S25
+4. ARCHITECTURE_SPEC.md §4      — **vollständig**: §4.1 (was zum Session-Zustand
+                                  gehört, Feld für Feld), §4.2 (was ausdrücklich
+                                  nicht — und warum), §4.3 (Latenzbudget) und
+                                  §4.4 (die elf Kommandos, die die Konsole für
+                                  die Oberfläche auslöst). Das ist die
+                                  Spezifikation dieser Session
+5. docs/IPC_PROTOCOL.md §5      — die Kommandos, die ein Client senden darf, mit
+                                  ihren Feldern; dazu §4.1 (der Snapshot trägt
+                                  die Session) und §6 (Deltas)
+6. crates/prism-core/src/session.rs — der Zustand, den du fernsteuerst:
+                                  `SessionState`, `WindowInstance`, `View`, und
+                                  welche Kommandos ihn wie ändern. Dazu
+                                  crates/prismd/tests/surface_gate.rs — das
+                                  D11-Gate in Rust
+7. ui/src/mirror/select.ts und ui/src/store/hooks.ts — wie eine Ansicht heute
+                                  aus dem Spiegel liest, und warum Selektoren
+                                  stabil sein müssen
+8. ui/src/telemetry/panel.tsx und ui/src/telemetry/painter.ts — das erste
+                                  Panel, seine Zeichenschnittstelle
+                                  (`LevelSurface`) und was daran client-lokal
+                                  ist
+9. ui/src/bindings/variants.ts  — die Laufzeittabellen der String-Unions,
+                                  darunter `WindowType`. Eine Ansicht, die eine
+                                  solche Liste selbst schreibt, führt genau die
+                                  Abweichung wieder ein, die diese Datei
+                                  beseitigt
 
 Stand — nichts davon musst du neu bauen:
 - Phasen 1–5 vollständig, `prismd` fährt headless, `prism-surface` bedient ein
-  Pult ohne Oberfläche. 1 432 Tests im Workspace, alle grün.
-- `ui` hat Client, Spiegel, Store, Hooks, Logger, Testinfrastruktur (`vitest` +
-  Testing Library, Playwright gegen einen Daemon im Mock-Output-Modus) und
-  158 grüne Tests bei 98,60 % Zeilenabdeckung.
+  Pult ohne Oberfläche. 1 439 Tests im Workspace, alle grün.
+- `ui` hat Client, Spiegel, Store, Hooks, Logger, den Telemetriekanal mit
+  Canvas-Renderer und Testinfrastruktur (`vitest` + Testing Library, Playwright
+  gegen einen echten Daemon). 235 grüne Tests bei 98,91 % Zeilenabdeckung.
 - Der Daemon lässt sich headless starten:
   `cargo run -p prismd -- --mock-output --websocket --run-for 30`
   und schreibt eine Lock-Datei mit seinen Endpunkten (docs/IPC_PROTOCOL.md §2.2).
-  `ui/e2e/daemon.ts` startet und tötet ihn bereits so.
+  `ui/e2e/daemon.ts` startet, tötet und findet ihn bereits so — und kann ihm
+  seit S24 eine Showdatei mitgeben.
 - `npm ci` in `ui/` genügt. Für die Ende-zu-Ende-Tests zusätzlich
   `npx playwright install chromium`.
 
-Aufgabe: Session S24 umsetzen — der Telemetriekanal der Oberfläche.
+Aufgabe: Session S25 umsetzen — Canvas, Fenstersystem und Views.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- 64 Universen bei 30 Hz dauerhaft mit **null React-Re-Renders** aus Telemetrie —
-  **mit einem Render-Zähler belegt, nicht nach Gefühl beurteilt**
-- Frame-Budget: das Canvas-Rendering bleibt bei 64 Universen unter 8 ms,
-  gemessen und in PROGRESS.md notiert
-- Verlorene Telemetrie degradiert weich und bringt den **Kontrollzustand nie**
-  aus dem Tritt
+- Fenster öffnen, verschieben, in der Größe ändern und schließen erzeugt
+  **Session-Kommandos**; die Oberfläche hält diesen Zustand **nicht** lokal
+- Ein am X-Touch umgeschalteter View erscheint sofort — das ist D11, von Ende zu
+  Ende beobachtet und nicht behauptet
+- Das Layout übersteht einen Neustart der Oberfläche, **weil es in der Session
+  liegt** — prüfbar, indem die Seite neu geladen wird, ohne dass der Daemon
+  etwas davon merkt
 - `npx tsc -b --force` sauber mit `strict: true`, **nirgends `any`**
 - `npm run build`, `npm run lint`, `npm run test` sauber
 - Coverage ≥ 85 % auf dem, was diese Session schreibt, gemessen und in
   PROGRESS.md notiert
+- Die Telemetrie-Zahlen aus S24 bleiben gültig: null React-Re-Renders aus
+  Telemetrie und Canvas-Rendern unter 8 ms bei 64 Universen. Beide Tests müssen
+  grün bleiben, und wenn das Fenstersystem das Panel umbaut, sind sie es, die
+  das merken
 
 Wichtige Randbedingungen:
-- **Telemetrie darf niemals in reaktiven Zustand** (docs/IPC_PROTOCOL.md §7,
-  letzter Absatz). Das ist keine Optimierung, sondern der Grund für den zweiten
-  Kanal: 64 × 512 Werte bei 30 Hz durch React-State machen die Oberfläche
-  unbenutzbar. S23 hat die Senke gebaut und mit einem Test belegt, dass hundert
-  Frames **null** Benachrichtigungen kosten — dieser Test muss grün bleiben, und
-  der neue Zähler ist sein Nachfolger für den Renderpfad.
-- **Das Layout ist versioniert, und eine unbekannte Version wird verworfen** —
-  nicht geraten. Telemetrie ist per Definition verwerfbar, also ist Verwerfen
-  hier die richtige Antwort und nicht die faule.
-- **Ein Frame ist ein Bild von jetzt.** Der Daemon koaleszt und verwirft (§8);
-  der Client hält den *letzten* Payload und keine Warteschlange. Ein Bild, das
-  drei Frames alt ist, hat keinen Wert.
-- **Die Zahlen müssen gemessen sein.** „Zero re-renders" ist ein Zähler,
-  „unter 8 ms" ist eine Messung mit `performance.now()` über genügend Frames,
-  und beide gehören mit ihren Bedingungen in PROGRESS.md §3. Eine Zahl, die
-  niemand reproduzieren kann, ist schlimmer als keine.
-- **Ein Test, der die zu prüfende Funktion zum Prüfen benutzt, prüft nichts.**
-  Für S24 heißt das: die Bytes, die dein Decoder liest, kommen aus
-  `prism_ipc::TelemetryFrame::encode` — aus einer Aufnahme oder aus einem
-  laufenden Daemon — und nicht aus deinem eigenen Encoder. Das Muster steht in
-  `crates/prismd/tests/ui_recording.rs`; erweitere es oder baue das Gegenstück,
-  aber erfinde die Erwartung nicht in TypeScript.
-- **Der Kontrollzustand ist unabhängig.** Ein verworfener oder unlesbarer
-  Telemetrie-Frame beendet nichts und ändert nichts an Show, Session oder
-  Programmer. Das ist prüfbar: Telemetrie-Müll schicken und danach ein Delta,
-  und das Delta muss ankommen.
-- **Was nicht in die Session gehört, gehört auch nicht in den Spiegel**
-  (ARCHITECTURE_SPEC.md §4.2). Zoomstufe, Scrollposition und Kamerastand des
-  Canvas sind client-lokal — sie gehören in Refs oder in lokalen
-  Komponentenzustand, nicht in eine Session-Command.
+- **Der Ort des Layouts ist die ganze Session.** `ARCHITECTURE_SPEC.md` §4.1
+  legt Position und Größe eines Fensters in die Session, §4.2 nimmt Scroll,
+  Zoom, Hover und Kamera ausdrücklich heraus. Ein Fenster, dessen Position im
+  Komponentenzustand liegt, besteht keines der drei Kriterien — und die
+  Versuchung ist groß, weil Ziehen mit lokalem Zustand flüssiger aussieht. Die
+  Auflösung ist eine Frage der *Kadenz*, nicht des Eigentums: was während des
+  Ziehens auf dem Bildschirm passiert, darf lokal sein; was der Zustand ist,
+  kommt vom Daemon zurück. Schreib auf, wie du das gelöst hast.
+- **Es gibt kein optimistisches Anwenden** (D3). Ein Kommando geht hinaus, ein
+  Delta kommt zurück, und erst dann bewegt sich die Anzeige. S23 hat das an der
+  Kommandozeile vorgemacht; ein Fenstersystem ist derselbe Vertrag mit mehr
+  Ereignissen pro Sekunde.
+- **Was der Daemon nicht kennt, kann die Oberfläche nicht erfinden.**
+  `ARCHITECTURE_SPEC.md` §4.4 listet elf Kommandos. Fehlt eines, das ein Fenster
+  braucht (Größe? Fokus? Reihenfolge?), dann ist das eine Änderung in
+  `prism-core` und `prism-ipc` mit Tests dort — **nicht** ein Zustand, den die
+  Oberfläche still selbst führt. S22 hat für die Executor-Tasten genau so einen
+  Befund hinterlassen (PROGRESS.md §7); ein zweiter dieser Art ist ein normales
+  Ergebnis und gehört ins Decision Log.
+- **D11 wird beobachtet, nicht behauptet.** Das Gate in Rust
+  (`crates/prismd/tests/surface_gate.rs`) prüft, dass ein Pult ohne Client den
+  View umschaltet. Diese Session schuldet die andere Hälfte: ein Client ist
+  verbunden, das Pult schaltet um, und die Oberfläche folgt. `MockSurfacePort`
+  im Daemon ist der Weg dahin, ohne dass ein Gerät angefasst wird.
+- **Kein Scrollen außerhalb des Canvas** (CLAUDE.md). Die Oberfläche ist ein
+  Gerätebildschirm: der Canvas füllt, was da ist, und die Fenster liegen darin.
+  Wenn etwas nicht passt, ist das eine Layout-Entscheidung und keine
+  Bildlaufleiste.
 - **Die generierten Bindings sind Quelltext aus Rust.** `ui/src/bindings/` wird
-  von `prism_domain::export_bindings` geschrieben (seit S23 inklusive
-  `variants.ts`, den Laufzeittabellen der String-Unions) und von der
-  Rust-Testsuite überprüft. Fehlt ein Typ oder eine Tabelle, ist das eine
-  Änderung in `prism-domain` und keine in `ui`.
+  von `prism_domain::export_bindings` geschrieben und von der Rust-Testsuite
+  überprüft. `WindowType`, `WindowInstance` und `View` sind bereits da,
+  einschließlich der Laufzeittabellen in `variants.ts`. Fehlt ein Typ, ist das
+  eine Änderung in `prism-domain`.
+- **Ein Test, der die zu prüfende Funktion zum Prüfen benutzt, prüft nichts.**
+  In dieser Session heißt das: die Erwartung an das, was ein Kommando mit der
+  Session macht, kommt aus dem Daemon — aus der Aufnahme
+  (`ui/tests/fixtures/daemon-recording.json`), aus einem laufenden `prismd`,
+  oder aus einem neuen Rust-Ziel nach dem Muster von
+  `crates/prismd/tests/ui_recording.rs`. Nicht aus einer zweiten Meinung in
+  TypeScript.
 - **Neue npm-Abhängigkeiten sind eine Entscheidung, keine Formalität.** S23 hat
-  Zustand und Immer abgelehnt und begründet und `@msgpack/msgpack` genommen und
-  begründet; halte es genauso. Ein Canvas braucht keine Bibliothek.
+  Zustand und Immer abgelehnt und begründet, S24 hat für den Canvas gar keine
+  gebraucht. Ein Fenstersystem ist die klassische Stelle, an der eine
+  Drag-and-Drop-Bibliothek hereinkommt; wenn du eine nimmst, begründe sie so wie
+  S23 `@msgpack/msgpack` begründet hat.
 - Ein Test darf niemals ein Gerät anfassen. Der Daemon läuft im
   Mock-Output-Modus.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
-  Node 24.11, `cargo-llvm-cov`).
+  Node 24.11, `cargo-llvm-cov`, Playwright/Chromium).
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S24-Status, jede gemessene Zahl (auch die Zeile
-  „Telemetry render" in §3), Decision Log bei Abweichungen und bei Funden, die
-  spätere Sessions betreffen
+- PROGRESS.md aktualisieren: S25-Status, jede gemessene Zahl, Decision Log bei
+  Abweichungen und bei Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S25 (`ui` — Canvas, Fenster, Views) überschreiben
+  Session S26 (`ui` — Executor-Leiste, Encoder-Leiste, Konsole) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(ui): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
+```

@@ -24,6 +24,7 @@ import { countAt, numberAt, stringAt } from "./mirror/select";
 import { statusText } from "./status";
 import { useDesk, useSend } from "./store/hooks";
 import type { DeskState, Notice } from "./store/desk";
+import { TelemetryPanel } from "./telemetry/panel";
 
 const selectStatus = (state: DeskState): ConnectionStatus => state.status;
 const selectDocuments = (state: DeskState) => state.documents;
@@ -175,6 +176,14 @@ function Connected() {
           />
         </dl>
       </section>
+
+      {/*
+        The second channel, and the reason there are two. Everything above this
+        line is the mirror, redrawn when a delta says so; the panel below is a
+        picture of what the fixtures are being given *now*, arriving thirty
+        times a second and never once passing through the store.
+      */}
+      <TelemetryPanel />
 
       <CommandLine daemonLine={stringAt(session, "/session/commandLine") ?? ""} />
     </>

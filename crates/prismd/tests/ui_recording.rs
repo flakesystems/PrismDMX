@@ -47,7 +47,7 @@
 #![allow(clippy::await_holding_lock)]
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use prism_core::{JsonMirror, SessionMirror, ShowMirror};
@@ -77,9 +77,7 @@ const COMMANDS_PER_CASE: usize = 10;
 
 /// Where the interface reads it from.
 fn recording_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join("ui/tests/fixtures/daemon-recording.json")
+    common::ui_fixture("daemon-recording.json")
 }
 
 /* -------------------------------------------------------------------------- */
@@ -120,57 +118,6 @@ struct Recording {
     client_messages: Vec<ClientRecord>,
     /// What the daemon sent back.
     cases: Vec<Case>,
-}
-
-/* -------------------------------------------------------------------------- */
-/* Base64, so the file is text                                                */
-/* -------------------------------------------------------------------------- */
-
-const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-/// Standard base64 with padding (RFC 4648 §4).
-fn encode_base64(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let (a, b, c) = (
-            u32::from(chunk[0]),
-            chunk.get(1).map_or(0, |byte| u32::from(*byte)),
-            chunk.get(2).map_or(0, |byte| u32::from(*byte)),
-        );
-        let triple = (a << 16) | (b << 8) | c;
-        for shift in [18, 12, 6, 0] {
-            let index = usize::try_from((triple >> shift) & 0x3f).unwrap_or(0);
-            out.push(char::from(ALPHABET[index]));
-        }
-        let written = out.len();
-        for missing in chunk.len()..3 {
-            out.replace_range(written - 3 + missing..written - 2 + missing, "=");
-        }
-    }
-    out
-}
-
-/// The other direction, refusing anything that is not base64.
-fn decode_base64(text: &str) -> Vec<u8> {
-    let mut bits = 0_u32;
-    let mut held = 0_u32;
-    let mut out = Vec::with_capacity(text.len() / 4 * 3);
-    for character in text.bytes() {
-        if character == b'=' {
-            break;
-        }
-        let index = ALPHABET
-            .iter()
-            .position(|letter| *letter == character)
-            .unwrap_or_else(|| panic!("{} is not base64", char::from(character)));
-        bits = (bits << 6) | u32::try_from(index).unwrap_or(0);
-        held += 6;
-        if held >= 8 {
-            held -= 8;
-            out.push(u8::try_from((bits >> held) & 0xff).unwrap_or(0));
-        }
-    }
-    out
 }
 
 /* -------------------------------------------------------------------------- */
@@ -379,7 +326,7 @@ async fn record_the_delta_stream_for_the_interface() {
             loop {
                 let payload = next_payload(&mut wire).await;
                 match decode(&payload) {
-                    ServerMessage::Delta { .. } => deltas.push(encode_base64(&payload)),
+                    ServerMessage::Delta { .. } => deltas.push(common::encode_base64(&payload)),
                     ServerMessage::Ack { seq: acked } if acked == seq => break,
                     ServerMessage::Reject {
                         seq: Some(refused), ..
@@ -401,9 +348,9 @@ async fn record_the_delta_stream_for_the_interface() {
 
         cases.push(Case {
             commands,
-            snapshot: encode_base64(&snapshot),
+            snapshot: common::encode_base64(&snapshot),
             deltas,
-            final_snapshot: encode_base64(&final_snapshot),
+            final_snapshot: common::encode_base64(&final_snapshot),
         });
     }
 
@@ -572,7 +519,9 @@ fn client_messages() -> Vec<ClientRecord> {
         .into_iter()
         .map(|(what, message)| ClientRecord {
             what: what.to_owned(),
-            payload: encode_base64(&prism_ipc::encode(&message).expect("a message must encode")),
+            payload: common::encode_base64(
+                &prism_ipc::encode(&message).expect("a message must encode"),
+            ),
         })
         .collect()
 }
@@ -620,7 +569,7 @@ fn the_recording_is_a_delta_stream_this_build_could_have_sent() {
         let mut programmer = start.programmer.clone();
 
         for (step, encoded) in case.deltas.iter().enumerate() {
-            let ServerMessage::Delta { delta } = decode(&decode_base64(encoded)) else {
+            let ServerMessage::Delta { delta } = decode(&common::decode_base64(encoded)) else {
                 panic!("case {index} step {step} is not a delta");
             };
             match &delta {
@@ -722,24 +671,24 @@ fn the_encoding_is_ordinary_base64() {
         ("foobar", "Zm9vYmFy"),
     ] {
         assert_eq!(
-            encode_base64(plain.as_bytes()),
+            common::encode_base64(plain.as_bytes()),
             encoded,
             "encoding {plain:?}"
         );
         assert_eq!(
-            decode_base64(encoded),
+            common::decode_base64(encoded),
             plain.as_bytes(),
             "decoding {encoded:?}"
         );
     }
     // And every byte survives the round trip, which is what the payloads need.
     let every: Vec<u8> = (0..=255).collect();
-    assert_eq!(decode_base64(&encode_base64(&every)), every);
+    assert_eq!(common::decode_base64(&common::encode_base64(&every)), every);
 }
 
 /// The snapshot inside a recorded payload.
 fn snapshot_of(encoded: &str) -> Snapshot {
-    let ServerMessage::Snapshot { snapshot } = decode(&decode_base64(encoded)) else {
+    let ServerMessage::Snapshot { snapshot } = decode(&common::decode_base64(encoded)) else {
         panic!("a recorded snapshot is not a snapshot");
     };
     *snapshot
