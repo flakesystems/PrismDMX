@@ -520,6 +520,54 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 
 `Strip[*]` expands per strip with the strip index bound to the executor at `executorPage * 8 + index`.
 
+### 4.2.1 As built (S22)
+
+`prism_surface::Bindings` is layer 3 whole, and it is a table lookup with no
+arithmetic in it: a fader arrives as a level and a detent as a parameter step,
+both already worked out one layer down. Five things it decides that §4 did not
+say:
+
+- **Loading cannot fail.** `Bindings::load(text, profile)` answers with the
+  profile when it parses and with the built-in defaults and a `ProfileError`
+  when it does not — a function without an error path, because "a malformed
+  profile never blocks startup" is stronger as a type than as a habit. It takes
+  a **`&str`**: which file it was is `prismd`'s business
+  (`prismd::surface::load_profile`), and that is what lets the fallback be
+  asserted without a filesystem.
+- **A profile is refused whole, not row by row.** A table half of which was
+  understood is a desk that does some of what its author intended, which is
+  worse to operate than one that does what the defaults say and complains. The
+  document may carry prose — the verification record and this deployment's notes
+  live in the same file — but a *binding* may not carry an unknown key, because
+  there a typo is an argument that silently did not arrive.
+- **The reserved button is refused by name.** A profile that binds SMPTE/Beats
+  is rejected with a message that says why (§4.3). Layer 2 already drops its
+  presses and counts them, so the binding could never have fired; the refusal
+  exists for the person who wrote the profile.
+- **`SurfaceContext` is the seam to the session.** `SetExecutorMaster` needs an
+  executor number and a strip only knows it is the fourth strip; `Channel ▶`
+  means *the next view* and this crate holds no view library. So the answers —
+  executor page, selected executor, the neighbouring views, the programmer page,
+  the attribute under the jog wheel — arrive as plain `Copy` data resolved by
+  whoever holds the session. `prism-surface` still knows no show and no session.
+- **The shipped file *is* the built-in defaults**, asserted by a test. Editing
+  `profiles/surface/xtouch.json` is how the defaults are changed, and deleting it
+  changes nothing.
+
+**Three rows of §4.1 name something the command vocabulary has not got**, and
+none of them was invented into existence:
+
+| §4.1 says | What is bound | Why |
+|---|---|---|
+| Main fader = `XFade` of the selected executor | `SetExecutorMaster` on the selected executor | `XFade` is an `ExecutorFaderFunction` — show data on the executor (`ARCHITECTURE_SPEC.md` §6). There is one fader command for all four functions, and what the fader *does* is the executor's own setting |
+| Play = `On` | `ExecutorGo`/`Next` on the selected executor | There is no `ExecutorOn` command; `On` is an `ExecutorButtonFunction`. `ExecutorGo` is what starts a sequence, so Play and Forward resolve to the same command until an executor-button command exists |
+| Strip buttons configurable to `LearnSpeed`, `Flash`, `Toggle`… | `ExecutorGo`, `ExecutorOff` | Same list, same reason. A binding table can only send commands; those names are the executor's own button functions |
+
+The gap is real and it is one gap, not three: **the protocol has no command that
+presses an executor's button and lets the executor decide what that means.** The
+session that adds one closes all three rows at once, and it is also where a
+tap for speed lands (§4.3).
+
 ### 4.3 Sharing the surface with a sound console (Xctl+MC)
 
 > **Provenance: this section is the operator's, not a measurement.** Everything in
@@ -686,7 +734,8 @@ change rather than a permanent fight.
 | Touch suppression | Simulate touch → engine value change → release; assert no outbound pitch bend during touch and exactly one resync 150 ms after release — `tests/feedback_rules.rs` (S21), which also asserts it for a fader *nobody moved*, the case that separates a guarantee from a coincidence |
 | Coalescing | Drive 1000 value changes in 100 ms; assert at most 3 outbound messages for that control — `tests/feedback_rules.rs` (S21) |
 | **Priority and pacing (S21)** | Every control on the surface different at once, drained one message per minimum gap: the classes must come out in §5.2's order, and a message is classified by a `match` on its **status byte** written out of §2.2 by hand rather than by the crate's own classifier, which is the code under test |
-| **Surface → UI (D11 gate)** | Send `Channel ▶` and F1 with **no UI client connected**; then connect a client and assert its `Snapshot` contains both the new view and the opened window |
+| **Surface → UI (D11 gate)** | Send `Channel ▶` and F1 with **no UI client connected**; then connect a client and assert its `Snapshot` contains both the new view and the opened window — **passed 2026-08-13 (S22)**, `crates/prismd/tests/surface_gate.rs`. The precondition is asserted rather than described: the daemon's client count is **0** when the buttons are pressed and still 0 when the session has changed. The two note numbers are written out by hand from §2.1 (49 and 54), because asking the profile what to press would be asking the code under test |
+| **The binding table (S22)** | Every row of §4.1 transcribed **by hand** into `crates/prism-surface/tests/bindings.rs`, plus the complement — the twenty-six panel buttons that *are* bound and the thirty-eight that are not. A test that built its expectations out of `Bindings::defaults()` would pass for any defaults at all, including ones with Play and Stop swapped. A second test asserts the shipped profile equals those defaults, and a third that no profile whatever it says can stop a desk starting |
 | **The device's own bytes (S20)** | `tests/hardware_capture.rs` replays four recordings of the real X-Touch — every strip button, the whole panel, all nine faders, all nine relative controls — and asserts that each message decodes to the control the table names, that the profile finds **nothing** it cannot describe, and that every message re-encodes to exactly the bytes the desk sent |
 
 Target coverage on `prism-surface`: **> 95 %**, per `CLAUDE.md`. All tests run against a mock MIDI port or a recorded capture — **no hardware required**, including the ones that verify a specific physical device.

@@ -80,7 +80,7 @@
 | S19 | MCU codec | ✅ | 2026-08-13 | All exit criteria verified — see §2.20. 112 tests, coverage **99.24 % lines**. Built against the **unverified** tables of §5, and held as data so S20 is an edit rather than a refactor. Seven mutation checks; two of them are only visible to the allocator |
 | S20 | 🔌 Hardware verification X-Touch | ✅ | 2026-08-13 | All exit criteria verified — see §2.21. **Every number in `docs/MCU_MAPPING.md` §2 confirmed at the device; none was wrong.** Six things no source had stated were corrected, and one real fault found: the surface can stop transmitting while still receiving. 13 new tests, 1 265 in the workspace |
 | S21 | Surface model and feedback | ✅ | 2026-08-13 | All exit criteria verified — see §2.22. **The four rules of `docs/MCU_MAPPING.md` §5 hold, and three of S20's findings are designed around rather than noted.** 211 tests in the crate (52 new), coverage **99.20 % lines**, zero allocations on the outbound path as well as the inbound one. Eight mutation checks; one of them turns exactly one test red, which is why that test exists |
-| S22 | Bindings + D11 gate | ☐ | | Mandatory gate |
+| S22 | Bindings + D11 gate | ✅ | 2026-08-13 | All exit criteria verified — see §2.23. **The mandatory gate for D11 passes:** a console changes a view and opens a window with no client connected, and the client that arrives afterwards finds both in its `Snapshot`. Every row of §4.1 transcribed by hand; the shipped profile *is* the built-in defaults; 1 419 tests in the workspace, coverage **99.30 % lines** on `prism-surface`. Six mutation checks; one of them turns the exit criterion red end to end. **Phase 5 is complete** |
 
 ### Phase 6 — User interface
 | Session | Title | Status | Date | Note |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 21 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 22 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -962,7 +962,7 @@ whole of §5 testable with arithmetic rather than with a wait.
 | `cargo fmt --all --check` | ✅ exit 0 |
 | Coverage on `prism-surface` **> 95 %** | ✅ **99.20 % lines**, 98.66 % regions, 98.28 % functions — `accel.rs`, `model.rs`, `control.rs` and `midi.rs` at **100 % lines**, `color.rs` 99.32 %, `profile.rs` 99.27 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. Three unreachable branches found while reading the report were **removed** rather than covered: the send loop's two conditions became one (so its `break` is the ordinary end of the queue), `probe_due`'s two early returns became one, and the fader loop now walks `ALL_FADERS` instead of converting an index that cannot be wrong. What is left uncovered in `surface.rs` is the *cannot happen* arm of each `emit` branch — `let Some(...) else { return false }` on an array the diff has already bounded — which a crate that denies `panic!` has to write and no test can reach |
 | `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu` | ✅ exit 0. **No new dependency**: layer 2 needed nothing that was not already in the workspace, and the one thing it added to the crate's own graph is `prism-domain`, which was in the manifest **unused** since S19 and is now used for exactly one type — `RgbColor`, on the way into the colour quantiser |
-| CI green on the pushed commit | ✅ run **31707683288** on `83e53fc` — all four jobs on the **first attempt**: Windows 6 m 18 s, Linux neutral 2 m 14 s, ARM64 check 36 s, UI 51 s. The Linux job is the one that matters for this crate: `prism-surface` is platform-neutral, so the whole of §5 — the two allocation targets included — is checked on a machine that has never seen an X-Touch |
+| CI green on the pushed commit | ☐ recorded below after the push, per `IMPLEMENTATION_PLAN.md`'s session protocol |
 
 **What was built, and the shape of it.** One object: `SurfaceController` holds the
 codec, two `SurfaceState`s — what the show wants shown and what the desk was last
@@ -1022,6 +1022,93 @@ was about the codec. It is measured because the obvious implementation of a diff
 is a `Vec` of messages built thirty times a second on the thread next to a 44 Hz
 tick, and S16's finding is that only the counter sees the difference.
 
+### 2.23 S22 verification record
+
+Measured on 2026-08-13, all exit criteria from `IMPLEMENTATION_PLAN.md` S22 and
+the session prompt. **Layer 3 of `docs/MCU_MAPPING.md` §1 — the binding table —
+and the mandatory gate for D11.** No hardware: the surface is a mock MIDI port,
+and the two note numbers pressed are transcribed from §2.1 by hand.
+
+| Check | Result |
+|---|---|
+| The default profile reproduces **every row** of `docs/MCU_MAPPING.md` §4.1 | ✅ `tests/bindings.rs`, one test per row, **expectations copied from the document by a person**. Also the complement, which is the half a table of defaults can get wrong quietly: twenty-six panel buttons are bound and the other thirty-eight are not, asserted button by button. Three rows name something the command vocabulary has not got — `XFade`, `On`, and the executor-button list — and all three are recorded rather than invented; see the decision log |
+| The shipped `profiles/surface/xtouch.json` **is** the built-in default table | ✅ asserted by `the_shipped_profile_is_the_built_in_default_table`, with the file compiled in by `include_str!`, so a profile that stopped parsing fails the build rather than one desk on one evening. The two must not drift: if they did, a malformed profile would silently *change* what the desk does, which is the opposite of what falling back is for |
+| A malformed profile falls back with a warning and **never** blocks startup — assured, not observed | ✅ twice. `Bindings::load` **has no error path**: it answers with a table whatever it is given, which is the criterion as a type rather than as a habit, and twelve deliberately broken texts are asserted to produce the working default table. And end to end, through a real file and a real process: `crates/prismd/tests/surface_gate.rs` starts a daemon pointed at a profile that binds the reserved button, and the daemon starts, warns, and the desk works |
+| **D11 gate** — `Channel ▶` and F1 with no client connected; a client then finds both in its `Snapshot` | ✅ **passed.** The precondition is asserted rather than described: `client_count()` is **0** when the two buttons are pressed and still 0 when the session has changed; only then does a client connect and ask for the world. Its snapshot carries `activeViewId = 2` and `openWindows[0].type = "FixtureSheet"`. The notes are 49 and 54, written out from §2.1 by hand — asking the profile which note to send would be asking the code under test what to press |
+| A profile that binds SMPTE/Beats is refused, with a message that says why | ✅ `ProfileError::ReservedControl`, whose text names the button, the combined Xctl+MC mode, *the button that switches the desk between the two hosts* and *leave it unbound*. Belt and braces: layer 2 drops its presses and counts them, so the binding could never have fired — the refusal is for the person who wrote the profile. Asserted on the wording, not merely on the variant |
+| `cargo test -p prism-surface` | ✅ exit 0 — **179 lib tests** + 71 integration tests across seven targets (21 bindings, 12 round trip, 12 feedback rules, 9 fuzz, 9 hardware capture, 4 + 4 allocations), 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **1 419 tests across 48 targets**, 14 ignored (unchanged). **53 of them are this session's**: 39 in `prism-surface` (211 → 250), 8 in `prismd`'s library and 6 in its new gate target (102 → 116). The two new targets are `prism-surface/tests/bindings.rs` and `prismd/tests/surface_gate.rs`. *The workspace total therefore moves by 68 against §2.22's figure of 1 351, and the extra 15 are not new tests* — summing the unchanged crates today gives 1 366 for S21's tree, so that record undercounted. Recorded rather than quietly corrected, because a number in this file that nobody can reproduce is worse than one that is wrong |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0. One lint met on the way and it was in a test: `useless_format` on a `format!` with nothing to interpolate |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-surface` **> 95 %** | ✅ **99.30 % lines**, 98.68 % regions, 98.46 % functions. `accel.rs`, `midi.rs`, `model.rs` and `control.rs` at **100 % lines**; the new `binding.rs` at **99.85 % lines** / 98.72 % regions, `profile.rs` 99.39 %, `color.rs` 99.32 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. Three uncovered lines in `binding.rs` were found by reading the report — the `action()` arms for the two faders and the wheel, which every test reached through `command()` instead — and are now a test rather than an exception |
+| Coverage on `prismd`, which grew a module | ✅ **95.03 % lines** (94.73 % at S18, so the new module is above the crate's own average rather than below it): `surface.rs` **96.94 % lines**, 97.32 % regions. What is left uncovered there is `main.rs`, which has no test target, and the arms a defensive `let … else` needs on a buffer the caller has already bounded |
+| `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu` | ✅ exit 0. Two new dependencies, both already in the workspace and both pure Rust: `serde` and `serde_json`, for layer 3 only. Layers 1 and 2 use neither |
+| CI green on the pushed commit | ☐ recorded below after the push, per `IMPLEMENTATION_PLAN.md`'s session protocol |
+
+**What was built, in two halves.**
+
+**1. `prism_surface::Bindings` — layer 3, and it does no arithmetic.** A fixed-size
+`Copy` table: one action per strip control, one per panel button, one for the
+wheel. `SurfaceAction` is a vocabulary of its own rather than a `Command` with
+holes in it, because a binding is written before there is an event and half of
+`Command`'s fields are answers only an event and a session have. Those answers
+arrive as `SurfaceContext` — executor page, selected executor, the two
+neighbouring views, the programmer page, the attribute under the jog wheel —
+which is how a crate that holds **no show and no session** can produce
+`SetExecutorMaster { executor_id, level }`. Everything that needed a measurement
+was done one layer down, exactly as S21 promised it would be: layer 3 is a table
+lookup and a `match`.
+
+**2. `prismd::surface` — the half that has a port, a clock and the daemon's
+state.** A `SurfacePort` trait (the seam `CLAUDE.md` requires), a `SurfaceLink`
+that reads, applies, repaints and pumps once every millisecond, and
+`load_profile`, which is the filesystem `prism-surface` deliberately has not got.
+A press becomes a `Command` and the command goes through **`Desk::command` — the
+same door every client uses**, so what a snapshot carries is the daemon's own
+state and there is no second command path to keep in step. That sentence is D11,
+and `tests/surface_gate.rs` is that sentence as a test.
+
+**No MIDI backend was written, and that is deliberate.** Nothing in the
+repository opens a MIDI port except S20's probe, which lives outside the
+workspace. The trait is where a backend will go; choosing one is a question about
+`midir` and about which crate may hold platform code (§10.1), and answering it
+was not needed to pass this gate.
+
+**The three rows §4.1 asks for and the protocol cannot answer.** `XFade` on the
+main fader, `On` on Play, and the strip buttons' configurable list
+(`LearnSpeed`, `Flash`, `Toggle`, …) are all `ExecutorFaderFunction` and
+`ExecutorButtonFunction` values — *show data on the executor* — and there is no
+command that presses an executor's button and lets the executor decide what that
+means. Rather than invent one in a user-editable file, the bindings resolve to
+the commands that exist and the gap is written down in three places:
+`docs/MCU_MAPPING.md` §4.2.1, the shipped profile's `deviationsFromSection41`
+block, and the decision log below. It is **one** gap, not three, and the session
+that adds an executor-button command closes all of it — which is also where a tap
+for speed lands.
+
+**Six deliberate regressions, and one of them turns the exit criterion red.**
+Making `Bindings::load` fall back to an *empty* table instead of the defaults
+leaves every unit test green and turns two red: the property test over twelve
+broken profiles, and — the one that matters — `prismd`'s
+`a_malformed_profile_leaves_the_desk_working_on_the_built_in_bindings`, which is
+the exit criterion measured against a running daemon. The other five: dropping
+the reserved-button refusal turns two red; resolving a strip against page 0
+instead of the current page turns one red; swapping `StepView`'s two directions
+turns two red, one of them in the §4.1 transcription; never painting the show
+onto the surface turns the drawing test red (both faders would read 0, and the
+test asserts two *different* positions for two different masters); and taking the
+surface out of the daemon's run loop turns **all six** gate tests red, each by
+name and each in under ten seconds.
+
+**And the picture goes the other way too.** The daemon paints the current page's
+executors onto the faders and the scribble strips, the active ones onto the
+Select LEDs and the unsaved-changes flag onto the Save lamp (§4.1's last row).
+The gate target asserts it end to end on the bytes: the first nine messages out
+are the nine motor faders **before a single LED** — §5.2's order, classified by
+status byte transcribed by hand — strip 0 parks at `E0 7C 7F`, which is 16380
+worked out by hand from a master of 65535, and the sequence's name arrives inside
+a SysEx as `SEQUENC`, folded to upper case the way the hardware folds it.
+
 ---
 
 ## 3. Coverage tracking
@@ -1037,9 +1124,9 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
 | `prism-protocols` | **> 95 %** | **98.43 % lines** (S18, re-measured because `MockOutput` grew a timestamped recording — `output.rs` is at **100 % lines, regions and functions**). S10's measurement, whose reasoning still holds: **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
-| `prism-surface` | **> 95 %** | **99.20 % lines**, 98.66 % regions, 98.28 % functions (S21, with layer 2 and two new targets) — `accel.rs`, `model.rs`, `control.rs` and `midi.rs` at **100 % lines**, `color.rs` 99.32 %, `profile.rs` 99.27 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. The crate grew by about 1 500 lines and the figure moved by six hundredths of a point, which is the point of measuring it. The 33 uncovered lines are the *cannot happen* arms a crate that denies `panic!` has to write — `let Some(...) else { return … }` on an array the diff has already bounded — plus `panic!` arms in tests that pass; three genuinely unreachable branches found while reading the report were **removed** rather than covered (§2.22). S20's measurement: **99.26 % lines**, 98.62 % regions, 98.01 % functions (with the recorded-capture target added) — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.94 %, `codec.rs` 98.71 %, `feedback.rs` 98.30 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. S19 measured **99.24 % lines**, 98.58 % regions, 97.94 % functions; two unreachable branches found while reading that report were removed rather than covered — see §2.20. **The figure does not include `tools/xtouch-probe`**, which is not a workspace member and has no tests: it is the instrument, not the product | 2026-08-13 (S20) |
+| `prism-surface` | **> 95 %** | **99.30 % lines**, 98.68 % regions, 98.46 % functions (S22, with layer 3 and the bindings target) — `accel.rs`, `midi.rs`, `model.rs` and `control.rs` at **100 % lines**, `binding.rs` **99.85 %** / 98.72 % regions, `profile.rs` 99.39 %, `color.rs` 99.32 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. Three uncovered lines in the new module were found by reading the report — the `action()` arms for the two faders and the wheel, which every test had reached through `command()` instead — and became a test rather than an exception. S21's measurement: **99.20 % lines**, 98.66 % regions, 98.28 % functions (with layer 2 and two new targets) — `accel.rs`, `model.rs`, `control.rs` and `midi.rs` at **100 % lines**, `color.rs` 99.32 %, `profile.rs` 99.27 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. The crate grew by about 1 500 lines and the figure moved by six hundredths of a point, which is the point of measuring it. The 33 uncovered lines are the *cannot happen* arms a crate that denies `panic!` has to write — `let Some(...) else { return … }` on an array the diff has already bounded — plus `panic!` arms in tests that pass; three genuinely unreachable branches found while reading the report were **removed** rather than covered (§2.22). S20's measurement: **99.26 % lines**, 98.62 % regions, 98.01 % functions (with the recorded-capture target added) — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.94 %, `codec.rs` 98.71 %, `feedback.rs` 98.30 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. S19 measured **99.24 % lines**, 98.58 % regions, 97.94 % functions; two unreachable branches found while reading that report were removed rather than covered — see §2.20. **The figure does not include `tools/xtouch-probe`**, which is not a workspace member and has no tests: it is the instrument, not the product | 2026-08-13 (S20) |
 | `prism-ipc` | ≥ 85 % | **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
-| `prismd` | ≥ 85 % | **94.73 % lines**, 94.81 % regions, 96.36 % functions (S18) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
+| `prismd` | ≥ 85 % | **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
 | `ui` | ≥ 85 % | — | |
 
 ### Performance gates
@@ -1339,6 +1426,11 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-13 | S22 | **Three rows of `docs/MCU_MAPPING.md` §4.1 name behaviour the command vocabulary cannot express, and they are one gap rather than three.** The main fader's `XFade`, Play's `On`, and the strip buttons' configurable list (`LearnSpeed`, `Off`, `On`, `Flash`, `Toggle`) are all `ExecutorFaderFunction` and `ExecutorButtonFunction` values — **show data on the executor** (`ARCHITECTURE_SPEC.md` §6) — and `docs/IPC_PROTOCOL.md` §5 has no command that presses an executor's button and lets the executor decide what that means. There is one fader command for all four fader functions, and `ExecutorGo`/`ExecutorOff` for two of the eight button functions | The bindings resolve to the commands that **exist** — the main fader moves the selected executor's master, Play and Forward are both `ExecutorGo`/`Next` — and the gap is written down in three places rather than papered over: `docs/MCU_MAPPING.md` §4.2.1, the shipped profile's `deviationsFromSection41` block, and here. The alternative was to invent an `ExecutorButton { executor, index }` command, which would have touched `prism-domain`, `prism-core`, the protocol document and the generated TypeScript — a protocol change made in passing by the session that noticed it, which is exactly what S20's rule about tap-for-speed says not to do. **The session that adds it closes all three rows at once**, and it is the same session that owes a tap against a speed master |
+| 2026-08-13 | S22 | **The exit criterion "never blocks startup" is better as a type than as a test.** A loader that returns `Result` can be called correctly by every caller written so far and wrongly by the next one, and the criterion is about *every* future startup path | `Bindings::load(text, profile) -> (Bindings, Option<ProfileError>)` has **no error path at all**: the table it answers with is the profile's when it parses and the built-in defaults when it does not, and the error is a warning to log rather than a decision to take. The mutation check is what makes this more than a shape: falling back to an *empty* table instead of the defaults leaves the type identical, every unit test green, and turns the end-to-end criterion red in `prismd` — a daemon that started fine and had a dead console |
+| 2026-08-13 | S22 | **A binding profile is refused whole, not row by row.** The tempting behaviour for a user-editable file is to keep the rows that parsed and warn about the rest. A table half of which was understood is a desk that does *some* of what its author intended, and an operator cannot tell which half by looking at it | Any problem — bad JSON, an unknown control, a control bound twice, a misspelled key inside a row, a profile for another device, a binding on the reserved button — falls back to the whole default table with one message naming the cause. The document itself may carry prose (the verification record and the deployment notes live in the same file), because refusing unknown *top-level* keys would push that documentation into a second file nobody would open; a **binding** may not, because there a typo is an argument that silently did not arrive |
+| 2026-08-13 | S22 | **`prism-surface` cannot hold a session, so the session's answers come to it as data.** Half of `docs/IPC_PROTOCOL.md` §5's commands carry an argument the surface has not got: an executor number where a strip only knows it is the fourth strip, a view number where `Channel ▶` only means *the next one*. Handing the crate a `SessionState` would have made layer 3 depend on `prism-core` and put the view library on the wrong side of a boundary §10.1 draws | `SurfaceContext` — executor page, selected executor, the two **neighbouring** views, the programmer page, and the attribute under the jog wheel — plain `Copy` answers resolved by `prismd::surface::context_of` once per batch of events. The neighbours rather than the library is the load-bearing part: it is what keeps a relative `SelectView` (D8) out of a crate that has no views, and it costs the daemon a walk of a `BTreeMap` it already holds |
+| 2026-08-13 | S22 | **No MIDI backend was written, and the D11 gate did not need one.** `prismd` may hold no `#[cfg(target_os = …)]` either (§10.1), so a real port means a dependency — `midir`, or something behind it — and a decision about which crate owns it | `SurfacePort` is the trait and `MockSurfacePort` is the only implementation. Choosing a backend is a question about a dependency and about §10.1's list, and answering it was not needed to pass a gate that is about a *daemon*, not about a device. The open question the shipped profile already records — whether a real unplug and replug produces exactly one disconnection from that backend — is still the backend's, and it is still open |
 | 2026-08-13 | S21 | **"Exactly one resynchronisation" is a claim about the shadow model, not about the value.** §5.1 says a released fader is resynchronised after 150 ms. The obvious implementation — suppress while touched, then let the ordinary diff run — sends a message only if the *value* changed meanwhile, and says nothing at all about a fader the show did not touch. But the operator moved the motor, so the desk is somewhere this layer never put it, and there is nothing in the picture to notice | A touch **invalidates** what the shadow model believes about that fader, so the resync is unconditional and the criterion becomes a guarantee. The mutation check is the evidence and it is unusually sharp: removing the invalidation leaves `releasing_a_fader_resynchronises_it_exactly_once` **green**, because that test happens to move the value, and turns exactly one test red — `a_fader_nobody_moved_is_still_resynchronised_after_a_release`. Without that second test the session would have claimed the criterion and not met it |
 | 2026-08-13 | S21 | **An inbound fader *move* must not invalidate the shadow, only a *touch* must.** §5.1's own account of the oscillation says the motor's movement generates an inbound value — so a layer that forgot its belief on every inbound position would resend after its **own echo**, once per frame, for ever: the fight §5.1 exists to prevent, arriving through the door marked *being careful* | Only touch invalidates. A move without a touch is either that echo or a fader moved with a pen, and the second case costs a stale value until the next change rather than a permanent fight. Written into `docs/MCU_MAPPING.md` §5.4 as a deliberate non-rule, because it is the kind of line a later reader deletes for looking like an omission |
 | 2026-08-13 | S21 | **The two acceleration curves are two mechanisms, not one mechanism with two tables.** S20 measured that a V-Pot reports 1…8 detents per message and the jog wheel reports ±1 however hard it is spun. The V-Pot has therefore *already measured the speed*; the wheel has not and cannot — it raises its **rate** | `VPotAcceleration` reads the reported magnitude; `JogAcceleration` reads the **interval since the previous message**, which is why S21 owning the clock matters beyond the SysEx timeout. A shared curve would make the wheel a control that cannot be hurried, which is exactly what an operator reaches for it to do. Both are data (`SurfaceController::set_curves`) because *how much a detent is worth* is taste, where the 1…8 is measurement |
@@ -1564,10 +1656,46 @@ the diffing, the touch suppression, the coalescing, the priority order and the
 pacing — 52 new tests, no allocation on either path, and eight mutation checks
 that each turn something red.
 
-**Begin S22** (`prism-surface` — bindings and the D11 gate). It needs no
-hardware either, and it is a **mandatory gate**: with no UI client connected,
-mock MIDI sends `Channel ▶` and F1; a client then connects and must find both the
-new view and the opened window in its `Snapshot`. Use the prompt in §8.
+**Phase 5 is complete, and D11 is proved rather than argued.** Layer 3 is a
+table lookup with no arithmetic in it, the shipped profile *is* the built-in
+defaults, a profile that will not parse cannot stop a desk starting, and a
+console changed a view and opened a window on a daemon with **no client
+connected** — which the client that arrived afterwards found in its snapshot.
+
+**Begin S23** (`ui` — foundation). Use the prompt in §8.
+
+Carried out of S22:
+- **There is no MIDI backend yet, and `SurfacePort` is where it goes.**
+  `prismd::surface::SurfacePort` is a two-method trait with one implementation
+  (`MockSurfacePort`). Attaching a real X-Touch means choosing a crate — `midir`
+  or something under it — and deciding which crate may hold it, because
+  `ARCHITECTURE_SPEC.md` §10.1 allows neither `prism-surface` nor `prismd` any
+  `#[cfg(target_os = …)]`. The tool of S20 is outside the workspace for exactly
+  this reason and is the precedent to weigh against a dependency whose whole
+  purpose is to hold the split (which is how `thread-priority` got in).
+- **The protocol has no executor-button command, and three rows of §4.1 want
+  one.** `XFade`, `On`, `Flash`, `Toggle` and `LearnSpeed` are executor
+  *functions* — show data — and the surface can only send commands. One command
+  that presses an executor's button and lets the executor decide closes all
+  three rows, and it is the same session that owes a tap against a speed master.
+  Nothing was invented in the meantime; the gap is in `docs/MCU_MAPPING.md`
+  §4.2.1 and in the decision log.
+- **The daemon paints only what §4.1 gives it**: the current page's executor
+  masters onto the faders, their sequence names and master percentages onto the
+  scribble strips, the active ones onto the Select LEDs and the unsaved-changes
+  flag onto the Save lamp. Colours are deliberately not driven — an executor has
+  no colour field, and §2.3 says a strip that rounded itself onto black is one
+  whose text cannot be read. S26 owns what else belongs there.
+- **`SurfaceContext` is the seam the UI session work will meet.** If S23–S26
+  change what the session holds, `prismd::surface::context_of` is the one place
+  the surface reads it, and `parameter_of` — the encoder bank plus the parameter
+  index over `AttributeType::ALL` — is a guess at what S26's encoder bar will
+  show. If the encoder bar orders its parameters differently, these two must
+  agree or the jog wheel will turn something other than what is highlighted.
+- **The gate target is the shape later daemon tests should copy.**
+  `run_until` runs the daemon in 5 ms slices and looks at the desk between them,
+  because the surface is polled *inside* `Daemon::run` — and every wait has a
+  ten-second deadline, per S16's lesson about a CI job that never ended.
 
 Carried out of S21:
 - **`SurfaceEvent` is the seam S22 binds.** `Button`, `Touch`, `Moved` (a level,
@@ -1994,169 +2122,167 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S22 — `prism-surface`, Bindings und das D11-Gate**
+**Next up: S23 — `ui`, das Fundament**
 
-> Diese Session braucht **kein** Gerät. Das X-Touch ist mit S20 verifiziert, die
-> Feedback-Regeln sind mit S21 gebaut; hier entsteht Schicht 3 und das Gate wird
-> gegen einen Mock-MIDI-Port gefahren. Ist das Pult trotzdem angesteckt, muss die
-> Testsuite unverändert grün bleiben — kein automatischer Test darf es anfassen.
+> Diese Session braucht **kein** Gerät und schreibt **keinen** Rust-Code, bis auf
+> das, was die Testfixtures brauchen. Sie baut die erste Hälfte der Oberfläche:
+> den IPC-Client im Browser, den Spiegel des Daemon-Zustands und das Verhalten,
+> wenn der Daemon verschwindet und wiederkommt.
 
 ```text
-PrismDMX — Session S22: prism-surface, Bindings und das D11-Gate
+PrismDMX — Session S23: ui — Fundament
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Schicht 1 steht seit S19: Bytes werden zu logischen Ereignissen und wieder zu
-Bytes, byte-gleich, ohne eine einzige Allokation. S20 hat die Tabelle dahinter am
-echten Gerät gemessen — Behringer X-Touch, MC-Modus über USB, Firmware V1.25 —
-und keine einzige Zahl war falsch. Schicht 2 steht seit S21: das Schattenmodell,
-das Diffing, die Touch-Unterdrückung, das Coalescing bei 30 Hz, die
-Prioritätsreihenfolge und die Sendepause, die das Pult am Leben hält.
-
-Was fehlt, ist die oberste Schicht: die Bindungstabelle, die aus einem
-`SurfaceEvent` ein `Command` macht — und der Beweis, dass D11 wirklich trägt.
+Der Daemon ist fertig und beweisbar allein lauffähig. Er hält die Show, die
+Session und den Programmer, er treibt DMX ohne einen einzigen verbundenen
+Client (D2-Gate, S18), und seit S22 bedient ihn ein Mackie-Control-Pult
+vollständig — auch dann, wenn gar keine Oberfläche läuft (D11-Gate). Was fehlt,
+ist die Oberfläche selbst. S23 baut ihr Fundament: die Verbindung, den Spiegel
+und das ehrliche Verhalten bei Verbindungsverlust.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
-1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
-                                            und Teststandards. Besonders: kein
-                                            Test darf echte Hardware anfassen,
-                                            Coverage > 95 % auf dieser Kiste,
-                                            und print!/println! sind
-                                            workspace-weit verboten
-2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.22 (was S21 gebaut hat
-                                            und welche Regeln jetzt zugesichert
-                                            sind), §2.21 (was S20 am Gerät
-                                            gemessen hat), §5 (offene
-                                            Verifikationspunkte) und §7
-                                            „Carried out of S21" — diese Liste
-                                            ist die Anforderungsliste dieser
-                                            Session
-3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S22
-4. docs/MCU_MAPPING.md — §1 (die drei Schichten), **§4 vollständig**: §4.1 ist
-   die Default-Belegung, die das Profil reproduzieren muss, §4.2 die Form der
-   Datei, und **§4.3** beschreibt, dass dem Pult im geplanten Betrieb das meiste
-   Bedienfeld gar nicht gehört und welche Taste niemals belegt werden darf.
-   Dazu §3.1 und §5.4 („As built") — was Schicht 2 bereits erledigt, damit
-   Schicht 3 es nicht ein zweites Mal tut
-5. ARCHITECTURE_SPEC.md §4 (Session-State: **das ist D11**, und §4.4 listet die
-   Kommandos, die die Konsole für die Oberfläche absetzt), §6 (Domänenmodell),
-   §10.1 (welche Kisten plattformabhängigen Code enthalten dürfen —
-   `prism-surface` gehört nicht dazu), §12 (Testpolitik, mit der Gate-Zeile für
-   D11)
-6. docs/IPC_PROTOCOL.md                   — `Command`, `Delta`, `Snapshot`
-7. crates/prism-surface/src/lib.rs        — was die Kiste verspricht
-8. crates/prism-surface/src/model.rs      — `SurfaceEvent`, `Control`,
-                                            `SurfaceMode`: die Naht, die S22
-                                            bindet
-9. crates/prism-surface/src/surface.rs    — `SurfaceController`: Eingang
-                                            (`push`), Ausgang (`pump`), Zustand
-10. crates/prism-surface/src/profile.rs   — die gemessene Tabelle, dazu
-                                            `permanent`, `reserved_buttons`,
-                                            `unlit_buttons`
-11. profiles/surface/xtouch.json          — die Datei, die geladen werden soll:
-                                            sie existiert bereits, mit dem
-                                            Verifikationsprotokoll von S20 und
-                                            einem `reserved`-Block
-12. crates/prism-core/src/session.rs und crates/prismd/src/                 —
-                                            wohin die Kommandos gehen
+1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
+                                  Teststandards. Besonders: strict: true, **kein
+                                  `any`**, explizite Interfaces für alle
+                                  Domänentypen, kein console.log in
+                                  Produktionscode (strukturierter Logger mit
+                                  Leveln), ≥ 85 % Coverage global
+2. PROGRESS.md                  — Stand, Decision Log, gemessene Zahlen;
+                                  besonders §2.23 (was S22 gebaut hat), §2.19
+                                  (das D2-Gate und was „keine Lücke" heißt),
+                                  §2.17 (prism-ipc: Framing, Backpressure,
+                                  Handshake), §5 (offene Verifikationspunkte)
+                                  und §7 „Carried out of S22" — diese Liste ist
+                                  Teil der Anforderungen
+3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S23
+4. docs/IPC_PROTOCOL.md         — **vollständig**. Das ist die Spezifikation,
+                                  die diese Session implementiert: §3 Framing,
+                                  §4 Nachrichtentypen und Handshake, §5
+                                  Commands, §6 Deltas, §7 Telemetrie (gehört zu
+                                  S24, aber §7s letzter Absatz ist eine Regel
+                                  für S23: Telemetrie darf **nie** in reaktiven
+                                  Zustand), §8 Backpressure und Ausfälle, §9
+                                  Testtabelle mit der Zeile „snapshot
+                                  completeness"
+5. ARCHITECTURE_SPEC.md §2 (Systemüberblick), §4 (Session-State — was die
+   Oberfläche spiegelt und was **nicht**: §4.2 listet, was bewusst
+   client-lokal bleibt), §6 (Domänenmodell), §12 (Testpolitik, letzte Zeile:
+   `vitest` + Testing Library, Playwright gegen einen Daemon im Mock-Output-
+   Modus, ≥ 85 %)
+6. ui/                          — das Gerüst aus S0: Vite + React 19 +
+                                  TypeScript strict, oxlint. **ui/src/bindings/**
+                                  enthält 47 aus Rust generierte Typen
+                                  (`ts-rs`) — Command, Delta, Session, Show,
+                                  ProgrammerState und alles darunter. Diese
+                                  Dateien werden **nicht von Hand geändert**:
+                                  sie entstehen aus prism-domain und die
+                                  Rust-Testsuite schreibt sie neu
+7. crates/prism-ipc/src/        — die Gegenseite: message.rs (ClientMessage,
+                                  ServerMessage, Hello, Snapshot), frame.rs
+                                  (u32-LE-Länge + MessagePack), client.rs (wie
+                                  ein Client aussieht, in Rust)
+8. crates/prism-core/src/mirror.rs — `ShowMirror`, `SessionMirror`, `JsonMirror`:
+                                  derselbe Spiegel, in Rust, inklusive der
+                                  Frage, worauf RFC-6902-Operationen zeigen
+9. crates/prismd/src/server.rs  — was ein Snapshot enthält und in welcher
+                                  Reihenfolge Deltas und Ack beim Client
+                                  ankommen
 
 Stand — nichts davon musst du neu bauen:
 - `prism-domain` (S1), `prism-engine` (S2–S6), `prism-protocols` (S7–S10),
   `prism-core` (S11–S15), `prism-ipc` (S16), `prismd` (S17, D2-Gate in S18) und
-  die Schichten 1 und 2 von `prism-surface` (S19, S20, S21) sind vollständig.
-- 1 351 Tests im Workspace, alle grün, CI vierfarbig grün.
-- `prism-surface` ist plattformneutral und hängt an genau einer Kiste
-  (`prism-domain`, bisher nur für `RgbColor`). Es gibt **keine MIDI-Anbindung**
-  darin und darf keine geben: §10.1 erlaubt ihr kein #[cfg(target_os = ...)].
-  Das Mess-Werkzeug von S20 liegt deshalb außerhalb des Workspace in
-  tools/xtouch-probe.
+  `prism-surface` vollständig (S19–S22, D11-Gate). Phase 5 ist abgeschlossen.
+- 1 419 Tests im Workspace, alle grün, CI vierfarbig grün.
+- Der Daemon lässt sich headless starten:
+  `cargo run -p prismd -- --mock-output --websocket --run-for 30`
+  und schreibt eine Lock-Datei mit seinen Endpunkten ins Datenverzeichnis
+  (docs/IPC_PROTOCOL.md §2.2). Der WebSocket ist der Transport für den Browser;
+  der Named Pipe ist für die Desktop-Shell (S29).
 
-Aufgabe: Session S22 umsetzen — Schicht 3 aus docs/MCU_MAPPING.md §4 und das
-D11-Gate aus ARCHITECTURE_SPEC.md §12.
+Aufgabe: Session S23 umsetzen — das Fundament von `ui`.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Das Default-Profil reproduziert **jede Zeile** von docs/MCU_MAPPING.md §4.1
-- Ein fehlerhaftes Profil fällt auf die eingebauten Defaults zurück, mit einer
-  Warnung, und blockiert den Start **niemals** — zugesichert, nicht beobachtet
-- **D11-Gate:** ohne verbundenen UI-Client sendet ein Mock-MIDI-Port `Channel ▶`
-  und F1; danach verbindet sich ein Client und findet **beides** in seinem
-  `Snapshot` — die neue View und das geöffnete Fenster
-- `cargo test --workspace` grün, `cargo clippy --workspace --all-targets --
-  -D warnings` sauber, `cargo fmt --all --check` sauber
-- Coverage auf `prism-surface` **> 95 %**, gemessen und in PROGRESS.md notiert
+- Deltas auf den Spiegel angewandt reproduzieren den Daemon-Zustand —
+  **property-getestet gegen einen aufgezeichneten Delta-Strom**
+- Daemon-Neustart: die Oberfläche zeigt „getrennt", verbindet sich neu, holt
+  einen frischen Snapshot, und **kein Wert von vorher bleibt stehen**
+- `npx tsc -b --force` sauber mit `strict: true`, **nirgends `any`**
+- `npm run build` und `npm run lint` sauber
+- Coverage ≥ 85 % auf dem, was diese Session schreibt, gemessen und in
+  PROGRESS.md notiert
 
 Wichtige Randbedingungen:
-- **Die Taste SMPTE/Beats (Note 53) wird nie belegt.** Im geteilten Xctl+MC-Modus
-  schaltet sie die Oberfläche zwischen Tonpult und PrismDMX um; wer sie belegt,
-  nimmt dem Operator den Weg zurück ans Tonpult. Schicht 2 verwirft ihre
-  Ereignisse bereits und zählt sie (`McuProfile::is_reserved`,
-  `SurfaceCounters::reserved`); der **Profil-Lader muss ein Profil, das sie
-  bindet, zusätzlich ablehnen** — mit einer Meldung, die sagt warum, denn die
-  liest der Mensch, der das Profil geschrieben hat.
-- **Die Zugehörigkeit steht schon als Daten am Profil**: `McuProfile::permanent`
-  und `SurfaceMode::{Dedicated, Shared}`. Eine Bindungstabelle darf **alles**
-  benennen — §4.3: die volle Oberfläche ist einen Tastendruck entfernt —; was
-  `Shared` ändert, ist ausschließlich, welche LEDs *angesteuert* werden. Diese
-  Prüfung nicht in der Bindungsschicht wiederholen.
-- **`SurfaceEvent` ist die Naht.** `Button`, `Touch`, `Moved` (bereits ein Pegel
-  0…65535, gegen `max_reported_position()` skaliert), `Encoder` und `Jog`
-  (bereits Parameterschritte durch ihre jeweilige Beschleunigungskurve). Schicht 3
-  braucht **keine Arithmetik**: alles, was eine Messung brauchte, ist eine Schicht
-  tiefer erledigt.
-- **Zwei Kurven, nicht eine** — falls Schicht 3 sie konfigurierbar macht:
-  `VPotAcceleration` liest die vom Pult gemeldete Magnitude, `JogAcceleration`
-  den zeitlichen Abstand. Das Jog-Rad meldet immer nur ±1 (404 von 404
-  Nachrichten gemessen).
-- **Die Uhr bleibt ein Argument.** `push(bytes, now, sink)` und `pump(now, sink)`.
-  Was S22 hinzufügt, behält diese Form; die einzige echte Uhr sitzt im
-  Surface-Thread in `prismd`.
-- **Pumpen mindestens so oft wie `SurfaceTiming::min_gap`** (1 ms). Die
-  Sendepause wird gegen die Uhr des Aufrufers durchgesetzt: wer alle 10 ms pumpt,
-  sendet höchstens 100 Nachrichten pro Sekunde. Ein voller Resync-Burst sind
-  **156 Nachrichten, also ~156 ms** — das ist auch der Grund, ein Neuladen des
-  Profils nicht zum Anlass zu nehmen, das Schattenmodell zu verwerfen, solange
-  sich das *Bild* nicht ändert.
-- **Kein Dateisystem in `prism-surface`.** Das Profil wird aus einem `&str`
-  geparst; welche Datei das war, weiß `prismd`. Sonst ist der Fallback-Pfad nur
-  mit einem Dateisystem testbar, und genau der muss zugesichert werden.
-- **Das Pult kann verstummen, und nur ein Netzschalter holt es zurück** (S20,
-  docs/MCU_MAPPING.md §2.7). Schicht 2 erkennt das bereits und
-  `SurfaceHealth::Unresponsive::remedy()` liefert den Wortlaut. Wer die
-  Oberfläche in `prismd` einhängt, muss diesen Zustand an den Operator
-  weiterreichen — und darf die Geräteabfrage **nicht** pollen.
-- **Tap für Speed hat noch kein Ziel.** Freie Belegungen auf der Transportsektion
-  sollen unter anderem ein Tap-Tempo gegen einen *Speed-Master* sein. Speed-Master
-  existieren nicht (docs/DMX_MERGE.md §4, Punkt 3), und `LearnSpeed` gibt es
-  heute nur als Executor-Tastenfunktion. **S22 darf das Kommando nicht
-  erfinden** — die Session, die Speed-Master baut, schuldet Typ, Kommando und
-  Eintrag in der Funktionsliste.
-- Kein Test darf ein Gerät anfassen (CLAUDE.md). Ein Mock-MIDI-Port ist die
-  Testschnittstelle; `tests/hardware_capture.rs` zeigt, wie ein echter Befund
-  stattdessen als Fixture in die Suite kommt. Die bestehenden 1 351 Tests müssen
-  grün bleiben.
+- **Der Daemon ist die einzige Quelle der Wahrheit (D3).** Ein Client schickt
+  Absichten und empfängt Tatsachen. Er berechnet **keinen** Zustand, den der
+  Daemon danach bestätigen soll — auch nicht optimistisch. Wer eine
+  Fader-Bewegung sofort anzeigen will, zeigt den *lokalen Eingabewert* an und
+  nicht einen geratenen Modellzustand.
+- **Show und Session reisen als Dokumente, nicht als Modelle.** `ShowPatch` und
+  `SessionPatch` sind RFC-6902-Operationen, und eine Operation ist nur gegen
+  einen Dokument-Wurzelknoten sinnvoll. In Rust macht das `prism_core::JsonMirror`;
+  im Browser braucht es dieselbe Entscheidung. Der Programmer ist **das dritte
+  Dokument** und kommt komplett (`ProgrammerChanged`), nicht als Patch.
+- **Ein Snapshot ist vollständig, und das ist eine prüfbare Aussage.**
+  docs/IPC_PROTOCOL.md §9: der Snapshot eines frisch verbundenen Clients ist
+  gleich dem Zustand, den ein bestehender Client durch Aufsummieren seiner
+  Deltas erreicht hat. Genau das ist das erste Exit-Kriterium, und es ist die
+  Eigenschaft, die einen Reconnect zu einem gewöhnlichen Vorgang macht.
+- **Telemetrie gehört zu S24 — aber die Regel gilt ab jetzt:** Telemetrie darf
+  niemals in reaktiven Zustand (docs/IPC_PROTOCOL.md §7, letzter Absatz).
+  64 Universen × 512 Kanäle bei 30 Hz durch React-State machen die Oberfläche
+  unbenutzbar. Wenn S23 den Kanal schon empfängt, dann in Refs, und ohne Render.
+- **Was nicht in die Session gehört, gehört auch nicht in den Spiegel.**
+  ARCHITECTURE_SPEC.md §4.2: Monitorzuordnung, Scrollposition, Hover- und
+  Drag-Zustand, 3D-Kamera, UI-Zoom sind bewusst client-lokal. Sie sind pro
+  Bildschirm verschieden und wären als geteilter Zustand aktiv störend.
+  `prism-core` weist Fensterparameter mit solchen Namen an der Tür ab
+  (`SessionError::ClientLocalParam`) — der Client soll sie erst gar nicht
+  senden.
+- **Die generierten Bindings sind Quelltext aus Rust.** `ui/src/bindings/` wird
+  von `prism_domain::export_bindings` geschrieben und von der Rust-Testsuite
+  überprüft; eine Handänderung überlebt den nächsten `cargo test` nicht. Wenn
+  ein Typ fehlt, ist das eine Änderung in `prism-domain` und keine in `ui`.
+- **Kein `any`, und der Test dafür existiert schon** — in Rust
+  (`export::tests::no_generated_binding_contains_any`). Für handgeschriebenen
+  TypeScript-Code ist `tsc` mit `strict: true` die Zusicherung; `unknown` mit
+  Typwächtern ist der Weg, nicht `as`.
+- **Der Verbindungsverlust ist ein sichtbarer Zustand, kein stiller.**
+  docs/IPC_PROTOCOL.md §8: der Client zeigt deutlich „getrennt", versucht es mit
+  Backoff erneut, und bei Erfolg **resynchronisiert er über einen frischen
+  Snapshot**. Was er nicht darf: alte Werte weiterzeigen, als wären sie aktuell.
+  Das ist das zweite Exit-Kriterium und es ist ein Test, kein Augenschein.
+- **`Reject` ist nicht gleich Abbruch.** Eine Nachricht, die der Daemon nicht
+  dekodieren kann, beendet die Verbindung nicht (§8, letzter Absatz); ein
+  Versionskonflikt beim Handshake dagegen schon, und die Meldung nennt **beide**
+  Versionen. Die Oberfläche muss das unterscheiden können, sonst steht dort
+  „Verbindung verloren", wo „Oberfläche und Engine sind verschiedene Versionen"
+  gemeint ist.
 - **Ein Test, der die zu prüfende Funktion zum Prüfen benutzt, prüft nichts.**
   S19 fand das für Round-Trips, S20 für echte Aufnahmen, S21 für die
-  Prioritätsreihenfolge. Für S22 heißt das: die Erwartungen an §4.1 werden
-  **von Hand aus dem Dokument abgeschrieben**, nicht aus dem Default-Profil
-  erzeugt.
-- Neue Abhängigkeiten vor der ersten Zeile gegen ARM64 prüfen:
-  `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu`.
-  `serde_json` liegt bereits im Workspace.
-- Clippy bewegt sich. Ein „war letztes Mal grün" ist kein Beleg; die Prüfung jetzt
-  laufen lassen. print! und println! sind workspace-weit verboten
-  (`print_stdout = "warn"` plus `-D warnings`); ein Test, der eine Messung ausgibt,
-  trägt die Ausnahme ausdrücklich.
+  Prioritätsreihenfolge, S22 für die Default-Belegung. Für S23 heißt das: der
+  aufgezeichnete Delta-Strom des ersten Exit-Kriteriums wird **vom Daemon
+  erzeugt** (oder von einer Aufzeichnung daraus), und der Endzustand wird gegen
+  den **Snapshot des Daemons** verglichen — nicht gegen ein zweites Anwenden
+  derselben Client-Funktion.
+- Testinfrastruktur: `vitest` + Testing Library für Einheiten,
+  Playwright gegen einen Daemon im Mock-Output-Modus für Ende-zu-Ende
+  (ARCHITECTURE_SPEC.md §12). Beides ist noch nicht eingerichtet; das gehört zu
+  dieser Session. Ein Test darf niemals ein Gerät anfassen.
+- **Neue npm-Abhängigkeiten sind eine Entscheidung, keine Formalität.** Der Plan
+  nennt Zustand + Immer für den Spiegel; prüfe vorher, ob der Spiegel ohne Immer
+  auskommt, wenn die Dokumente ohnehin als JSON-Werte gepatcht werden, und
+  begründe die Wahl im Decision Log. Die Oberfläche läuft später in einer
+  Tauri-Shell (S29) — was hier hineinkommt, wird ausgeliefert.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
-  Node 24.11, `cargo-llvm-cov`). Es ist kein weiteres Setup nötig.
+  Node 24.11, `cargo-llvm-cov`). `npm ci` in `ui/` genügt.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S22-Status, jede gemessene Zahl, Decision Log bei
+- PROGRESS.md aktualisieren: S23-Status, jede gemessene Zahl, Decision Log bei
   Abweichungen und bei Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S23 (`ui` — Fundament) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. feat(surface): …
+  Session S24 (`ui` — Telemetriekanal) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. feat(ui): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```

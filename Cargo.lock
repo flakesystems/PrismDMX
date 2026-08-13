@@ -750,6 +750,8 @@ version = "0.1.0"
 dependencies = [
  "prism-domain",
  "proptest",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

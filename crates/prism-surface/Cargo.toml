@@ -9,6 +9,13 @@ publish.workspace = true
 
 [dependencies]
 prism-domain = { path = "../prism-domain" }
+# Layer 3 only. The binding table ships as JSON a user edits
+# (docs/MCU_MAPPING.md section 4.2), so the crate has to read one - but it reads
+# a `&str` and never a path: which file it was is `prismd`'s business, and that
+# is what lets the fallback-to-defaults guarantee be tested without a
+# filesystem. Layers 1 and 2 use neither.
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 # "Every valid event encodes and decodes back to itself" is a claim about a

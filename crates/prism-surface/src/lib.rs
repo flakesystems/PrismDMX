@@ -51,6 +51,28 @@
 //! It owns no port, no thread and no clock. Every entry point takes `now`, so
 //! the whole of §5 is tested with arithmetic and nothing waits for anything.
 //!
+//! # What S22 built: layer 3, the binding table
+//!
+//! ```text
+//!   [`SurfaceEvent`] ──▶ [`Bindings`] ──▶ [`SurfaceAction`] ──▶ `Command`
+//!                         JSON, and the   device-free, the      the arguments
+//!                         built-in §4.1   §4.1 vocabulary       from a
+//!                         defaults                             [`SurfaceContext`]
+//! ```
+//!
+//! No arithmetic at all: a fader is already a level and a detent is already a
+//! parameter step, so the top layer is a table lookup and a `match`. What it
+//! cannot know — which executor is under strip 3, which view lies after this
+//! one — arrives as [`SurfaceContext`], plain `Copy` answers resolved by
+//! whoever holds the session. This crate still holds no show and no session.
+//!
+//! [`Bindings::load`] **cannot fail**: a profile that will not parse answers
+//! with the built-in defaults and a [`ProfileError`] to log, because
+//! `IMPLEMENTATION_PLAN.md` S22 asks that a malformed profile never block
+//! startup and a function without an error path is the strongest way to say it.
+//! It reads a `&str` rather than a path — there is no filesystem in this crate
+//! either.
+//!
 //! The one domain type this crate uses arrives here: [`prism_domain::RgbColor`],
 //! quantised onto the eight colours a scribble strip has — hue first, because a
 //! pastel is still the colour it is a pastel of (`color`).
@@ -118,6 +140,7 @@
 )]
 
 pub mod accel;
+mod binding;
 mod codec;
 pub mod color;
 mod control;
@@ -128,6 +151,10 @@ pub mod profile;
 mod surface;
 
 pub use accel::{JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
+pub use binding::{
+    Bindings, BoundControl, ExecutorTarget, PROFILE_VERSION, ProfileError, Step, SurfaceAction,
+    SurfaceContext,
+};
 pub use codec::{CodecCounters, McuCodec};
 pub use color::quantize;
 pub use control::{

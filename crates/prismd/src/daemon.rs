@@ -48,6 +48,8 @@ use crate::lock::{DaemonLock, LockError};
 use crate::log;
 use crate::paths;
 use crate::server::{Desk, DeskHandler, OutputEntry};
+use crate::surface::{SURFACE_PERIOD, SurfaceLink, SurfacePort};
+use prism_surface::Bindings;
 
 /// How often the daemon looks at its own housekeeping: the autosave policy and
 /// the outputs' health.
@@ -130,6 +132,13 @@ pub struct Daemon {
     lock: DaemonLock,
     exit: Exit,
     listeners: Vec<tokio::task::JoinHandle<()>>,
+    /// The binding table a surface attached to this daemon will use, read at
+    /// startup so a broken profile is reported once rather than per surface.
+    bindings: Bindings,
+    /// The control surface, once one has been attached. `None` is the ordinary
+    /// state: **D2** says the daemon runs with no client, and it runs with no
+    /// console just as happily.
+    surface: Option<SurfaceLink>,
 }
 
 impl core::fmt::Debug for Daemon {
@@ -283,7 +292,45 @@ impl Daemon {
             lock,
             exit: options.exit,
             listeners,
+            bindings: match &options.surface_profile {
+                Some(path) => crate::surface::load_profile(path),
+                None => Bindings::defaults(),
+            },
+            surface: None,
         })
+    }
+
+    /// Attaches a control surface.
+    ///
+    /// Separate from [`start`](Self::start) because a port is a thing rather
+    /// than a setting: `Options` is `Clone` and comparable, and a MIDI port is
+    /// neither. It is also the seam `CLAUDE.md` asks for — the D11 gate attaches
+    /// a mock and nothing in the suite touches a device.
+    ///
+    /// The surface is drawn once as soon as the daemon starts polling: attaching
+    /// invalidates the shadow model, which is §5.3's resync burst and is paced
+    /// like everything else.
+    pub fn attach_surface(&mut self, port: Box<dyn SurfacePort>) {
+        log::info(
+            "surface",
+            &format!(
+                "a control surface is attached: {} controls bound",
+                self.bindings.bound()
+            ),
+        );
+        self.surface = Some(SurfaceLink::attach(port, self.bindings));
+    }
+
+    /// The attached surface, for a status panel or a test.
+    #[must_use]
+    pub const fn surface(&self) -> Option<&SurfaceLink> {
+        self.surface.as_ref()
+    }
+
+    /// The binding table in force.
+    #[must_use]
+    pub const fn bindings(&self) -> &Bindings {
+        &self.bindings
     }
 
     /// The desk, for a test that wants to look at what the daemon holds.
@@ -330,6 +377,11 @@ impl Daemon {
     pub async fn run(&mut self, run_for: Option<Duration>, stop: impl Future<Output = ()>) {
         let mut housekeeping = tokio::time::interval(HOUSEKEEPING);
         let mut telemetry = tokio::time::interval(TELEMETRY_PERIOD);
+        // The surface is polled at the pacing floor rather than at a rate of its
+        // own: the send pause is enforced against this loop's clock, so polling
+        // less often would send less rather than the same amount later
+        // (`docs/MCU_MAPPING.md` §5.2 and §2.7).
+        let mut surface = tokio::time::interval(SURFACE_PERIOD);
         let mut sequence = 0u64;
         let mut buffer = Vec::new();
         let mut health: Vec<OutputHealth> = self
@@ -363,6 +415,19 @@ impl Daemon {
                         self.server.broadcast(delta).await;
                     }
                     for delta in self.output_health_changes(&mut health) {
+                        self.server.broadcast(delta).await;
+                    }
+                }
+                _ = surface.tick(), if self.surface.is_some() => {
+                    // A press becomes a command, the command reaches the
+                    // daemon's own state, and the delta goes to whoever is
+                    // attached — which may be nobody. That is D11.
+                    let deltas = self
+                        .surface
+                        .as_mut()
+                        .map(|surface| surface.poll(&self.desk))
+                        .unwrap_or_default();
+                    for delta in deltas {
                         self.server.broadcast(delta).await;
                     }
                 }

@@ -101,18 +101,31 @@ impl StripButton {
     pub const fn index(self) -> usize {
         self as usize
     }
-}
 
-impl fmt::Display for StripButton {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+    /// What a binding profile calls this button, as `docs/MCU_MAPPING.md` §3
+    /// spells it: `Strip[*].Button.Select`.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
             Self::Rec => "Rec",
             Self::Solo => "Solo",
             Self::Mute => "Mute",
             Self::Select => "Select",
             Self::VPotPush => "VPotPush",
-        };
-        f.write_str(name)
+        }
+    }
+
+    /// The button a control name refers to — the inverse of
+    /// [`name`](Self::name).
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|button| button.name() == name)
+    }
+}
+
+impl fmt::Display for StripButton {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
@@ -349,6 +362,97 @@ impl GlobalButton {
     #[must_use]
     pub const fn index(self) -> usize {
         self as usize
+    }
+
+    /// What a binding profile calls this button, after the `Global.` prefix
+    /// (`docs/MCU_MAPPING.md` §4.2).
+    ///
+    /// The variant's own spelling, deliberately: a profile is written by a
+    /// person against this list, and a second vocabulary — the legend printed on
+    /// the panel, say, with its slashes and spaces — would be a second thing to
+    /// keep in step. A test asserts the sixty-four names are distinct and that
+    /// [`from_name`](Self::from_name) reverses every one.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::AssignTrack => "AssignTrack",
+            Self::AssignSend => "AssignSend",
+            Self::AssignPan => "AssignPan",
+            Self::AssignPlugin => "AssignPlugin",
+            Self::AssignEq => "AssignEq",
+            Self::AssignInstrument => "AssignInstrument",
+            Self::BankLeft => "BankLeft",
+            Self::BankRight => "BankRight",
+            Self::ChannelLeft => "ChannelLeft",
+            Self::ChannelRight => "ChannelRight",
+            Self::Flip => "Flip",
+            Self::GlobalView => "GlobalView",
+            Self::NameValue => "NameValue",
+            Self::SmpteBeats => "SmpteBeats",
+            Self::F1 => "F1",
+            Self::F2 => "F2",
+            Self::F3 => "F3",
+            Self::F4 => "F4",
+            Self::F5 => "F5",
+            Self::F6 => "F6",
+            Self::F7 => "F7",
+            Self::F8 => "F8",
+            Self::ViewMidiTracks => "ViewMidiTracks",
+            Self::ViewInputs => "ViewInputs",
+            Self::ViewAudioTracks => "ViewAudioTracks",
+            Self::ViewAudioInstruments => "ViewAudioInstruments",
+            Self::ViewAux => "ViewAux",
+            Self::ViewBusses => "ViewBusses",
+            Self::ViewOutputs => "ViewOutputs",
+            Self::ViewUser => "ViewUser",
+            Self::ModShift => "ModShift",
+            Self::ModOption => "ModOption",
+            Self::ModControl => "ModControl",
+            Self::ModAlt => "ModAlt",
+            Self::AutoRead => "AutoRead",
+            Self::AutoWrite => "AutoWrite",
+            Self::AutoTrim => "AutoTrim",
+            Self::AutoTouch => "AutoTouch",
+            Self::AutoLatch => "AutoLatch",
+            Self::AutoGroup => "AutoGroup",
+            Self::Save => "Save",
+            Self::Undo => "Undo",
+            Self::Cancel => "Cancel",
+            Self::Enter => "Enter",
+            Self::Markers => "Markers",
+            Self::Nudge => "Nudge",
+            Self::Cycle => "Cycle",
+            Self::Drop => "Drop",
+            Self::Replace => "Replace",
+            Self::Click => "Click",
+            Self::SoloClear => "SoloClear",
+            Self::Rewind => "Rewind",
+            Self::FastForward => "FastForward",
+            Self::Stop => "Stop",
+            Self::Play => "Play",
+            Self::Record => "Record",
+            Self::CursorUp => "CursorUp",
+            Self::CursorDown => "CursorDown",
+            Self::CursorLeft => "CursorLeft",
+            Self::CursorRight => "CursorRight",
+            Self::Zoom => "Zoom",
+            Self::Scrub => "Scrub",
+            Self::FootSwitch1 => "FootSwitch1",
+            Self::FootSwitch2 => "FootSwitch2",
+        }
+    }
+
+    /// The button a control name refers to — the inverse of
+    /// [`name`](Self::name).
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|button| button.name() == name)
+    }
+}
+
+impl fmt::Display for GlobalButton {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
@@ -704,6 +808,15 @@ const X_TOUCH_STRIP_BUTTONS: [StripButtonRow; 5] = [
 pub struct McuProfile {
     /// Human-readable name, as a log line or the UI names the surface.
     pub name: &'static str,
+    /// The name a binding profile calls this surface by — the `device` field of
+    /// `profiles/surface/xtouch.json` (`docs/MCU_MAPPING.md` §4.2).
+    ///
+    /// Machine-readable where [`name`](Self::name) is not, and it exists so that
+    /// a binding table written for another surface is **refused** rather than
+    /// applied to whichever device happens to be plugged in. A profile that
+    /// names controls this surface has not got would otherwise load quietly and
+    /// bind nothing.
+    pub key: &'static str,
     /// The device ID this surface answers to inside a Mackie SysEx.
     pub device_id: u8,
     /// The MIDI channel every note and CC uses, **zero-based**: 0 is what a
@@ -1047,6 +1160,7 @@ impl McuProfile {
     /// the device on 2026-08-13** (§2.7).
     pub const X_TOUCH: Self = Self {
         name: "Behringer X-Touch (MC mode)",
+        key: "behringer-x-touch",
         device_id: DEVICE_ID_MCU,
         channel: 0,
         strips: 8,

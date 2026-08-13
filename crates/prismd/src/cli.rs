@@ -90,6 +90,14 @@ pub struct Options {
     pub websocket: Option<SocketAddr>,
     /// The §2.1 token. Required when the WebSocket listener is not on loopback.
     pub token: Option<String>,
+    /// The X-Touch binding profile to read (`docs/MCU_MAPPING.md` §4.2), or
+    /// `None` for the built-in defaults.
+    ///
+    /// A path this daemon may fail to read: a profile that is missing or
+    /// malformed produces a warning and the built-in table, never a daemon that
+    /// will not start. `IMPLEMENTATION_PLAN.md` S22, and
+    /// [`crate::surface::load_profile`] is where it is kept.
+    pub surface_profile: Option<PathBuf>,
     /// What the stage does when the daemon stops.
     pub exit: Exit,
     /// How much to log.
@@ -109,6 +117,7 @@ impl Default for Options {
             local: true,
             websocket: None,
             token: None,
+            surface_profile: None,
             exit: Exit::default(),
             log_level: Level::Info,
             run_for: None,
@@ -172,6 +181,12 @@ Options:
   --no-local            do not open the named pipe / Unix domain socket
   --websocket [ADDR]    open the WebSocket listener (default: {DEFAULT_WEBSOCKET})
   --token <TOKEN>       the access token a listener off loopback requires
+
+  --surface-profile <PATH>
+                        the X-Touch binding table to read (see
+                        profiles/surface/xtouch.json). A profile that is
+                        missing or malformed is reported and the built-in
+                        bindings are used; it never stops the daemon
 
   --blackout-on-exit    publish a blackout before stopping the outputs
   --hold-on-exit        leave the last look on stage (default)
@@ -261,6 +276,7 @@ where
                 options.websocket = Some(socket_address(DEFAULT_WEBSOCKET, 0)?);
             }
             "--token" => options.token = Some(value()?),
+            "--surface-profile" => options.surface_profile = Some(PathBuf::from(value()?)),
             "--blackout-on-exit" => options.exit = Exit::Blackout,
             "--hold-on-exit" => options.exit = Exit::Hold,
             "--log-level" => {

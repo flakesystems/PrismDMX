@@ -21,10 +21,13 @@
 //!                                    │        ▼
 //!                                    ├──▶ [`engine`]   the 44 Hz thread,
 //!                                    │                 at its own priority
-//!                                    └──▶ [`server`]   the ServerHandler
-//!                                             │        prism-ipc asked for
-//!                                             ▼
-//!                                        clients, or none
+//!                                    ├──▶ [`server`]   the ServerHandler
+//!                                    │        │        prism-ipc asked for
+//!                                    │        ▼
+//!                                    │   clients, or none
+//!                                    └──▶ [`surface`]  the X-Touch, whose
+//!                                                      presses become the same
+//!                                                      commands a client sends
 //! ```
 //!
 //! # What this crate is not allowed to contain
@@ -58,5 +61,6 @@ pub mod log;
 pub mod machine;
 pub mod paths;
 pub mod server;
+pub mod surface;
 #[cfg(test)]
 mod testkit;

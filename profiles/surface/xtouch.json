@@ -1,7 +1,7 @@
 {
   "profileVersion": 1,
   "device": "behringer-x-touch",
-  "documentation": "docs/MCU_MAPPING.md - section 4 defines this file (layer 3, the binding table), section 2 defines the MIDI numbers (layer 1), and section 2.7 records the hardware verification named below. Loaded and schema-validated by prism-surface in S22; a malformed profile falls back to the built-in defaults with a warning and never blocks startup.",
+  "documentation": "docs/MCU_MAPPING.md - section 4 defines this file (layer 3, the binding table), section 2 defines the MIDI numbers (layer 1), and section 2.7 records the hardware verification named below. Read by prism_surface::Bindings::load (S22), which is given the text rather than a path: a profile that will not parse answers with the built-in defaults and a warning, and can never block startup. The bindings below reproduce those built-in defaults exactly, and a test asserts it - so editing this file is how the defaults are changed, and deleting it changes nothing.",
   "notOurNoteMap": "The note and CC numbers are deliberately NOT in this file. They live in exactly one place, prism_surface::profile::X_TOUCH, because a second copy of a 104-row table is a second thing to keep in step - which is what holding it in one constant was for. This file maps logical controls to commands.",
 
   "verification": {
@@ -70,42 +70,45 @@
     }
   ],
 
-  "bindingNotes": "Each action's 't' is a prism_domain::Command variant. The arguments a command needs but a binding cannot know - executor_id, level, view_id - are supplied by layer 3 from the strip index, the current executor page (D7: executorPage * 8 + index) and the control's own value. 'Strip[*]' expands per strip.",
+  "bindingNotes": "Each action's 't' is a prism_surface::SurfaceAction variant, which resolves to exactly one prism_domain::Command. The arguments a command needs but a binding cannot know - executor_id, level, view_id, the attribute under the jog wheel - are supplied by layer 3 from the control's own value and a SurfaceContext the daemon fills in from the session (D7: executorPage * 8 + strip index). 'Strip[*]' is one entry rather than eight: a fader bank has one binding per row, and the strip index is what picks the executor. A control listed with a null action is deliberately left alone, which is not the same as one this file forgot.",
+
+  "controlNames": "Strip[*].Fader, Strip[*].Encoder, Strip[*].Button.{Rec,Solo,Mute,Select,VPotPush}, Main.Fader, Global.Jog, and Global.<button> for each of the 64 panel buttons named by prism_surface::GlobalButton. A control this list does not name is refused, and so is a control bound twice.",
 
   "bindings": [
-    { "control": "Strip[*].Fader", "action": { "t": "SetExecutorMaster" } },
-    { "control": "Strip[*].Button.Rec", "action": { "t": "ExecutorGo", "direction": "Next" } },
-    { "control": "Strip[*].Button.Solo", "action": { "t": "ExecutorGo", "direction": "Next" } },
-    { "control": "Strip[*].Button.Mute", "action": { "t": "ExecutorGo", "direction": "Next" } },
-    { "control": "Strip[*].Button.Select", "action": { "t": "ExecutorGo", "direction": "Next" } },
+    { "control": "Strip[*].Fader", "action": { "t": "ExecutorMaster", "target": "Strip" } },
+    { "control": "Strip[*].Button.Rec", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
+    { "control": "Strip[*].Button.Solo", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
+    { "control": "Strip[*].Button.Mute", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
+    { "control": "Strip[*].Button.Select", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
+    { "control": "Strip[*].Button.VPotPush", "action": { "t": "SelectExecutor", "target": "Strip" } },
     { "control": "Strip[*].Encoder", "action": null },
-    { "control": "Strip[*].EncoderPush", "action": { "t": "SelectExecutor" } },
 
-    { "control": "Main.Fader", "action": { "t": "SetExecutorMaster", "target": "SelectedCrossfade" } },
-    { "control": "Main.Flip", "action": { "t": "ExecutorGo", "direction": "Next", "target": "Selected" } },
+    { "control": "Main.Fader", "action": { "t": "ExecutorMaster", "target": "Selected" } },
+    { "control": "Global.Flip", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Next" } },
 
-    { "control": "Global.Play", "action": { "t": "ExecutorGo", "direction": "Next", "target": "Selected" } },
+    { "control": "Global.Play", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Next" } },
     { "control": "Global.Stop", "action": { "t": "ExecutorOff", "target": "Selected" } },
-    { "control": "Global.FastForward", "action": { "t": "ExecutorGo", "direction": "Next", "target": "Selected" } },
-    { "control": "Global.Rewind", "action": { "t": "ExecutorGo", "direction": "Previous", "target": "Selected" } },
+    { "control": "Global.FastForward", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Next" } },
+    { "control": "Global.Rewind", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Prev" } },
     { "control": "Global.Record", "action": { "t": "ClearProgrammer" } },
 
-    { "control": "Global.BankLeft", "action": { "t": "SetExecutorPage", "relative": -1 } },
-    { "control": "Global.BankRight", "action": { "t": "SetExecutorPage", "relative": 1 } },
-    { "control": "Global.ChannelLeft", "action": { "t": "SelectView", "relative": -1 } },
-    { "control": "Global.ChannelRight", "action": { "t": "SelectView", "relative": 1 } },
+    { "control": "Global.BankLeft", "action": { "t": "ExecutorPage", "delta": -1 } },
+    { "control": "Global.BankRight", "action": { "t": "ExecutorPage", "delta": 1 } },
+    { "control": "Global.ChannelLeft", "action": { "t": "StepView", "direction": "Prev" } },
+    { "control": "Global.ChannelRight", "action": { "t": "StepView", "direction": "Next" } },
 
-    { "control": "Global.CursorUp", "action": { "t": "SetProgrammerPage", "relative": -1 } },
-    { "control": "Global.CursorDown", "action": { "t": "SetProgrammerPage", "relative": 1 } },
-    { "control": "Global.CursorLeft", "action": { "t": "SelectProgrammerParam", "direction": "Previous" } },
+    { "control": "Global.CursorUp", "action": { "t": "ProgrammerPage", "delta": -1 } },
+    { "control": "Global.CursorDown", "action": { "t": "ProgrammerPage", "delta": 1 } },
+    { "control": "Global.CursorLeft", "action": { "t": "SelectProgrammerParam", "direction": "Prev" } },
     { "control": "Global.CursorRight", "action": { "t": "SelectProgrammerParam", "direction": "Next" } },
-    { "control": "Global.Jog", "action": { "t": "SetAttribute", "relative": true } },
+    { "control": "Global.Jog", "action": { "t": "AdjustParameter" } },
 
     { "control": "Global.AssignTrack", "action": { "t": "SetEncoderBank", "group": "Dimmer" } },
     { "control": "Global.AssignSend", "action": { "t": "SetEncoderBank", "group": "Position" } },
     { "control": "Global.AssignPan", "action": { "t": "SetEncoderBank", "group": "Color" } },
     { "control": "Global.AssignPlugin", "action": { "t": "SetEncoderBank", "group": "Beam" } },
     { "control": "Global.AssignEq", "action": { "t": "SetEncoderBank", "group": "Focus" } },
+    { "control": "Global.AssignInstrument", "action": null },
 
     { "control": "Global.F1", "action": { "t": "OpenWindow", "window": "FixtureSheet" } },
     { "control": "Global.F2", "action": { "t": "OpenWindow", "window": "SequenceSheet" } },
@@ -118,16 +121,24 @@
 
     { "control": "Global.Save", "action": { "t": "SaveShow" } },
     { "control": "Global.Undo", "action": { "t": "Oops" } },
-    { "control": "Global.Enter", "action": { "t": "Redo" } }
+    { "control": "Global.Enter", "action": { "t": "Redo" } },
+
+    { "control": "Global.NameValue", "action": null },
+    { "control": "Global.SmpteBeats", "action": null }
   ],
 
-  "openQuestionsForS22": [
-    "SelectView in prism_domain takes an absolute view_id, but Channel left/right needs a relative move (D8). Either layer 3 resolves 'relative' against the session's view list, or the protocol grows a relative form. The 'relative' keys above are layer 3's, not the domain's.",
-    "SetExecutorMaster carries level: u16, and this surface reports 0..16380 in steps of 4 rather than 0..16383. Scale against verification.measured.faderMaxReported, or a fader against its end stop yields 99.98 per cent.",
-    "The Encoder Assign section has six buttons and docs/MCU_MAPPING.md section 4.1 names five feature groups. AssignInstrument is left unbound rather than doubled up.",
-    "Global.NameValue and Global.SmpteBeats are deliberately unbound - see 'reserved'. SmpteBeats must stay unbound and a loader should refuse a profile that binds it; NameValue is merely a bad idea.",
-    "The transport section and the jog wheel are the controls that reach PrismDMX without a mode switch (see sharedMode). Their function list should therefore grow the live-show entries an operator actually wants there - above all a tap for speed - rather than staying transport-shaped.",
-    "A tap for speed has no target yet. LearnSpeed exists only as an ExecutorButtonFunction, and speed masters are named in docs/DMX_MERGE.md section 4 item 3 with nothing implementing them and no domain type carrying one. S22 must not invent the command; the session that builds speed masters owes the type, the command and the function-list entry.",
-    "D7 (executor paging on Faderbank) and D8 (SelectView on Channel) sit outside the permanent set, so in shared operation they cost a switch to the full surface. Acceptable for setup-shaped work, and a reason not to put anything time-critical there."
+  "deviationsFromSection41": [
+    "Main fader: section 4.1 calls it XFade of the selected executor. XFade is an ExecutorFaderFunction - show data on the executor (ARCHITECTURE_SPEC.md section 6) - and the protocol has one fader command, SetExecutorMaster, for all four functions. So the binding is ExecutorMaster on the selected executor and what the fader DOES is the executor's own setting.",
+    "Play: section 4.1 gives it On. There is no ExecutorOn command; On is an ExecutorButtonFunction. ExecutorGo/Next is what starts a sequence, so Play and Forward resolve to the same command until an executor-button command exists. Recorded rather than invented - see PROGRESS.md's decision log for S22.",
+    "Strip Rec/Solo/Mute/Select: section 4.1's configurable list (Empty/Go+/Go-/LearnSpeed/Off/On/Flash/Toggle) is the ExecutorButtonFunction list, not a command list. A binding table can only send commands, so the two functions with commands (Go+, Go-) and Off are bindable here and the rest belong to the executor.",
+    "Strip[*].Button.VPotPush is not a section 4.1 row. It selects that strip's executor, because the transport section, the Flip button and the main fader all act on the SELECTED executor and the selection has to be reachable from the surface.",
+    "Global.Enter -> Redo is not a section 4.1 row either. Undo without a redo beside it is a desk with half an Oops."
+  ],
+
+  "carriedForward": [
+    "A tap for speed has no target yet. LearnSpeed exists only as an ExecutorButtonFunction, and speed masters are named in docs/DMX_MERGE.md section 4 item 3 with nothing implementing them and no domain type carrying one. S22 deliberately did not invent the command; the session that builds speed masters owes the type, the command and the function-list entry.",
+    "The transport section and the jog wheel are the controls that reach PrismDMX without a mode switch (see sharedMode). Their bindings above are a reasonable starting point, not a layout: they are the five keys worth spending on live-show work.",
+    "D7 (executor paging on Faderbank) and D8 (SelectView on Channel) sit outside the permanent set, so in shared operation they cost a switch to the full surface. Acceptable for setup-shaped work, and a reason not to put anything time-critical there.",
+    "The Encoder Assign section has six buttons and docs/MCU_MAPPING.md section 4.1 names five feature groups. AssignInstrument is left unbound rather than doubled up: a button that repeats its neighbour teaches an operator that it is broken."
   ]
 }
