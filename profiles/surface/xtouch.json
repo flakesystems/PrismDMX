@@ -37,7 +37,7 @@
     },
     "untested": {
       "footSwitches": "Notes 102 and 103 need a pedal in the FOOT SW jacks; nothing was plugged in. Neither note has an LED, which is expected of a jack.",
-      "cablePull": "Belongs to S21's connection handling rather than to the codec."
+      "cablePull": "S21 built the handling and asserts it against a mock: the port going away invalidates the shadow model, stops all traffic, tells the engine nothing, and a reconnect redraws the whole surface once, paced. What is untested is whether a real unplug and replug produces exactly one Disconnected and one connected from the MIDI backend S22 chooses - a question about that backend, not about prism-surface."
     },
     "knownFault": "Saturating both directions at once - a burst of large SysEx writes while replies are outstanding - loses messages and can stop the surface transmitting entirely while it goes on receiving normally. Only a power cycle recovers it. Pace the outbound path (30 Hz, coalesced, minimum gap) and never poll the handshake. docs/MCU_MAPPING.md section 2.7."
   },
@@ -45,6 +45,7 @@
   "sharedMode": {
     "summary": "This surface is to be run in the X-Touch's combined Xctl+MC mode, driving the venue's sound console over Xctl and PrismDMX over MC at the same time. docs/MCU_MAPPING.md section 4.3.",
     "provenance": "Stated by the operator who owns and runs the desk. NOT measured in S20, which verified plain MC mode. Verifying it needs the sound console present.",
+    "authority": "S21 holds this same set as McuProfile::permanent, in code, because the shadow model consults it every frame. THAT is the authoritative copy; the list below is this file's description of the deployment. If they ever disagree, the constant wins and this file is wrong.",
     "reachesPrismDmxInSharedMode": [
       "Global.Rewind", "Global.FastForward", "Global.Stop", "Global.Play", "Global.Record",
       "Global.Jog"

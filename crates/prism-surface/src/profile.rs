@@ -36,7 +36,8 @@
 
 use core::fmt;
 
-use crate::control::FADER_MAX;
+use crate::control::{ButtonId, FADER_MAX};
+use crate::model::{Control, SurfaceMode};
 
 /// Mackie's three-byte manufacturer ID, which every MCU SysEx carries.
 ///
@@ -93,6 +94,13 @@ impl StripButton {
         Self::Select,
         Self::VPotPush,
     ];
+
+    /// This button's position in [`ALL`](Self::ALL), which is how layer 2's
+    /// shadow model indexes a strip's LEDs.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self as usize
+    }
 }
 
 impl fmt::Display for StripButton {
@@ -331,6 +339,17 @@ impl GlobalButton {
         Self::FootSwitch1,
         Self::FootSwitch2,
     ];
+
+    /// This button's position in [`ALL`](Self::ALL), which is how layer 2's
+    /// shadow model indexes the panel's LEDs.
+    ///
+    /// The note number would be the obvious index and is the wrong one: it is a
+    /// property of *this* surface, and the shadow model is layer 2's, where a
+    /// device with a different note map still has these sixty-four buttons.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self as usize
+    }
 }
 
 /// One row of the global button table.
@@ -616,6 +635,43 @@ const X_TOUCH_BUTTONS: [ButtonNote; 64] = [
 const X_TOUCH_UNLIT_BUTTONS: [GlobalButton; 2] =
     [GlobalButton::NameValue, GlobalButton::SmpteBeats];
 
+/// What keeps reaching MC while the surface is also driving a sound console.
+///
+/// `docs/MCU_MAPPING.md` §4.3, and **this one is the operator's account rather
+/// than a measurement**: the desk is to be run in the X-Touch's combined
+/// **Xctl+MC** mode, driving the venue's sound console and PrismDMX at once, and
+/// in that mode only what Xctl leaves unused reaches us permanently — the
+/// transport section and the jog wheel. Everything else follows the operator's
+/// switch between the two hosts, which costs one button press and gives PrismDMX
+/// the whole surface.
+///
+/// Held as data beside [`X_TOUCH_UNLIT_BUTTONS`] for the same reason: *which
+/// controls are ours* is then one edit rather than a condition threaded through
+/// the diffing. §7 of the mapping document carries verifying it as an open item,
+/// because checking it needs the sound console on the other end.
+const X_TOUCH_PERMANENT: [Control; 6] = [
+    Control::Button(ButtonId::Global(GlobalButton::Rewind)),
+    Control::Button(ButtonId::Global(GlobalButton::FastForward)),
+    Control::Button(ButtonId::Global(GlobalButton::Stop)),
+    Control::Button(ButtonId::Global(GlobalButton::Play)),
+    Control::Button(ButtonId::Global(GlobalButton::Record)),
+    Control::Jog,
+];
+
+/// Buttons PrismDMX must never drive, bind or claim.
+///
+/// One of them, and `docs/MCU_MAPPING.md` §4.3 is emphatic about why:
+/// **SMPTE/Beats is the button that switches the surface between the two hosts**
+/// in the combined mode. It is the operator's way back to the sound desk, and a
+/// console that steals it is a console somebody has to power-cycle to get out
+/// of.
+///
+/// Reserved in **every** mode rather than only in the shared one, deliberately,
+/// so that one profile is safe on a desk whose mode nobody has checked. Layer 2
+/// drops its inbound events (and counts them); S22's loader should refuse a
+/// binding that names it rather than merely defaulting away from it.
+const X_TOUCH_RESERVED_BUTTONS: [GlobalButton; 1] = [GlobalButton::SmpteBeats];
+
 /// The strip button rows of `docs/MCU_MAPPING.md` §2.1.
 const X_TOUCH_STRIP_BUTTONS: [StripButtonRow; 5] = [
     StripButtonRow {
@@ -716,6 +772,21 @@ pub struct McuProfile {
     /// a console whose feedback silently lies about part of itself — S21's shadow
     /// model can skip these, and S26 can decline to offer them as indicators.
     pub unlit_buttons: &'static [GlobalButton],
+    /// The controls that reach PrismDMX even when the surface is shared with
+    /// another host — [`SurfaceMode::Shared`].
+    ///
+    /// Data rather than a condition in the diffing, exactly as
+    /// [`unlit_buttons`](Self::unlit_buttons) is, because *which controls are
+    /// ours* is a fact about a deployment and changing it should be one edit.
+    /// `docs/MCU_MAPPING.md` §4.3, and it is the operator's account rather than a
+    /// measurement — §7 carries verifying it as an open item.
+    pub permanent: &'static [Control],
+    /// Buttons PrismDMX must never drive or bind, whatever the mode.
+    ///
+    /// SMPTE/Beats on this surface: in the combined Xctl+MC mode it is what
+    /// switches the desk between the two hosts, so binding it strands the
+    /// operator away from their sound console (§4.3).
+    pub reserved_buttons: &'static [GlobalButton],
     /// Whether the numbers above have been read off a real device.
     ///
     /// A field rather than a comment so a log line, a status panel or a test can
@@ -883,6 +954,85 @@ impl McuProfile {
         FADER_MAX - (FADER_MAX % step)
     }
 
+    /// The level a reported fader position means, 0…65535.
+    ///
+    /// **Scaled against [`max_reported_position`](Self::max_reported_position)
+    /// and not against [`FADER_MAX`]**, which is the whole reason S20 measured
+    /// the step: this surface's faders stop at 16380, so dividing by 16383 gives
+    /// 99.98 % for a fader against its end stop. An executor master that cannot
+    /// reach full is a fault an operator finds and nobody can explain.
+    ///
+    /// A position above the reported top — which this surface never sends, and
+    /// another might — answers full rather than wrapping.
+    #[must_use]
+    #[allow(
+        clippy::integer_division,
+        reason = "a level is a ratio; the remainder is the quantisation the \
+                  12-bit fader already has"
+    )]
+    pub const fn level_from_position(&self, position: u16) -> u16 {
+        let top = self.max_reported_position();
+        if top == 0 || position >= top {
+            return u16::MAX;
+        }
+        ((position as u32 * u16::MAX as u32) / top as u32) as u16
+    }
+
+    /// The position that puts a motor fader at a level.
+    ///
+    /// The inverse of [`level_from_position`](Self::level_from_position), and
+    /// scaled against the same number: a master at full parks the fader exactly
+    /// where the surface itself reports full, so a value driven out and the value
+    /// that comes back agree at both end stops.
+    #[must_use]
+    #[allow(
+        clippy::integer_division,
+        reason = "rounds to nearest deliberately; the numerator carries the half"
+    )]
+    pub const fn position_from_level(&self, level: u16) -> u16 {
+        let top = self.max_reported_position() as u32;
+        let full = u16::MAX as u32;
+        (((level as u32 * top) + full / 2) / full) as u16
+    }
+
+    /// Whether this surface has a control at all.
+    #[must_use]
+    pub fn has(&self, control: Control) -> bool {
+        match control {
+            Control::Fader(fader) => self.fader_channel(fader).is_some(),
+            Control::Button(ButtonId::Strip { strip, button }) => {
+                self.strip_note(strip, button).is_some()
+            }
+            Control::Button(ButtonId::Global(button)) => self.note_of(button).is_some(),
+            Control::Encoder(strip) | Control::Display(strip) | Control::Meter(strip) => {
+                strip < self.strips
+            }
+            Control::Segment(digit) => digit < self.segments,
+            Control::Jog => true,
+        }
+    }
+
+    /// Whether PrismDMX may drive a control in this mode.
+    ///
+    /// In [`SurfaceMode::Dedicated`] that is every control the surface has. In
+    /// [`SurfaceMode::Shared`] it is only [`permanent`](Self::permanent) — the
+    /// rest of the panel is showing the sound console, where lighting a Select
+    /// LED is at best ignored and at worst fights that console's own feedback
+    /// (`docs/MCU_MAPPING.md` §4.3).
+    #[must_use]
+    pub fn holds(&self, control: Control, mode: SurfaceMode) -> bool {
+        match mode {
+            SurfaceMode::Dedicated => self.has(control),
+            SurfaceMode::Shared => self.permanent.contains(&control) && self.has(control),
+        }
+    }
+
+    /// Whether a button is one PrismDMX must never drive or bind.
+    #[must_use]
+    pub fn is_reserved(&self, button: GlobalButton) -> bool {
+        self.reserved_buttons.contains(&button)
+    }
+
     /// Whether a button's LED exists and can be driven.
     ///
     /// `false` for a button this surface has not got at all, and for the ones in
@@ -916,6 +1066,8 @@ impl McuProfile {
         lcd_buffer_len: 112,
         fader_step: 4,
         unlit_buttons: &X_TOUCH_UNLIT_BUTTONS,
+        permanent: &X_TOUCH_PERMANENT,
+        reserved_buttons: &X_TOUCH_RESERVED_BUTTONS,
         verified: true,
     };
 }
@@ -952,6 +1104,8 @@ mod tests {
         DEVICE_ID_EXTENDER, DEVICE_ID_MCU, Fader, GlobalButton, MACKIE_MANUFACTURER_ID,
         StripButton, X_TOUCH,
     };
+    use crate::control::ButtonId;
+    use crate::model::{Control, SurfaceMode};
 
     #[test]
     fn the_profile_has_been_seen_on_a_device_and_says_which_one() {
@@ -1235,6 +1389,159 @@ mod tests {
         assert_eq!(X_TOUCH.device_id, DEVICE_ID_MCU);
         assert_eq!(DEVICE_ID_MCU, 0x14);
         assert_eq!(DEVICE_ID_EXTENDER, 0x15);
+    }
+
+    #[test]
+    fn a_fader_scales_against_what_the_surface_reports_and_not_against_the_field() {
+        // The measurement that matters most upstairs (§2.7): the top of travel
+        // is 16380 and a master computed against 16383 stops at 99.98 %.
+        // 16380 is transcribed here rather than computed, because a test that
+        // asked the profile the same question the code asks it would agree with
+        // any answer.
+        assert_eq!(X_TOUCH.level_from_position(16380), u16::MAX);
+        assert_eq!(X_TOUCH.level_from_position(0), 0);
+        assert_eq!(X_TOUCH.position_from_level(u16::MAX), 16380);
+        assert_eq!(X_TOUCH.position_from_level(0), 0);
+        // Half travel is half a level, to within the 12 bits the fader has.
+        assert_eq!(X_TOUCH.position_from_level(32768), 8190);
+        assert!(X_TOUCH.level_from_position(8190).abs_diff(32768) <= 2);
+        // A position the field allows but this surface never sends still reads
+        // as full rather than wrapping past it.
+        assert_eq!(X_TOUCH.level_from_position(16383), u16::MAX);
+        assert_eq!(X_TOUCH.level_from_position(super::FADER_MAX), u16::MAX);
+    }
+
+    #[test]
+    fn a_position_driven_out_and_read_back_lands_on_the_same_level() {
+        // The round trip an operator sees: the desk is told where to put a
+        // fader, reports it back, and the two must not disagree by enough to
+        // start a fight between the motor and the shadow model.
+        for level in (0..=u16::MAX).step_by(0x111) {
+            let position = X_TOUCH.position_from_level(level);
+            assert!(position <= X_TOUCH.max_reported_position());
+            let read_back = X_TOUCH.level_from_position(position);
+            assert!(
+                read_back.abs_diff(level) <= 16,
+                "level {level} drove to {position} and read back {read_back}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_profile_with_no_travel_at_all_answers_rather_than_dividing_by_zero() {
+        // `max_reported_position` cannot be zero for any step a `u8` can hold,
+        // but the crate denies panicking and a half-filled profile must not be
+        // the exception that proves it.
+        let mut broken = X_TOUCH;
+        broken.fader_step = 0;
+        assert_eq!(broken.max_reported_position(), super::FADER_MAX);
+        assert_eq!(broken.level_from_position(super::FADER_MAX), u16::MAX);
+    }
+
+    #[test]
+    fn the_shared_mode_keeps_the_transport_section_and_the_jog_wheel() {
+        // §4.3, held as data: in the combined Xctl+MC mode only what Xctl leaves
+        // unused reaches PrismDMX. The list is the operator's account and not a
+        // measurement, which is why it is one edit rather than a condition in
+        // the diffing.
+        for button in [
+            GlobalButton::Rewind,
+            GlobalButton::FastForward,
+            GlobalButton::Stop,
+            GlobalButton::Play,
+            GlobalButton::Record,
+        ] {
+            let control = Control::Button(ButtonId::Global(button));
+            assert!(X_TOUCH.holds(control, SurfaceMode::Shared), "{button:?}");
+            assert!(X_TOUCH.holds(control, SurfaceMode::Dedicated));
+        }
+        assert!(X_TOUCH.holds(Control::Jog, SurfaceMode::Shared));
+        assert_eq!(X_TOUCH.permanent.len(), 6);
+    }
+
+    #[test]
+    fn the_shared_mode_keeps_nothing_else_and_the_dedicated_one_keeps_it_all() {
+        // The other half of the claim, and the one that stops feedback from
+        // fighting a sound console: every strip control, every other panel
+        // button and every display belongs to the other host until the operator
+        // switches back.
+        for strip in 0..X_TOUCH.strips {
+            for control in [
+                Control::Fader(Fader::Strip(strip)),
+                Control::Encoder(strip),
+                Control::Display(strip),
+                Control::Meter(strip),
+            ] {
+                assert!(!X_TOUCH.holds(control, SurfaceMode::Shared), "{control:?}");
+                assert!(X_TOUCH.holds(control, SurfaceMode::Dedicated));
+            }
+            for button in StripButton::ALL {
+                let control = Control::Button(ButtonId::Strip { strip, button });
+                assert!(!X_TOUCH.holds(control, SurfaceMode::Shared));
+                assert!(X_TOUCH.holds(control, SurfaceMode::Dedicated));
+            }
+        }
+        assert!(!X_TOUCH.holds(Control::Fader(Fader::Main), SurfaceMode::Shared));
+        assert!(!X_TOUCH.holds(Control::Segment(0), SurfaceMode::Shared));
+        for button in GlobalButton::ALL {
+            let control = Control::Button(ButtonId::Global(button));
+            assert_eq!(
+                X_TOUCH.holds(control, SurfaceMode::Shared),
+                X_TOUCH.permanent.contains(&control),
+                "{button:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_control_the_surface_has_not_got_is_held_in_neither_mode() {
+        for control in [
+            Control::Fader(Fader::Strip(8)),
+            Control::Encoder(8),
+            Control::Display(8),
+            Control::Meter(8),
+            Control::Segment(12),
+            Control::Button(ButtonId::Strip {
+                strip: 8,
+                button: StripButton::Rec,
+            }),
+        ] {
+            assert!(!X_TOUCH.has(control), "{control:?}");
+            assert!(!X_TOUCH.holds(control, SurfaceMode::Dedicated));
+            assert!(!X_TOUCH.holds(control, SurfaceMode::Shared));
+        }
+        assert!(X_TOUCH.has(Control::Jog));
+        assert!(X_TOUCH.has(Control::Segment(11)));
+    }
+
+    #[test]
+    fn smpte_beats_is_reserved_in_every_mode_and_it_is_the_only_one() {
+        // §4.3: in the combined mode it is the operator's way back to the sound
+        // desk. Reserved in the dedicated mode as well, deliberately, so one
+        // profile is safe on a desk whose mode nobody has checked.
+        assert!(X_TOUCH.is_reserved(GlobalButton::SmpteBeats));
+        assert_eq!(X_TOUCH.reserved_buttons.len(), 1);
+        for button in GlobalButton::ALL {
+            assert_eq!(
+                X_TOUCH.is_reserved(button),
+                button == GlobalButton::SmpteBeats,
+                "{button:?}"
+            );
+        }
+        // It is a button the surface has - it decodes, it is simply not ours -
+        // and it happens to be one of the two with no lamp at all.
+        assert_eq!(X_TOUCH.note_of(GlobalButton::SmpteBeats), Some(53));
+        assert!(!X_TOUCH.has_led(GlobalButton::SmpteBeats));
+    }
+
+    #[test]
+    fn a_button_indexes_itself_the_way_the_shadow_model_stores_it() {
+        for (index, button) in GlobalButton::ALL.into_iter().enumerate() {
+            assert_eq!(button.index(), index, "{button:?}");
+        }
+        for (index, button) in StripButton::ALL.into_iter().enumerate() {
+            assert_eq!(button.index(), index, "{button}");
+        }
     }
 
     #[test]

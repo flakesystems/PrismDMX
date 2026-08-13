@@ -26,12 +26,36 @@
 //!    wants shown      nothing allocated          counters, for `midi-in`
 //! ```
 //!
-//! There is **no domain type in this crate**. No `Command`, no show, no
-//! session: `GlobalButton::Play` is note 94, and that pressing it starts an
-//! executor is layer 3's opinion (S22). The only dependency is `prism-domain`,
-//! and layer 1 does not yet need it.
+//! There is **no domain type in layer 1**. No `Command`, no show, no session:
+//! `GlobalButton::Play` is note 94, and that pressing it starts an executor is
+//! layer 3's opinion (S22).
 //!
-//! There is also **no MIDI port**. Binding to a real device is
+//! # What S21 built: layer 2, the shadow model
+//!
+//! ```text
+//!   bytes ──▶ [`SurfaceController::push`] ──▶ [`SurfaceEvent`]
+//!              scaling, two acceleration     what the operator
+//!              curves, touch bookkeeping     meant
+//!
+//!   show state ──▶ setters ──▶ two [`SurfaceState`]s ──▶ diff ──▶ [`Feedback`]
+//!                              what the show wants,     §5.2's   at most one
+//!                              what the desk was told   order    per gap
+//! ```
+//!
+//! [`SurfaceController`] is one object holding the codec, the two pictures and
+//! the four rules of `docs/MCU_MAPPING.md` §5 — touch suppression, coalescing,
+//! priority and pacing — plus the fault §5.3 did not cover until S20 met it: a
+//! surface that goes on receiving perfectly while its transmitter is dead, and
+//! which only a **power cycle** recovers ([`SurfaceHealth::Unresponsive`]).
+//!
+//! It owns no port, no thread and no clock. Every entry point takes `now`, so
+//! the whole of §5 is tested with arithmetic and nothing waits for anything.
+//!
+//! The one domain type this crate uses arrives here: [`prism_domain::RgbColor`],
+//! quantised onto the eight colours a scribble strip has — hue first, because a
+//! pastel is still the colour it is a pastel of (`color`).
+//!
+//! There is **no MIDI port** anywhere in the crate. Binding to a real device is
 //! platform-dependent and belongs to the surface thread; this crate is bytes in
 //! and bytes out, which is what lets its whole test suite run on a build server
 //! with nothing plugged in — `CLAUDE.md`'s mocking rule, and the reason
@@ -63,10 +87,12 @@
 //!
 //! # What this crate promises
 //!
-//! - **Nothing allocates**, per message or per malformed packet. The one buffer
-//!   a sender can fill is the SysEx reassembly array, it is
-//!   [`MAX_SYSEX_BYTES`] long, and it lives inside the decoder. Measured in
-//!   `tests/codec_allocations.rs`, not asserted.
+//! - **Nothing allocates**, per message, per malformed packet or per frame of
+//!   outbound traffic. The one buffer a sender can fill is the SysEx reassembly
+//!   array, it is [`MAX_SYSEX_BYTES`] long, and it lives inside the decoder; the
+//!   two pictures and the frame's send queue are fixed-size arrays inside
+//!   [`SurfaceController`]. Measured in `tests/codec_allocations.rs` and
+//!   `tests/surface_allocations.rs`, not asserted.
 //! - **Nothing panics.** The crate denies `unwrap`, `expect`, `panic!` and
 //!   slice indexing outside its tests, so a hostile byte stream has no path to
 //!   a failure at all.
@@ -75,6 +101,10 @@
 //!   describe, because those want different repairs.
 //! - **A round trip is byte-equal.** Encoding an event produces the bytes the
 //!   surface would have sent, not merely bytes that read back the same way.
+//! - **Nothing is sent twice.** Outbound traffic is the difference between the
+//!   two pictures, and the shadow only moves when a message actually goes out —
+//!   so a frame that could not be finished is finished by the next one instead
+//!   of being lost.
 
 #![cfg_attr(
     not(test),
@@ -87,13 +117,19 @@
     )
 )]
 
+pub mod accel;
 mod codec;
+pub mod color;
 mod control;
 mod feedback;
 mod midi;
+mod model;
 pub mod profile;
+mod surface;
 
+pub use accel::{JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
 pub use codec::{CodecCounters, McuCodec};
+pub use color::quantize;
 pub use control::{
     ButtonId, ControlEvent, FADER_MAX, MAX_RELATIVE_STEPS, PRESS_VELOCITY, RELEASE_VELOCITY,
     relative_steps, relative_value,
@@ -107,8 +143,14 @@ pub use midi::{
     DEFAULT_SYSEX_TIMEOUT, DecodeCounters, EncodeError, MAX_MESSAGE_BYTES, MAX_SYSEX_BYTES,
     MidiDecoder, MidiMessage,
 };
+pub use model::{
+    ALL_FADERS, Control, DISPLAY_LINES, DisplayLine, GLOBAL_BUTTONS, MAX_FADERS, MAX_SEGMENTS,
+    MAX_STRIPS, Priority, SEGMENT_BLANK, STRIP_BUTTONS, STRIP_CHARS, StripDisplay, SurfaceEvent,
+    SurfaceMode, SurfaceState, fader_at, fader_index,
+};
 pub use profile::{
     ButtonNote, DEVICE_ID_EXTENDER, DEVICE_ID_MCU, Fader, GlobalButton, MACKIE_MANUFACTURER_ID,
     McuProfile, SYSEX_DEVICE_QUERY, SYSEX_LCD_COLOR, SYSEX_LCD_TEXT, SYSEX_METER_MODE, StripButton,
     StripButtonRow, X_TOUCH,
 };
+pub use surface::{SurfaceController, SurfaceCounters, SurfaceHealth, SurfaceTiming};
