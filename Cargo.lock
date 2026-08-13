@@ -749,6 +749,7 @@ name = "prism-surface"
 version = "0.1.0"
 dependencies = [
  "prism-domain",
+ "proptest",
 ]
 
 [[package]]

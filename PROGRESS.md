@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-08-12
-**Current phase:** Phase 4 — IPC and daemon
-**Current session:** S19 — `prism-surface`, the MCU codec (not started; see §8 for the prompt that starts it)
-**Last completed:** S18 — the D2 gate ✅ — **killing a client mid-show costs the rig nothing, and it is asserted on recorded frames**
+**Last updated:** 2026-08-13
+**Current phase:** Phase 5 — Surface
+**Current session:** S20 — 🔌 hardware verification of the X-Touch (not started; **needs the console** — see §8 for the prompt that starts it)
+**Last completed:** S19 — the MCU codec ✅ — **the desk has hands: bytes to control events and back, byte-equal, allocation-free, and every discarded packet counted**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -77,7 +77,7 @@
 ### Phase 5 — Surface
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
-| S19 | MCU codec | ☐ | | Against unverified tables — see §5 |
+| S19 | MCU codec | ✅ | 2026-08-13 | All exit criteria verified — see §2.20. 112 tests, coverage **99.24 % lines**. Built against the **unverified** tables of §5, and held as data so S20 is an edit rather than a refactor. Seven mutation checks; two of them are only visible to the allocator |
 | S20 | 🔌 Hardware verification X-Touch | ☐ | | Needs the console |
 | S21 | Surface model and feedback | ☐ | | |
 | S22 | Bindings + D11 gate | ☐ | | Mandatory gate |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 19 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 20 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -799,6 +799,50 @@ silently drifting from the daemon; and making telemetry non-droppable turns the
 backpressure test red, because the counter that says a picture was dropped never
 moves and the client is disconnected on a full control queue instead.
 
+### 2.20 S19 verification record
+
+Measured on 2026-08-13, all exit criteria from `IMPLEMENTATION_PLAN.md` S19 and
+the session prompt. The first session of Phase 5, and the first line of code in
+`prism-surface`: **layer 1 of `docs/MCU_MAPPING.md` §1, and only layer 1.**
+
+| Check | Result |
+|---|---|
+| Table-driven round trip: bytes → event → bytes, **byte-equal both ways** | ✅ `tests/round_trip.rs`. 36 inbound rows and 18 outbound rows, each holding a **literal byte array and a literal note number transcribed from `docs/MCU_MAPPING.md` §2 by hand** rather than derived from the profile — which is the whole point, because a round trip computed from the table it is testing passes with every number in it shifted by one. The mutation check below proves that is not a hypothetical. Three rows that are *not* byte-equal are separated out as **aliases** with the canonical form they normalise onto (a real Note Off, a press at any non-zero velocity, and the V-Pot's minus zero), so the difference is asserted instead of being quietly left out of the table. Two property tests say the same thing about the whole space — every valid event and every valid feedback message, including all 16 384 fader positions and every scribble strip offset and length |
+| Running status decoded identically to an explicit status byte | ✅ twice. `midi.rs`'s own test on a hand-built pair, and `the_same_burst_with_the_status_bytes_left_out_decodes_identically`, which takes the **whole 36-row inbound table**, drops every status byte that repeats the previous one, and asserts the two streams decode to the same events — and asserts the stripped stream is actually shorter, so a test that omitted nothing could not pass. The MIDI rules around it are separate claims: a real-time byte does **not** disturb running status, a system common message **cancels** it and takes its data bytes with it, and a SysEx cancels it too |
+| Fuzz with truncated and out-of-range messages: no panic, no allocation growth, correct discard counters | ✅ `tests/fuzz.rs` and `tests/codec_allocations.rs`. **No panic:** a quarter of a million pseudo-random bytes per run from a seeded xorshift, plus `proptest`. **Correct counters** is an *identity* rather than a number, because for random bytes nobody can say what the counters should read: every byte pushed is counted, and every complete message is either delivered or counted as unmapped or ignored — a codec that swallowed a message breaks it one way and one that invented a message breaks it the other. Against the deterministic hostile stream the counts are asserted **exactly**, per fault class, per round. **No allocation growth: 0 allocator calls**, measured with a counting global allocator over 250 kB of hostile input decoded twelve times and over 99 kB of every kind of outbound message |
+| SysEx split across packets reassembles; an unterminated one times out and is dropped | ✅ a whole 63-byte scribble strip message cut into **four-byte packets**, the size a USB MIDI packet actually is, arriving as one event. A real-time byte landing inside the payload does not join it. An oversized message is discarded **whole** rather than truncated to fit — a scribble strip built from the first 128 bytes of a 200-byte message is a display full of plausible nonsense. And the timeout is asserted from **both** sides of its deadline, at no cost in wall-clock time: the arrival instant is an argument to `push`, so there is no clock to simulate and nothing to wait for |
+| Every note number, CC number and channel is **data** | ✅ `profile::X_TOUCH`, one constant, `verified: false`. Nothing in the codec matches on a literal. The two lists that describe the 64 global buttons — the enum and the note table — are asserted to be a bijection, the table to be sorted and hole-free over 40…103, the five strip button rows to tile 0…39 without overlapping, and the two tables to be disjoint over all 128 notes. `verified` is checked in a `const` block, so the day somebody sets it without doing S20's work the **build** stops rather than one test |
+| `cargo test -p prism-surface` | ✅ exit 0 — **87 lib tests** + 25 integration tests across three targets (12 + 9 + 4), 0 failed, 0 ignored |
+| `cargo test --workspace` | ✅ exit 0 — **1 266 tests** across 43 targets, 14 ignored (unchanged) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0. `stable` brought two lints this crate had to meet on its first day — `byte_char_slices` and `cloned_ref_to_slice_refs` — both in test code, both fixed here. The allocation target carries the `print_stdout` allowance the other measuring suites do |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| Coverage on `prism-surface` **> 95 %** | ✅ **99.24 % lines**, 98.58 % regions, 97.94 % functions — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.79 %, `codec.rs` 98.71 %, `feedback.rs` 98.26 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. Two genuinely unreachable branches found while reading the report were **removed** rather than covered: `RingMode::from_bits` returns a mode instead of an `Option`, because all four two-bit codes are defined, and the SysEx header is read with `first`/`get` instead of a slice pattern with a dead `else` |
+| `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu` | ✅ exit 0. The one new dependency is `proptest`, already in the workspace and pure Rust; nothing new compiles C |
+
+**The crate depends on nothing.** `prism-domain` is in its manifest and layer 1
+does not yet use a single type from
+it — deliberately: `GlobalButton::Play` is note 94 in this crate, and that
+pressing it starts an executor is layer 3's opinion (S22). There is no
+`Command`, no show, no session, and no MIDI port either: binding to a device is
+platform code and belongs to the surface thread, which is what lets the whole
+suite run in the Linux CI job with nothing plugged in.
+
+**Seven deliberate regressions, and the two most useful are the ones only the
+allocator can see.** Swapping the two halves of the 14-bit fader split *in both
+directions* leaves every property test green — an encode/decode pair still
+agrees with itself — and turns the hand-written byte tables red; that is
+`ARCHITECTURE_SPEC.md` §12's row, and the reason the tables are transcribed
+rather than generated. Reading the V-Pots as two's complement, symmetrically,
+does the same. Forgetting running status after each message turns three tests
+red. Truncating an oversized SysEx instead of discarding it turns three red.
+Checking the SysEx timeout only on an explicit poll turns one red. And **two
+mutations that keep every functional test green**: reassembling into a `Vec`
+rather than into the fixed array, and assembling an outbound SysEx into a `Vec`
+before copying it — 87 lib tests, 9 fuzz tests and 12 round-trip tests all pass,
+and only `tests/codec_allocations.rs` says a word. That is S16's finding
+reproduced: a functionally correct implementation can be the wrong one, and only
+the counter sees the difference.
+
 ---
 
 ## 3. Coverage tracking
@@ -814,7 +858,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
 | `prism-protocols` | **> 95 %** | **98.43 % lines** (S18, re-measured because `MockOutput` grew a timestamped recording — `output.rs` is at **100 % lines, regions and functions**). S10's measurement, whose reasoning still holds: **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
-| `prism-surface` | **> 95 %** | — | |
+| `prism-surface` | **> 95 %** | **99.24 % lines**, 98.58 % regions, 97.94 % functions — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.79 %, `codec.rs` 98.71 %, `feedback.rs` 98.26 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. Two unreachable branches found while reading the report were removed rather than covered — see §2.20 | 2026-08-13 (S19) |
 | `prism-ipc` | ≥ 85 % | **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
 | `prismd` | ≥ 85 % | **94.73 % lines**, 94.81 % regions, 96.36 % functions (S18) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
 | `ui` | ≥ 85 % | — | |
@@ -1002,7 +1046,7 @@ Both are recorded as plain data so verification is a data update, not a refactor
 
 | Item | Blocks | Status |
 |---|---|---|
-| MCU note and CC numbers vs. real X-Touch | S20, and sign-off of S19 | ☐ unverified — banner in `docs/MCU_MAPPING.md` §2 |
+| MCU note and CC numbers vs. real X-Touch | S20, and sign-off of S19 | ☐ unverified at the device — banner in `docs/MCU_MAPPING.md` §2, and **`prism_surface::X_TOUCH.verified == false` since S19**, asserted in a `const` block so the build stops if somebody sets it without doing the work. **Codec built against it 2026-08-13 (S19):** every number is in that one constant and nothing in the codec matches on a literal, so a correction is an edit to the table and to the hand-transcribed byte table in `tests/round_trip.rs` — two places, both data. S19 added three items to §7's list from things the implementation had to decide without an answer: what a 7-segment value of `0` draws, whether a strip index above 7 is ignored, and what a *Device Ready* actually contains. **Researched 2026-08-12:** every number now has a named source (§2.5 — Ardour's production implementation, two independent reverse-engineering projects), the X-Touch's undocumented **scribble strip colour SysEx is written down** (§2.3, `F0 00 00 66 14 72` + eight 3-bit RGB bytes, firmware ≥ 1.22), and §7 has become a list of claims to falsify rather than of unknowns. The three no source could settle — the V-Pot's acceleration encoding, whether back-to-back messages need pacing, and the colour message's edge cases — are marked as the ones to measure first |
 | sACN against a real receiver | nothing — S10 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received and the group address over the whole 1…63999 range. What only a gateway and a real switch can answer is whether the **multicast path** works end to end — IGMP snooping on the switch, and whether a hop limit of 1 reaches the venue's nodes. Both are held as data (`SacnDestination`, `SacnConfig::multicast_ttl`), so verifying them is a configuration change. **No test sends multicast on purpose:** a suite that put sACN on the network it runs on is the same fault as one that broadcasts. `ARCHITECTURE_SPEC.md` §14 |
 | ArtNet against a real node | nothing — S9 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received. What only a node can answer is whether it agrees about the port-address mapping (0-based or 1-based on that front panel) and whether it wants ArtSync. Both are held as data — `PortAddress` per universe and `ArtNetConfig::sync` — so verifying them is a configuration change, not a code change. `ARCHITECTURE_SPEC.md` §14 |
 | ~~SH-RS09B USB VID/PID and real frame rate~~ | — | ✅ **verified 2026-08-11 (S8)** — `0403:6001`, serial `B0037HIY`, `FT232R USB UART`, 35.5 Hz over 60 s. `DeviceProfile::SH_RS09B` carries `verified: true` and the tests assert the measurements. **Holding it as data paid for itself:** the whole verification was three fields and one test, with no code changed anywhere else — see `ARCHITECTURE_SPEC.md` §14 |
@@ -1015,6 +1059,12 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-13 | S19 | **A round-trip test that computes its expected bytes from the table it is testing is a function composed with its own inverse, and a mutation check proved it.** The obvious way to write `bytes → event → bytes` is to build the bytes from `X_TOUCH` and compare. Swapping the two halves of the 14-bit fader split **in both directions** — decode reads MSB first *and* encode writes MSB first — leaves every such test green, and leaves both property tests green, because the pair still agrees with itself. On a real desk the fader is in the wrong place | `tests/round_trip.rs` holds **literal byte arrays and literal note numbers**, transcribed from `docs/MCU_MAPPING.md` §2 by hand. The symmetric mutation turns four of them red. This is S16's `to_vec` / `to_vec_named` finding in a second setting and it generalises: **a round trip is only a test of a codec if one end of it is written down independently.** The consequence for S20 is deliberate — correcting a number is an edit in two places, the profile and this table, and if they disagree the build says so |
+| 2026-08-13 | S19 | **The codec is handed the time rather than holding a clock, and that is more testable rather than less.** The session plan said the SysEx timeout should sit behind a `Clock` the way `prism-protocols::OutputRunner`'s backoff does, tested against `ManualClock`. It does not. `MidiDecoder::push` takes `now: Duration` | Three reasons, and the third settles it. The arrival time of a packet is a **property of the packet**, so a decoder that reads a clock is guessing at something its caller knows exactly. A test then needs no simulated clock at all, only arithmetic — the timeout is asserted from both sides of its deadline in microseconds. And `Clock` carries `sleep_until`, which a codec must never call: holding one would mean holding a method whose use would be a defect. It also keeps `prism-surface`'s dependency list at one crate, where a `Clock` would have pulled in `prism-engine`. **The rule for later layers:** S21's surface thread owns a clock and passes the instant down; nothing below it should |
+| 2026-08-13 | S19 | **A `panic!` is not the only way for a codec to fail an operator; losing its place in the stream is worse, and it is invisible.** `CLAUDE.md` says an invalid MIDI packet must never propagate a failure, which reads as *do not panic*. The failure that actually reaches a desk is quieter: a parser that mishandles a Program Change's data-byte count, or drops the data bytes of a Song Position Pointer, spends the rest of the burst reporting orphans — and the Select button stops working until something resynchronises | The decoder knows **all seven** channel voice messages, not the four the MCU uses, and swallows system common data bytes; deciding a message is uninteresting happens one layer up, where it is counted as `unmapped` rather than as damage. The claim is stated as a property: *after any byte stream at all, the next Play press still arrives* — `proptest` over arbitrary packets, and the same thing asserted on every prefix of every valid message. **A second property carries the same weight:** a random stream decodes identically however it is cut into packets, whole, byte by byte, or at an arbitrary interior point. That is what a USB MIDI transport does to a parser, and it fails for any parser that keeps state on the stack of `push` |
+| 2026-08-13 | S19 | **Inbound SysEx is counted, not interpreted — because the alternative is inventing data in a table made of citations.** The MCU handshake is optional (`docs/MCU_MAPPING.md` §2.3) and no source settles what an X-Touch's *Device Ready* payload contains. A decoder for it would have been a guess sitting beside 64 note numbers that all carry a source | `McuCodec` counts a complete Mackie SysEx as `sysex_ignored` and hands it to nobody. The *question* — `F0 00 00 66 14 00 F7` — is written, since that side is known, and the reassembly, the bounded buffer and the timeout are all exercised by the scribble strip messages, which are longer than anything a device sends back. Added to §7 as something to record at the desk. **The general rule this session worked to:** where a source could not settle something, the codec does the least it can defend and the question goes on §7's list — three did |
+| 2026-08-13 | S19 | **Two mutations that every functional test survives, and only the allocator sees.** Reassembling a SysEx into a `Vec` instead of the fixed array, and assembling an outbound SysEx into a `Vec` before copying it into the caller's buffer, both leave 87 lib tests, 9 fuzz tests and 12 round-trip tests green — same events, same counters, same bytes | Only `tests/codec_allocations.rs` turns red, which is why it exists. It follows `prism-engine`'s and `prism-ipc`'s pattern with one addition worth carrying: **"no allocation growth" is a comparison, so the hostile window is fed twelve times what the ordinary one is**, and a guard test at the end allocates on purpose to prove the probe can still see one. A measurement that reports zero needs something that makes it report non-zero, or it is indistinguishable from a probe that stopped counting |
+| 2026-08-13 | S19 | **A discard counter is only useful if it separates *the cable is broken* from *the profile is wrong*.** Both produce "nothing happened when I pressed it", and a single `discarded` number would leave an operator and a later session with no way to tell them apart | Ten counters on the wire layer — orphan data bytes, truncated messages, interrupted, overflowed and timed-out SysEx, stray `F7`, system common and real-time — plus `unmapped` and `sysex_ignored` above it, which count **well-formed** messages this profile does not describe. The distinction is exactly the one S20 needs: a surface sending notes nobody has mapped moves `unmapped` and leaves `wire.discarded()` at zero, which is a table to fix rather than a cable. The counts are asserted **exactly** against a deterministic hostile stream rather than as "more than zero", because a counter that is out by a factor is a counter nobody can reason from |
 | 2026-08-12 | S18 | **"No gap" is two claims, and a mutation check is what proved one of them is not enough.** The criterion says *the output frame sequence has no gap across the whole run*, and the obvious reading is about the frames arriving. It is the wrong half on its own: a daemon that blacks the stage out when its last client disconnects — three words in `DeskHandler::disconnected` — produces a **perfect** recording, 79 frames, longest gap 24 ms, no silence anywhere, and a dark hall. The mirror-image defect is a daemon that freezes holding a good frame, which any content-only assertion passes | Both, and neither is optional. **(1) No silence:** consecutive frames for one universe are never more than **250 ms** apart — eleven output cadences, against a measured 24–51 ms — over the whole run, with the kill asserted to fall *inside* the recorded window. **(2) No unbidden darkness:** from the frame the show's look is first complete on, every later frame still carries it, the light in question being the one the *dead client* asked for. The 250 ms is chosen against the failure rather than against the jitter: an output coupled to a client stalls for as long as the client takes to die, which is not 250 ms, and a DMX receiver holds its last look for about a second. **This needed a change in `prism-protocols`:** `MockOutputHandle::frames()` had no times in it, and a list of frames without times cannot tell a driver's own cadence from a stage that stopped — so `MockOutput` records a `FrameRecord { at, universe, data }` and `timeline()` is what the gate reads |
 | 2026-08-12 | S18 | **The gate passed without a line of the daemon changing, and that is the result rather than an anticlimax.** S18 was set up as a session that might find defects — S8 found one in the break timing, S15 found one in the save path, S16 found a leaked named pipe. This one found none: `prismd` was already a process in which a client's death touches nothing but a log line and a `HashMap` entry | What the session delivered is a **proof** and three affordances the proof needed: `MockOutputHandle::timeline` (`prism-protocols`), `ServerHandle::clients` (`prism-ipc` — a per-client counter that can only be read by a caller who already knows the id is a counter nothing outside the module can read), and `Daemon::server`. Worth recording because the temptation in a gate session is to add machinery so that something has been built. The architecture is what was being tested, and the four deliberate regressions are the evidence the tests would have said so |
 | 2026-08-12 | S18 | **A killed client and a client that said goodbye are different tests, and the difference is what the D2 gate is about.** `Client::disconnect` flushes and shuts the socket down in order; S17's snapshot test uses it and it proves the polite case. The case D2 means is the machine being switched off | The client lives in a task that is **aborted while it is waiting**, with messages already queued for it that it will never read: the socket closes with no goodbye, mid-conversation, under backpressure. The daemon is then asserted to have *let go* — `client_count()` back to zero — which is S16's leaked named pipe stated as a test at the daemon level rather than at the transport's. The same shape is used for the reconnect criterion, so what a fresh client is compared against is a state a **dead** client had accumulated |
@@ -1203,16 +1253,60 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**D2 is proved.** A client connects, starts a sequence, and is killed where it
-stands — and the frames the rig was given afterwards are unbroken in time and
-unchanged in content, including the light the dead client asked for. It comes
-back to a state identical to the daemon's; a client of the wrong version is
-turned away in words that name both versions; and a client that stops reading
-loses pictures, loses no commands, and is invisible to the client beside it.
-Every one of those is asserted on something recorded, not on something watched.
+**The codec exists, and it is honest about what it does not know.** Bytes become
+control events and control events become the bytes the surface would have sent,
+byte for byte; a message split across four-byte packets reassembles, one that
+never ends is dropped on a deadline, and nothing on either path calls the
+allocator once. Every note number and CC number is one constant that says
+`verified: false` out loud.
 
-**Phase 4 is complete.** Begin **S19** (`prism-surface` — the MCU codec), which
-is where the desk grows a pair of hands. Use the prompt in §8.
+**Begin S20** (🔌 hardware verification of the X-Touch). **This session needs the
+console**: a Behringer X-Touch in MC mode over USB, and a MIDI monitor.
+`docs/MCU_MAPPING.md` §7 is the list — no longer a list of unknowns but of
+claims to falsify, and S19 added three more to it. Use the prompt in §8.
+
+**S21 is not blocked by S20.** The surface model, the shadow diffing, touch
+suppression and coalescing are all above layer 1 and none of them depends on a
+number being right. If the desk is not available, S21 can be done first and S20
+slotted in later; it is the sign-off of S19 rather than a prerequisite for S21.
+
+Carried out of S19:
+- **`profile::X_TOUCH` is the whole of what S20 edits**, and
+  `tests/round_trip.rs`'s hand-written byte table is the second half of it. The
+  two are deliberately independent: a table that agreed with itself whatever it
+  said would make the verification session meaningless. **Do not "simplify" the
+  test to compute its bytes from the profile** — a mutation check proved that
+  version passes with the fader's two bytes swapped.
+- **`X_TOUCH.verified` is asserted in a `const` block.** Setting it to `true`
+  without changing that assertion stops the build, which is the intended way for
+  S20 to be reminded of what it is claiming.
+- **Time is an argument, not a clock.** `MidiDecoder::push(bytes, now, sink)`.
+  S21 owns the clock on the surface thread and passes the instant down; nothing
+  below it should hold one. Same for `poll(now)`, which is what an idle port
+  needs so a half-arrived message eventually ages out.
+- **The counters separate a broken cable from a wrong profile.**
+  `wire.discarded()` is malformed input; `unmapped` is a well-formed message
+  this profile does not describe. S20 will live in the second one, and S26's
+  status panel should show them apart.
+- **Layer 1 knows no domain type**, and `prism-domain` is in the manifest
+  unused. S21 may need it; S22 certainly will. Keep `ControlEvent` `Copy` and
+  free of owned fields — it crosses a thread boundary on the path §4.3 budgets
+  in milliseconds.
+- **`Feedback` decodes as well as encodes**, which is what let the outbound
+  round trip be a claim about bytes. S20's MIDI monitor capture can be compared
+  against it directly, and S21's tests can act as the surface.
+- **Three questions the sources could not settle went onto §7's list** rather
+  than being guessed: what a 7-segment `0` draws, whether a strip index above
+  seven is ignored, and what a *Device Ready* contains. Inbound SysEx is
+  therefore counted (`sysex_ignored`) and not interpreted.
+- **What S21 must add, and this crate deliberately did not:** touch suppression
+  (§5.1 — no outbound pitch bend while a fader reports touch, one resync 150 ms
+  after release), 30 Hz coalescing against a shadow model (§5.2), the send
+  priority faders → LEDs → LCD → meters, the resync burst on reconnect (§5.3),
+  and the **nearest-corner colour quantisation** — hue-first, per §2.3, because
+  a pastel is still the colour it is a pastel of. A minimum gap between outbound
+  messages may also belong there: two independent projects report the X-Touch
+  losing the tail of a burst, and §7 measures it.
 
 Carried out of S18:
 - **`MockOutputHandle::timeline()` is the shape every later gate should be
@@ -1484,155 +1578,163 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S19 — `prism-surface`: der MCU-Codec**
+**Next up: S20 — 🔌 Hardware-Verifikation des Behringer X-Touch**
+
+> ⚠️ **Diese Session braucht ein Gerät.** Ohne einen angeschlossenen Behringer
+> X-Touch im Mackie-Control-Modus ist sie nicht durchführbar. Ist das Pult nicht
+> greifbar, dann überspringe S20 und mache mit **S21** weiter (Surface-Modell und
+> Feedback) — S21 hängt nicht davon ab, dass eine Zahl stimmt. S20 ist die
+> Abnahme von S19, keine Voraussetzung für S21.
 
 ```text
-PrismDMX — Session S19: prism-surface, der MCU-Codec
+PrismDMX — Session S20: Hardware-Verifikation des X-Touch
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Mit S18 ist Phase 4 fertig: es gibt einen Daemon, der DMX ausgibt, und es ist
-*bewiesen* — an aufgezeichneten Frames —, dass das Sterben eines Clients mitten
-in der Show das Licht weder anhält noch verändert. Was dem Pult jetzt fehlt,
-sind Hände. Diese Session baut die unterste der drei Schichten, mit denen ein
-Behringer X-Touch an PrismDMX hängt: den MIDI-Codec. Reine Bytes zu logischen
-Ereignissen und zurück, ohne eine Zeile Domänenlogik.
+Diese Session braucht ein Gerät: einen Behringer X-Touch im
+Mackie-Control-Modus, per USB an diesem Rechner. Ohne das Pult ist sie nicht
+durchführbar — dann bitte abbrechen und stattdessen S21 vorschlagen.
+
+Mit S19 steht der MCU-Codec: Bytes werden zu logischen Ereignissen und wieder
+zu Bytes, byte-gleich, ohne eine einzige Allokation, und jedes verworfene Paket
+wird gezählt. Was fehlt, ist der Beweis, dass die Zahlen stimmen. Jede
+Notennummer, jede CC-Nummer und jeder Kanal in diesem Codec stammt aus
+öffentlichen Quellen — Ardours Produktivimplementierung, zwei unabhängige
+Reverse-Engineering-Projekte, Abletons eigenes Remote-Script — und keine
+einzige davon wurde je an unserem Gerät gemessen. Das Profil sagt das selbst:
+`prism_surface::X_TOUCH.verified == false`.
+
+Diese Session hält die Tabelle gegen ein echtes Pult.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
-                                            und Teststandards. §"Testing Policy"
-                                            verlangt >95 % Abdeckung für diese
-                                            Kiste, und die Zeile über MIDI
-                                            ("ein ungültiges Paket darf nie
-                                            fehlschlagen") ist hier das Thema
+                                            und Teststandards. Besonders: kein
+                                            Test darf echte Hardware anfassen —
+                                            was hier gemessen wird, gehört
+                                            deshalb in ein #[ignore]-Target
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.19 (was S18 geliefert
-                                            hat), §5 (die MCU-Tabellen sind
-                                            **unverifiziert** — das ist der
-                                            wichtigste Satz für diese Session)
-                                            und §7 „Carried out of S18"
+                                            besonders §2.20 (was S19 geliefert
+                                            hat und was es bewusst offen ließ),
+                                            §2.9 (S8, die einzige bisherige
+                                            Hardware-Session — sie hat einen
+                                            echten Defekt gefunden), §3.2 (wie
+                                            die Hardware-Tests von S8 gefahren
+                                            werden), §5 (die offenen
+                                            Verifikationspunkte) und §7
+                                            „Carried out of S19"
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S19 und S20
-4. docs/MCU_MAPPING.md — die ganze Datei, sie ist die Spezifikation dieser
-   Session: §1 (die drei Schichten und warum sie getrennt sind), §2 (die
-   Protokolltabellen, **mit dem UNVERIFIED-Banner**), §2.3 (die vier
-   Robustheitsanforderungen an den Codec), §6 (Testtabelle), §7 (die
-   Hardware-Checkliste, die S20 abarbeitet)
-5. ARCHITECTURE_SPEC.md §1 (Entscheidungen D6, D8, D11), §3 (Threading-Modell —
-   der Surface-Thread), §10.1 (welche Kisten `#[cfg(target_os = ...)]` dürfen),
-   §12 (Testpolitik — die Zeile „Unit (MCU codec)"), §14 (offene
-   Verifikationspunkte)
-6. crates/prism-surface/src/lib.rs        — heute nur Moduldokumentation; das
-                                            ist der Platz, auf den gebaut wird
-7. crates/prism-protocols/src/sacn.rs und artnet.rs — das Muster für einen
-                                            Byte-Codec in diesem Projekt: jedes
-                                            Feld einzeln behauptet, Tabellen als
-                                            Daten, keine Zahl im Code versteckt
-8. crates/prism-engine/tests/tick_allocations.rs — der zählende Allocator, mit
-                                            dem „keine Allokation" gemessen und
-                                            nicht behauptet wird
-9. crates/prism-domain/src/lib.rs         — die Typen, auf die `prism-surface`
-                                            heute allein angewiesen ist
+                                            von S20 und S21
+4. docs/MCU_MAPPING.md — die ganze Datei. §2 sind die zu prüfenden Tabellen,
+   §2.3 die Farb-SysEx des X-Touch (Firmware ≥ 1.22), §2.5 woher jede Zahl
+   stammt und wie belastbar sie ist, §2.6 was S19 gebaut und was es offen
+   gelassen hat, und §7 ist die Arbeitsliste dieser Session — inzwischen keine
+   Liste von Unbekannten mehr, sondern eine Liste zu widerlegender Behauptungen
+5. ARCHITECTURE_SPEC.md §7.1 und §14 (offene Verifikationspunkte), §10.1
+   (welche Kisten plattformabhängigen Code enthalten dürfen — `prism-surface`
+   gehört nicht dazu), §12 (Testpolitik)
+6. crates/prism-surface/src/profile.rs    — die Tabelle. Genau eine Konstante,
+                                            `X_TOUCH`, mit `verified: false`
+7. crates/prism-surface/tests/round_trip.rs — die zweite Hälfte der Tabelle:
+                                            von Hand abgeschriebene Byte-Folgen.
+                                            Absichtlich unabhängig vom Profil —
+                                            siehe unten
+8. crates/prism-protocols/tests/hardware.rs — das Muster für ein
+                                            Hardware-Target in diesem Projekt:
+                                            #[ignore]d, dokumentiert, hinter
+                                            einem Mutex serialisiert, über
+                                            Umgebungsvariablen steuerbar
+9. crates/prism-protocols/src/device.rs   — wie S8 eine verifizierte Messung
+                                            als Daten abgelegt hat
+                                            (`DeviceProfile::SH_RS09B`,
+                                            `verified: true`)
 
-Stand nach S18 — nichts davon musst du neu bauen:
+Stand nach S19 — nichts davon musst du neu bauen:
 - `prism-domain` (S1), `prism-engine` (S2–S6), `prism-protocols` (S7–S10),
-  `prism-core` (S11–S15), `prism-ipc` (S16) und `prismd` (S17) sind vollständig.
-- S18 hat das D2-Gate bewiesen (`crates/prismd/tests/resilience.rs`) und dafür
-  drei Kleinigkeiten ergänzt: `MockOutputHandle::timeline()`,
-  `ServerHandle::clients()` und `Daemon::server()`.
-- Insgesamt 1140 Tests im Workspace, alle grün, CI vierfarbig grün.
-- `crates/prism-surface` existiert als Kiste mit einer `lib.rs` voller
-  Moduldokumentation und **ohne eine Zeile Code**. Ihre einzige Abhängigkeit ist
-  `prism-domain`. Sie ist plattformneutral und wird im Linux-CI-Job mitgetestet.
+  `prism-core` (S11–S15), `prism-ipc` (S16), `prismd` (S17, D2-Gate in S18) und
+  Schicht 1 von `prism-surface` (S19) sind vollständig.
+- 1 266 Tests im Workspace, alle grün, CI vierfarbig grün.
+- `prism-surface` ist plattformneutral, hängt an nichts und enthält keine
+  MIDI-Anbindung: Bytes hinein, Bytes hinaus. Eine Anbindung an einen echten
+  Port (`midir` o. ä.) gibt es noch nicht — diese Session braucht eine, und sie
+  ist plattformabhängig. Das ist die erste Entscheidung, die zu treffen ist:
+  entweder ein reines Mess-Target, das die Kiste selbst nicht anfasst, oder eine
+  Anbindung, die sauber gekapselt bleibt. §10.1 erlaubt `prism-surface` kein
+  #[cfg(target_os = ...)].
 
-Aufgabe: Session S19 umsetzen — Schicht 1 aus docs/MCU_MAPPING.md, der MCU-Codec.
+Aufgabe: Session S20 umsetzen — die Tabellen aus docs/MCU_MAPPING.md §2 gegen
+ein echtes Gerät halten und den UNVERIFIED-Banner entfernen.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Tabellengetriebene Round-Trip-Tests: Bytes → Ereignis → Bytes, in **beiden**
-  Richtungen byte-gleich
-- Running Status wird identisch dekodiert wie ein ausgeschriebenes Statusbyte
-- Fuzzing mit abgeschnittenen und außerhalb des Bereichs liegenden Nachrichten:
-  kein Panic, **kein Allokationswachstum**, korrekte Verwurf-Zähler
-- SysEx über mehrere Pakete verteilt setzt sich wieder zusammen; ein
-  unabgeschlossenes SysEx läuft in einen Timeout und wird verworfen
-- `cargo test -p prism-surface` ist grün
-- `cargo clippy --workspace --all-targets -- -D warnings` ist sauber
-- `cargo fmt --all --check` ist sauber
-- Abdeckung auf `prism-surface` **> 95 %**, gemessen mit
-  `cargo llvm-cov -p prism-surface --summary-only` und in PROGRESS.md eingetragen
+- Jeder Punkt in docs/MCU_MAPPING.md §7 abgehakt oder mit einem Befund versehen
+- §2 und `profiles/surface/xtouch.json` mit gemessenen Werten aktualisiert
+- Abweichungen vom MCU-Standard ausdrücklich dokumentiert, nicht stillschweigend
+  korrigiert
+- UNVERIFIED-Banner entfernt, `X_TOUCH.verified` auf `true`,
+  ARCHITECTURE_SPEC.md §14 abgehakt
+- `cargo test --workspace` grün, `cargo clippy --workspace --all-targets --
+  -D warnings` sauber, `cargo fmt --all --check` sauber
 
 Wichtige Randbedingungen:
-- **Die Zahlen in §2 sind unverifiziert, und das ist eine Entwurfsvorgabe, kein
-  Mangel.** S20 hält sie mit einem MIDI-Monitor gegen ein echtes Gerät. Damit
-  diese Verifikation eine *Datenänderung* bleibt und kein Refactoring, gehören
-  Notennummern, CC-Nummern und Kanäle in eine **Tabelle als Daten** — so wie S8
-  es mit `DeviceProfile::SH_RS09B` vorgemacht hat: dort waren es am Ende drei
-  Felder und ein Test. Eine Zahl, die in einem `match` steht, ist an der
-  falschen Stelle.
-- **Der Codec ist rein.** `docs/MCU_MAPPING.md` §1: „MIDI bytes ↔ logical
-  control events. Pure, no domain logic, no state beyond the running-status
-  parser." Kein `Command`, kein Show-Modell, keine Session — das ist Schicht 3
-  und gehört zu S21/S22.
-- **„Keine Allokation" wird gemessen, nicht behauptet.** §2.3: *the codec
-  allocates nothing per message; it writes into caller-provided buffers*.
-  `crates/prism-engine/tests/tick_allocations.rs` und
-  `crates/prism-ipc/tests/oversized_frame.rs` haben beide einen zählenden
-  globalen Allocator; S16 hat dabei gelernt, dass eine funktional richtige
-  Implementierung die falsche sein kann und nur der Zähler den Unterschied
-  sieht. Der SysEx-Puffer ist die eine Ausnahme, und er hat eine Obergrenze.
-- **Ein verworfenes Paket wird gezählt, nicht verschwiegen.** CLAUDE.md verlangt
-  strukturiertes Logging statt `println!`, und S10/S11 haben mehrfach
-  aufgeschrieben, warum ein stilles Verwerfen die schlimmere Variante ist: was
-  niemand zählt, kann niemand suchen. Die Zähler sind Teil der Schnittstelle.
-- **Round-Trip heißt in beide Richtungen byte-gleich**, und S16 hat gelernt,
-  woran ein Round-Trip-Test vorbeimessen kann: `to_vec` und `to_vec_named`
-  liefern beide etwas, das sich wieder einlesen lässt — erst die Behauptung
-  über die **Bytes** hat den Unterschied gesehen. Für 14-Bit-Pitch-Bend (LSB
-  zuerst!) und die Vorzeichen-Betrag-Kodierung der V-Pots gilt dasselbe.
-- **Property-Tests, wo eine Tabelle nicht reicht.** `prism-domain` hat ein
-  `proptest`-Feature, das `prism-engine` und `prism-ipc` beide benutzen; für
-  „jedes gültige Ereignis kodiert und dekodiert sich wieder zu sich selbst" ist
-  das die passende Form.
-- **Kein Test darf echte Hardware anfassen** (CLAUDE.md). Alle Tests laufen
-  gegen einen Mock-MIDI-Port; ein X-Touch am USB-Port dieses Rechners darf von
-  `cargo test` nichts merken. Die Hardware-Session ist S20.
-- **`prism-surface` ist plattformneutral** (ARCHITECTURE_SPEC.md §10.1 nennt sie
-  nicht), und die CI führt ihre Tests im Linux-Job aus. Eine MIDI-*Anbindung*
-  (`midir` o. ä.) ist plattformabhängig und gehört **nicht** in diese Session:
-  S19 ist der Codec, also Bytes hinein und Bytes hinaus.
-- **Neue Abhängigkeiten vor der ersten Zeile gegen ARM64 prüfen** — S15 und S16
-  haben das jeweils vorher getan und einmal einen fehlenden C-Compiler dabei
-  gefunden: `cargo check -p prism-surface --all-targets --target
-  aarch64-unknown-linux-gnu`.
-- **Ein Test-Fixture aus lauter Default-Werten kann „korrekt übertragen" nicht
-  von „nie angefasst" unterscheiden** (S14-Fund, seit S15 Regel). Für einen
-  Codec heißt das: keine Nullen als Testwerte, kein Kanal 1, keine Note 0.
-- **Jedes Warten in einem Test braucht eine Frist.** Der SysEx-Timeout ist die
-  Stelle, an der das hier auftaucht — und er gehört an eine `Clock`, so wie
-  `prism-protocols::OutputRunner` seine Backoff-Politik gegen `ManualClock`
-  testbar gemacht hat, statt eine echte Sekunde zu warten.
-- Test-Driven, wie CLAUDE.md es verlangt: erst der fehlschlagende Test, dann der
-  Code. Wo ein Test schnell grün wird, lohnt eine Gegenprobe: S11 bis S18 haben
-  ihre zentralen Tests jeweils durch absichtlich eingebaute Regressionen
-  geprüft. S18 hat dabei den lehrreichsten Fall gehabt: eine Mutation, die das
-  Kriterium *formal* erfüllte und trotzdem falsch war — die Prüfung hat das
-  Kriterium verändert, nicht den Code.
-- **Clippy bewegt sich.** S17 musste acht bereits vorhandene Zeilen in drei
-  anderen Kisten anfassen, weil `stable` einen neuen Lint mitbrachte. Ein „war
-  letztes Mal grün" ist kein Beleg; die Prüfung jetzt laufen lassen. `print!`
-  und `println!` sind workspace-weit verboten (`print_stdout = "warn"` plus
-  `-D warnings`); ein Test, der eine Messung ausgibt, trägt die Ausnahme
-  ausdrücklich.
+- Eine Korrektur ist eine Datenänderung an zwei Stellen, und das ist Absicht.
+  Die Zahlen stehen in `profile::X_TOUCH`; die von Hand abgeschriebenen Bytes
+  stehen in `tests/round_trip.rs`. S19 hat durch eine Mutation belegt, warum:
+  eine Round-Trip-Prüfung, die ihre erwarteten Bytes aus derselben Tabelle
+  errechnet, die sie prüft, besteht auch dann noch, wenn die beiden Hälften der
+  14-Bit-Faderposition in beiden Richtungen vertauscht sind. Die Test-Tabelle
+  darf deshalb nicht „vereinfacht" werden, indem sie aus dem Profil abgeleitet
+  wird.
+- `X_TOUCH.verified` wird in einem const-Block behauptet. Es auf `true` zu
+  setzen bricht den Build, bis diese Behauptung mit umgeschrieben wird — das ist
+  die eingebaute Erinnerung daran, was da behauptet wird.
+- Zuerst messen, dann glauben. S8 ist das Vorbild und die Warnung: dort stimmte
+  die geratene USB-Produkt-ID, die geratene Bildrate aber nicht — und die
+  falsche Zahl war das Symptom eines echten Defekts im Timing. Eine Abweichung
+  ist erst dann ein Tabellenfehler, wenn ausgeschlossen ist, dass sie ein
+  Codefehler ist.
+- Die drei Punkte, die keine Quelle klären konnte, zuerst: (1) die
+  Beschleunigungs-Kodierung der V-Pots — schickt eine schnelle Drehung ein
+  `0x01` pro Rastung oder eine größere Magnitude? (2) das Pacing — gehen
+  aufeinanderfolgende Nachrichten verloren, und ab welchem Abstand nicht mehr?
+  (3) alles an den Farben: die acht Werte, ob es eine invertierte Variante gibt,
+  was eine Nachricht mit weniger als acht Bytes tut, und ob ein Text-Schreiben
+  die Farbe zurücksetzt.
+- Drei Fragen hat S19 zusätzlich auf die Liste gesetzt, weil der Codec sie ohne
+  Gerät nicht entscheiden konnte: was eine 7-Segment-`0` anzeigt (die Quellen
+  sagen „Leerzeichen", die Regel „ASCII ohne Bit 6" sagt `@` — beides kann nicht
+  stimmen), ob eine Nachricht mit Strip-Index über 7 ignoriert wird, und was ein
+  Device Ready tatsächlich enthält.
+- Kein automatischer Test darf das Gerät anfassen (CLAUDE.md). Alles, was
+  Hardware braucht, ist #[ignore]d und wird von Hand gefahren; §3.2 zeigt, wie
+  S8 das dokumentiert hat, damit die Messung reproduzierbar bleibt. Die
+  bestehenden 1 266 Tests müssen grün bleiben, auch mit angestecktem Pult.
+- Zuerst aufschreiben, was das Pult überhaupt ist: Modus und Verbindung
+  (MC / HUI / Xctl, USB / MIDI-DIN / Ethernet — beim Einschalten mit gehaltener
+  SELECT-Taste von Kanal 1 gewählt) und die Firmware-Version. Die Farb-SysEx
+  braucht ≥ 1.22; ein Pult darunter hat gar keine Farben, und dann ist der halbe
+  §7 nicht messbar.
+- Neue Abhängigkeiten vor der ersten Zeile gegen ARM64 prüfen:
+  `cargo check -p <kiste> --all-targets --target aarch64-unknown-linux-gnu`.
+  Eine MIDI-Anbindung ist plattformabhängig; S15 und S16 haben so einmal einen
+  fehlenden C-Compiler gefunden.
+- Ein Befund gehört ins Dokument, auch wenn er unbequem ist.
+  docs/MCU_MAPPING.md §7 sagt es ausdrücklich: Abweichungen vom MCU-Standard
+  werden aufgeschrieben, nicht stillschweigend korrigiert, damit das nächste
+  Geräteprofil davon profitiert.
+- Clippy bewegt sich. Ein „war letztes Mal grün" ist kein Beleg; die Prüfung
+  jetzt laufen lassen. print! und println! sind workspace-weit verboten
+  (`print_stdout = "warn"` plus `-D warnings`); ein Test, der eine Messung
+  ausgibt, trägt die Ausnahme ausdrücklich.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11, `cargo-llvm-cov`). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S19-Status, gemessene Coverage, Decision Log bei
-  Abweichungen vom Plan oder Funden, die spätere Sessions betreffen
+- PROGRESS.md aktualisieren: S20-Status, jede gemessene Zahl, Decision Log bei
+  Abweichungen und bei Funden, die spätere Sessions betreffen; §5 und
+  ARCHITECTURE_SPEC.md §14 abhaken
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S20 (🔌 Hardware-Verifikation X-Touch) überschreiben — und dort
-  ausdrücklich vermerken, dass diese Session ein Gerät braucht
-- Mit Conventional-Commit-Message committen, z. B. feat(surface): …
+  Session S21 (`prism-surface` — Surface-Modell und Feedback) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. fix(surface): … oder
+  docs(mcu): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```

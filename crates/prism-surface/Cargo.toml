@@ -10,5 +10,13 @@ publish.workspace = true
 [dependencies]
 prism-domain = { path = "../prism-domain" }
 
+[dev-dependencies]
+# "Every valid event encodes and decodes back to itself" is a claim about a
+# space a table cannot enumerate: 16 384 fader positions times nine faders on
+# its own. The same generator-based approach `prism-engine` and `prism-ipc`
+# already use, with the strategies local to this crate - `prism_domain::arb`
+# describes domain values, and layer 1 has none.
+proptest = { workspace = true }
+
 [lints]
 workspace = true
