@@ -21,10 +21,13 @@
 //! send a fader to the top, which is the kind of fault that looks like a broken
 //! encoder rather than a broken codec.
 //!
-//! Whether a fast turn sends one step per message or a larger magnitude is
-//! **unconfirmed** (`docs/MCU_MAPPING.md` §2.1 and §7). The codec passes the
-//! magnitude through unchanged and interprets nothing: if the device turns out
-//! to accelerate, that is a curve in layer 2 and no change here.
+//! Whether a fast turn sends one step per message or a larger magnitude was
+//! unconfirmed until S20 measured it, and the answer is **both, depending on the
+//! control** (`docs/MCU_MAPPING.md` §2.7): a V-Pot spun hard carries 1…8 detents
+//! in one message, and the jog wheel sends ±1 and nothing else however fast it
+//! goes. The codec passes the magnitude through unchanged and interprets nothing,
+//! which is the only behaviour correct for both — the acceleration curve is
+//! layer 2's, and layer 2 needs two of them.
 
 use crate::midi::{EncodeError, MidiMessage};
 use crate::profile::{Fader, GlobalButton, McuProfile, StripButton};

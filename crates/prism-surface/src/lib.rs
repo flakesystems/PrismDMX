@@ -38,15 +38,28 @@
 //! `ARCHITECTURE_SPEC.md` §10.1 can list `prism-surface` among the
 //! platform-neutral crates.
 //!
-//! # The numbers are unverified, and they are data because of it
+//! # The numbers are verified, and they are data because they had to be
 //!
 //! Every note number, CC number and channel is in [`profile::X_TOUCH`], which
-//! carries `verified: false`. `docs/MCU_MAPPING.md` §2 has named sources for
-//! all of them and none has been seen on the desk in the next room; §7 is the
-//! list of claims S20 falsifies. Holding them as a table rather than as `match`
-//! arms is what makes that session a data edit — the bet `prism-protocols` made
-//! with `DeviceProfile::SH_RS09B` in S7 and collected on in S8, where the whole
-//! hardware verification came to three fields and one test.
+//! carries **`verified: true` since 2026-08-13 (S20)**: a Behringer X-Touch in MC
+//! mode over USB, firmware V1.25, worked control by control.
+//! `docs/MCU_MAPPING.md` §2.7 is the measurement and §7 is the checklist it
+//! closes.
+//!
+//! Holding the table as data rather than as `match` arms is what made that
+//! session a data edit — the bet `prism-protocols` made with
+//! `DeviceProfile::SH_RS09B` in S7 and collected on in S8. **It paid better than
+//! S8's did: not one number changed.** What the desk corrected was four things no
+//! source had stated — the faders report in steps of four
+//! ([`McuProfile::fader_step`]), two panel buttons have no LED
+//! ([`McuProfile::unlit_buttons`]), a 7-segment `0` blanks the digit rather than
+//! drawing `@`, and a V-Pot carries an acceleration magnitude the jog wheel never
+//! uses.
+//!
+//! The evidence is in the repository rather than in a paragraph:
+//! `tests/captures/` holds what the surface sent and
+//! `tests/hardware_capture.rs` replays it in the ordinary suite, on a build
+//! server, with nothing plugged in.
 //!
 //! # What this crate promises
 //!

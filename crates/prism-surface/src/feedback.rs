@@ -11,8 +11,9 @@
 //! decodes too, which buys three things: the round-trip criterion becomes an
 //! assertion about **bytes** rather than about a function composed with its own
 //! inverse; a test can act as the surface and check what the desk sent it; and
-//! S20's MIDI monitor session has something to compare a capture against
-//! without anybody transcribing hex by hand.
+//! S20's capture session had something to compare a recording against without
+//! anybody transcribing hex by hand — which is what
+//! `tests/hardware_capture.rs` does with the real device's bytes.
 //!
 //! # The one message this device is bought for
 //!
@@ -40,7 +41,10 @@ use crate::profile::{
 ///
 /// A property of the message rather than of the surface: `docs/MCU_MAPPING.md`
 /// §2.3 records that both shipping implementations always send exactly eight
-/// and that nobody knows what a shorter message does. §7 asks the device.
+/// that both shipping implementations always send exactly eight. **Measured in
+/// S20: a message carrying any other number of colour bytes — zero, four and nine
+/// were tried — is ignored entirely**, so eight is the message rather than a
+/// convention, and there is no per-strip form to find.
 pub const SCRIBBLE_STRIP_COLORS: usize = 8;
 
 /// Velocity that turns a button LED off.
@@ -258,11 +262,22 @@ impl MeterSignal {
 
 /// One character of the 7-segment display.
 ///
-/// The character set is ASCII with bit 6 stripped, which makes it a bijection
-/// onto the printable range `' '`…`'_'`: `'A'` (0x41) becomes 1, `'0'` (0x30)
-/// stays 48. The sources also say a value of 0 blanks the digit, and 0 is what
-/// `'@'` maps to under the stripping rule — the two claims cannot both be the
-/// whole truth, and `docs/MCU_MAPPING.md` §7 asks the device which it is.
+/// The character set is ASCII with bit 6 stripped, which maps the printable
+/// range `' '`…`'_'` onto six bits: `'A'` (0x41) becomes 1, `'0'` (0x30) stays
+/// 48.
+///
+/// # The one place the rule does not hold, measured (S20)
+///
+/// `docs/MCU_MAPPING.md` §2.2 carried two claims that could not both be the
+/// whole truth: that the set is *ASCII with bit 6 stripped*, under which 0 is
+/// `'@'`, and that *0 is a space*. The desk was asked (§2.7): **value 0 blanks
+/// the digit**, and so does 32, the space. So the second claim wins at 0 and
+/// `'@'` has no representation at all — sending its stripped code draws nothing.
+///
+/// Hence [`from_ascii`](Self::from_ascii) refuses `'@'` rather than quietly
+/// turning it into a blank, the same way it refuses `'{'`. A name written through
+/// this type either appears or is refused; it never comes out with a hole in it
+/// that only the desk can see.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SegmentChar {
     /// The six-bit character code.
@@ -272,15 +287,20 @@ pub struct SegmentChar {
 }
 
 impl SegmentChar {
-    /// The character an ASCII byte displays as, or `None` for one outside the
-    /// range the display can show.
+    /// The character an ASCII byte displays as, or `None` for one the display
+    /// cannot draw.
     ///
     /// Lower case is folded up: the display has no lower case, and a name that
-    /// silently came out blank would be worse than one in capitals.
+    /// silently came out blank would be worse than one in capitals. (The
+    /// hardware folds it as well — measured in S20 — so this is belt and
+    /// braces.)
+    ///
+    /// `'@'` is refused, because the code it would strip to draws a blank on the
+    /// real device. See the type's documentation.
     #[must_use]
     pub const fn from_ascii(byte: u8) -> Option<Self> {
         let byte = byte.to_ascii_uppercase();
-        if byte < 0x20 || byte > 0x5F {
+        if byte < 0x20 || byte > 0x5F || byte == b'@' {
             return None;
         }
         Some(Self {
@@ -289,10 +309,15 @@ impl SegmentChar {
         })
     }
 
-    /// The ASCII byte this character came from.
+    /// The ASCII byte this character draws as.
+    ///
+    /// Code 0 answers `' '`, because that is what the digit shows — measured, and
+    /// the reason `'@'` is not a character here.
     #[must_use]
     pub const fn to_ascii(self) -> u8 {
-        if self.code < 0x20 {
+        if self.code == 0 {
+            b' '
+        } else if self.code < 0x20 {
             self.code | 0x40
         } else {
             self.code
@@ -417,7 +442,10 @@ impl StripColor {
 pub enum LcdMeterMode {
     /// Horizontal. The only mode in which the overload marker appears.
     Horizontal,
-    /// Vertical. **Untested on the X-Touch** — `docs/MCU_MAPPING.md` §2.2.
+    /// Vertical. **Measured in S20: neither mode does anything on the X-Touch**,
+    /// whose meters are hardware LEDs rather than drawn on the LCD — and the
+    /// overload marker works regardless, which the standard's "horizontal only"
+    /// rule says it should not. `docs/MCU_MAPPING.md` §2.7.
     Vertical,
 }
 
@@ -976,8 +1004,36 @@ mod tests {
     }
 
     #[test]
+    fn the_display_draws_a_blank_for_code_zero_rather_than_an_at_sign() {
+        // Measured at the device (S20): CC value 0 blanks the digit, and so does
+        // 32. The stripping rule would make 0 an '@', so the rule stops one
+        // character short of the whole range - which is why from_ascii refuses
+        // '@' instead of handing back a code that draws nothing.
+        assert_eq!(SegmentChar::from_ascii(b'@'), None);
+        assert_eq!(
+            SegmentChar {
+                code: 0,
+                dot: false
+            }
+            .to_ascii(),
+            b' '
+        );
+        // A space is still a space, on its own code, and that is the one to send
+        // for a blank: 32 was measured blank as well, and it is what the
+        // stripping rule produces for ' '.
+        assert_eq!(SegmentChar::from_ascii(b' ').map(|c| c.code), Some(32));
+        // Both blanks survive the wire unchanged, so a shadow model that holds
+        // one of them does not flicker into the other.
+        for code in [0_u8, 32] {
+            let character = SegmentChar { code, dot: false };
+            let value = character.value().expect("six bits");
+            assert_eq!(SegmentChar::from_value(value), character);
+        }
+    }
+
+    #[test]
     fn every_character_the_display_can_show_survives_the_trip_to_ascii_and_back() {
-        for byte in 0x20..=0x5Fu8 {
+        for byte in (0x20..=0x5Fu8).filter(|byte| *byte != b'@') {
             let character = SegmentChar::from_ascii(byte).expect("inside the range");
             assert_eq!(character.to_ascii(), byte);
             let value = character.value().expect("six bits");
@@ -1110,8 +1166,8 @@ mod tests {
     #[test]
     fn a_colour_message_of_the_wrong_length_is_not_understood() {
         // §2.3: both shipping implementations always send exactly eight and
-        // nobody knows what a shorter message does. Refusing to guess is the
-        // honest reading, and §7 asks the device.
+        // and S20 measured that the device ignores any other length outright,
+        // so refusing to decode one is what the surface itself does.
         for length in [0usize, 7, 9] {
             let mut payload = vec![0x00, 0x00, 0x66, 0x14, 0x72];
             payload.extend(std::iter::repeat_n(0x01, length));

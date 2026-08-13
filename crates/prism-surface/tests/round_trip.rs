@@ -14,7 +14,7 @@
 //!
 //! So [`INBOUND`] and [`OUTBOUND`] hold literal byte arrays and literal note
 //! numbers, transcribed from `docs/MCU_MAPPING.md` §2 rather than derived from
-//! [`X_TOUCH`]. When S20 finds a row is wrong, two places change and the second
+//! [`X_TOUCH`]. If a row is ever wrong, two places change and the second
 //! one is this file — which is the point: a table that agreed with itself
 //! whatever it said would make the verification session meaningless.
 //!
@@ -334,7 +334,7 @@ const INBOUND: &[Inbound] = &[
         },
     },
     Inbound {
-        what: "strip 8 V-Pot spun hard — magnitude unconfirmed, §7 measures it",
+        what: "strip 8 V-Pot spun hard — magnitude 8 measured at the device, §2.7",
         bytes: &[0xB0, 23, 0x0B],
         event: ControlEvent::VPot {
             strip: 7,

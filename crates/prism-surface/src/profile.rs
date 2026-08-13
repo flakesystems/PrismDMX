@@ -2,25 +2,41 @@
 //!
 //! Every note number, CC number and MIDI channel in `docs/MCU_MAPPING.md` §2
 //! lives in [`X_TOUCH`]. Nothing in this crate matches on a literal number, and
-//! that is the whole design: the table is **unverified against a real device**
-//! ([`McuProfile::verified`] says so out loud), and S20 holds it against a MIDI
-//! monitor. When a row turns out to be wrong, the correction is an edit to this
-//! file and nothing else — the same bet `prism_protocols::DeviceProfile::SH_RS09B`
-//! made in S7 and collected on in S8, where the whole hardware verification came
-//! to three fields and one test.
+//! that is the whole design: correcting a row is an edit to this file and
+//! nothing else — the same bet `prism_protocols::DeviceProfile::SH_RS09B` made
+//! in S7 and collected on in S8.
 //!
 //! A number sitting inside a `match` arm somewhere in the decoder would be in
 //! the wrong place, because correcting it would then be a refactor.
 //!
-//! # Where the numbers come from
+//! # Verified at the device (S20, 2026-08-13)
 //!
-//! `docs/MCU_MAPPING.md` §2.5. In short: Ardour's production Mackie surface
-//! code, a careful reverse-engineering write-up of the protocol, and Ableton's
-//! own `MackieControl` remote script adapted for the X-Touch — three
-//! independent sources that agree number for number. That is enough to *write*
-//! a codec against and not enough to sign one off.
+//! [`McuProfile::verified`] is now `true`, and it means something specific: a
+//! Behringer X-Touch in **MC mode over USB, firmware V1.25, serial `0156406`**
+//! was worked control by control and answered on every number below.
+//! `docs/MCU_MAPPING.md` §2.7 is the measurement and §7 is the checklist it
+//! closes. The recordings are in `tests/captures/` and
+//! `tests/hardware_capture.rs` replays them, so the claim survives as a test
+//! rather than as a paragraph.
+//!
+//! **Not one note number, CC number, channel or offset had to change.** Three
+//! sources that agree number for number turned out to be right, which is worth
+//! knowing before the next device is guessed at. What the desk *did* correct was
+//! four things no source stated: the faders report in steps of four rather than
+//! all 16 384 positions ([`McuProfile::fader_step`]), two panel buttons have no
+//! LED at all ([`McuProfile::unlit_buttons`]), a 7-segment value of 0 blanks the
+//! digit rather than drawing `@`, and the V-Pots carry an acceleration magnitude
+//! the jog wheel never uses.
+//!
+//! # Where the numbers came from before that
+//!
+//! `docs/MCU_MAPPING.md` §2.5: Ardour's production Mackie surface code, a
+//! careful reverse-engineering write-up of the protocol, and Ableton's own
+//! `MackieControl` remote script adapted for the X-Touch.
 
 use core::fmt;
+
+use crate::control::FADER_MAX;
 
 /// Mackie's three-byte manufacturer ID, which every MCU SysEx carries.
 ///
@@ -330,7 +346,7 @@ pub struct ButtonNote {
 ///
 /// Sorted because the decoder binary-searches it and because a sorted table is
 /// one a person can read against a MIDI monitor capture line by line, which is
-/// what S20 does. A test asserts the ordering rather than trusting it.
+/// what S20 did. A test asserts the ordering rather than trusting it.
 const X_TOUCH_BUTTONS: [ButtonNote; 64] = [
     ButtonNote {
         button: GlobalButton::AssignTrack,
@@ -590,6 +606,16 @@ const X_TOUCH_BUTTONS: [ButtonNote; 64] = [
     },
 ];
 
+/// The buttons this surface has that have no LED, measured in S20.
+///
+/// Two of sixty-four. Both are printed on the panel, both send their note when
+/// pressed, and neither lights whatever velocity is sent to it —
+/// `docs/MCU_MAPPING.md` §2.7. The list is separate from the note table rather
+/// than a field on every row because it is a two-item exception, and a `bool` on
+/// all sixty-four rows would be sixty-two ways of writing "yes".
+const X_TOUCH_UNLIT_BUTTONS: [GlobalButton; 2] =
+    [GlobalButton::NameValue, GlobalButton::SmpteBeats];
+
 /// The strip button rows of `docs/MCU_MAPPING.md` §2.1.
 const X_TOUCH_STRIP_BUTTONS: [StripButtonRow; 5] = [
     StripButtonRow {
@@ -664,12 +690,40 @@ pub struct McuProfile {
     pub lcd_chars_per_strip: u8,
     /// Characters in the whole two-line buffer.
     pub lcd_buffer_len: u8,
+    /// The granularity a fader **reports**, in 14-bit units.
+    ///
+    /// Measured at the device (S20): every one of 576 captured positions was a
+    /// multiple of **4**, so the X-Touch's faders are 12-bit presented in a
+    /// 14-bit field and the top of travel is
+    /// [`max_reported_position`](Self::max_reported_position) — 16380, not
+    /// [`FADER_MAX`]. No source mentioned this.
+    ///
+    /// It matters upstairs rather than here: a layer that turns an inbound
+    /// position into a percentage by dividing by [`FADER_MAX`] gives 99.98 % for
+    /// a fader against its end stop, and a master that cannot reach full is a
+    /// master that is wrong. Outbound positions are unaffected — the motor
+    /// accepts all 16 384 and simply cannot report back that finely.
+    pub fader_step: u8,
+    /// Buttons that send a note but have **no LED to light**.
+    ///
+    /// A deviation from the MCU standard, measured (S20): `docs/MCU_MAPPING.md`
+    /// §2.2 says every button that has an LED accepts a Note On, and the Ardour
+    /// manual calls the X-Touch a 1:1 emulation with no deviations. Name/Value
+    /// and SMPTE/Beats are printed on this panel, send notes 52 and 53 when
+    /// pressed, and are dark whatever is sent to them.
+    ///
+    /// Held as data because a console that lights a lamp which does not exist is
+    /// a console whose feedback silently lies about part of itself — S21's shadow
+    /// model can skip these, and S26 can decline to offer them as indicators.
+    pub unlit_buttons: &'static [GlobalButton],
     /// Whether the numbers above have been read off a real device.
     ///
-    /// **`false`**, and it is a field rather than a comment so a log line, a
-    /// status panel or a test can ask. `docs/MCU_MAPPING.md` §7 is the list of
-    /// claims S20 falsifies at the desk; when it is done, this becomes `true`
-    /// in the same edit that corrects whatever was wrong.
+    /// A field rather than a comment so a log line, a status panel or a test can
+    /// ask. **`true` since 2026-08-13 (S20)**: `docs/MCU_MAPPING.md` §7's
+    /// checklist was worked through against a Behringer X-Touch in MC mode over
+    /// USB on firmware V1.25, and §2.7 records what it said. The captures in
+    /// `tests/captures/` are the evidence and `tests/hardware_capture.rs`
+    /// replays them on every commit.
     pub verified: bool,
 }
 
@@ -815,7 +869,32 @@ impl McuProfile {
         (channel < self.strips).then_some(Fader::Strip(channel))
     }
 
-    /// The X-Touch as `docs/MCU_MAPPING.md` §2 describes it, **unverified**.
+    /// The highest position this surface's faders can report.
+    ///
+    /// [`FADER_MAX`] rounded down to a whole [`fader_step`](Self::fader_step):
+    /// 16380 on the X-Touch. A fader is at the top when it reads *this*, not
+    /// when it reads 16383, which it never will.
+    #[must_use]
+    pub const fn max_reported_position(&self) -> u16 {
+        let step = self.fader_step as u16;
+        if step < 2 {
+            return FADER_MAX;
+        }
+        FADER_MAX - (FADER_MAX % step)
+    }
+
+    /// Whether a button's LED exists and can be driven.
+    ///
+    /// `false` for a button this surface has not got at all, and for the ones in
+    /// [`unlit_buttons`](Self::unlit_buttons) — which are buttons it *does* have
+    /// and cannot light.
+    #[must_use]
+    pub fn has_led(&self, button: GlobalButton) -> bool {
+        self.note_of(button).is_some() && !self.unlit_buttons.contains(&button)
+    }
+
+    /// The X-Touch as `docs/MCU_MAPPING.md` §2 describes it, **verified against
+    /// the device on 2026-08-13** (§2.7).
     pub const X_TOUCH: Self = Self {
         name: "Behringer X-Touch (MC mode)",
         device_id: DEVICE_ID_MCU,
@@ -835,7 +914,9 @@ impl McuProfile {
         lcd_line_offset: 0x38,
         lcd_chars_per_strip: 7,
         lcd_buffer_len: 112,
-        verified: false,
+        fader_step: 4,
+        unlit_buttons: &X_TOUCH_UNLIT_BUTTONS,
+        verified: true,
     };
 }
 
@@ -873,24 +954,77 @@ mod tests {
     };
 
     #[test]
-    fn the_profile_says_it_has_not_been_seen_on_a_device() {
-        // docs/MCU_MAPPING.md carries an UNVERIFIED banner and this is that
-        // banner as a value. S20 flips it in the same edit that corrects
-        // whatever the MIDI monitor disagrees with; until then a status panel
-        // or a log line can say so, which a comment could not.
+    fn the_profile_has_been_seen_on_a_device_and_says_which_one() {
+        // S19 asserted the opposite here, in a `const` block, precisely so that
+        // setting the flag would stop the *build* until somebody rewrote this
+        // test - which is this edit. What is being claimed now is narrow and
+        // worth stating in full: a Behringer X-Touch in MC mode over USB,
+        // firmware V1.25, serial 0156406, worked control by control on
+        // 2026-08-13. docs/MCU_MAPPING.md §2.7 is the measurement; §7 is the
+        // checklist it closes.
         //
-        // A `const` block rather than a plain assertion, and not only because
-        // clippy asks: it means the day somebody sets the flag without doing
-        // S20's work, the *build* stops rather than one test.
-        const { assert!(!X_TOUCH.verified) }
+        // The claim does not rest on this line. `tests/hardware_capture.rs`
+        // replays what that surface actually sent - four captures, several
+        // thousand messages - and asserts every one of them re-encodes to the
+        // bytes it arrived as. A note number changed by hand turns that red on
+        // a build server with nothing plugged in.
+        const { assert!(X_TOUCH.verified) }
         assert_eq!(X_TOUCH.name, "Behringer X-Touch (MC mode)");
+    }
+
+    #[test]
+    fn the_faders_report_in_steps_of_four_so_the_top_of_travel_is_not_16383() {
+        // Measured (S20): every captured position was a multiple of 4, so the
+        // surface's faders are 12-bit inside a 14-bit field. Nothing in §2.5's
+        // sources mentions it, and a percentage computed against 16383 is a
+        // master that stops at 99.98 %.
+        assert_eq!(X_TOUCH.fader_step, 4);
+        assert_eq!(X_TOUCH.max_reported_position(), 16380);
+        assert!(X_TOUCH.max_reported_position() < crate::control::FADER_MAX);
+        assert_eq!(
+            X_TOUCH.max_reported_position() % u16::from(X_TOUCH.fader_step),
+            0
+        );
+    }
+
+    #[test]
+    fn a_surface_that_reported_every_position_would_reach_the_top() {
+        // The rounding is a property of the profile rather than of this device:
+        // a step of 1 - or of 0, which is what a half-filled profile would say -
+        // must not lose the last value.
+        let mut ideal = X_TOUCH;
+        ideal.fader_step = 1;
+        assert_eq!(ideal.max_reported_position(), crate::control::FADER_MAX);
+        ideal.fader_step = 0;
+        assert_eq!(ideal.max_reported_position(), crate::control::FADER_MAX);
+    }
+
+    #[test]
+    fn two_buttons_on_this_panel_have_no_led_and_the_profile_says_so() {
+        // A deviation from the MCU standard, measured rather than assumed: both
+        // send their note when pressed and neither can be lit. §2.2's "every
+        // button that has an LED accepts this" is still true; the Ardour
+        // manual's "no deviations" is not.
+        assert!(!X_TOUCH.has_led(GlobalButton::NameValue));
+        assert!(!X_TOUCH.has_led(GlobalButton::SmpteBeats));
+        assert_eq!(X_TOUCH.unlit_buttons.len(), 2);
+        // They are buttons the surface has, which is the whole point of the
+        // exception: their notes decode, they just do not light.
+        assert_eq!(X_TOUCH.note_of(GlobalButton::NameValue), Some(52));
+        assert_eq!(X_TOUCH.note_of(GlobalButton::SmpteBeats), Some(53));
+        // Everything else lights, including all four transport buttons and Save,
+        // which is the one the dirty flag drives (§4.1).
+        for button in GlobalButton::ALL {
+            let unlit = X_TOUCH.unlit_buttons.contains(&button);
+            assert_eq!(X_TOUCH.has_led(button), !unlit, "{button:?}");
+        }
     }
 
     #[test]
     fn every_global_button_has_exactly_one_note_and_every_note_one_button() {
         // Two lists that have to agree: GlobalButton::ALL and the note table.
         // A button added to one and forgotten in the other is the mistake this
-        // catches, and it is the mistake S20 will be making all evening.
+        // catches. S20 walked all sixty-four against the device and found none.
         assert_eq!(X_TOUCH.buttons.len(), GlobalButton::ALL.len());
         for button in GlobalButton::ALL {
             let note = X_TOUCH

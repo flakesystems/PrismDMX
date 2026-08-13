@@ -1,0 +1,41 @@
+# The X-Touch bring-up tool of S20, and deliberately **not** a workspace member.
+#
+# `ARCHITECTURE_SPEC.md` §10.1 lists `prism-surface` among the platform-neutral
+# crates and allows it no `#[cfg(target_os = ...)]`; opening a MIDI port is
+# platform code. Making this its own workspace (the empty `[workspace]` table
+# below) keeps every promise the crate makes intact:
+#
+#   * `cargo test --workspace`, `cargo clippy --workspace --all-targets` and the
+#     ARM64 cross-check never see `midir`, so nothing new compiles for a
+#     platform this tool was never going to run on,
+#   * `prism-surface` gains no dependency at all, and its whole suite still runs
+#     on the Linux CI job with nothing plugged in,
+#   * and the tool still speaks through the real codec rather than a second
+#     implementation of it: `prism-surface` is a path dependency, so every byte
+#     sent to the desk was produced by `Feedback::encode_into` and every byte
+#     read back was decoded by `McuCodec`.
+#
+# `PROGRESS.md` §3.4 carries the commands.
+[workspace]
+
+[package]
+name = "xtouch-probe"
+description = "S20 hardware verification tool for the Behringer X-Touch (MC mode)."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+publish = false
+
+[dependencies]
+prism-surface = { path = "../../crates/prism-surface" }
+# The only MIDI port binding in the repository. WinMM on Windows, ALSA on Linux,
+# CoreMIDI on macOS - and none of that reaches the codec, which is handed bytes.
+midir = "0.11"
+
+[lints.clippy]
+# This whole binary exists to print numbers at a person: it is the case the
+# workspace lint means by "crates that legitimately write to a terminal opt
+# out". It is not a workspace member, so the opt-out is stated here.
+print_stdout = "allow"
+print_stderr = "allow"

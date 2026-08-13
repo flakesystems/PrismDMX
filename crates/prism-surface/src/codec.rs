@@ -9,14 +9,20 @@
 //! # Inbound SysEx is counted, not interpreted
 //!
 //! The MCU handshake — the host's *are you there* and the surface's *Device
-//! Ready* — is **optional**, and no source settles what the answer's payload
-//! looks like on an X-Touch (`docs/MCU_MAPPING.md` §2.3). Writing a decoder for
-//! a message shape nobody has seen would be inventing data in a table that is
-//! deliberately made of citations, so this codec counts an inbound Mackie SysEx
-//! and hands it on to nobody. The *question* is still written —
-//! [`Feedback::DeviceQuery`](crate::Feedback::DeviceQuery) — and the
-//! reassembly, the bounded buffer and the timeout are all exercised by it.
-//! S20 records what the desk actually answers.
+//! Ready* — is **optional**. When S19 wrote this codec no source settled what
+//! the answer's payload looked like on an X-Touch, so rather than invent data for
+//! a message shape nobody had seen, it counts an inbound Mackie SysEx
+//! (`sysex_ignored`) and hands it on to nobody. The *question* is written —
+//! [`Feedback::DeviceQuery`](crate::Feedback::DeviceQuery) — and the reassembly,
+//! the bounded buffer and the timeout are all exercised by it.
+//!
+//! **S20 asked the desk, and `docs/MCU_MAPPING.md` §2.3 now has the answer**:
+//! `F0 00 00 66 14 01` followed by eleven printable ASCII bytes — a
+//! seven-character serial and a four-character challenge — plus an undocumented
+//! firmware version request beside it. So a decoder is writeable now. It is still
+//! not written, because nothing above layer 1 has asked for a serial number, and
+//! an API invented for no caller is a guess of a different kind. What was missing
+//! was the bytes; the bytes are written down.
 
 use std::time::Duration;
 
@@ -266,7 +272,7 @@ mod tests {
         assert!(codec.poll(Duration::from_millis(10)));
         assert_eq!(codec.counters().wire.sysex_timeout, 1);
         assert_eq!(codec.profile().name, "Behringer X-Touch (MC mode)");
-        assert!(!codec.profile().verified);
+        assert!(codec.profile().verified);
     }
 
     #[test]

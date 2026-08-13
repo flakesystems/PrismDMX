@@ -3,6 +3,13 @@
 **/*.rs.bk
 *.pdb
 
+# `tools/xtouch-probe` is deliberately not a workspace member (it opens a MIDI
+# port, which ARCHITECTURE_SPEC.md 10.1 allows prism-surface no part of), so it
+# has a build directory of its own that the root /target/ rule does not cover.
+# Its Cargo.lock *is* committed: it is a binary, and a bring-up tool that builds
+# differently next year is a measurement nobody can reproduce.
+tools/*/target/
+
 # Node / UI
 node_modules/
 ui/dist/

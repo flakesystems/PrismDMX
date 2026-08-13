@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-13
 **Current phase:** Phase 5 — Surface
-**Current session:** S20 — 🔌 hardware verification of the X-Touch (not started; **needs the console** — see §8 for the prompt that starts it)
-**Last completed:** S19 — the MCU codec ✅ — **the desk has hands: bytes to control events and back, byte-equal, allocation-free, and every discarded packet counted**
+**Current session:** S21 — `prism-surface` surface model and feedback (not started — see §8 for the prompt that starts it)
+**Last completed:** S20 — 🔌 hardware verification of the X-Touch ✅ — **the table is no longer a citation: every number in it was read off a real desk, not one of them was wrong, and the recordings are in the test suite**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -78,7 +78,7 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S19 | MCU codec | ✅ | 2026-08-13 | All exit criteria verified — see §2.20. 112 tests, coverage **99.24 % lines**. Built against the **unverified** tables of §5, and held as data so S20 is an edit rather than a refactor. Seven mutation checks; two of them are only visible to the allocator |
-| S20 | 🔌 Hardware verification X-Touch | ☐ | | Needs the console |
+| S20 | 🔌 Hardware verification X-Touch | ✅ | 2026-08-13 | All exit criteria verified — see §2.21. **Every number in `docs/MCU_MAPPING.md` §2 confirmed at the device; none was wrong.** Six things no source had stated were corrected, and one real fault found: the surface can stop transmitting while still receiving. 13 new tests, 1 265 in the workspace |
 | S21 | Surface model and feedback | ☐ | | |
 | S22 | Bindings + D11 gate | ☐ | | Mandatory gate |
 
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 20 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 21 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -846,6 +846,104 @@ the counter sees the difference.
 
 ---
 
+### 2.21 S20 verification record
+
+Measured on 2026-08-13 against the console itself — **Behringer X-Touch, MC mode
+over USB, firmware V1.25, serial `0156406`** (USB `1397:00B1`). All exit criteria
+from `IMPLEMENTATION_PLAN.md` S20 and the session prompt.
+
+The headline is short: **`docs/MCU_MAPPING.md` §2 was right. Not one note number,
+CC number, MIDI channel or buffer offset had to change.** S19's bet — hold the
+whole protocol table as one constant so that verification is a data edit — paid
+out, and it paid more cleanly than S8's did, where the guessed frame rate turned
+out to be the symptom of a real defect.
+
+| Check | Result |
+|---|---|
+| Every item in `docs/MCU_MAPPING.md` §7 ticked | ✅ all fifteen, plus the three S19 added. Two are marked ◻ **untested** rather than ticked, and both say why: the foot switches (notes 102/103) need a pedal that is not plugged in, and the cable-pull case belongs to S21's connection handling. An absent pedal is not a result |
+| Mode and connection recorded | ✅ **MC over USB**, read off the front panel with channel 1 SELECT held at power-up *and* confirmed independently by the device ID the surface answers SysEx on (`0x14`) |
+| Firmware version recorded | ✅ **V1.25** — so ≥ 1.22 and the colour extension exists. Found by SysEx rather than by reading a boot screen: `F0 00 00 66 14 13 F7` is answered with `…14 "V1.25"`, an **undocumented firmware request** now written into §2.3 |
+| The 40 strip-button notes | ✅ pressed strip by strip; notes 0–7 / 8–15 / 16–23 / 24–31 / 32–39 exactly as tabulated |
+| The 64 panel notes | ✅ **60 verified in both directions at once** — the host lit one LED and the button that lit was pressed, so the outbound map and the inbound map are checked by the same act. Notes 52 and 53 pressed blind (no LED — see below). Notes 102/103 untested |
+| Fader channels and 14-bit byte order | ✅ pitch-bend channels 1–8 left to right, 9 for the main fader; **LSB first**, proved by the top-of-travel message `E0 7C 7F` = 124 + 128 × 127 |
+| Fader touch notes | ✅ 104–111 in order, 112 for the main fader |
+| V-Pot acceleration — the first thing §7 asked | ✅ **the V-Pots accelerate (magnitudes 1…8) and the jog wheel does not (±1 in 404 messages, however hard it is spun).** Two controls the document described identically are not the same |
+| Scribble strip offsets and the 56th character | ✅ strip *n* owns 7 characters at `7n`; **all 56 of a line arrive** (Ardour's 55 is caution, not a limit); the buffer is one continuous 112 characters — a write at offset 55 spills onto the lower line — and a single 112-byte message fills both |
+| Colours — all four open questions | ✅ the eight values in the documented additive order; **no inverted variant in MC mode** (bits 3/4/6 are masked away); **a message without exactly eight colour bytes is ignored** (0, 4 and 9 all tried), so there is no per-strip form; **text does not reset the colour** |
+| Meter format, overload flag, decay | ✅ the `(strip << 4)` + level split confirmed, and `0xE`/`0xF` set and clear the marker — **but the decay is under a second**, not the ~300 ms per division the sources claim, which would be 2–4 s. The LCD meter-mode SysEx does nothing at all here, and the overload marker works regardless of it |
+| 7-segment addressing, encoding and channel | ✅ digit 0 is the **rightmost** (`0…9 A B` to digits 0…11 reads `BA9876543210`); CC 76 ignored; **the display is accepted on MIDI channel 16 as well as channel 1**, which is the measurement that justifies the codec taking both |
+| What a 7-segment `0` draws | ✅ **a blank**, and so does 32. The contradiction is settled against the stripping rule: `'@'` cannot be shown at all. `SegmentChar::from_ascii` now **refuses** it and `to_ascii(0)` answers a space |
+| A strip index above 7 | ✅ **ignored, never wrapped** — meters at index 8 and 15, ring LEDs on CC 56/63, note 120, pitch bend on channel 10, CC 76, and the extender device ID `0x15` all did nothing |
+| Whether back-to-back messages are lost | ✅ measured, and the answer is worse than the reports — see the decision log. Small bursts are lossless; large bursts alone are harmless; **saturating both directions at once loses replies and can stop the surface transmitting until it is power-cycled** |
+| Round-trip latency | ✅ **median 0.71 ms**, min 0.612, max 1.023 over 60 exchanges, host → surface → host. The figure that actually bounds `ARCHITECTURE_SPEC.md` §4.3 is different and also measured: a moving fader is reported every **19.8 ms** |
+| §2 and `profiles/surface/xtouch.json` updated, banner removed | ✅ §2 carries the measurements, the UNVERIFIED banner is gone, §2.7 is the measurement and §7 is closed. The JSON is written — as **layer 3**, the binding table, plus the verification record. It deliberately does **not** copy the note map; see the decision log |
+| `X_TOUCH.verified` is `true`, §14 ticked | ✅ and the `const` assertion S19 planted was rewritten in the same edit, which is exactly what it was for. `ARCHITECTURE_SPEC.md` §14's row is closed |
+| `cargo test --workspace` | ✅ exit 0 — **1 265 tests across 44 targets**, 14 ignored. Also run with the desk plugged in, before any of this session's edits: same result, and nothing in the ordinary suite touches a device |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0. One lint met on the way: `assertions_on_constants` on `assert!(X_TOUCH.verified)` in the new target, which is now a `const` block like the one in `profile.rs` |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu` | ✅ exit 0. **`prism-surface` gained no dependency at all** — the MIDI port lives in a crate outside the workspace, so nothing new compiles for ARM64 or for Linux |
+| CI green on the pushed commit | recorded in §1 row 13 |
+
+**What the session produced, in three parts.**
+
+**1. A tool, outside the workspace on purpose.** `tools/xtouch-probe` is the only
+code in the repository that opens a MIDI port. `ARCHITECTURE_SPEC.md` §10.1 allows
+`prism-surface` no platform code, so rather than bend the rule the tool is its own
+crate with its own `[workspace]` table: `cargo test --workspace`, clippy and the
+ARM64 cross-check never see `midir`. It depends on `prism-surface` by path, which
+is the point — **every byte it sent was produced by `Feedback::encode_into` and
+every byte it read was decoded by `McuCodec`**, so what was verified is the
+shipping codec and not a transcription of it. The exceptions are marked in its own
+output: the `raw` command, and the steps that deliberately send what the codec
+*refuses* to encode — which is how "what does the surface do with a strip index of
+8?" gets asked at all.
+
+**2. The verification came back into the workspace as evidence rather than as
+prose.** `crates/prism-surface/tests/captures/` holds four recordings of what the
+desk sent — every strip button, the whole panel, all nine faders, all nine
+relative controls, about 2 500 messages — and `tests/hardware_capture.rs` replays
+them in the ordinary suite. A device-specific claim is now checked on a build
+server with nothing plugged in, for ever. `verified: true` is a sentence about one
+evening; the captures are what keeps it true.
+
+**3. Six corrections, none of them a note number.** Every one is something no
+source stated:
+
+- **The faders are 12-bit.** All 576 captured positions are multiples of **4**, the
+  LSB only ever takes the 32 values `00,04,…,7C`, and the top of travel is
+  **16380** — the surface never sends 16383. Held as `McuProfile::fader_step`,
+  because a percentage computed against 16383 gives 99.98 % for a fader against
+  its end stop, and an executor master that cannot reach full is wrong.
+- **The V-Pots accelerate and the jog wheel does not**, on the same encoding.
+  Layer 2 needs two curves, not one.
+- **Two panel buttons have no LED**: Name/Value (52) and SMPTE/Beats (53) send
+  their notes and stay dark at any velocity. `McuProfile::unlit_buttons` says so as
+  data.
+- **The encoders have no lamp under them**, so ring bit 6 has nothing to light.
+- **A 7-segment `0` blanks the digit**, which cost `SegmentChar` a corrected
+  mapping — the only change to shipping behaviour in the whole session.
+- **The meters decay in under a second**, several times faster than documented.
+
+**And one fault, which is the session's real product.** Flooding the surface with
+large SysEx writes *while replies are outstanding* can stop its MIDI transmitter
+dead: no buttons, no faders, no replies — while it goes on **receiving perfectly**,
+displaying text written to it in that state. Reopening the port does not help and
+neither does a fresh process; only a power cycle. It happened twice, reproducibly,
+and each half of the recipe is harmless on its own. That is S8's lesson in a second
+setting: **the thing worth having the hardware for is the failure a mock cannot
+contain.** The three consequences for S21 are in `docs/MCU_MAPPING.md` §2.7 and
+§5.3.
+
+**A note on method, because the first attempt at the panel was wrong.** The obvious
+approach — print a press order, compare the capture against it — produced 71
+"mismatches" that were nothing of the kind: the walk had been done strip by strip
+where the printed list ran row by row. An order a person has to follow exactly
+makes the *person* the thing under test. Lighting one LED and asking for whichever
+button lit removes the order from the experiment altogether and verifies the
+outbound map in the same pass. That is the method to reuse for the next surface.
+
+---
+
 ## 3. Coverage tracking
 
 Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and protocols. Record **measured** figures only — leave blank until a run produces a number.
@@ -859,7 +957,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
 | `prism-protocols` | **> 95 %** | **98.43 % lines** (S18, re-measured because `MockOutput` grew a timestamped recording — `output.rs` is at **100 % lines, regions and functions**). S10's measurement, whose reasoning still holds: **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
-| `prism-surface` | **> 95 %** | **99.24 % lines**, 98.58 % regions, 97.94 % functions — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.79 %, `codec.rs` 98.71 %, `feedback.rs` 98.26 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. Two unreachable branches found while reading the report were removed rather than covered — see §2.20 | 2026-08-13 (S19) |
+| `prism-surface` | **> 95 %** | **99.26 % lines**, 98.62 % regions, 98.01 % functions (S20, with the recorded-capture target added) — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.94 %, `codec.rs` 98.71 %, `feedback.rs` 98.30 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. S19 measured **99.24 % lines**, 98.58 % regions, 97.94 % functions; two unreachable branches found while reading that report were removed rather than covered — see §2.20. **The figure does not include `tools/xtouch-probe`**, which is not a workspace member and has no tests: it is the instrument, not the product | 2026-08-13 (S20) |
 | `prism-ipc` | ≥ 85 % | **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
 | `prismd` | ≥ 85 % | **94.73 % lines**, 94.81 % regions, 96.36 % functions (S18) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
 | `ui` | ≥ 85 % | — | |
@@ -1017,6 +1115,107 @@ Without the adapter this fails, which is the point of the `#[ignore]`s:
 cargo llvm-cov -p prism-protocols --summary-only -- --include-ignored
 ```
 
+### 3.4 Running the X-Touch probe (S20)
+
+`tools/xtouch-probe` is the only code in the repository that opens a MIDI port,
+and it is **not a workspace member** — see the decision log for why. It has its
+own `Cargo.lock` and `target/`, so it is built and run from its own directory:
+
+```bash
+cd tools/xtouch-probe && cargo run --quiet -- ports
+```
+
+Everything below assumes that directory. **The desk must be in MC mode over USB**
+(hold channel 1 SELECT while switching on to check). `PRISM_XT_IN` and
+`PRISM_XT_OUT` pick a port by name substring or index if the default guess is
+wrong; `PRISM_XT_CAPTURE` writes a capture file.
+
+What the desk is, and what firmware it runs — the first thing any session should
+ask, and it answers in under a second:
+
+```bash
+cargo run --quiet -- identify
+```
+
+Log and analyse everything the surface sends. The analysis reconciles what
+arrived against `profile::X_TOUCH` — notes with their names, pitch-bend channels
+with their faders, CC numbers with their encoders, magnitudes, and the gaps
+between messages:
+
+```bash
+cargo run --quiet -- capture 60
+```
+
+**The note map, checked in both directions without an order to follow.** The host
+lights one LED at a time; press whichever button is lit. This is the command that
+verified 60 of the 64 panel buttons, and it is the method to reuse — a printed
+press order makes the person the thing under test:
+
+```bash
+cargo run --quiet -- pair
+```
+
+`pair <from> <count>` repeats part of it. `PRISM_XT_PATIENCE` (seconds, default
+30) is how long it waits before moving on, which is how a button with no LED
+shows up.
+
+The outbound experiments. With no argument each lists its steps; `<name> <n>`
+runs one step; `<name> all` runs the lot with `PRISM_XT_STEP_MS` (default 6000)
+between them. Running one step at a time is what makes an observation reliable —
+the person watching is told exactly what to expect and sees only that:
+
+```bash
+cargo run --quiet -- colors
+```
+
+```bash
+cargo run --quiet -- leds all
+```
+
+`leds`, `motors`, `rings`, `meters`, `segments`, `lcd`, `colors` and `oddities`.
+The last one sends what the codec **refuses** to encode — a meter for strip 15, a
+ring LED past the eighth, a colour message of the wrong length — which is the only
+way to ask what the surface does with a message it should never receive.
+
+Round-trip latency, measured through the handshake because a motor fader generates
+no reply:
+
+```bash
+cargo run --quiet -- latency 60
+```
+
+**The pacing tests, and a warning.** `flood <gap_us> <count> <mode>` where mode is
+`silent` (send and ask nothing), `interleave` (query after each message, each
+answer waited for), `burst` (query after each message, nothing waited for) or
+`moving` (flood while an operator sweeps a fader, counting what still gets
+through):
+
+```bash
+cargo run --quiet -- flood 0 64 silent
+```
+
+`burst` mode, and the older `pacing` command, are the two that **stop the surface
+transmitting** — twice out of two attempts. The desk then receives normally,
+displays whatever is written to it, and sends nothing at all until it is
+**power-cycled**; reopening the port does not help. That is the finding
+(`docs/MCU_MAPPING.md` §2.7), so it is reproducible on purpose — but run it
+knowing it ends with somebody reaching for the switch.
+
+Arbitrary bytes, for a question that has not been given a subcommand yet:
+
+```bash
+cargo run --quiet -- raw F0 00 00 66 14 13 F7
+```
+
+The captures the tool produced live in `crates/prism-surface/tests/captures/` and
+are replayed by `crates/prism-surface/tests/hardware_capture.rs` **in the ordinary
+suite** — so re-running any of this is how a *new* claim gets measured, not how an
+existing one gets checked:
+
+```bash
+cargo test -p prism-surface --test hardware_capture
+```
+
 ### 3.3 The `loom` models
 
 The `loom` models replace the standard atomics with instrumented ones, so they are
@@ -1047,7 +1246,7 @@ Both are recorded as plain data so verification is a data update, not a refactor
 
 | Item | Blocks | Status |
 |---|---|---|
-| MCU note and CC numbers vs. real X-Touch | S20, and sign-off of S19 | ☐ unverified at the device — banner in `docs/MCU_MAPPING.md` §2, and **`prism_surface::X_TOUCH.verified == false` since S19**, asserted in a `const` block so the build stops if somebody sets it without doing the work. **Codec built against it 2026-08-13 (S19):** every number is in that one constant and nothing in the codec matches on a literal, so a correction is an edit to the table and to the hand-transcribed byte table in `tests/round_trip.rs` — two places, both data. S19 added three items to §7's list from things the implementation had to decide without an answer: what a 7-segment value of `0` draws, whether a strip index above 7 is ignored, and what a *Device Ready* actually contains. **Researched 2026-08-12:** every number now has a named source (§2.5 — Ardour's production implementation, two independent reverse-engineering projects), the X-Touch's undocumented **scribble strip colour SysEx is written down** (§2.3, `F0 00 00 66 14 72` + eight 3-bit RGB bytes, firmware ≥ 1.22), and §7 has become a list of claims to falsify rather than of unknowns. The three no source could settle — the V-Pot's acceleration encoding, whether back-to-back messages need pacing, and the colour message's edge cases — are marked as the ones to measure first |
+| ~~MCU note and CC numbers vs. real X-Touch~~ | — | ✅ **verified 2026-08-13 (S20)** — a Behringer X-Touch in **MC mode over USB, firmware V1.25, serial `0156406`**, worked control by control: all 40 strip notes, all 64 panel notes (60 of them in both directions at once, by lighting one LED and pressing the button that lit), all nine faders, all nine relative controls and every outbound message type. **Not one number was wrong** — the whole verification was three added profile fields, one corrected character mapping and a new test target, which is what holding the table as one constant was for. `prism_surface::X_TOUCH.verified` is `true` and the `const` assertion S19 planted was rewritten in the same edit. **The evidence is in the repository rather than in this table:** `crates/prism-surface/tests/captures/` holds four recordings of what the desk sent and `crates/prism-surface/tests/hardware_capture.rs` replays them in the ordinary suite, so a device-specific claim is checked on a build server with nothing plugged in. Six things no source had stated were corrected (§2.21) and one real fault was found: **the surface can stop transmitting while still receiving, and only a power cycle recovers it** — `docs/MCU_MAPPING.md` §2.7, and S21 designs around it. Two items are recorded ◻ untested rather than ticked: the foot switches need a pedal nobody had, and the cable-pull case belongs to S21 |
 | sACN against a real receiver | nothing — S10 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received and the group address over the whole 1…63999 range. What only a gateway and a real switch can answer is whether the **multicast path** works end to end — IGMP snooping on the switch, and whether a hop limit of 1 reaches the venue's nodes. Both are held as data (`SacnDestination`, `SacnConfig::multicast_ttl`), so verifying them is a configuration change. **No test sends multicast on purpose:** a suite that put sACN on the network it runs on is the same fault as one that broadcasts. `ARCHITECTURE_SPEC.md` §14 |
 | ArtNet against a real node | nothing — S9 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received. What only a node can answer is whether it agrees about the port-address mapping (0-based or 1-based on that front panel) and whether it wants ArtSync. Both are held as data — `PortAddress` per universe and `ArtNetConfig::sync` — so verifying them is a configuration change, not a code change. `ARCHITECTURE_SPEC.md` §14 |
 | ~~SH-RS09B USB VID/PID and real frame rate~~ | — | ✅ **verified 2026-08-11 (S8)** — `0403:6001`, serial `B0037HIY`, `FT232R USB UART`, 35.5 Hz over 60 s. `DeviceProfile::SH_RS09B` carries `verified: true` and the tests assert the measurements. **Holding it as data paid for itself:** the whole verification was three fields and one test, with no code changed anywhere else — see `ARCHITECTURE_SPEC.md` §14 |
@@ -1060,6 +1259,16 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-13 | S20 | **The X-Touch can stop transmitting while it goes on receiving, and only a power cycle brings it back.** Flooding it with 63-byte scribble strip writes *while device-query replies are outstanding* loses 17–34 of 64 replies and then kills its MIDI transmitter outright: no buttons, no faders, no SysEx. It keeps **receiving perfectly** — text written in that state appears on the display. Closing and reopening the port does not help; a fresh process does not help. It happened **twice out of two attempts**, and each half of the recipe is harmless alone: 64 small messages back to back lose nothing, 64 large ones with nothing asked of the desk are fine, and even large-plus-query is fine if each reply is waited for. A 2000-message flood while an operator swept a fader did not hang it but **thinned the inbound stream from ~40 to ~11 messages a second** | Three things for S21, all in `docs/MCU_MAPPING.md` §2.7 and §5.3. **Pace the outbound path** — §5.2's 30 Hz coalescing against a shadow model is not an optimisation, it is what keeps the desk out of this state, and a minimum gap belongs in the send queue. **Never poll the handshake**: the device query is the only reply the surface generates, and the failure needs replies in flight. And **silence is a fault state that §5.3 did not cover** — it assumed disappearance, where the port stays open and writes still land. A surface layer that only watches for disconnection would show a green light beside a dead console, so it must notice a desk that has gone quiet and say *power-cycle it*, because reconnecting is the one thing that will not work |
+| 2026-08-13 | S20 | **The X-Touch's faders are 12-bit inside a 14-bit field.** Every one of 576 captured positions is a multiple of 4; the low byte only ever takes the 32 values `00,04,…,7C`; the top of travel is **16380** and 16383 is never sent. No source mentions it. The motor accepts all 16 384 values — it simply cannot report that finely | `McuProfile::fader_step` and `max_reported_position()`, with the reasoning in the field's own documentation: a layer that turns an inbound position into a percentage by dividing by 16383 gives **99.98 %** for a fader against its end stop, and an executor master that cannot reach full is wrong in a way an operator will find and nobody will be able to explain. S21 scales against the profile, not against `FADER_MAX` |
+| 2026-08-13 | S20 | **The V-Pots accelerate and the jog wheel does not, on the same encoding.** §2.1 described both as "relative, sign-magnitude" and left the magnitude open, and it is open in two different ways: a V-Pot spun hard carries **1…8 detents** in one message, while the jog wheel sent **±1 and nothing else in 404 messages** however hard it was spun — it raises its rate, not its magnitude | S19's decision to pass the magnitude through uninterpreted was right for a reason it could not have known: it is the only behaviour correct for *both* controls. **Layer 2 needs two curves**, not one — an acceleration curve on the V-Pots and none on the jog wheel — and a single shared curve would make one of them wrong. Recorded in `control.rs`'s module documentation beside the encoding itself |
+| 2026-08-13 | S20 | **A round trip over recorded device bytes is still a function composed with its own inverse.** The new capture target asserts that every message the desk sent re-encodes to exactly those bytes — and the S19 mutation (swapping the two halves of the 14-bit fader split *in both directions*) leaves it **green**, on genuine recordings, because decode and encode still agree with each other. What turned red was the *quantisation* test: with the halves swapped the positions are no longer multiples of 4 | S19's finding generalises further than S19 could state it: **real input does not make a round trip self-validating.** So `tests/hardware_capture.rs` carries a second table of eleven captured messages whose meaning is **worked out by hand** (`E0 7C 7F` is 124 + 128 × 127 = 16380), plus the measured properties — multiples of 4, maximum 16380, magnitudes 1…8, jog ±1. The rule for any future device: a capture is evidence, and evidence still needs one end written down independently |
+| 2026-08-13 | S20 | **Printing a press order makes the person the thing under test.** The first attempt at verifying the 64-button panel printed the expected order and compared the capture against it. It reported **71 mismatches**, every one spurious: the walk had been done strip by strip where the list ran row by row. Nothing was wrong with the desk or the table | Replaced by a protocol with no order in it: **the host lights one LED and the operator presses whichever button is lit.** That verified 60 of 64 buttons with zero ambiguity and, because the LED and the note are checked in the same act, it verifies the **outbound** map at the same time — which the press-order method could not do at all. This is the method for the next surface, and `tools/xtouch-probe pair` is it |
+| 2026-08-13 | S20 | **Two panel buttons have no LED, and the encoders have no lamp.** Name/Value (52) and SMPTE/Beats (53) are printed on the panel, send their notes, and stay dark at every velocity; the ring value's bit 6 — the MCU's "small LED beneath the encoder" — has nothing to light on this surface. The Ardour manual's "a direct emulation … with no deviations" is not quite true | `McuProfile::unlit_buttons` holds the two as data, because a console that lights a lamp which does not exist is one whose feedback silently lies about part of itself: S21's shadow model can skip them and S26 can decline to offer them as indicators. The encoder lamp is documented rather than modelled — setting a bit that lights nothing costs nothing, where a missing LED that the UI believes in costs a support call. `profiles/surface/xtouch.json` leaves both buttons unbound on purpose |
+| 2026-08-13 | S20 | **A 7-segment value of 0 blanks the digit, so `'@'` cannot be displayed at all.** §2.2 carried two claims that could not both be true — the character set is "ASCII with bit 6 stripped", under which 0 is `'@'`, and "0 is a space". The desk blanks both 0 and 32 | The rule stops one character short, and the codec now says so: `SegmentChar::from_ascii` **refuses `'@'`** rather than returning a code that draws nothing, and `to_ascii(0)` answers a space. This is the session's only change to shipping behaviour, and the reasoning is the one that matters for a console: a name written through this type either appears or is refused, and never comes back with a hole in it that only the desk can see |
+| 2026-08-13 | S20 | **The measurement tool belongs outside the workspace, and the evidence belongs inside it.** Verifying the codec needed a MIDI port; `ARCHITECTURE_SPEC.md` §10.1 allows `prism-surface` no platform code, and adding `midir` as a dev-dependency would have put an ALSA C build in front of the Linux job and the ARM64 cross-check | `tools/xtouch-probe` is its own crate with its own `[workspace]` table, so `cargo test --workspace`, `cargo clippy --workspace --all-targets` and the ARM64 check never see it — **`prism-surface` gained no dependency at all.** It depends on `prism-surface` by path, so every byte it sent was `Feedback::encode_into`'s and every byte it read was `McuCodec`'s: what was verified is the shipping codec, not a transcription. What comes *back* into the workspace is recorded captures replayed by an ordinary test. **Platform code and hardware in a tool, evidence in a fixture** — the pattern for the next device, written into §10.1 |
+| 2026-08-13 | S20 | **`profiles/surface/xtouch.json` is layer 3 only, and deliberately holds no note map.** `docs/MCU_MAPPING.md` §2.1 used to say the JSON held the note and CC numbers "as data", while §4 said it was the binding table. Both cannot be true without two copies of a 104-row table | The JSON is the **binding table** plus the verification record (firmware, serial, mode, and the measured device facts a loader may want). The note map stays in `profile::X_TOUCH`, one constant — which is the whole reason this session was a data edit rather than a refactor, and a second copy would have thrown that away. §2.1 now says so explicitly, and the file says it about itself. Three open questions for S22 are written into the file where the loader will find them, the sharpest being that `Command::SelectView` takes an absolute `view_id` where `Channel ◀▶` needs a relative move |
+| 2026-08-13 | S20 | **The handshake is answered, and there is an undocumented firmware request beside it.** The device query returns `F0 00 00 66 14 01` plus eleven printable ASCII bytes — a seven-character serial (`0156406`) and a four-character challenge (`5BC5`), not the `0x06` some sources expected. And `F0 00 00 66 14 13 F7` is answered with `…14 "V1.25"`, which no source mentions at all | Both are written into `docs/MCU_MAPPING.md` §2.3, which closes the last of S19's three open questions. The codec still **counts inbound SysEx rather than decoding it** — not for want of data now, but because nothing above layer 1 has asked for a serial number and an API invented for no caller is a guess of a different kind. The firmware request is the useful one: it makes "does this desk have the colour extension?" a run-time question rather than a request that an operator power-cycle the desk and read the boot screen |
 | 2026-08-13 | S19 | **A round-trip test that computes its expected bytes from the table it is testing is a function composed with its own inverse, and a mutation check proved it.** The obvious way to write `bytes → event → bytes` is to build the bytes from `X_TOUCH` and compare. Swapping the two halves of the 14-bit fader split **in both directions** — decode reads MSB first *and* encode writes MSB first — leaves every such test green, and leaves both property tests green, because the pair still agrees with itself. On a real desk the fader is in the wrong place | `tests/round_trip.rs` holds **literal byte arrays and literal note numbers**, transcribed from `docs/MCU_MAPPING.md` §2 by hand. The symmetric mutation turns four of them red. This is S16's `to_vec` / `to_vec_named` finding in a second setting and it generalises: **a round trip is only a test of a codec if one end of it is written down independently.** The consequence for S20 is deliberate — correcting a number is an edit in two places, the profile and this table, and if they disagree the build says so |
 | 2026-08-13 | S19 | **The codec is handed the time rather than holding a clock, and that is more testable rather than less.** The session plan said the SysEx timeout should sit behind a `Clock` the way `prism-protocols::OutputRunner`'s backoff does, tested against `ManualClock`. It does not. `MidiDecoder::push` takes `now: Duration` | Three reasons, and the third settles it. The arrival time of a packet is a **property of the packet**, so a decoder that reads a clock is guessing at something its caller knows exactly. A test then needs no simulated clock at all, only arithmetic — the timeout is asserted from both sides of its deadline in microseconds. And `Clock` carries `sleep_until`, which a codec must never call: holding one would mean holding a method whose use would be a defect. It also keeps `prism-surface`'s dependency list at one crate, where a `Clock` would have pulled in `prism-engine`. **The rule for later layers:** S21's surface thread owns a clock and passes the instant down; nothing below it should |
 | 2026-08-13 | S19 | **A `panic!` is not the only way for a codec to fail an operator; losing its place in the stream is worse, and it is invisible.** `CLAUDE.md` says an invalid MIDI packet must never propagate a failure, which reads as *do not panic*. The failure that actually reaches a desk is quieter: a parser that mishandles a Program Change's data-byte count, or drops the data bytes of a Song Position Pointer, spends the rest of the burst reporting orphans — and the Select button stops working until something resynchronises | The decoder knows **all seven** channel voice messages, not the four the MCU uses, and swallows system common data bytes; deciding a message is uninteresting happens one layer up, where it is counted as `unmapped` rather than as damage. The claim is stated as a property: *after any byte stream at all, the next Play press still arrives* — `proptest` over arbitrary packets, and the same thing asserted on every prefix of every valid message. **A second property carries the same weight:** a random stream decodes identically however it is cut into packets, whole, byte by byte, or at an arbitrary interior point. That is what a USB MIDI transport does to a parser, and it fails for any parser that keeps state on the stack of `push` |
@@ -1254,22 +1463,76 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The codec exists, and it is honest about what it does not know.** Bytes become
-control events and control events become the bytes the surface would have sent,
-byte for byte; a message split across four-byte packets reassembles, one that
-never ends is dropped on a deadline, and nothing on either path calls the
-allocator once. Every note number and CC number is one constant that says
-`verified: false` out loud.
+**The table is no longer a citation.** Every note number, CC number, MIDI channel
+and buffer offset in `docs/MCU_MAPPING.md` §2 was read off a real Behringer
+X-Touch in MC mode over USB on 2026-08-13, and **not one of them was wrong**.
+`prism_surface::X_TOUCH.verified` is `true`, the UNVERIFIED banner is gone, and
+the evidence is in the test suite rather than in a paragraph: four recordings of
+what the desk sent, replayed on every commit with nothing plugged in.
 
-**Begin S20** (🔌 hardware verification of the X-Touch). **This session needs the
-console**: a Behringer X-Touch in MC mode over USB, and a MIDI monitor.
-`docs/MCU_MAPPING.md` §7 is the list — no longer a list of unknowns but of
-claims to falsify, and S19 added three more to it. Use the prompt in §8.
+**Begin S21** (`prism-surface` — surface model and feedback). It needs no
+hardware: the shadow model, the diffing, touch suppression and coalescing are all
+above layer 1. Use the prompt in §8. **Read `docs/MCU_MAPPING.md` §2.7 first** —
+it is the measurement, and three of its findings are requirements on S21 rather
+than notes.
 
-**S21 is not blocked by S20.** The surface model, the shadow diffing, touch
-suppression and coalescing are all above layer 1 and none of them depends on a
-number being right. If the desk is not available, S21 can be done first and S20
-slotted in later; it is the sign-off of S19 rather than a prerequisite for S21.
+Carried out of S20:
+- **Pace the outbound path, and treat §5.2's 30 Hz as a safety limit rather than
+  an optimisation.** The X-Touch can be made to **stop transmitting altogether**
+  while it goes on receiving perfectly: no buttons, no faders, no replies, and
+  only a power cycle brings it back. It took a burst of 63-byte scribble strip
+  writes with device-query replies outstanding, it happened twice out of two
+  attempts, and each half of the recipe is harmless alone. A minimum gap between
+  outbound messages belongs in the send queue.
+- **Never poll the handshake.** The device query is the only reply this surface
+  generates, and the failure above needs replies in flight. Use it once at
+  connect, if at all.
+- **Silence is a fault state, and §5.3 does not cover it.** That rule assumes the
+  device *disappears*; here the port stays open and writes still land on the
+  display. A surface layer that only watches for disconnection will show a green
+  light beside a dead console. Notice a desk that has gone quiet, and say
+  **power-cycle it** — reconnecting is the one thing that will not help.
+- **Scale faders against `McuProfile::fader_step`, not against `FADER_MAX`.** The
+  faders report in steps of 4 and stop at **16380**; dividing by 16383 gives
+  99.98 % for a fader against its end stop, and an executor master that cannot
+  reach full is a fault an operator will find and nobody will be able to explain.
+  `max_reported_position()` is the number to use.
+- **Two acceleration curves, not one.** A V-Pot spun hard carries 1…8 detents per
+  message; the jog wheel sends ±1 and nothing else however fast it goes. One
+  shared curve would be wrong about one of them. The codec passes the magnitude
+  through unchanged, which is correct for both — the interpretation is S21's.
+- **A moving fader is reported every 19.8 ms**, which is the real bound on
+  `ARCHITECTURE_SPEC.md` §4.3's first row. Round-trip through the surface is
+  0.71 ms median, so nothing in the transport needs optimising.
+- **The shadow model can hold text and colour separately.** Writing text does not
+  reset the colour — measured, not assumed — so the two diff independently. And
+  the colour message is **all eight strips or nothing**: a message with any other
+  number of colour bytes is ignored outright, so there is no per-strip update to
+  find.
+- **Skip the lamps that do not exist.** `McuProfile::unlit_buttons` names the two
+  buttons with no LED (Name/Value, SMPTE/Beats), and the encoders have no lamp
+  under them at all, so ring bit 6 lights nothing on this device.
+- **Meters need refreshing faster than the documentation implies** — they fall to
+  empty in under a second, not the 2–4 s a decay of ~300 ms per division would
+  give. §5.2's permission to drop them first still holds: a dropped meter falls
+  rather than freezing.
+- **The nearest-corner colour quantisation is still S21's** (§2.3, hue-first,
+  because a pastel is still the colour it is a pastel of) and the eight values it
+  maps onto are now confirmed: bit 0 red, bit 1 green, bit 2 blue, and bits above
+  that are masked away by the surface — there is no inverted variant in MC mode.
+- **`tools/xtouch-probe` is there when a new question needs the desk**, and
+  §3.4 has the commands. Two rules from using it: run one step at a time so the
+  person watching is told exactly what to expect, and **never verify a map by
+  printing a press order** — light one LED and ask for the button that lit, which
+  checks both directions at once and cannot be thrown off by the order somebody
+  walks the panel in.
+- **A capture is evidence and evidence still needs one end written down.** The new
+  replay target asserts that every recorded message re-encodes to the bytes the
+  desk sent — and the S19 fader mutation leaves that **green**, on real data,
+  because decode and encode still agree with each other. What catches it is the
+  measured *properties* (multiples of 4, maximum 16380) and eleven captured
+  messages whose meaning was worked out by hand. Any future device inherits both
+  halves.
 
 Carried out of S19:
 - **`profile::X_TOUCH` is the whole of what S20 edits**, and
@@ -1579,163 +1842,163 @@ Carried from Phase 1:
 
 > Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
 
-**Next up: S20 — 🔌 Hardware-Verifikation des Behringer X-Touch**
+**Next up: S21 — `prism-surface`, Surface-Modell und Feedback**
 
-> ⚠️ **Diese Session braucht ein Gerät.** Ohne einen angeschlossenen Behringer
-> X-Touch im Mackie-Control-Modus ist sie nicht durchführbar. Ist das Pult nicht
-> greifbar, dann überspringe S20 und mache mit **S21** weiter (Surface-Modell und
-> Feedback) — S21 hängt nicht davon ab, dass eine Zahl stimmt. S20 ist die
-> Abnahme von S19, keine Voraussetzung für S21.
+> Diese Session braucht **kein** Gerät. Das X-Touch ist mit S20 verifiziert; alles
+> hier liegt über Schicht 1 und wird gegen einen Mock-MIDI-Port getestet. Ist das
+> Pult trotzdem angesteckt, muss die Testsuite unverändert grün bleiben — kein
+> automatischer Test darf es anfassen.
 
 ```text
-PrismDMX — Session S20: Hardware-Verifikation des X-Touch
+PrismDMX — Session S21: prism-surface, Surface-Modell und Feedback
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Diese Session braucht ein Gerät: einen Behringer X-Touch im
-Mackie-Control-Modus, per USB an diesem Rechner. Ohne das Pult ist sie nicht
-durchführbar — dann bitte abbrechen und stattdessen S21 vorschlagen.
+Mit S19 steht der MCU-Codec: Bytes werden zu logischen Ereignissen und wieder zu
+Bytes, byte-gleich, ohne eine einzige Allokation, und jedes verworfene Paket wird
+gezählt. Mit S20 ist die Tabelle dahinter am echten Gerät gemessen — ein
+Behringer X-Touch im MC-Modus über USB, Firmware V1.25 — und keine einzige Zahl
+war falsch. `prism_surface::X_TOUCH.verified` ist `true`.
 
-Mit S19 steht der MCU-Codec: Bytes werden zu logischen Ereignissen und wieder
-zu Bytes, byte-gleich, ohne eine einzige Allokation, und jedes verworfene Paket
-wird gezählt. Was fehlt, ist der Beweis, dass die Zahlen stimmen. Jede
-Notennummer, jede CC-Nummer und jeder Kanal in diesem Codec stammt aus
-öffentlichen Quellen — Ardours Produktivimplementierung, zwei unabhängige
-Reverse-Engineering-Projekte, Abletons eigenes Remote-Script — und keine
-einzige davon wurde je an unserem Gerät gemessen. Das Profil sagt das selbst:
-`prism_surface::X_TOUCH.verified == false`.
-
-Diese Session hält die Tabelle gegen ein echtes Pult.
+Was fehlt, ist die Schicht darüber: das geräteunabhängige Kontrollmodell, das
+Schattenmodell, und die Regeln, ohne die ein Pult sichtbar falsch reagiert.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                              — verbindliche Qualitäts-, Architektur-
                                             und Teststandards. Besonders: kein
-                                            Test darf echte Hardware anfassen —
-                                            was hier gemessen wird, gehört
-                                            deshalb in ein #[ignore]-Target
+                                            Test darf echte Hardware anfassen,
+                                            Coverage > 95 % auf dieser Kiste,
+                                            und print!/println! sind
+                                            workspace-weit verboten
 2. PROGRESS.md                            — Stand, Decision Log, gemessene Zahlen;
-                                            besonders §2.20 (was S19 geliefert
-                                            hat und was es bewusst offen ließ),
-                                            §2.9 (S8, die einzige bisherige
-                                            Hardware-Session — sie hat einen
-                                            echten Defekt gefunden), §3.2 (wie
-                                            die Hardware-Tests von S8 gefahren
-                                            werden), §5 (die offenen
+                                            besonders §2.21 (was S20 am Gerät
+                                            gemessen hat), §2.20 (was S19 gebaut
+                                            und bewusst offen gelassen hat), §3.4
+                                            (wie das Mess-Werkzeug gefahren wird,
+                                            falls doch eine Frage ans Gerät
+                                            entsteht), §5 (offene
                                             Verifikationspunkte) und §7
-                                            „Carried out of S19"
+                                            „Carried out of S20" — diese Liste
+                                            ist die Anforderungsliste dieser
+                                            Session
 3. IMPLEMENTATION_PLAN.md                 — Session-Protokoll und die Definition
-                                            von S20 und S21
-4. docs/MCU_MAPPING.md — die ganze Datei. §2 sind die zu prüfenden Tabellen,
-   §2.3 die Farb-SysEx des X-Touch (Firmware ≥ 1.22), §2.5 woher jede Zahl
-   stammt und wie belastbar sie ist, §2.6 was S19 gebaut und was es offen
-   gelassen hat, und §7 ist die Arbeitsliste dieser Session — inzwischen keine
-   Liste von Unbekannten mehr, sondern eine Liste zu widerlegender Behauptungen
-5. ARCHITECTURE_SPEC.md §7.1 und §14 (offene Verifikationspunkte), §10.1
-   (welche Kisten plattformabhängigen Code enthalten dürfen — `prism-surface`
-   gehört nicht dazu), §12 (Testpolitik)
-6. crates/prism-surface/src/profile.rs    — die Tabelle. Genau eine Konstante,
-                                            `X_TOUCH`, mit `verified: false`
-7. crates/prism-surface/tests/round_trip.rs — die zweite Hälfte der Tabelle:
-                                            von Hand abgeschriebene Byte-Folgen.
-                                            Absichtlich unabhängig vom Profil —
-                                            siehe unten
-8. crates/prism-protocols/tests/hardware.rs — das Muster für ein
-                                            Hardware-Target in diesem Projekt:
-                                            #[ignore]d, dokumentiert, hinter
-                                            einem Mutex serialisiert, über
-                                            Umgebungsvariablen steuerbar
-9. crates/prism-protocols/src/device.rs   — wie S8 eine verifizierte Messung
-                                            als Daten abgelegt hat
-                                            (`DeviceProfile::SH_RS09B`,
-                                            `verified: true`)
+                                            von S21 und S22
+4. docs/MCU_MAPPING.md — §1 (die drei Schichten und wer was weiß), §3 (das
+   logische Kontrollmodell, das hier entsteht), §5 (die Feedback-Regeln: Touch-
+   Unterdrückung, Coalescing, Reconnect) und **§2.7 vollständig** — das ist die
+   Messung von S20, und drei ihrer Befunde sind Anforderungen an diese Session,
+   keine Anmerkungen
+5. ARCHITECTURE_SPEC.md §3 (Threading-Modell), §4.3 (Latenzbudget, jetzt mit
+   gemessenen Zahlen), §10.1 (welche Kisten plattformabhängigen Code enthalten
+   dürfen — `prism-surface` gehört nicht dazu), §12 (Testpolitik)
+6. crates/prism-surface/src/lib.rs        — was die Kiste verspricht und was
+                                            Schicht 1 bewusst nicht tut
+7. crates/prism-surface/src/control.rs    — ControlEvent, die Eingangsseite
+8. crates/prism-surface/src/feedback.rs   — Feedback, die Ausgangsseite; sie
+                                            dekodiert auch, was Tests erlaubt,
+                                            die Rolle des Pults zu spielen
+9. crates/prism-surface/src/profile.rs    — die gemessene Tabelle, inklusive
+                                            fader_step und unlit_buttons
+10. crates/prism-surface/tests/hardware_capture.rs — die Aufnahmen des echten
+                                            Geräts, die in der normalen Suite
+                                            laufen; das Muster für „Beweis als
+                                            Fixture"
 
-Stand nach S19 — nichts davon musst du neu bauen:
+Stand — nichts davon musst du neu bauen:
 - `prism-domain` (S1), `prism-engine` (S2–S6), `prism-protocols` (S7–S10),
   `prism-core` (S11–S15), `prism-ipc` (S16), `prismd` (S17, D2-Gate in S18) und
-  Schicht 1 von `prism-surface` (S19) sind vollständig.
-- 1 266 Tests im Workspace, alle grün, CI vierfarbig grün.
-- `prism-surface` ist plattformneutral, hängt an nichts und enthält keine
-  MIDI-Anbindung: Bytes hinein, Bytes hinaus. Eine Anbindung an einen echten
-  Port (`midir` o. ä.) gibt es noch nicht — diese Session braucht eine, und sie
-  ist plattformabhängig. Das ist die erste Entscheidung, die zu treffen ist:
-  entweder ein reines Mess-Target, das die Kiste selbst nicht anfasst, oder eine
-  Anbindung, die sauber gekapselt bleibt. §10.1 erlaubt `prism-surface` kein
-  #[cfg(target_os = ...)].
+  Schicht 1 von `prism-surface` (S19, am Gerät verifiziert in S20) sind
+  vollständig.
+- 1 265 Tests im Workspace, alle grün, CI vierfarbig grün.
+- `prism-surface` ist plattformneutral und hängt an genau einer Kiste
+  (`prism-domain`, von Schicht 1 noch unbenutzt). Es gibt **keine
+  MIDI-Anbindung** darin und darf keine geben: §10.1 erlaubt ihr kein
+  #[cfg(target_os = ...)]. Das Mess-Werkzeug von S20 liegt deshalb außerhalb des
+  Workspace in tools/xtouch-probe.
 
-Aufgabe: Session S20 umsetzen — die Tabellen aus docs/MCU_MAPPING.md §2 gegen
-ein echtes Gerät halten und den UNVERIFIED-Banner entfernen.
+Aufgabe: Session S21 umsetzen — Schicht 2 aus docs/MCU_MAPPING.md §3 und die
+Feedback-Regeln aus §5.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Jeder Punkt in docs/MCU_MAPPING.md §7 abgehakt oder mit einem Befund versehen
-- §2 und `profiles/surface/xtouch.json` mit gemessenen Werten aktualisiert
-- Abweichungen vom MCU-Standard ausdrücklich dokumentiert, nicht stillschweigend
-  korrigiert
-- UNVERIFIED-Banner entfernt, `X_TOUCH.verified` auf `true`,
-  ARCHITECTURE_SPEC.md §14 abgehakt
+- Touch-Unterdrückung: solange ein Fader Berührung meldet, geht **kein** Pitch
+  Bend an ihn hinaus; 150 ms nach dem Loslassen genau **eine**
+  Resynchronisation — beides zugesichert, nicht beobachtet
+- Coalescing: 1000 Wertänderungen in 100 ms erzeugen höchstens 3 ausgehende
+  Nachrichten für dieselbe Kontrolle
+- Priorität unter Bandbreitendruck in der dokumentierten Reihenfolge geprüft:
+  Fader → LEDs → LCD → Meter
+- Das Verschwinden des Geräts lässt die Engine unberührt
 - `cargo test --workspace` grün, `cargo clippy --workspace --all-targets --
   -D warnings` sauber, `cargo fmt --all --check` sauber
+- Coverage auf `prism-surface` **> 95 %**, gemessen und in PROGRESS.md notiert
 
-Wichtige Randbedingungen:
-- Eine Korrektur ist eine Datenänderung an zwei Stellen, und das ist Absicht.
-  Die Zahlen stehen in `profile::X_TOUCH`; die von Hand abgeschriebenen Bytes
-  stehen in `tests/round_trip.rs`. S19 hat durch eine Mutation belegt, warum:
-  eine Round-Trip-Prüfung, die ihre erwarteten Bytes aus derselben Tabelle
-  errechnet, die sie prüft, besteht auch dann noch, wenn die beiden Hälften der
-  14-Bit-Faderposition in beiden Richtungen vertauscht sind. Die Test-Tabelle
-  darf deshalb nicht „vereinfacht" werden, indem sie aus dem Profil abgeleitet
-  wird.
-- `X_TOUCH.verified` wird in einem const-Block behauptet. Es auf `true` zu
-  setzen bricht den Build, bis diese Behauptung mit umgeschrieben wird — das ist
-  die eingebaute Erinnerung daran, was da behauptet wird.
-- Zuerst messen, dann glauben. S8 ist das Vorbild und die Warnung: dort stimmte
-  die geratene USB-Produkt-ID, die geratene Bildrate aber nicht — und die
-  falsche Zahl war das Symptom eines echten Defekts im Timing. Eine Abweichung
-  ist erst dann ein Tabellenfehler, wenn ausgeschlossen ist, dass sie ein
-  Codefehler ist.
-- Die drei Punkte, die keine Quelle klären konnte, zuerst: (1) die
-  Beschleunigungs-Kodierung der V-Pots — schickt eine schnelle Drehung ein
-  `0x01` pro Rastung oder eine größere Magnitude? (2) das Pacing — gehen
-  aufeinanderfolgende Nachrichten verloren, und ab welchem Abstand nicht mehr?
-  (3) alles an den Farben: die acht Werte, ob es eine invertierte Variante gibt,
-  was eine Nachricht mit weniger als acht Bytes tut, und ob ein Text-Schreiben
-  die Farbe zurücksetzt.
-- Drei Fragen hat S19 zusätzlich auf die Liste gesetzt, weil der Codec sie ohne
-  Gerät nicht entscheiden konnte: was eine 7-Segment-`0` anzeigt (die Quellen
-  sagen „Leerzeichen", die Regel „ASCII ohne Bit 6" sagt `@` — beides kann nicht
-  stimmen), ob eine Nachricht mit Strip-Index über 7 ignoriert wird, und was ein
-  Device Ready tatsächlich enthält.
-- Kein automatischer Test darf das Gerät anfassen (CLAUDE.md). Alles, was
-  Hardware braucht, ist #[ignore]d und wird von Hand gefahren; §3.2 zeigt, wie
-  S8 das dokumentiert hat, damit die Messung reproduzierbar bleibt. Die
-  bestehenden 1 266 Tests müssen grün bleiben, auch mit angestecktem Pult.
-- Zuerst aufschreiben, was das Pult überhaupt ist: Modus und Verbindung
-  (MC / HUI / Xctl, USB / MIDI-DIN / Ethernet — beim Einschalten mit gehaltener
-  SELECT-Taste von Kanal 1 gewählt) und die Firmware-Version. Die Farb-SysEx
-  braucht ≥ 1.22; ein Pult darunter hat gar keine Farben, und dann ist der halbe
-  §7 nicht messbar.
+Wichtige Randbedingungen — die drei ersten sind Befunde von S20 am echten Gerät:
+- **Das Pult kann verstummen, und nur ein Netzschalter holt es zurück.** Ein
+  Schwall 63-Byte-SysEx-Nachrichten, während Antworten offen sind, hat den
+  MIDI-Sender des X-Touch zweimal von zwei Versuchen komplett abgeschaltet: keine
+  Taste, kein Fader, keine Antwort — während es weiter **einwandfrei empfängt**
+  und Text anzeigt, den man ihm schickt. Port neu öffnen hilft nicht, ein neuer
+  Prozess hilft nicht. Die 30 Hz aus §5.2 sind deshalb eine Sicherheitsgrenze und
+  keine Optimierung, und ein Mindestabstand zwischen ausgehenden Nachrichten
+  gehört in die Sendeschlange. Den Handshake nicht pollen: die Geräteabfrage ist
+  die einzige Antwort, die diese Oberfläche erzeugt.
+- **Stille ist ein Fehlerzustand, den §5.3 nicht abdeckt.** Die Regel dort nimmt
+  an, dass das Gerät *verschwindet*. Hier bleibt der Port offen und Schreibvorgänge
+  landen weiter. Eine Schicht, die nur auf Trennung achtet, zeigt ein grünes Licht
+  neben einem toten Pult. Wer bemerkt, dass ein sprechendes Pult verstummt ist,
+  muss **„Netzschalter"** sagen, denn Neuverbinden ist genau das, was nicht hilft.
+- **Fader gegen `McuProfile::fader_step` skalieren, nicht gegen `FADER_MAX`.**
+  Das Pult meldet in Schritten von 4 und endet bei **16380**. Wer durch 16383
+  teilt, bekommt 99,98 % bei ganz oben liegendem Fader — ein Executor-Master, der
+  nie voll wird, ist ein Fehler, den ein Operator findet und niemand erklären kann.
+  `max_reported_position()` ist die Zahl.
+- Zwei Beschleunigungskurven, nicht eine: ein schnell gedrehter V-Pot trägt 1…8
+  Rastungen pro Nachricht, das Jog-Rad immer nur ±1. Eine gemeinsame Kurve wäre
+  für eines von beiden falsch.
+- Das Schattenmodell darf Text und Farbe **getrennt** halten — ein Text-Schreiben
+  setzt die Farbe nicht zurück (gemessen). Die Farbnachricht ist dagegen
+  **alle acht Streifen oder nichts**: jede andere Länge ignoriert das Gerät.
+- Die Farbquantisierung (§2.3) gehört in diese Schicht: nächste Ecke des
+  RGB-Würfels, **hue-first**, weil ein Pastellton immer noch die Farbe ist, deren
+  Pastellton er ist. Grau nach Weiß, und Schwarz nur, wenn es ausdrücklich
+  gewählt wurde — Schwarz heißt Hintergrundbeleuchtung **aus**, der Text ist dann
+  unlesbar.
+- LEDs, die es nicht gibt, nicht ansteuern: `McuProfile::unlit_buttons` nennt die
+  zwei Tasten ohne LED, und unter den Encodern sitzt auf diesem Gerät gar keine
+  Lampe (Bit 6 des Ring-Werts leuchtet nichts).
+- Meter fallen in unter einer Sekunde auf null — deutlich schneller als
+  dokumentiert. §5.2 darf sie weiter zuerst verwerfen: ein verworfenes Meter fällt,
+  es friert nicht ein.
+- Die Zeit ist ein Argument, keine Uhr. `MidiDecoder::push(bytes, now, sink)` und
+  `poll(now)` bekommen den Zeitpunkt übergeben; **S21 besitzt die Uhr** auf dem
+  Surface-Thread und gibt sie nach unten weiter. Nichts unterhalb dieser Schicht
+  darf eine halten — siehe Decision Log, S19.
+- `ControlEvent` bleibt `Copy` und ohne besitzende Felder: es überquert eine
+  Thread-Grenze auf dem Pfad, den §4.3 in Millisekunden budgetiert.
+- Kein Test darf ein Gerät anfassen (CLAUDE.md). Ein Mock-MIDI-Port ist die
+  Testschnittstelle; `tests/hardware_capture.rs` zeigt, wie ein echter Befund
+  stattdessen als Fixture in die Suite kommt. Die bestehenden 1 265 Tests müssen
+  grün bleiben.
+- Ein Round-Trip-Test ist nur dann ein Test, wenn ein Ende unabhängig
+  aufgeschrieben ist. Das gilt auch für echte Aufnahmen: die S19-Mutation
+  (beide Hälften der 14-Bit-Faderposition getauscht) lässt einen Byte-Vergleich
+  über echte Gerätebytes **grün** — siehe Decision Log, S20. Wer hier
+  Erwartungswerte aus dem Code errechnet, prüft nichts.
 - Neue Abhängigkeiten vor der ersten Zeile gegen ARM64 prüfen:
-  `cargo check -p <kiste> --all-targets --target aarch64-unknown-linux-gnu`.
-  Eine MIDI-Anbindung ist plattformabhängig; S15 und S16 haben so einmal einen
-  fehlenden C-Compiler gefunden.
-- Ein Befund gehört ins Dokument, auch wenn er unbequem ist.
-  docs/MCU_MAPPING.md §7 sagt es ausdrücklich: Abweichungen vom MCU-Standard
-  werden aufgeschrieben, nicht stillschweigend korrigiert, damit das nächste
-  Geräteprofil davon profitiert.
-- Clippy bewegt sich. Ein „war letztes Mal grün" ist kein Beleg; die Prüfung
-  jetzt laufen lassen. print! und println! sind workspace-weit verboten
-  (`print_stdout = "warn"` plus `-D warnings`); ein Test, der eine Messung
-  ausgibt, trägt die Ausnahme ausdrücklich.
+  `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu`.
+- Clippy bewegt sich. Ein „war letztes Mal grün" ist kein Beleg; die Prüfung jetzt
+  laufen lassen. print! und println! sind workspace-weit verboten
+  (`print_stdout = "warn"` plus `-D warnings`); ein Test, der eine Messung ausgibt,
+  trägt die Ausnahme ausdrücklich.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11, `cargo-llvm-cov`). Es ist kein weiteres Setup nötig.
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S20-Status, jede gemessene Zahl, Decision Log bei
-  Abweichungen und bei Funden, die spätere Sessions betreffen; §5 und
-  ARCHITECTURE_SPEC.md §14 abhaken
+- PROGRESS.md aktualisieren: S21-Status, jede gemessene Zahl, Decision Log bei
+  Abweichungen und bei Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S21 (`prism-surface` — Surface-Modell und Feedback) überschreiben
-- Mit Conventional-Commit-Message committen, z. B. fix(surface): … oder
-  docs(mcu): …
+  Session S22 (`prism-surface` — Bindings und das D11-Gate) überschreiben
+- Mit Conventional-Commit-Message committen, z. B. feat(surface): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```
