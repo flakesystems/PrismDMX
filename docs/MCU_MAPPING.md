@@ -81,7 +81,7 @@ by name and D6/D7/D8 need by number:
 |---|---|
 | Encoder Assign | Track 40, Send 41, Pan/Surround 42, Plug-in 43, EQ 44, Instrument 45 |
 | Fader banks | Bank ◀ 46, Bank ▶ 47, Channel ◀ 48, Channel ▶ 49, **Flip 50**, Global View 51 |
-| Display | Name/Value 52, SMPTE/Beats 53 — **⚠ both send their note and neither has an LED, §2.7** |
+| Display | Name/Value 52, SMPTE/Beats 53 — **⚠ both send their note and neither has an LED, §2.7. SMPTE/Beats is reserved: in the combined Xctl+MC mode it switches the surface between hosts, so PrismDMX never binds it — §4.3** |
 | Function | F1–F8 = 54–61 |
 | Global View group | MIDI Tracks 62, Inputs 63, Audio Tracks 64, Audio Instruments 65, Aux 66, Busses 67, Outputs 68, User 69 |
 | Modifiers | Shift 70, Option 71, Control 72, Alt 73 — held, not latched |
@@ -198,13 +198,18 @@ strip during a get-in is a worse outcome than an approximate colour.
   encoder 2 picks USB, MIDI DIN or Ethernet. **PrismDMX targets MC over USB**, and
   the desk this document was verified against is set to exactly that — confirmed
   at the front panel and by the device ID it answers on (§2.7).
-- **Xctl is a different protocol and is deliberately out of scope.** It is
-  Behringer's own, used by the X32/M32 consoles, carried over UDP (port 10111 in
-  the one public implementation) and it uses device ID `0x58` with *per-strip*
-  display messages that carry the text **and** the colour **and** an inversion
-  flag together. It is better than MC for scribble strips and it is
-  undocumented, single-vendor and unusable over plain MIDI. Recorded here so
-  that a later session knows the option exists rather than rediscovering it.
+- **Xctl is a different protocol and is deliberately out of scope *as a protocol
+  PrismDMX speaks*.** It is Behringer's own, used by the X32/M32 consoles,
+  carried over UDP (port 10111 in the one public implementation) and it uses
+  device ID `0x58` with *per-strip* display messages that carry the text **and**
+  the colour **and** an inversion flag together. It is better than MC for
+  scribble strips and it is undocumented, single-vendor and unusable over plain
+  MIDI. PrismDMX will not implement it.
+- **But the surface will be run in the combined Xctl+MC mode, and that is a
+  requirement rather than a curiosity — see §4.3.** The intended deployment is
+  one X-Touch driving the venue's sound console over Xctl *and* PrismDMX over MC
+  at the same time. That changes what layer 3 may assume: most of the panel
+  belongs to the other host, and only what Xctl leaves unused reaches us.
 
 ### 2.4 Robustness requirements for the codec
 
@@ -478,6 +483,73 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 
 `Strip[*]` expands per strip with the strip index bound to the executor at `executorPage * 8 + index`.
 
+### 4.3 Sharing the surface with a sound console (Xctl+MC)
+
+> **Provenance: this section is the operator's, not a measurement.** Everything in
+> §2.7 was read off the desk in S20; everything here was stated by the person who
+> owns and runs it, describing how it is to be deployed and how the combined mode
+> behaves. It is written down because it changes what layer 3 may assume, and it
+> is marked because the difference between *measured* and *reported* is the whole
+> point of §2.5. Verifying it needs the sound console present as well and is
+> recorded as an open item in §7.
+
+**The intended deployment is one X-Touch driving two hosts at once**: the venue's
+sound console over Xctl, and PrismDMX over MC, in the surface's combined
+**Xctl+MC** mode. That is not the configuration S20 measured — the desk was in
+plain MC — and it does not change a single number in §2, because the MC half of
+the combined mode is the same MC. What it changes is **how much of the panel is
+ours**.
+
+**Only what Xctl does not use reaches MC.** In the combined mode the surface
+routes each control to one host or the other: whatever the Xctl side claims
+belongs to the sound console, and the rest keeps driving MC output *and* keeps
+listening to MC input, permanently. In practice the reliably-ours set is:
+
+| Guaranteed to reach PrismDMX | Note / CC |
+|---|---|
+| The whole transport section — Rewind, Forward, Stop, Play, Record | 91–95 |
+| The jog wheel | CC 60 |
+
+Everything else — the eight strips, the faders, the encoders, the F-keys, the
+bank and channel buttons — is the sound console's in that mode, and a binding
+placed on it is a binding that will never fire.
+
+**Three consequences, in order of how expensive they are to get wrong.**
+
+1. **The default profile must stay usable when it is reduced to five buttons and
+   a wheel.** `Play`, `Stop`, `Forward`, `Rewind`, `Record` and the jog wheel are
+   the whole console in that mode, so what they do has to be worth having on its
+   own: go, off, next, previous, a clear, and a wheel that moves the selected
+   parameter. §4.1's assignments already put exactly those there, which is luck
+   rather than judgement, and it should now be treated as a constraint — **do not
+   move an operating function off the transport section** without knowing this.
+2. **D7 and D8 assume a whole panel.** `Faderbank ◀▶` (executor paging) and
+   `Channel ◀▶` (`SelectView`) are outside the guaranteed set, so in the shared
+   mode there is no surface path to paging or to switching views. That is not a
+   fault in D7 or D8 — the dedicated MC deployment still has them — but a shared
+   deployment needs those reachable elsewhere, and the UI and the Web Remote are
+   where they are.
+3. **Feedback must not assume it owns a control.** The shadow model may only
+   drive LEDs for controls MC actually holds; lighting a strip's Select LED in
+   shared mode is either ignored or, worse, fights the sound console's own
+   feedback. S21 should hold the ownership set as **data on the profile**, in the
+   same way `unlit_buttons` is, so that "which controls are ours" is one edit
+   rather than a condition scattered through the diffing.
+
+**SMPTE/Beats (note 53) is reserved and must never be bound.** In the combined
+mode **it is the button that switches the surface between the two hosts** — it is
+the operator's way back to the sound desk, and a console that steals it is a
+console somebody has to power-cycle to get out of. The decision goes further than
+the shared mode, and deliberately: **PrismDMX leaves it unbound in every mode**,
+so that the same profile is safe on a desk whose mode nobody has checked.
+
+It is worth noting, without making more of it than the evidence supports, that
+note 53 is one of the two buttons S20 found to have **no LED at all** (§2.7). A
+button the firmware reserves for itself is a button it would have no reason to
+give a host-controllable lamp. That is a consistent story rather than a
+demonstrated one — Name/Value has no LED either and switches nothing — but it is
+one more reason not to build anything on top of it.
+
 ---
 
 ## 5. Feedback rules
@@ -571,6 +643,7 @@ untried cable pull are not results.
 - [x] **Round-trip latency** — **median 0.71 ms** host → surface → host over 60 exchanges (min 0.61, max 1.02). Measured through the handshake, because a motor fader generates no reply; a fader move the *operator* makes is reported every 19.8 ms, which is the figure that bounds §4.3's budget
 - [x] **§2 updated and the UNVERIFIED banner removed**; `profiles/surface/xtouch.json` written with the verification recorded in it. `prism_surface::X_TOUCH.verified` is `true`, and `ARCHITECTURE_SPEC.md` §14's row is closed
 - ◻ **Foot switches (notes 102, 103)** — *untested.* Nothing is plugged into either jack, and there is no way to make an absent pedal send a note. Their LEDs were driven and, as expected for a jack rather than a button, nothing lit
+- ◻ **The combined Xctl+MC mode** — *untested, and it is the deployment that is actually planned* (§4.3). The desk was in plain MC for all of the above, which is the right mode to have verified first: the MC half of the combined mode is the same MC, so nothing in §2 depends on it. What is **not** verified is the division of the panel — that only what Xctl leaves unused reaches MC, and that the transport section and the jog wheel are what reliably remain. That is the operator's account of the surface, not a measurement, and checking it needs the sound console on the other end of it. Worth doing before S22 finalises a default profile, because it decides which bindings can be relied on
 - ◻ **Behaviour when the USB cable is pulled** — *untested here.* S8 did this for the DMX adapter and it belongs to S21's connection handling rather than to the codec; what this session did establish is the harder case, a surface that is still *there* and has stopped talking
 
 Findings go into this document. Discrepancies against the MCU standard are recorded explicitly rather than silently corrected, so the next device profile can reuse the knowledge — see §2.7, which is that list.

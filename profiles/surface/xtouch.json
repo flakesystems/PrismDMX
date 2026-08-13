@@ -42,6 +42,31 @@
     "knownFault": "Saturating both directions at once - a burst of large SysEx writes while replies are outstanding - loses messages and can stop the surface transmitting entirely while it goes on receiving normally. Only a power cycle recovers it. Pace the outbound path (30 Hz, coalesced, minimum gap) and never poll the handshake. docs/MCU_MAPPING.md section 2.7."
   },
 
+  "sharedMode": {
+    "summary": "This surface is to be run in the X-Touch's combined Xctl+MC mode, driving the venue's sound console over Xctl and PrismDMX over MC at the same time. docs/MCU_MAPPING.md section 4.3.",
+    "provenance": "Stated by the operator who owns and runs the desk. NOT measured in S20, which verified plain MC mode. Verifying it needs the sound console present.",
+    "reachesPrismDmxInSharedMode": [
+      "Global.Rewind", "Global.FastForward", "Global.Stop", "Global.Play", "Global.Record",
+      "Global.Jog"
+    ],
+    "consequence": "Everything else - strips, faders, encoders, F-keys, bank and channel buttons - belongs to the sound console in that mode, and a binding on it will never fire. The transport section and the jog wheel therefore have to be worth having on their own, and feedback must not drive LEDs for controls MC does not hold."
+  },
+
+  "reserved": [
+    {
+      "control": "Global.SmpteBeats",
+      "note": 53,
+      "reason": "In the combined Xctl+MC mode this button switches the surface between the two hosts. It is the operator's way back to the sound desk, so PrismDMX never binds it - in ANY mode, so that one profile is safe on a desk whose mode nobody has checked. It also has no LED (measured, S20).",
+      "bindable": false
+    },
+    {
+      "control": "Global.NameValue",
+      "note": 52,
+      "reason": "No LED on this device (measured, S20). Bindable in principle, but a control with no feedback is a poor place for an operating function, so the default profile leaves it alone.",
+      "bindable": true
+    }
+  ],
+
   "bindingNotes": "Each action's 't' is a prism_domain::Command variant. The arguments a command needs but a binding cannot know - executor_id, level, view_id - are supplied by layer 3 from the strip index, the current executor page (D7: executorPage * 8 + index) and the control's own value. 'Strip[*]' expands per strip.",
 
   "bindings": [
@@ -97,6 +122,8 @@
     "SelectView in prism_domain takes an absolute view_id, but Channel left/right needs a relative move (D8). Either layer 3 resolves 'relative' against the session's view list, or the protocol grows a relative form. The 'relative' keys above are layer 3's, not the domain's.",
     "SetExecutorMaster carries level: u16, and this surface reports 0..16380 in steps of 4 rather than 0..16383. Scale against verification.measured.faderMaxReported, or a fader against its end stop yields 99.98 per cent.",
     "The Encoder Assign section has six buttons and docs/MCU_MAPPING.md section 4.1 names five feature groups. AssignInstrument is left unbound rather than doubled up.",
-    "Global.NameValue and Global.SmpteBeats are deliberately unbound: they have no LED (measured), so a binding there would be a control with no feedback."
+    "Global.NameValue and Global.SmpteBeats are deliberately unbound - see 'reserved'. SmpteBeats must stay unbound and a loader should refuse a profile that binds it; NameValue is merely a bad idea.",
+    "The transport section and the jog wheel are the only controls guaranteed to reach PrismDMX in the combined Xctl+MC mode. Their bindings above happen to be the ones worth having in isolation - go, off, next, previous, clear, and a wheel on the selected parameter - and that should now be treated as a constraint rather than as luck.",
+    "D7 (executor paging on Faderbank) and D8 (SelectView on Channel) sit outside that guaranteed set, so in shared mode there is no surface path to either. Both need to stay reachable from the UI and the Web Remote."
   ]
 }
