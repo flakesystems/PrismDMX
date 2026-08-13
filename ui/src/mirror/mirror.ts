@@ -1,0 +1,103 @@
+/**
+ * The three documents a client holds, and what each delta does to them.
+ *
+ * The browser's half of `prism_core::ShowMirror` and `SessionMirror`, plus the
+ * programmer — which is the third document and arrives whole rather than as a
+ * patch (`docs/IPC_PROTOCOL.md` §4.1).
+ *
+ * # Documents, not models
+ *
+ * `ShowPatch` and `SessionPatch` are RFC 6902 operations, and an operation is
+ * only meaningful against a **document root**. So the show and the session are
+ * held here as the `JsonValue` the snapshot carried, not as a parsed model that
+ * would have to be re-derived after every operation and could not be pointed
+ * at. Views that want a typed shape read it out with a selector; the thing the
+ * deltas are applied to stays the document the daemon patched.
+ */
+
+import type { Delta, ProgrammerState } from "../bindings";
+import { applyOp, applyOps } from "./patch";
+import type { JsonValue } from "../bindings";
+
+/** The three documents, as of one moment. */
+export interface Documents {
+  /** The show: patch, groups, presets, sequences, executors. */
+  readonly show: JsonValue;
+  /** The session: `{ session, views }` — the operating state every client shares. */
+  readonly session: JsonValue;
+  /** The programmer: selection plus the sparse set of touched values. */
+  readonly programmer: ProgrammerState;
+}
+
+/** The pointer the executor collection lives at, matching `prism_core::show`. */
+const EXECUTORS = "executors";
+
+/**
+ * Applies one delta, answering with the documents that result.
+ *
+ * The answer is the *same object* when a delta changes nothing here, so a
+ * caller can compare by identity to decide whether to notify anybody.
+ *
+ * `ExecutorState` writes the two fields it carries into the show. The protocol
+ * gives running executors a delta of their own so a client does not have to
+ * diff the show to draw a moving executor bar, and a mirror that ignored it
+ * would drift on exactly those fields — S18 checked that by removing it.
+ *
+ * @throws {import("./patch").MirrorFault} if an operation does not fit. That is
+ * not a recoverable condition: it means this client and the daemon have already
+ * diverged, and the caller's answer is to re-snapshot.
+ */
+export function applyDelta(documents: Documents, delta: Delta): Documents {
+  switch (delta.t) {
+    case "ShowPatch": {
+      if (delta.ops.length === 0) {
+        return documents;
+      }
+      return { ...documents, show: applyOps(documents.show, delta.ops) };
+    }
+    case "SessionPatch": {
+      if (delta.ops.length === 0) {
+        return documents;
+      }
+      return { ...documents, session: applyOps(documents.session, delta.ops) };
+    }
+    case "ProgrammerChanged":
+      return { ...documents, programmer: delta.state };
+    case "ExecutorState": {
+      const base = `/${EXECUTORS}/${delta.executorId}`;
+      const active = applyOp(documents.show, {
+        op: "replace",
+        path: `${base}/isActive`,
+        value: delta.isActive,
+      });
+      return {
+        ...documents,
+        show: applyOp(active, {
+          op: "replace",
+          path: `${base}/currentCueIndex`,
+          value: delta.cueIndex,
+        }),
+      };
+    }
+    // Everything else describes something that is not one of the three
+    // documents: the output health panel, the save lamp, and a message for the
+    // operator. The store holds those; the mirror does not.
+    case "OutputHealth":
+    case "DirtyFlag":
+    case "Notice":
+      return documents;
+  }
+}
+
+/**
+ * Applies deltas in order.
+ *
+ * @throws {import("./patch").MirrorFault} for the first delta that does not fit.
+ */
+export function applyDeltas(documents: Documents, deltas: readonly Delta[]): Documents {
+  let current = documents;
+  for (const delta of deltas) {
+    current = applyDelta(current, delta);
+  }
+  return current;
+}

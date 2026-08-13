@@ -46,3 +46,10 @@ tarpaulin-report.*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Playwright
+ui/test-results/
+ui/playwright-report/
+ui/coverage/
+ui/blob-report/
+ui/.playwright/

@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
 **Last updated:** 2026-08-13
-**Current phase:** Phase 5 — Surface
-**Current session:** S21 — `prism-surface` surface model and feedback (not started — see §8 for the prompt that starts it)
-**Last completed:** S20 — 🔌 hardware verification of the X-Touch ✅ — **the table is no longer a citation: every number in it was read off a real desk, not one of them was wrong, and the recordings are in the test suite**
+**Current phase:** Phase 6 — User interface
+**Current session:** S24 — `ui` telemetry channel (not started — see §8 for the prompt that starts it)
+**Last completed:** S23 — `ui` foundation ✅ — **the interface has a client, a mirror and an honest disconnected state: a recorded delta stream from a real daemon is replayed into the mirror and lands on the daemon's own snapshot, and a daemon killed under a real browser leaves nothing of itself on the screen**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -85,7 +85,7 @@
 ### Phase 6 — User interface
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
-| S23 | UI foundation | ☐ | | |
+| S23 | UI foundation | ✅ | 2026-08-13 | All exit criteria verified — see §2.24. **A delta stream recorded off a running daemon, replayed through the TypeScript mirror, reaches the daemon's own snapshot** — twelve cases, 93 deltas; and a real `prismd` killed under Chromium leaves no value on the screen. 158 UI tests, coverage **98.60 % lines**, zero `any`, no state-management dependency |
 | S24 | Telemetry channel | ☐ | | |
 | S25 | Canvas, windows, views | ☐ | | |
 | S26 | Executor bar, encoder bar, console | ☐ | | |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 22 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 23 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -1109,6 +1109,82 @@ status byte transcribed by hand — strip 0 parks at `E0 7C 7F`, which is 16380
 worked out by hand from a master of 65535, and the sequence's name arrives inside
 a SysEx as `SEQUENC`, folded to upper case the way the hardware folds it.
 
+### 2.24 S23 verification record
+
+Measured on 2026-08-13, all exit criteria from `IMPLEMENTATION_PLAN.md` S23 and
+the session prompt. The first session whose product runs in a **browser**, and
+the first line of `ui/src` that is not the Vite template.
+
+| Check | Result |
+|---|---|
+| **Deltas applied to the mirror reproduce the daemon's state — property-tested against a recorded delta stream** | ✅ `ui/src/mirror/recording.test.ts`, over `ui/tests/fixtures/daemon-recording.json`: **twelve scripted sequences, 93 deltas**, recorded off a running `prismd` over a real socket by `crates/prismd/tests/ui_recording.rs`. Each case is a snapshot, the deltas a randomised command script produced, and the snapshot a **second client** was served afterwards — `docs/IPC_PROTOCOL.md` §9's *snapshot completeness* row, from the browser's end. **Both halves of the comparison come from the daemon**: nothing in TypeScript computes what the answer should be, which is the trap S19–S22 each found in their own layer. What the test exercises is the whole path — base64 → MessagePack → `readServerMessage` → `applyDelta` → a document compared against one `prism-core` serialised |
+| The recording is not vacuous, and cannot go stale quietly | ✅ three guards. In TypeScript: every case has deltas, all three documents move across the file, and all four document-touching delta kinds appear (`ShowPatch`, `SessionPatch`, `ProgrammerChanged`, `ExecutorState`). In Rust, on **every** `cargo test`: `the_recording_is_a_delta_stream_this_build_could_have_sent` decodes every payload with this build's own types and replays it through `prism_core::ShowMirror`/`SessionMirror` — so a wire format that moved stops decoding *there*, next to the daemon, rather than going stale in `ui/`. The regenerator itself is `#[ignore]`d, the way `prism-core`'s frozen migration fixture is: rewriting a committed recording is a deliberate act |
+| **The client's encoder is what the daemon reads — asserted on bytes** | ✅ the recording also carries **thirteen client messages** encoded by `rmp-serde`, and the browser encodes the same thirteen and compares **byte for byte**: the tag first, fields in declaration order, the narrowest integer that fits, `nil` for an absent token and *no member at all* for an absent `params`. That is the only way to check an encoder against a decoder that is not in the process — and it passed on the first run, which is worth recording because it is a claim about two libraries agreeing (`@msgpack/msgpack` and `rmp-serde`) rather than about this code |
+| **Daemon restart: the interface shows disconnected, reconnects, re-snapshots, and no value from before is left standing** | ✅ **twice, at two levels.** In jsdom (`src/App.test.tsx`): the socket drops, the status reads *Disconnected — retrying in 0.1 s*, and the assertion is on the **document** — `command-line` and `executor-page` have gone from the page altogether and the old text is nowhere in `document.body.textContent`. Then the clock is advanced, a fresh snapshot arrives with a different session, and the old value is still nowhere. And against a real daemon (`e2e/reconnect.spec.ts`, Playwright + Chromium): `prismd --mock-output --websocket` is **killed**, the page says so, and the daemon is restarted on the same data directory — where the command line the interface was showing no longer exists, because it was never saved into the show. **2 passed in 40.6 s** |
+| The interface is not merely green when it reconnects | ✅ the end-to-end test types a second command into the reconnected daemon and asserts the readout follows. A status pill can be wrong on its own; a `SessionPatch` coming back cannot |
+| A version mismatch is not called a lost connection | ✅ `RejectReason::ProtocolVersion` produces its own status — *the interface and the engine are different versions* — with its own explanation and a retry at the **longest** backoff, because waiting is not the remedy. Everything else that ends a connection reads *Disconnected*. The distinction is asserted in `connection.test.ts` and in `App.test.tsx`, and the two refusals that do **not** end a connection (§8, last paragraph) are asserted to leave it open |
+| **The transcription of `prism-ipc`'s envelope is checked from Rust** | ✅ `crates/prism-ipc/tests/interface_protocol.rs` `include_str!`s `ui/src/ipc/protocol.ts` and asserts the protocol version, every `RejectReason` **and the count** (so a variant removed here cannot linger there), every `ClientKind`, every message tag in both directions, `Hello`'s three fields, the snapshot's five, and the exact text of `closesTheConnection` against `RejectReason::closes_the_connection`. The same shape as S22's `the_shipped_profile_is_the_built_in_default_table` |
+| `npx tsc -b --force` clean with `strict: true`, **no `any` anywhere** | ✅ exit 0. `strict`, `noUncheckedIndexedAccess`, `noImplicitReturns`, `noUnusedLocals`, `erasableSyntaxOnly` — the S0 settings, unchanged. **`any` appears nowhere in `ui/src` or `ui/e2e`**, and **no shipped module contains a type assertion**: a decoded payload is `unknown` and every narrowing is a reader in `src/ipc/shape.ts` that answers with the type or throws a `ProtocolFault` naming the field. Four assertions exist and all four are in *test* files — a synthetic `CloseEvent` for the WebSocket adapter, the parsed recording, and the client's own encoded message read back — because a test is allowed to know what it just constructed. The `as const` in `protocol.ts` are const assertions on literal tuples, which is the opposite of a cast |
+| `npm run build` and `npm run lint` clean | ✅ both exit 0. The build is 235 kB (73 kB gzipped) — React, `@msgpack/msgpack` and this session's code. `oxlint` reports **nothing**, which took splitting three files: a module that exports a component and a function together is a fast-refresh warning, and `statusText`, the hooks and the context object each moved to a file of their own |
+| `cargo test --workspace` | ✅ exit 0 — **1 432 tests across 50 targets**, 15 ignored (14 as before, plus the recording's regenerator). **13 of them are this session's**: 5 in the new `prism-ipc/tests/interface_protocol.rs`, 5 in the new `prismd/tests/ui_recording.rs` (one of them the ignored regenerator), and 3 in `prism-domain`'s export module |
+| `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check` | ✅ both exit 0 |
+| **Coverage on what this session wrote** | ✅ **98.60 % lines**, 96.06 % branches, **100 % functions** over `ui/src` (158 tests in 15 files, `vitest` + Testing Library). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts` and `desk.ts`. Then `connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. The nine uncovered lines were read rather than counted, and each is a *cannot happen* arm: the `SharedArrayBuffer` branch of `overArrayBuffer` (nothing in this interface makes one), a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a stopped connection, the store being set to the state it already holds, and a `return null` in a panel that only renders when the documents exist |
+| Coverage on `prism-domain`, which grew the variant generator | ✅ **99.52 % lines**, 97.46 % regions, 98.31 % functions (99.77 % at S1; `export.rs` is now 97.07 % lines / 91.71 % regions). The seven uncovered lines are two `?` arms on file I/O, one acronym branch in the name converter that no type name reaches, and a `panic!` formatting inside a test that passes |
+| A test never touches a device | ✅ the unit suite has no socket at all — `FakeNetwork` and `ManualTimer` are the seam, so a five-second backoff is asserted rather than waited for — and the end-to-end suite starts `prismd --mock-output`, which is the daemon's headless mode |
+| CI green on the pushed commit | ✅ run **REPLACE_RUN** on `REPLACE_SHA` — see the last row of §1 |
+
+**What was built, in five layers.**
+
+**1. `ipc/` — the client.** `shape.ts` turns `unknown` into types: readers with a
+path in every error, and an explicit 128-level depth limit for the reason
+`prism-ipc`'s `scan.rs` has one. `protocol.ts` is `docs/IPC_PROTOCOL.md` §4
+transcribed and checked from Rust. `codec.ts` is MessagePack and the 1 MiB
+limit. `connection.ts` is the handshake, the backoff — 100 ms doubling to 5 s,
+the same shape as the output drivers' — and the state machine that tells a
+version mismatch from a lost socket. `telemetry.ts` is a sink with **no way to
+notify anybody**.
+
+**2. `mirror/` — RFC 6902 in the browser.** `patch.ts` is
+`prism_core::JsonMirror` rule for rule — `-` at the end of an array, `01` not
+being an index, a `move` into its own source, `replace` needing something to
+replace — with the cases in its test file taken from `mirror.rs`'s own tests. It
+is **immutable by path copying**: a patch that changes one fixture leaves every
+other fixture object identical by reference, which is what lets a selector
+decide it has nothing to redraw, and there is a test that asserts exactly that.
+
+**3. `store/` — the read model.** A `DeskStore` of about a hundred lines and
+`useSyncExternalStore`. Losing the daemon **drops the three documents**, which is
+the second exit criterion made checkable rather than promised.
+
+**4. `App.tsx` — enough interface to test the foundation through.** The
+connection state said plainly, the three documents read out by pointer, nothing
+at all when there is no daemon, and a command line — which is the smallest
+honest illustration of **D3**: what is typed is *local input*, what is displayed
+underneath is the **daemon's** command line, and the second only ever moves
+because a `SessionPatch` said so.
+
+**5. The test infrastructure `ARCHITECTURE_SPEC.md` §12 asks for.** `vitest` plus
+Testing Library for units, Playwright against a daemon in mock-output mode for
+end to end, and a CI job of its own for the second, because it compiles a daemon
+and downloads a browser.
+
+**Two dependencies were considered and one was taken.** The plan named Zustand
+and Immer; neither is here, and `@msgpack/msgpack` is. The reasoning is in the
+decision log — briefly: the documents are patched by RFC 6902 operations against
+a document root, so the applier already returns a new document with everything
+untouched shared by reference, and a draft proxy in front of that would be a
+second immutability mechanism over data that is already immutable; the store is
+forty lines of `useSyncExternalStore`; and a hand-written MessagePack decoder
+would be a second implementation of a binary format, in the one language where a
+decoding mistake is silent.
+
+**What S24 inherits and what it must not undo.** The telemetry channel is
+already received — `TelemetrySink.accept` — and it is asserted that a hundred
+frames through it cost the store **zero notifications** and leave the state
+object identical. S24 decodes the fixed-layout frame and renders it on a canvas;
+the sink is where that starts, and `deskEvents` deliberately has no
+`onTelemetry`, so the store cannot be wired to it by accident.
+
 ---
 
 ## 3. Coverage tracking
@@ -1120,14 +1196,14 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 
 | Crate | Target | Measured | Date |
 |---|---|---|---|
-| `prism-domain` | ≥ 85 % | **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-10 |
+| `prism-domain` | ≥ 85 % | **99.52 % lines**, 97.46 % regions, 98.31 % functions (S23, re-measured because `export.rs` grew the run-time variant tables the interface narrows a decoded string with; `export.rs` reads 97.07 % lines / 91.71 % regions, and the seven uncovered lines are two `?` arms on file I/O, one acronym branch in the name converter that no type name reaches, and a `panic!` formatting inside a test that passes). S1's measurement: **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-13 (S23) |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
 | `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
 | `prism-protocols` | **> 95 %** | **98.43 % lines** (S18, re-measured because `MockOutput` grew a timestamped recording — `output.rs` is at **100 % lines, regions and functions**). S10's measurement, whose reasoning still holds: **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | **99.30 % lines**, 98.68 % regions, 98.46 % functions (S22, with layer 3 and the bindings target) — `accel.rs`, `midi.rs`, `model.rs` and `control.rs` at **100 % lines**, `binding.rs` **99.85 %** / 98.72 % regions, `profile.rs` 99.39 %, `color.rs` 99.32 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. Three uncovered lines in the new module were found by reading the report — the `action()` arms for the two faders and the wheel, which every test had reached through `command()` instead — and became a test rather than an exception. S21's measurement: **99.20 % lines**, 98.66 % regions, 98.28 % functions (with layer 2 and two new targets) — `accel.rs`, `model.rs`, `control.rs` and `midi.rs` at **100 % lines**, `color.rs` 99.32 %, `profile.rs` 99.27 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. The crate grew by about 1 500 lines and the figure moved by six hundredths of a point, which is the point of measuring it. The 33 uncovered lines are the *cannot happen* arms a crate that denies `panic!` has to write — `let Some(...) else { return … }` on an array the diff has already bounded — plus `panic!` arms in tests that pass; three genuinely unreachable branches found while reading the report were **removed** rather than covered (§2.22). S20's measurement: **99.26 % lines**, 98.62 % regions, 98.01 % functions (with the recorded-capture target added) — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.94 %, `codec.rs` 98.71 %, `feedback.rs` 98.30 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. S19 measured **99.24 % lines**, 98.58 % regions, 97.94 % functions; two unreachable branches found while reading that report were removed rather than covered — see §2.20. **The figure does not include `tools/xtouch-probe`**, which is not a workspace member and has no tests: it is the instrument, not the product | 2026-08-13 (S20) |
 | `prism-ipc` | ≥ 85 % | **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
 | `prismd` | ≥ 85 % | **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
-| `ui` | ≥ 85 % | — | |
+| `ui` | ≥ 85 % | **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-13 (S23) |
 
 ### Performance gates
 
@@ -1426,6 +1502,15 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-13 | S23 | **Neither Zustand nor Immer is in the interface, and the plan named both.** Immer exists to make a deep update read like a mutation — but the show and the session are patched by **RFC 6902 operations against a document root**, so the update is `applyOps`, which already answers with a new document that shares every untouched container by reference. A draft proxy in front of that is a second immutability mechanism over data that is already immutable, and it would have to reconcile with a patch applier that does not use it. Zustand is a store with selector subscriptions, which React 19 has as `useSyncExternalStore` | `store/desk.ts` is about a hundred lines and `store/hooks.ts` is forty, both testable with no renderer. The measurement that decided it: a `replace` on one fixture's name leaves every *other* fixture object identical by reference, which is what a selector compares — asserted in `mirror/patch.test.ts`. The other half of the argument is that the interface ships inside a Tauri bundle (S29), so a dependency here is one an operator installs |
+| 2026-08-13 | S23 | **`@msgpack/msgpack` was taken, and a hand-written codec was not.** The daemon uses `rmp-serde`; the browser needs the other half. Writing it by hand would put a second implementation of a binary format in the project, in the language where a decoding mistake is silent, and there is nothing project-specific about MessagePack | One runtime dependency, no dependencies of its own, and it decodes into `unknown` — which is exactly the shape the readers want, because the checking that matters is *is this a message* and not *is this MessagePack*. Its decoder walks with an explicit stack rather than recursing, so the attack `prism-ipc`'s `scan.rs` guards against cannot overflow the JavaScript stack; the depth limit in `shape.ts` is about what happens afterwards, when the value is walked as a document. **Checked rather than assumed:** the recording carries thirteen client messages encoded by `rmp-serde` and the browser reproduces all thirteen byte for byte |
+| 2026-08-13 | S23 | **A TypeScript string union is erased at run time, and a decoder needs the values.** `ts-rs` renders a unit-only enum as `"Dimmer" \| "Position" \| …`, which is right for a type and useless to code deciding whether the string it just read off a socket *is* one. Writing the lists by hand in `ui` would have been a second enumeration to keep in step — the drift the generated bindings exist to prevent | `prism_domain::export::write_variants` emits `ui/src/bindings/variants.ts`, and it derives each list **from the generated union itself** rather than from a second enumeration in Rust: it reads back the `.ts` file `ts-rs` has just written. Fourteen tables come out of it for free, including the ones no session has needed yet, and `MergeMode` proves the method — its variants travel as `HTP`/`LTP` because of a `rename_all`, and a table written from the Rust identifiers would have type-checked and never matched a message |
+| 2026-08-13 | S23 | **The envelope of `prism-ipc` is hand-written TypeScript, and that needs a guard.** `ui/src/bindings/` is `prism-domain`'s, which owns the vocabulary; `Hello`, `Snapshot`, `ServerMessage` and `RejectReason` belong to `prism-ipc`, which exports no TypeScript. Adding `ts-rs` there would mean two crates writing one directory — and the first thing `export_bindings` does is delete the `.ts` files it finds | The envelope is transcribed in `ui/src/ipc/protocol.ts` and `crates/prism-ipc/tests/interface_protocol.rs` `include_str!`s it back: the protocol version, every `RejectReason` **and the count**, every `ClientKind`, every message tag in both directions, and the exact text of `closesTheConnection` against `RejectReason::closes_the_connection`. Compiled in, so a file that moved fails the build rather than a test. The same shape as S22's check that the shipped profile *is* the built-in table |
+| 2026-08-13 | S23 | **Losing the daemon drops the three documents, rather than greying them out.** The alternative reading of §8 — keep the last state and mark it stale — is the one an interface usually takes, and it is wrong here: a fader reading 63 % after the engine that knew it has stopped is a number somebody may run a show off | `DeskStore.disconnected()` sets `documents`, `outputs` and `health` to `null`, and the telemetry sink is cleared with them. The notices stay, because a message about what went wrong is the one thing still true. It also turns the exit criterion into something checkable rather than promised: the assertion is that the old text is **nowhere in the document**, in jsdom and in a real browser |
+| 2026-08-13 | S23 | **A delta that does not fit the mirror is a divergence, not an error to log and continue from.** `prism_core::mirror` already says why — clients apply deltas without validating them, so an operation that does not fit means the two have *already* disagreed | `DeskStore.applyDelta` answers `false` and leaves the state untouched; `deskEvents` turns that into `Connection.resync`, which drops the socket and reconnects through the ordinary backoff. Reconnecting is not a heavy remedy: it is the same path a daemon restart takes, and the snapshot at the end of it is the only honest way back |
+| 2026-08-13 | S23 | **Commands are not queued while there is no daemon.** The tempting behaviour is to hold them and send them on reconnect | `Connection.send` answers `null` and logs a warning. A Go or a fader movement that arrived four seconds late is an instruction the operator has already given up on, and §8 says a client that reconnects **re-snapshots** rather than replaying what it meant to say. The command line demonstrates the same rule from the other side: what is typed is local input and the readout underneath is the daemon's, so nothing has to be rolled back when a command is refused |
+| 2026-08-13 | S23 | **`vite preview` binds `localhost`, and on this machine that resolves to `::1` first.** The first Playwright run timed out waiting three minutes for `http://127.0.0.1:4173`, with a server that was answering perfectly on the same port over IPv6 | `--host 127.0.0.1` in the `webServer` command, and the reason written next to it. Worth recording because the same trap is waiting for anything else in this project that binds a loopback listener by name — the daemon's own `--websocket` takes an address rather than a host name, which is why it has never met it |
+| 2026-08-13 | S23 | **A pointer that names nothing is an ordinary answer for a *view* and a fault for a *delta*.** The same `MirrorFault` would otherwise mean two different things: a window open on a fixture that has just been deleted, and a client that has drifted from the daemon | `mirror/select.ts` answers `null` for a path that is not there and lets a **malformed** pointer through — that one is a typo in a view rather than a statement about the document, and hiding it behind `null` would leave a panel permanently empty with nothing to explain it |
 | 2026-08-13 | S22 | **Three rows of `docs/MCU_MAPPING.md` §4.1 name behaviour the command vocabulary cannot express, and they are one gap rather than three.** The main fader's `XFade`, Play's `On`, and the strip buttons' configurable list (`LearnSpeed`, `Off`, `On`, `Flash`, `Toggle`) are all `ExecutorFaderFunction` and `ExecutorButtonFunction` values — **show data on the executor** (`ARCHITECTURE_SPEC.md` §6) — and `docs/IPC_PROTOCOL.md` §5 has no command that presses an executor's button and lets the executor decide what that means. There is one fader command for all four fader functions, and `ExecutorGo`/`ExecutorOff` for two of the eight button functions | The bindings resolve to the commands that **exist** — the main fader moves the selected executor's master, Play and Forward are both `ExecutorGo`/`Next` — and the gap is written down in three places rather than papered over: `docs/MCU_MAPPING.md` §4.2.1, the shipped profile's `deviationsFromSection41` block, and here. The alternative was to invent an `ExecutorButton { executor, index }` command, which would have touched `prism-domain`, `prism-core`, the protocol document and the generated TypeScript — a protocol change made in passing by the session that noticed it, which is exactly what S20's rule about tap-for-speed says not to do. **The session that adds it closes all three rows at once**, and it is the same session that owes a tap against a speed master |
 | 2026-08-13 | S22 | **The exit criterion "never blocks startup" is better as a type than as a test.** A loader that returns `Result` can be called correctly by every caller written so far and wrongly by the next one, and the criterion is about *every* future startup path | `Bindings::load(text, profile) -> (Bindings, Option<ProfileError>)` has **no error path at all**: the table it answers with is the profile's when it parses and the built-in defaults when it does not, and the error is a warning to log rather than a decision to take. The mutation check is what makes this more than a shape: falling back to an *empty* table instead of the defaults leaves the type identical, every unit test green, and turns the end-to-end criterion red in `prismd` — a daemon that started fine and had a dead console |
 | 2026-08-13 | S22 | **A binding profile is refused whole, not row by row.** The tempting behaviour for a user-editable file is to keep the rows that parsed and warn about the rest. A table half of which was understood is a desk that does *some* of what its author intended, and an operator cannot tell which half by looking at it | Any problem — bad JSON, an unknown control, a control bound twice, a misspelled key inside a row, a profile for another device, a binding on the reserved button — falls back to the whole default table with one message naming the cause. The document itself may carry prose (the verification record and the deployment notes live in the same file), because refusing unknown *top-level* keys would push that documentation into a second file nobody would open; a **binding** may not, because there a typo is an argument that silently did not arrive |
@@ -1644,25 +1729,69 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The table is no longer a citation.** Every note number, CC number, MIDI channel
-and buffer offset in `docs/MCU_MAPPING.md` §2 was read off a real Behringer
-X-Touch in MC mode over USB on 2026-08-13, and **not one of them was wrong**.
-`prism_surface::X_TOUCH.verified` is `true`, the UNVERIFIED banner is gone, and
-the evidence is in the test suite rather than in a paragraph: four recordings of
-what the desk sent, replayed on every commit with nothing plugged in.
+**Phase 6 has begun, and the interface has a foundation rather than a demo.**
+An IPC client that speaks the daemon's own bytes — checked byte for byte against
+payloads `rmp-serde` wrote — a JSON Patch mirror that reproduces the daemon's
+state from a **recorded delta stream**, a read model with no state-management
+dependency in it, and a disconnected state that is honest: when the engine goes,
+the values go with it.
 
-**Layer 2 exists and the rules hold.** `SurfaceController` is the shadow model,
-the diffing, the touch suppression, the coalescing, the priority order and the
-pacing — 52 new tests, no allocation on either path, and eight mutation checks
-that each turn something red.
+**The two exit criteria are tests rather than claims.** The first is
+`ui/src/mirror/recording.test.ts` against twelve sequences a running `prismd`
+actually produced, ending on the snapshot a *second client* was served. The
+second is asserted twice — in jsdom against a fake socket, and in Chromium
+against a `prismd` that is **killed** and restarted.
 
-**Phase 5 is complete, and D11 is proved rather than argued.** Layer 3 is a
-table lookup with no arithmetic in it, the shipped profile *is* the built-in
-defaults, a profile that will not parse cannot stop a desk starting, and a
-console changed a view and opened a window on a daemon with **no client
-connected** — which the client that arrived afterwards found in its snapshot.
+**Begin S24** (`ui` — telemetry channel). Use the prompt in §8.
 
-**Begin S23** (`ui` — foundation). Use the prompt in §8.
+Carried out of S23:
+- **The telemetry channel already arrives, and it must stay out of React.**
+  `ipc/telemetry.ts` is a sink with no way to notify anybody, `deskEvents` has
+  no `onTelemetry` on purpose, and `telemetry.test.ts` asserts that a hundred
+  frames cost the store **zero** notifications and leave the state object
+  identical. S24 decodes `prism_ipc::TelemetryFrame` — a 16-byte header
+  (`"PTLM"`, layout version, reserved, universe count, sequence, little-endian)
+  and one 514-byte section per universe — and renders it on a canvas. A frame
+  announcing a layout version this build does not know is **dropped**, not
+  guessed at.
+- **`TelemetrySink.clear()` is called when the connection goes**, and the reason
+  is the same one the store drops its documents for: a picture of the rig from a
+  daemon that has stopped is exactly as stale as a fader value from one.
+- **The recording is frozen and its regenerator is `#[ignore]`d.**
+  `cargo test -p prismd --test ui_recording -- --ignored` rewrites
+  `ui/tests/fixtures/daemon-recording.json`; the non-ignored tests beside it
+  replay the committed file through `prism_core`'s mirror on every commit, so a
+  wire-format change fails in Rust rather than going stale in `ui/`. A session
+  that changes `Delta`, `Snapshot` or the framing should expect to regenerate it
+  — and to look at the diff, because that diff *is* the protocol change.
+- **`ui/src/bindings/variants.ts` is generated and is where run-time vocabulary
+  comes from.** Fourteen tables, derived from the unions `ts-rs` wrote. A view
+  that needs the list of window types or attribute types has it already; a view
+  that hand-writes one is reintroducing the drift this file removes.
+- **Selectors must be stable and pure**, because `useDesk` caches per state
+  object *and* per selector identity. Module scope or `useCallback`. A selector
+  that builds a new object every call defeats the whole arrangement, and the
+  test that proves the arrangement works (`store/context.test.tsx`) is the one
+  that would go quiet if it were broken.
+- **The pointers the views read are `prism-core`'s document shapes, not a
+  model.** `/session/executorPage`, `/session/openWindows`, `/fixtures`,
+  `/executors/<id>/isActive`. S25 will want typed accessors over the session;
+  they belong beside `mirror/select.ts`, and they should stay *readers* of the
+  document rather than a parsed copy of it — a parsed copy is a second model to
+  keep in step, and RFC 6902 operations only mean anything against a root.
+- **There is one interactive control in the interface and it is a
+  demonstration.** The command line sends `CommandLineInput` and displays the
+  daemon's own `commandLine` underneath. S26 owns the real one, including the
+  parser; what should survive is the shape — local input in the input, the
+  daemon's fact in the readout, nothing optimistic in between.
+- **The end-to-end suite is a separate CI job and it compiles a daemon.**
+  `ui-e2e` installs Chromium and runs `cargo build -p prismd`; a spec that needs
+  a daemon calls `startDaemon(port, dataDir?)` from `ui/e2e/daemon.ts`, which
+  finds it by reading the lock file (§2.2) rather than by sleeping. Use a port
+  of your own, not 7373 — a developer may have a daemon running.
+- **`vite preview` must be told `--host 127.0.0.1`** or it binds `localhost`,
+  which can resolve to `::1` and leave Playwright waiting on an IPv4 address
+  nothing is listening on.
 
 Carried out of S22:
 - **There is no MIDI backend yet, and `SurfacePort` is where it goes.**
@@ -2120,169 +2249,137 @@ Carried from Phase 1:
 
 ## 8. Follow-up prompt for the next session
 
-> Rewritten at the close of every session, per `IMPLEMENTATION_PLAN.md`. Written to be **self-contained**: it assumes no loaded context, no memory of previous conversations and no knowledge of the project. Paste it into a fresh session to continue.
+Paste everything below into a fresh session.
 
-**Next up: S23 — `ui`, das Fundament**
+---
 
-> Diese Session braucht **kein** Gerät und schreibt **keinen** Rust-Code, bis auf
-> das, was die Testfixtures brauchen. Sie baut die erste Hälfte der Oberfläche:
-> den IPC-Client im Browser, den Spiegel des Daemon-Zustands und das Verhalten,
-> wenn der Daemon verschwindet und wiederkommt.
-
-```text
-PrismDMX — Session S23: ui — Fundament
+PrismDMX — Session S24: `ui` — Telemetriekanal
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Der Daemon ist fertig und beweisbar allein lauffähig. Er hält die Show, die
-Session und den Programmer, er treibt DMX ohne einen einzigen verbundenen
-Client (D2-Gate, S18), und seit S22 bedient ihn ein Mackie-Control-Pult
-vollständig — auch dann, wenn gar keine Oberfläche läuft (D11-Gate). Was fehlt,
-ist die Oberfläche selbst. S23 baut ihr Fundament: die Verbindung, den Spiegel
-und das ehrliche Verhalten bei Verbindungsverlust.
+Der Daemon läuft allein und wird von einem Pult bedient (D2 in S18, D11 in S22).
+Seit S23 hat die Oberfläche ein Fundament: einen IPC-Client, der die Bytes des
+Daemons spricht, einen Spiegel, der einen aufgezeichneten Delta-Strom auf den
+Snapshot des Daemons abbildet, und einen ehrlichen Zustand bei
+Verbindungsverlust. Was fehlt, ist der zweite Kanal — und der ist der Grund,
+warum es überhaupt zwei gibt.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
-                                  Teststandards. Besonders: strict: true, **kein
-                                  `any`**, explizite Interfaces für alle
-                                  Domänentypen, kein console.log in
+                                  Teststandards. Besonders: `strict: true`,
+                                  **kein `any`**, explizite Interfaces für alle
+                                  Domänentypen, kein `console.log` in
                                   Produktionscode (strukturierter Logger mit
                                   Leveln), ≥ 85 % Coverage global
 2. PROGRESS.md                  — Stand, Decision Log, gemessene Zahlen;
-                                  besonders §2.23 (was S22 gebaut hat), §2.19
-                                  (das D2-Gate und was „keine Lücke" heißt),
-                                  §2.17 (prism-ipc: Framing, Backpressure,
-                                  Handshake), §5 (offene Verifikationspunkte)
-                                  und §7 „Carried out of S22" — diese Liste ist
-                                  Teil der Anforderungen
-3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S23
-4. docs/IPC_PROTOCOL.md         — **vollständig**. Das ist die Spezifikation,
-                                  die diese Session implementiert: §3 Framing,
-                                  §4 Nachrichtentypen und Handshake, §5
-                                  Commands, §6 Deltas, §7 Telemetrie (gehört zu
-                                  S24, aber §7s letzter Absatz ist eine Regel
-                                  für S23: Telemetrie darf **nie** in reaktiven
-                                  Zustand), §8 Backpressure und Ausfälle, §9
-                                  Testtabelle mit der Zeile „snapshot
-                                  completeness"
-5. ARCHITECTURE_SPEC.md §2 (Systemüberblick), §4 (Session-State — was die
-   Oberfläche spiegelt und was **nicht**: §4.2 listet, was bewusst
-   client-lokal bleibt), §6 (Domänenmodell), §12 (Testpolitik, letzte Zeile:
-   `vitest` + Testing Library, Playwright gegen einen Daemon im Mock-Output-
-   Modus, ≥ 85 %)
-6. ui/                          — das Gerüst aus S0: Vite + React 19 +
-                                  TypeScript strict, oxlint. **ui/src/bindings/**
-                                  enthält 47 aus Rust generierte Typen
-                                  (`ts-rs`) — Command, Delta, Session, Show,
-                                  ProgrammerState und alles darunter. Diese
-                                  Dateien werden **nicht von Hand geändert**:
-                                  sie entstehen aus prism-domain und die
-                                  Rust-Testsuite schreibt sie neu
-7. crates/prism-ipc/src/        — die Gegenseite: message.rs (ClientMessage,
-                                  ServerMessage, Hello, Snapshot), frame.rs
-                                  (u32-LE-Länge + MessagePack), client.rs (wie
-                                  ein Client aussieht, in Rust)
-8. crates/prism-core/src/mirror.rs — `ShowMirror`, `SessionMirror`, `JsonMirror`:
-                                  derselbe Spiegel, in Rust, inklusive der
-                                  Frage, worauf RFC-6902-Operationen zeigen
-9. crates/prismd/src/server.rs  — was ein Snapshot enthält und in welcher
-                                  Reihenfolge Deltas und Ack beim Client
-                                  ankommen
+                                  besonders §2.24 (was S23 gebaut hat), §2.17
+                                  (`prism-ipc`: Framing, Backpressure,
+                                  Telemetrie-Layout), §3 (Coverage und
+                                  Performance-Gates, inklusive der noch leeren
+                                  Zeile „Telemetry render") und §7 „Carried out
+                                  of S23" — diese Liste ist Teil der
+                                  Anforderungen
+3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S24
+4. docs/IPC_PROTOCOL.md §7      — **vollständig**, und §3 dazu. Das ist die
+                                  Spezifikation dieser Session: Rate, Inhalt,
+                                  Kodierung, Verlustpolitik, das feste
+                                  Binärlayout und der letzte Absatz, der eine
+                                  Regel ist und keine Empfehlung
+5. ARCHITECTURE_SPEC.md §2 (Systemüberblick — der Pfeil `ENG → CV`), §3.2
+   (Bildrate, genau gesagt), §5 (Pipeline) und §12 (Testpolitik)
+6. crates/prism-ipc/src/telemetry.rs — das Layout in Rust: `TelemetryFrame`,
+                                  `UniverseLevels`, `TELEMETRY_HEADER_BYTES`,
+                                  `TELEMETRY_VERSION`, und was `decode` mit
+                                  einer unbekannten Layoutversion macht
+7. crates/prismd/src/daemon.rs  — wer die Frames erzeugt, wie oft, und welche
+                                  Universen darin vorkommen
+8. ui/src/ipc/telemetry.ts      — die Senke aus S23: sie hält den letzten
+                                  Payload und kann **niemanden benachrichtigen**.
+                                  Dazu ui/src/ipc/connection.ts (`onTelemetry`)
+                                  und ui/src/store/desk.ts (`deskEvents` hat
+                                  bewusst kein `onTelemetry`)
+9. ui/src/mirror/recording.test.ts und crates/prismd/tests/ui_recording.rs —
+                                  wie in diesem Projekt gegen eine **Aufnahme
+                                  des Daemons** getestet wird statt gegen die
+                                  eigene Erwartung
 
 Stand — nichts davon musst du neu bauen:
-- `prism-domain` (S1), `prism-engine` (S2–S6), `prism-protocols` (S7–S10),
-  `prism-core` (S11–S15), `prism-ipc` (S16), `prismd` (S17, D2-Gate in S18) und
-  `prism-surface` vollständig (S19–S22, D11-Gate). Phase 5 ist abgeschlossen.
-- 1 419 Tests im Workspace, alle grün, CI vierfarbig grün.
+- Phasen 1–5 vollständig, `prismd` fährt headless, `prism-surface` bedient ein
+  Pult ohne Oberfläche. 1 432 Tests im Workspace, alle grün.
+- `ui` hat Client, Spiegel, Store, Hooks, Logger, Testinfrastruktur (`vitest` +
+  Testing Library, Playwright gegen einen Daemon im Mock-Output-Modus) und
+  158 grüne Tests bei 98,60 % Zeilenabdeckung.
 - Der Daemon lässt sich headless starten:
   `cargo run -p prismd -- --mock-output --websocket --run-for 30`
-  und schreibt eine Lock-Datei mit seinen Endpunkten ins Datenverzeichnis
-  (docs/IPC_PROTOCOL.md §2.2). Der WebSocket ist der Transport für den Browser;
-  der Named Pipe ist für die Desktop-Shell (S29).
+  und schreibt eine Lock-Datei mit seinen Endpunkten (docs/IPC_PROTOCOL.md §2.2).
+  `ui/e2e/daemon.ts` startet und tötet ihn bereits so.
+- `npm ci` in `ui/` genügt. Für die Ende-zu-Ende-Tests zusätzlich
+  `npx playwright install chromium`.
 
-Aufgabe: Session S23 umsetzen — das Fundament von `ui`.
+Aufgabe: Session S24 umsetzen — der Telemetriekanal der Oberfläche.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Deltas auf den Spiegel angewandt reproduzieren den Daemon-Zustand —
-  **property-getestet gegen einen aufgezeichneten Delta-Strom**
-- Daemon-Neustart: die Oberfläche zeigt „getrennt", verbindet sich neu, holt
-  einen frischen Snapshot, und **kein Wert von vorher bleibt stehen**
+- 64 Universen bei 30 Hz dauerhaft mit **null React-Re-Renders** aus Telemetrie —
+  **mit einem Render-Zähler belegt, nicht nach Gefühl beurteilt**
+- Frame-Budget: das Canvas-Rendering bleibt bei 64 Universen unter 8 ms,
+  gemessen und in PROGRESS.md notiert
+- Verlorene Telemetrie degradiert weich und bringt den **Kontrollzustand nie**
+  aus dem Tritt
 - `npx tsc -b --force` sauber mit `strict: true`, **nirgends `any`**
-- `npm run build` und `npm run lint` sauber
+- `npm run build`, `npm run lint`, `npm run test` sauber
 - Coverage ≥ 85 % auf dem, was diese Session schreibt, gemessen und in
   PROGRESS.md notiert
 
 Wichtige Randbedingungen:
-- **Der Daemon ist die einzige Quelle der Wahrheit (D3).** Ein Client schickt
-  Absichten und empfängt Tatsachen. Er berechnet **keinen** Zustand, den der
-  Daemon danach bestätigen soll — auch nicht optimistisch. Wer eine
-  Fader-Bewegung sofort anzeigen will, zeigt den *lokalen Eingabewert* an und
-  nicht einen geratenen Modellzustand.
-- **Show und Session reisen als Dokumente, nicht als Modelle.** `ShowPatch` und
-  `SessionPatch` sind RFC-6902-Operationen, und eine Operation ist nur gegen
-  einen Dokument-Wurzelknoten sinnvoll. In Rust macht das `prism_core::JsonMirror`;
-  im Browser braucht es dieselbe Entscheidung. Der Programmer ist **das dritte
-  Dokument** und kommt komplett (`ProgrammerChanged`), nicht als Patch.
-- **Ein Snapshot ist vollständig, und das ist eine prüfbare Aussage.**
-  docs/IPC_PROTOCOL.md §9: der Snapshot eines frisch verbundenen Clients ist
-  gleich dem Zustand, den ein bestehender Client durch Aufsummieren seiner
-  Deltas erreicht hat. Genau das ist das erste Exit-Kriterium, und es ist die
-  Eigenschaft, die einen Reconnect zu einem gewöhnlichen Vorgang macht.
-- **Telemetrie gehört zu S24 — aber die Regel gilt ab jetzt:** Telemetrie darf
-  niemals in reaktiven Zustand (docs/IPC_PROTOCOL.md §7, letzter Absatz).
-  64 Universen × 512 Kanäle bei 30 Hz durch React-State machen die Oberfläche
-  unbenutzbar. Wenn S23 den Kanal schon empfängt, dann in Refs, und ohne Render.
-- **Was nicht in die Session gehört, gehört auch nicht in den Spiegel.**
-  ARCHITECTURE_SPEC.md §4.2: Monitorzuordnung, Scrollposition, Hover- und
-  Drag-Zustand, 3D-Kamera, UI-Zoom sind bewusst client-lokal. Sie sind pro
-  Bildschirm verschieden und wären als geteilter Zustand aktiv störend.
-  `prism-core` weist Fensterparameter mit solchen Namen an der Tür ab
-  (`SessionError::ClientLocalParam`) — der Client soll sie erst gar nicht
-  senden.
-- **Die generierten Bindings sind Quelltext aus Rust.** `ui/src/bindings/` wird
-  von `prism_domain::export_bindings` geschrieben und von der Rust-Testsuite
-  überprüft; eine Handänderung überlebt den nächsten `cargo test` nicht. Wenn
-  ein Typ fehlt, ist das eine Änderung in `prism-domain` und keine in `ui`.
-- **Kein `any`, und der Test dafür existiert schon** — in Rust
-  (`export::tests::no_generated_binding_contains_any`). Für handgeschriebenen
-  TypeScript-Code ist `tsc` mit `strict: true` die Zusicherung; `unknown` mit
-  Typwächtern ist der Weg, nicht `as`.
-- **Der Verbindungsverlust ist ein sichtbarer Zustand, kein stiller.**
-  docs/IPC_PROTOCOL.md §8: der Client zeigt deutlich „getrennt", versucht es mit
-  Backoff erneut, und bei Erfolg **resynchronisiert er über einen frischen
-  Snapshot**. Was er nicht darf: alte Werte weiterzeigen, als wären sie aktuell.
-  Das ist das zweite Exit-Kriterium und es ist ein Test, kein Augenschein.
-- **`Reject` ist nicht gleich Abbruch.** Eine Nachricht, die der Daemon nicht
-  dekodieren kann, beendet die Verbindung nicht (§8, letzter Absatz); ein
-  Versionskonflikt beim Handshake dagegen schon, und die Meldung nennt **beide**
-  Versionen. Die Oberfläche muss das unterscheiden können, sonst steht dort
-  „Verbindung verloren", wo „Oberfläche und Engine sind verschiedene Versionen"
-  gemeint ist.
+- **Telemetrie darf niemals in reaktiven Zustand** (docs/IPC_PROTOCOL.md §7,
+  letzter Absatz). Das ist keine Optimierung, sondern der Grund für den zweiten
+  Kanal: 64 × 512 Werte bei 30 Hz durch React-State machen die Oberfläche
+  unbenutzbar. S23 hat die Senke gebaut und mit einem Test belegt, dass hundert
+  Frames **null** Benachrichtigungen kosten — dieser Test muss grün bleiben, und
+  der neue Zähler ist sein Nachfolger für den Renderpfad.
+- **Das Layout ist versioniert, und eine unbekannte Version wird verworfen** —
+  nicht geraten. Telemetrie ist per Definition verwerfbar, also ist Verwerfen
+  hier die richtige Antwort und nicht die faule.
+- **Ein Frame ist ein Bild von jetzt.** Der Daemon koaleszt und verwirft (§8);
+  der Client hält den *letzten* Payload und keine Warteschlange. Ein Bild, das
+  drei Frames alt ist, hat keinen Wert.
+- **Die Zahlen müssen gemessen sein.** „Zero re-renders" ist ein Zähler,
+  „unter 8 ms" ist eine Messung mit `performance.now()` über genügend Frames,
+  und beide gehören mit ihren Bedingungen in PROGRESS.md §3. Eine Zahl, die
+  niemand reproduzieren kann, ist schlimmer als keine.
 - **Ein Test, der die zu prüfende Funktion zum Prüfen benutzt, prüft nichts.**
-  S19 fand das für Round-Trips, S20 für echte Aufnahmen, S21 für die
-  Prioritätsreihenfolge, S22 für die Default-Belegung. Für S23 heißt das: der
-  aufgezeichnete Delta-Strom des ersten Exit-Kriteriums wird **vom Daemon
-  erzeugt** (oder von einer Aufzeichnung daraus), und der Endzustand wird gegen
-  den **Snapshot des Daemons** verglichen — nicht gegen ein zweites Anwenden
-  derselben Client-Funktion.
-- Testinfrastruktur: `vitest` + Testing Library für Einheiten,
-  Playwright gegen einen Daemon im Mock-Output-Modus für Ende-zu-Ende
-  (ARCHITECTURE_SPEC.md §12). Beides ist noch nicht eingerichtet; das gehört zu
-  dieser Session. Ein Test darf niemals ein Gerät anfassen.
-- **Neue npm-Abhängigkeiten sind eine Entscheidung, keine Formalität.** Der Plan
-  nennt Zustand + Immer für den Spiegel; prüfe vorher, ob der Spiegel ohne Immer
-  auskommt, wenn die Dokumente ohnehin als JSON-Werte gepatcht werden, und
-  begründe die Wahl im Decision Log. Die Oberfläche läuft später in einer
-  Tauri-Shell (S29) — was hier hineinkommt, wird ausgeliefert.
+  Für S24 heißt das: die Bytes, die dein Decoder liest, kommen aus
+  `prism_ipc::TelemetryFrame::encode` — aus einer Aufnahme oder aus einem
+  laufenden Daemon — und nicht aus deinem eigenen Encoder. Das Muster steht in
+  `crates/prismd/tests/ui_recording.rs`; erweitere es oder baue das Gegenstück,
+  aber erfinde die Erwartung nicht in TypeScript.
+- **Der Kontrollzustand ist unabhängig.** Ein verworfener oder unlesbarer
+  Telemetrie-Frame beendet nichts und ändert nichts an Show, Session oder
+  Programmer. Das ist prüfbar: Telemetrie-Müll schicken und danach ein Delta,
+  und das Delta muss ankommen.
+- **Was nicht in die Session gehört, gehört auch nicht in den Spiegel**
+  (ARCHITECTURE_SPEC.md §4.2). Zoomstufe, Scrollposition und Kamerastand des
+  Canvas sind client-lokal — sie gehören in Refs oder in lokalen
+  Komponentenzustand, nicht in eine Session-Command.
+- **Die generierten Bindings sind Quelltext aus Rust.** `ui/src/bindings/` wird
+  von `prism_domain::export_bindings` geschrieben (seit S23 inklusive
+  `variants.ts`, den Laufzeittabellen der String-Unions) und von der
+  Rust-Testsuite überprüft. Fehlt ein Typ oder eine Tabelle, ist das eine
+  Änderung in `prism-domain` und keine in `ui`.
+- **Neue npm-Abhängigkeiten sind eine Entscheidung, keine Formalität.** S23 hat
+  Zustand und Immer abgelehnt und begründet und `@msgpack/msgpack` genommen und
+  begründet; halte es genauso. Ein Canvas braucht keine Bibliothek.
+- Ein Test darf niemals ein Gerät anfassen. Der Daemon läuft im
+  Mock-Output-Modus.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
-  Node 24.11, `cargo-llvm-cov`). `npm ci` in `ui/` genügt.
+  Node 24.11, `cargo-llvm-cov`).
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S23-Status, jede gemessene Zahl, Decision Log bei
-  Abweichungen und bei Funden, die spätere Sessions betreffen
+- PROGRESS.md aktualisieren: S24-Status, jede gemessene Zahl (auch die Zeile
+  „Telemetry render" in §3), Decision Log bei Abweichungen und bei Funden, die
+  spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S24 (`ui` — Telemetriekanal) überschreiben
+  Session S25 (`ui` — Canvas, Fenster, Views) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(ui): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
-```
