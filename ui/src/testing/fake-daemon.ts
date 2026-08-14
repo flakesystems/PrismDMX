@@ -164,9 +164,16 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
         executorPage: 3,
         encoderBank: "Dimmer",
         commandLine: "fixture 1 at full",
-        openWindows: [],
+        // One window, because a canvas with nothing on it cannot tell a test
+        // that draws windows from one that does not — and because the level
+        // view lives in a `DmxSheet` from S25 onwards, so the telemetry tests
+        // need one open to have anywhere to draw.
+        openWindows: [
+          { instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480, params: {} },
+        ],
+        focusedWindow: 1,
       },
-      views: {},
+      views: { "1": { id: 1, name: "View 1", windows: [] } },
     },
     programmer: emptyProgrammer(),
     outputs: [{ id: 1, name: "Mock", health: "Ok" }],

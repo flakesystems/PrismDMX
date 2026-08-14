@@ -230,7 +230,12 @@ describe("the command line", () => {
     }
 
     const { default: userEvent } = await import("@testing-library/user-event");
-    const user = userEvent.setup();
+    // `delay: null` types without waiting between keys. With the default the
+    // fifteen characters here are fifteen awaits, which is nothing on its own
+    // and enough to time out when twenty-seven instrumented files are running
+    // at once — a test that fails only under `--coverage` is a flake, and S18
+    // established that those get fixed rather than retried.
+    const user = userEvent.setup({ delay: null });
     await user.type(input, "fixture 2 at 50");
 
     // D3: what was typed is *local input*. Until the daemon says otherwise, the

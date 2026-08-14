@@ -253,7 +253,7 @@ impl Show {
             Command::Oops => Ok(Applied::effect(Effect::Undo)),
             Command::Redo => Ok(Applied::effect(Effect::Redo)),
             Command::SaveShow => Ok(Applied::effect(Effect::Save)),
-            // The eleven §4.4 session commands, named rather than caught by a
+            // The twelve session commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
             // the protocol is a compile error here instead of a silent
             // rejection at run time.
@@ -262,6 +262,7 @@ impl Show {
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
+            | Command::PlaceWindow { .. }
             | Command::SetExecutorPage { .. }
             | Command::SelectExecutor { .. }
             | Command::SetEncoderBank { .. }

@@ -189,6 +189,58 @@ pub enum Command {
         /// The window to focus.
         instance_id: WindowInstanceId,
     },
+    /// Move and resize an open window.
+    ///
+    /// **Not one of `ARCHITECTURE_SPEC.md` §4.4's eleven**, and the reason is
+    /// that §4.4 lists what the *console* issues: an X-Touch opens and closes
+    /// windows, it does not drag them. But §4.1 puts `x`, `y`, `w` and `h` in
+    /// the session, so a window dragged on one screen has to move on every
+    /// other one — and a client that kept the position to itself would be
+    /// holding session state locally, which is the thing D11 exists to prevent.
+    /// S25 found the gap; without this command a canvas has no honest way to be
+    /// dragged at all. See `crate::WindowInstance` for the units: they are
+    /// canvas units, which each client scales to its own screen.
+    ///
+    /// The four coordinates are guarded against NaN and infinity in **both**
+    /// directions, like every other `f64` in this crate, so a non-finite
+    /// coordinate is refused at the decoder rather than written into a session
+    /// that then cannot be saved.
+    PlaceWindow {
+        /// The window to move.
+        instance_id: WindowInstanceId,
+        /// New left edge.
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::finite_f64()")
+        )]
+        x: f64,
+        /// New top edge.
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::finite_f64()")
+        )]
+        y: f64,
+        /// New width.
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::finite_f64()")
+        )]
+        w: f64,
+        /// New height.
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::finite_f64()")
+        )]
+        h: f64,
+    },
     /// Page the fader bank.
     SetExecutorPage {
         /// New page number.
@@ -222,8 +274,11 @@ pub enum Command {
 }
 
 impl Command {
-    /// Whether this command is one of the interface commands from
-    /// `ARCHITECTURE_SPEC.md` §4.4, which act on session state.
+    /// Whether this command acts on session state rather than on the show.
+    ///
+    /// `ARCHITECTURE_SPEC.md` §4.4's eleven, plus [`Self::PlaceWindow`], which
+    /// is twelfth because §4.4 lists what the *console* issues and a canvas is
+    /// not a console. See that variant for why it has to exist at all.
     #[must_use]
     pub const fn is_session_command(&self) -> bool {
         matches!(
@@ -233,6 +288,7 @@ impl Command {
                 | Self::OpenWindow { .. }
                 | Self::CloseWindow { .. }
                 | Self::FocusWindow { .. }
+                | Self::PlaceWindow { .. }
                 | Self::SetExecutorPage { .. }
                 | Self::SelectExecutor { .. }
                 | Self::SetEncoderBank { .. }
@@ -404,6 +460,13 @@ mod tests {
             Command::FocusWindow {
                 instance_id: WindowInstanceId::new(1),
             },
+            Command::PlaceWindow {
+                instance_id: WindowInstanceId::new(1),
+                x: 0.0,
+                y: 0.0,
+                w: 640.0,
+                h: 480.0,
+            },
             Command::SetExecutorPage { page: 0 },
             Command::SelectExecutor {
                 executor_id: ExecutorId::new(0),
@@ -419,7 +482,7 @@ mod tests {
                 text: "1 thru 4 at full".to_owned(),
             },
         ];
-        assert_eq!(commands.len(), 23);
+        assert_eq!(commands.len(), 24);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -431,8 +494,11 @@ mod tests {
     }
 
     #[test]
-    fn session_commands_are_exactly_the_list_in_the_architecture_spec() {
-        // ARCHITECTURE_SPEC.md §4.4.
+    fn session_commands_are_the_architecture_spec_list_plus_the_one_a_canvas_needs() {
+        // ARCHITECTURE_SPEC.md §4.4's eleven, and `PlaceWindow` — which is not
+        // in that list because the list is what a *console* issues. §4.1 puts a
+        // window's position and size in the session all the same, so dragging
+        // one is a command or it is client-local state pretending not to be.
         let session_commands = [
             Command::SelectView {
                 view_id: ViewId::new(1),
@@ -451,6 +517,13 @@ mod tests {
             Command::FocusWindow {
                 instance_id: WindowInstanceId::new(1),
             },
+            Command::PlaceWindow {
+                instance_id: WindowInstanceId::new(1),
+                x: 1.0,
+                y: 2.0,
+                w: 3.0,
+                h: 4.0,
+            },
             Command::SetExecutorPage { page: 0 },
             Command::SelectExecutor {
                 executor_id: ExecutorId::new(0),
@@ -466,11 +539,41 @@ mod tests {
                 text: String::new(),
             },
         ];
-        assert_eq!(session_commands.len(), 11);
+        assert_eq!(session_commands.len(), 12);
         for command in session_commands {
             assert!(command.is_session_command(), "{command:?}");
         }
         assert!(!Command::ClearProgrammer.is_session_command());
+    }
+
+    #[test]
+    fn a_window_cannot_be_placed_at_a_coordinate_that_is_not_a_number() {
+        // The same guard `WindowInstance` carries, on the way in as well as on
+        // the way out: MessagePack can encode NaN and infinity faithfully, so
+        // without this a hostile or corrupt frame could put one into the
+        // session — where it would compare unequal to itself and stop the show
+        // file saving.
+        let placed = |x: f64| Command::PlaceWindow {
+            instance_id: WindowInstanceId::new(1),
+            x,
+            y: 0.0,
+            w: 1.0,
+            h: 1.0,
+        };
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(serde_json::to_string(&placed(value)).is_err());
+            assert!(rmp_serde::to_vec_named(&placed(value)).is_err());
+        }
+        let json = serde_json::to_string(&placed(-12.5)).unwrap();
+        assert_eq!(
+            json,
+            r#"{"t":"PlaceWindow","instanceId":1,"x":-12.5,"y":0.0,"w":1.0,"h":1.0}"#
+        );
+        assert_eq!(
+            serde_json::from_str::<Command>(&json).unwrap(),
+            placed(-12.5)
+        );
+        assert!(serde_json::from_str::<Command>(&json.replace("-12.5", "1e400")).is_err());
     }
 
     #[test]

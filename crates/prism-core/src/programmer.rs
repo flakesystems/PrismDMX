@@ -300,7 +300,7 @@ impl Programmer {
                 self.cue(show, *sequence_id, cue_number)?;
                 self.touch()
             }
-            // The other eighteen commands, named rather than caught by a
+            // The other nineteen commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
             // the protocol is a compile error here as well as in `Show::apply`
             // and `SessionState::apply`.
@@ -316,6 +316,7 @@ impl Programmer {
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
+            | Command::PlaceWindow { .. }
             | Command::SetExecutorPage { .. }
             | Command::SelectExecutor { .. }
             | Command::SetEncoderBank { .. }

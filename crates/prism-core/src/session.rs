@@ -314,6 +314,13 @@ impl SessionState {
             Command::OpenWindow { window, params } => self.open_window(*window, params.as_ref())?,
             Command::CloseWindow { instance_id } => self.close_window(*instance_id)?,
             Command::FocusWindow { instance_id } => self.focus_window(*instance_id)?,
+            Command::PlaceWindow {
+                instance_id,
+                x,
+                y,
+                w,
+                h,
+            } => self.place_window(*instance_id, *x, *y, *w, *h)?,
             Command::SetExecutorPage { page } => self.set_executor_page(*page)?,
             Command::SelectExecutor { executor_id } => self.select_executor(Some(*executor_id))?,
             Command::SetEncoderBank { group } => self.set_encoder_bank(*group)?,
@@ -479,9 +486,10 @@ impl SessionState {
     /// There is no §4.4 command for this: the console opens and closes windows,
     /// it does not drag them. Position and size are session state all the same
     /// (§4.1), so dragging a window on one screen has to move it on every
-    /// other — **S25 requirement:** the canvas calls this, which means the
-    /// protocol needs a command carrying it, and adding one is a change to
-    /// `docs/IPC_PROTOCOL.md` §5 rather than something the UI can do locally.
+    /// other. **S25 took the consequence the note here used to predict:**
+    /// `Command::PlaceWindow` now exists, `docs/IPC_PROTOCOL.md` §5 carries it,
+    /// and the canvas reaches this method through the same door every other
+    /// client command uses rather than keeping the position to itself.
     ///
     /// # Errors
     ///

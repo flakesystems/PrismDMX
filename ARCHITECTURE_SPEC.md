@@ -185,6 +185,8 @@ Routing through the UI (MIDI → daemon → UI → daemon) would add two IPC rou
 
 `SelectView`, `StoreView`, `OpenWindow`, `CloseWindow`, `FocusWindow`, `SetExecutorPage`, `SelectExecutor`, `SetEncoderBank`, `SetProgrammerPage`, `SelectProgrammerParam`, `CommandLineInput`.
 
+These eleven are what the **console** issues. A twelfth session command, `PlaceWindow`, was added in **S25** and is deliberately not in this list: a console never drags a window, but §4.1 puts a window's position and size in the session, so a canvas that moved one without telling the daemon would be holding session state locally. It travels with the eleven, is journalled with them (that is, not at all — §6.1), and is specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md) §5.
+
 The **F1–F8 XKeys** are therefore freely assignable to "open Fixture Sheet", "open Patch", "jump to view 2" or macros — drawing on the same command list the UI buttons use. There is no second command world for the console.
 
 > **Multi-session (later):** the model permits several sessions so two operators can work with independent views. V1 has exactly one session and the programmer belongs to it. Multiple programmers would be a merge question (LTP between them) and are deliberately out of scope.
@@ -310,8 +312,9 @@ interface ProgrammerValue {
 }
 
 type WindowType =
-  | "FixtureSheet" | "SequenceSheet" | "Groups" | "Viewer3D" | "PhaserEditor"
-  | "ClockViewer" | "CueViewer" | "PresetPool" | "Patch" | "Settings";
+  | "FixtureSheet" | "DmxSheet" | "SequenceSheet" | "Groups" | "Viewer3D"
+  | "PhaserEditor" | "ClockViewer" | "CueViewer" | "PresetPool" | "Patch"
+  | "Settings";   // DmxSheet added in S25: the output itself, channel by channel
 
 interface WindowInstance {
   instanceId: number; type: WindowType;

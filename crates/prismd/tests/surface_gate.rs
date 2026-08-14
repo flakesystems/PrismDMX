@@ -183,6 +183,99 @@ async fn the_console_changes_the_session_with_no_client_connected_and_a_client_f
     daemon.shutdown().await;
 }
 
+/// **The other half of D11**, and the half S25 owes: a client is *connected*,
+/// the console presses a button, and the client is told — without asking.
+///
+/// The gate above is about a console operating a desk with nobody watching.
+/// This is about the interface following one that is: the delta the press
+/// produced arrives on the same wire every other delta arrives on, because the
+/// console and a client go through the same door. The browser's end of this is
+/// `ui/e2e/session.spec.ts`, which watches the same thing happen in Chromium.
+///
+/// The surface here is `--mock-surface`: a file, opened by `Daemon::start` from
+/// the command line, so what is under test is the arrangement an operator gets
+/// rather than one a test wired up.
+#[tokio::test]
+async fn a_console_press_reaches_a_connected_client_as_a_delta() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    write_console_show(&dir.path().join("aula.prism"));
+    let keys = dir.path().join("console.midi");
+
+    let mut options = options(dir.path());
+    options.local = true;
+    options.mock_surface = Some(keys.clone());
+    let mut daemon = Daemon::start(&options).await.unwrap();
+    assert!(
+        daemon.surface().is_some(),
+        "--mock-surface attaches a surface at start-up, without a device"
+    );
+
+    let address = common::local_address(dir.path());
+    let connecting = tokio::spawn(async move {
+        let wire = prism_ipc::local::connect(&address).await.unwrap();
+        Client::handshake(wire, Hello::new(ClientKind::Desktop))
+            .await
+            .unwrap()
+    });
+    let (mut client, snapshot) = tokio::select! {
+        result = connecting => result.unwrap(),
+        () = daemon.run(Some(Duration::from_secs(10)), std::future::pending()) => {
+            panic!("the client never connected")
+        }
+    };
+    // What the client believes before the press, from its own snapshot.
+    let session = prism_core::JsonMirror::new(snapshot.session.clone());
+    assert_eq!(
+        session.get("/session/activeViewId").unwrap(),
+        &prism_domain::JsonValue::Int(1)
+    );
+
+    // `Channel ▶` — the same three bytes the desk sends, appended to the file a
+    // separate process would append them to.
+    {
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&keys)
+            .expect("the daemon created the file when it opened it");
+        file.write_all(&[NOTE_ON, CHANNEL_RIGHT, 127]).unwrap();
+        file.write_all(&[NOTE_ON, CHANNEL_RIGHT, 0]).unwrap();
+        file.flush().unwrap();
+    }
+
+    // The client is *told*. It asked for nothing; the delta arrived because the
+    // daemon broadcasts what the console changed.
+    let listening = tokio::spawn(async move {
+        loop {
+            match client.next_event().await {
+                Some(Ok(ClientEvent::Delta(prism_domain::Delta::SessionPatch { ops }))) => {
+                    if let Some(op) = ops.into_iter().next() {
+                        return op;
+                    }
+                }
+                Some(Ok(_)) => {}
+                other => panic!("the connection ended: {other:?}"),
+            }
+        }
+    });
+    let op = tokio::select! {
+        result = listening => result.unwrap(),
+        () = daemon.run(Some(Duration::from_secs(10)), std::future::pending()) => {
+            panic!("the console press never reached the client")
+        }
+    };
+    assert_eq!(
+        op,
+        prism_domain::JsonPatchOp::Replace {
+            path: "/session/activeViewId".to_owned(),
+            value: prism_domain::JsonValue::Int(2),
+        }
+    );
+
+    daemon.shutdown().await;
+}
+
 /// A profile that will not parse never stops a daemon starting — the second
 /// exit criterion, against a real file and a real process.
 #[tokio::test]

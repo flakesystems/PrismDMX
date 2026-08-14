@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-08-14
 **Current phase:** Phase 6 — User interface
-**Current session:** S25 — `ui` canvas, windows, views (not started — see §8 for the prompt that starts it)
-**Last completed:** S24 — `ui` telemetry channel ✅ — **the second channel is the picture: 64 universes at 30 Hz off a real daemon reach a canvas and cost React nothing, counted over three hundred frames, and the whole frame — decode and paint — is 0.30 ms median and 1.10 ms at the 99th percentile against a budget of 8**
+**Current session:** S26 — `ui` executor bar, encoder bar, console (not started — see §8 for the prompt that starts it)
+**Last completed:** S25 — `ui` canvas, windows, views ✅ — **the layout is not in the interface: windows open, move, resize and close by command, the canvas draws `openWindows` and nothing else, and a page reload against an untouched daemon puts every window back. D11 is now observed from both ends — three MIDI bytes appended to a file, and a browser that was doing nothing changes view**
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
 > Update this file at the end of every session. Record what was *measured*, not what was intended. A session is `done` only when its exit criteria in the plan actually pass.
@@ -87,7 +87,7 @@
 |---|---|---|---|---|
 | S23 | UI foundation | ✅ | 2026-08-13 | All exit criteria verified — see §2.24. **A delta stream recorded off a running daemon, replayed through the TypeScript mirror, reaches the daemon's own snapshot** — twelve cases, 93 deltas; and a real `prismd` killed under Chromium leaves no value on the screen. 158 UI tests, coverage **98.60 % lines**, zero `any`, no state-management dependency |
 | S24 | Telemetry channel | ✅ | 2026-08-14 | All exit criteria verified — see §2.25. **Zero React commits over 300 frames of 64 universes, counted with a `<Profiler>`; 0.30 ms median and 1.10 ms p99 for decode *and* paint, measured in Chromium against a real `prismd` publishing 64 real universes.** The decoder is held to `TelemetryFrame::decode`'s own answers on recorded frames; 77 new UI tests, coverage **98.91 % lines** on `ui/src`. Four mutation checks; one of them is what says the render counter counts |
-| S25 | Canvas, windows, views | ☐ | | |
+| S25 | Canvas, windows, views | ✅ | 2026-08-14 | All exit criteria verified — see §2.26. **D11 observed rather than argued: a real `prismd`, a real Chromium, and three MIDI bytes appended to a file by neither of them — the view switches and the window opens in the browser.** The layout survives `page.reload()` against a daemon that is never told. Two protocol findings, both taken: `Command::PlaceWindow` and `WindowType::DmxSheet`. 298 UI tests, coverage **98.82 % lines**; 1 449 in the workspace |
 | S26 | Executor bar, encoder bar, console | ☐ | | |
 | S27 | Patch and fixture sheet | ☐ | | |
 | S28 | Sequences, cues, presets | ☐ | | |
@@ -100,7 +100,7 @@
 | S31 | Web Remote | ☐ | | |
 | S32 | PSN / OSC — openfollow.app | ☐ | | |
 
-**Done:** 24 / 33 · **In progress:** 0 · **Blocked:** 0
+**Done:** 25 / 33 · **In progress:** 0 · **Blocked:** 0
 
 ### 2.1 S0 verification record
 
@@ -1256,6 +1256,87 @@ by `cargo test -p prismd --test ui_telemetry -- --ignored`, and both are opened
 by non-ignored tests on every commit — a show format that moved would fail in
 Rust rather than in Chromium months later.
 
+### 2.26 S25 verification record
+
+Measured on 2026-08-14, all exit criteria from `IMPLEMENTATION_PLAN.md` S25 and
+the session prompt. The session where the interface stops being a readout and
+starts being a desk — and the first one whose central claim can only be checked
+by *watching* rather than by asserting.
+
+| Check | Result |
+|---|---|
+| **Opening, moving, resizing and closing a window issues a session command — the interface does not hold this state** | ✅ four gestures, four commands, and the assertion is on what happens *before* the delta: `ui/src/canvas/session.test.tsx` drives the whole interface over a socket and, after each gesture, reads the bytes that went out **and** checks the canvas has not moved. Opening sends `OpenWindow` and the canvas stays empty; closing sends `CloseWindow` and the window stays; dragging sends `PlaceWindow` and the window is back at the daemon's rectangle the moment the button comes up. There is nowhere for the answer to be kept: `Canvas` renders `openWindows(session)` and holds no list, no positions and no stacking order |
+| **The stacking order is the daemon's too** | ✅ the trap in the sentence above. `openWindows` deliberately does **not** sort — `prism-core` moves a focused window to the end of the list, so array order *is* stacking order, and the stylesheet has no `z-index` anywhere so document order is the only thing that can express it. `canvas.test.tsx` asserts the drawn order is `[2, 1]` after `FocusWindow(1)` and that this is **not** the sorted order. **Checked by mutation:** sorting the readers' answer by number turns five tests red across three files |
+| **A view switched at the X-Touch appears at once — D11, observed end to end** | ✅ `ui/e2e/session.spec.ts`, in Chromium against a real `prismd`: a layout is stored as view 2 and the canvas is then emptied, and **three MIDI bytes are appended to a file by the test process** — `90 31 7F`, `Channel ▶` on channel 1, written out from `docs/MCU_MAPPING.md` §2.1 by hand. The browser is doing nothing at that moment. The view lights up, `activeViewId` reads 2 and the window comes back; then F1 (note 54) opens a Fixture Sheet, and it appears. Nothing was polled and nothing was asked for. The daemon reads the file through `--mock-surface`, which is the console's `--mock-output`: the same three layers of `prism-surface`, the same binding table, no device |
+| The same claim in Rust, on the wire | ✅ `crates/prismd/tests/surface_gate.rs` gained `a_console_press_reaches_a_connected_client_as_a_delta`: a client connects, its snapshot says view 1, a press is appended to the mock surface file, and the client is **sent** `replace /session/activeViewId → 2`. The existing gate is the other half — the same press with *nobody* connected. Between them, D11 holds whether or not an interface is running |
+| **The layout survives a restart of the interface, because it lives in the session** | ✅ twice. In Chromium: two windows are opened and one is dragged, `page.reload()` destroys every scrap of state in the tab, and the windows come back **at the same percentages** — with the daemon neither restarted nor saved nor told anything at all. In jsdom: a *second* interface, which has never sent a command or seen a delta, is handed the snapshot and draws the same canvas — which is the stronger form, because it holds for a client that took no part in building the layout |
+| **Where the layout lives, and how a drag can still be smooth** | ✅ the question the prompt calls the decisive one, and the answer is **cadence, not ownership** — written down in `ui/src/canvas/drag.ts` and asserted in `drag.test.ts` and `canvas.test.tsx`. Ownership never moves: the canvas renders `openWindows` and nothing else. What is local is *how often the daemon is told* (at most one `PlaceWindow` every 33 ms, plus one when the button comes up) and *what the screen shows in between* (the rectangle the pointer describes — `ARCHITECTURE_SPEC.md` §4.2's own "drag state"). **The moment the button comes up the local rectangle is dropped**, so a drag against a daemon that never answers leaves the window exactly where it started. That is the test that would fail for an implementation that held the position and "synced up" afterwards, and it is `sends where the pointer went and holds nothing when it gets there`. **Checked by mutation:** keeping the drag rectangle after pointer-up turns four tests red |
+| **The protocol had no command for dragging a window. It has one now** | ✅ `Command::PlaceWindow { instanceId, x, y, w, h }` in `prism-domain`, routed in `prism_core::SessionState::apply` to the `place_window` that S12 had already written and left a note on. §4.4 lists eleven commands because it lists what the **console** issues, and a console never drags a window; §4.1 puts the geometry in the session all the same. The alternative was a position the interface kept to itself, which fails all three exit criteria. `docs/IPC_PROTOCOL.md` §5 and `ARCHITECTURE_SPEC.md` §4.4 both say so now, and the decision log has the reasoning. **Checked by mutation:** removing it from `is_session_command` turns `prism-core` and `prism-domain` red |
+| **The level view had no window type. It has one now** | ✅ `WindowType::DmxSheet` — the DMX output itself, channel by channel, which is what S24 built and what none of `ARCHITECTURE_SPEC.md` §6's ten window types named. A `FixtureSheet` shows what the *fixtures* are set to; this shows what is on the *cable*, and those two can disagree. The telemetry panel now lives in one, sized by the window rather than by `vh` — which is what §7's *carried out of S24* asked for |
+| **The four coordinates cannot be NaN, in either direction** | ✅ the same `crate::finite` guard `WindowInstance` carries. MessagePack encodes NaN and infinity faithfully, so without it a corrupt or hostile frame could put one into a session — where it compares unequal to itself and stops the show file saving. Asserted on both wire formats in `prism-domain` |
+| **The interface's encoder is what the daemon reads — still asserted on bytes, and a difference was found** | ✅ and this one is worth reading. `rmp-serde` writes an `f64` as a float64 whatever its value; `@msgpack/msgpack` writes the JavaScript number 240 as a **uint8**, because JavaScript has one kind of number. Both are valid MessagePack for the same value. So `crates/prismd/tests/ui_session.rs` records **both** forms of every `PlaceWindow` — its own, and the integer form built by hand — and asserts in Rust, against `prism_ipc::decode`, that they are the same command. The browser then compares its bytes against the integer form. Both sides still come from Rust; what changed is that the equivalence is now a checked claim about the daemon rather than a hope |
+| **The canvas is held to the daemon's answers, not to a second opinion in TypeScript** | ✅ `ui/tests/fixtures/session-recording.json`, written by the new `crates/prismd/tests/ui_session.rs` off a running `prismd`: **twelve commands of a canvas being used** — two windows opened, one dragged, one resized, one brought to the front, a view stored, a window closed, two commands refused, a view selected back — and after each one, **which windows are open, in what order, at what coordinates, which has the focus and what views exist**, taken from a *fresh client's* snapshot. `ui/src/canvas/windows.test.ts` applies the recorded deltas through the interface's own mirror and compares its readers' answers with those. Nothing in TypeScript decides what the answer should be |
+| The recording cannot go stale quietly, and is not vacuous | ✅ three guards in Rust, on every `cargo test`. `the_recorded_windows_are_what_the_session_document_says` replays the deltas through `prism_core::SessionMirror` and checks every step's recorded answers against the mirrored document, then checks the whole thing against the final snapshot. `the_integer_form_of_a_command_is_the_same_command` is above. `the_recording_is_of_a_canvas_being_used` demands the file actually contain the interesting cases: a window at the daemon's default, one that moved, one that was resized, a **reordering with the same set of windows** (which a canvas that sorted would get wrong), exactly two refusals that changed nothing, a view stored, and at least three kinds of window. The regenerator is `#[ignore]`d, like the other two |
+| **A refusal moves nothing** | ✅ two of the twelve steps are refused on purpose — dragging a window that has just been closed, and selecting a view that was never stored. The recording carries `refused: true`, **no deltas at all** (not an empty one), and identical answers to the step before; the browser asserts the same |
+| **No scrolling outside the canvas** | ✅ `CLAUDE.md`'s rule, checked in a browser rather than reviewed in a stylesheet: with four windows open, `e2e/session.spec.ts` reads `scrollWidth − clientWidth` and `scrollHeight − clientHeight` off **both** the document element and the canvas, and all four are 0. `index.css` — the Vite template until this session — is now `html, body, #root { height: 100% }` with `overflow: hidden`, so a layout mistake is clipped and gets fixed rather than quietly adding a scrollbar to a console. The one place that scrolls is inside a window, which is what a window is for |
+| A window this build cannot draw is left out, not drawn empty | ✅ `type` is narrowed against the generated `WINDOW_TYPE_VARIANTS`, so a daemon newer than the interface produces a canvas with the windows it understands on it — asserted against a session holding a `Hologram`, a window with no rectangle, a window with no number, and a string where a window should be. The four windows that are genuinely not built yet (`Viewer3D`, `PhaserEditor`, `ClockViewer`, `Settings`) say so **by name**, because an operator who pressed an F-key should find an answer rather than an empty rectangle |
+| `npx tsc -b --force` clean with `strict: true`, **no `any` anywhere** | ✅ exit 0. `any` appears **nowhere** in `ui/src` or `ui/e2e`. This session's shipped code contains **no type assertion at all**; the four in its test files are the allowance S23 set — a parsed recording and a decoded message the file itself constructed. Base64 is `atob`, not `Buffer`, so the test files stay under the browser configuration |
+| `npm run build`, `npm run lint`, `npm run test` clean | ✅ all three exit 0. The build is **252 kB (79 kB gzipped)**, up 8 kB on S24 — **and this session adds no dependency**. A window system is the classic place a drag-and-drop library arrives; the whole of this one is three pure functions, a class with a clock argument, and two pointer listeners, and none of the libraries on offer would have made the *cadence* decision for us. `oxlint` reports nothing. **298 tests in 29 files**, up from 235 in 22 |
+| `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check` | ✅ all three exit 0 — **1 449 tests across 53 targets**, 17 ignored. Nine of them are this session's: 3 in the new `prismd/tests/ui_session.rs` (plus its ignored regenerator), 1 in `surface_gate.rs`, 3 in `prismd`'s library (the file surface and the new flag) and 2 in `prism-domain` |
+| **Coverage on what this session wrote** | ✅ **98.82 % lines**, 94.06 % branches, **100 % functions**, 98.86 % statements over `ui/src` (298 tests, `vitest` + Testing Library), against S24's 98.91 %. The new `canvas/` module reads **99.39 % lines, 95.49 % branches, 100 % functions**: `geometry.ts`, `drag.ts`, `windows.ts`, `window.tsx`, `content.tsx` and `viewbar.tsx` at **100 % lines**, `canvas.tsx` 91.66 %. The uncovered lines across the whole tree were read rather than counted, and every one is an arm this interface cannot reach: the canvas element being `null` when a drag asks for its box, three `documents === null` guards under a connection that is already `connected`, and the `?? "—"` fallbacks for a patched fixture with no name |
+| Coverage on `prismd`, which grew a port and a flag | ✅ **94.98 % lines**, 94.97 % regions, 96.37 % functions — `surface.rs` **97.30 %** (up from 96.94 with `FileSurfacePort` in it) and `cli.rs` **99.36 %**. `main.rs` is still 0 % and still the honest part of the figure; without it the crate reads 96.2 % |
+| **The two telemetry numbers from S24 are still true** | ✅ both, and the window system was made to prove it rather than trusted. *Zero React commits over 300 frames of 64 universes* is unchanged — `telemetry/render.test.tsx` now renders the panel **inside a window**, because the snapshot the fake daemon serves has a `DmxSheet` open, so the count is of an interface with a canvas and a window frame in it. *Under 8 ms* was re-measured in Chromium against a real `prismd` on the 64-universe rig, **with the window opened through the interface**: **`64 universes · 30.2 Hz · paint 0.20 ms (p99 0.50 ms) · 155 frames`**, nothing lost and nothing dropped. The measurement now goes through the window system as well as the telemetry channel — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn |
+| A test never touches a device | ✅ the console is a **file**. `--mock-surface` is the console's `--mock-output`: MIDI bytes appended to a path, read by the same three layers, with the feedback dropped because a file has no motor faders. The output is `--mock-output`. Nothing is plugged into anything, on either the developer's machine or the build server |
+| The end-to-end suite | ✅ **6 tests, all green** (Playwright + Chromium, against real daemons): S23's two, S24's one, and this session's three |
+| CI green on the pushed commit | ⏳ recorded below once the run finishes |
+
+**What was built, in five pieces.**
+
+**1. `canvas/geometry.ts` — the coordinate space.** A fixed 1920 × 1080 grid of
+*canvas units* that each client stretches over its own element, because §4.1's
+`x`, `y`, `w` and `h` are shared by clients that do not share a screen. The
+number is not free: the daemon opens a window at 640 × 480, so a grid on which
+that is a third of the width is the reason 1920 was chosen, and there is a test
+that says so. Windows are positioned in **percentages**, so a screen that
+changes size moves every window without a single command — a screen's size is
+client-local (§4.2).
+
+**2. `canvas/drag.ts` — the cadence.** Sixty lines, a clock passed in as an
+argument, and the rule in the module documentation. See the row above.
+
+**3. `canvas/windows.ts` — readers, not a model.** S23's rule taken literally:
+`openWindows`, `focusedWindow`, `activeViewId`, `storedViews` each walk the
+document they are given and answer. Nothing is parsed and kept, because a
+parsed copy is a second model to keep in step and RFC 6902 operations only mean
+anything against a root.
+
+**4. `canvas/canvas.tsx`, `window.tsx`, `content.tsx`, `viewbar.tsx` — the
+screen.** A window frame with a title bar, a close button and a corner; a View
+Selector Bar whose lit button is `activeViewId` and whose buttons issue the
+same `SelectView` the X-Touch's `Channel ◀▶` does (**D8**); and a body per
+window type — the level view, the patch, the pools, and an honest sentence for
+the four that are S27, S28 and S30's.
+
+**5. `prismd::surface::FileSurfacePort` — a console with no console.** The
+missing half of the test rig. `MockSurfacePort` lets a *Rust test* press a
+button; this lets a **separate process** press one, which is what D11 needed to
+be watched rather than reconstructed. It is production code with a flag on it,
+in the same sense `--mock-output` is, and a person can use it to try a binding
+table with nothing plugged in.
+
+**Four mutation checks.** Keeping the drag rectangle after the button comes up
+— the optimistic implementation — turns four tests red. Sorting `openWindows`
+by number turns five red across three files. Sending on every pointer event
+rather than on the interval turns three red. Removing `PlaceWindow` from
+`is_session_command` turns `prism-core` and `prism-domain` red.
+
+**One fixture was added and it is written by Rust.**
+`ui/tests/fixtures/session-recording.json`, by
+`cargo test -p prismd --test ui_session -- --ignored`, and opened by three
+non-ignored Rust tests on every commit. A session shape that moved would fail
+in Rust rather than in Chromium months later.
+
+
 ---
 
 ## 3. Coverage tracking
@@ -1267,14 +1348,14 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 
 | Crate | Target | Measured | Date |
 |---|---|---|---|
-| `prism-domain` | ≥ 85 % | **99.52 % lines**, 97.46 % regions, 98.31 % functions (S23, re-measured because `export.rs` grew the run-time variant tables the interface narrows a decoded string with; `export.rs` reads 97.07 % lines / 91.71 % regions, and the seven uncovered lines are two `?` arms on file I/O, one acronym branch in the name converter that no type name reaches, and a `panic!` formatting inside a test that passes). S1's measurement: **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-13 (S23) |
+| `prism-domain` | ≥ 85 % | **97.95 % lines**, 96.66 % regions, 96.72 % functions (S25, which added `Command::PlaceWindow` and `WindowType::DmxSheet`). **The figure went down and the reason was chased rather than assumed**: the same measurement at the previous commit reads 99.45 %, and the twenty-four newly uncovered lines are all *attribute and field lines* of `Command::PlaceWindow` and of `Session` — that is, code `proptest_derive::Arbitrary` generates and `llvm-cov` maps onto the declaration it came from. Adding a variant to an enum changes the shape of the generated union and therefore which of those lines a 64-case property run reaches. **No shipped path is uncovered**: both new items are serialised, deserialised and round-tripped by hand-written tests (`the_dmx_sheet_is_a_window_like_any_other`, `a_window_cannot_be_placed_at_a_coordinate_that_is_not_a_number`, `every_command_from_the_protocol_specification_exists`), and `export.rs`'s five are S23's known ones. A later session that wants the point and a half back should look at the case count in `wire.rs`'s `round_trip!` macro rather than at the domain types. S23's measurement: **99.52 % lines**, 97.46 % regions, 98.31 % functions (S23, re-measured because `export.rs` grew the run-time variant tables the interface narrows a decoded string with; `export.rs` reads 97.07 % lines / 91.71 % regions, and the seven uncovered lines are two `?` arms on file I/O, one acronym branch in the name converter that no type name reaches, and a `panic!` formatting inside a test that passes). S1's measurement: **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-13 (S23) |
 | `prism-engine` | **> 95 %** | **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-11 (S6) |
-| `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
+| `prism-core` | **> 95 %** (programmer) | **99.47 % lines**, 98.07 % regions, 98.51 % functions (re-measured at S25, which routed `Command::PlaceWindow` into `SessionState::apply`; unchanged to two decimal places). S15's measurement and its reasoning: **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-12 (S15) |
 | `prism-protocols` | **> 95 %** | **98.43 % lines** (S18, re-measured because `MockOutput` grew a timestamped recording — `output.rs` is at **100 % lines, regions and functions**). S10's measurement, whose reasoning still holds: **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | **99.30 % lines**, 98.68 % regions, 98.46 % functions (S22, with layer 3 and the bindings target) — `accel.rs`, `midi.rs`, `model.rs` and `control.rs` at **100 % lines**, `binding.rs` **99.85 %** / 98.72 % regions, `profile.rs` 99.39 %, `color.rs` 99.32 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. Three uncovered lines in the new module were found by reading the report — the `action()` arms for the two faders and the wheel, which every test had reached through `command()` instead — and became a test rather than an exception. S21's measurement: **99.20 % lines**, 98.66 % regions, 98.28 % functions (with layer 2 and two new targets) — `accel.rs`, `model.rs`, `control.rs` and `midi.rs` at **100 % lines**, `color.rs` 99.32 %, `profile.rs` 99.27 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. The crate grew by about 1 500 lines and the figure moved by six hundredths of a point, which is the point of measuring it. The 33 uncovered lines are the *cannot happen* arms a crate that denies `panic!` has to write — `let Some(...) else { return … }` on an array the diff has already bounded — plus `panic!` arms in tests that pass; three genuinely unreachable branches found while reading the report were **removed** rather than covered (§2.22). S20's measurement: **99.26 % lines**, 98.62 % regions, 98.01 % functions (with the recorded-capture target added) — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.94 %, `codec.rs` 98.71 %, `feedback.rs` 98.30 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. S19 measured **99.24 % lines**, 98.58 % regions, 97.94 % functions; two unreachable branches found while reading that report were removed rather than covered — see §2.20. **The figure does not include `tools/xtouch-probe`**, which is not a workspace member and has no tests: it is the instrument, not the product | 2026-08-13 (S20) |
 | `prism-ipc` | ≥ 85 % | **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-12 (S16) |
-| `prismd` | ≥ 85 % | **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
-| `ui` | ≥ 85 % | **98.91 % lines**, 94.08 % branches, **100 % functions**, 98.94 % statements (S24, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; 235 tests in 22 files). The new `telemetry/` module reads **99.45 % lines** and **100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The eleven uncovered lines across the whole tree were read, not counted: S23's nine *cannot happen* arms, plus a canvas ref that is `null` when the effect runs and the `typeof window === "undefined"` arm of the resize fallback. The end-to-end suite (Playwright, **3** tests) is **not** in this figure. S23's measurement: **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-13 (S23) |
+| `prismd` | ≥ 85 % | **94.98 % lines**, 94.97 % regions, 96.37 % functions (S25, with `FileSurfacePort` and `--mock-surface`) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` **99.36 %**, `lock.rs` 98.48 %, `surface.rs` **97.30 %** (up from 96.94 % with a second port in it), `core.rs` 95.72 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 94.00 %, `daemon.rs` 93.85 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. Without `main.rs` the crate reads **95.6 %**. The five hundredths of a point below S22 are `daemon.rs`'s new *the surface file would not open* arm, which no test can reach without taking a directory away from the process. S22's measurement: **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-12 (S18) |
+| `ui` | ≥ 85 % | **98.82 % lines**, 94.06 % branches, **100 % functions**, 98.86 % statements (S25, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **298 tests in 29 files**). The new `canvas/` module reads **99.39 % lines**, 95.49 % branches and **100 % functions**: `geometry.ts`, `drag.ts`, `windows.ts`, `window.tsx`, `content.tsx` and `viewbar.tsx` at **100 % lines**, `canvas.tsx` 91.66 %. The fourteen uncovered lines across the whole tree were read, not counted: S23's and S24's eleven, plus the canvas element being `null` when a drag asks for its box and three `documents === null` guards under a connection that is already *connected*. The end-to-end suite (Playwright, **6** tests) is **not** in this figure. S24's measurement: **98.91 % lines**, 94.08 % branches, **100 % functions**, 98.94 % statements (S24, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; 235 tests in 22 files). The new `telemetry/` module reads **99.45 % lines** and **100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The eleven uncovered lines across the whole tree were read, not counted: S23's nine *cannot happen* arms, plus a canvas ref that is `null` when the effect runs and the `typeof window === "undefined"` arm of the resize fallback. The end-to-end suite (Playwright, **3** tests) is **not** in this figure. S23's measurement: **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-13 (S23) |
 
 ### Performance gates
 
@@ -1287,8 +1368,8 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Frame determinism | identical input → byte-identical frames | three runs of the same 100-tick script compared byte for byte on the driver's frames, 8 command changes, > 20 distinct frames | 2026-08-11 |
 | Open DMX frame rate | measure real rate on SH-RS09B | **35.53 Hz** over 60 s through D2XX (2 132 frames), **38.35 Hz** through the virtual COM port. Both with the frame timing corrected; before the correction the same code reported 43.1 Hz, and that figure was the *symptom* — see the decision log. `DeviceProfile::SH_RS09B` now carries `verified: true` | 2026-08-11 (S8) |
-| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-14 (S24) |
-| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-14 (S24) |
+| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits over 300 frames** — re-checked at S25 with the panel **inside a window**, so the count is of an interface that has a canvas, a window frame and a View Selector Bar in it. Originally: **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-14 (S24) |
+| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.20 ms median, 0.50 ms p99 over 155 frames at 30.2 Hz (S25)**, with the DMX Sheet **opened through the interface** — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn, and a canvas sized by the window rather than by `34vh`. S24's measurement: **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-14 (S24) |
 
 **Thread priority is part of the tick jitter figure.** The same ten-minute run at
 the shell's default priority missed 45 ticks and had a p99.9 of 54 ms. The engine
@@ -1610,6 +1691,12 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-14 | S25 | **The protocol had no way to move a window, and `ARCHITECTURE_SPEC.md` §4.1 says a window's position is session state.** §4.4's eleven commands are what the *console* issues, and an X-Touch opens and closes windows without ever dragging one. A canvas does. The two ways out were both bad: keep the geometry in the client, which fails all three of this session's exit criteria and is exactly the drift **D11** exists to stop; or invent a delta, which would be a client writing to a document the daemon owns | **`Command::PlaceWindow { instanceId, x, y, w, h }`** — the twelfth session command, in `prism-domain`, routed in `prism_core::SessionState::apply` to the `place_window` S12 had already written and left a note on. `docs/IPC_PROTOCOL.md` §5 carries it with the reasoning; `ARCHITECTURE_SPEC.md` §4.4 says why it is not in its list. The four coordinates carry `crate::finite`'s guard in **both** directions, so a NaN is refused at the decoder rather than written into a session that then cannot be saved. This is the second finding of S22's shape and, like that one, it was taken rather than worked around |
+| 2026-08-14 | S25 | **`WindowType` had no name for the thing S24 built.** The level view — the DMX output, channel by channel — is not a `FixtureSheet`: one shows what the *fixtures* are set to and the other shows what is on the *cable*, and the whole point of the second is that it can disagree with the first. §7's *carried out of S24* asked for the panel to move into a window, and there was no window to move it into | **`WindowType::DmxSheet`**, and `ARCHITECTURE_SPEC.md` §6's list is eleven. The telemetry panel is now a window body sized by its window rather than by `34vh`, and the frame-budget measurement goes through the window system as a result — the end-to-end spec opens the window with an `OpenWindow` before it measures anything |
+| 2026-08-14 | S25 | **A drag is smooth or it is honest, and the way to have both is *cadence* rather than ownership.** Holding the window's position in component state during a drag and reconciling afterwards is optimistic application under another name — **D3** — and it breaks the moment the daemon refuses a command or a second client moves the same window. Sending a command per pointer event is the other extreme: a pointer reports at 120 Hz on the screens this runs on, and S21 established at the other end of the desk that an unpaced stream of small messages is how a device is saturated | Ownership never moves — `Canvas` renders `openWindows(session)` and holds no layout at all. What is local is the *rate* (`PlaceWindow` at most every 33 ms, plus one when the button comes up) and *what the screen shows in between* (the rectangle the pointer describes, which is §4.2's own "drag state"). **The local rectangle is dropped the instant the button comes up**, so a drag against a daemon that never answers leaves the window where it started — asserted, and it is the test an optimistic implementation fails |
+| 2026-08-14 | S25 | **`@msgpack/msgpack` and `rmp-serde` encode the same number differently, and S23's byte-for-byte encoder check found it the first time a command carried a float.** `rmp-serde` writes an `f64` as a float64 whatever its value; JavaScript has one kind of number, so a canvas sending the whole coordinate 240 produces a uint8. Both are valid MessagePack for the same value — but *the daemon accepting both* is a claim about `prism-ipc`, and a browser cannot check it | `crates/prismd/tests/ui_session.rs` records **both** encodings of every `PlaceWindow` — `rmp-serde`'s own and an integer form built by hand — and `the_integer_form_of_a_command_is_the_same_command` asserts against `prism_ipc::decode` that they are the same command. The interface then compares its bytes with the integer form. The check stays byte for byte and both sides still come from Rust; what is new is that the equivalence is verified rather than assumed |
+| 2026-08-14 | S25 | **D11 could be asserted from either end and observed from neither, because nothing outside the daemon's own process could press a button.** `MockSurfacePort` is a Rust type: a test in `crates/prismd` can press `Channel ▶`, and that is how S22's gate works. A browser cannot. So the strongest available claim was *this delta, which a console would produce, moves the interface* — which is a reconstruction, not an observation | **`--mock-surface <PATH>`**: `prismd::surface::FileSurfacePort` reads MIDI bytes appended to a file and drops its feedback, because a file has no motor faders. It is the console's `--mock-output` and it is production code with a flag on it for the same reason. `ui/e2e/session.spec.ts` now watches a real Chromium follow three bytes written by neither the browser nor the daemon, and `surface_gate.rs` watches a connected client be *sent* the delta. D11 is observed at both ends |
+| 2026-08-14 | S25 | **`OpenWindow` carries no geometry, so every window opens on top of the last one.** The daemon has no screen to centre a window on and puts each one at 0, 0 — which is right, but means opening three windows produces three identical rectangles in a pile. The obvious fix, having the client offset a newly opened window, is a client writing session state on its own initiative and a race between two clients doing it | Left as it is, deliberately, and written down here instead. The operator drags the window, which is how a good many consoles behave. If it becomes a nuisance the fix belongs in the protocol — geometry on `OpenWindow`, or a *cascade* the daemon performs — and not in a client. It has one visible consequence today: `ui/e2e/session.spec.ts` drags its window **before** opening the second one, or the pointer would land on the window in front |
 | 2026-08-14 | S24 | **The decode belongs on the *paint* side of the sink, and putting it there is what makes the third exit criterion structural.** The obvious place to decode a telemetry frame is where it arrives — in the connection's `onTelemetry`, beside every other message. Two things are wrong with that. It is work done for pictures nobody sees: telemetry arrives at 30 Hz, a background tab paints at 0 Hz, and the browser decides which. And it puts the decoder on the *control* side of the sink, where a malformed frame is one mistake away from the store | `TelemetrySink.accept` stays what S23 built — it takes bytes and holds the latest — and the decode happens in the animation-frame loop, whose only outputs are a canvas and one `textContent`. *Dropped telemetry never desynchronises control state* stops being a promise about care and becomes a fact about which side of a boundary the code is on. It is still asserted: 180 malformed frames through a real connection, then a delta that has to arrive |
 | 2026-08-14 | S24 | **There is no telemetry encoder in the interface, and that is a decision rather than an omission.** The natural way to test a decoder is to build frames to feed it — and a TypeScript encoder feeding a TypeScript decoder passes with the header misread, the endianness reversed and the stride wrong, as long as all three are wrong together. It is the trap S19 (round trips), S20 (recorded round trips), S21 (self-classifying messages) and S23 (self-computed patches) each found in their own layer | The bytes come from `prism_ipc::TelemetryFrame::encode` off two running daemons, and **every expectation is `TelemetryFrame::decode`'s own answer**, written into `ui/tests/fixtures/telemetry-recording.json` beside the payload. `ui/src/telemetry` contains no encoder at all, which is also correct on its own terms: §4 makes `Telemetry` daemon → client, so a client that could build one would be a client that could lie about the rig |
 | 2026-08-14 | S24 | **Measuring an 8 ms frame budget needs 64 real universes, and the daemon will not publish universes a show does not patch.** `prismd` filters telemetry down to `patched_universes()` (S17, and for a good reason: 64 universes of nothing at 30 Hz is a megabyte a second on a school network). So a daemon started with `--universes 64` and an empty show publishes **none**, and the protocol has no command that embeds a fixture type — a client cannot patch its way to a wide rig | A 64-universe show is a committed fixture, `ui/tests/fixtures/wide-rig.prism`, written by the same `#[ignore]`d regenerator as the frame recording and opened by a non-ignored Rust test on every commit. `.gitignore`'s `*.prism` gained a second exception, beside S15's frozen migration file. The end-to-end spec copies it before starting a daemon on it, because a daemon writes to the show it opens |
@@ -1845,19 +1932,85 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
-**The interface now has both channels, and the second one is the reason there
-are two.** A fixed-layout binary frame decoded in place, 64 universes drawn as a
-raster on a `<canvas>`, and a control state that cannot be disturbed by any of
-it — because the decoder lives on the paint side of the sink, where nothing it
-does can reach the store.
+**The interface is a desk now, and none of it is in the interface.** Windows
+open, move, resize and close by command; the canvas draws `openWindows` and
+holds no layout of its own; and the View Selector Bar's lit button is
+`activeViewId`. Reloading the page against a daemon that is never told anything
+puts every window back where it was, because it was never here.
 
-**Both exit criteria are numbers rather than claims.** *Zero re-renders* is a
-`<Profiler>` count over 300 frames of 64 universes, and a mutation check says the
-counter counts. *Under 8 ms* is 0.30 ms median and 1.10 ms p99, measured in
-Chromium against a real `prismd` publishing 64 real universes at 30 Hz, with the
-command to re-run it in §3.
+**D11 is observed from both ends.** S22's gate proved a console can operate a
+desk with nobody watching. This session owed the other half, and it is not a
+reconstruction: `--mock-surface` lets a *separate process* append three MIDI
+bytes to a file, and `ui/e2e/session.spec.ts` watches a real Chromium — which
+was doing nothing at all — switch view and open a window.
 
-**Begin S25** (`ui` — canvas, windows, views). Use the prompt in §8.
+**Two things the protocol did not have, and both were added rather than worked
+around.** `Command::PlaceWindow`, because §4.1 puts a window's geometry in the
+session and §4.4 lists only what a console issues; and `WindowType::DmxSheet`,
+because none of the ten named the level view S24 built. Both are in the decision
+log with the reasoning.
+
+**Begin S26** (`ui` — executor bar, encoder bar, console). Use the prompt in §8.
+
+Carried out of S25:
+- **The layout question is settled and the answer is `cadence`, not ownership.**
+  `ui/src/canvas/drag.ts` is the whole of it: the daemon owns the rectangle, the
+  screen may show the pointer's rectangle while the button is down, a command
+  goes out at most every 33 ms plus one on release, and **the local rectangle is
+  dropped the instant the button comes up**. S26's faders and encoders have the
+  identical problem one layer down — a fader dragged in the interface is a
+  stream of `SetExecutorMaster` — and this is the shape to copy. It is also the
+  shape the *surface* already uses in the other direction (S21's coalescing).
+- **`canvas/windows.ts` is where a typed reading of the session goes.**
+  `openWindows`, `focusedWindow`, `activeViewId`, `storedViews` — readers over
+  the document, never a parsed copy, and every string narrowed against
+  `bindings/variants.ts`. S26 wants `executorPage`, `selectedExecutor`,
+  `encoderBank`, `programmerPage` and `programmerParamIndex` the same way; they
+  belong beside these, and `mirror/select.ts` is the layer under both.
+- **`prismd::surface::context_of` and the encoder bar must agree, and now
+  somebody can check.** S22 left the warning: `parameter_of` walks
+  `AttributeType::ALL` filtered by the encoder bank, and if S26's encoder bar
+  orders its parameters differently the jog wheel turns something other than
+  what is highlighted. With `--mock-surface` that is now testable end to end —
+  turn the wheel, watch the interface.
+- **`--mock-surface <PATH>` is the console for tests, and `pressConsole` in
+  `ui/e2e/daemon.ts` is how to press one.** Bytes from `docs/MCU_MAPPING.md`
+  §2.1 written out by hand; never ask the profile which note to send, because
+  that is asking the code under test what to press.
+- **`ui/tests/fixtures/session-recording.json` is a third frozen fixture.**
+  Written by `cargo test -p prismd --test ui_session -- --ignored`, opened by
+  three non-ignored Rust tests on every commit, and it carries **both**
+  MessagePack encodings of every command with a float in it — because
+  `@msgpack/msgpack` writes a whole number as an integer and `rmp-serde` writes
+  an `f64` as a float64, and the daemon accepting both is a claim about
+  `prism-ipc` rather than something a browser can check. S26 adds commands with
+  no floats, so it can compare bytes directly again — but if it ever adds one,
+  this is the pattern.
+- **`OpenWindow` carries no geometry, so every window opens at 0, 0 on top of
+  the last.** Left alone deliberately (decision log): a client that offset its
+  own new windows would be writing session state on its own initiative, and two
+  clients doing it would race. If it becomes a nuisance the fix is geometry on
+  `OpenWindow` or a cascade in the daemon — not in a client.
+- **There is no `z-index` in the stylesheet and there must not be one.** The
+  stacking order is the order of `openWindows`, which `FocusWindow` changes in
+  the daemon, so document order is the only thing allowed to express it. A
+  `z-index` would be a second source of truth for something the session decides,
+  and `canvas.test.tsx` asserts the drawn order is the daemon's rather than the
+  sorted one.
+- **Nothing outside the canvas scrolls, and that is now checked in a browser.**
+  `index.css` is `height: 100%` and `overflow: hidden`; the end-to-end suite
+  reads `scrollWidth − clientWidth` off the document element *and* the canvas
+  with four windows open and demands zeros. S26's executor and encoder bars take
+  height from the same column, so they have to fit — a bar that does not fit is
+  a layout decision, not a scrollbar.
+- **The window bodies are placeholders on purpose, and four of them say so by
+  name.** `content.tsx` switches on `WindowType` without a wildcard, so a window
+  type added to `prism-domain` is a compile error there. S27 fills in the
+  fixture sheet and the patch; S28 the sequences, cues and pools.
+- **The telemetry panel now lives in a `DmxSheet` window** and is sized by it.
+  Both S24 gates were re-measured through the window system and both hold
+  (§3). If S26 puts more on the screen, `npx playwright test telemetry` is the
+  spec that would notice, because it asserts a p99.
 
 Carried out of S24:
 - **Telemetry must stay out of React, and there are now two guards.** S23's:
@@ -2413,15 +2566,17 @@ Paste everything below into a fresh session.
 ---
 
 ```
-PrismDMX — Session S25: `ui` — Canvas, Fenster, Views
+PrismDMX — Session S26: `ui` — Executor-Leiste, Encoder-Leiste, Konsole
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Der Daemon hält den Zustand, das Pult bedient ihn ohne Oberfläche (D2 in S18,
-D11 in S22), und seit S23/S24 hat die Oberfläche beide Kanäle: einen Spiegel,
-der dem Daemon folgt, und ein Bild der Ausgabe, das nie durch React geht. Was
-fehlt, ist die Oberfläche selbst — und ihr entscheidender Punkt ist, wo ihr
-Layout wohnt. Nicht hier.
+D11 in S22), und seit S23–S25 hat die Oberfläche einen Spiegel, ein Bild der
+Ausgabe, das nie durch React geht, und einen Canvas, dessen Fenster im Daemon
+liegen. Was fehlt, sind die Bedienelemente: die acht Executor der aktuellen
+Seite, die fünf Encoder-Bänke, die in den Programmer schreiben, und die
+Kommandozeile. Das ist die Session, in der die Oberfläche zum ersten Mal Licht
+macht.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
@@ -2434,129 +2589,137 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                   außerhalb des Canvas**, schnelles Erkennen der
                                   Bereiche vor Ästhetik
 2. PROGRESS.md                  — Stand, Decision Log, gemessene Zahlen;
-                                  besonders §2.25 (was S24 gebaut hat), §2.24
-                                  (S23), §2.13 (`prism-core`: Session-Zustand,
-                                  D11), §3 (Coverage und Performance-Gates) und
-                                  §7 „Carried out of S24" **und** „Carried out
-                                  of S23" — diese beiden Listen sind Teil der
-                                  Anforderungen
-3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S25
-4. ARCHITECTURE_SPEC.md §4      — **vollständig**: §4.1 (was zum Session-Zustand
-                                  gehört, Feld für Feld), §4.2 (was ausdrücklich
-                                  nicht — und warum), §4.3 (Latenzbudget) und
-                                  §4.4 (die elf Kommandos, die die Konsole für
-                                  die Oberfläche auslöst). Das ist die
-                                  Spezifikation dieser Session
-5. docs/IPC_PROTOCOL.md §5      — die Kommandos, die ein Client senden darf, mit
-                                  ihren Feldern; dazu §4.1 (der Snapshot trägt
-                                  die Session) und §6 (Deltas)
-6. crates/prism-core/src/session.rs — der Zustand, den du fernsteuerst:
-                                  `SessionState`, `WindowInstance`, `View`, und
-                                  welche Kommandos ihn wie ändern. Dazu
-                                  crates/prismd/tests/surface_gate.rs — das
-                                  D11-Gate in Rust
-7. ui/src/mirror/select.ts und ui/src/store/hooks.ts — wie eine Ansicht heute
-                                  aus dem Spiegel liest, und warum Selektoren
-                                  stabil sein müssen
-8. ui/src/telemetry/panel.tsx und ui/src/telemetry/painter.ts — das erste
-                                  Panel, seine Zeichenschnittstelle
-                                  (`LevelSurface`) und was daran client-lokal
-                                  ist
-9. ui/src/bindings/variants.ts  — die Laufzeittabellen der String-Unions,
-                                  darunter `WindowType`. Eine Ansicht, die eine
-                                  solche Liste selbst schreibt, führt genau die
-                                  Abweichung wieder ein, die diese Datei
-                                  beseitigt
+                                  besonders §2.26 (was S25 gebaut hat), §2.25
+                                  (S24), §2.23 (S22: das D11-Gate und der
+                                  **Befund zu den Executor-Tasten**), §2.14
+                                  (`prism-core`: der Programmer), §3 (Coverage
+                                  und Performance-Gates) und §7 „Carried out of
+                                  S25" **und** „Carried out of S22" — diese
+                                  beiden Listen sind Teil der Anforderungen
+3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S26
+4. ARCHITECTURE_SPEC.md §4      — vollständig: §4.1 (Session-Zustand Feld für
+                                  Feld: `executorPage`, `selectedExecutor`,
+                                  `encoderBank`, `programmerPage`,
+                                  `programmerParamIndex`, `commandLine`), §4.2
+                                  (was ausdrücklich client-lokal ist), §4.3
+                                  (Latenzbudget) und §4.4 (die Kommandos, die
+                                  die Konsole auslöst). Dazu §6 (`Programmer`,
+                                  `Executor`) und D7 (eine Seite ist acht
+                                  Executor)
+5. docs/IPC_PROTOCOL.md §5      — die Kommandos, die ein Client senden darf,
+                                  besonders `SetExecutorMaster`, `ExecutorGo`,
+                                  `ExecutorOff`, `SetAttribute`,
+                                  `SelectFixtures`, `SetEncoderBank`,
+                                  `SelectExecutor`, `SetExecutorPage`,
+                                  `CommandLineInput`; dazu §6 (Deltas, besonders
+                                  `ExecutorState` und `ProgrammerChanged`)
+6. docs/MCU_MAPPING.md §4.1 und §4.2.1 — was das Pult mit denselben Kommandos
+                                  tut, und der offene Befund: **es gibt kein
+                                  Kommando, das eine Executor-Taste drückt**
+7. crates/prism-core/src/programmer.rs — der Zustand, den die Encoder-Leiste
+                                  fernsteuert: Selektion, dünn besetzte Werte,
+                                  Feature-Gruppen, der dreistufige Clear
+8. crates/prismd/src/surface.rs — `context_of` und `parameter_of`: was das Pult
+                                  glaubt, welcher Parameter am Jog-Rad hängt.
+                                  Wenn die Encoder-Leiste anders ordnet, dreht
+                                  das Rad etwas anderes als das, was leuchtet
+9. ui/src/canvas/drag.ts        — die Antwort auf „wem gehört der Zustand,
+                                  wessen ist die Kadenz". Ein Fader ist
+                                  derselbe Vertrag mit mehr Ereignissen
+10. ui/src/canvas/windows.ts und ui/src/mirror/select.ts — wie eine Ansicht
+                                  typisiert aus dem Spiegel liest
+11. ui/src/bindings/variants.ts — die Laufzeittabellen der String-Unions,
+                                  darunter `FeatureGroup` und `AttributeType`.
+                                  Eine Ansicht, die eine solche Liste selbst
+                                  schreibt, führt genau die Abweichung wieder
+                                  ein, die diese Datei beseitigt
 
 Stand — nichts davon musst du neu bauen:
 - Phasen 1–5 vollständig, `prismd` fährt headless, `prism-surface` bedient ein
-  Pult ohne Oberfläche. 1 439 Tests im Workspace, alle grün.
+  Pult ohne Oberfläche. 1 449 Tests im Workspace, alle grün.
 - `ui` hat Client, Spiegel, Store, Hooks, Logger, den Telemetriekanal mit
-  Canvas-Renderer und Testinfrastruktur (`vitest` + Testing Library, Playwright
-  gegen einen echten Daemon). 235 grüne Tests bei 98,91 % Zeilenabdeckung.
+  Canvas-Renderer, das Fenstersystem mit View-Leiste und Testinfrastruktur
+  (`vitest` + Testing Library, Playwright gegen einen echten Daemon).
+  298 grüne Tests bei 98,82 % Zeilenabdeckung, dazu 6 Ende-zu-Ende-Tests.
 - Der Daemon lässt sich headless starten:
   `cargo run -p prismd -- --mock-output --websocket --run-for 30`
   und schreibt eine Lock-Datei mit seinen Endpunkten (docs/IPC_PROTOCOL.md §2.2).
-  `ui/e2e/daemon.ts` startet, tötet und findet ihn bereits so — und kann ihm
-  seit S24 eine Showdatei mitgeben.
+  `ui/e2e/daemon.ts` startet, tötet und findet ihn — und kann ihm seit S25 über
+  `--mock-surface <PATH>` ein Pult mitgeben, dessen Tasten `pressConsole()`
+  drückt.
 - `npm ci` in `ui/` genügt. Für die Ende-zu-Ende-Tests zusätzlich
   `npx playwright install chromium`.
 
-Aufgabe: Session S25 umsetzen — Canvas, Fenstersystem und Views.
+Aufgabe: Session S26 umsetzen — Executor-Leiste, Encoder-Leiste, Kommandozeile.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Fenster öffnen, verschieben, in der Größe ändern und schließen erzeugt
-  **Session-Kommandos**; die Oberfläche hält diesen Zustand **nicht** lokal
-- Ein am X-Touch umgeschalteter View erscheint sofort — das ist D11, von Ende zu
-  Ende beobachtet und nicht behauptet
-- Das Layout übersteht einen Neustart der Oberfläche, **weil es in der Session
-  liegt** — prüfbar, indem die Seite neu geladen wird, ohne dass der Daemon
-  etwas davon merkt
+- Die Executor-Leiste zeigt **genau die aktuelle Seite** (D7: acht Executor);
+  Blättern am X-Touch und Blättern in der Oberfläche stimmen überein — beobachtet
+  über `--mock-surface`, nicht behauptet
+- Eine Encoder-Änderung erreicht den Programmer und erscheint **innerhalb eines
+  Ticks** in der Ausgabe. Das ist an einem laufenden Daemon zu messen: Kommando
+  hinaus, `ProgrammerChanged` zurück, und der Wert im Telemetriebild
+- Die Kommandozeile parst und meldet Syntaxfehler, **ohne zu werfen**
 - `npx tsc -b --force` sauber mit `strict: true`, **nirgends `any`**
 - `npm run build`, `npm run lint`, `npm run test` sauber
 - Coverage ≥ 85 % auf dem, was diese Session schreibt, gemessen und in
   PROGRESS.md notiert
-- Die Telemetrie-Zahlen aus S24 bleiben gültig: null React-Re-Renders aus
-  Telemetrie und Canvas-Rendern unter 8 ms bei 64 Universen. Beide Tests müssen
-  grün bleiben, und wenn das Fenstersystem das Panel umbaut, sind sie es, die
-  das merken
+- Die Zahlen aus S24/S25 bleiben gültig: null React-Re-Renders aus Telemetrie und
+  Canvas-Rendern unter 8 ms bei 64 Universen, und die drei S25-Kriterien
+  (Fenster über Kommandos, D11 beobachtet, Layout übersteht einen Neustart).
+  Alle diese Tests müssen grün bleiben
 
 Wichtige Randbedingungen:
-- **Der Ort des Layouts ist die ganze Session.** `ARCHITECTURE_SPEC.md` §4.1
-  legt Position und Größe eines Fensters in die Session, §4.2 nimmt Scroll,
-  Zoom, Hover und Kamera ausdrücklich heraus. Ein Fenster, dessen Position im
-  Komponentenzustand liegt, besteht keines der drei Kriterien — und die
-  Versuchung ist groß, weil Ziehen mit lokalem Zustand flüssiger aussieht. Die
-  Auflösung ist eine Frage der *Kadenz*, nicht des Eigentums: was während des
-  Ziehens auf dem Bildschirm passiert, darf lokal sein; was der Zustand ist,
-  kommt vom Daemon zurück. Schreib auf, wie du das gelöst hast.
-- **Es gibt kein optimistisches Anwenden** (D3). Ein Kommando geht hinaus, ein
-  Delta kommt zurück, und erst dann bewegt sich die Anzeige. S23 hat das an der
-  Kommandozeile vorgemacht; ein Fenstersystem ist derselbe Vertrag mit mehr
-  Ereignissen pro Sekunde.
-- **Was der Daemon nicht kennt, kann die Oberfläche nicht erfinden.**
-  `ARCHITECTURE_SPEC.md` §4.4 listet elf Kommandos. Fehlt eines, das ein Fenster
-  braucht (Größe? Fokus? Reihenfolge?), dann ist das eine Änderung in
-  `prism-core` und `prism-ipc` mit Tests dort — **nicht** ein Zustand, den die
-  Oberfläche still selbst führt. S22 hat für die Executor-Tasten genau so einen
-  Befund hinterlassen (PROGRESS.md §7); ein zweiter dieser Art ist ein normales
-  Ergebnis und gehört ins Decision Log.
-- **D11 wird beobachtet, nicht behauptet.** Das Gate in Rust
-  (`crates/prismd/tests/surface_gate.rs`) prüft, dass ein Pult ohne Client den
-  View umschaltet. Diese Session schuldet die andere Hälfte: ein Client ist
-  verbunden, das Pult schaltet um, und die Oberfläche folgt. `MockSurfacePort`
-  im Daemon ist der Weg dahin, ohne dass ein Gerät angefasst wird.
-- **Kein Scrollen außerhalb des Canvas** (CLAUDE.md). Die Oberfläche ist ein
-  Gerätebildschirm: der Canvas füllt, was da ist, und die Fenster liegen darin.
-  Wenn etwas nicht passt, ist das eine Layout-Entscheidung und keine
-  Bildlaufleiste.
+- **Es gibt kein optimistisches Anwenden** (D3). Ein Fader, den die Oberfläche
+  zieht, zeigt lokal die Zeigerposition; was der Wert *ist*, kommt als Delta
+  zurück. `ui/src/canvas/drag.ts` hat diese Frage für Fenster gelöst und schreibt
+  die Auflösung hin — Eigentum beim Daemon, Kadenz lokal, und der lokale Wert
+  wird beim Loslassen **fallengelassen**. Ein Fader ist derselbe Vertrag mit mehr
+  Ereignissen pro Sekunde; kopiere die Form, nicht den Code, wenn er nicht passt.
+- **Was der Daemon nicht kennt, kann die Oberfläche nicht erfinden.** S22 hat
+  einen offenen Befund hinterlassen: `XFade`, `On`, `Flash`, `Toggle` und
+  `LearnSpeed` sind Executor-*Funktionen* in den Showdaten, und es gibt **kein
+  Kommando, das eine Executor-Taste drückt**. Drei Zeilen von
+  `docs/MCU_MAPPING.md` §4.1 hängen daran. Wenn die Executor-Leiste eine solche
+  Taste braucht, ist das eine Änderung in `prism-domain`, `prism-core` und
+  `prism-ipc` mit Tests dort — nicht ein Zustand, den die Oberfläche still selbst
+  führt. S25 hat zwei solche Befunde genau so aufgelöst (`PlaceWindow`,
+  `DmxSheet`); ein dritter ist ein normales Ergebnis und gehört ins Decision Log.
+- **Die Reihenfolge der Parameter ist eine Vereinbarung mit dem Pult.**
+  `prismd::surface::parameter_of` bildet Encoder-Bank plus Parameterindex auf
+  `AttributeType::ALL` ab. Wenn die Encoder-Leiste anders ordnet, dreht das
+  Jog-Rad etwas anderes als das, was in der Oberfläche hervorgehoben ist. Die
+  beiden müssen übereinstimmen, und das ist prüfbar: `--mock-surface` dreht das
+  Rad, die Oberfläche zeigt das Ergebnis.
+- **Ein Test, der die zu prüfende Funktion zum Prüfen benutzt, prüft nichts.**
+  Die Erwartung an das, was ein Kommando mit dem Programmer macht, kommt aus dem
+  Daemon — aus einer Aufnahme (`ui/tests/fixtures/*.json`), aus einem laufenden
+  `prismd`, oder aus einem neuen Rust-Ziel nach dem Muster von
+  `crates/prismd/tests/ui_session.rs`. Nicht aus einer zweiten Meinung in
+  TypeScript.
+- **Kein Scrollen außerhalb des Canvas** (CLAUDE.md). Executor- und
+  Encoder-Leiste nehmen Höhe aus derselben Spalte wie der Canvas. Was nicht
+  passt, ist eine Layout-Entscheidung und keine Bildlaufleiste; der
+  Ende-zu-Ende-Test in `ui/e2e/session.spec.ts` prüft das bereits und muss grün
+  bleiben.
 - **Die generierten Bindings sind Quelltext aus Rust.** `ui/src/bindings/` wird
   von `prism_domain::export_bindings` geschrieben und von der Rust-Testsuite
-  überprüft. `WindowType`, `WindowInstance` und `View` sind bereits da,
-  einschließlich der Laufzeittabellen in `variants.ts`. Fehlt ein Typ, ist das
-  eine Änderung in `prism-domain`.
-- **Ein Test, der die zu prüfende Funktion zum Prüfen benutzt, prüft nichts.**
-  In dieser Session heißt das: die Erwartung an das, was ein Kommando mit der
-  Session macht, kommt aus dem Daemon — aus der Aufnahme
-  (`ui/tests/fixtures/daemon-recording.json`), aus einem laufenden `prismd`,
-  oder aus einem neuen Rust-Ziel nach dem Muster von
-  `crates/prismd/tests/ui_recording.rs`. Nicht aus einer zweiten Meinung in
-  TypeScript.
+  überprüft. Fehlt ein Typ, ist das eine Änderung in `prism-domain`.
 - **Neue npm-Abhängigkeiten sind eine Entscheidung, keine Formalität.** S23 hat
-  Zustand und Immer abgelehnt und begründet, S24 hat für den Canvas gar keine
-  gebraucht. Ein Fenstersystem ist die klassische Stelle, an der eine
-  Drag-and-Drop-Bibliothek hereinkommt; wenn du eine nimmst, begründe sie so wie
-  S23 `@msgpack/msgpack` begründet hat.
+  Zustand und Immer abgelehnt und begründet, S24 hat für den Canvas keine
+  gebraucht, S25 für ein ganzes Fenstersystem keine. Ein Parser für die
+  Kommandozeile ist die klassische Stelle, an der eine hereinkommt; wenn du eine
+  nimmst, begründe sie so wie S23 `@msgpack/msgpack` begründet hat.
 - Ein Test darf niemals ein Gerät anfassen. Der Daemon läuft im
-  Mock-Output-Modus.
+  Mock-Output-Modus, das Pult ist `--mock-surface`.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11, `cargo-llvm-cov`, Playwright/Chromium).
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S25-Status, jede gemessene Zahl, Decision Log bei
+- PROGRESS.md aktualisieren: S26-Status, jede gemessene Zahl, Decision Log bei
   Abweichungen und bei Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S26 (`ui` — Executor-Leiste, Encoder-Leiste, Konsole) überschreiben
+  Session S27 (`ui` — Patch und Fixture Sheet) überschreiben
 - Mit Conventional-Commit-Message committen, z. B. feat(ui): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)

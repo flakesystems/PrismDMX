@@ -282,7 +282,7 @@ impl Daemon {
             ),
         );
 
-        Ok(Self {
+        let mut daemon = Self {
             desk,
             server,
             outputs: opened.threads,
@@ -297,7 +297,25 @@ impl Daemon {
                 None => Bindings::defaults(),
             },
             surface: None,
-        })
+        };
+
+        // The one surface a command line can ask for. A real MIDI port is not
+        // among them yet — there is no backend (S22) — but a file of MIDI bytes
+        // is a surface as far as all three layers are concerned, and it is what
+        // lets D11 be watched from outside the process.
+        if let Some(path) = &options.mock_surface {
+            match crate::surface::FileSurfacePort::open(path) {
+                Ok(port) => daemon.attach_surface(Box::new(port)),
+                Err(error) => log::warn(
+                    "surface",
+                    &format!(
+                        "{} could not be opened ({error}); no surface is attached",
+                        path.display()
+                    ),
+                ),
+            }
+        }
+        Ok(daemon)
     }
 
     /// Attaches a control surface.

@@ -1,30 +1,41 @@
 /**
- * The interface, as far as S23 takes it: what the daemon says, and one way to
- * say something back.
+ * The interface: a device screen.
  *
- * There is no canvas, no window system and no executor bar yet — those are
- * S25 and S26. What is here is the thing the rest of them stand on, made
- * visible so it can be tested through a browser rather than argued about:
+ * `CLAUDE.md` describes what this has to be — *built like an in-device screen,
+ * no scrolling outside the canvas, fast recognition of sections before
+ * aesthetics* — so the shape is fixed and the middle is where everything
+ * happens:
  *
- * - the connection state, said plainly and never hidden (§8);
- * - the three documents, read out of the mirror by pointer;
- * - **nothing at all** when there is no daemon, because a value from an engine
- *   that has stopped is worse than no value;
- * - a command line, which is the smallest complete illustration of D3: what is
- *   typed is *local input*, what is displayed underneath is the **daemon's**
- *   command line, and the second only ever changes because a delta said so.
+ * ```text
+ *   header   title, connection, the View Selector Bar, Add window
+ *   canvas   the windows the session says are open   (all remaining height)
+ *   footer   the command line, and one strip of readings
+ * ```
+ *
+ * # Nothing on this screen is state this interface holds
+ *
+ * The canvas is `openWindows`. The lit view button is `activeViewId`. The
+ * readings are the mirror. The one thing that is local is what has been *typed*
+ * into the command line, which is D3's own illustration and was S23's.
+ *
+ * That is the whole of S25's first exit criterion: opening, moving and closing
+ * a window issues a session command, and there is nowhere here for the answer
+ * to be kept instead.
  */
 
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import "./App.css";
+import type { JsonValue, WindowType } from "./bindings";
+import { Canvas } from "./canvas/canvas";
+import type { Rect } from "./canvas/geometry";
+import { ViewBar } from "./canvas/viewbar";
 import type { ConnectionStatus } from "./ipc/connection";
 import { countAt, numberAt, stringAt } from "./mirror/select";
 import { statusText } from "./status";
 import { useDesk, useSend } from "./store/hooks";
 import type { DeskState, Notice } from "./store/desk";
-import { TelemetryPanel } from "./telemetry/panel";
 
 const selectStatus = (state: DeskState): ConnectionStatus => state.status;
 const selectDocuments = (state: DeskState) => state.documents;
@@ -36,13 +47,15 @@ const selectNotices = (state: DeskState): readonly Notice[] => state.notices;
 /** The whole interface. */
 export default function App() {
   const status = useDesk(selectStatus);
+  const connected = status.kind === "connected";
   return (
     <main className="desk">
       <header className="desk-header">
         <h1>PrismDMX</h1>
         <StatusPill status={status} />
+        {connected ? <Views /> : null}
       </header>
-      {status.kind === "connected" ? <Connected /> : <NotConnected status={status} />}
+      {connected ? <Desk /> : <NotConnected status={status} />}
       <Notices />
     </main>
   );
@@ -77,116 +90,139 @@ function NotConnected({ status }: { readonly status: ConnectionStatus }) {
   );
 }
 
-/** Everything the mirror holds. */
-function Connected() {
+/** The View Selector Bar, once there is a session to read it from. */
+function Views() {
   const documents = useDesk(selectDocuments);
+  const send = useSend();
+  const onSelectView = useCallback(
+    (viewId: number) => {
+      send({ t: "SelectView", viewId });
+    },
+    [send],
+  );
+  const onStoreView = useCallback(
+    (viewId: number, name: string) => {
+      send({ t: "StoreView", viewId, name });
+    },
+    [send],
+  );
+  const onOpenWindow = useCallback(
+    (type: WindowType) => {
+      send({ t: "OpenWindow", window: type });
+    },
+    [send],
+  );
+  if (documents === null) {
+    return null;
+  }
+  return (
+    <ViewBar
+      session={documents.session}
+      onSelectView={onSelectView}
+      onStoreView={onStoreView}
+      onOpenWindow={onOpenWindow}
+    />
+  );
+}
+
+/** The canvas and the strip under it. */
+function Desk() {
+  const documents = useDesk(selectDocuments);
+  const send = useSend();
+
+  const onPlace = useCallback(
+    (instanceId: number, rect: Rect) => {
+      send({ t: "PlaceWindow", instanceId, x: rect.x, y: rect.y, w: rect.w, h: rect.h });
+    },
+    [send],
+  );
+  const onFocus = useCallback(
+    (instanceId: number) => {
+      send({ t: "FocusWindow", instanceId });
+    },
+    [send],
+  );
+  const onClose = useCallback(
+    (instanceId: number) => {
+      send({ t: "CloseWindow", instanceId });
+    },
+    [send],
+  );
+
+  if (documents === null) {
+    return null;
+  }
+  return (
+    <>
+      <Canvas
+        session={documents.session}
+        show={documents.show}
+        onPlace={onPlace}
+        onFocus={onFocus}
+        onClose={onClose}
+      />
+      <footer className="desk-footer">
+        <CommandLine daemonLine={stringAt(documents.session, "/session/commandLine") ?? ""} />
+        <StatusStrip session={documents.session} show={documents.show} />
+      </footer>
+    </>
+  );
+}
+
+/**
+ * One line of readings: the show, the session, and the engine.
+ *
+ * A console's status strip. It is here rather than in a window because it must
+ * be true at a glance and without anybody having opened anything — and because
+ * a `Settings` window that could be closed is the wrong place for *is the
+ * engine running*.
+ */
+function StatusStrip({ session, show }: { readonly session: JsonValue; readonly show: JsonValue }) {
   const health = useDesk(selectHealth);
   const outputs = useDesk(selectOutputs);
   const unsaved = useDesk(selectUnsaved);
-  if (documents === null || health === null || outputs === null) {
+  if (health === null || outputs === null) {
     return null;
   }
-
-  const show = documents.show;
-  const session = documents.session;
   return (
-    <>
-      <section className="panel" data-testid="engine">
-        <h2>Engine</h2>
-        <dl>
-          <Reading label="Protocol" value={String(health.protocolVersion)} testId="protocol" />
-          <Reading label="Tick" value={`${health.tickHz.toFixed(1)} Hz`} testId="tick-hz" />
-          <Reading label="Missed ticks" value={String(health.missedTicks)} testId="missed-ticks" />
-          <Reading
-            label="Show"
-            value={unsaved ? "unsaved changes" : "saved"}
-            testId="dirty-flag"
-          />
-        </dl>
-        <ul className="outputs">
-          {outputs.map((output) => (
-            <li key={output.id} data-testid={`output-${output.id}`}>
-              {output.name}: {output.health}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="panel" data-testid="session">
-        <h2>Session</h2>
-        <dl>
-          <Reading
-            label="Active view"
-            value={text(numberAt(session, "/session/activeViewId"))}
-            testId="active-view"
-          />
-          <Reading
-            label="Executor page"
-            value={text(numberAt(session, "/session/executorPage"))}
-            testId="executor-page"
-          />
-          <Reading
-            label="Encoder bank"
-            value={text(stringAt(session, "/session/encoderBank"))}
-            testId="encoder-bank"
-          />
-          <Reading
-            label="Open windows"
-            value={text(countAt(session, "/session/openWindows"))}
-            testId="open-windows"
-          />
-        </dl>
-      </section>
-
-      <section className="panel" data-testid="show">
-        <h2>Show</h2>
-        <dl>
-          <Reading label="Fixtures" value={text(countAt(show, "/fixtures"))} testId="fixtures" />
-          <Reading label="Groups" value={text(countAt(show, "/groups"))} testId="groups" />
-          <Reading
-            label="Sequences"
-            value={text(countAt(show, "/sequences"))}
-            testId="sequences"
-          />
-          <Reading
-            label="Executors"
-            value={text(countAt(show, "/executors"))}
-            testId="executors"
-          />
-        </dl>
-      </section>
-
-      <section className="panel" data-testid="programmer">
-        <h2>Programmer</h2>
-        <dl>
-          <Reading
-            label="Selected"
-            value={String(documents.programmer.selection.length)}
-            testId="selection"
-          />
-          <Reading
-            label="Touched values"
-            value={String(documents.programmer.values.length)}
-            testId="touched"
-          />
-          <Reading
-            label="Encoder bank"
-            value={documents.programmer.activeFeatureGroup}
-            testId="programmer-bank"
-          />
-        </dl>
-      </section>
-
-      {/*
-        The second channel, and the reason there are two. Everything above this
-        line is the mirror, redrawn when a delta says so; the panel below is a
-        picture of what the fixtures are being given *now*, arriving thirty
-        times a second and never once passing through the store.
-      */}
-      <TelemetryPanel />
-
-      <CommandLine daemonLine={stringAt(session, "/session/commandLine") ?? ""} />
-    </>
+    <dl className="strip" data-testid="status-strip">
+      <Reading label="Fixtures" value={text(countAt(show, "/fixtures"))} testId="fixtures" />
+      <Reading label="Groups" value={text(countAt(show, "/groups"))} testId="groups" />
+      <Reading label="Seqs" value={text(countAt(show, "/sequences"))} testId="sequences" />
+      <Reading label="Execs" value={text(countAt(show, "/executors"))} testId="executors" />
+      <Reading
+        label="View"
+        value={text(numberAt(session, "/session/activeViewId"))}
+        testId="active-view"
+      />
+      <Reading
+        label="Windows"
+        value={text(countAt(session, "/session/openWindows"))}
+        testId="open-windows"
+      />
+      <Reading
+        label="Page"
+        value={text(numberAt(session, "/session/executorPage"))}
+        testId="executor-page"
+      />
+      <Reading
+        label="Bank"
+        value={text(stringAt(session, "/session/encoderBank"))}
+        testId="encoder-bank"
+      />
+      <Reading label="Protocol" value={String(health.protocolVersion)} testId="protocol" />
+      <Reading label="Tick" value={`${health.tickHz.toFixed(1)} Hz`} testId="tick-hz" />
+      <Reading label="Missed" value={String(health.missedTicks)} testId="missed-ticks" />
+      <Reading label="Show" value={unsaved ? "unsaved changes" : "saved"} testId="dirty-flag" />
+      {outputs.map((output) => (
+        <Reading
+          key={output.id}
+          label={`Out ${String(output.id)}`}
+          value={`${output.name}: ${output.health}`}
+          testId={`output-${String(output.id)}`}
+        />
+      ))}
+    </dl>
   );
 }
 
@@ -195,10 +231,12 @@ function Connected() {
  *
  * The input holds what has been typed — *local* input, which the daemon has
  * never been told about and which is nobody else's business. Pressing Enter
- * sends a `CommandLineInput` command. What is displayed underneath is the
+ * sends a `CommandLineInput` command. What is displayed beside it is the
  * session's command line **as the daemon holds it**, and it changes when the
  * `SessionPatch` comes back and not a moment sooner. Nothing here is
  * optimistic; there is no state to roll back if the command is refused.
+ *
+ * S26 owns the real one, including the parser.
  */
 function CommandLine({ daemonLine }: { readonly daemonLine: string }) {
   const send = useSend();
@@ -210,10 +248,9 @@ function CommandLine({ daemonLine }: { readonly daemonLine: string }) {
   };
 
   return (
-    <section className="panel" data-testid="command-line-panel">
-      <h2>Command line</h2>
+    <div className="command-line" data-testid="command-line-panel">
       <form onSubmit={submit}>
-        <label htmlFor="command-input">Type, then Enter</label>
+        <label htmlFor="command-input">Command</label>
         <input
           id="command-input"
           data-testid="command-input"
@@ -225,9 +262,9 @@ function CommandLine({ daemonLine }: { readonly daemonLine: string }) {
         />
       </form>
       <p className="daemon-line">
-        The engine&rsquo;s command line: <output data-testid="command-line">{daemonLine}</output>
+        Engine: <output data-testid="command-line">{daemonLine}</output>
       </p>
-    </section>
+    </div>
   );
 }
 
@@ -256,8 +293,7 @@ function Notices() {
     return null;
   }
   return (
-    <section className="panel" data-testid="notices">
-      <h2>Messages</h2>
+    <section className="notices" data-testid="notices">
       <ul>
         {notices.map((notice) => (
           <li key={notice.id} className={`notice notice-${notice.level.toLowerCase()}`}>

@@ -24,6 +24,16 @@ pub enum WindowType {
     /// Live values per fixture and attribute.
     #[default]
     FixtureSheet,
+    /// The DMX output itself, universe by universe and channel by channel.
+    ///
+    /// **Added in S25**, and the reason is worth writing down: S24 built the
+    /// level view — the telemetry canvas — and the ten window types
+    /// `ARCHITECTURE_SPEC.md` §6 listed had no name for it. A
+    /// [`FixtureSheet`](Self::FixtureSheet) shows what the *fixtures* are set
+    /// to, which is the show's view of the rig; this shows what is going down
+    /// the *cable*, which is the only view that can disagree with it. A console
+    /// has both, and an operator patching a rig needs the second one.
+    DmxSheet,
     /// Cues of a sequence.
     SequenceSheet,
     /// Group pool.
@@ -262,13 +272,33 @@ mod tests {
     }
 
     #[test]
-    fn all_ten_window_types_exist() {
+    fn the_dmx_sheet_is_a_window_like_any_other() {
+        // S25 added it, and a variant no test ever constructs is a variant
+        // whose wire name nobody has checked. `DmxSheet` is what the level
+        // view lives in, so this is the name `openWindows` will carry in every
+        // saved show that has one.
+        let window = WindowInstance {
+            window_type: WindowType::DmxSheet,
+            ..window()
+        };
+        let json = serde_json::to_value(&window).unwrap();
+        assert_eq!(json["type"], "DmxSheet");
+        assert_eq!(
+            serde_json::from_value::<WindowInstance>(json).unwrap(),
+            window
+        );
+    }
+
+    #[test]
+    fn all_eleven_window_types_exist() {
+        // `ARCHITECTURE_SPEC.md` §6's ten, and `DmxSheet` — S25's, for the level
+        // view S24 built and none of the ten named.
         let cfg = Config::new();
         assert_eq!(
             WindowType::inline(&cfg),
-            "\"FixtureSheet\" | \"SequenceSheet\" | \"Groups\" | \"Viewer3D\" \
-             | \"PhaserEditor\" | \"ClockViewer\" | \"CueViewer\" | \"PresetPool\" \
-             | \"Patch\" | \"Settings\""
+            "\"FixtureSheet\" | \"DmxSheet\" | \"SequenceSheet\" | \"Groups\" \
+             | \"Viewer3D\" | \"PhaserEditor\" | \"ClockViewer\" | \"CueViewer\" \
+             | \"PresetPool\" | \"Patch\" | \"Settings\""
         );
     }
 }

@@ -68,15 +68,20 @@ describe("deltas", () => {
         ops: [{ op: "replace", path: "/session/executorPage", value: 5 }],
       }),
     ).toBe(true);
+    // The whole document, not the one member: an applier that replaced the
+    // root would pass an assertion about `executorPage` alone.
     expect(store.getState().documents?.session).toEqual({
       session: {
         activeViewId: 1,
         executorPage: 5,
         encoderBank: "Dimmer",
         commandLine: "fixture 1 at full",
-        openWindows: [],
+        openWindows: [
+          { instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480, params: {} },
+        ],
+        focusedWindow: 1,
       },
-      views: {},
+      views: { "1": { id: 1, name: "View 1", windows: [] } },
     });
   });
 

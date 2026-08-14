@@ -90,6 +90,12 @@ test("64 universes at 30 Hz, drawn inside the frame budget", async ({ page }) =>
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
 
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+
+  // Since S25 the level view lives in a window, so one has to be open for
+  // there to be a canvas at all. Opening it is an `OpenWindow` to the daemon
+  // and a `SessionPatch` back — which means this measurement is now taken
+  // through the window system as well as through the telemetry channel.
+  await page.getByTestId("open-window").selectOption("DmxSheet");
   await expect(page.getByTestId("telemetry")).toBeVisible();
 
   // The channel is carrying the whole rig. This is the assertion that says the

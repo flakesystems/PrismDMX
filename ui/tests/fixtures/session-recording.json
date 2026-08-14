@@ -1,0 +1,461 @@
+{
+  "note": "Recorded off a running prismd by crates/prismd/tests/ui_session.rs. The windows, focus and view of every step are the daemon's own answers, taken from a fresh client's snapshot. Regenerate with: cargo test -p prismd --test ui_session -- --ignored",
+  "protocolVersion": 1,
+  "defaultWindow": [
+    0.0,
+    0.0,
+    640.0,
+    480.0
+  ],
+  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90haRzaG93hqlleGVjdXRvcnOBoTCIr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqZNYXN0ZXKiaWQAqGlzQWN0aXZlwqttYXN0ZXJMZXZlbM3//6pzZXF1ZW5jZUlkAaxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVys2dlbmVyaWMuZGltbWVyLmRhcmuGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlks2dlbmVyaWMuZGltbWVyLmRhcmusbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaMxY2ikbmFtZaZEaW1tZXKoZml4dHVyZXODoTGJp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiadhZGRyZXNzBaJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEziadhZGRyZXNzAaJpZAOpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4GhMYSkY3Vlc5GIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWlQ3VlIDGmbnVtYmVyoTGlcGFydHORhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUCqXByZXNldFJlZsCldmFsdWXN//+ndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCiaWQBpGxvb3DCpG5hbWWqU2VxdWVuY2UgMadzZXNzaW9ugqdzZXNzaW9ui6xhY3RpdmVWaWV3SWQBq2NvbW1hbmRMaW5lsWZpeHR1cmUgMSBhdCBmdWxsq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UDrWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCldmlld3OBoTGDomlkAaRuYW1lplZpZXcgMad3aW5kb3dzkKpwcm9ncmFtbWVyhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAKdvdXRwdXRzkYOiaWQBpG5hbWWrTW9jayBvdXRwdXSmaGVhbHRook9rpmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQGqRRnYR9JOrbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzwg==",
+  "steps": [
+    {
+      "what": "open a fixture sheet: the canvas has one window, at the daemon's default",
+      "client": "g6F0p0NvbW1hbmSjc2VxAadjb21tYW5kgqF0qk9wZW5XaW5kb3emd2luZG93rEZpeHR1cmVTaGVldA==",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWRh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4ywAAAAAAAAAAoXnLAAAAAAAAAACDom9wp3JlcGxhY2WkcGF0aLYvc2Vzc2lvbi9mb2N1c2VkV2luZG93pXZhbHVlAQ=="
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 1,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ]
+      ]
+    },
+    {
+      "what": "open a DMX sheet: two windows, the new one in front and focused",
+      "client": "g6F0p0NvbW1hbmSjc2VxAqdjb21tYW5kgqF0qk9wZW5XaW5kb3emd2luZG93qERteFNoZWV0",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4ywAAAAAAAAAAoXnLAAAAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQIQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAAg6JvcKdyZXBsYWNlpHBhdGi2L3Nlc3Npb24vZm9jdXNlZFdpbmRvd6V2YWx1ZQI="
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        },
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 2,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ]
+      ]
+    },
+    {
+      "what": "drag the fixture sheet: the position is the daemon's, not the canvas's",
+      "client": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjLQG4AAAAAAAChectAXgAAAAAAAKF3y0CEAAAAAAAAoWjLQH4AAAAAAAA=",
+      "clientInteger": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjM8KF5eKF3zQKAoWjNAeA=",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQIQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAA"
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        },
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 2,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ]
+      ]
+    },
+    {
+      "what": "resize the DMX sheet by its corner",
+      "client": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjLAAAAAAAAAAChecsAAAAAAAAAAKF3y0CUAAAAAAAAoWjLQIaAAAAAAAA=",
+      "clientInteger": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXgAoXkAoXfNBQChaM0C0A==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAACHoWjLQIaAAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAA"
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        },
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 1280.0,
+          "h": 720.0
+        }
+      ],
+      "focusedWindow": 2,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ]
+      ]
+    },
+    {
+      "what": "focus the fixture sheet: it goes to the end, which is the front",
+      "client": "g6F0p0NvbW1hbmSjc2VxBadjb21tYW5kgqF0q0ZvY3VzV2luZG93qmluc3RhbmNlSWQB",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0CGgAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0BeAAAAAAAAg6JvcKdyZXBsYWNlpHBhdGi2L3Nlc3Npb24vZm9jdXNlZFdpbmRvd6V2YWx1ZQE="
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 1280.0,
+          "h": 720.0
+        },
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 1,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ]
+      ]
+    },
+    {
+      "what": "store the canvas as view 2",
+      "client": "g6F0p0NvbW1hbmSjc2VxBqdjb21tYW5kg6F0qVN0b3JlVmlld6Z2aWV3SWQCpG5hbWWrUHJvZ3JhbW1pbmc=",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKNhZGSkcGF0aKgvdmlld3MvMqV2YWx1ZYOiaWQCpG5hbWWrUHJvZ3JhbW1pbmend2luZG93c5KHoWjLQIaAAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAAA=",
+        "gqF0pURlbHRhpWRlbHRhgqF0qURpcnR5RmxhZ651bnNhdmVkQ2hhbmdlc8M="
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 1280.0,
+          "h": 720.0
+        },
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 1,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ],
+        [
+          2,
+          "Programming",
+          2
+        ]
+      ]
+    },
+    {
+      "what": "open a patch window on top of it",
+      "client": "g6F0p0NvbW1hbmSjc2VxB6djb21tYW5kgqF0qk9wZW5XaW5kb3emd2luZG93pVBhdGNo",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWTh6Foy0CGgAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0BeAAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQDpnBhcmFtc4CkdHlwZaVQYXRjaKF3y0CEAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWUD"
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 1280.0,
+          "h": 720.0
+        },
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        },
+        {
+          "instanceId": 3,
+          "type": "Patch",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 3,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ],
+        [
+          2,
+          "Programming",
+          2
+        ]
+      ]
+    },
+    {
+      "what": "close the DMX sheet",
+      "client": "g6F0p0NvbW1hbmSjc2VxCKdjb21tYW5kgqF0q0Nsb3NlV2luZG93qmluc3RhbmNlSWQC",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAOmcGFyYW1zgKR0eXBlpVBhdGNooXfLQIQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAA"
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        },
+        {
+          "instanceId": 3,
+          "type": "Patch",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 3,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ],
+        [
+          2,
+          "Programming",
+          2
+        ]
+      ]
+    },
+    {
+      "what": "drag the window that was just closed: refused, and nothing moves",
+      "client": "g6F0p0NvbW1hbmSjc2VxCadjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjLQIwgAAAAAAChectAjCAAAAAAAKF3y0BZAAAAAAAAoWjLQFkAAAAAAAA=",
+      "clientInteger": "g6F0p0NvbW1hbmSjc2VxCadjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjNA4Shec0DhKF3ZKFoZA==",
+      "deltas": [],
+      "refused": true,
+      "windows": [
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        },
+        {
+          "instanceId": 3,
+          "type": "Patch",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 3,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ],
+        [
+          2,
+          "Programming",
+          2
+        ]
+      ]
+    },
+    {
+      "what": "select view 2: the layout comes back, the patch window is gone",
+      "client": "g6F0p0NvbW1hbmSjc2VxCqdjb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAg==",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOTg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vYWN0aXZlVmlld0lkpXZhbHVlAoOib3CncmVwbGFjZaRwYXRotC9zZXNzaW9uL29wZW5XaW5kb3dzpXZhbHVlkoehaMtAhoAAAAAAAKppbnN0YW5jZUlkAqZwYXJhbXOApHR5cGWoRG14U2hlZXShd8tAlAAAAAAAAKF4ywAAAAAAAAAAoXnLAAAAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAGmcGFyYW1zgKR0eXBlrEZpeHR1cmVTaGVldKF3y0CEAAAAAAAAoXjLQG4AAAAAAAChectAXgAAAAAAAIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWUB"
+      ],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 1280.0,
+          "h": 720.0
+        },
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 1,
+      "activeViewId": 2,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ],
+        [
+          2,
+          "Programming",
+          2
+        ]
+      ]
+    },
+    {
+      "what": "select a view that was never stored: refused, the canvas stands still",
+      "client": "g6F0p0NvbW1hbmSjc2VxC6djb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkCQ==",
+      "clientInteger": null,
+      "deltas": [],
+      "refused": true,
+      "windows": [
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 0.0,
+          "y": 0.0,
+          "w": 1280.0,
+          "h": 720.0
+        },
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 120.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 1,
+      "activeViewId": 2,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ],
+        [
+          2,
+          "Programming",
+          2
+        ]
+      ]
+    },
+    {
+      "what": "select view 1: the canvas empties, because view 1 was stored empty",
+      "client": "g6F0p0NvbW1hbmSjc2VxDKdjb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAQ==",
+      "clientInteger": null,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOTg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vYWN0aXZlVmlld0lkpXZhbHVlAYOib3CncmVwbGFjZaRwYXRotC9zZXNzaW9uL29wZW5XaW5kb3dzpXZhbHVlkIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWXA"
+      ],
+      "refused": false,
+      "windows": [],
+      "focusedWindow": null,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ],
+        [
+          2,
+          "Programming",
+          2
+        ]
+      ]
+    }
+  ],
+  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90haRzaG93hqlleGVjdXRvcnOBoTCIr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqZNYXN0ZXKiaWQAqGlzQWN0aXZlwqttYXN0ZXJMZXZlbM3//6pzZXF1ZW5jZUlkAaxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVys2dlbmVyaWMuZGltbWVyLmRhcmuGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlks2dlbmVyaWMuZGltbWVyLmRhcmusbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaMxY2ikbmFtZaZEaW1tZXKoZml4dHVyZXODoTGJp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiadhZGRyZXNzBaJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEziadhZGRyZXNzAaJpZAOpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4GhMYSkY3Vlc5GIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWlQ3VlIDGmbnVtYmVyoTGlcGFydHORhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUCqXByZXNldFJlZsCldmFsdWXN//+ndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCiaWQBpGxvb3DCpG5hbWWqU2VxdWVuY2UgMadzZXNzaW9ugqdzZXNzaW9ui6xhY3RpdmVWaWV3SWQBq2NvbW1hbmRMaW5lsWZpeHR1cmUgMSBhdCBmdWxsq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UDrWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCldmlld3OCoTGDomlkAaRuYW1lplZpZXcgMad3aW5kb3dzkKEyg6JpZAKkbmFtZatQcm9ncmFtbWluZ6d3aW5kb3dzkoehaMtAhoAAAAAAAKppbnN0YW5jZUlkAqZwYXJhbXOApHR5cGWoRG14U2hlZXShd8tAlAAAAAAAAKF4ywAAAAAAAAAAoXnLAAAAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAGmcGFyYW1zgKR0eXBlrEZpeHR1cmVTaGVldKF3y0CEAAAAAAAAoXjLQG4AAAAAAAChectAXgAAAAAAAKpwcm9ncmFtbWVyhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAKdvdXRwdXRzkYOiaWQBpG5hbWWrTW9jayBvdXRwdXSmaGVhbHRook9rpmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEm4ZWDty/qrbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzww=="
+}

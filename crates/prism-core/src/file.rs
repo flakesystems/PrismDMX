@@ -311,7 +311,7 @@ impl ShowFile {
     /// record, so an Oops cannot reach it. `Command::is_undoable` remains the
     /// definition rather than this list —
     /// `a_command_has_a_scope_exactly_when_it_is_undoable` holds the two
-    /// together over all twenty-three commands, so a new command cannot be
+    /// together over all twenty-four commands, so a new command cannot be
     /// given a scope here and left out of the list there, or the reverse.
     fn image(&self, command: &Command) -> Vec<Image> {
         match command {
@@ -337,9 +337,9 @@ impl ShowFile {
                 images
             }
             // The three playback actions, the two journal commands, the save
-            // and the eleven §4.4 session commands — named rather than caught
-            // by a wildcard, so a command added to the protocol is a compile
-            // error here as well as in the three appliers.
+            // and the twelve session commands — named rather than caught by a
+            // wildcard, so a command added to the protocol is a compile error
+            // here as well as in the three appliers.
             Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
             | Command::SetExecutorMaster { .. }
@@ -351,6 +351,7 @@ impl ShowFile {
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
+            | Command::PlaceWindow { .. }
             | Command::SetExecutorPage { .. }
             | Command::SelectExecutor { .. }
             | Command::SetEncoderBank { .. }
@@ -748,6 +749,13 @@ mod tests {
             Command::FocusWindow {
                 instance_id: WindowInstanceId::new(1),
             },
+            Command::PlaceWindow {
+                instance_id: WindowInstanceId::new(1),
+                x: 0.0,
+                y: 0.0,
+                w: 1.0,
+                h: 1.0,
+            },
             Command::SetExecutorPage { page: 0 },
             Command::SelectExecutor {
                 executor_id: ExecutorId::new(0),
@@ -763,7 +771,7 @@ mod tests {
                 text: String::new(),
             },
         ];
-        assert_eq!(commands.len(), 23);
+        assert_eq!(commands.len(), 24);
         let mut undoable = 0;
         for command in &commands {
             assert_eq!(

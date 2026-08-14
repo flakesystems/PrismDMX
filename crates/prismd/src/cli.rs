@@ -98,6 +98,16 @@ pub struct Options {
     /// will not start. `IMPLEMENTATION_PLAN.md` S22, and
     /// [`crate::surface::load_profile`] is where it is kept.
     pub surface_profile: Option<PathBuf>,
+    /// A file to read MIDI bytes from as though a control surface were plugged
+    /// in, or `None` for no surface at all.
+    ///
+    /// The console's counterpart to `--mock-output`, and it exists for the same
+    /// reason: `CLAUDE.md` forbids a test from touching a device, and D11 is a
+    /// claim about a console changing what an interface shows. With this, that
+    /// claim can be *observed* from outside the process — a browser watching a
+    /// real daemon while bytes from `docs/MCU_MAPPING.md` §2.1 are appended to
+    /// a file. See [`crate::surface::FileSurfacePort`].
+    pub mock_surface: Option<PathBuf>,
     /// What the stage does when the daemon stops.
     pub exit: Exit,
     /// How much to log.
@@ -118,6 +128,7 @@ impl Default for Options {
             websocket: None,
             token: None,
             surface_profile: None,
+            mock_surface: None,
             exit: Exit::default(),
             log_level: Level::Info,
             run_for: None,
@@ -187,6 +198,10 @@ Options:
                         profiles/surface/xtouch.json). A profile that is
                         missing or malformed is reported and the built-in
                         bindings are used; it never stops the daemon
+  --mock-surface <PATH> a control surface with no device behind it: MIDI bytes
+                        appended to PATH are read as though the console had
+                        sent them, and the feedback goes nowhere, because a
+                        file has no faders. The console half of --mock-output
 
   --blackout-on-exit    publish a blackout before stopping the outputs
   --hold-on-exit        leave the last look on stage (default)
@@ -277,6 +292,7 @@ where
             }
             "--token" => options.token = Some(value()?),
             "--surface-profile" => options.surface_profile = Some(PathBuf::from(value()?)),
+            "--mock-surface" => options.mock_surface = Some(PathBuf::from(value()?)),
             "--blackout-on-exit" => options.exit = Exit::Blackout,
             "--hold-on-exit" => options.exit = Exit::Hold,
             "--log-level" => {
@@ -560,6 +576,22 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_surface_can_be_asked_for_without_a_device() {
+        // The console half of `--mock-output`: a path, not a port. The daemon
+        // opens it in `Daemon::start`, and a path that will not open is a
+        // warning rather than a refusal — which is why the parser has nothing
+        // to say about it here.
+        let options = options(&["--mock-surface", "keys.midi"]);
+        assert_eq!(options.mock_surface, Some(PathBuf::from("keys.midi")));
+        assert_eq!(
+            Options::default().mock_surface,
+            None,
+            "there is no surface by default"
+        );
+        assert!(refusal(&["--mock-surface"]).contains("needs a value"));
+    }
+
     /// The help is the documentation, so it has to name every option the parser
     /// answers to. A flag that works and is not written down is a flag nobody
     /// uses.
@@ -578,6 +610,8 @@ mod tests {
             "--no-local",
             "--websocket",
             "--token",
+            "--surface-profile",
+            "--mock-surface",
             "--blackout-on-exit",
             "--hold-on-exit",
             "--log-level",

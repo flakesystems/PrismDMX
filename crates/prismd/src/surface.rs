@@ -548,6 +548,87 @@ impl MockSurfaceHandle {
     }
 }
 
+/// A control surface with no device behind it, fed from a file.
+///
+/// [`MockSurfacePort`] is the same idea inside the process; this is the one a
+/// *separate* process can drive, and it exists for one reason: **D11 is a claim
+/// about what an operator sees**, and the only way to observe it rather than
+/// assert it is to have a real daemon, a real browser and a real console press
+/// at the same time. `CLAUDE.md` forbids the third from being a device, so it is
+/// bytes appended to a file — the same MIDI a `docs/MCU_MAPPING.md` §2.1 button
+/// sends, read by the same three layers.
+///
+/// It is `--mock-surface`, and it is the console's `--mock-output`: a mode a
+/// person can also use to try a binding table with nothing plugged in.
+///
+/// # What it does not do
+///
+/// **Nothing goes back out.** A file has no motor faders and no scribble
+/// strips, so the feedback is dropped and counted. That is not a limitation to
+/// work around: the outbound path is `prism-surface`'s, it is tested to the byte
+/// there (S21), and a port that wrote 156 messages into a file every time the
+/// shadow model was invalidated would be a growing file and nothing else.
+///
+/// # Framing
+///
+/// Whatever bytes have arrived since the last poll, in one piece. The layer
+/// above is a **stream** decoder with running-status and SysEx reassembly
+/// (S19), so a message split across two reads is reassembled exactly as it is
+/// when a USB packet boundary lands in the middle of one.
+#[derive(Debug)]
+pub struct FileSurfacePort {
+    file: std::fs::File,
+    /// How many messages were dropped for want of anywhere to put them.
+    dropped: u64,
+}
+
+impl FileSurfacePort {
+    /// Opens the file, creating it if it is not there.
+    ///
+    /// Created rather than refused so that the daemon can be started *before*
+    /// whatever is going to press the buttons exists — which is the ordinary
+    /// order in a test, and in a shell session where somebody is about to run
+    /// `printf`.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the operating system says. The caller warns and carries on: a
+    /// surface that will not open must never stop a daemon starting, for the
+    /// same reason a malformed profile must not (S22).
+    pub fn open(path: &Path) -> std::io::Result<Self> {
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)?;
+        Ok(Self { file, dropped: 0 })
+    }
+
+    /// How many outbound messages have gone nowhere.
+    #[must_use]
+    pub const fn dropped(&self) -> u64 {
+        self.dropped
+    }
+}
+
+impl SurfacePort for FileSurfacePort {
+    fn read(&mut self, buffer: &mut [u8]) -> Option<usize> {
+        use std::io::Read as _;
+        // A short read is the ordinary case and end of file is *nothing is
+        // waiting*, not an error: the writer appends whenever a button is
+        // pressed, and between presses there is simply nothing there.
+        match self.file.read(buffer) {
+            Ok(0) | Err(_) => None,
+            Ok(length) => Some(length),
+        }
+    }
+
+    fn write(&mut self, _bytes: &[u8]) {
+        self.dropped = self.dropped.saturating_add(1);
+    }
+}
+
 /// Reads a binding profile from disk, and **cannot fail**.
 ///
 /// The filesystem half of `prism_surface::Bindings::load`: which file it was is
@@ -724,6 +805,52 @@ mod tests {
             handle.received().is_empty(),
             "nothing goes to a port that is not there"
         );
+    }
+
+    #[test]
+    fn a_file_surface_reads_what_is_appended_and_drops_what_comes_back() {
+        use std::io::Write as _;
+
+        let directory = tempfile::tempdir().expect("a temporary directory");
+        let path = directory.path().join("console.midi");
+        // Opened before anything exists, which is the order a daemon starts in.
+        let mut port = super::FileSurfacePort::open(&path).expect("a file surface opens");
+        let mut buffer = [0u8; 16];
+        assert_eq!(port.read(&mut buffer), None, "nothing has been pressed yet");
+
+        // F1, note 54 on channel 1 — `docs/MCU_MAPPING.md` §2.1, written out
+        // rather than asked for.
+        let mut writer = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("the file is there to append to");
+        writer.write_all(&[0x90, 54, 127]).expect("append");
+        writer.flush().expect("flush");
+        assert_eq!(port.read(&mut buffer), Some(3));
+        assert_eq!(&buffer[..3], &[0x90, 54, 127]);
+        assert_eq!(port.read(&mut buffer), None, "and then nothing again");
+
+        // More arrives later, and the port picks up where it left off rather
+        // than reading the file from the beginning.
+        writer.write_all(&[0x90, 54, 0]).expect("append");
+        writer.flush().expect("flush");
+        assert_eq!(port.read(&mut buffer), Some(3));
+        assert_eq!(&buffer[..3], &[0x90, 54, 0]);
+
+        // A file has no faders, so the picture goes nowhere and says so.
+        assert_eq!(port.dropped(), 0);
+        port.write(&[0xE0, 0, 64]);
+        assert_eq!(port.dropped(), 1);
+        assert!(port.connected(), "a file does not fall out of its socket");
+    }
+
+    #[test]
+    fn a_file_surface_that_cannot_be_opened_says_so_rather_than_panicking() {
+        // The daemon turns this into a warning and starts anyway (S22's rule
+        // for the profile, and the same reason: nothing about a console may
+        // stop a show being run).
+        let missing = std::path::Path::new("no-such-directory/no-such-file.midi");
+        assert!(super::FileSurfacePort::open(missing).is_err());
     }
 
     #[test]

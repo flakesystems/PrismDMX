@@ -12,7 +12,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -53,6 +53,16 @@ export interface DaemonOptions {
   readonly show?: string;
   /** How many universes the frame layout carries. */
   readonly universes?: number;
+  /**
+   * A file to feed the daemon MIDI bytes through, as though a console were
+   * plugged in (`--mock-surface`).
+   *
+   * The console half of `--mock-output`, and the only way to observe **D11**
+   * from outside the process: a real daemon, a real browser and a real button
+   * press, with nothing plugged into anything. Use {@link pressConsole} to
+   * press one.
+   */
+  readonly mockSurface?: string;
 }
 
 /** Starts a daemon on `port`, in `dataDir` if one is given. */
@@ -75,6 +85,7 @@ export async function startDaemon(
       "warn",
       ...(options.show === undefined ? [] : ["--show", options.show]),
       ...(options.universes === undefined ? [] : ["--universes", String(options.universes)]),
+      ...(options.mockSurface === undefined ? [] : ["--mock-surface", options.mockSurface]),
     ],
     { stdio: "ignore" },
   );
@@ -92,6 +103,18 @@ export async function startDaemon(
       }
     },
   };
+}
+
+/**
+ * Presses a button on the console the daemon is reading from a file.
+ *
+ * The bytes are `docs/MCU_MAPPING.md` §2.1's, written out by the caller: Note
+ * On on MIDI channel 1 with velocity 127, then the same note with velocity 0.
+ * Asking the profile which note to send would be asking the code under test
+ * what to press — S19's finding, and S20's method rule.
+ */
+export function pressConsole(path: string, note: number): void {
+  appendFileSync(path, Buffer.from([0x90, note, 127, 0x90, note, 0]));
 }
 
 /** Removes a daemon's data directory once nothing is using it. */

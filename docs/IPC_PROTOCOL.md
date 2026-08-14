@@ -124,6 +124,7 @@ type Command =
   | { t: "OpenWindow"; window: WindowType; params?: Record<string, unknown> }
   | { t: "CloseWindow"; instanceId: number }
   | { t: "FocusWindow"; instanceId: number }
+  | { t: "PlaceWindow"; instanceId: number; x: number; y: number; w: number; h: number }
   | { t: "SetExecutorPage"; page: number }
   | { t: "SelectExecutor"; executorId: ExecutorId }
   | { t: "SetEncoderBank"; group: FeatureGroup }
@@ -133,6 +134,8 @@ type Command =
 ```
 
 The second group is the concrete form of **D11**. The console and the UI draw on one vocabulary; there is no separate surface command set to keep in sync.
+
+> **`PlaceWindow` is twelfth and is not in `ARCHITECTURE_SPEC.md` §4.4** *(S25)*. §4.4 lists what the *console* issues, and an X-Touch opens and closes windows without ever dragging one. But §4.1 puts `x`, `y`, `w` and `h` in the session, so a window moved on one screen has to move on every other one — and a client that kept the geometry to itself would be holding session state locally, which is precisely what **D11** exists to prevent. The gap was found when the canvas was built and there was no honest way to drag a window; the four coordinates are canvas units and are rejected as NaN or infinity in both directions, like every other `f64` in the domain.
 
 ### 5.1 Latency path
 
