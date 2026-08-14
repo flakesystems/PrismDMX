@@ -23,7 +23,7 @@ import type { ReactNode } from "react";
 import type { TelemetryChannel } from "./context";
 import { TelemetryContext, useTelemetryChannel } from "./context";
 import { driveTelemetry } from "./driver";
-import { LevelPainter, canvasSurface } from "./painter";
+import { LevelPainter, canvasSurface, devicePixelRatio, resizeCanvas } from "./painter";
 
 /** Makes one telemetry channel available to everything below it. */
 export function TelemetryProvider({
@@ -58,23 +58,10 @@ export function TelemetryPanel() {
     const surface = canvas === null ? null : build(canvas);
     const painter = surface === null ? null : new LevelPainter(surface);
 
-    /**
-     * Matches the canvas's pixels to the box the layout gave it.
-     *
-     * A canvas has two sizes — the element's and the bitmap's — and a bitmap
-     * left at its 300 × 150 default is what makes a canvas look blurred. The
-     * chrome is invalidated with it, because a resized context loses its state.
-     */
+    // The chrome is invalidated with the size, because a resized context loses
+    // its state and a smoothed blit is a blurred grid.
     const measure = (): void => {
-      if (canvas === null) {
-        return;
-      }
-      const scale = devicePixelRatio();
-      const width = Math.round(canvas.clientWidth * scale);
-      const height = Math.round(canvas.clientHeight * scale);
-      if (width > 0 && height > 0 && (canvas.width !== width || canvas.height !== height)) {
-        canvas.width = width;
-        canvas.height = height;
+      if (resizeCanvas(canvas, devicePixelRatio())) {
         painter?.invalidate();
       }
     };
@@ -112,11 +99,6 @@ export function TelemetryPanel() {
       </p>
     </section>
   );
-}
-
-/** Pixels per CSS pixel, and 1 where nothing says otherwise. */
-function devicePixelRatio(): number {
-  return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 }
 
 /**

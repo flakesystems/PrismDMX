@@ -294,6 +294,180 @@
   white-space: nowrap;
 }
 
+/*
+ * The patch and the fixture sheet, S27.
+ *
+ * Both are windows with more rows than they have room for, and both scroll
+ * **inside their own body**. `CLAUDE.md` forbids scrolling outside the canvas;
+ * this is inside one, which is what a window is for. The end-to-end suite reads
+ * `scrollWidth - clientWidth` off the document, the canvas and both bars and
+ * demands zeros, and none of that is affected by a window that scrolls.
+ */
+.patch,
+.fixture-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.sheet-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.patch-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.patch-count {
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.patch-embed {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ink-dim);
+}
+
+/*
+ * A row that shares channels with another, and the one being edited. Colour
+ * and weight, not colour alone: a console is read at two metres in a dark room
+ * and by people who do not all see red the same way (`CLAUDE.md`).
+ */
+.row-conflict td {
+  color: var(--warn, #ffd479);
+  font-weight: 600;
+}
+
+.row-editing td {
+  background: var(--edge-lit, rgba(255, 255, 255, 0.08));
+}
+
+.row-selected td {
+  background: var(--edge-lit, rgba(255, 255, 255, 0.08));
+}
+
+.linkish {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.patch-form {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--edge);
+  padding-top: 0.35rem;
+}
+
+.patch-form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.patch-form legend {
+  padding: 0;
+  color: var(--ink-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.patch-form label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ink-dim);
+}
+
+.patch-form input {
+  width: 7rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.patch-form input[data-testid="draft-id"],
+.patch-form input[data-testid="draft-universe"],
+.patch-form input[data-testid="draft-address"] {
+  width: 4rem;
+}
+
+/* The three things the preview line can be saying, told apart at a glance. */
+.patch-preview {
+  margin: 0.3rem 0;
+  min-height: 1.2em;
+}
+
+.preview-waiting {
+  color: var(--ink-dim);
+}
+
+.preview-clear {
+  color: var(--ok, #7bd88f);
+}
+
+.preview-overlap {
+  color: var(--warn, #ffd479);
+}
+
+.preview-refused {
+  color: var(--bad, #ff6b6b);
+}
+
+.patch-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sheet-bank {
+  margin: 0;
+  flex: 0 0 auto;
+  color: var(--ink-dim);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/*
+ * The fixture sheet's two halves: the table, which scrolls, and the canvas the
+ * output column is drawn on, which does not. The canvas is a *sibling* of the
+ * scroll container rather than a child of it, so it stays the size of the
+ * window however many rows there are — the loop reads `scrollTop` off the
+ * container each frame instead. A canvas as tall as four hundred rows would be
+ * nine thousand pixels of bitmap for the twenty a person can see.
+ */
+.sheet-live {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0.4rem;
+}
+
+.sheet-canvas {
+  flex: 0 0 8rem;
+  align-self: stretch;
+  min-height: 0;
+  background: var(--panel-deep, #0b0e13);
+  border-left: 1px solid var(--edge);
+}
+
 .pool {
   margin: 0;
   padding: 0;

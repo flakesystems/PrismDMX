@@ -28,8 +28,8 @@ use std::{fs, io};
 use ts_rs::{Config, ExportError, TS};
 
 use crate::{
-    Command, Cue, Delta, Executor, Fixture, FixtureType, Group, JsonValue, OutputHealth, Preset,
-    ProgrammerState, Sequence, Session, View,
+    Answer, Command, Cue, Delta, Executor, Fixture, FixtureType, Group, JsonValue, OutputHealth,
+    Preset, ProgrammerState, Query, Sequence, Session, View,
 };
 
 /// Where the bindings live, relative to the workspace root.
@@ -76,6 +76,10 @@ pub fn export_bindings(out_dir: &Path) -> Result<Vec<String>, ExportError> {
     let cfg = Config::new().with_out_dir(out_dir).with_large_int("number");
     Command::export_all(&cfg)?;
     Delta::export_all(&cfg)?;
+    // The third wire shape, added in S27: a question that changes nothing and
+    // the answer to it. See `query.rs` for why it is not a command or a delta.
+    Query::export_all(&cfg)?;
+    Answer::export_all(&cfg)?;
     FixtureType::export_all(&cfg)?;
     Fixture::export_all(&cfg)?;
     Group::export_all(&cfg)?;
@@ -390,6 +394,8 @@ mod tests {
         assert!(!variants.contains("COMMAND_VARIANTS"));
         assert!(!variants.contains("DELTA_VARIANTS"));
         assert!(!variants.contains("JSON_VALUE_VARIANTS"));
+        assert!(!variants.contains("QUERY_VARIANTS"));
+        assert!(!variants.contains("ANSWER_VARIANTS"));
     }
 
     /// **The encoder bar and the jog wheel read one table** (S26).

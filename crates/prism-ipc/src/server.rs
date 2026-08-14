@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use core::fmt;
-use prism_domain::{Command, Delta};
+use prism_domain::{Answer, Command, Delta, Query};
 use tokio::sync::{Mutex, Notify};
 
 use crate::backpressure::{Outbound, OutboundStats};
@@ -109,6 +109,22 @@ pub trait ServerHandler: Send + Sync + 'static {
 
     /// Apply a command, or refuse it. A refusal must change nothing (§5).
     fn command(&self, client: ClientId, command: Command) -> CommandOutcome;
+
+    /// Answer a question. **Must change nothing at all** (§5.2).
+    ///
+    /// There is no refusal shape, and that is deliberate: every [`Query`] is
+    /// answerable against any state, so a daemon that could not answer one
+    /// would be a daemon with a defect rather than a client with a bad
+    /// question. The default answers the only way a handler with no opinion
+    /// can, which is what keeps the test handlers in this crate short.
+    fn query(&self, client: ClientId, query: Query) -> Answer {
+        let _ = client;
+        match query {
+            Query::PatchConflicts | Query::PatchPreview { .. } => Answer::PatchConflicts {
+                conflicts: Vec::new(),
+            },
+        }
+    }
 
     /// A client was accepted.
     fn connected(&self, client: ClientId, hello: &Hello) {
@@ -377,6 +393,13 @@ impl ServerHandle {
                 }
                 true
             }
+            Ok(ClientMessage::Query { seq, query }) => {
+                // No broadcast and no ack: a question changes nothing, so the
+                // answer goes to the one client that asked and to nobody else.
+                let answer = self.inner.handler.query(id, query);
+                connection.push(ServerMessage::Answer { seq, answer }).await;
+                true
+            }
             Ok(ClientMessage::Hello { .. }) => {
                 connection
                     .push(ServerMessage::Reject {
@@ -526,7 +549,7 @@ async fn handshake(
             }
             .map_or_else(|| Ok(hello.clone()), Err)
         }
-        Ok(ClientMessage::Command { .. }) => Err((
+        Ok(ClientMessage::Command { .. } | ClientMessage::Query { .. }) => Err((
             RejectReason::OutOfOrder,
             "the first message on a connection must be Hello".to_owned(),
         )),
@@ -592,6 +615,7 @@ mod tests {
                     tick_hz: 44.0,
                     ..DaemonHealth::default()
                 },
+                fixture_library: Vec::new(),
             }
         }
 

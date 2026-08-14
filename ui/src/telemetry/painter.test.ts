@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { RecordingSurface } from "../testing/recording-surface";
 import { narrowFrame, wideFrame } from "../testing/telemetry-frames";
 import { CHANNELS_PER_UNIVERSE, TelemetryFrameView } from "./frame";
-import { LevelPainter, levelGeometry } from "./painter";
+import { LevelPainter, devicePixelRatio, levelGeometry, resizeCanvas } from "./painter";
 
 /** A view holding one of the recorded frames. */
 function frameOf(bytes: Uint8Array): TelemetryFrameView {
@@ -274,5 +274,58 @@ describe("what is drawn again and what is not", () => {
     painter.invalidate();
     painter.paint(frameOf(narrowFrame(0)));
     expect(surface.clears).toHaveLength(2);
+  });
+});
+
+/**
+ * The one place that knows what size a canvas's bitmap should be.
+ *
+ * Two views draw levels — the DMX Sheet and the Fixture Sheet's output column —
+ * and two copies of *what scale is this screen* would be two answers, one of
+ * which makes a canvas look blurred rather than making a test fail. So it is
+ * here, beside `canvasSurface`, and asserted here.
+ */
+describe("matching a canvas's pixels to its box", () => {
+  /** A canvas whose CSS box is `width` × `height`. */
+  function canvasOf(width: number, height: number): HTMLCanvasElement {
+    const element = document.createElement("canvas");
+    Object.defineProperty(element, "clientWidth", { value: width, configurable: true });
+    Object.defineProperty(element, "clientHeight", { value: height, configurable: true });
+    return element;
+  }
+
+  it("resizes the bitmap once, and says so only when it moved", () => {
+    const canvas = canvasOf(320, 200);
+    // A canvas starts at 300 × 150 whatever its box says, which is exactly what
+    // makes an unmeasured one look blurred.
+    expect(canvas.width).toBe(300);
+    expect(resizeCanvas(canvas, 2)).toBe(true);
+    expect([canvas.width, canvas.height]).toEqual([640, 400]);
+    // Asked again with nothing changed: no answer, so the chrome is not drawn
+    // again for nothing.
+    expect(resizeCanvas(canvas, 2)).toBe(false);
+    expect(resizeCanvas(canvas, 1)).toBe(true);
+    expect([canvas.width, canvas.height]).toEqual([320, 200]);
+  });
+
+  it("does nothing for a canvas that is not there or has no box yet", () => {
+    // Both are ordinary: a ref is `null` for the first render, and a window
+    // being dragged is one pixel tall for a moment.
+    expect(resizeCanvas(null, 1)).toBe(false);
+    expect(resizeCanvas(canvasOf(0, 0), 1)).toBe(false);
+    expect(resizeCanvas(canvasOf(100, 0), 1)).toBe(false);
+  });
+
+  it("reads the screen's scale, and answers 1 where nothing says otherwise", () => {
+    expect(devicePixelRatio()).toBeGreaterThan(0);
+    const held = window.devicePixelRatio;
+    try {
+      Object.defineProperty(window, "devicePixelRatio", { value: 0, configurable: true });
+      expect(devicePixelRatio()).toBe(1);
+      Object.defineProperty(window, "devicePixelRatio", { value: 2.5, configurable: true });
+      expect(devicePixelRatio()).toBe(2.5);
+    } finally {
+      Object.defineProperty(window, "devicePixelRatio", { value: held, configurable: true });
+    }
   });
 });

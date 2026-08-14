@@ -5,7 +5,9 @@
 //! | [`ClientMessage::Hello`] | client → daemon | reliable, first message |
 //! | [`ServerMessage::Snapshot`] | daemon → client | reliable, answer to `Hello` |
 //! | [`ClientMessage::Command`] | client → daemon | reliable, ordered — never dropped |
+//! | [`ClientMessage::Query`] | client → daemon | reliable, ordered, changes nothing |
 //! | [`ServerMessage::Delta`] | daemon → client | reliable, ordered |
+//! | [`ServerMessage::Answer`] | daemon → client | reliable, to the one client that asked |
 //! | [`ServerMessage::Telemetry`] | daemon → client | **droppable**, coalesced |
 //! | [`ServerMessage::Ack`] / [`ServerMessage::Reject`] | daemon → client | reliable |
 //!
@@ -41,7 +43,9 @@
 //! binary. The cost is about ten bytes per telemetry frame; the alternative is a
 //! second channel discriminator in the framing, which §3 rules out.
 
-use prism_domain::{Command, Delta, JsonValue, OutputHealth, OutputId, ProgrammerState};
+use prism_domain::{
+    Answer, Command, Delta, FixtureType, JsonValue, OutputHealth, OutputId, ProgrammerState, Query,
+};
 use serde::{Deserialize, Serialize};
 
 /// The protocol version, incremented on any breaking change.
@@ -113,6 +117,20 @@ pub enum ClientMessage {
         /// What the client wants done.
         command: Command,
     },
+    /// A question. **Changes nothing**, and is answered to this client alone.
+    ///
+    /// Added in S27, for the reason `prism_domain::query` gives: an address
+    /// conflict has to be shown *before* it is committed, and neither a command
+    /// nor a delta can say what would happen. It shares the command's numbering
+    /// because it travels on the same ordered channel and the answer has to be
+    /// addressable when several are in flight — which, for a patch form
+    /// answering keystrokes, is the ordinary case.
+    Query {
+        /// This connection's own numbering, echoed in the answer.
+        seq: u64,
+        /// What the client is asking.
+        query: Query,
+    },
 }
 
 /// Everything the daemon may send.
@@ -140,6 +158,18 @@ pub enum ServerMessage {
     Ack {
         /// The `seq` of the command that was applied.
         seq: u64,
+    },
+    /// The answer to a [`ClientMessage::Query`], to the client that asked.
+    ///
+    /// Not a `Delta`: a delta is broadcast, and what one operator is typing
+    /// into a patch form is nobody else's business (`ARCHITECTURE_SPEC.md`
+    /// §4.2). Not droppable either — a client that asked a question and never
+    /// heard back would wait for ever.
+    Answer {
+        /// The `seq` of the query this answers.
+        seq: u64,
+        /// What the daemon says.
+        answer: Answer,
     },
     /// Something was refused. Carries `seq` when it was a command, and `None`
     /// when it was the connection itself — a version mismatch, a missing token,
@@ -174,7 +204,8 @@ impl ServerMessage {
             Self::Snapshot { .. }
             | Self::Delta { .. }
             | Self::Telemetry { .. }
-            | Self::Ack { .. } => false,
+            | Self::Ack { .. }
+            | Self::Answer { .. } => false,
         }
     }
 }
@@ -247,6 +278,18 @@ pub struct Snapshot {
     pub outputs: Vec<OutputSnapshot>,
     /// How the daemon itself is doing.
     pub health: DaemonHealth,
+    /// The profiles **this desk** can embed into a show — `prism_core::library`.
+    ///
+    /// Not show content and not session state: it is a property of the build,
+    /// it never changes while the daemon runs, and a show that has embedded one
+    /// of these owns its copy from then on (S11). It is in the snapshot rather
+    /// than behind a query because a client needs it to *offer* the list at all,
+    /// and a list that never changes has nothing to ask about.
+    ///
+    /// Added in S27, which is when a client first had a way to patch anything:
+    /// a brand-new show carries no profiles, so without this the patch window
+    /// of a fresh show would be a form with an empty menu.
+    pub fixture_library: Vec<FixtureType>,
 }
 
 /// One DMX output, as the status panel shows it.
@@ -304,7 +347,8 @@ mod tests {
     };
     use crate::{decode, encode};
     use prism_domain::{
-        Command, Delta, FixtureId, JsonValue, NoticeLevel, OutputHealth, OutputId, ProgrammerState,
+        Answer, Command, Delta, FixtureId, JsonValue, NoticeLevel, OutputHealth, OutputId,
+        PatchConflict, PatchPreview, ProgrammerState, Query, UniverseId,
     };
 
     fn snapshot() -> Snapshot {
@@ -334,7 +378,21 @@ mod tests {
                 missed_ticks: 2,
                 unsaved_changes: true,
             },
+            fixture_library: prism_core_library(),
         }
+    }
+
+    /// A stand-in for `prism_core::fixture_library`, which this crate may not
+    /// depend on: `prism-ipc` is the wire and knows only `prism-domain`.
+    fn prism_core_library() -> Vec<prism_domain::FixtureType> {
+        vec![prism_domain::FixtureType {
+            id: "generic.dimmer".to_owned(),
+            manufacturer: "Generic".to_owned(),
+            name: "Dimmer".to_owned(),
+            mode: "1ch".to_owned(),
+            footprint: 1,
+            attributes: Vec::new(),
+        }]
     }
 
     #[test]
@@ -359,6 +417,19 @@ mod tests {
                 seq: u64::MAX,
                 command: Command::ClearProgrammer,
             },
+            ClientMessage::Query {
+                seq: 3,
+                query: Query::PatchConflicts,
+            },
+            ClientMessage::Query {
+                seq: 4,
+                query: Query::PatchPreview {
+                    id: FixtureId::new(1),
+                    type_id: "generic.dimmer".to_owned(),
+                    universe: UniverseId::new(2),
+                    address: 5,
+                },
+            },
         ];
         for message in messages {
             let bytes = encode(&message).unwrap();
@@ -382,6 +453,24 @@ mod tests {
                 data: vec![0, 1, 2, 255],
             },
             ServerMessage::Ack { seq: 9 },
+            ServerMessage::Answer {
+                seq: 9,
+                answer: Answer::PatchPreview {
+                    preview: PatchPreview {
+                        accepted: true,
+                        refusal: None,
+                        footprint: 4,
+                        last_address: Some(8),
+                        conflicts: vec![PatchConflict {
+                            universe: UniverseId::new(1),
+                            from: 5,
+                            to: 8,
+                            first: FixtureId::new(1),
+                            second: FixtureId::new(2),
+                        }],
+                    },
+                },
+            },
             ServerMessage::Reject {
                 seq: Some(9),
                 reason: RejectReason::CommandRefused,
@@ -411,6 +500,7 @@ mod tests {
         assert_eq!(back.outputs.len(), 1);
         assert_eq!(back.outputs[0].name, "Open DMX");
         assert_eq!(back.outputs[0].health, OutputHealth::Degraded);
+        assert_eq!(back.fixture_library, prism_core_library());
         assert!((back.health.tick_hz - 44.0).abs() < f64::EPSILON);
         assert_eq!(back.health.missed_ticks, 2);
         assert!(back.health.unsaved_changes);
@@ -449,6 +539,14 @@ mod tests {
                 },
             },
             ServerMessage::Ack { seq: 0 },
+            // An answer is not droppable either: a client that asked a question
+            // and never heard back would wait for ever.
+            ServerMessage::Answer {
+                seq: 0,
+                answer: Answer::PatchConflicts {
+                    conflicts: Vec::new(),
+                },
+            },
             ServerMessage::Reject {
                 seq: None,
                 reason: RejectReason::Backpressure,

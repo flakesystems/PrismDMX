@@ -101,6 +101,7 @@ mod conflict;
 mod desk;
 mod file;
 mod journal;
+mod library;
 mod mirror;
 mod programmer;
 mod session;
@@ -110,11 +111,15 @@ mod store;
 mod testkit;
 
 pub use command::{Applied, Effect, show_patch_ops};
-pub use conflict::{PatchConflict, ShowIssue};
+pub use conflict::ShowIssue;
 pub use desk::{DeskId, InvalidDeskId, MachineConfig};
 pub use file::{ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
+pub use library::{fixture_library, library_type};
 pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
+/// Re-exported from `prism-domain`, where S27 moved it so that it could travel
+/// on the wire as the answer to a `Query::PatchPreview`.
+pub use prism_domain::PatchConflict;
 pub use programmer::{Programmer, ProgrammerError};
 pub use session::{SessionError, SessionState, session_patch_ops};
 pub use show::{Show, ShowError};

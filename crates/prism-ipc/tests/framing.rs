@@ -108,18 +108,26 @@ fn any_snapshot() -> impl Strategy<Value = Snapshot> {
             programmer,
             outputs,
             health,
+            fixture_library: Vec::new(),
         })
 }
 
-fn any_client_message() -> impl Strategy<Value = ClientMessage> {
+fn any_client_message() -> BoxedStrategy<ClientMessage> {
+    // Boxed, and not for tidiness: `prop_oneof!` nests one generic value-tree
+    // layer per arm, and with `Command`'s derived tree inside it the
+    // two-message property below ran a debug build out of stack when S27 added
+    // the third arm. Erasing the type puts that recursion behind a vtable.
     prop_oneof![
         any_hello().prop_map(|hello| ClientMessage::Hello { hello }),
+        (any::<u64>(), any::<prism_domain::Query>())
+            .prop_map(|(seq, query)| ClientMessage::Query { seq, query }),
         (any::<u64>(), any::<Command>())
             .prop_map(|(seq, command)| ClientMessage::Command { seq, command }),
     ]
+    .boxed()
 }
 
-fn any_server_message() -> impl Strategy<Value = ServerMessage> {
+fn any_server_message() -> BoxedStrategy<ServerMessage> {
     prop_oneof![
         any_snapshot().prop_map(|snapshot| ServerMessage::Snapshot {
             snapshot: Box::new(snapshot)
@@ -128,6 +136,8 @@ fn any_server_message() -> impl Strategy<Value = ServerMessage> {
         proptest::collection::vec(any::<u8>(), 0..600)
             .prop_map(|data| ServerMessage::Telemetry { data }),
         any::<u64>().prop_map(|seq| ServerMessage::Ack { seq }),
+        (any::<u64>(), any::<prism_domain::Answer>())
+            .prop_map(|(seq, answer)| ServerMessage::Answer { seq, answer }),
         (
             proptest::option::of(any::<u64>()),
             any_reject_reason(),
@@ -139,6 +149,7 @@ fn any_server_message() -> impl Strategy<Value = ServerMessage> {
                 message
             }),
     ]
+    .boxed()
 }
 
 proptest! {

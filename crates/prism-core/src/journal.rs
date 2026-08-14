@@ -19,7 +19,9 @@
 //!
 //! | Command | Scope |
 //! |---|---|
-//! | `PatchFixture` | that one fixture's patch entry |
+//! | `PatchFixture`, `UnpatchFixture` | that one fixture's patch entry |
+//! | `RenumberFixture` | **both** numbers' patch entries — the one it left and the one it took |
+//! | `EmbedFixtureType` | that one embedded profile |
 //! | `StoreCue` | that one sequence, the programmer, the programmer's page state |
 //! | `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` | the programmer and its page state |
 //!
@@ -57,7 +59,9 @@
 use core::fmt;
 use std::collections::VecDeque;
 
-use prism_domain::{Command, Fixture, FixtureId, ProgrammerState, Sequence, SequenceId};
+use prism_domain::{
+    Command, Fixture, FixtureId, FixtureType, ProgrammerState, Sequence, SequenceId,
+};
 
 /// Why an Oops or a Redo could not be carried out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,10 +88,15 @@ impl core::error::Error for JournalError {}
 /// What a client shows beside an Oops button, and what makes the exclusion of
 /// the playback commands real rather than promised: a record that names one
 /// fixture cannot move an executor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// `Copy` was dropped in S27, when `EmbedFixtureType` gave one variant a key
+/// rather than a number. A scope is compared and printed, never counted on in a
+/// hot path, so a move is not a cost worth naming a variant vaguely to avoid.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum UndoScope {
     /// One fixture's entry in the patch.
     Fixture(FixtureId),
+    /// One embedded profile.
+    FixtureType(String),
     /// One sequence, with its cues.
     Sequence(SequenceId),
     /// The programmer, whole.
@@ -110,6 +119,12 @@ pub(crate) enum Image {
     /// The absence is a real case and not defensive: patching a fixture for the
     /// first time has "not patched" as its inverse.
     Fixture(FixtureId, Option<Fixture>),
+    /// One embedded profile. `None`: the show did not carry it.
+    ///
+    /// Embedding one for the first time has "not embedded" as its inverse, the
+    /// same shape a fixture has — and for the same reason, since S27 made both
+    /// reachable from the interface.
+    FixtureType(String, Option<FixtureType>),
     /// A sequence and its cues.
     ///
     /// Not optional, where a fixture is. The only command that images a
@@ -132,9 +147,10 @@ pub(crate) enum Image {
 
 impl Image {
     /// What this image is an image of.
-    pub(crate) const fn scope(&self) -> UndoScope {
+    pub(crate) fn scope(&self) -> UndoScope {
         match self {
             Self::Fixture(id, _) => UndoScope::Fixture(*id),
+            Self::FixtureType(type_id, _) => UndoScope::FixtureType(type_id.clone()),
             Self::Sequence(sequence) => UndoScope::Sequence(sequence.id),
             Self::Programmer(_) => UndoScope::Programmer,
             Self::ProgrammerPage { .. } => UndoScope::ProgrammerPage,

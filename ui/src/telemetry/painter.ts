@@ -390,6 +390,41 @@ export class LevelPainter {
 }
 
 /**
+ * Pixels per CSS pixel, and 1 where nothing says otherwise.
+ *
+ * Here rather than in each view for the reason every other seam in this project
+ * is one place: two copies of *what scale is this screen* is two answers, and
+ * the one that is wrong makes a canvas look blurred rather than making a test
+ * fail.
+ */
+export function devicePixelRatio(): number {
+  return typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+}
+
+/**
+ * Matches a canvas's pixels to the box the layout gave it, answering whether
+ * anything moved.
+ *
+ * A canvas has two sizes — the element's and the bitmap's — and a bitmap left at
+ * its 300 × 150 default is what makes a canvas look blurred. The answer matters
+ * because a resized context loses its state, so whatever was drawn on it has to
+ * be drawn again.
+ */
+export function resizeCanvas(canvas: HTMLCanvasElement | null, scale: number): boolean {
+  if (canvas === null) {
+    return false;
+  }
+  const width = Math.round(canvas.clientWidth * scale);
+  const height = Math.round(canvas.clientHeight * scale);
+  if (width <= 0 || height <= 0 || (canvas.width === width && canvas.height === height)) {
+    return false;
+  }
+  canvas.width = width;
+  canvas.height = height;
+  return true;
+}
+
+/**
  * A {@link LevelSurface} over a real canvas, or `null` where there is no 2D
  * context — which is every `jsdom` test and any browser that has run out of
  * canvas contexts.

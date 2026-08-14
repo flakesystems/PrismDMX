@@ -1,7 +1,7 @@
 /**
  * What each kind of window shows.
  *
- * Three of the eleven read the show document; the rest say plainly that they
+ * Four of the eleven read the show document; the rest say plainly that they
  * are not built yet, which is a deliberate answer rather than a gap — the
  * session is authoritative, an X-Touch F-key can open any of them, and a window
  * that rendered nothing would look like a fault.
@@ -19,6 +19,8 @@ import { WINDOW_TYPE_VARIANTS } from "../bindings/variants";
 import { TelemetrySink } from "../ipc/telemetry";
 import { readServerMessage } from "../ipc/protocol";
 import { nullSink, setLogSink } from "../log/logger";
+import { DeskProvider } from "../store/context";
+import { DeskStore } from "../store/desk";
 import { TelemetryProvider } from "../telemetry/panel";
 import { WindowContent } from "./content";
 
@@ -26,8 +28,8 @@ import recordingText from "../../tests/fixtures/session-recording.json?raw";
 
 const recording = JSON.parse(recordingText) as { readonly initialSnapshot: string };
 
-/** The show document the recorded daemon was holding. */
-const show: JsonValue = (() => {
+/** The two documents the recorded daemon was holding. */
+const { show, session } = ((): { show: JsonValue; session: JsonValue } => {
   const binary = atob(recording.initialSnapshot);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) {
@@ -37,15 +39,22 @@ const show: JsonValue = (() => {
   if (message.t !== "Snapshot") {
     throw new Error("the recording does not start with a snapshot");
   }
-  return message.snapshot.show;
+  return { show: message.snapshot.show, session: message.snapshot.session };
 })();
 
-/** Renders one window's body. */
+/** Renders one window's body, inside the two providers every window sits in. */
 function body(type: WindowType, document: JsonValue = show): string {
   const view = render(
-    <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
-      <WindowContent window={{ instanceId: 1, type, x: 0, y: 0, w: 640, h: 480 }} show={document} />
-    </TelemetryProvider>,
+    <DeskProvider store={new DeskStore()}>
+      <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
+        <WindowContent
+          window={{ instanceId: 1, type, x: 0, y: 0, w: 640, h: 480 }}
+          show={document}
+          session={session}
+          programmer={null}
+        />
+      </TelemetryProvider>
+    </DeskProvider>,
   );
   const text = view.container.textContent ?? "";
   view.unmount();
@@ -57,15 +66,19 @@ beforeEach(() => {
 });
 
 describe("a window's body", () => {
-  it("shows the patch in the patch and the fixture sheet", () => {
-    for (const type of ["Patch", "FixtureSheet"] as const) {
-      const text = body(type);
-      expect(text, type).toContain("Fixture 1");
-      expect(text, type).toContain("generic.dimmer");
-      // Universe and address, which is what makes it a patch rather than a
-      // list of names.
-      expect(text, type).toContain("Addr");
-    }
+  it("shows the rig in the Patch and the state in the Fixture Sheet", () => {
+    // The two are **not** the same window, which is S27's decision: the patch
+    // is where a rig is built and the sheet is where it is watched.
+    const patch = body("Patch");
+    expect(patch).toContain("Fixture 1");
+    expect(patch).toContain("Addr");
+    expect(patch).toContain("Add fixture");
+
+    const sheet = body("FixtureSheet");
+    expect(sheet).toContain("Fixture 1");
+    // The bank in force, and no address column at all: a sheet is about levels.
+    expect(sheet).toContain("Dimmer");
+    expect(sheet).not.toContain("Addr");
   });
 
   it("shows the pools the show has, by number and name", () => {
@@ -75,6 +88,7 @@ describe("a window's body", () => {
 
   it("says what is missing rather than showing an empty box", () => {
     expect(body("Patch", {})).toContain("Nothing is patched");
+    expect(body("FixtureSheet", {})).toContain("Nothing is patched");
     expect(body("Groups", {})).toContain("No groups yet");
     expect(body("SequenceSheet", {})).toContain("No sequences yet");
     expect(body("PresetPool", {})).toContain("No presets yet");
@@ -85,12 +99,16 @@ describe("a window's body", () => {
 
   it("puts the level view in the DMX sheet", () => {
     render(
-      <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
-        <WindowContent
-          window={{ instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480 }}
-          show={show}
-        />
-      </TelemetryProvider>,
+      <DeskProvider store={new DeskStore()}>
+        <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
+          <WindowContent
+            window={{ instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480 }}
+            show={show}
+            session={session}
+            programmer={null}
+          />
+        </TelemetryProvider>
+      </DeskProvider>,
     );
     expect(screen.getByTestId("telemetry-canvas")).not.toBeNull();
   });

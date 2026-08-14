@@ -32,7 +32,7 @@
  * 30 Hz through React state is the interface this rule exists to prevent.
  */
 
-import type { Command, Delta } from "../bindings";
+import type { Answer, Command, Delta, Query } from "../bindings";
 import { logger } from "../log/logger";
 import type { Payload } from "./codec";
 import { decodeServerMessage, encodeClientMessage } from "./codec";
@@ -86,6 +86,8 @@ export interface ConnectionEvents {
   onTelemetry?: (payload: Payload) => void;
   /** A command was applied. */
   onAck?: (seq: number) => void;
+  /** A question was answered. It changed nothing (§5.2). */
+  onAnswer?: (seq: number, answer: Answer) => void;
   /** A command was refused, and it changed nothing. */
   onRefused?: (seq: number | null, reason: RejectReason, message: string) => void;
 }
@@ -266,6 +268,39 @@ export class Connection {
   }
 
   /**
+   * Asks a question, answering with the sequence number the daemon will echo.
+   *
+   * A question changes nothing, so this is **not** a way round {@link send}'s
+   * promise: there is no query that writes. What comes back arrives at
+   * {@link ConnectionEvents.onAnswer}, addressed by this number, because a
+   * patch form answering keystrokes has several in flight at once and the
+   * newest answer is the only one worth drawing.
+   *
+   * Answers `null` when there is no daemon to ask. The caller shows what it
+   * last knew, or nothing — never a guess, which is the same rule
+   * {@link send} follows.
+   */
+  ask(query: Query): number | null {
+    const socket = this.#socket;
+    if (this.#phase !== "ready" || socket === null) {
+      log.debug("a query was not sent because the daemon is not connected", { query: query.t });
+      return null;
+    }
+    const seq = this.#nextSeq;
+    this.#nextSeq += 1;
+    try {
+      socket.send(encodeClientMessage({ t: "Query", seq, query }));
+    } catch (cause) {
+      log.error("a query could not be sent", {
+        query: query.t,
+        cause: cause instanceof Error ? cause.message : String(cause),
+      });
+      return null;
+    }
+    return seq;
+  }
+
+  /**
    * Drops the connection and asks for a fresh snapshot.
    *
    * The answer to a mirror that has diverged from the daemon (§6: a client
@@ -343,6 +378,9 @@ export class Connection {
         return;
       case "Ack":
         this.#events.onAck?.(message.seq);
+        return;
+      case "Answer":
+        this.#events.onAnswer?.(message.seq, message.answer);
         return;
       case "Reject":
         this.#events.onRefused?.(message.seq, message.reason, message.message);

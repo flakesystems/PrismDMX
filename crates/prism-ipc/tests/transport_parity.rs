@@ -121,6 +121,7 @@ fn the_world() -> Snapshot {
             missed_ticks: 4,
             unsaved_changes: true,
         },
+        fixture_library: Vec::new(),
     }
 }
 
@@ -511,6 +512,7 @@ fn record(event: &ClientEvent) -> Vec<u8> {
         ClientEvent::Delta(delta) => prism_ipc::encode(delta).unwrap(),
         ClientEvent::Telemetry(frame) => frame.encode(),
         ClientEvent::Ack { seq } => prism_ipc::encode(seq).unwrap(),
+        ClientEvent::Answered { seq, answer } => prism_ipc::encode(&(seq, answer)).unwrap(),
         ClientEvent::Refused {
             seq,
             reason,

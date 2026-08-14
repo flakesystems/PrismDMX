@@ -185,6 +185,19 @@ pub fn show_commands() -> Vec<Command> {
             level: 32768,
         },
         patch_command(9, 3, 1),
+        // The three S27 added, each in a form a populated show accepts: 1 is
+        // patched, 77 is free, and the desk's library carries an RGB PAR this
+        // show has not embedded.
+        Command::UnpatchFixture {
+            id: FixtureId::new(1),
+        },
+        Command::RenumberFixture {
+            id: FixtureId::new(1),
+            to: FixtureId::new(77),
+        },
+        Command::EmbedFixtureType {
+            type_id: "generic.rgb.par".to_owned(),
+        },
         Command::Oops,
         Command::Redo,
         Command::SaveShow,

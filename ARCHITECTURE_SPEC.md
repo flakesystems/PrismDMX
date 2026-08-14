@@ -317,6 +317,12 @@ type WindowType =
   | "FixtureSheet" | "DmxSheet" | "SequenceSheet" | "Groups" | "Viewer3D"
   | "PhaserEditor" | "ClockViewer" | "CueViewer" | "PresetPool" | "Patch"
   | "Settings";   // DmxSheet added in S25: the output itself, channel by channel
+// S27 settled what the three sheets are for, which had never been written down:
+//   Patch        — the *rig*: which fixtures exist and where their channels are.
+//                  The one window that changes the show's shape.
+//   FixtureSheet — the *state*: what the programmer holds and what is on the
+//                  cable, per fixture, live. Watched, not edited.
+//   DmxSheet     — the *cable*: channel by channel, with no fixtures in it.
 
 interface WindowInstance {
   instanceId: number; type: WindowType;

@@ -21,10 +21,23 @@
  * intent and receives facts.
  */
 
-import type { Command, Delta, OutputHealth, OutputId, ProgrammerState } from "../bindings";
+import type {
+  Answer,
+  AttributeDef,
+  Command,
+  Delta,
+  FixtureType,
+  OutputHealth,
+  OutputId,
+  PatchConflict,
+  PatchPreview,
+  ProgrammerState,
+  Query,
+} from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
   FEATURE_GROUP_VARIANTS,
+  MERGE_MODE_VARIANTS,
   NOTICE_LEVEL_VARIANTS,
   OUTPUT_HEALTH_VARIANTS,
   PROGRAMMER_VALUE_SOURCE_VARIANTS,
@@ -71,10 +84,18 @@ export interface Hello {
   readonly token: string | null;
 }
 
-/** Everything a client may send. */
+/**
+ * Everything a client may send.
+ *
+ * Three shapes, since S27: a handshake, an intent, and a **question**. A query
+ * changes nothing and is answered to this client alone, which is why it is not
+ * a command with a special reply — see `crates/prism-domain/src/query.rs`. It
+ * shares the command numbering because both travel on the one ordered channel.
+ */
 export type ClientMessage =
   | { readonly t: "Hello"; readonly hello: Hello }
-  | { readonly t: "Command"; readonly seq: number; readonly command: Command };
+  | { readonly t: "Command"; readonly seq: number; readonly command: Command }
+  | { readonly t: "Query"; readonly seq: number; readonly query: Query };
 
 /** Why something was refused. */
 export const REJECT_REASONS = [
@@ -145,6 +166,16 @@ export interface Snapshot {
   readonly outputs: readonly OutputSnapshot[];
   /** How the daemon itself is doing. */
   readonly health: DaemonHealth;
+  /**
+   * The profiles **this desk** can embed into a show.
+   *
+   * Not show content: a show that has embedded one of these owns its copy from
+   * then on (S11), and this list is a property of the daemon's build. It is in
+   * the snapshot rather than behind a query because a client needs it in order
+   * to *offer* the list at all — a brand-new show carries no profiles, so a
+   * patch window without this would be a form with an empty menu.
+   */
+  readonly fixtureLibrary: readonly FixtureType[];
 }
 
 /** Everything the daemon may send. */
@@ -153,6 +184,7 @@ export type ServerMessage =
   | { readonly t: "Delta"; readonly delta: Delta }
   | { readonly t: "Telemetry"; readonly data: Payload }
   | { readonly t: "Ack"; readonly seq: number }
+  | { readonly t: "Answer"; readonly seq: number; readonly answer: Answer }
   | {
       readonly t: "Reject";
       readonly seq: number | null;
@@ -302,6 +334,92 @@ export function readDelta(value: unknown, path: string): Delta {
   }
 }
 
+/** One overlapping pair, as the daemon worked it out. */
+function readPatchConflict(value: unknown, path: string): PatchConflict {
+  const record = asRecord(value, path);
+  return {
+    universe: asInteger(field(record, "universe"), `${path}.universe`),
+    from: asInteger(field(record, "from"), `${path}.from`),
+    to: asInteger(field(record, "to"), `${path}.to`),
+    first: asInteger(field(record, "first"), `${path}.first`),
+    second: asInteger(field(record, "second"), `${path}.second`),
+  };
+}
+
+/** The list of them, in the daemon's order — which is patch-sheet order. */
+function readPatchConflicts(value: unknown, path: string): PatchConflict[] {
+  return asArray(value, path).map((entry, index) =>
+    readPatchConflict(entry, `${path}[${index}]`),
+  );
+}
+
+/** What patching a fixture would do. */
+function readPatchPreview(value: unknown, path: string): PatchPreview {
+  const record = asRecord(value, path);
+  return {
+    accepted: asBoolean(field(record, "accepted"), `${path}.accepted`),
+    refusal: asNullable(field(record, "refusal"), `${path}.refusal`, asString),
+    footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
+    lastAddress: asNullable(field(record, "lastAddress"), `${path}.lastAddress`, asInteger),
+    conflicts: readPatchConflicts(field(record, "conflicts"), `${path}.conflicts`),
+  };
+}
+
+/** The daemon's answer to a question. */
+export function readAnswer(value: unknown, path: string): Answer {
+  const record = asRecord(value, path);
+  const tag = asString(field(record, "t"), `${path}.t`);
+  switch (tag) {
+    case "PatchConflicts":
+      return {
+        t: "PatchConflicts",
+        conflicts: readPatchConflicts(field(record, "conflicts"), `${path}.conflicts`),
+      };
+    case "PatchPreview":
+      return {
+        t: "PatchPreview",
+        preview: readPatchPreview(field(record, "preview"), `${path}.preview`),
+      };
+    default:
+      throw new ProtocolFault(`${path}.t`, `an answer this build knows, not ${JSON.stringify(tag)}`);
+  }
+}
+
+/** One attribute of a profile. */
+function readAttributeDef(value: unknown, path: string): AttributeDef {
+  const record = asRecord(value, path);
+  return {
+    attribute: asVariant(field(record, "attribute"), `${path}.attribute`, ATTRIBUTE_TYPE_VARIANTS),
+    featureGroup: asVariant(
+      field(record, "featureGroup"),
+      `${path}.featureGroup`,
+      FEATURE_GROUP_VARIANTS,
+    ),
+    coarseOffset: asInteger(field(record, "coarseOffset"), `${path}.coarseOffset`),
+    fineOffset: asNullable(field(record, "fineOffset"), `${path}.fineOffset`, asInteger),
+    defaultValue: asInteger(field(record, "defaultValue"), `${path}.defaultValue`),
+    mergeMode: asVariant(field(record, "mergeMode"), `${path}.mergeMode`, MERGE_MODE_VARIANTS),
+    invert: asBoolean(field(record, "invert"), `${path}.invert`),
+    physicalFrom: asNumber(field(record, "physicalFrom"), `${path}.physicalFrom`),
+    physicalTo: asNumber(field(record, "physicalTo"), `${path}.physicalTo`),
+  };
+}
+
+/** One profile this desk can embed. */
+function readFixtureType(value: unknown, path: string): FixtureType {
+  const record = asRecord(value, path);
+  return {
+    id: asString(field(record, "id"), `${path}.id`),
+    manufacturer: asString(field(record, "manufacturer"), `${path}.manufacturer`),
+    name: asString(field(record, "name"), `${path}.name`),
+    mode: asString(field(record, "mode"), `${path}.mode`),
+    footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
+    attributes: asArray(field(record, "attributes"), `${path}.attributes`).map((entry, index) =>
+      readAttributeDef(entry, `${path}.attributes[${index}]`),
+    ),
+  };
+}
+
 /** One configured output. */
 function readOutputSnapshot(value: unknown, path: string): OutputSnapshot {
   const record = asRecord(value, path);
@@ -334,6 +452,9 @@ export function readSnapshot(value: unknown, path: string): Snapshot {
       readOutputSnapshot(output, `${path}.outputs[${index}]`),
     ),
     health: readDaemonHealth(field(record, "health"), `${path}.health`),
+    fixtureLibrary: asArray(field(record, "fixtureLibrary"), `${path}.fixtureLibrary`).map(
+      (entry, index) => readFixtureType(entry, `${path}.fixtureLibrary[${index}]`),
+    ),
   };
 }
 
@@ -357,6 +478,12 @@ export function readServerMessage(value: unknown, path = "ServerMessage"): Serve
       return { t: "Telemetry", data: asBytes(field(record, "data"), `${path}.data`) };
     case "Ack":
       return { t: "Ack", seq: asInteger(field(record, "seq"), `${path}.seq`) };
+    case "Answer":
+      return {
+        t: "Answer",
+        seq: asInteger(field(record, "seq"), `${path}.seq`),
+        answer: readAnswer(field(record, "answer"), `${path}.answer`),
+      };
     case "Reject":
       return {
         t: "Reject",
@@ -380,6 +507,8 @@ export function describeServerMessage(message: ServerMessage): string {
       return "a telemetry frame";
     case "Ack":
       return "an acknowledgement";
+    case "Answer":
+      return "an answer";
     case "Reject":
       return "a rejection";
   }

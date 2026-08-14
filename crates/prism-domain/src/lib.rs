@@ -38,6 +38,7 @@ mod output;
 mod patch;
 mod preset;
 mod programmer;
+mod query;
 mod sequence;
 mod session;
 #[cfg(test)]
@@ -63,5 +64,6 @@ pub use programmer::{
     ClearStage, InvalidClearStage, ProgrammerEntry, ProgrammerState, ProgrammerValue,
     ProgrammerValueSource, ProgrammerValues,
 };
+pub use query::{Answer, PatchConflict, PatchPreview, Query};
 pub use sequence::{Cue, CuePart, CueTrigger, Sequence};
 pub use session::{Session, View, WindowInstance, WindowType};

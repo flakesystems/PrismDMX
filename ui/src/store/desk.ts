@@ -30,7 +30,7 @@
  * them from until the next snapshot arrives, which is checkable and is checked.
  */
 
-import type { Command, Delta, NoticeLevel, ProgrammerState } from "../bindings";
+import type { Answer, Command, Delta, FixtureType, NoticeLevel, ProgrammerState, Query } from "../bindings";
 import type { ConnectionStatus, ConnectionEvents } from "../ipc/connection";
 import type { DaemonHealth, OutputSnapshot, RejectReason, Snapshot } from "../ipc/protocol";
 import { logger } from "../log/logger";
@@ -70,6 +70,15 @@ export interface DeskState {
   readonly outputs: readonly OutputSnapshot[] | null;
   /** How the daemon is doing, or `null` when not connected. */
   readonly health: DaemonHealth | null;
+  /**
+   * The profiles this desk can embed, or `null` when not connected.
+   *
+   * A property of the daemon's build rather than of the show, so it arrives in
+   * the snapshot and never moves afterwards — but it goes with the documents
+   * when the connection does, for the same reason they do: a list of profiles
+   * from a daemon that has stopped is a menu that cannot be acted on.
+   */
+  readonly fixtureLibrary: readonly FixtureType[] | null;
   /** Whether the show has unsaved changes — the Save lamp. */
   readonly unsavedChanges: boolean;
   /** Messages for the operator, newest last. */
@@ -82,6 +91,7 @@ export const INITIAL_STATE: DeskState = {
   documents: null,
   outputs: null,
   health: null,
+  fixtureLibrary: null,
   unsavedChanges: false,
   notices: [],
 };
@@ -91,6 +101,12 @@ export type Listener = () => void;
 
 /** Sends a command to the daemon, answering with `null` if it could not. */
 export type Dispatch = (command: Command) => number | null;
+
+/** Sends a question, answering with `null` if it could not. */
+export type Enquire = (query: Query) => number | null;
+
+/** How long a question may go unanswered before the caller is told so. */
+export const QUERY_TIMEOUT_MS = 5000;
 
 /**
  * The store.
@@ -108,6 +124,12 @@ export class DeskStore {
     log.warn("a command was dropped because no connection is attached");
     return null;
   };
+  #enquire: Enquire = () => {
+    log.warn("a query was dropped because no connection is attached");
+    return null;
+  };
+  /** Questions asked and not yet answered, by the daemon's echo number. */
+  #pending = new Map<number, (answer: Answer | null) => void>();
 
   /** The current state. Stable between changes, so it may be compared by identity. */
   getState = (): DeskState => this.#state;
@@ -120,9 +142,12 @@ export class DeskStore {
     };
   };
 
-  /** Attaches the connection commands go out through. */
-  attach(dispatch: Dispatch): void {
+  /** Attaches the connection commands and questions go out through. */
+  attach(dispatch: Dispatch, enquire?: Enquire): void {
     this.#dispatch = dispatch;
+    if (enquire !== undefined) {
+      this.#enquire = enquire;
+    }
   }
 
   /**
@@ -133,6 +158,48 @@ export class DeskStore {
    * the command that went out, not even optimistically.
    */
   send: Dispatch = (command) => this.#dispatch(command);
+
+  /**
+   * Asks a question and waits for the answer.
+   *
+   * Answers `null` rather than throwing when there is no daemon, when the
+   * connection goes before the answer does, or when nothing comes back within
+   * {@link QUERY_TIMEOUT_MS}. A caller that got `null` shows what it last knew
+   * or shows nothing; **it never guesses**, which is the whole reason the
+   * question was asked of the daemon in the first place (D3).
+   */
+  ask = async (query: Query): Promise<Answer | null> => {
+    const seq = this.#enquire(query);
+    if (seq === null) {
+      return null;
+    }
+    return new Promise<Answer | null>((resolve) => {
+      const timer = setTimeout(() => {
+        if (this.#pending.delete(seq)) {
+          log.warn("a query went unanswered", { query: query.t, seq });
+          resolve(null);
+        }
+      }, QUERY_TIMEOUT_MS);
+      this.#pending.set(seq, (answer) => {
+        clearTimeout(timer);
+        resolve(answer);
+      });
+    });
+  };
+
+  /** The daemon answered a question. */
+  answered(seq: number, answer: Answer): void {
+    const waiting = this.#pending.get(seq);
+    if (waiting === undefined) {
+      // An answer to a question this client has stopped caring about — a
+      // keystroke two keystrokes ago, or one that timed out. Nothing to do:
+      // an answer changes no state by construction.
+      log.debug("an answer arrived for a question nobody is waiting for", { seq });
+      return;
+    }
+    this.#pending.delete(seq);
+    waiting(answer);
+  }
 
   /** The connection state changed. */
   setStatus(status: ConnectionStatus): void {
@@ -153,6 +220,7 @@ export class DeskStore {
       },
       outputs: snapshot.outputs,
       health: snapshot.health,
+      fixtureLibrary: snapshot.fixtureLibrary,
       unsavedChanges: snapshot.health.unsavedChanges,
     });
   }
@@ -164,6 +232,15 @@ export class DeskStore {
    * wrong is the one thing that is still true after the connection is lost.
    */
   disconnected(): void {
+    // Every question in flight is answered with `null` rather than left
+    // hanging: a patch form waiting on a preview from a daemon that has gone
+    // would wait for the timeout and then show an answer about a show nobody
+    // is holding any more.
+    const waiting = [...this.#pending.values()];
+    this.#pending.clear();
+    for (const resolve of waiting) {
+      resolve(null);
+    }
     if (this.#state.documents === null && this.#state.outputs === null) {
       return;
     }
@@ -172,6 +249,7 @@ export class DeskStore {
       documents: null,
       outputs: null,
       health: null,
+      fixtureLibrary: null,
       unsavedChanges: false,
     });
   }
@@ -293,6 +371,9 @@ export function deskEvents(store: DeskStore, resync: (reason: string) => void): 
       if (!store.applyDelta(delta)) {
         resync("a delta did not fit the mirror");
       }
+    },
+    onAnswer: (seq, answer) => {
+      store.answered(seq, answer);
     },
     onRefused: (seq, reason, message) => {
       store.refused(seq, reason, message);

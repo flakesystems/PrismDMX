@@ -341,6 +341,9 @@ impl SessionState {
             | Command::ExecutorOff { .. }
             | Command::SetExecutorMaster { .. }
             | Command::PatchFixture { .. }
+            | Command::UnpatchFixture { .. }
+            | Command::RenumberFixture { .. }
+            | Command::EmbedFixtureType { .. }
             | Command::Oops
             | Command::Redo
             | Command::SaveShow => return Err(SessionError::NotASessionCommand),

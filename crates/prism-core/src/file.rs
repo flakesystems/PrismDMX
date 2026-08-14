@@ -315,9 +315,20 @@ impl ShowFile {
     /// given a scope here and left out of the list there, or the reverse.
     fn image(&self, command: &Command) -> Vec<Image> {
         match command {
-            Command::PatchFixture { id, .. } => {
+            Command::PatchFixture { id, .. } | Command::UnpatchFixture { id } => {
                 vec![Image::Fixture(*id, self.show.fixture(*id).cloned())]
             }
+            // Two entries, because a renumber is a remove and an insert: an
+            // undo has to put the fixture back where it was **and** take it off
+            // the number it moved to. One image would restore half of it.
+            Command::RenumberFixture { id, to } => vec![
+                Image::Fixture(*id, self.show.fixture(*id).cloned()),
+                Image::Fixture(*to, self.show.fixture(*to).cloned()),
+            ],
+            Command::EmbedFixtureType { type_id } => vec![Image::FixtureType(
+                type_id.clone(),
+                self.show.fixture_type(type_id).cloned(),
+            )],
             Command::SelectFixtures { .. }
             | Command::SetAttribute { .. }
             | Command::ApplyPreset { .. }
@@ -469,6 +480,14 @@ impl ShowFile {
                     // is being taken back (S4).
                     applied.effects.push(Effect::Repatch);
                 }
+                Image::FixtureType(type_id, fixture_type) => {
+                    let ops = match fixture_type {
+                        Some(fixture_type) => self.show.embed_fixture_type(fixture_type.clone())?,
+                        None => self.show.remove_fixture_type(type_id)?,
+                    };
+                    applied.deltas.push(Delta::ShowPatch { ops });
+                    applied.effects.push(Effect::Repatch);
+                }
                 Image::Sequence(sequence) => {
                     let ops = self.show.store_sequence(sequence.clone())?;
                     applied.deltas.push(Delta::ShowPatch { ops });
@@ -499,7 +518,7 @@ impl ShowFile {
                         applied.deltas.push(Delta::SessionPatch { ops });
                     }
                 }
-                Image::Fixture(..) | Image::Sequence(_) => {}
+                Image::Fixture(..) | Image::FixtureType(..) | Image::Sequence(_) => {}
             }
         }
         Ok(applied)

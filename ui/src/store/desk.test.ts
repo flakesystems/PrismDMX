@@ -6,11 +6,19 @@
  * this file says the values are gone, that one says nothing renders them.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Answer, Query } from "../bindings";
 import { nullSink, setLogSink } from "../log/logger";
 import { emptyProgrammer, health, snapshot } from "../testing/fake-daemon";
-import { DeskStore, INITIAL_STATE, NOTICE_LIMIT, deskEvents, programmerOf } from "./desk";
+import {
+  DeskStore,
+  INITIAL_STATE,
+  NOTICE_LIMIT,
+  QUERY_TIMEOUT_MS,
+  deskEvents,
+  programmerOf,
+} from "./desk";
 
 beforeEach(() => {
   setLogSink(nullSink);
@@ -266,5 +274,104 @@ describe("the connection events", () => {
     });
     expect(store.send({ t: "SaveShow" })).toBe(7);
     expect(sent).toEqual(["SaveShow"]);
+  });
+});
+
+/**
+ * **Questions (§5.2), and what happens when one is not answered.**
+ *
+ * A question changes nothing by construction, so what there is to get wrong is
+ * the waiting: an answer that arrives for a question nobody is waiting for, an
+ * answer that never arrives at all, and a connection that goes while one is in
+ * flight. All three end the same way — the caller is told *no answer* and shows
+ * what it last knew, which is the only honest thing a client with no daemon can
+ * do (D3).
+ */
+describe("asking the daemon a question", () => {
+  const conflicts: Answer = { t: "PatchConflicts", conflicts: [] };
+
+  it("carries the answer back to the caller that asked", async () => {
+    const store = new DeskStore();
+    const asked: Query[] = [];
+    store.attach(
+      () => null,
+      (query) => {
+        asked.push(query);
+        return 3;
+      },
+    );
+    const waiting = store.ask({ t: "PatchConflicts" });
+    store.answered(3, conflicts);
+    await expect(waiting).resolves.toEqual(conflicts);
+    expect(asked).toEqual([{ t: "PatchConflicts" }]);
+  });
+
+  it("answers with nothing when there is no daemon to ask", async () => {
+    // The default enquirer, which is what a store with no connection attached
+    // has. A caller shows what it last knew; it never guesses.
+    await expect(new DeskStore().ask({ t: "PatchConflicts" })).resolves.toBeNull();
+  });
+
+  it("answers with nothing when the daemon says nothing for long enough", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new DeskStore();
+      store.attach(
+        () => null,
+        () => 1,
+      );
+      const waiting = store.ask({ t: "PatchConflicts" });
+      vi.advanceTimersByTime(QUERY_TIMEOUT_MS);
+      await expect(waiting).resolves.toBeNull();
+      // And the answer arriving afterwards is dropped rather than resolving a
+      // promise that has already been settled.
+      store.answered(1, conflicts);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("answers every question in flight when the connection goes", async () => {
+    // A patch form waiting on a preview from a daemon that has stopped would
+    // otherwise wait out the timeout and then draw an answer about a show
+    // nobody is holding any more.
+    const store = new DeskStore();
+    let seq = 0;
+    store.attach(
+      () => null,
+      () => {
+        seq += 1;
+        return seq;
+      },
+    );
+    const first = store.ask({ t: "PatchConflicts" });
+    const second = store.ask({ t: "PatchConflicts" });
+    store.disconnected();
+    await expect(first).resolves.toBeNull();
+    await expect(second).resolves.toBeNull();
+  });
+
+  it("ignores an answer nobody is waiting for", () => {
+    // A keystroke two keystrokes ago, or one that timed out. There is nothing
+    // to do with it: an answer changes no state by construction.
+    const store = new DeskStore();
+    const before = store.getState();
+    store.answered(99, conflicts);
+    expect(store.getState()).toBe(before);
+  });
+
+  it("routes the daemon's answers into the store", () => {
+    const store = new DeskStore();
+    let seq: number | null = null;
+    store.attach(
+      () => null,
+      () => 5,
+    );
+    const waiting = store.ask({ t: "PatchConflicts" }).then((answer) => answer);
+    const events = deskEvents(store, () => {});
+    events.onAnswer?.(5, conflicts);
+    seq = 5;
+    expect(seq).toBe(5);
+    return expect(waiting).resolves.toEqual(conflicts);
   });
 });

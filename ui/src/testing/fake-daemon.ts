@@ -16,7 +16,7 @@
 
 import { encode } from "@msgpack/msgpack";
 
-import type { Delta, ProgrammerState } from "../bindings";
+import type { Answer, Delta, FixtureType, ProgrammerState } from "../bindings";
 import type { Socket, SocketFactory, SocketHandlers, Timer } from "../ipc/connection";
 import type { DaemonHealth, RejectReason, Snapshot } from "../ipc/protocol";
 import type { Payload } from "../ipc/shape";
@@ -132,6 +132,55 @@ export function emptyProgrammer(): ProgrammerState {
   return { selection: [], activeFeatureGroup: "Dimmer", values: [], clearStage: 0 };
 }
 
+/**
+ * The profiles the desk carries, in the shape `prism_core::library` serves.
+ *
+ * Two of them, because a menu with one entry cannot tell a component that reads
+ * the list from one that draws the first thing it finds.
+ */
+export function fixtureLibrary(): FixtureType[] {
+  return [
+    {
+      id: "generic.dimmer",
+      manufacturer: "Generic",
+      name: "Dimmer",
+      mode: "1ch",
+      footprint: 1,
+      attributes: [
+        {
+          attribute: "Dimmer",
+          featureGroup: "Dimmer",
+          coarseOffset: 0,
+          fineOffset: null,
+          defaultValue: 0,
+          mergeMode: "HTP",
+          invert: false,
+          physicalFrom: 0,
+          physicalTo: 100,
+        },
+      ],
+    },
+    {
+      id: "generic.rgbw.par",
+      manufacturer: "Generic",
+      name: "RGBW PAR",
+      mode: "4ch",
+      footprint: 4,
+      attributes: (["Red", "Green", "Blue", "White"] as const).map((attribute, index) => ({
+        attribute,
+        featureGroup: "Color" as const,
+        coarseOffset: index,
+        fineOffset: null,
+        defaultValue: 0,
+        mergeMode: "LTP" as const,
+        invert: false,
+        physicalFrom: 0,
+        physicalTo: 100,
+      })),
+    },
+  ];
+}
+
 /** The daemon's health, at its defaults. */
 export function health(overrides: Partial<DaemonHealth> = {}): DaemonHealth {
   return {
@@ -178,6 +227,7 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     programmer: emptyProgrammer(),
     outputs: [{ id: 1, name: "Mock", health: "Ok" }],
     health: health(),
+    fixtureLibrary: fixtureLibrary(),
     ...overrides,
   };
 }
@@ -189,6 +239,7 @@ export function serverMessage(
     | { t: "Delta"; delta: Delta }
     | { t: "Telemetry"; data: Uint8Array }
     | { t: "Ack"; seq: number }
+    | { t: "Answer"; seq: number; answer: Answer }
     | { t: "Reject"; seq: number | null; reason: RejectReason; message: string },
 ): Uint8Array {
   return encode(message, { ignoreUndefined: true });

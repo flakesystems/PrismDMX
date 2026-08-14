@@ -287,6 +287,45 @@ describe("sending", () => {
   });
 });
 
+/**
+ * Questions (§5.2), which travel on the same ordered channel and share its
+ * numbering — because an answer and an acknowledgement that could carry the
+ * same number would be two things a client could not tell apart.
+ */
+describe("asking", () => {
+  it("numbers questions with the commands and carries the answer back", () => {
+    const answers: [number, unknown][] = [];
+    const { network, connection } = connected({
+      onAnswer: (seq, answer) => answers.push([seq, answer]),
+    });
+    connection.start();
+    network.openAndHandshake(aSnapshot());
+
+    expect(connection.send({ t: "Oops" })).toBe(0);
+    expect(connection.ask({ t: "PatchConflicts" })).toBe(1);
+    expect(sentMessages(network.last).slice(1)).toEqual([
+      { t: "Command", seq: 0, command: { t: "Oops" } },
+      { t: "Query", seq: 1, query: { t: "PatchConflicts" } },
+    ]);
+
+    network.last.deliver(
+      serverMessage({ t: "Answer", seq: 1, answer: { t: "PatchConflicts", conflicts: [] } }),
+    );
+    expect(answers).toEqual([[1, { t: "PatchConflicts", conflicts: [] }]]);
+  });
+
+  it("refuses to ask when there is no daemon, and reports a socket that throws", () => {
+    const { network, connection } = connected();
+    connection.start();
+    expect(connection.ask({ t: "PatchConflicts" })).toBeNull();
+    network.openAndHandshake(aSnapshot());
+    network.last.send = () => {
+      throw new Error("the socket is closing");
+    };
+    expect(connection.ask({ t: "PatchConflicts" })).toBeNull();
+  });
+});
+
 describe("the reconnect", () => {
   it("backs off 100 ms doubling to five seconds", () => {
     expect(backoffMs(0)).toBe(100);

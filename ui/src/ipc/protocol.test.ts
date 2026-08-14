@@ -16,6 +16,7 @@ import {
   closesTheConnection,
   describeServerMessage,
   hello,
+  readAnswer,
   readDelta,
   readProgrammerState,
   readServerMessage,
@@ -233,5 +234,118 @@ describe("the snapshot", () => {
         readSnapshot({ ...aSnapshot(), health: { ...aSnapshot().health, tickHz: "44" } }, "s"),
       ),
     ).toBe("s.health.tickHz");
+  });
+});
+
+/**
+ * The third shape, added in S27: a question changes nothing and its answer is
+ * a **fact the daemon computed** — which is exactly why it is decoded as
+ * strictly as a delta rather than trusted.
+ */
+describe("an answer", () => {
+  it("reads the two the daemon can give", () => {
+    const conflicts = { t: "PatchConflicts", conflicts: [] };
+    expect(readAnswer(conflicts, "a")).toEqual(conflicts);
+
+    const preview = {
+      t: "PatchPreview",
+      preview: {
+        accepted: true,
+        refusal: null,
+        footprint: 4,
+        lastAddress: 33,
+        conflicts: [{ universe: 1, from: 32, to: 33, first: 6, second: 7 }],
+      },
+    };
+    expect(readAnswer(preview, "a")).toEqual(preview);
+  });
+
+  it("names the field that was not what it should be", () => {
+    expect(faultPath(() => readAnswer({ t: "Elsewhere" }, "a"))).toBe("a.t");
+    expect(faultPath(() => readAnswer({ t: "PatchConflicts" }, "a"))).toBe("a.conflicts");
+    expect(
+      faultPath(() =>
+        readAnswer({ t: "PatchConflicts", conflicts: [{ universe: 1, from: 1 }] }, "a"),
+      ),
+    ).toBe("a.conflicts[0].to");
+    expect(
+      faultPath(() =>
+        readAnswer(
+          {
+            t: "PatchPreview",
+            preview: {
+              accepted: "yes",
+              refusal: null,
+              footprint: 1,
+              lastAddress: null,
+              conflicts: [],
+            },
+          },
+          "a",
+        ),
+      ),
+    ).toBe("a.preview.accepted");
+  });
+
+  it("arrives inside a server message, addressed by the question's number", () => {
+    const message = readServerMessage({
+      t: "Answer",
+      seq: 4,
+      answer: { t: "PatchConflicts", conflicts: [] },
+    });
+    expect(message).toEqual({
+      t: "Answer",
+      seq: 4,
+      answer: { t: "PatchConflicts", conflicts: [] },
+    });
+    expect(describeServerMessage(message)).toBe("an answer");
+  });
+});
+
+/**
+ * The desk's own profiles, which ride in the snapshot because a client needs
+ * them to *offer* the list at all — a brand-new show carries none.
+ */
+describe("the fixture library in the snapshot", () => {
+  it("reads every field of every profile", () => {
+    const snapshot = aSnapshot();
+    expect(readSnapshot(snapshot, "s").fixtureLibrary).toEqual(snapshot.fixtureLibrary);
+    expect(snapshot.fixtureLibrary.length).toBeGreaterThan(1);
+  });
+
+  it("names the profile and the attribute that was wrong", () => {
+    const broken = (attributes: unknown) => ({
+      ...aSnapshot(),
+      fixtureLibrary: [
+        { id: "x", manufacturer: "m", name: "n", mode: "1ch", footprint: 1, attributes },
+      ],
+    });
+    expect(faultPath(() => readSnapshot(broken(7), "s"))).toBe("s.fixtureLibrary[0].attributes");
+    expect(
+      faultPath(() => readSnapshot(broken([{ attribute: "Nonesuch" }]), "s")),
+    ).toBe("s.fixtureLibrary[0].attributes[0].attribute");
+    expect(
+      faultPath(() =>
+        readSnapshot(
+          broken([
+            {
+              attribute: "Dimmer",
+              featureGroup: "Dimmer",
+              coarseOffset: 0,
+              fineOffset: null,
+              defaultValue: 0,
+              mergeMode: "MTP",
+              invert: false,
+              physicalFrom: 0,
+              physicalTo: 1,
+            },
+          ]),
+          "s",
+        ),
+      ),
+    ).toBe("s.fixtureLibrary[0].attributes[0].mergeMode");
+    expect(faultPath(() => readSnapshot({ ...aSnapshot(), fixtureLibrary: 7 }, "s"))).toBe(
+      "s.fixtureLibrary",
+    );
   });
 });

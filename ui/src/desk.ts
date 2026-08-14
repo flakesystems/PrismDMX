@@ -55,7 +55,10 @@ export function createDesk(options: DeskOptions = {}): Desk {
     },
   );
 
-  store.attach((command) => connection.send(command));
+  store.attach(
+    (command) => connection.send(command),
+    (query) => connection.ask(query),
+  );
 
   return {
     store,

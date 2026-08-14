@@ -33,7 +33,8 @@ use prism_domain::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::conflict::{PatchConflict, ShowIssue};
+use crate::conflict::ShowIssue;
+use prism_domain::PatchConflict;
 
 /// Wire name of the embedded profile library.
 pub(crate) const FIXTURE_TYPES: &str = "fixtureTypes";
@@ -119,6 +120,14 @@ pub enum ShowError {
         /// The first fixture that would stop fitting.
         fixture: prism_domain::FixtureId,
     },
+    /// A renumber was asked for a number that is already taken. Two fixtures
+    /// cannot share one, and replacing the other would delete a light nobody
+    /// asked to delete.
+    FixtureNumberInUse(prism_domain::FixtureId),
+    /// A profile key this desk does not carry. `Command::EmbedFixtureType`
+    /// names one of `crate::library`'s, because a client sends a key rather
+    /// than a profile (S27).
+    UnknownLibraryType(String),
     /// A fixture type cannot be removed while a fixture instantiates it.
     FixtureTypeInUse {
         /// The type.
@@ -191,6 +200,12 @@ impl fmt::Display for ShowError {
                 f,
                 "replacing fixture type {type_id:?} would leave fixture {fixture} out of range"
             ),
+            Self::FixtureNumberInUse(id) => {
+                write!(f, "fixture {id} is already patched")
+            }
+            Self::UnknownLibraryType(id) => {
+                write!(f, "this desk carries no profile {id:?}")
+            }
             Self::FixtureTypeInUse { type_id, fixture } => {
                 write!(f, "fixture type {type_id:?} is used by fixture {fixture}")
             }
@@ -450,6 +465,51 @@ impl Show {
         crate::conflict::issues(self)
     }
 
+    /// What patching a fixture at an address *would* do, without doing it.
+    ///
+    /// The answer to `Query::PatchPreview`, and the reason S27 could show an
+    /// address conflict **before** it was committed rather than warning about
+    /// one afterwards. See [`crate::conflict`]: an overlap is legal, so the
+    /// answer distinguishes *would be refused* from *would overlap*.
+    #[must_use]
+    pub fn preview_patch(
+        &self,
+        id: prism_domain::FixtureId,
+        type_id: &str,
+        universe: UniverseId,
+        address: u16,
+    ) -> prism_domain::PatchPreview {
+        crate::conflict::preview(self, id, type_id, universe, address)
+    }
+
+    /// Whether [`Self::patch_fixture`] would accept these five fields.
+    ///
+    /// Writes nothing. The validation is the same code path the edit runs, so a
+    /// preview and the patch that follows it cannot disagree.
+    ///
+    /// # Errors
+    ///
+    /// Whatever [`Self::patch_fixture`] would answer with.
+    pub(crate) fn check_patch(
+        &self,
+        id: prism_domain::FixtureId,
+        type_id: &str,
+        universe: UniverseId,
+        address: u16,
+    ) -> Result<(), ShowError> {
+        self.check_fixture(&Fixture {
+            id,
+            name: String::new(),
+            type_id: type_id.to_owned(),
+            universe,
+            address,
+            position: prism_domain::Vec3::ZERO,
+            rotation: prism_domain::Vec3::ZERO,
+            invert_pan: false,
+            invert_tilt: false,
+        })
+    }
+
     // -- edits ------------------------------------------------------------
 
     /// Embeds a profile, or replaces one already embedded.
@@ -561,6 +621,61 @@ impl Show {
         Ok(vec![JsonPatchOp::Remove {
             path: pointer(FIXTURES, &id.to_string()),
         }])
+    }
+
+    /// Gives a patched fixture a different number.
+    ///
+    /// One operation rather than an unpatch and a patch, because the number is
+    /// the key: doing it in two steps would leave the rig without that fixture
+    /// in between, and a refusal on the second step would leave it deleted.
+    /// Everything else about the fixture travels with it — the name, the type,
+    /// the address, the position, the rotation and the inverts — so a renumber
+    /// is exactly a renumber.
+    ///
+    /// Deliberately does **not** follow the number into groups, presets or cues.
+    /// Those keep pointing at the old number, which [`Show::issues`] then reports
+    /// as dangling: the alternative is rewriting an operator's stored looks
+    /// underneath them, and S11 settled that a show outlives its rig rather than
+    /// the other way round.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownFixture`] if `from` is not patched, or
+    /// [`ShowError::FixtureNumberInUse`] if `to` already is — two fixtures
+    /// cannot share a number, and replacing the other one would delete a light
+    /// nobody asked to delete.
+    pub fn renumber_fixture(
+        &mut self,
+        from: prism_domain::FixtureId,
+        to: prism_domain::FixtureId,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(existing) = self.fixtures.get(&from) else {
+            return Err(ShowError::UnknownFixture(from));
+        };
+        if from == to {
+            // Not an error and not a change: an operator who typed the number
+            // that was already there has asked for nothing.
+            return Ok(Vec::new());
+        }
+        if self.fixtures.contains_key(&to) {
+            return Err(ShowError::FixtureNumberInUse(to));
+        }
+        let moved = Fixture {
+            id: to,
+            ..existing.clone()
+        };
+        // Built before anything is written, so a projection failure leaves the
+        // show exactly as it was — S11's rule, which is why `put` comes first.
+        let op = put(pointer(FIXTURES, &to.to_string()), &moved, false)?;
+        self.fixtures.remove(&from);
+        self.fixtures.insert(to, moved);
+        self.touch_patch();
+        Ok(vec![
+            JsonPatchOp::Remove {
+                path: pointer(FIXTURES, &from.to_string()),
+            },
+            op,
+        ])
     }
 
     /// Stores a group, replacing one with the same number.

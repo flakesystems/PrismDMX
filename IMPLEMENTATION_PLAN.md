@@ -549,7 +549,9 @@ grown up, and both of those rules survive it.
 - `Label View 1 "Programmer"` — and with no label given, a window to type one into. The same for cues, sequences, groups and presets
 - `Edit Sequence 5 Cue 3` — loads it into the programmer, and **Update starts blinking** as soon as something is changed. `Update` stores back in Override mode, and so does the Update key on the console
 - S26's `go`, `off`, `page`, `clear` and `at`, kept and unbroken
+- Most Button Presses outside of executor handlers either write a no argument command (like Update, Clear and Oops) and execute it directly, write multiple argument command (like Select, Edit, Label and Store) and wait for Enter to execute the command (Which is also mapped to a button on the surface), or append an argument to a command (like Fixture, Group, Sequence, Cue and View)
 - Completion and history: what the words are, what is legal *at this point in the line*, and the last lines back with the arrow keys — client-local (§4.2), so one operator's history is not another's
+- A readme file explaining the command structure. Also contains explanation for commands from S26
 - **A prompt is not a modal that blocks the desk.** The show carries on, the console line holds the question, Escape cancels, and a Go from the X-Touch is not waiting on it
 
 **Exit criteria**

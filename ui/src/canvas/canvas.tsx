@@ -29,7 +29,7 @@
 
 import { useCallback, useRef } from "react";
 
-import type { JsonValue } from "../bindings";
+import type { JsonValue, ProgrammerState } from "../bindings";
 import { WindowContent } from "./content";
 import type { Rect } from "./geometry";
 import { WindowFrame } from "./window";
@@ -42,6 +42,8 @@ export interface CanvasProps {
   readonly session: JsonValue;
   /** The show document, for what the windows display. */
   readonly show: JsonValue;
+  /** The programmer, for the windows that show what is being programmed. */
+  readonly programmer: ProgrammerState | null;
   /** Sends a `PlaceWindow`. */
   readonly onPlace: (instanceId: number, rect: Rect) => void;
   /** Sends a `FocusWindow`. */
@@ -51,7 +53,7 @@ export interface CanvasProps {
 }
 
 /** The whole canvas. */
-export function Canvas({ session, show, onPlace, onFocus, onClose }: CanvasProps) {
+export function Canvas({ session, show, programmer, onPlace, onFocus, onClose }: CanvasProps) {
   const surface = useRef<HTMLDivElement>(null);
   const windows = openWindows(session);
   const focused = focusedWindow(session);
@@ -85,7 +87,12 @@ export function Canvas({ session, show, onPlace, onFocus, onClose }: CanvasProps
           onFocus={onFocus}
           onClose={onClose}
         >
-          <WindowContent window={instance} show={show} />
+          <WindowContent
+            window={instance}
+            show={show}
+            session={session}
+            programmer={programmer}
+          />
         </WindowFrame>
       ))}
     </div>

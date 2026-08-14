@@ -244,6 +244,7 @@ function Desk() {
       <Canvas
         session={documents.session}
         show={documents.show}
+        programmer={documents.programmer}
         onPlace={onPlace}
         onFocus={onFocus}
         onClose={onClose}

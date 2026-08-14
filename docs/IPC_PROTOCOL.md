@@ -62,13 +62,15 @@ The local endpoint is `prism_ipc::local::daemon_address(label)`, where the label
 | `Hello` | client → daemon | reliable, first message |
 | `Snapshot` | daemon → client | reliable, response to `Hello` |
 | `Command` | client → daemon | reliable, ordered — never dropped |
+| `Query` | client → daemon | reliable, ordered, **changes nothing** |
 | `Delta` | daemon → client | reliable, ordered |
+| `Answer` | daemon → client | reliable, to the one client that asked |
 | `Telemetry` | daemon → client | **droppable**, coalesced |
 | `Ack` / `Reject` | daemon → client | reliable |
 
 There are two envelopes, not one: `ClientMessage` carries `Hello` and `Command`, `ServerMessage` carries the rest. A type that could carry either would let a client send a `Delta`, and **D3** says it cannot *(S16)*.
 
-A `Command` carries a `seq`, and `Ack` and `Reject` echo it. The daemon stores that number and never interprets it; it exists because with several commands in flight — the normal case for a fader bank — an unaddressed rejection tells a client only that *something* failed *(S16)*.
+A `Command` carries a `seq`, and `Ack` and `Reject` echo it. The daemon stores that number and never interprets it; it exists because with several commands in flight — the normal case for a fader bank — an unaddressed rejection tells a client only that *something* failed *(S16)*. A `Query` shares that numbering and `Answer` echoes it, because both travel on the one ordered channel and two numberings would let an answer and an acknowledgement collide *(S27)*.
 
 ### 4.1 Handshake
 
@@ -80,10 +82,12 @@ sequenceDiagram
     alt version mismatch
         D-->>C: Reject { reason }
     else accepted
-        D-->>C: Snapshot { show, session, programmer, outputs, health }
+        D-->>C: Snapshot { show, session, programmer, outputs, health, fixtureLibrary }
         loop while connected
             C->>D: Command
             D-->>C: Delta
+            C->>D: Query
+            D-->>C: Answer
             D-->>C: Telemetry
         end
     end
@@ -94,6 +98,8 @@ The `Snapshot` carries **three** documents: the show model, the session state an
 > **The programmer is the third document, and it was added in S16.** S13 found the gap: the programmer is a model of its own with a delta of its own, so a client connecting mid-programming would have seen an empty one. It could have been closed by sending a `ProgrammerChanged` immediately after the snapshot. It is closed in the snapshot instead, because §9's *snapshot completeness* row — a fresh client's snapshot equals the state an existing client reached by accumulating deltas — is false for the programmer under the other reading. The world arrives in one message, or that criterion has to be rewritten.
 
 The show and the session travel as **documents** rather than as models, because `ShowPatch` and `SessionPatch` are RFC 6902 operations and an operation is only meaningful against a document root. `prism_core::ShowMirror` and `SessionMirror` apply them to exactly these two values.
+
+> **The snapshot also carries `fixtureLibrary`, and it is not show content** *(S27)*. It is the list of profiles **this desk** can embed — `prism_core::library` — and it is a property of the build rather than of the show: a show that has embedded one of them owns its copy from then on (§5's `EmbedFixtureType`, and the embedding rule on `Command::PatchFixture`). It is in the snapshot rather than behind a `Query` because it never changes while the daemon runs and because a client needs it in order to *offer* the list at all: a brand-new show carries no profiles, so without it a patch window would be a form with an empty menu.
 
 ### 4.2 Version negotiation
 
@@ -117,6 +123,9 @@ type Command =
   | { t: "ExecutorOff"; executorId: ExecutorId }
   | { t: "SetExecutorMaster"; executorId: ExecutorId; level: number }
   | { t: "PatchFixture"; /* … */ }
+  | { t: "UnpatchFixture"; id: FixtureId }
+  | { t: "RenumberFixture"; id: FixtureId; to: FixtureId }
+  | { t: "EmbedFixtureType"; typeId: string }
   | { t: "Oops" } | { t: "Redo" } | { t: "SaveShow" }
   // ---- Session and interface (D11) — issued by console and UI alike ----
   | { t: "SelectView"; viewId: number }
@@ -135,11 +144,50 @@ type Command =
 
 The second group is the concrete form of **D11**. The console and the UI draw on one vocabulary; there is no separate surface command set to keep in sync.
 
+> **Three commands the patch needed** *(S27)*. `PatchFixture` alone can only ever *add* to a rig, so a patch nobody could correct was the state the interface was in until S27. `UnpatchFixture` takes one out, and does **not** cascade into groups, presets or cues — a show outlives the rig it was written on (S11), and `Show::issues` reports what now dangles rather than deleting an operator's stored looks. `RenumberFixture` is one command and not an unpatch plus a patch, because the number is the key the patch is filed under: doing it in two steps leaves the rig without that fixture in between, and leaves it deleted if the second step is refused. `EmbedFixtureType` carries **a key and nothing else**, resolved by the daemon against `prism_core::library` — the same rule `PatchFixture` follows in carrying no channels, since a client that sent a whole `FixtureType` would be authoring show content for the daemon to validate. Without it a brand-new show, which carries no profiles at all, could not be patched from an interface.
+
 > **`PlaceWindow` is twelfth and is not in `ARCHITECTURE_SPEC.md` §4.4** *(S25)*. §4.4 lists what the *console* issues, and an X-Touch opens and closes windows without ever dragging one. But §4.1 puts `x`, `y`, `w` and `h` in the session, so a window moved on one screen has to move on every other one — and a client that kept the geometry to itself would be holding session state locally, which is precisely what **D11** exists to prevent. The gap was found when the canvas was built and there was no honest way to drag a window; the four coordinates are canvas units and are rejected as NaN or infinity in both directions, like every other `f64` in the domain.
 
 ### 5.1 Latency path
 
 Commands originating at the X-Touch do **not** traverse this protocol on their way to the engine — the surface controller runs inside `prismd` and pushes straight into the engine's SPSC queue. The protocol carries the resulting deltas outward to clients. The measured budget is in `ARCHITECTURE_SPEC.md` §4.3.
+
+### 5.2 Queries — the third shape *(S27)*
+
+A command expresses intent and a delta describes a change that has already
+happened. Neither can answer *what would happen if*, and S27 needed exactly
+that: **an address conflict has to be shown before it is committed**, not
+reported afterwards beside a patch that has already moved.
+
+```typescript
+type Query =
+  | { t: "PatchConflicts" }
+  | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number };
+
+type Answer =
+  | { t: "PatchConflicts"; conflicts: PatchConflict[] }
+  | { t: "PatchPreview"; preview: PatchPreview };
+```
+
+Four rules, and the first three are what make it safe to ask one on a desk that
+is running a show:
+
+- **A query changes nothing.** There is no refusal shape and no journal entry,
+  and `crates/prismd/tests/ui_patch.rs` asserts on a recording that every query
+  step broadcast no delta at all and left the patch exactly as the step before
+  it did.
+- **The answer goes to the client that asked**, addressed by the query's `seq`.
+  It is deliberately not a `Delta`: a delta is broadcast, and what one operator
+  is typing into a form is nobody else's business (`ARCHITECTURE_SPEC.md` §4.2).
+- **There is no `Query::Show`.** The show and the session arrive as documents and
+  are kept current by deltas; a question that returned a second copy of state a
+  client already mirrors would be a second path to the same fact. Every variant
+  answers something **derived** that no client may derive for itself.
+- **The alternatives were both worse.** A client that intersected the address
+  spans itself would be a second opinion about something `prism_core::conflict`
+  already decides — the duplication **D3** exists to prevent. A command that
+  patched and then offered an undo would show the operator the conflict by
+  *making* it, on a rig that is on stage.
 
 ---
 
@@ -213,4 +261,5 @@ A client is never a dependency of the engine. Disconnecting every client leaves 
 | Backpressure | Attach a deliberately slow client; assert telemetry is dropped, commands are not, and other clients are unaffected *(S16 built the mechanism through a 512-byte socket; S18 measures it against a running daemon — the slow client loses more telemetry frames than it receives, receives every control message in order afterwards, and the client beside it has its commands answered throughout)* |
 | **Telemetry layout, from the client's end** | Decode frames a running daemon sent and compare against what `TelemetryFrame::decode` made of the same bytes; assert a layout version this build does not know is **dropped** *(S24: `crates/prismd/tests/ui_telemetry.rs` records the frames and writes down `decode`'s own answers; `ui/src/telemetry/frame.test.ts` holds the browser to them. There is no encoder in the client — a client never sends telemetry (§4), and one would exist only to feed the decoder its own idea of the format)* |
 | **Telemetry into a picture** | Assert the frame reaches a canvas and **not** reactive state, and that drawing it fits the budget *(S24: a `<Profiler>` counts zero React commits over 300 frames of 64 universes; `ui/e2e/telemetry.spec.ts` measures decode and paint in Chromium against a real daemon publishing 64 real universes — 0.30 ms median, 1.10 ms p99. A frame this build cannot read costs one picture and nothing else, asserted by sending malformed frames and then a delta that has to arrive)* |
+| **Queries change nothing (§5.2)** | Record a script of commands and questions off a running daemon; assert every question was answered, broadcast **no** deltas at all, and left the patch and the profiles exactly as the step before it did *(S27: `crates/prismd/tests/ui_patch.rs`. The same file asserts the harder half — that a preview is what the patch that follows it does: the address a preview called free is the address the fixture ends up at, and the overlap a preview named before the command is the overlap `Show::conflicts` reports afterwards)* |
 | Transport parity | Run the full suite over both named pipe / UDS and WebSocket; results must be identical *(S16: one suite, called three times — the third transport is the in-process duplex — plus a scripted session recorded over each and compared as bytes)* |

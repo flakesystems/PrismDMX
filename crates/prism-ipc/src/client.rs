@@ -22,7 +22,7 @@
 
 use core::fmt;
 
-use prism_domain::{Command, Delta};
+use prism_domain::{Answer, Command, Delta, Query};
 
 use crate::message::{ClientMessage, Hello, RejectReason, ServerMessage, Snapshot};
 use crate::telemetry::{TelemetryError, TelemetryFrame};
@@ -93,6 +93,13 @@ pub enum ClientEvent {
     Ack {
         /// The `seq` [`Client::send`] answered with.
         seq: u64,
+    },
+    /// A question was answered (§5.2). Changes nothing by construction.
+    Answered {
+        /// The `seq` [`Client::ask`] answered with.
+        seq: u64,
+        /// What the daemon says.
+        answer: Answer,
     },
     /// A command was refused, and it changed nothing (§5).
     Refused {
@@ -186,6 +193,26 @@ impl Client {
         Ok(seq)
     }
 
+    /// Asks a question, answering with the sequence number the daemon will echo.
+    ///
+    /// A question changes nothing (§5.2), so there is no `Ack` and no `Reject`
+    /// for one: the answer arrives as [`ClientEvent::Answered`] carrying this
+    /// number. The numbering is shared with [`Self::send`] deliberately —
+    /// commands and queries travel on one ordered channel, and two numberings
+    /// would let an answer and an acknowledgement collide.
+    ///
+    /// # Errors
+    ///
+    /// [`ClientError::Wire`] if the connection has gone.
+    pub async fn ask(&mut self, query: Query) -> Result<u64, ClientError> {
+        let seq = self.next_seq;
+        self.next_seq += 1;
+        self.sender
+            .send_message(&ClientMessage::Query { seq, query })
+            .await?;
+        Ok(seq)
+    }
+
     /// The next thing the daemon said, or `None` when the connection has closed.
     pub async fn next_event(&mut self) -> Option<Result<ClientEvent, ClientError>> {
         let message = match self.receiver.recv_message::<ServerMessage>().await? {
@@ -199,6 +226,7 @@ impl Client {
                 Err(error) => Err(ClientError::Telemetry(error)),
             },
             ServerMessage::Ack { seq } => Ok(ClientEvent::Ack { seq }),
+            ServerMessage::Answer { seq, answer } => Ok(ClientEvent::Answered { seq, answer }),
             ServerMessage::Reject {
                 seq,
                 reason,
@@ -231,6 +259,7 @@ const fn describe(message: &ServerMessage) -> &'static str {
         ServerMessage::Delta { .. } => "a delta",
         ServerMessage::Telemetry { .. } => "a telemetry frame",
         ServerMessage::Ack { .. } => "an acknowledgement",
+        ServerMessage::Answer { .. } => "an answer",
         ServerMessage::Reject { .. } => "a rejection",
     }
 }
@@ -241,7 +270,9 @@ mod tests {
     use crate::message::{ClientKind, DaemonHealth, Hello, RejectReason, ServerMessage, Snapshot};
     use crate::telemetry::{TelemetryFrame, UniverseLevels};
     use crate::transport::{Wire, memory};
-    use prism_domain::{Command, Delta, JsonValue, NoticeLevel, ProgrammerState, UniverseId};
+    use prism_domain::{
+        Answer, Command, Delta, JsonValue, NoticeLevel, ProgrammerState, Query, UniverseId,
+    };
 
     fn snapshot() -> Snapshot {
         Snapshot {
@@ -250,6 +281,7 @@ mod tests {
             programmer: ProgrammerState::default(),
             outputs: Vec::new(),
             health: DaemonHealth::default(),
+            fixture_library: Vec::new(),
         }
     }
 
@@ -445,6 +477,56 @@ mod tests {
         assert_eq!(
             client.next_event().await.unwrap().unwrap(),
             ClientEvent::Ack { seq: 1 }
+        );
+    }
+
+    /// A question (§5.2) shares the command numbering, and its answer echoes
+    /// that number — which is what lets a client with several in flight know
+    /// which draft an answer belongs to.
+    #[tokio::test]
+    async fn a_question_is_numbered_with_the_commands_and_its_answer_echoes_it() {
+        let (mut client, _snapshot, mut daemon) = daemon_answering(ServerMessage::Snapshot {
+            snapshot: Box::new(snapshot()),
+        })
+        .await;
+
+        assert_eq!(client.send(Command::ClearProgrammer).await.unwrap(), 0);
+        assert_eq!(client.ask(Query::PatchConflicts).await.unwrap(), 1);
+        let sent = daemon
+            .recv_message::<crate::message::ClientMessage>()
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            sent,
+            crate::message::ClientMessage::Command { seq: 0, .. }
+        ));
+        let asked = daemon
+            .recv_message::<crate::message::ClientMessage>()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            asked,
+            crate::message::ClientMessage::Query {
+                seq: 1,
+                query: Query::PatchConflicts,
+            }
+        );
+
+        let answer = Answer::PatchConflicts {
+            conflicts: Vec::new(),
+        };
+        daemon
+            .send_message(&ServerMessage::Answer {
+                seq: 1,
+                answer: answer.clone(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            client.next_event().await.unwrap().unwrap(),
+            ClientEvent::Answered { seq: 1, answer }
         );
     }
 

@@ -30,7 +30,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use prism_domain::{Command, Delta};
+use prism_domain::{Answer, Command, Delta, Query};
 use prism_ipc::{
     ClientId, CommandOutcome, DaemonHealth, Hello, OutputSnapshot, PROTOCOL_VERSION, ServerHandler,
     Snapshot,
@@ -114,6 +114,11 @@ impl Desk {
             programmer: core.file.programmer.state().clone(),
             outputs: self.output_snapshots(),
             health: self.health(&core),
+            // What this **desk** can embed, which is a property of the build
+            // rather than of the show (S27). A client needs it to offer the
+            // list at all: a brand-new show carries no profiles, and a patch
+            // window with an empty menu is a window that can patch nothing.
+            fixture_library: prism_core::fixture_library(),
         }
     }
 
@@ -157,6 +162,32 @@ impl Desk {
         }
     }
 
+    /// Answers a question. **Changes nothing** — `docs/IPC_PROTOCOL.md` §5.2.
+    ///
+    /// There is no refusal shape and there is nothing to broadcast: the answer
+    /// is arithmetic over the show this daemon is holding, computed here so
+    /// that no client has to compute it. The lock is taken for reading and let
+    /// go again, exactly as `snapshot` does.
+    pub fn query(&self, query: &Query) -> Answer {
+        let core = self.core();
+        match query {
+            Query::PatchConflicts => Answer::PatchConflicts {
+                conflicts: core.file.show.conflicts(),
+            },
+            Query::PatchPreview {
+                id,
+                type_id,
+                universe,
+                address,
+            } => Answer::PatchPreview {
+                preview: core
+                    .file
+                    .show
+                    .preview_patch(*id, type_id, *universe, *address),
+            },
+        }
+    }
+
     /// Deltas the daemon produced by itself rather than in answer to a command
     /// — the autosave's complaint, an output changing health.
     ///
@@ -193,6 +224,10 @@ impl ServerHandler for DeskHandler {
         self.desk.command(command)
     }
 
+    fn query(&self, _client: ClientId, query: Query) -> Answer {
+        self.desk.query(&query)
+    }
+
     fn connected(&self, client: ClientId, hello: &Hello) {
         log::info(
             "ipc",
@@ -215,8 +250,8 @@ mod tests {
     use crate::testkit::show_file;
     use prism_core::{JsonMirror, ShowStore};
     use prism_domain::{
-        AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, OutputHealth, OutputId,
-        SelectionMode,
+        Answer, AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, OutputHealth,
+        OutputId, Query, SelectionMode,
     };
     use prism_engine::FramePublisher;
     use prism_ipc::CommandOutcome;
@@ -381,6 +416,73 @@ mod tests {
         assert_eq!(desk.snapshot().outputs[0].health, OutputHealth::Ok);
         assert_eq!(desk.outputs().len(), 1);
 
+        driver.stop();
+    }
+
+    /// **A question changes nothing, and the answer is the daemon's arithmetic.**
+    ///
+    /// `docs/IPC_PROTOCOL.md` §5.2. The rig here has a one-channel dimmer at 1,
+    /// a four-channel PAR at 10 and a dimmer at 5, so a PAR asked about at 8
+    /// would run over the one at 10 — which is exactly the answer an operator
+    /// has to be given *before* they press Apply.
+    #[test]
+    fn a_question_is_answered_and_the_show_does_not_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let (desk, driver) = desk(dir.path());
+        let before = desk.snapshot().show;
+
+        let Answer::PatchConflicts { conflicts } = desk.query(&Query::PatchConflicts) else {
+            panic!("that is not a conflicts answer");
+        };
+        assert_eq!(conflicts, Vec::new(), "the rig starts clean");
+
+        let Answer::PatchPreview { preview } = desk.query(&Query::PatchPreview {
+            id: FixtureId::new(9),
+            type_id: "generic.rgbw.par".to_owned(),
+            universe: prism_domain::UniverseId::new(1),
+            address: 8,
+        }) else {
+            panic!("that is not a preview");
+        };
+        assert!(preview.accepted, "an overlap is not a refusal");
+        assert_eq!(preview.footprint, 4);
+        assert_eq!(preview.last_address, Some(11));
+        assert_eq!(preview.conflicts.len(), 1, "{preview:?}");
+        assert_eq!(preview.conflicts[0].first, FixtureId::new(2));
+        assert_eq!(preview.conflicts[0].second, FixtureId::new(9));
+
+        // A refusal, said without sending anything.
+        let Answer::PatchPreview { preview } = desk.query(&Query::PatchPreview {
+            id: FixtureId::new(9),
+            type_id: "nothing.at.all".to_owned(),
+            universe: prism_domain::UniverseId::new(1),
+            address: 1,
+        }) else {
+            panic!("that is not a preview");
+        };
+        assert!(!preview.accepted);
+        assert!(preview.refusal.is_some());
+
+        // **And nothing moved**, which is the whole property the third message
+        // shape rests on: an interface may ask this as often as it likes on a
+        // desk that is running a show.
+        assert_eq!(desk.snapshot().show, before);
+        assert!(!desk.snapshot().health.unsaved_changes);
+
+        driver.stop();
+    }
+
+    /// The desk's own profiles ride in the snapshot, because a client needs
+    /// them to offer the list at all — a brand-new show carries none.
+    #[test]
+    fn the_snapshot_carries_the_profiles_this_desk_can_embed() {
+        let dir = tempfile::tempdir().unwrap();
+        let (desk, driver) = desk(dir.path());
+        assert_eq!(
+            desk.snapshot().fixture_library,
+            prism_core::fixture_library()
+        );
+        assert!(!desk.snapshot().fixture_library.is_empty());
         driver.stop();
     }
 

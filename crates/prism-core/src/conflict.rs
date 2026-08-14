@@ -21,38 +21,19 @@
 
 use core::fmt;
 
-use prism_domain::{ExecutorId, FixtureId, GroupId, PresetId, SequenceId, UniverseId};
+use prism_domain::{
+    ExecutorId, FixtureId, GroupId, PatchConflict, PatchPreview, PresetId, SequenceId, UniverseId,
+};
 
 use crate::show::Show;
 
-/// Two fixtures sharing DMX channels.
+/// One fixture's address span, as the overlap search walks them.
 ///
-/// Ordered by universe and then by the first shared channel, so the list reads
-/// like a patch sheet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct PatchConflict {
-    /// The universe the overlap is in.
-    pub universe: UniverseId,
-    /// First shared channel, `1..=512`.
-    pub from: u16,
-    /// Last shared channel.
-    pub to: u16,
-    /// The lower of the two fixture numbers.
-    pub first: FixtureId,
-    /// The higher of the two fixture numbers — the one that **wins** the shared
-    /// channels, because the engine writes its targets last (S4).
-    pub second: FixtureId,
-}
-
-impl fmt::Display for PatchConflict {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "fixtures {} and {} share universe {} channels {}-{}; {} wins",
-            self.first, self.second, self.universe, self.from, self.to, self.second
-        )
-    }
-}
+/// `(universe, first channel, last channel, fixture)` in that order, so sorting
+/// a list of them puts a universe's fixtures together and in address order —
+/// which is what lets the search below stop at the first fixture that starts
+/// past the end of the one being examined.
+type Span = (UniverseId, u16, u16, FixtureId);
 
 /// Something a patch sheet should show in red.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,12 +134,9 @@ impl fmt::Display for ShowIssue {
     }
 }
 
-/// Every pair of fixtures sharing channels, in patch-sheet order.
-pub(crate) fn conflicts(show: &Show) -> Vec<PatchConflict> {
-    // (universe, first channel, last channel, fixture). Sorted, so the search
-    // for an overlap stops at the first fixture that starts past the end of the
-    // one being examined rather than walking the rest of the universe.
-    let mut spans: Vec<(UniverseId, u16, u16, FixtureId)> = show
+/// Every fixture's address span, sorted.
+fn spans(show: &Show) -> Vec<Span> {
+    let mut spans: Vec<Span> = show
         .patched()
         .filter_map(|(fixture, fixture_type)| {
             fixture
@@ -167,7 +145,12 @@ pub(crate) fn conflicts(show: &Show) -> Vec<PatchConflict> {
         })
         .collect();
     spans.sort_unstable();
+    spans
+}
 
+/// Every pair of fixtures sharing channels, in patch-sheet order.
+pub(crate) fn conflicts(show: &Show) -> Vec<PatchConflict> {
+    let spans = spans(show);
     let mut found = Vec::new();
     for (index, &(universe, _, end, id)) in spans.iter().enumerate() {
         for &(other_universe, other_start, other_end, other_id) in &spans[index + 1..] {
@@ -185,6 +168,70 @@ pub(crate) fn conflicts(show: &Show) -> Vec<PatchConflict> {
     }
     found.sort_unstable();
     found
+}
+
+/// What patching `id` at `universe`/`address` would do — worked out **without
+/// doing it**.
+///
+/// This is the daemon's half of S27's *address conflicts are shown before they
+/// are committed*. It answers three things a client must not work out for
+/// itself: whether the patch would be accepted at all and why not, how many
+/// channels it would occupy, and which fixtures it would overlap.
+///
+/// The fixture is excluded from its own overlap search, because a repatch of
+/// fixture 3 onto the channels fixture 3 already has is not a conflict — it is
+/// the same fixture, in the same place, and reporting it would put a red line
+/// under every row an operator opened and did not change.
+pub(crate) fn preview(
+    show: &Show,
+    id: FixtureId,
+    type_id: &str,
+    universe: UniverseId,
+    address: u16,
+) -> PatchPreview {
+    // The refusal is the show model's own, taken by asking it: a second copy of
+    // the validation here would be the duplication this whole preview exists to
+    // avoid. `check_patch` writes nothing.
+    let refusal = show
+        .check_patch(id, type_id, universe, address)
+        .err()
+        .map(|error| error.to_string());
+    let footprint = show
+        .fixture_type(type_id)
+        .map_or(0, |fixture_type| fixture_type.footprint);
+    let last_address = (footprint > 0 && address > 0)
+        .then(|| address.checked_add(footprint - 1))
+        .flatten()
+        .filter(|last| *last <= prism_domain::CHANNELS_PER_UNIVERSE);
+
+    let mut conflicts = Vec::new();
+    if let Some(end) = last_address {
+        for (other_universe, other_start, other_end, other_id) in spans(show) {
+            if other_universe != universe
+                || other_id == id
+                || other_start > end
+                || other_end < address
+            {
+                continue;
+            }
+            conflicts.push(PatchConflict {
+                universe,
+                from: other_start.max(address),
+                to: end.min(other_end),
+                first: id.min(other_id),
+                second: id.max(other_id),
+            });
+        }
+        conflicts.sort_unstable();
+    }
+
+    PatchPreview {
+        accepted: refusal.is_none(),
+        refusal,
+        footprint,
+        last_address,
+        conflicts,
+    }
 }
 
 /// Everything wrong with the show, conflicts included.
@@ -462,6 +509,181 @@ mod tests {
             show.issues()[0].to_string(),
             "fixture 1 needs the profile \"generic.rgbw.par\""
         );
+    }
+
+    /* -- the preview: what a patch would do, before it does it ------------ */
+
+    /// The claim S27's exit criterion rests on: the answer a preview gives is
+    /// the answer the patch that follows it produces.
+    ///
+    /// Asserted by *doing* both — the preview, then the command — over four
+    /// addresses on the same rig, rather than by comparing two functions.
+    #[test]
+    fn a_preview_says_what_the_patch_that_follows_it_does() {
+        for address in [1, 3, 5, 509] {
+            let mut show = patched(&[(1, 1, 1), (2, 1, 5)]);
+            let preview = show.preview_patch(
+                FixtureId::new(3),
+                "generic.rgbw.par",
+                UniverseId::new(1),
+                address,
+            );
+            let patched_ok = show
+                .patch_fixture(fixture(3, "generic.rgbw.par", 1, address))
+                .is_ok();
+            assert_eq!(preview.accepted, patched_ok, "address {address}");
+            if !patched_ok {
+                assert!(preview.refusal.is_some(), "address {address}");
+                continue;
+            }
+            let after: Vec<PatchConflict> = show
+                .conflicts()
+                .into_iter()
+                .filter(|conflict| {
+                    conflict.first == FixtureId::new(3) || conflict.second == FixtureId::new(3)
+                })
+                .collect();
+            assert_eq!(preview.conflicts, after, "address {address}");
+        }
+    }
+
+    #[test]
+    fn a_preview_of_a_clean_address_is_accepted_and_empty() {
+        let show = patched(&[(1, 1, 1)]);
+        let preview =
+            show.preview_patch(FixtureId::new(2), "generic.rgbw.par", UniverseId::new(1), 9);
+        assert!(preview.accepted);
+        assert_eq!(preview.refusal, None);
+        assert_eq!(preview.footprint, 4);
+        assert_eq!(preview.last_address, Some(12));
+        assert_eq!(preview.conflicts, Vec::new());
+    }
+
+    /// **An overlap is not a refusal**, and the preview has to say both things
+    /// at once — otherwise a patch sheet could not offer to clone a fixture.
+    #[test]
+    fn a_preview_can_be_accepted_and_still_report_an_overlap() {
+        let show = patched(&[(1, 1, 1)]);
+        let preview =
+            show.preview_patch(FixtureId::new(2), "generic.rgbw.par", UniverseId::new(1), 3);
+        assert!(preview.accepted, "cloning a fixture is legal");
+        assert_eq!(
+            preview.conflicts,
+            vec![PatchConflict {
+                universe: UniverseId::new(1),
+                from: 3,
+                to: 4,
+                first: FixtureId::new(1),
+                second: FixtureId::new(2),
+            }]
+        );
+    }
+
+    /// A fixture does not conflict with itself.
+    ///
+    /// The case that decides whether an operator can open the row of a patched
+    /// fixture, change its name and press Enter without being told it clashes
+    /// with something — namely with itself.
+    #[test]
+    fn repatching_a_fixture_where_it_already_is_reports_nothing() {
+        let show = patched(&[(1, 1, 1), (2, 1, 5)]);
+        let preview =
+            show.preview_patch(FixtureId::new(1), "generic.rgbw.par", UniverseId::new(1), 1);
+        assert!(preview.accepted);
+        assert_eq!(preview.conflicts, Vec::new());
+        // And moving it onto its neighbour still reports the neighbour.
+        let moved =
+            show.preview_patch(FixtureId::new(1), "generic.rgbw.par", UniverseId::new(1), 6);
+        assert_eq!(moved.conflicts.len(), 1);
+        assert_eq!(moved.conflicts[0].first, FixtureId::new(1));
+        assert_eq!(moved.conflicts[0].second, FixtureId::new(2));
+    }
+
+    /// A wide fixture laid over a narrow one that starts before it: the shared
+    /// range starts where the *new* fixture does, not where the old one does.
+    #[test]
+    fn the_shared_range_is_the_intersection_from_either_side() {
+        let mut show = patched(&[(1, 1, 1)]);
+        show.embed_fixture_type(dimmer_type()).unwrap();
+        let preview =
+            show.preview_patch(FixtureId::new(9), "generic.dimmer", UniverseId::new(1), 3);
+        assert_eq!(
+            preview.conflicts,
+            vec![PatchConflict {
+                universe: UniverseId::new(1),
+                from: 3,
+                to: 3,
+                first: FixtureId::new(1),
+                second: FixtureId::new(9),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_preview_of_something_that_would_be_refused_says_why_and_lists_nothing() {
+        let show = patched(&[(1, 1, 1)]);
+
+        let unknown =
+            show.preview_patch(FixtureId::new(2), "nothing.at.all", UniverseId::new(1), 1);
+        assert!(!unknown.accepted);
+        assert_eq!(unknown.footprint, 0);
+        assert_eq!(unknown.last_address, None);
+        assert_eq!(unknown.conflicts, Vec::new());
+        assert!(
+            unknown
+                .refusal
+                .is_some_and(|why| why.contains("nothing.at.all")),
+            "a refusal has to name what is wrong"
+        );
+
+        // Past the end of the universe, and outside the universe range: both
+        // are refusals with no conflict list, because a fixture that cannot be
+        // patched cannot overlap anything.
+        let past = show.preview_patch(
+            FixtureId::new(2),
+            "generic.rgbw.par",
+            UniverseId::new(1),
+            510,
+        );
+        assert!(!past.accepted);
+        assert_eq!(past.footprint, 4);
+        assert_eq!(past.last_address, None);
+        assert_eq!(past.conflicts, Vec::new());
+
+        let nowhere = show.preview_patch(
+            FixtureId::new(2),
+            "generic.rgbw.par",
+            UniverseId::new(65),
+            1,
+        );
+        assert!(!nowhere.accepted);
+        assert_eq!(nowhere.conflicts, Vec::new());
+
+        let zero = show.preview_patch(FixtureId::new(2), "generic.rgbw.par", UniverseId::new(1), 0);
+        assert!(!zero.accepted);
+        assert_eq!(zero.last_address, None);
+    }
+
+    #[test]
+    fn a_preview_never_writes_anything() {
+        let mut show = patched(&[(1, 1, 1), (2, 1, 5)]);
+        let before = rmp_serde::to_vec_named(&show).unwrap();
+        let revision = show.patch_revision();
+        let dirty = show.is_dirty();
+        for address in [0, 1, 3, 500, 512] {
+            let _ = show.preview_patch(
+                FixtureId::new(3),
+                "generic.rgbw.par",
+                UniverseId::new(1),
+                address,
+            );
+        }
+        assert_eq!(rmp_serde::to_vec_named(&show).unwrap(), before);
+        assert_eq!(show.patch_revision(), revision);
+        assert_eq!(show.is_dirty(), dirty);
+        // And the borrow is shared, which is what lets a query answer while a
+        // command is not being applied.
+        let _ = &mut show;
     }
 
     #[test]

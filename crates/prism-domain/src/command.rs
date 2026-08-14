@@ -148,6 +148,53 @@ pub enum Command {
         /// Start address, `1..=512`.
         address: u16,
     },
+    /// Take a fixture out of the patch.
+    ///
+    /// **Does not cascade** into groups, presets or cues: a show outlives the
+    /// rig it was written on, and deleting an operator's stored looks because a
+    /// light came out of the rig for one show would be worse than leaving them
+    /// dangling. `prism_core::Show::issues` reports what now points at nothing.
+    ///
+    /// Added in **S27**, with [`Self::RenumberFixture`], because a patch that
+    /// can only ever be added to is not one an operator can correct — and
+    /// because the interface's only other way to change a fixture *number* would
+    /// have been to unpatch and repatch as two commands, which is a rig with a
+    /// hole in it if the second one is refused.
+    UnpatchFixture {
+        /// The fixture to remove.
+        id: FixtureId,
+    },
+    /// Give a patched fixture a different number.
+    ///
+    /// One command rather than two, and that is the whole reason it exists: the
+    /// number is the key the patch is filed under, so changing it is a remove
+    /// and an insert — and a client that sent those separately would leave the
+    /// rig without that fixture for as long as the round trip took, or for ever
+    /// if the second half were refused. Everything else about the fixture,
+    /// including its position, rotation and inverts, comes with it.
+    RenumberFixture {
+        /// The fixture as it is numbered now.
+        id: FixtureId,
+        /// The number it should have. Refused when something is already there:
+        /// two fixtures cannot share a number, and silently replacing the other
+        /// one would delete a light nobody asked to delete.
+        to: FixtureId,
+    },
+    /// Embed one of the desk's built-in profiles into the show.
+    ///
+    /// Carries the **key only**, for the same reason
+    /// [`Self::PatchFixture`] carries no channels: the profile is
+    /// `prism_core::library`'s, the daemon copies it into the show, and a client
+    /// that sent a whole [`crate::FixtureType`] would be authoring show content
+    /// that the daemon would then have to validate and accept.
+    ///
+    /// A show **embeds** the profiles it uses rather than referencing a library
+    /// (S11), so this is a copy at a moment in time: a later desk with a
+    /// different library opens the show unchanged.
+    EmbedFixtureType {
+        /// The library key, e.g. `generic.rgbw.par`.
+        type_id: String,
+    },
     /// Undo the last undoable command.
     Oops,
     /// Redo the last undone command.
@@ -440,6 +487,16 @@ mod tests {
                 universe: UniverseId::new(1),
                 address: 1,
             },
+            Command::UnpatchFixture {
+                id: FixtureId::new(1),
+            },
+            Command::RenumberFixture {
+                id: FixtureId::new(1),
+                to: FixtureId::new(2),
+            },
+            Command::EmbedFixtureType {
+                type_id: "generic.rgbw.par".to_owned(),
+            },
             Command::Oops,
             Command::Redo,
             Command::SaveShow,
@@ -482,7 +539,7 @@ mod tests {
                 text: "1 thru 4 at full".to_owned(),
             },
         ];
-        assert_eq!(commands.len(), 24);
+        assert_eq!(commands.len(), 27);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -610,6 +667,18 @@ mod tests {
             Command::StoreCue {
                 sequence_id: SequenceId::new(1),
                 cue_number: "1".to_owned(),
+            },
+            // The three S27 added. A patch edit is exactly the kind of thing
+            // Oops is for: it is not light the operator is currently driving.
+            Command::UnpatchFixture {
+                id: FixtureId::new(1),
+            },
+            Command::RenumberFixture {
+                id: FixtureId::new(1),
+                to: FixtureId::new(2),
+            },
+            Command::EmbedFixtureType {
+                type_id: "generic.dimmer".to_owned(),
             },
         ] {
             assert!(command.is_undoable(), "{command:?}");

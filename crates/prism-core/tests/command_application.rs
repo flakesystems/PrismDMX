@@ -36,7 +36,7 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
 #[test]
 fn the_two_groups_together_are_the_whole_protocol() {
     // A new command variant has to be given a home here, or this fails.
-    assert_eq!(show_commands().len() + session_commands().len(), 23);
+    assert_eq!(show_commands().len() + session_commands().len(), 26);
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
     }
@@ -166,6 +166,33 @@ fn every_rejection_leaves_the_show_byte_identical() {
                 fixture: FixtureId::new(9),
                 universe: UniverseId::new(65),
             },
+        ),
+        // The three ways an S27 command can be refused.
+        (
+            Command::UnpatchFixture {
+                id: FixtureId::new(99),
+            },
+            ShowError::UnknownFixture(FixtureId::new(99)),
+        ),
+        (
+            Command::RenumberFixture {
+                id: FixtureId::new(1),
+                to: FixtureId::new(2),
+            },
+            ShowError::FixtureNumberInUse(FixtureId::new(2)),
+        ),
+        (
+            Command::RenumberFixture {
+                id: FixtureId::new(99),
+                to: FixtureId::new(100),
+            },
+            ShowError::UnknownFixture(FixtureId::new(99)),
+        ),
+        (
+            Command::EmbedFixtureType {
+                type_id: "nothing.at.all".to_owned(),
+            },
+            ShowError::UnknownLibraryType("nothing.at.all".to_owned()),
         ),
     ];
 

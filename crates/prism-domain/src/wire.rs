@@ -101,6 +101,11 @@ round_trip! {
     param_direction => crate::ParamDirection,
     command => crate::Command,
     delta => crate::Delta,
+
+    patch_conflict => crate::PatchConflict,
+    patch_preview => crate::PatchPreview,
+    query => crate::Query,
+    answer => crate::Answer,
 }
 
 /// Pins the reason [`crate::arb::finite_f64`] generates bounded-precision

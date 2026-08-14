@@ -80,6 +80,105 @@ fn program(file: &mut ShowFile) {
     .unwrap();
 }
 
+/// **The three patch commands S27 added are taken back, whole.**
+///
+/// The interesting one is the renumber: it is a remove and an insert, so its
+/// record carries *two* fixture images, and a journal that imaged only the
+/// number the operator typed would put the fixture back and leave a copy of it
+/// on the new number. Each is asserted on the file's **bytes**, so a restore
+/// that got the position, the rotation or the inverts wrong would fail here
+/// too.
+#[test]
+fn the_patch_edits_of_s27_are_undone_and_redone_byte_for_byte() {
+    for command in [
+        Command::UnpatchFixture {
+            id: FixtureId::new(1),
+        },
+        Command::RenumberFixture {
+            id: FixtureId::new(1),
+            to: FixtureId::new(77),
+        },
+        Command::EmbedFixtureType {
+            type_id: "generic.rgb.par".to_owned(),
+        },
+    ] {
+        let mut file = file();
+        // A fixture with geometry on it, so a restore that rebuilt the fixture
+        // from the command rather than from the image would be visible.
+        let mut hung = fixture(1, "generic.rgbw.par", 1, 1);
+        hung.position = prism_domain::Vec3::new(1.5, 4.0, -2.0);
+        hung.invert_tilt = true;
+        file.show.patch_fixture(hung).unwrap();
+        let before = state(&file);
+
+        file.apply(&command)
+            .unwrap_or_else(|error| panic!("{command:?}: {error}"));
+        assert_ne!(state(&file), before, "{command:?} changed nothing");
+        let after = state(&file);
+
+        file.apply(&Command::Oops).unwrap();
+        assert_eq!(state(&file), before, "{command:?} was not taken back");
+        file.apply(&Command::Redo).unwrap();
+        assert_eq!(state(&file), after, "{command:?} was not put back");
+    }
+}
+
+/// A renumber's record names **both** numbers, which is what makes the undo
+/// above possible rather than lucky.
+#[test]
+fn a_renumber_is_journalled_over_both_numbers() {
+    let mut renumbered = file();
+    renumbered
+        .apply(&Command::RenumberFixture {
+            id: FixtureId::new(1),
+            to: FixtureId::new(77),
+        })
+        .unwrap();
+    let record = renumbered.journal.undoable().expect("a renumber is a step");
+    assert_eq!(
+        record.scope(),
+        vec![
+            UndoScope::Fixture(FixtureId::new(1)),
+            UndoScope::Fixture(FixtureId::new(77)),
+        ]
+    );
+
+    let mut embedded = file();
+    embedded
+        .apply(&Command::EmbedFixtureType {
+            type_id: "generic.rgb.par".to_owned(),
+        })
+        .unwrap();
+    assert_eq!(
+        embedded
+            .journal
+            .undoable()
+            .expect("an embed is a step")
+            .scope(),
+        vec![UndoScope::FixtureType("generic.rgb.par".to_owned())]
+    );
+}
+
+/// Renumbering a fixture to the number it already has is accepted, changes
+/// nothing, and is **not** a step: an operator who pressed Oops after it would
+/// otherwise watch nothing happen and press it again, losing the edit they
+/// actually meant to take back.
+#[test]
+fn a_renumber_to_the_same_number_is_not_a_step() {
+    let mut file = file();
+    let before = snapshot(&file);
+    let applied = file
+        .apply(&Command::RenumberFixture {
+            id: FixtureId::new(1),
+            to: FixtureId::new(1),
+        })
+        .expect("asking for the number it has is not an error");
+    assert!(applied.deltas.is_empty(), "{applied:?}");
+    assert!(applied.effects.is_empty(), "{applied:?}");
+    assert_eq!(snapshot(&file), before);
+    assert!(file.journal.is_empty());
+}
+
 // -- the four exit criteria ------------------------------------------------
 
 /// Commands a populated file can actually apply, so a property run reaches the

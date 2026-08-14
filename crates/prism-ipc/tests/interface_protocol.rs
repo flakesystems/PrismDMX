@@ -143,13 +143,13 @@ fn the_interface_knows_every_client_kind_and_every_message() {
     // The message tags, both directions. Written out here rather than derived
     // from the enums, because a tag is what `#[serde(tag = "t")]` puts on the
     // wire and reading it off the type would be asking the code under test.
-    for tag in ["Hello", "Command"] {
+    for tag in ["Hello", "Command", "Query"] {
         assert!(
             PROTOCOL_TS.contains(&format!("readonly t: \"{tag}\"")),
             "the interface cannot send a {tag}"
         );
     }
-    for tag in ["Snapshot", "Delta", "Telemetry", "Ack", "Reject"] {
+    for tag in ["Snapshot", "Delta", "Telemetry", "Ack", "Answer", "Reject"] {
         assert!(
             PROTOCOL_TS.contains(&format!("case \"{tag}\":")),
             "the interface cannot read a {tag}"
@@ -170,8 +170,17 @@ fn the_interface_says_hello_with_the_fields_this_crate_reads() {
             "the interface's Hello has no {field}"
         );
     }
-    // And the snapshot's three documents, which is what §4.1 promises.
-    for field in ["show", "session", "programmer", "outputs", "health"] {
+    // And the snapshot's three documents, which is what §4.1 promises — plus
+    // the desk's own profile library, which S27 added because a client needs it
+    // to offer the list at all.
+    for field in [
+        "show",
+        "session",
+        "programmer",
+        "outputs",
+        "health",
+        "fixtureLibrary",
+    ] {
         assert!(
             PROTOCOL_TS.contains(&format!("readonly {field}:")),
             "the interface's Snapshot has no {field}"

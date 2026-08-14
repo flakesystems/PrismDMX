@@ -10,7 +10,7 @@
 
 import { use, useCallback, useRef, useSyncExternalStore } from "react";
 
-import type { Command } from "../bindings";
+import type { Answer, Command, Query } from "../bindings";
 import type { DeskState, DeskStore } from "./desk";
 import { StoreContext } from "./store-context";
 
@@ -46,4 +46,14 @@ export function useDesk<T>(selector: (state: DeskState) => T): T {
 /** The function that sends a command to the daemon. */
 export function useSend(): (command: Command) => number | null {
   return useDeskStore().send;
+}
+
+/**
+ * The function that asks the daemon a question (§5.2).
+ *
+ * Stable for the life of the store, so it may be a dependency of an effect
+ * without re-running it.
+ */
+export function useAsk(): (query: Query) => Promise<Answer | null> {
+  return useDeskStore().ask;
 }

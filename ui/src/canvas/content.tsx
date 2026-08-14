@@ -7,15 +7,16 @@
  * `PhaserEditor` from an X-Touch F-key should find a window that says so
  * rather than an empty rectangle they will file a bug about.
  *
- * The three that are not placeholders are the three whose data is already in
- * the mirror or already on a canvas:
+ * The three of the family that are built are the three about light rather than
+ * about looks, and S27 is where the difference between them was settled:
  *
- * - **DMX Sheet** is S24's level view, moved out of the column it was demoed in
- *   and into a window sized by the window. It is the reason `WindowType` grew a
- *   variant: none of `ARCHITECTURE_SPEC.md` §6's ten named the DMX output
- *   itself.
- * - **Patch** and **Fixture Sheet** list what the show has patched, read
- *   straight out of the show document by pointer.
+ * - **Patch** is the *rig* — which fixtures exist and where their channels are.
+ *   It is the one window in this interface that changes the show's shape.
+ * - **Fixture Sheet** is the *state* — what the programmer holds and what is on
+ *   the cable, per fixture, live.
+ * - **DMX Sheet** is the *cable* — S24's level view, channel by channel, with no
+ *   fixtures in it at all. It is the reason `WindowType` grew a variant in S25:
+ *   none of `ARCHITECTURE_SPEC.md` §6's ten named the DMX output itself.
  *
  * # Scrolling
  *
@@ -25,9 +26,11 @@
  * does the page.
  */
 
-import type { JsonValue } from "../bindings";
+import type { JsonValue, ProgrammerState } from "../bindings";
 import { isObject } from "../mirror/patch";
-import { numberAt, stringAt, valueAt } from "../mirror/select";
+import { stringAt, valueAt } from "../mirror/select";
+import { PatchWindow } from "../patch/patchwindow";
+import { FixtureSheet } from "../patch/sheet";
 import { TelemetryPanel } from "../telemetry/panel";
 import type { CanvasWindow } from "./windows";
 import { windowTitle } from "./windows";
@@ -36,16 +39,21 @@ import { windowTitle } from "./windows";
 export function WindowContent({
   window: instance,
   show,
+  session,
+  programmer,
 }: {
   readonly window: CanvasWindow;
   readonly show: JsonValue;
+  readonly session: JsonValue;
+  readonly programmer: ProgrammerState | null;
 }) {
   switch (instance.type) {
     case "DmxSheet":
       return <TelemetryPanel />;
     case "Patch":
+      return <PatchWindow show={show} />;
     case "FixtureSheet":
-      return <PatchList show={show} />;
+      return <FixtureSheet show={show} session={session} programmer={programmer} />;
     case "Groups":
       return <NameList show={show} collection="groups" empty="No groups yet" />;
     case "SequenceSheet":
@@ -59,39 +67,6 @@ export function WindowContent({
     case "Settings":
       return <NotBuiltYet window={instance} />;
   }
-}
-
-/** The patch: every fixture, its type, and where it lives. */
-function PatchList({ show }: { readonly show: JsonValue }) {
-  const fixtures = valueAt(show, "/fixtures");
-  const rows = isObject(fixtures) ? Object.entries(fixtures) : [];
-  if (rows.length === 0) {
-    return <p className="window-note">Nothing is patched.</p>;
-  }
-  return (
-    <table className="sheet">
-      <thead>
-        <tr>
-          <th scope="col">Fx</th>
-          <th scope="col">Name</th>
-          <th scope="col">Type</th>
-          <th scope="col">Univ</th>
-          <th scope="col">Addr</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(([id, fixture]) => (
-          <tr key={id}>
-            <td>{id}</td>
-            <td>{stringAt(fixture, "/name") ?? "—"}</td>
-            <td>{stringAt(fixture, "/typeId") ?? "—"}</td>
-            <td>{numberAt(fixture, "/universe") ?? "—"}</td>
-            <td>{numberAt(fixture, "/address") ?? "—"}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
 }
 
 /** Whatever a collection of the show holds, by number and name. */

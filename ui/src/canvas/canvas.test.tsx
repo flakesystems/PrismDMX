@@ -26,6 +26,8 @@ import { nullSink, setLogSink } from "../log/logger";
 import { applyDelta } from "../mirror/mirror";
 import type { Documents } from "../mirror/mirror";
 import { TelemetrySink } from "../ipc/telemetry";
+import { DeskProvider } from "../store/context";
+import { DeskStore } from "../store/desk";
 import { TelemetryProvider } from "../telemetry/panel";
 import { Canvas } from "./canvas";
 import { PLACE_INTERVAL_MS } from "./drag";
@@ -90,16 +92,20 @@ function canvas(documents: Documents) {
     // A telemetry channel, because one window type *is* the level view. The
     // surface is `null` — jsdom has no rasteriser and S24's own tests are
     // where the drawing is asserted; what this file needs is the canvas
-    // element to be in the window.
-    <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
-      <Canvas
-        session={documents.session}
-        show={documents.show}
-        onPlace={(instanceId, rect) => placed.push({ instanceId, rect })}
-        onFocus={(instanceId) => focused.push(instanceId)}
-        onClose={(instanceId) => closed.push(instanceId)}
-      />
-    </TelemetryProvider>,
+    // element to be in the window. And a store, because the Patch window
+    // sends commands and asks questions like every other part of the desk.
+    <DeskProvider store={new DeskStore()}>
+      <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
+        <Canvas
+          session={documents.session}
+          show={documents.show}
+          programmer={null}
+          onPlace={(instanceId, rect) => placed.push({ instanceId, rect })}
+          onFocus={(instanceId) => focused.push(instanceId)}
+          onClose={(instanceId) => closed.push(instanceId)}
+        />
+      </TelemetryProvider>
+    </DeskProvider>,
   );
   return { placed, focused, closed, view, documents };
 }
@@ -183,7 +189,7 @@ describe("what the canvas draws", () => {
     expect(screen.getByTestId("telemetry-canvas")).not.toBeNull();
     // And the show, read out of the show document by pointer.
     expect(screen.getByTestId("window-3").textContent).toContain("Fixture 1");
-    expect(screen.getByTestId("window-3").textContent).toContain("generic.dimmer");
+    expect(screen.getByTestId("window-3").textContent).toContain("Add fixture");
   });
 });
 
@@ -231,15 +237,18 @@ describe("dragging a window", () => {
       ],
     });
     view.rerender(
-      <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
-        <Canvas
-          session={moved.session}
-          show={moved.show}
-          onPlace={() => undefined}
-          onFocus={() => undefined}
-          onClose={() => undefined}
-        />
-      </TelemetryProvider>,
+      <DeskProvider store={new DeskStore()}>
+        <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
+          <Canvas
+            session={moved.session}
+            show={moved.show}
+            programmer={null}
+            onPlace={() => undefined}
+            onFocus={() => undefined}
+            onClose={() => undefined}
+          />
+        </TelemetryProvider>
+      </DeskProvider>,
     );
     expect(styleOf(1)).toEqual(asStyle({ x: 340, y: 120, w: 640, h: 480 }));
   });

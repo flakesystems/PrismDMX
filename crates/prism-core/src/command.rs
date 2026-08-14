@@ -250,6 +250,36 @@ impl Show {
                 universe,
                 address,
             } => self.apply_patch_fixture(*id, name, type_id, *universe, *address),
+            Command::UnpatchFixture { id } => {
+                let ops = self.unpatch_fixture(*id)?;
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::Repatch],
+                })
+            }
+            Command::RenumberFixture { id, to } => {
+                let ops = self.renumber_fixture(*id, *to)?;
+                if ops.is_empty() {
+                    // The number it already had. Nothing changed, so nothing is
+                    // broadcast — an empty `ShowPatch` is a delta that says a
+                    // client's mirror moved when it did not.
+                    return Ok(Applied::default());
+                }
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::Repatch],
+                })
+            }
+            Command::EmbedFixtureType { type_id } => {
+                let Some(fixture_type) = crate::library::library_type(type_id) else {
+                    return Err(ShowError::UnknownLibraryType(type_id.clone()));
+                };
+                let ops = self.embed_fixture_type(fixture_type)?;
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::Repatch],
+                })
+            }
             Command::Oops => Ok(Applied::effect(Effect::Undo)),
             Command::Redo => Ok(Applied::effect(Effect::Redo)),
             Command::SaveShow => Ok(Applied::effect(Effect::Save)),
