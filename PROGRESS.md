@@ -28,7 +28,7 @@
 | 10 | First commit | ✅ | `chore(workspace)` — docs, workspace, UI scaffold, CI |
 | 11 | Git remote | ✅ | `origin` → github.com/flakesystems/PrismDMX (**private**), `master` pushed and tracking |
 | 12 | GitHub CLI | ✅ | `gh` 2.97.0, authenticated (scopes: repo, workflow, read:org, gist) |
-| 13 | CI verified green | ✅ | Latest: run **31807825063** on `2c09ba6` (S26) — **all five jobs on the first attempt**: Windows 8 m 28 s, Linux neutral 2 m 22 s, ARM64 check 41 s, UI typecheck/lint/test/build 1 m 35 s, UI end-to-end against a daemon 1 m 48 s. **Eleven end-to-end tests, all green**, five of them this session's: paging agreeing between a `--mock-surface` console and a real Chromium, the jog wheel turning the parameter the encoder bar highlights, a console line reaching the telemetry picture (**`programmer 88 ms · output 122 ms`** on the runner), a syntax error that is a message rather than a throw, and eight zeros of overflow with both new bars on the screen. The telemetry budget was re-measured through them: **`64 universes · 30.4 Hz · paint 0.20 ms (p99 0.80 ms) · 156 frames · 1 lost`**. Before that: run **31798437277** on `e698b57` (S25) — **all five jobs on the first attempt**: Windows 9 m 37 s, Linux neutral 2 m 26 s, ARM64 check 51 s, UI typecheck/lint/test/build 1 m 13 s, UI end-to-end against a daemon 1 m 45 s. The end-to-end job is again the interesting one: **six tests, all green**, and three of them are S25's — a canvas that survives a page reload against an untouched daemon, a screen with no scrollbar outside the canvas, and **D11 watched happening**: a real `prismd` with `--mock-surface`, a real Chromium doing nothing, and three MIDI bytes written to a file by neither of them. That is decision D11 verified on a build server rather than on one developer's machine. The telemetry budget was re-measured through the new window system in the same run: `64 universes · 30.4 Hz · paint 0.20 ms (p99 1.10 ms) · 155 frames`. Before that: run **31752194635** on `c5dd711` (S24) — **all five jobs on the first attempt**: Windows 6 m 52 s, Linux neutral 2 m 15 s, ARM64 check 40 s, UI typecheck/lint/test/build 1 m 13 s, UI end-to-end against a daemon 1 m 52 s. The end-to-end job is the one worth reading this time: it started a real `prismd` on the committed 64-universe rig and measured the interface drawing it — **`64 universes · 30.3 Hz · paint 0.20 ms (p99 0.40 ms) · 164 frames`**, no frame lost and none dropped, on a Linux runner with a software rasteriser and a debug daemon. S24's frame budget is therefore a figure two machines agree on rather than one this machine reported. Before that: Latest: run **31737443279** on `c0ce1e0` (S23) — **all five jobs on the first attempt**, and there are five because this session added one: Windows 6 m 35 s, Linux neutral 2 m 31 s, ARM64 check 54 s, UI typecheck/lint/test/build 1 m 16 s, **UI end-to-end against a daemon 2 m 20 s**. The new job is the one worth watching: it compiles `prismd`, installs Chromium, serves the production build and then **kills and restarts the daemon** under the browser, which is S23's second exit criterion executed rather than argued — on Linux, over a WebSocket. The UI job also runs `npm run lint` and `npm run test` for the first time, and typechecks with `tsc -b --force` rather than `tsc --noEmit`, which on a solution file with no files of its own checked nothing at all. Before that: run **31728064334** on `cbde96e` (S22) — all four jobs on the first attempt: Windows 8 m 19 s, Linux neutral 2 m 28 s, ARM64 47 s, UI 51 s. Before that: run **31700591538** on `e2fe45b` (S20) — all four jobs on the **first attempt**: Windows 6 m 19 s, Linux neutral 2 m 08 s, ARM64 check 48 s, UI 50 s. The Linux job is the one that matters for this session: `prism-surface`'s whole suite runs there, **including the new `hardware_capture` target**, because a recording of a device is a platform-neutral fixture — a claim about a specific Behringer X-Touch is now checked on a Linux build server with nothing plugged in. The ARM64 check is unchanged in substance and that is the point: the MIDI port lives in `tools/xtouch-probe`, outside the workspace, so no job compiles `midir`. Before that: run **31655311363** on `8aefe2a` (S19) — all four jobs on the first attempt: Windows 9 m 51 s, Linux neutral 2 m 21 s, ARM64 check 49 s, UI 47 s. `prism-surface` is platform-neutral, so its whole suite runs in the Linux job as well. Before that: run **31638518112** on `23cd22e` (S18) — all four jobs. **S18 took three runs:** **31635842272** on `5bff4e7` was green, and then **31636431800**, on a commit that changed nothing but this file, failed on two different flaky *tests* on two different platforms — both fixed here, both in the decision log, neither a defect in the daemon. In a green run the Linux job is the interesting one: **`tests/resilience.rs` runs the whole D2 gate there over a Unix domain socket — 6 passed in 4.01 s**. Before that: run **31630334754** on `4a8ef6c` (S17) — all four jobs on the first attempt: Windows 9 m 11 s (it now compiles the `windows` crate as well, which `thread-priority` brings in), Linux neutral 2 m 15 s (**`prismd`'s tests run there from this session, over a Unix domain socket**), ARM64 check 44 s, UI 53 s. Before that: run **31607859145** on `2288ceb` (S16) — all four jobs: Windows 7 m 25 s (it now compiles `tokio`, `axum` and `hyper` as well), Linux neutral 2 m 17 s, ARM64 check 41 s (unchanged — none of S16's dependencies compiles C), UI 54 s. Three attempts: **31604980498** hung on a test rather than failing, **31607534093** failed on a clippy warning — both in the decision log. Before that: run **31583296669** on `24bbbc9` (S15) — all four jobs on the first attempt: Windows 4 m 32 s, Linux neutral 1 m 34 s, ARM64 check 1 m 15 s (now installing `gcc-aarch64-linux-gnu` for the bundled SQLite), UI 52 s. Before that: run **31550454514** on `5ad7d70` (S14) — all four jobs on the first attempt: Windows 3 m 35 s, Linux neutral 1 m 29 s, UI 45 s, ARM64 check 22 s. Before that: run **31546552629** on `d9a6564` (S13) — all four jobs on the first attempt: Windows 3 m 33 s, Linux neutral 1 m 43 s, UI 42 s, ARM64 check 22 s. Before that: run **31531687277** on `3db01dd` (S12) — all four jobs on the first attempt: Windows 3 m 56 s, Linux neutral 1 m 11 s, UI 44 s, ARM64 check 21 s. Before that: run **31522070040** on `3cc803a` (S11) — all four jobs on the first attempt: Windows 3 m 24 s, Linux neutral 1 m 10 s, UI 52 s, ARM64 check 25 s. Before that: run **31506271867** on `532cd1b` (S10, timing gate) — all four jobs on the first attempt: Windows 4 m 45 s, Linux neutral 1 m 12 s, UI 40 s, ARM64 check 23 s. S10's feature commit: run **31500810174** on `3711902`, green on a rerun of the Windows job, which failed on `prism-engine`'s short timing gate rather than on anything in the commit — see the decision log. First verified: run **31346581991** |
+| 13 | CI verified green | ✅ | Latest: run **31798437277** on `e698b57` (S25) — **all five jobs on the first attempt**: Windows 9 m 37 s, Linux neutral 2 m 26 s, ARM64 check 51 s, UI typecheck/lint/test/build 1 m 13 s, UI end-to-end against a daemon 1 m 45 s. The end-to-end job is again the interesting one: **six tests, all green**, and three of them are S25's — a canvas that survives a page reload against an untouched daemon, a screen with no scrollbar outside the canvas, and **D11 watched happening**: a real `prismd` with `--mock-surface`, a real Chromium doing nothing, and three MIDI bytes written to a file by neither of them. That is decision D11 verified on a build server rather than on one developer's machine. The telemetry budget was re-measured through the new window system in the same run: `64 universes · 30.4 Hz · paint 0.20 ms (p99 1.10 ms) · 155 frames`. Before that: run **31752194635** on `c5dd711` (S24) — **all five jobs on the first attempt**: Windows 6 m 52 s, Linux neutral 2 m 15 s, ARM64 check 40 s, UI typecheck/lint/test/build 1 m 13 s, UI end-to-end against a daemon 1 m 52 s. The end-to-end job is the one worth reading this time: it started a real `prismd` on the committed 64-universe rig and measured the interface drawing it — **`64 universes · 30.3 Hz · paint 0.20 ms (p99 0.40 ms) · 164 frames`**, no frame lost and none dropped, on a Linux runner with a software rasteriser and a debug daemon. S24's frame budget is therefore a figure two machines agree on rather than one this machine reported. Before that: Latest: run **31737443279** on `c0ce1e0` (S23) — **all five jobs on the first attempt**, and there are five because this session added one: Windows 6 m 35 s, Linux neutral 2 m 31 s, ARM64 check 54 s, UI typecheck/lint/test/build 1 m 16 s, **UI end-to-end against a daemon 2 m 20 s**. The new job is the one worth watching: it compiles `prismd`, installs Chromium, serves the production build and then **kills and restarts the daemon** under the browser, which is S23's second exit criterion executed rather than argued — on Linux, over a WebSocket. The UI job also runs `npm run lint` and `npm run test` for the first time, and typechecks with `tsc -b --force` rather than `tsc --noEmit`, which on a solution file with no files of its own checked nothing at all. Before that: run **31728064334** on `cbde96e` (S22) — all four jobs on the first attempt: Windows 8 m 19 s, Linux neutral 2 m 28 s, ARM64 47 s, UI 51 s. Before that: run **31700591538** on `e2fe45b` (S20) — all four jobs on the **first attempt**: Windows 6 m 19 s, Linux neutral 2 m 08 s, ARM64 check 48 s, UI 50 s. The Linux job is the one that matters for this session: `prism-surface`'s whole suite runs there, **including the new `hardware_capture` target**, because a recording of a device is a platform-neutral fixture — a claim about a specific Behringer X-Touch is now checked on a Linux build server with nothing plugged in. The ARM64 check is unchanged in substance and that is the point: the MIDI port lives in `tools/xtouch-probe`, outside the workspace, so no job compiles `midir`. Before that: run **31655311363** on `8aefe2a` (S19) — all four jobs on the first attempt: Windows 9 m 51 s, Linux neutral 2 m 21 s, ARM64 check 49 s, UI 47 s. `prism-surface` is platform-neutral, so its whole suite runs in the Linux job as well. Before that: run **31638518112** on `23cd22e` (S18) — all four jobs. **S18 took three runs:** **31635842272** on `5bff4e7` was green, and then **31636431800**, on a commit that changed nothing but this file, failed on two different flaky *tests* on two different platforms — both fixed here, both in the decision log, neither a defect in the daemon. In a green run the Linux job is the interesting one: **`tests/resilience.rs` runs the whole D2 gate there over a Unix domain socket — 6 passed in 4.01 s**. Before that: run **31630334754** on `4a8ef6c` (S17) — all four jobs on the first attempt: Windows 9 m 11 s (it now compiles the `windows` crate as well, which `thread-priority` brings in), Linux neutral 2 m 15 s (**`prismd`'s tests run there from this session, over a Unix domain socket**), ARM64 check 44 s, UI 53 s. Before that: run **31607859145** on `2288ceb` (S16) — all four jobs: Windows 7 m 25 s (it now compiles `tokio`, `axum` and `hyper` as well), Linux neutral 2 m 17 s, ARM64 check 41 s (unchanged — none of S16's dependencies compiles C), UI 54 s. Three attempts: **31604980498** hung on a test rather than failing, **31607534093** failed on a clippy warning — both in the decision log. Before that: run **31583296669** on `24bbbc9` (S15) — all four jobs on the first attempt: Windows 4 m 32 s, Linux neutral 1 m 34 s, ARM64 check 1 m 15 s (now installing `gcc-aarch64-linux-gnu` for the bundled SQLite), UI 52 s. Before that: run **31550454514** on `5ad7d70` (S14) — all four jobs on the first attempt: Windows 3 m 35 s, Linux neutral 1 m 29 s, UI 45 s, ARM64 check 22 s. Before that: run **31546552629** on `d9a6564` (S13) — all four jobs on the first attempt: Windows 3 m 33 s, Linux neutral 1 m 43 s, UI 42 s, ARM64 check 22 s. Before that: run **31531687277** on `3db01dd` (S12) — all four jobs on the first attempt: Windows 3 m 56 s, Linux neutral 1 m 11 s, UI 44 s, ARM64 check 21 s. Before that: run **31522070040** on `3cc803a` (S11) — all four jobs on the first attempt: Windows 3 m 24 s, Linux neutral 1 m 10 s, UI 52 s, ARM64 check 25 s. Before that: run **31506271867** on `532cd1b` (S10, timing gate) — all four jobs on the first attempt: Windows 4 m 45 s, Linux neutral 1 m 12 s, UI 40 s, ARM64 check 23 s. S10's feature commit: run **31500810174** on `3711902`, green on a rerun of the Windows job, which failed on `prism-engine`'s short timing gate rather than on anything in the commit — see the decision log. First verified: run **31346581991** |
 | 14 | `loom` model checking | ✅ | `loom` 0.7.2, a `cfg(loom)`-only dependency of `prism-engine`. Not run by CI — see §3.1 for the command |
 
 ---
@@ -89,18 +89,51 @@
 | S24 | Telemetry channel | ✅ | 2026-08-14 | All exit criteria verified — see §2.25. **Zero React commits over 300 frames of 64 universes, counted with a `<Profiler>`; 0.30 ms median and 1.10 ms p99 for decode *and* paint, measured in Chromium against a real `prismd` publishing 64 real universes.** The decoder is held to `TelemetryFrame::decode`'s own answers on recorded frames; 77 new UI tests, coverage **98.91 % lines** on `ui/src`. Four mutation checks; one of them is what says the render counter counts |
 | S25 | Canvas, windows, views | ✅ | 2026-08-14 | All exit criteria verified — see §2.26. **D11 observed rather than argued: a real `prismd`, a real Chromium, and three MIDI bytes appended to a file by neither of them — the view switches and the window opens in the browser.** The layout survives `page.reload()` against a daemon that is never told. Two protocol findings, both taken: `Command::PlaceWindow` and `WindowType::DmxSheet`. 298 UI tests, coverage **98.82 % lines**; 1 449 in the workspace |
 | S26 | Executor bar, encoder bar, console | ✅ | 2026-08-14 | All exit criteria verified — see §2.27. **Paging observed from both ends, the jog wheel turning what the bar highlights, and a console line reaching the picture in 113 ms.** Two protocol findings recorded rather than invented (`ExecutorButton`, the cue-index readback); one table added to `prism-domain` so the encoder bar and the wheel cannot disagree. 371 UI tests, coverage **99.07 % lines**; 1 441 in the workspace |
-| S27 | Patch and fixture sheet | ☐ | | |
-| S28 | Sequences, cues, presets | ☐ | | |
+| S27 | Patch and fixture sheet | ☐ | | **Next.** The prompt in §8 starts it |
+| S35 | Desk layout, encoder pages, view management | ☐ | | Added 2026-08-14. Corrects the two stacked bars S26 shipped, gives `programmerPage` something to do, and makes views renameable, deletable and movable |
+| S34 | Executor functions and the tick readback | ☐ | | Added 2026-08-14. `Command::ExecutorButton`, `Flash`, `Toggle`, speed masters, and the cue-index channel — the two findings S26 recorded rather than invented |
+| S28 | Sequences, cues, presets | ☐ | | Raises the store-mode question; S39 answers it |
+| S39 | Store modes, cue editing, the update state | ☐ | | Added 2026-08-14. `prism-core`: Merge/Override/Remove, `StoreSequence`, `EditCue`, and the state that makes Update blink |
+| S40 | The console shell | ☐ | | Added 2026-08-14. S26's parser grown up: groups, presets, store prompts, labels, cue editing |
+| S43 | Interface cleanup and polish | ☐ | | Added 2026-08-14. The §7 *carried out of* lists, gone through one entry at a time |
 | S29 | `prism-app` Tauri shell | ☐ | | Needs MSVC Build Tools |
 
-### Phase 7 — Extended features
+*Listed in running order; the numbers are identity rather than sequence — see `IMPLEMENTATION_PLAN.md`, Conventions.*
+
+### Phase 7 — Outputs, devices and the machine
+| Session | Title | Status | Date | Note |
+|---|---|---|---|---|
+| S33 | The output patch: many outputs, many kinds | ☐ | | Added 2026-08-14. Today every network output is handed *every* universe and outputs are command-line flags; a venue's real rig is not expressible |
+| S36 | `prism-midi` — the real MIDI port | ☐ | | Added 2026-08-14. Neither `SurfacePort` implementation opens a device, and §10.1 allows no crate that has one a home yet 🔌 |
+
+### Phase 8 — Settings and the control editor
+| Session | Title | Status | Date | Note |
+|---|---|---|---|---|
+| S37 | The settings window | ☐ | | Added 2026-08-14. Outputs, devices, show files, this machine — the window `WindowType::Settings` has reserved since S25 |
+| S38 | The interactive control editor | ☐ | | Added 2026-08-14. The binding table edited at the desk, with Learn |
+
+### Phase 9 — Extended features
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S30 | 3D viewer | ☐ | | |
-| S31 | Web Remote | ☐ | | |
-| S32 | PSN / OSC — openfollow.app | ☐ | | |
+| S31 | Web Remote | ☐ | | The settings window travels there; the **machine** panel does not, and the daemon is what refuses it |
+| S32 | PSN / OSC — openfollow.app | ☐ | | Gains its settings panel, and OSC as a *surface* in the control editor rather than a second mapping system |
 
-**Done:** 26 / 33 · **In progress:** 0 · **Blocked:** 0
+### Phase 10 — Documentation and release
+| Session | Title | Status | Date | Note |
+|---|---|---|---|---|
+| S41 | The manual, and a README in every crate | ☐ | | Added 2026-08-14. Checked by tests: every crate has one, and the manual's lists match the code |
+| S42 | prismdmx.de | ☐ | | Added 2026-08-14. Built from this repository, so the documentation cannot drift from a release |
+
+**Done:** 26 / 44 · **In progress:** 0 · **Blocked:** 0
+
+**Eleven sessions were added on 2026-08-14** — S33–S43 — for the output patch,
+the real MIDI port, the settings window, the control editor, the desk-layout
+rework, view management, the console shell, the executor-function gap S26
+recorded, the store modes, the documentation and the cleanup pass. Existing
+sessions kept their numbers, because `prism-core`, `prism-surface` and this
+file's decision log all reference them by number; the **running order** is in
+`IMPLEMENTATION_PLAN.md`.
 
 ### 2.1 S0 verification record
 
@@ -1368,7 +1401,7 @@ on a rig.
 | **Coverage on what this session wrote** | ✅ **99.07 % lines**, 94.74 % branches, **100 % functions**, 99.10 % statements over `ui/src` (371 tests, `vitest` + Testing Library), up from S25's 98.82 %. The new `desk/` module reads **99.75 % lines**, 96.28 % branches, **100 % functions**: `level.ts`, `session.ts` and `valuedrag.ts` at **100 % on every column**, `console.ts`, `programmer.ts`, `encoderbar.tsx` and `executorbar.tsx` at **100 % lines**, `commandline.tsx` 97.56 %. The one uncovered line is the mirror's clear-the-timer-on-unmount arm reached with nothing pending; the uncovered *branches* were read rather than counted, and each is an unreachable arm — a `?? CLEAR_TITLES[0]` for a stage outside 0…2, an `aria-disabled` for a bar with no session, and the `position()` miss in a search over the array being searched |
 | Coverage on `prism-domain` and `prismd`, which both changed | ✅ `prism-domain` **97.52 % lines**, 96.18 % regions, 95.50 % functions. The uncovered lines are three in `attribute.rs` that `llvm-cov` maps onto the `MergeMode` declaration (`proptest_derive` code attributed to the line it was generated from — the same effect §3 already records for this crate), and fourteen in `export.rs`: the string-literal lines of a multi-line `String::from`, and the `position()` miss above. `prismd` **95.06 % lines**, 95.02 % regions, 96.37 % functions — `surface.rs` **97.34 %**, and `main.rs` still 0 % and still the honest part of the figure |
 | A test never touches a device | ✅ the console is a **file** and the output is `--mock-output`. The unit suite has no socket, no canvas and no clock of its own: `FakeNetwork`, `ManualTimer` and a `now` passed as an argument, so *at most one command every 33 ms* is asserted rather than waited for |
-| CI green on the pushed commit | ✅ run **31807825063** on `2c09ba6` — **all five jobs on the first attempt**: Windows full build and test 8 m 28 s, Linux neutral 2 m 22 s, ARM64 cross-check 41 s, UI typecheck/lint/test/build 1 m 35 s, UI end-to-end against a daemon 1 m 48 s. The last is the one worth reading: **all eleven end-to-end tests passed on a Linux runner**, so paging from a console and the jog wheel turning what the encoder bar highlights were both observed on a machine that has never run this interface by hand — a `prismd` compiled there, a Chromium downloaded there, and MIDI bytes appended to a file by neither. This session's own measurement came out **`programmer 88 ms · output 122 ms`** there against 106 ms here, and S24's frame budget was re-measured through both new bars at the same time: **`64 universes · 30.4 Hz · paint 0.20 ms (p99 0.80 ms) · 156 frames · 1 lost`** |
+| CI green on the pushed commit | ⏳ recorded below once the run has been watched |
 
 **What was built, in five pieces.**
 
@@ -1454,7 +1487,7 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | Frame determinism | identical input → byte-identical frames | three runs of the same 100-tick script compared byte for byte on the driver's frames, 8 command changes, > 20 distinct frames | 2026-08-11 |
 | Open DMX frame rate | measure real rate on SH-RS09B | **35.53 Hz** over 60 s through D2XX (2 132 frames), **38.35 Hz** through the virtual COM port. Both with the frame timing corrected; before the correction the same code reported 43.1 Hz, and that figure was the *symptom* — see the decision log. `DeviceProfile::SH_RS09B` now carries `verified: true` | 2026-08-11 (S8) |
 | Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits over 300 frames** — re-checked at S26 with the executor bar, the encoder bar and the command line on the screen as well, and at S25 with the panel **inside a window**, so the count is of an interface that has a canvas, a window frame and a View Selector Bar in it. Originally: **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-14 (S24) |
-| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.20 ms median, 0.40 ms p99 over 156 frames at 30.4 Hz (S26)**, re-measured with the executor bar and the encoder bar rendering above the canvas — two more bands in the same column, and the figure does not move. S25's measurement: **0.20 ms median, 0.50 ms p99 over 155 frames at 30.2 Hz**. **On the CI runner at S26: 0.20 ms median, 0.80 ms p99 over 156 frames at 30.4 Hz** — Linux, software rasteriser, debug daemon, with both new bars rendering above the canvas, with the DMX Sheet **opened through the interface** — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn, and a canvas sized by the window rather than by `34vh`. S24's measurement: **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-14 (S24) |
+| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.20 ms median, 0.40 ms p99 over 156 frames at 30.4 Hz (S26)**, re-measured with the executor bar and the encoder bar rendering above the canvas — two more bands in the same column, and the figure does not move. S25's measurement: **0.20 ms median, 0.50 ms p99 over 155 frames at 30.2 Hz**, with the DMX Sheet **opened through the interface** — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn, and a canvas sized by the window rather than by `34vh`. S24's measurement: **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-14 (S24) |
 
 **Thread priority is part of the tick jitter figure.** The same ten-minute run at
 the shell's default priority missed 45 ticks and had a p99.9 of 54 ms. The engine
@@ -2041,6 +2074,17 @@ functions (`docs/MCU_MAPPING.md` §4.2.1 has the table). And `currentCueIndex` i
 never filled, because nothing carries it back from the tick thread; the bar shows
 a dash and a Rust test asserts the absence, so the session that fixes it will
 find that test red.
+
+**The plan was extended on 2026-08-14, after S26 and before S27.** Eleven
+sessions were added — S33–S43 — for the things the plan had no home for: the
+output patch (several outputs of several kinds at once, each carrying the
+universes it is wired for), the real MIDI port, the settings window, the
+interactive control editor, the desk-layout rework S26's two stacked bars asked
+for, view management, the console shell, the executor-function gap S26 recorded,
+the store modes, the documentation and a cleanup pass. **Existing sessions kept
+their numbers** — `prism-core`, `prism-surface` and this file's decision log all
+reference them by number — so the numbers are identity and the **running order**
+in `IMPLEMENTATION_PLAN.md` is the schedule. After S27 comes **S35**, not S28.
 
 **Begin S27** (`ui` — patch and fixture sheet). Use the prompt in §8.
 
@@ -2712,6 +2756,7 @@ it assumes no memory of this conversation and no knowledge of the project.
 
 ---
 
+```
 PrismDMX — Session S27: `ui` — Patch und Fixture Sheet
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
@@ -2813,6 +2858,17 @@ Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreff
   drei S26-Kriterien. Alle elf Ende-zu-Ende-Tests müssen grün bleiben
 
 Wichtige Randbedingungen:
+- **Diese Session patcht *Fixtures*, nicht Ausgänge.** Der Ausgangs-Patch —
+  mehrere Ausgänge verschiedener Art gleichzeitig, jeder mit den Universen, für
+  die er verkabelt ist — ist **S33**, und das Fenster, in dem man ihn bedient,
+  ist **S37**. Heute bekommt jeder Netzwerk-Ausgang *alle* Universen der Show;
+  das ist bekannt, aufgeschrieben und nicht das Problem dieser Session. Ein
+  Universum, für das es keinen Ausgang gibt, darf hier auffallen — mehr nicht.
+- **Die beiden Leisten unter dem Canvas werden in S35 umgebaut**: Executor- und
+  Encoder-Leiste kommen nebeneinander statt übereinander, und die Encoder-Leiste
+  wird in Seiten zu je vier Parametern geteilt. Investiere hier nichts in die
+  jetzige Anordnung, und verlasse dich in einem Fenster nicht auf die Höhe, die
+  der Canvas heute hat.
 - **Der Konflikt ist bereits berechnet, und zwar im Daemon.**
   `prism_core::conflict` und `Show::issues` wissen, welche Adressen sich
   überschneiden. Eine Oberfläche, die das in TypeScript nachrechnet, ist eine
@@ -2870,7 +2926,13 @@ Zum Abschluss der Session:
 - PROGRESS.md aktualisieren: S27-Status, jede gemessene Zahl, Decision Log bei
   Abweichungen und bei Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  Session S28 (`ui` — Sequenzen, Cues, Presets) überschreiben
+  **Session S35** (`ui` — Desk-Layout: die beiden Leisten nebeneinander,
+  Encoder-Seiten zu je vier Parametern, und Views, die sich umbenennen,
+  löschen und verschieben lassen) überschreiben. **Nicht S28** — der Plan wurde
+  am 2026-08-14 erweitert und umsortiert; die Laufreihenfolge steht in
+  IMPLEMENTATION_PLAN.md unter „Running order", und die Sessionnummern sind
+  Identität, nicht Reihenfolge
 - Mit Conventional-Commit-Message committen, z. B. feat(ui): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
+```
