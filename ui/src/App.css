@@ -346,6 +346,306 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- the encoder bar ---------------------------------------------------- */
+
+/*
+ * Both bars take their height from the same column as the canvas, so the canvas
+ * is what shrinks. `flex: 0 0 auto` and a fixed height rather than content-sized
+ * boxes: a bar whose height depended on what was on it would move the canvas
+ * every time an executor was assigned.
+ */
+.encbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  height: 3.1rem;
+  padding: 0.25rem 0.6rem;
+  border-top: 1px solid var(--edge);
+  background: var(--panel);
+}
+
+.encbar-banks,
+.encbar-encoders,
+.encbar-param {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+
+.encbar-encoders {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bank {
+  padding: 0 0.5rem;
+  border: 1px solid var(--edge-lit);
+  border-radius: 3px;
+  background: var(--ground);
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* The lit bank is the session's `encoderBank` and nothing else. */
+.bank-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/*
+ * A bank the programmer is holding values on. Marked on the *edge* rather than
+ * by colouring the text, so it composes with the lit state: a bank can be both,
+ * and an operator working in Position has to be able to see that Colour has
+ * something in it.
+ */
+.bank-touched {
+  border-bottom-width: 3px;
+  border-bottom-color: var(--ok);
+}
+
+.encoder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 5.2rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--edge-lit);
+  border-radius: 3px;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+/* The one the jog wheel turns — `programmerParamIndex`. */
+.encoder-selected {
+  border-color: var(--accent);
+}
+
+.encoder-absent {
+  color: var(--ink-dim);
+  cursor: default;
+}
+
+.encoder-name {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.encoder-selected .encoder-name {
+  color: var(--accent);
+}
+
+.encoder-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.encoder-count {
+  font-size: 0.6rem;
+  color: var(--ink-dim);
+}
+
+.encbar-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin: 0;
+}
+
+.clear-button {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--edge-lit);
+  border-radius: 3px;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The three-stage Clear says which stage it is at, because the next press
+   does something different at each one. */
+.clear-stage-1 {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.clear-stage-2 {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* ---- the executor bar --------------------------------------------------- */
+
+.execbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+  height: 6.4rem;
+  padding: 0.25rem 0.6rem;
+  border-top: 1px solid var(--edge);
+  background: var(--panel);
+}
+
+.execbar-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding-right: 0.4rem;
+}
+
+.page-step {
+  padding: 0 0.4rem;
+  border: 1px solid var(--edge-lit);
+  border-radius: 3px;
+  background: var(--ground);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.page-step:disabled {
+  color: var(--edge-lit);
+  cursor: default;
+}
+
+.page-number {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+/* Eight strips, equal width, whatever is on them. A page with nothing
+   assigned is eight empty strips and not an absence. */
+.strip {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto auto;
+  gap: 0.12rem;
+  padding: 0.15rem;
+  border: 1px solid var(--edge);
+  border-radius: 3px;
+  background: var(--ground);
+}
+
+.strip-selected {
+  border-color: var(--accent);
+}
+
+.strip-empty {
+  opacity: 0.55;
+}
+
+.strip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.66rem;
+  cursor: pointer;
+}
+
+/* A running executor. The lamp is the border of its head, so it reads at a
+   glance across eight strips. */
+.strip-running {
+  color: var(--ok);
+}
+
+.strip-number {
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.strip-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.strip-fader {
+  position: relative;
+  min-height: 0.9rem;
+  border: 1px solid var(--edge-lit);
+  border-radius: 2px;
+  background: #0b0e13;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+.strip-fader[aria-disabled="true"] {
+  cursor: default;
+}
+
+.strip-level {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--accent);
+  opacity: 0.75;
+}
+
+.strip-percent,
+.strip-cue {
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+  text-align: right;
+}
+
+.strip-buttons {
+  display: flex;
+  gap: 0.1rem;
+}
+
+.strip-button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.05rem 0;
+  border: 1px solid var(--edge-lit);
+  border-radius: 2px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.58rem;
+  cursor: pointer;
+}
+
+/*
+ * A button the show assigns and the protocol has no command for. Drawn, because
+ * it is on the executor; disabled, because pressing it would mean this
+ * interface deciding what the executor's own setting means.
+ */
+.strip-button-unbound {
+  border-style: dashed;
+  color: var(--ink-dim);
+  cursor: not-allowed;
+}
+
 /* ---- footer ------------------------------------------------------------- */
 
 .desk-footer {

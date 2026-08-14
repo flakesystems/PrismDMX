@@ -497,7 +497,7 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 | **Channel ◀▶** | **switch UI view** — `SelectView` (D8) | **Session** | — |
 | **Zoom ▲▼** | programmer page up / down | **Session** | — |
 | **Zoom ◀▶** | select previous / next programmer parameter | **Session** | — |
-| Jog wheel | change the value of the selected programmer parameter | Programmer | — |
+| Jog wheel | change the value of the selected programmer parameter | Programmer | — · **which parameter that is comes from `FeatureGroup::attributes` (S26)** — one table, exported to the interface as `FEATURE_GROUP_ATTRIBUTES`, so the encoder bar highlights what the wheel turns |
 | Encoder Assign section | switch encoder bank — Dimmer / Position / Color / Beam / Focus | **Session** | yes |
 | **F1–F8 (XKeys)** | free: open window, jump to view, macro, executor | **Session** or Engine | yes |
 | Save | save show file; **LED lit while unsaved changes exist** | Core | — |
@@ -567,6 +567,31 @@ The gap is real and it is one gap, not three: **the protocol has no command that
 presses an executor's button and lets the executor decide what that means.** The
 session that adds one closes all three rows at once, and it is also where a
 tap for speed lands (§4.3).
+
+#### The same gap, met from the interface (S26)
+
+The executor bar reached it from the other end and resolved it the same way. A
+strip draws the four buttons the show assigns it, presses `Go+`, `Go-` and `Off`
+— the three that have commands — and draws the other four **disabled, with the
+reason on the button**. Resolving `Toggle` against `isActive` in a client would
+be a client deciding what a show's own setting means: two clients would race,
+and the daemon would be told to do something nobody pressed.
+
+S26 also worked out what closing it would actually take, which S22 could not see
+from the binding table:
+
+| Function | What it needs |
+|---|---|
+| `On`, `Off` | `prism_engine::TickCommand::SetExecutorActive`, which **exists** — "on a loaded executor this is *start the sequence* and *stop it*, not a raw activation" (S5). Reachable today |
+| `Toggle` | The same command, with the daemon reading `isActive` — which the daemon may do and a client may not. Reachable today |
+| `Flash` | A **temporary** master override that does not disturb the stored master: press raises, release restores. Neither the engine nor the command vocabulary has one, and `SetExecutorMaster` is the wrong tool because it *is* the stored master |
+| `LearnSpeed` | Speed masters, which are named in `docs/DMX_MERGE.md` §4 item 3 with nothing implementing them (§4.3) |
+
+So the command is `ExecutorButton { executorId, button, pressed }` — the
+`pressed` flag is what `Flash` needs — and the session that adds it owes
+`prism-domain`, `prism-core`'s routing, an `Effect`, and engine work for two of
+the eight functions. It is an engine session and not an interface one, which is
+why S26 recorded it rather than half-building it.
 
 ### 4.3 Sharing the surface with a sound console (Xctl+MC)
 

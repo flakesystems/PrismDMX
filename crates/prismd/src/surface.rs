@@ -419,15 +419,19 @@ pub fn context_of(core: &Core) -> prism_surface::SurfaceContext {
 /// The attribute the jog wheel turns.
 ///
 /// The encoder bank names a feature group and the parameter index counts within
-/// it, in `AttributeType::ALL`'s order — the same order the encoder bar will
-/// show (S26). An index past the end is nothing rather than the last one: the
-/// wheel then does nothing, which is what an operator who has paged past the
-/// parameters should feel.
+/// it, in `AttributeType::ALL`'s order. **This is `FeatureGroup::attributes` and
+/// nothing else**, which is the whole point: S26's encoder bar numbers its
+/// encoders out of the same table — exported to TypeScript with the rest of the
+/// bindings as `FEATURE_GROUP_ATTRIBUTES` — so the wheel turns what is
+/// highlighted. S22 left this as a warning because there was nothing on the
+/// other side of it yet; now there is, and the way the two are kept in step is
+/// that there is one of them.
+///
+/// An index past the end is nothing rather than the last one: the wheel then
+/// does nothing, which is what an operator who has paged past the parameters
+/// should feel.
 fn parameter_of(group: prism_domain::FeatureGroup, index: u32) -> Option<AttributeType> {
-    AttributeType::ALL
-        .into_iter()
-        .filter(|attribute| attribute.feature_group() == group)
-        .nth(index as usize)
+    group.parameter(index)
 }
 
 /// The executors one page holds, for a caller that wants to name the slot.
@@ -737,6 +741,27 @@ mod tests {
         // Past the end is nothing rather than the last one.
         assert_eq!(parameter_of(FeatureGroup::Position, 2), None);
         assert_eq!(parameter_of(FeatureGroup::Dimmer, 9), None);
+    }
+
+    /// **The wheel and the encoder bar walk the same list** (S26).
+    ///
+    /// `FeatureGroup::attributes` is what `prism-domain` exports to the
+    /// interface as `FEATURE_GROUP_ATTRIBUTES`, and it is what the wheel
+    /// resolves through here. Asserted for every bank and every index rather
+    /// than for the two the test above happens to name, because the failure
+    /// this prevents — turning one parameter while another is highlighted —
+    /// would show up on whichever bank was got wrong.
+    #[test]
+    fn the_wheel_walks_the_table_the_encoder_bar_is_given() {
+        for group in FeatureGroup::ALL {
+            let on_it = group.attributes();
+            for (index, &attribute) in on_it.iter().enumerate() {
+                let index = u32::try_from(index).expect("a bank has few parameters");
+                assert_eq!(parameter_of(group, index), Some(attribute), "{group:?}");
+            }
+            let past = u32::try_from(on_it.len()).expect("a bank has few parameters");
+            assert_eq!(parameter_of(group, past), None, "{group:?}");
+        }
     }
 
     #[test]

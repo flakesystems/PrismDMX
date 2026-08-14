@@ -48,9 +48,13 @@ test("the interface follows a real daemon, loses it, and comes back with nothing
   // 2. A command goes out and a fact comes back. What is typed is local input;
   //    what the readout shows is the daemon's own session, changed by the
   //    `SessionPatch` the command produced. Nothing is optimistic (D3).
+  //
+  //    Typing is enough: since S26 the console line is mirrored into the
+  //    session **as it is typed** (paced), so every other client and the
+  //    scribble strips follow a line before it is executed. Enter is what
+  //    *executes* it, and executing it clears the line.
   await expect(page.getByTestId("command-line")).toHaveText("");
   await page.getByTestId("command-input").fill("fixture 1 at full");
-  await page.getByTestId("command-input").press("Enter");
   await expect(page.getByTestId("command-line")).toHaveText("fixture 1 at full");
 
   // 3. The daemon is killed. Not asked to stop — killed.
@@ -72,7 +76,6 @@ test("the interface follows a real daemon, loses it, and comes back with nothing
 
   // And the connection is a working one again rather than merely green.
   await page.getByTestId("command-input").fill("group 2 at 50");
-  await page.getByTestId("command-input").press("Enter");
   await expect(page.getByTestId("command-line")).toHaveText("group 2 at 50");
 
   await daemon.kill();

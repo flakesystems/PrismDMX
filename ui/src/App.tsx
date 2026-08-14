@@ -7,30 +7,43 @@
  * happens:
  *
  * ```text
- *   header   title, connection, the View Selector Bar, Add window
- *   canvas   the windows the session says are open   (all remaining height)
- *   footer   the command line, and one strip of readings
+ *   header    title, connection, the View Selector Bar, Add window
+ *   canvas    the windows the session says are open   (all remaining height)
+ *   encoders  five banks and the parameters of the one in force   (S26)
+ *   executors the eight executors of the current page — D7          (S26)
+ *   footer    the command line, and one strip of readings
  * ```
+ *
+ * The three bands below the canvas take their height from the same column, so
+ * the canvas is what shrinks. `CLAUDE.md` forbids scrolling outside the canvas,
+ * and `e2e/session.spec.ts` reads `scrollHeight − clientHeight` off the
+ * document to check it rather than trusting a stylesheet.
  *
  * # Nothing on this screen is state this interface holds
  *
  * The canvas is `openWindows`. The lit view button is `activeViewId`. The
+ * executor bar is `executorPage` and `/executors`. The lit encoder bank is
+ * `encoderBank` and the highlighted parameter is `programmerParamIndex`. The
  * readings are the mirror. The one thing that is local is what has been *typed*
  * into the command line, which is D3's own illustration and was S23's.
  *
- * That is the whole of S25's first exit criterion: opening, moving and closing
- * a window issues a session command, and there is nowhere here for the answer
- * to be kept instead.
+ * That is the whole of S25's first exit criterion and half of S26's: every
+ * gesture on this screen is a command out and a delta back, and there is
+ * nowhere here for the answer to be kept instead.
  */
 
-import type { FormEvent } from "react";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 
 import "./App.css";
-import type { JsonValue, WindowType } from "./bindings";
+import type { Command, FeatureGroup, JsonValue, WindowType } from "./bindings";
 import { Canvas } from "./canvas/canvas";
 import type { Rect } from "./canvas/geometry";
 import { ViewBar } from "./canvas/viewbar";
+import { CommandLine } from "./desk/commandline";
+import { EncoderBar } from "./desk/encoderbar";
+import { ExecutorBar } from "./desk/executorbar";
+import type { ParameterReading } from "./desk/programmer";
+import { commandLine } from "./desk/session";
 import type { ConnectionStatus } from "./ipc/connection";
 import { countAt, numberAt, stringAt } from "./mirror/select";
 import { statusText } from "./status";
@@ -125,7 +138,7 @@ function Views() {
   );
 }
 
-/** The canvas and the strip under it. */
+/** The canvas, the two bars and the strip under them. */
 function Desk() {
   const documents = useDesk(selectDocuments);
   const send = useSend();
@@ -149,6 +162,80 @@ function Desk() {
     [send],
   );
 
+  // The executor bar's five.
+  const onPage = useCallback(
+    (page: number) => {
+      send({ t: "SetExecutorPage", page });
+    },
+    [send],
+  );
+  const onSelect = useCallback(
+    (executorId: number) => {
+      send({ t: "SelectExecutor", executorId });
+    },
+    [send],
+  );
+  const onMaster = useCallback(
+    (executorId: number, level: number) => {
+      send({ t: "SetExecutorMaster", executorId, level });
+    },
+    [send],
+  );
+  const onGo = useCallback(
+    (executorId: number, direction: "Next" | "Prev") => {
+      send({ t: "ExecutorGo", executorId, direction });
+    },
+    [send],
+  );
+  const onOff = useCallback(
+    (executorId: number) => {
+      send({ t: "ExecutorOff", executorId });
+    },
+    [send],
+  );
+
+  // The encoder bar's four.
+  const onBank = useCallback(
+    (group: FeatureGroup) => {
+      send({ t: "SetEncoderBank", group });
+    },
+    [send],
+  );
+  const onParam = useCallback(
+    (direction: "Prev" | "Next") => {
+      send({ t: "SelectProgrammerParam", direction });
+    },
+    [send],
+  );
+  const onTurn = useCallback(
+    (reading: ParameterReading, delta: number) => {
+      // Relative, so the daemon starts from what the programmer holds — or
+      // from the attribute's home value when it holds nothing. Working that out
+      // here would be this interface deciding what a value *is*.
+      send({ t: "SetAttribute", attribute: reading.attribute, value: delta, relative: true });
+    },
+    [send],
+  );
+  const onClear = useCallback(() => {
+    send({ t: "ClearProgrammer" });
+  }, [send]);
+
+  // The command line's two.
+  const onCommands = useCallback(
+    (commands: readonly Command[]) => {
+      for (const command of commands) {
+        send(command);
+      }
+    },
+    [send],
+  );
+  const onText = useCallback(
+    (text: string) => {
+      send({ t: "CommandLineInput", text });
+    },
+    [send],
+  );
+
   if (documents === null) {
     return null;
   }
@@ -161,8 +248,30 @@ function Desk() {
         onFocus={onFocus}
         onClose={onClose}
       />
+      <EncoderBar
+        session={documents.session}
+        show={documents.show}
+        programmer={documents.programmer}
+        onBank={onBank}
+        onParam={onParam}
+        onTurn={onTurn}
+        onClear={onClear}
+      />
+      <ExecutorBar
+        session={documents.session}
+        show={documents.show}
+        onPage={onPage}
+        onSelect={onSelect}
+        onMaster={onMaster}
+        onGo={onGo}
+        onOff={onOff}
+      />
       <footer className="desk-footer">
-        <CommandLine daemonLine={stringAt(documents.session, "/session/commandLine") ?? ""} />
+        <CommandLine
+          daemonLine={commandLine(documents.session)}
+          onCommands={onCommands}
+          onText={onText}
+        />
         <StatusStrip session={documents.session} show={documents.show} />
       </footer>
     </>
@@ -210,6 +319,11 @@ function StatusStrip({ session, show }: { readonly session: JsonValue; readonly 
         value={text(stringAt(session, "/session/encoderBank"))}
         testId="encoder-bank"
       />
+      <Reading
+        label="Param"
+        value={text(numberAt(session, "/session/programmerParamIndex"))}
+        testId="param-index"
+      />
       <Reading label="Protocol" value={String(health.protocolVersion)} testId="protocol" />
       <Reading label="Tick" value={`${health.tickHz.toFixed(1)} Hz`} testId="tick-hz" />
       <Reading label="Missed" value={String(health.missedTicks)} testId="missed-ticks" />
@@ -223,48 +337,6 @@ function StatusStrip({ session, show }: { readonly session: JsonValue; readonly 
         />
       ))}
     </dl>
-  );
-}
-
-/**
- * The command line, and the smallest honest illustration of **D3**.
- *
- * The input holds what has been typed — *local* input, which the daemon has
- * never been told about and which is nobody else's business. Pressing Enter
- * sends a `CommandLineInput` command. What is displayed beside it is the
- * session's command line **as the daemon holds it**, and it changes when the
- * `SessionPatch` comes back and not a moment sooner. Nothing here is
- * optimistic; there is no state to roll back if the command is refused.
- *
- * S26 owns the real one, including the parser.
- */
-function CommandLine({ daemonLine }: { readonly daemonLine: string }) {
-  const send = useSend();
-  const [typed, setTyped] = useState("");
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    send({ t: "CommandLineInput", text: typed });
-  };
-
-  return (
-    <div className="command-line" data-testid="command-line-panel">
-      <form onSubmit={submit}>
-        <label htmlFor="command-input">Command</label>
-        <input
-          id="command-input"
-          data-testid="command-input"
-          value={typed}
-          onChange={(event) => {
-            setTyped(event.target.value);
-          }}
-          autoComplete="off"
-        />
-      </form>
-      <p className="daemon-line">
-        Engine: <output data-testid="command-line">{daemonLine}</output>
-      </p>
-    </div>
   );
 }
 

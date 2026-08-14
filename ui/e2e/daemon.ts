@@ -114,7 +114,26 @@ export async function startDaemon(
  * what to press — S19's finding, and S20's method rule.
  */
 export function pressConsole(path: string, note: number): void {
-  appendFileSync(path, Buffer.from([0x90, note, 127, 0x90, note, 0]));
+  sendConsole(path, [0x90, note, 127, 0x90, note, 0]);
+}
+
+/**
+ * Turns the jog wheel on the console the daemon is reading from a file.
+ *
+ * `CC 60`, relative, sign-magnitude: bit 6 is the sign and bits 0–5 the step
+ * count, so `0x01` is one detent clockwise and `0x41` one anticlockwise
+ * (`docs/MCU_MAPPING.md` §2.1, and §2.7's measurement that this wheel only ever
+ * sends ±1 however hard it is spun). Written out by the caller, like the note
+ * numbers: asking the profile what to send would be asking the code under test.
+ */
+export function turnConsoleWheel(path: string, detents: number): void {
+  const magnitude = Math.min(Math.abs(detents), 63);
+  sendConsole(path, [0xb0, 60, detents < 0 ? 0x40 | magnitude : magnitude]);
+}
+
+/** Appends raw MIDI bytes to the file the daemon reads its console from. */
+export function sendConsole(path: string, bytes: readonly number[]): void {
+  appendFileSync(path, Buffer.from(bytes));
 }
 
 /** Removes a daemon's data directory once nothing is using it. */

@@ -1,0 +1,3149 @@
+{
+  "note": "Recorded off a running prismd by crates/prismd/tests/ui_programmer.rs. The strips, the programmer and the session of every step are the daemon's own answers, taken from a fresh client's snapshot. Regenerate with: cargo test -p prismd --test ui_programmer -- --ignored",
+  "protocolVersion": 1,
+  "executorsPerPage": 8,
+  "encoderBanks": {
+    "Beam": [
+      "Iris",
+      "Zoom",
+      "Gobo",
+      "Prism",
+      "Shutter",
+      "Control"
+    ],
+    "Color": [
+      "Red",
+      "Green",
+      "Blue",
+      "White",
+      "Amber"
+    ],
+    "Dimmer": [
+      "Dimmer"
+    ],
+    "Focus": [
+      "Focus"
+    ],
+    "Position": [
+      "Pan",
+      "Tilt"
+    ]
+  },
+  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90haRzaG93hqlleGVjdXRvcnODoTCIr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26mTWFzdGVyrWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWzN//+qc2VxdWVuY2VJZAGhMoivYnV0dG9uRnVuY3Rpb25zlKVGbGFzaKZUb2dnbGWiT26qTGVhcm5TcGVlZK9jdXJyZW50Q3VlSW5kZXjAr2VuY29kZXJGdW5jdGlvbqVTcGVlZK1mYWRlckZ1bmN0aW9upVhGYWRlomlkAqhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWwAqnNlcXVlbmNlSWQCoTmIr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqVFbXB0eaJpZAmoaXNBY3RpdmXCq21hc3RlckxldmVszYAAqnNlcXVlbmNlSWTArGZpeHR1cmVUeXBlc4KzZ2VuZXJpYy5kaW1tZXIuZGFya4aqYXR0cmlidXRlc5GJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludAGiaWSzZ2VuZXJpYy5kaW1tZXIuZGFya6xtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrJnZW5lcmljLm1vdmluZ2hlYWSGqmF0dHJpYnV0ZXOXialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0BaxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50B6JpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM3Y2ikbmFtZatNb3ZpbmcgSGVhZKhmaXh0dXJlc4WhMYmnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEyiadhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqERpbW1lciAyqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlks2dlbmVyaWMuZGltbWVyLmRhcmuodW5pdmVyc2UBoTOJp2FkZHJlc3MDomlkA6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWoRGltbWVyIDOocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNImnYWRkcmVzcwSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgNKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaE1iadhZGRyZXNzC6JpZAWpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpkhlYWQgNahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLJnZW5lcmljLm1vdmluZ2hlYWSodW5pdmVyc2UBpmdyb3Vwc4CncHJlc2V0c4Cpc2VxdWVuY2VzgqExhKRjdWVzkYilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaVDdWUgMaZudW1iZXKhMaVwYXJ0c5GEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQGpcHJlc2V0UmVmwKV2YWx1Zc3//6d0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwKJpZAGkbG9vcMKkbmFtZalXYXJtIFdhc2ihMoSkY3Vlc5GIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWlQ3VlIDGmbnVtYmVyoTGlcGFydHORhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUCqXByZXNldFJlZsCldmFsdWXN//+ndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCiaWQCpGxvb3DCpG5hbWWpQ29sZCBXYXNop3Nlc3Npb26Cp3Nlc3Npb26LrGFjdGl2ZVZpZXdJZAGrY29tbWFuZExpbmWgq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCldmlld3OBoTGDomlkAaRuYW1lplZpZXcgMad3aW5kb3dzkKpwcm9ncmFtbWVyhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAKdvdXRwdXRzkYOiaWQBpG5hbWWrTW9jayBvdXRwdXSmaGVhbHRook9rpmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQGsV6UG7xTOrbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzwg==",
+  "steps": [
+    {
+      "what": "page the fader bank up: the eight strips are a different eight",
+      "typed": "page 1",
+      "typedLine": 0,
+      "client": "g6F0p0NvbW1hbmSjc2VxAadjb21tYW5kgqF0r1NldEV4ZWN1dG9yUGFnZaRwYWdlAQ==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vZXhlY3V0b3JQYWdlpXZhbHVlAQ=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 8,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 1,
+          "executorId": 9,
+          "assigned": true,
+          "name": null,
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Empty",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 10,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 3,
+          "executorId": 11,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 12,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 13,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 14,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 15,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 1,
+        "selectedExecutor": null,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "a page with nothing on it, which is an ordinary page and not an error",
+      "typed": "page 2",
+      "typedLine": 1,
+      "client": "g6F0p0NvbW1hbmSjc2VxAqdjb21tYW5kgqF0r1NldEV4ZWN1dG9yUGFnZaRwYWdlAg==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vZXhlY3V0b3JQYWdlpXZhbHVlAg=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 16,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 1,
+          "executorId": 17,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 18,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 3,
+          "executorId": 19,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 20,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 21,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 22,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 23,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 2,
+        "selectedExecutor": null,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "and back down, which is where the executors are",
+      "typed": "page 0",
+      "typedLine": 2,
+      "client": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5kgqF0r1NldEV4ZWN1dG9yUGFnZaRwYWdlAA==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vZXhlY3V0b3JQYWdlpXZhbHVlAA=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 65535,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": null,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "select the executor the main fader and the transport act on",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5kgqF0rlNlbGVjdEV4ZWN1dG9yqmV4ZWN1dG9ySWQC",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi5L3Nlc3Npb24vc2VsZWN0ZWRFeGVjdXRvcqV2YWx1ZQI="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 65535,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "pull a master to half: the level is the daemon's, not the pointer's",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxBadjb21tYW5kg6F0sVNldEV4ZWN1dG9yTWFzdGVyqmV4ZWN1dG9ySWQApWxldmVszYAA",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi4L2V4ZWN1dG9ycy8wL21hc3RlckxldmVspXZhbHVlzYAA",
+        "gqF0pURlbHRhpWRlbHRhgqF0qURpcnR5RmxhZ651bnNhdmVkQ2hhbmdlc8M="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "Go on executor 0: it runs and takes its first cue",
+      "typed": "go 0",
+      "typedLine": 3,
+      "client": "g6F0p0NvbW1hbmSjc2VxBqdjb21tYW5kg6F0qkV4ZWN1dG9yR2+qZXhlY3V0b3JJZACpZGlyZWN0aW9upE5leHQ=",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhhKF0rUV4ZWN1dG9yU3RhdGWqZXhlY3V0b3JJZACoaXNBY3RpdmXDqGN1ZUluZGV4wA=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": true,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "Off again: it stops and the cue index goes",
+      "typed": "off 0",
+      "typedLine": 4,
+      "client": "g6F0p0NvbW1hbmSjc2VxB6djb21tYW5kgqF0q0V4ZWN1dG9yT2ZmqmV4ZWN1dG9ySWQA",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhhKF0rUV4ZWN1dG9yU3RhdGWqZXhlY3V0b3JJZACoaXNBY3RpdmXCqGN1ZUluZGV4wA=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "Go on an executor that has no sequence: refused, nothing moves",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxCKdjb21tYW5kg6F0qkV4ZWN1dG9yR2+qZXhlY3V0b3JJZAmpZGlyZWN0aW9upE5leHQ=",
+      "deltas": [],
+      "refused": true,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Dimmer",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "switch the encoder bank to Position",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxCadjb21tYW5kgqF0rlNldEVuY29kZXJCYW5rpWdyb3VwqFBvc2l0aW9u",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vZW5jb2RlckJhbmuldmFsdWWoUG9zaXRpb24="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "select two fixtures from the command line",
+      "typed": "1 + 2",
+      "typedLine": 5,
+      "client": "g6F0p0NvbW1hbmSjc2VxCqdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5IBAqRtb2Rlo1NldA==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26SAQKyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UA"
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          1,
+          2
+        ],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "a range: `thru` is inclusive at both ends",
+      "typed": "1 thru 3 at 50",
+      "typedLine": 6,
+      "client": "g6F0p0NvbW1hbmSjc2VxC6djb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAA=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          1,
+          2,
+          3
+        ],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "and the level the same line asked for: one line, two commands",
+      "typed": "1 thru 3 at 50",
+      "typedLine": 6,
+      "client": "g6F0p0NvbW1hbmSjc2VxDKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWmRGltbWVypXZhbHVlzX//qHJlbGF0aXZlwg==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAA=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          1,
+          2,
+          3
+        ],
+        "activeFeatureGroup": "Dimmer",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "a fixture the show has not got: the parser is right and the daemon refuses",
+      "typed": "9",
+      "typedLine": 8,
+      "client": "g6F0p0NvbW1hbmSjc2VxDadjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5EJpG1vZGWjU2V0",
+      "deltas": [],
+      "refused": true,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          1,
+          2,
+          3
+        ],
+        "activeFeatureGroup": "Dimmer",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "the moving head, and a parameter that is not a dimmer",
+      "typed": "5 pan at 25",
+      "typedLine": 9,
+      "client": "g6F0p0NvbW1hbmSjc2VxDqdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5EFpG1vZGWjU2V0",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5ODp2ZpeHR1cmUBqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQKpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCqY2xlYXJTdGFnZQA="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Dimmer",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "pan a quarter of the way over: the bank follows the attribute",
+      "typed": "5 pan at 25",
+      "typedLine": 9,
+      "client": "g6F0p0NvbW1hbmSjc2VxD6djb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWjUGFupXZhbHVlzT//qHJlbGF0aXZlwg==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzlIOnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQWpYXR0cmlidXRlo1BhbqV2YWx1ZYOldmFsdWXNP/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UA"
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Position",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            5,
+            "Pan",
+            16383,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer",
+          "Position"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "an encoder turned: relative, and it starts from what the programmer holds",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxEKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWjUGFupXZhbHVlzQKPqHJlbGF0aXZlww==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzlIOnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQWpYXR0cmlidXRlo1BhbqV2YWx1ZYOldmFsdWXNQo6mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UA"
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Position",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            5,
+            "Pan",
+            17038,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer",
+          "Position"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "the same encoder the other way, past zero: it saturates rather than wrapping",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWjUGFupXZhbHVl0v//FaCocmVsYXRpdmXD",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzlIOnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQWpYXR0cmlidXRlo1BhbqV2YWx1ZYOldmFsdWUApnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAA=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Position",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            5,
+            "Pan",
+            0,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer",
+          "Position"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "the wheel moves on to the next parameter of the bank",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxEqdjb21tYW5kgqF0tVNlbGVjdFByb2dyYW1tZXJQYXJhbalkaXJlY3Rpb26kTmV4dA==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi9L3Nlc3Npb24vcHJvZ3JhbW1lclBhcmFtSW5kZXildmFsdWUB"
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Position",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            5,
+            "Pan",
+            0,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer",
+          "Position"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 1,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "an absolute value out of range: refused, and the programmer stands still",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxE6djb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWkVGlsdKV2YWx1Zc4AARFwqHJlbGF0aXZlwg==",
+      "deltas": [],
+      "refused": true,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Position",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            5,
+            "Pan",
+            0,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer",
+          "Position"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 1,
+        "commandLine": ""
+      }
+    },
+    {
+      "what": "the line as it is being typed, which every client sees",
+      "typed": null,
+      "typedLine": null,
+      "client": "g6F0p0NvbW1hbmSjc2VxFKdjb21tYW5kgqF0sENvbW1hbmRMaW5lSW5wdXSkdGV4dKwxIHRocnUgNCBhdCA=",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vY29tbWFuZExpbmWldmFsdWWsMSB0aHJ1IDQgYXQg"
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Position",
+        "values": [
+          [
+            1,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            2,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            3,
+            "Dimmer",
+            32767,
+            "Manual"
+          ],
+          [
+            5,
+            "Pan",
+            0,
+            "Manual"
+          ]
+        ],
+        "clearStage": 0,
+        "touchedBanks": [
+          "Dimmer",
+          "Position"
+        ]
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 1,
+        "commandLine": "1 thru 4 at "
+      }
+    },
+    {
+      "what": "Clear once: the values go and the selection stays",
+      "typed": "clear",
+      "typedLine": 11,
+      "client": "g6F0p0NvbW1hbmSjc2VxFadjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzkKpjbGVhclN0YWdlAQ=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [
+          5
+        ],
+        "activeFeatureGroup": "Position",
+        "values": [],
+        "clearStage": 1,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 1,
+        "commandLine": "1 thru 4 at "
+      }
+    },
+    {
+      "what": "Clear twice: the selection goes",
+      "typed": "clear",
+      "typedLine": 12,
+      "client": "g6F0p0NvbW1hbmSjc2VxFqdjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKhQb3NpdGlvbqZ2YWx1ZXOQqmNsZWFyU3RhZ2UC",
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi9L3Nlc3Npb24vcHJvZ3JhbW1lclBhcmFtSW5kZXildmFsdWUA"
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Position",
+        "values": [],
+        "clearStage": 2,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": "1 thru 4 at "
+      }
+    },
+    {
+      "what": "Clear three times: everything, including the bank",
+      "typed": "clear",
+      "typedLine": 13,
+      "client": "g6F0p0NvbW1hbmSjc2VxF6djb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAA=="
+      ],
+      "refused": false,
+      "strips": [
+        {
+          "slot": 0,
+          "executorId": 0,
+          "assigned": true,
+          "name": "Warm Wash",
+          "masterLevel": 32768,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "Master",
+          "buttonFunctions": [
+            "Go+",
+            "Go-",
+            "Off",
+            "Empty"
+          ]
+        },
+        {
+          "slot": 1,
+          "executorId": 1,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 2,
+          "executorId": 2,
+          "assigned": true,
+          "name": "Cold Wash",
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "XFade",
+          "buttonFunctions": [
+            "Flash",
+            "Toggle",
+            "On",
+            "LearnSpeed"
+          ]
+        },
+        {
+          "slot": 3,
+          "executorId": 3,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 4,
+          "executorId": 4,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 5,
+          "executorId": 5,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 6,
+          "executorId": 6,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        },
+        {
+          "slot": 7,
+          "executorId": 7,
+          "assigned": false,
+          "name": null,
+          "masterLevel": 0,
+          "isActive": false,
+          "currentCueIndex": null,
+          "faderFunction": "",
+          "buttonFunctions": []
+        }
+      ],
+      "programmer": {
+        "selection": [],
+        "activeFeatureGroup": "Dimmer",
+        "values": [],
+        "clearStage": 0,
+        "touchedBanks": []
+      },
+      "session": {
+        "executorPage": 0,
+        "selectedExecutor": 2,
+        "encoderBank": "Position",
+        "programmerPage": 0,
+        "programmerParamIndex": 0,
+        "commandLine": "1 thru 4 at "
+      }
+    }
+  ],
+  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90haRzaG93hqlleGVjdXRvcnODoTCIr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26mTWFzdGVyrWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWzNgACqc2VxdWVuY2VJZAGhMoivYnV0dG9uRnVuY3Rpb25zlKVGbGFzaKZUb2dnbGWiT26qTGVhcm5TcGVlZK9jdXJyZW50Q3VlSW5kZXjAr2VuY29kZXJGdW5jdGlvbqVTcGVlZK1mYWRlckZ1bmN0aW9upVhGYWRlomlkAqhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWwAqnNlcXVlbmNlSWQCoTmIr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqVFbXB0eaJpZAmoaXNBY3RpdmXCq21hc3RlckxldmVszYAAqnNlcXVlbmNlSWTArGZpeHR1cmVUeXBlc4KzZ2VuZXJpYy5kaW1tZXIuZGFya4aqYXR0cmlidXRlc5GJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludAGiaWSzZ2VuZXJpYy5kaW1tZXIuZGFya6xtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrJnZW5lcmljLm1vdmluZ2hlYWSGqmF0dHJpYnV0ZXOXialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0BaxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50B6JpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM3Y2ikbmFtZatNb3ZpbmcgSGVhZKhmaXh0dXJlc4WhMYmnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEyiadhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqERpbW1lciAyqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlks2dlbmVyaWMuZGltbWVyLmRhcmuodW5pdmVyc2UBoTOJp2FkZHJlc3MDomlkA6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWoRGltbWVyIDOocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNImnYWRkcmVzcwSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgNKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaE1iadhZGRyZXNzC6JpZAWpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpkhlYWQgNahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLJnZW5lcmljLm1vdmluZ2hlYWSodW5pdmVyc2UBpmdyb3Vwc4CncHJlc2V0c4Cpc2VxdWVuY2VzgqExhKRjdWVzkYilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaVDdWUgMaZudW1iZXKhMaVwYXJ0c5GEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQGpcHJlc2V0UmVmwKV2YWx1Zc3//6d0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwKJpZAGkbG9vcMKkbmFtZalXYXJtIFdhc2ihMoSkY3Vlc5GIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWlQ3VlIDGmbnVtYmVyoTGlcGFydHORhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUCqXByZXNldFJlZsCldmFsdWXN//+ndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCiaWQCpGxvb3DCpG5hbWWpQ29sZCBXYXNop3Nlc3Npb26Cp3Nlc3Npb26LrGFjdGl2ZVZpZXdJZAGrY29tbWFuZExpbmWsMSB0aHJ1IDQgYXQgq2VuY29kZXJCYW5rqFBvc2l0aW9urGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9yAqV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKEqXNlbGVjdGlvbpCyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UAp291dHB1dHORg6JpZAGkbmFtZatNb2NrIG91dHB1dKZoZWFsdGiiT2umaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestAR1zcenzwE6ttaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPD"
+}

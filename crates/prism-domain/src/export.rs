@@ -169,8 +169,74 @@ fn write_variants(dir: &Path, names: &[String]) -> io::Result<Vec<String>> {
             screaming_snake(name)
         ));
     }
+    contents.push_str(&feature_group_attributes(&tables));
     fs::write(dir.join(format!("{VARIANTS}.ts")), contents)?;
     Ok(tables.into_iter().map(|(name, _)| name).collect())
+}
+
+/// The encoder banks and what is on each of them, as a TypeScript record.
+///
+/// The one table here that is not a list of variants, and the reason it is
+/// generated rather than written in TypeScript: **the encoder bar and the jog
+/// wheel have to walk the same order**. `prismd::surface::parameter_of` resolves
+/// the wheel's parameter through [`FeatureGroup::attributes`]; an encoder bar
+/// that wrote its own list would turn one knob and light another, which is a
+/// fault an operator would blame on the desk. S22 recorded the risk and S26
+/// removed it by having one table.
+///
+/// The **spellings come out of the unions `ts-rs` wrote**, exactly as every
+/// other table here does: the two enums' `ALL` arrays give the position of a
+/// value and the generated union gives its name, so a `rename_all` added to
+/// either one moves this table with it and there is still only one list.
+///
+/// Answers an empty string if either union is missing, which cannot happen with
+/// the roots this module exports and would be a table of `undefined` if it did.
+fn feature_group_attributes(tables: &[(String, Vec<String>)]) -> String {
+    let named = |name: &str| -> Option<&Vec<String>> {
+        tables
+            .iter()
+            .find(|(table, _)| table == name)
+            .map(|(_, values)| values)
+    };
+    let (Some(groups), Some(attributes)) = (named("FeatureGroup"), named("AttributeType")) else {
+        return String::new();
+    };
+
+    let mut out = String::from(
+        "
+/**
+ * The attributes on each encoder bank, in `AttributeType::ALL`'s order.
+ *
+ * The order the encoder bar numbers its encoders in **and** the order the jog
+ * wheel walks (`prismd::surface::parameter_of`). One table, because two would
+ * mean turning one parameter while another one is highlighted.
+ */
+export const FEATURE_GROUP_ATTRIBUTES: Readonly<
+  Record<FeatureGroup, readonly AttributeType[]>
+> = {
+",
+    );
+    for (index, group) in crate::FeatureGroup::ALL.into_iter().enumerate() {
+        let Some(name) = groups.get(index) else {
+            return String::new();
+        };
+        let mut on_it = Vec::new();
+        for attribute in group.attributes() {
+            let Some(position) = crate::AttributeType::ALL
+                .iter()
+                .position(|candidate| candidate == attribute)
+            else {
+                return String::new();
+            };
+            let Some(spelling) = attributes.get(position) else {
+                return String::new();
+            };
+            on_it.push(format!("\"{spelling}\""));
+        }
+        out.push_str(&format!("  \"{name}\": [{}],\n", on_it.join(", ")));
+    }
+    out.push_str("};\n");
+    out
 }
 
 /// The string literals of `export type <name> = "a" | "b";`, or `None` if the
@@ -324,6 +390,78 @@ mod tests {
         assert!(!variants.contains("COMMAND_VARIANTS"));
         assert!(!variants.contains("DELTA_VARIANTS"));
         assert!(!variants.contains("JSON_VALUE_VARIANTS"));
+    }
+
+    /// **The encoder bar and the jog wheel read one table** (S26).
+    ///
+    /// The generated record is asserted against `FeatureGroup::attributes`,
+    /// which is what `prismd::surface::parameter_of` resolves the wheel
+    /// through. An encoder bar that hand-wrote this list is the drift S22
+    /// warned about, and this is the file that makes hand-writing it
+    /// unnecessary.
+    #[test]
+    fn the_encoder_banks_carry_their_parameters_in_the_order_the_wheel_walks() {
+        exported_once();
+        let variants = fs::read_to_string(bindings_dir().join("variants.ts")).unwrap();
+        assert!(
+            variants.contains(
+                "export const FEATURE_GROUP_ATTRIBUTES: Readonly<\n  Record<FeatureGroup, readonly AttributeType[]>\n> = {"
+            ),
+            "{variants}"
+        );
+        for group in crate::FeatureGroup::ALL {
+            let attributes = group
+                .attributes()
+                .iter()
+                .map(|attribute| serde_json::to_string(attribute).unwrap())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let row = format!(
+                "  {}: [{attributes}],",
+                serde_json::to_string(&group).unwrap()
+            );
+            assert!(variants.contains(&row), "variants.ts has no row {row}");
+        }
+        // Position is the row that would catch a table sorted alphabetically or
+        // built from the enum's declaration order rather than from `ALL`.
+        assert!(
+            variants.contains("  \"Position\": [\"Pan\", \"Tilt\"],"),
+            "{variants}"
+        );
+    }
+
+    /// A run of the generator with a union missing writes no table at all,
+    /// rather than one full of `undefined`.
+    #[test]
+    fn the_encoder_bank_table_needs_both_unions() {
+        let attributes = crate::AttributeType::ALL
+            .iter()
+            .map(|attribute| format!("{attribute:?}"))
+            .collect::<Vec<_>>();
+        let groups = crate::FeatureGroup::ALL
+            .iter()
+            .map(|group| format!("{group:?}"))
+            .collect::<Vec<_>>();
+        assert!(super::feature_group_attributes(&[]).is_empty());
+        assert!(
+            super::feature_group_attributes(&[("FeatureGroup".to_owned(), groups.clone())])
+                .is_empty()
+        );
+        // A `FeatureGroup` union with a group missing is the other half.
+        assert!(
+            super::feature_group_attributes(&[
+                ("FeatureGroup".to_owned(), vec!["Dimmer".to_owned()]),
+                ("AttributeType".to_owned(), attributes.clone()),
+            ])
+            .is_empty()
+        );
+        assert!(
+            super::feature_group_attributes(&[
+                ("FeatureGroup".to_owned(), groups),
+                ("AttributeType".to_owned(), vec!["Dimmer".to_owned()]),
+            ])
+            .is_empty()
+        );
     }
 
     #[test]

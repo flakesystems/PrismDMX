@@ -125,6 +125,59 @@ impl FeatureGroup {
         Self::Beam,
         Self::Focus,
     ];
+
+    /// The attributes on this encoder bank, in [`AttributeType::ALL`]'s order.
+    ///
+    /// **This is the order the encoder bar shows and the order the jog wheel
+    /// walks, and it has to be one order.** `prismd::surface::parameter_of`
+    /// resolves *encoder bank plus parameter index* to the attribute the wheel
+    /// turns; the interface's encoder bar numbers its encoders the same way. If
+    /// the two disagreed, an operator would turn the wheel and watch a
+    /// parameter other than the one that is highlighted change — which is a
+    /// fault nobody would attribute to a table. S22 left the warning; S26 made
+    /// it one table, exported to TypeScript with the rest of the bindings.
+    ///
+    /// Written out rather than filtered, because it is `const` and the callers
+    /// want a slice. `every_bank_is_the_attributes_that_name_it` asserts it is
+    /// exactly the filter, so the two cannot drift.
+    ///
+    /// A fixture *profile* may file an individual attribute under a different
+    /// group ([`AttributeDef::feature_group`]); that is a statement about one
+    /// fixture's channel and does not move the encoder. What this answers is
+    /// which knobs the bank has.
+    #[must_use]
+    pub const fn attributes(self) -> &'static [AttributeType] {
+        match self {
+            Self::Dimmer => &[AttributeType::Dimmer],
+            Self::Position => &[AttributeType::Pan, AttributeType::Tilt],
+            Self::Color => &[
+                AttributeType::Red,
+                AttributeType::Green,
+                AttributeType::Blue,
+                AttributeType::White,
+                AttributeType::Amber,
+            ],
+            Self::Beam => &[
+                AttributeType::Iris,
+                AttributeType::Zoom,
+                AttributeType::Gobo,
+                AttributeType::Prism,
+                AttributeType::Shutter,
+                AttributeType::Control,
+            ],
+            Self::Focus => &[AttributeType::Focus],
+        }
+    }
+
+    /// The attribute at `index` on this bank, or `None` past the end.
+    ///
+    /// Past the end is nothing rather than the last one: a wheel turned past
+    /// the parameters does nothing, which is what an operator who has paged
+    /// off the end should feel.
+    #[must_use]
+    pub fn parameter(self, index: u32) -> Option<AttributeType> {
+        self.attributes().get(index as usize).copied()
+    }
 }
 
 /// How two playback sources combine for one attribute.
@@ -279,6 +332,45 @@ mod tests {
             serde_json::to_string(&FeatureGroup::Position).unwrap(),
             "\"Position\""
         );
+    }
+
+    /// The written-out table is exactly the filter, so it cannot drift from
+    /// [`AttributeType::feature_group`] — which is what a `const` slice buys
+    /// speed at the cost of, and what this pays back.
+    #[test]
+    fn every_bank_holds_the_attributes_that_name_it_in_all_order() {
+        let mut seen = Vec::new();
+        for group in FeatureGroup::ALL {
+            let filtered: Vec<AttributeType> = AttributeType::ALL
+                .into_iter()
+                .filter(|attribute| attribute.feature_group() == group)
+                .collect();
+            assert_eq!(group.attributes(), filtered, "{group:?}");
+            assert!(!filtered.is_empty(), "{group:?} has no encoders at all");
+            seen.extend(filtered);
+        }
+        // And between them the five banks reach every attribute exactly once:
+        // an encoder bar built from these is a complete one.
+        seen.sort_unstable();
+        let mut all = AttributeType::ALL.to_vec();
+        all.sort_unstable();
+        assert_eq!(seen, all);
+    }
+
+    #[test]
+    fn a_parameter_index_past_the_end_of_a_bank_names_nothing() {
+        // The jog wheel's rule (`prismd::surface::parameter_of`) and the
+        // encoder bar's, now the same function.
+        assert_eq!(
+            FeatureGroup::Position.parameter(0),
+            Some(AttributeType::Pan)
+        );
+        assert_eq!(
+            FeatureGroup::Position.parameter(1),
+            Some(AttributeType::Tilt)
+        );
+        assert_eq!(FeatureGroup::Position.parameter(2), None);
+        assert_eq!(FeatureGroup::Dimmer.parameter(u32::MAX), None);
     }
 
     #[test]
