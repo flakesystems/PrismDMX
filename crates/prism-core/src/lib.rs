@@ -115,7 +115,7 @@ pub use conflict::ShowIssue;
 pub use desk::{DeskId, InvalidDeskId, MachineConfig};
 pub use file::{ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
-pub use library::{fixture_library, library_type};
+pub use library::{DEFAULT_SEARCH_LIMIT, FixtureLibrary, MAX_SEARCH_LIMIT, generic_profiles};
 pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
 /// Re-exported from `prism-domain`, where S27 moved it so that it could travel
 /// on the wire as the answer to a `Query::PatchPreview`.

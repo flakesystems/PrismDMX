@@ -36,6 +36,21 @@ interface Recording {
   }[];
 }
 
+/**
+ * A recorded step, found by **what it is for** rather than by its number.
+ *
+ * The script grows — S44 added three searches in the middle of it — and an index
+ * written down here would quietly start pointing at another step and assert
+ * something true about the wrong thing.
+ */
+function stepAbout(about: string): { readonly answer: string | null } {
+  const step = recording.steps.find((entry) => entry.what.includes(about));
+  if (step === undefined) {
+    throw new Error(`no recorded step is about ${JSON.stringify(about)}`);
+  }
+  return step;
+}
+
 const recording = JSON.parse(recordingText) as Recording;
 
 /** Bytes out of a base64 payload. */
@@ -48,11 +63,11 @@ function payload(text: string): Uint8Array {
   return bytes;
 }
 
-/** The daemon's answer to the query at `step`. */
-function answerAt(step: number): Answer {
-  const encoded = recording.steps[step]?.answer;
+/** The daemon's answer to the query the step about `about` asked. */
+function answerAt(about: string): Answer {
+  const encoded = stepAbout(about).answer;
   if (encoded === null || encoded === undefined) {
-    throw new Error(`step ${String(step)} carries no answer`);
+    throw new Error(`the step about ${JSON.stringify(about)} carries no answer`);
   }
   const message = readServerMessage(decode(payload(encoded)));
   if (message.t !== "Answer") {
@@ -61,11 +76,11 @@ function answerAt(step: number): Answer {
   return message.answer;
 }
 
-/** The preview at `step`, or a named failure. */
-function previewAt(step: number): PatchPreview {
-  const preview = previewOf(answerAt(step));
+/** The preview the step about `about` asked for, or a named failure. */
+function previewAt(about: string): PatchPreview {
+  const preview = previewOf(answerAt(about));
   if (preview === null) {
-    throw new Error(`step ${String(step)} is not a preview`);
+    throw new Error(`the step about ${JSON.stringify(about)} is not a preview`);
   }
   return preview;
 }
@@ -77,7 +92,7 @@ beforeEach(() => {
 describe("what the operator is told before they commit", () => {
   it("says a clear address is clear, and where the fixture would end", () => {
     // Step 1 of the recorded script: would a PAR fit at address 30?
-    const text = previewText(previewAt(1), 6);
+    const text = previewText(previewAt("would a PAR fit at address 30"), 6);
     expect(text).toContain("Free");
     expect(text).toContain("4 channels");
     // 33, which is the daemon's arithmetic and not this file's.
@@ -88,7 +103,7 @@ describe("what the operator is told before they commit", () => {
     // Step 3: a second PAR at 32, over the one at 30. `prism_core::conflict`
     // reports it and does not refuse it — cloning a fixture is a technique in
     // daily use — so the sentence has to carry both facts at once.
-    const preview = previewAt(3);
+    const preview = previewAt("would a second PAR at 32 clash");
     expect(preview.accepted).toBe(true);
     expect(isAcceptable(preview)).toBe(true);
     const text = previewText(preview, 7);
@@ -100,7 +115,7 @@ describe("what the operator is told before they commit", () => {
   it("says a refusal in the daemon's own words, before anything is sent", () => {
     // Step 6: four channels from 510 runs past the end of a universe. The
     // command was never sent — this is the answer to a question.
-    const preview = previewAt(6);
+    const preview = previewAt("would it fit at 510");
     expect(preview.accepted).toBe(false);
     expect(isAcceptable(preview)).toBe(false);
     expect(previewText(preview, 7)).toContain("510");
@@ -110,10 +125,10 @@ describe("what the operator is told before they commit", () => {
   it("says a profile the show has not got is a refusal, until it has it", () => {
     // Steps 7 and 9 are the same question with an `EmbedFixtureType` between
     // them, which is the pair that makes the desk's library worth having.
-    expect(previewAt(7).accepted).toBe(false);
-    expect(previewAt(7).footprint).toBe(0);
-    expect(previewAt(9).accepted).toBe(true);
-    expect(previewText(previewAt(9), 7)).toContain("11 channels");
+    expect(previewAt("a profile the show has not got").accepted).toBe(false);
+    expect(previewAt("a profile the show has not got").footprint).toBe(0);
+    expect(previewAt("the same question again").accepted).toBe(true);
+    expect(previewText(previewAt("the same question again"), 7)).toContain("11 channels");
   });
 
   it("has nothing to say before the daemon has answered", () => {
@@ -159,16 +174,20 @@ describe("which rows the sheet paints red", () => {
   it("is the pairs the daemon reports, both halves of each", () => {
     // Step 5: the show has an overlap in it. Step 12: the fixture was moved and
     // it has not.
-    expect(conflictedFixtures(conflictsOf(answerAt(5)))).toEqual(new Set([6, 7]));
-    expect(conflictedFixtures(conflictsOf(answerAt(12)))).toEqual(new Set());
-    // Step 0 is the same question before anything was patched.
-    expect(conflictsOf(answerAt(0))).toEqual([]);
+    expect(
+      conflictedFixtures(conflictsOf(answerAt("now the show has an overlap"))),
+    ).toEqual(new Set([6, 7]));
+    expect(
+      conflictedFixtures(conflictsOf(answerAt("takes the overlap away again"))),
+    ).toEqual(new Set());
+    // The same question before anything was patched.
+    expect(conflictsOf(answerAt("what overlaps in the rig as it stands"))).toEqual([]);
   });
 
   it("reads nothing out of an answer of the other kind", () => {
     // A preview is not a conflict list and a conflict list is not a preview.
-    expect(conflictsOf(answerAt(1))).toEqual([]);
-    expect(previewOf(answerAt(0))).toBeNull();
+    expect(conflictsOf(answerAt("would a PAR fit at address 30"))).toEqual([]);
+    expect(previewOf(answerAt("what overlaps in the rig as it stands"))).toBeNull();
     expect(conflictsOf(null)).toEqual([]);
     expect(previewOf(null)).toBeNull();
   });
@@ -213,8 +232,8 @@ describe("a question asked while the last one is still in flight", () => {
 
     requester.request(query(30));
     requester.request(query(32));
-    daemon.answer(1, answerAt(3));
-    daemon.answer(0, answerAt(1));
+    daemon.answer(1, answerAt("would a second PAR at 32 clash"));
+    daemon.answer(0, answerAt("would a PAR fit at address 30"));
     await Promise.resolve();
     await Promise.resolve();
 
@@ -229,7 +248,7 @@ describe("a question asked while the last one is still in flight", () => {
     const requester = new PreviewRequester(daemon.ask, (preview) => seen.push(preview));
     requester.request(query(30));
     requester.stop();
-    daemon.answer(0, answerAt(1));
+    daemon.answer(0, answerAt("would a PAR fit at address 30"));
     await Promise.resolve();
     await Promise.resolve();
     expect(seen).toEqual([]);

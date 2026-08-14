@@ -456,7 +456,11 @@ prismdmx/
 │  └─ src/bindings/      # generated from prism-domain
 ├─ profiles/
 │  ├─ surface/xtouch.json    # layer 3 bindings + the S20 verification record
-│  └─ fixtures/*.json
+│  └─ fixtures/              # the Open Fixture Library, DOWNLOADED at install
+│                            # time and not committed (S44). Only SOURCE.md is
+│                            # in git; tools/fetch-fixtures installs the rest.
+│                            # A copy here would be the second copy of somebody
+│                            # else's data, and the one that is out of date.
 ├─ tools/
 │  └─ xtouch-probe/      # S20's bring-up tool. NOT a workspace member: it opens
 │                        # a MIDI port, which is platform code (§10.1), and

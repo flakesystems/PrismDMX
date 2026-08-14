@@ -114,6 +114,45 @@ pub fn machine_config_path(data_dir: &Path) -> PathBuf {
     data_dir.join("machine.json")
 }
 
+/// Where the **operator's own** fixture profiles go — S44.
+///
+/// Inside the data directory, so it survives an update: the installed library
+/// (`profiles/fixtures/`) is replaced wholesale by the next install, and a
+/// venue's correction to a profile must not go with it. Files here are read in
+/// the Open Fixture Library's own format and a key here **wins**.
+#[must_use]
+pub fn fixtures_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("fixtures")
+}
+
+/// Where the installer put the Open Fixture Library, if it can be found.
+///
+/// Looked for beside the executable first — which is where an installed desk
+/// has it — and then up the tree from it, which is what finds
+/// `profiles/fixtures/` when the daemon is a `cargo run` inside a checkout.
+/// `None` is an ordinary answer: the desk starts with its built-in profiles and
+/// says so.
+///
+/// A path rather than a compiled-in constant, because the library is
+/// **downloaded at install time and not committed** — see
+/// `profiles/fixtures/SOURCE.md`.
+#[must_use]
+pub fn installed_library_dir() -> Option<PathBuf> {
+    let executable = std::env::current_exe().ok()?;
+    let mut directory = executable.parent()?;
+    // `target/debug/prismd.exe` is three levels below the checkout root, and an
+    // installed desk has `profiles/` beside the binary. Six is more than either
+    // needs and stops well before the root of the disk.
+    for _ in 0..6 {
+        let candidate = directory.join("profiles").join("fixtures");
+        if candidate.join("manufacturers.json").is_file() {
+            return Some(candidate);
+        }
+        directory = directory.parent()?;
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

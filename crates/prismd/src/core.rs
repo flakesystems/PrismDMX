@@ -233,9 +233,10 @@ impl Core {
                     self.send(TickCommand::SetExecutorLevel { executor, level });
                 }
                 // Carried out by `ShowFile::apply` and never handed on (S13,
-                // S14). Named rather than caught by a wildcard, so an effect
-                // added later is a compile error here.
-                Effect::Programmer | Effect::Undo | Effect::Redo => {}
+                // S14, and S44's `EmbedProfile`, which needs the desk's
+                // library and gets it there). Named rather than caught by a
+                // wildcard, so an effect added later is a compile error here.
+                Effect::Programmer | Effect::Undo | Effect::Redo | Effect::EmbedProfile => {}
                 Effect::Save => deltas.extend(self.save()?),
             }
         }

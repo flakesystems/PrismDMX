@@ -97,6 +97,17 @@ pub enum Effect {
         /// The new level.
         level: u16,
     },
+    /// A profile out of the desk's library has to be copied into the show, and
+    /// the show model has no library — the same shape as [`Self::Save`], which
+    /// needs a disk.
+    ///
+    /// [`ShowFile::apply`](crate::ShowFile::apply) carries it out and removes it
+    /// from the answer, because that is the layer S44 gave a
+    /// [`crate::FixtureLibrary`] to. A caller applying `EmbedFixtureType` to a
+    /// bare [`Show`] therefore gets this effect and an unchanged show: the show
+    /// model cannot know whether a key names a profile, only that a profile is
+    /// wanted.
+    EmbedProfile,
     /// [`crate::Programmer`] owns the rest of this command. The show model has
     /// already checked everything it can see.
     ///
@@ -270,16 +281,10 @@ impl Show {
                     effects: vec![Effect::Repatch],
                 })
             }
-            Command::EmbedFixtureType { type_id } => {
-                let Some(fixture_type) = crate::library::library_type(type_id) else {
-                    return Err(ShowError::UnknownLibraryType(type_id.clone()));
-                };
-                let ops = self.embed_fixture_type(fixture_type)?;
-                Ok(Applied {
-                    deltas: vec![Delta::ShowPatch { ops }],
-                    effects: vec![Effect::Repatch],
-                })
-            }
+            // The library is `ShowFile`'s, so this is validated as far as the
+            // show can see it — which is not far: a key is a key. See
+            // [`Effect::EmbedProfile`].
+            Command::EmbedFixtureType { .. } => Ok(Applied::effect(Effect::EmbedProfile)),
             Command::Oops => Ok(Applied::effect(Effect::Undo)),
             Command::Redo => Ok(Applied::effect(Effect::Redo)),
             Command::SaveShow => Ok(Applied::effect(Effect::Save)),

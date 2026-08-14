@@ -123,6 +123,10 @@ pub trait ServerHandler: Send + Sync + 'static {
             Query::PatchConflicts | Query::PatchPreview { .. } => Answer::PatchConflicts {
                 conflicts: Vec::new(),
             },
+            Query::SearchLibrary { .. } => Answer::LibraryMatches {
+                matches: Vec::new(),
+                total: 0,
+            },
         }
     }
 
@@ -615,7 +619,7 @@ mod tests {
                     tick_hz: 44.0,
                     ..DaemonHealth::default()
                 },
-                fixture_library: Vec::new(),
+                fixture_library: 0,
             }
         }
 

@@ -430,6 +430,72 @@ The engine is pure logic with no I/O. It is the highest-value TDD target in the 
 
 **Exit criteria:** fixtures can be patched, addressed and edited entirely from the UI; address conflicts are shown before they are committed; the fixture sheet reflects live values.
 
+## S44 · `prism-core` + `prismd` + `ui` — the Open Fixture Library
+**Size:** L · **Depends on:** S27 · **an extension of S27, asked for on 2026-08-14**
+
+**Goal:** a desk that knows real fixtures. S27 shipped four generic profiles and
+said so plainly: "not a fixture library in the sense a venue means — no import,
+no GDTF, no per-manufacturer modes, and no way for an operator to author a
+profile of their own". This is that sentence answered.
+
+**What is there now.** `prism_core::library` is four `FixtureType`s built in
+Rust, `Command::EmbedFixtureType` names one by key, and the whole list rides in
+the `Snapshot` because four of anything fits anywhere. `ARCHITECTURE_SPEC.md` §9
+reserves `profiles/fixtures/` and nothing has ever written it. A venue patching a
+real moving head has to approximate it with a generic profile of the right
+footprint, which is exactly as wrong as it sounds: the channels land in the wrong
+places.
+
+**The library.** The [Open Fixture Library](https://open-fixture-library.org) is
+MIT-licensed, publishes one JSON file per fixture against a versioned schema, and
+is what the rest of this industry's open software reads. Vendored at schema
+**12.5.1**: **634 fixtures across 132 manufacturers, 8.5 MB, 2 798 modes.**
+
+**Deliverables**
+- `profiles/fixtures/` — the OFL tree as OFL publishes it, with its `LICENSE`
+  and a `SOURCE.md` naming the upstream commit and schema version, so a
+  re-import is reproducible and the licence travels with the data
+- An **OFL reader** in `prism-core`, platform-neutral and pure: one
+  `prism_domain::FixtureType` per OFL *mode*, offsets from the mode's channel
+  order, `fineChannelAliases` becoming `fineOffset`, capability types mapped onto
+  `AttributeType`, and `angleStart`/`angleEnd` becoming the physical range
+- **The conversion is lossy and says so, with numbers.** Of 2 798 modes, 2 084
+  convert and 714 are skipped because their channel list contains an object
+  entry — a matrix insert or a switching channel, neither of which this domain
+  model can express. 8 387 attributes are mapped; 5 064 channels carry a
+  capability there is no `AttributeType` for; 1 384 are dropped as duplicates of
+  an attribute a lower channel already claimed
+- **A fixtures folder that is read automatically**: `<data-dir>/fixtures/`, in
+  the same OFL format, scanned at start-up. A key there **overrides** the
+  bundled one, so a venue can correct a profile without editing the vendored tree
+- **The library leaves the snapshot.** Two thousand profiles do not fit in a
+  1 MiB frame (`docs/IPC_PROTOCOL.md` §3), so `Snapshot.fixtureLibrary` is
+  replaced by `Query::SearchLibrary { text, limit }` → `Answer::LibraryMatches`,
+  carrying a small entry per match rather than a whole `FixtureType`. This is
+  the second caller of the query channel S27 added, and the first one that
+  *needed* it rather than merely suited it
+- A **search field** in the patch window in place of S27's menu, and the
+  profile embedded by key exactly as before
+
+**Exit criteria**
+- A show can be patched with a **real fixture** from the interface: search,
+  choose a mode, embed, patch — and the channels land where the manufacturer's
+  manual says they do, asserted against the vendored JSON for a named fixture
+- Every one of the 634 vendored files parses, and the reader's answers for one
+  fixture are asserted **field by field** against a fixture written out by hand
+  from the JSON — not against the reader's own output
+- A malformed or unreadable file in either directory is **skipped with a warning
+  and never stops the daemon starting**, asserted the way S22 asserts a
+  malformed binding profile
+- A file in `<data-dir>/fixtures/` is found without a restart flag, and a key it
+  shares with the bundled library wins
+- Loading the whole library at start-up is **measured** and recorded, and the
+  daemon's start-up time is still a number a person would not notice
+- `Snapshot` no longer carries the library; the search answers within the frame
+  limit for the worst query the corpus admits, asserted
+- The three S27 criteria still hold, all fourteen end-to-end tests stay green,
+  and coverage on the new code is ≥ 85 %
+
 ## S35 · `ui` — the desk layout: bars side by side, encoder pages, views that can be managed
 **Size:** M · **Depends on:** S26
 
@@ -794,6 +860,7 @@ flowchart LR
     S16 & S17 --> S23 --> S24 & S25
     S24 & S25 --> S26 --> S28 & S34 & S35
     S25 --> S27 --> S30
+    S27 --> S44
     S17 & S23 --> S29
     S23 --> S31
     S28 --> S39
@@ -824,16 +891,17 @@ is, is the order the work was planned to make sense in.
 | # | Session | Why here |
 |---|---|---|
 | 1 | **S27** `ui` — patch and fixture sheet | The last thing an operator cannot do at all: build a rig. Already prompted in `PROGRESS.md` §8 |
-| 2 | **S35** `ui` — desk layout and view management | A correction to what S26 shipped, done before more is built on top of the layout it got wrong |
-| 3 | **S34** core/engine — executor functions and the tick readback | Fills in the four buttons S26 had to draw disabled, and the cue number it had to draw as a dash. Everything that plays back is better afterwards |
-| 4 | **S28** `ui` — sequences, cues, presets | Needs the executor bar finished; raises the store-mode question |
-| 5 | **S39** `prism-core` — store modes, cue editing, the update state | Answers it, and defines the update state the shell's blinking Update needs |
-| 6 | **S40** `ui` — the console shell | Needs all four above: groups and presets to select, cues to store, executors to press, views to label |
-| 7 | **S33** core/protocols — the output patch | The first session a venue rather than a laptop needs. Independent of everything above, so it may equally run earlier if hardware is waiting |
-| 8 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock |
-| 9 | **S37** `ui` — the settings window | Needs both of those to have something to configure |
-| 10 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from |
-| 11 | **S43** `ui` — cleanup and polish | After the last feature and before the first release, because that is the only moment the list is complete |
-| 12 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab |
-| 13 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC | Extended features, in whichever order the venue asks for them |
-| 14 | **S41** docs · **S42** prismdmx.de | Last, because a manual written before the settings window would document a program that does not exist |
+| 2 | **S44** `prism-core`/`prismd`/`ui` — the Open Fixture Library | Asked for on 2026-08-14 as an extension of S27. Four generic profiles cannot patch a real rig, and S27 said so in as many words |
+| 3 | **S35** `ui` — desk layout and view management | A correction to what S26 shipped, done before more is built on top of the layout it got wrong |
+| 4 | **S34** core/engine — executor functions and the tick readback | Fills in the four buttons S26 had to draw disabled, and the cue number it had to draw as a dash. Everything that plays back is better afterwards |
+| 5 | **S28** `ui` — sequences, cues, presets | Needs the executor bar finished; raises the store-mode question |
+| 6 | **S39** `prism-core` — store modes, cue editing, the update state | Answers it, and defines the update state the shell's blinking Update needs |
+| 7 | **S40** `ui` — the console shell | Needs all four above: groups and presets to select, cues to store, executors to press, views to label |
+| 8 | **S33** core/protocols — the output patch | The first session a venue rather than a laptop needs. Independent of everything above, so it may equally run earlier if hardware is waiting |
+| 9 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock |
+| 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure |
+| 11 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from |
+| 12 | **S43** `ui` — cleanup and polish | After the last feature and before the first release, because that is the only moment the list is complete |
+| 13 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab |
+| 14 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC | Extended features, in whichever order the venue asks for them |
+| 15 | **S41** docs · **S42** prismdmx.de | Last, because a manual written before the settings window would document a program that does not exist |

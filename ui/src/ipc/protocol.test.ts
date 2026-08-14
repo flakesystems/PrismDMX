@@ -303,49 +303,18 @@ describe("an answer", () => {
 });
 
 /**
- * The desk's own profiles, which ride in the snapshot because a client needs
- * them to *offer* the list at all — a brand-new show carries none.
+ * How many profiles the desk has — a **number**, since S44 made the library two
+ * thousand of them and a snapshot has to fit in a frame. What a client does
+ * with the library itself is ask.
  */
 describe("the fixture library in the snapshot", () => {
-  it("reads every field of every profile", () => {
+  it("is a count rather than the profiles", () => {
     const snapshot = aSnapshot();
-    expect(readSnapshot(snapshot, "s").fixtureLibrary).toEqual(snapshot.fixtureLibrary);
-    expect(snapshot.fixtureLibrary.length).toBeGreaterThan(1);
-  });
-
-  it("names the profile and the attribute that was wrong", () => {
-    const broken = (attributes: unknown) => ({
-      ...aSnapshot(),
-      fixtureLibrary: [
-        { id: "x", manufacturer: "m", name: "n", mode: "1ch", footprint: 1, attributes },
-      ],
-    });
-    expect(faultPath(() => readSnapshot(broken(7), "s"))).toBe("s.fixtureLibrary[0].attributes");
-    expect(
-      faultPath(() => readSnapshot(broken([{ attribute: "Nonesuch" }]), "s")),
-    ).toBe("s.fixtureLibrary[0].attributes[0].attribute");
-    expect(
-      faultPath(() =>
-        readSnapshot(
-          broken([
-            {
-              attribute: "Dimmer",
-              featureGroup: "Dimmer",
-              coarseOffset: 0,
-              fineOffset: null,
-              defaultValue: 0,
-              mergeMode: "MTP",
-              invert: false,
-              physicalFrom: 0,
-              physicalTo: 1,
-            },
-          ]),
-          "s",
-        ),
-      ),
-    ).toBe("s.fixtureLibrary[0].attributes[0].mergeMode");
-    expect(faultPath(() => readSnapshot({ ...aSnapshot(), fixtureLibrary: 7 }, "s"))).toBe(
+    expect(readSnapshot(snapshot, "s").fixtureLibrary).toBe(snapshot.fixtureLibrary);
+    expect(snapshot.fixtureLibrary).toBeGreaterThan(1);
+    expect(faultPath(() => readSnapshot({ ...aSnapshot(), fixtureLibrary: "many" }, "s"))).toBe(
       "s.fixtureLibrary",
     );
   });
+
 });

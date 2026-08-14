@@ -30,7 +30,7 @@
 
 import type { JsonValue } from "../bindings";
 import { isObject } from "../mirror/patch";
-import { numberAt, stringAt, valueAt } from "../mirror/select";
+import { numberAt, pointerToken, stringAt, valueAt } from "../mirror/select";
 import type { TelemetrySink } from "../ipc/telemetry";
 import type { Scheduler } from "../telemetry/driver";
 import { animationFrames } from "../telemetry/driver";
@@ -90,7 +90,7 @@ export function liveFixtures(show: JsonValue | null): readonly LiveFixture[] {
       id,
       universe: numberAt(entry, "/universe") ?? 0,
       address: numberAt(entry, "/address") ?? 0,
-      footprint: numberAt(show, `/fixtureTypes/${typeId}/footprint`) ?? 0,
+      footprint: numberAt(show, `/fixtureTypes/${pointerToken(typeId)}/footprint`) ?? 0,
     });
   }
   return rows.sort((left, right) => left.id - right.id);

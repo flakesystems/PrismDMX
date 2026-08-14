@@ -47,6 +47,14 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The Open Fixture Library, which is **downloaded at install time and not
+      # committed** (S44, profiles/fixtures/SOURCE.md). Fetched here so the
+      # corpus tests run against the real thing rather than skipping themselves:
+      # 634 fixtures is the input no hand-written JSON can stand in for.
+      - name: Install the fixture library
+        shell: pwsh
+        run: tools/fetch-fixtures/fetch-fixtures.ps1
+
       - name: Build
         run: cargo build --workspace
 
@@ -79,6 +87,13 @@ jobs:
       # of its tests runs against a mock with no hardware attached. If a real
       # backend ever fails to build on Linux, that belongs behind a #[cfg]
       # rather than behind removing this line.
+      # The Open Fixture Library, which is **downloaded at install time and not
+      # committed** (S44, profiles/fixtures/SOURCE.md). Fetched here so the
+      # corpus tests run against the real thing rather than skipping themselves:
+      # 634 fixtures is the input no hand-written JSON can stand in for.
+      - name: Install the fixture library
+        run: tools/fetch-fixtures/fetch-fixtures.sh
+
       - name: Test platform-neutral crates
         run: >
           cargo test
@@ -192,6 +207,14 @@ jobs:
 
       - name: Install the browser
         run: npx playwright install --with-deps chromium
+
+      # The Open Fixture Library, which is **downloaded at install time and not
+      # committed** (S44, profiles/fixtures/SOURCE.md). Fetched here so the
+      # corpus tests run against the real thing rather than skipping themselves:
+      # 634 fixtures is the input no hand-written JSON can stand in for.
+      - name: Install the fixture library
+        working-directory: .
+        run: tools/fetch-fixtures/fetch-fixtures.sh
 
       # The spec builds this itself if it is missing; doing it here means a
       # compile is not spent out of a test's own timeout.

@@ -27,7 +27,7 @@
 import type { AttributeType, FeatureGroup, JsonValue, ProgrammerState } from "../bindings";
 import { FEATURE_GROUP_ATTRIBUTES, FEATURE_GROUP_VARIANTS } from "../bindings/variants";
 import { isArray, isObject } from "../mirror/patch";
-import { stringAt, valueAt } from "../mirror/select";
+import { pointerToken, stringAt, valueAt } from "../mirror/select";
 import { percentOfLevel } from "./level";
 
 /** What one encoder of the bar shows. */
@@ -162,7 +162,7 @@ export function groupOf(
   if (typeId === null) {
     return null;
   }
-  const attributes = valueAt(show, `/fixtureTypes/${typeId}/attributes`);
+  const attributes = valueAt(show, `/fixtureTypes/${pointerToken(typeId)}/attributes`);
   if (attributes === null || !isArray(attributes)) {
     return null;
   }

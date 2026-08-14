@@ -28,7 +28,7 @@
 
 import type { JsonValue } from "../bindings";
 import { isObject } from "../mirror/patch";
-import { numberAt, stringAt, valueAt } from "../mirror/select";
+import { numberAt, pointerToken, stringAt, valueAt } from "../mirror/select";
 
 /** Where the patch lives in the show document. */
 export const FIXTURES = "/fixtures";
@@ -98,7 +98,7 @@ export function patchRows(show: JsonValue | null): readonly PatchRow[] {
       id,
       name: stringAt(entry, "/name") ?? "",
       typeId,
-      typeName: stringAt(show, `${FIXTURE_TYPES}/${typeId}/name`) ?? typeId,
+      typeName: stringAt(show, `${FIXTURE_TYPES}/${pointerToken(typeId)}/name`) ?? typeId,
       universe: numberAt(entry, "/universe") ?? 0,
       address: numberAt(entry, "/address") ?? 0,
       footprint: footprintOf(show, typeId),
@@ -131,7 +131,7 @@ export function embeddedProfiles(show: JsonValue | null): readonly ProfileRow[] 
 
 /** How wide one of a profile is, or 0 when the show has not got it. */
 export function footprintOf(show: JsonValue | null, typeId: string): number {
-  return numberAt(show, `${FIXTURE_TYPES}/${typeId}/footprint`) ?? 0;
+  return numberAt(show, `${FIXTURE_TYPES}/${pointerToken(typeId)}/footprint`) ?? 0;
 }
 
 /**

@@ -83,6 +83,7 @@ sequenceDiagram
         D-->>C: Reject { reason }
     else accepted
         D-->>C: Snapshot { show, session, programmer, outputs, health, fixtureLibrary }
+        Note over C,D: fixtureLibrary is a *count* (S44)
         loop while connected
             C->>D: Command
             D-->>C: Delta
@@ -99,7 +100,9 @@ The `Snapshot` carries **three** documents: the show model, the session state an
 
 The show and the session travel as **documents** rather than as models, because `ShowPatch` and `SessionPatch` are RFC 6902 operations and an operation is only meaningful against a document root. `prism_core::ShowMirror` and `SessionMirror` apply them to exactly these two values.
 
-> **The snapshot also carries `fixtureLibrary`, and it is not show content** *(S27)*. It is the list of profiles **this desk** can embed — `prism_core::library` — and it is a property of the build rather than of the show: a show that has embedded one of them owns its copy from then on (§5's `EmbedFixtureType`, and the embedding rule on `Command::PatchFixture`). It is in the snapshot rather than behind a `Query` because it never changes while the daemon runs and because a client needs it in order to *offer* the list at all: a brand-new show carries no profiles, so without it a patch window would be a form with an empty menu.
+> **The snapshot carries `fixtureLibrary` as a number** *(S27, changed in S44)*. It is how many profiles **this desk** can embed — `prism_core::library` — and it is a property of the build rather than of the show: a show that has embedded one of them owns its copy from then on (§5's `EmbedFixtureType`, and the embedding rule on `Command::PatchFixture`).
+>
+> S27 carried the whole list here, which was right for the four built-in profiles and impossible for the two thousand S44 brought: the Open Fixture Library is 634 fixtures across 2 798 modes, which is several megabytes and would not fit in the 1 MiB frame §3 defines — and a menu of two thousand entries is not a menu. So the list is **searched** (§5.2's `SearchLibrary`) and this field is only what a client needs in order to say *2 157 profiles* beside the box. Zero is an ordinary state: it means no library is installed and the built-in profiles are all that is offered, which the daemon logs on the way up.
 
 ### 4.2 Version negotiation
 
@@ -162,12 +165,16 @@ reported afterwards beside a patch that has already moved.
 ```typescript
 type Query =
   | { t: "PatchConflicts" }
-  | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number };
+  | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number }
+  | { t: "SearchLibrary"; text: string; limit: number };
 
 type Answer =
   | { t: "PatchConflicts"; conflicts: PatchConflict[] }
-  | { t: "PatchPreview"; preview: PatchPreview };
+  | { t: "PatchPreview"; preview: PatchPreview }
+  | { t: "LibraryMatches"; matches: LibraryEntry[]; total: number };
 ```
+
+> **`SearchLibrary` is the variant that made the mechanism necessary** *(S44)*. `PatchPreview` could conceivably have been a client's own arithmetic, wrongly; the fixture library could not be sent at all. The desk knows some two thousand profiles, an answer has to fit in a frame, and a `LibraryEntry` is deliberately not a `FixtureType` — a key, a manufacturer, a name, a mode and a footprint, which is what a menu row shows. The profile itself never leaves the daemon: `Command::EmbedFixtureType` names the one that was chosen by its key, and the daemon copies it into the show. The `limit` a client asks for is **clamped by the daemon**, because a client that asked for two thousand would otherwise get an answer no frame can carry.
 
 Four rules, and the first three are what make it safe to ask one on a desk that
 is running a show:

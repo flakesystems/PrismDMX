@@ -54,7 +54,7 @@ impl ServerHandler for Handler {
                 tick_hz: 44.0,
                 ..DaemonHealth::default()
             },
-            fixture_library: Vec::new(),
+            fixture_library: 0,
         }
     }
 

@@ -23,10 +23,9 @@
 
 import type {
   Answer,
-  AttributeDef,
   Command,
   Delta,
-  FixtureType,
+  LibraryEntry,
   OutputHealth,
   OutputId,
   PatchConflict,
@@ -37,7 +36,6 @@ import type {
 import {
   ATTRIBUTE_TYPE_VARIANTS,
   FEATURE_GROUP_VARIANTS,
-  MERGE_MODE_VARIANTS,
   NOTICE_LEVEL_VARIANTS,
   OUTPUT_HEALTH_VARIANTS,
   PROGRAMMER_VALUE_SOURCE_VARIANTS,
@@ -167,15 +165,15 @@ export interface Snapshot {
   /** How the daemon itself is doing. */
   readonly health: DaemonHealth;
   /**
-   * The profiles **this desk** can embed into a show.
+   * How many profiles **this desk** can embed into a show.
    *
-   * Not show content: a show that has embedded one of these owns its copy from
-   * then on (S11), and this list is a property of the daemon's build. It is in
-   * the snapshot rather than behind a query because a client needs it in order
-   * to *offer* the list at all — a brand-new show carries no profiles, so a
-   * patch window without this would be a form with an empty menu.
+   * A number and not the profiles — S44. S27 carried the whole list here, which
+   * was right for four and impossible for two thousand: a snapshot has to fit in
+   * a frame (§3), and a menu of two thousand entries is not a menu. So a client
+   * **searches** (`Query::SearchLibrary`) and this is only what it needs to say
+   * *2 157 profiles* beside the box.
    */
-  readonly fixtureLibrary: readonly FixtureType[];
+  readonly fixtureLibrary: number;
 }
 
 /** Everything the daemon may send. */
@@ -380,33 +378,21 @@ export function readAnswer(value: unknown, path: string): Answer {
         t: "PatchPreview",
         preview: readPatchPreview(field(record, "preview"), `${path}.preview`),
       };
+    case "LibraryMatches":
+      return {
+        t: "LibraryMatches",
+        matches: asArray(field(record, "matches"), `${path}.matches`).map((entry, index) =>
+          readLibraryEntry(entry, `${path}.matches[${index}]`),
+        ),
+        total: asInteger(field(record, "total"), `${path}.total`),
+      };
     default:
       throw new ProtocolFault(`${path}.t`, `an answer this build knows, not ${JSON.stringify(tag)}`);
   }
 }
 
-/** One attribute of a profile. */
-function readAttributeDef(value: unknown, path: string): AttributeDef {
-  const record = asRecord(value, path);
-  return {
-    attribute: asVariant(field(record, "attribute"), `${path}.attribute`, ATTRIBUTE_TYPE_VARIANTS),
-    featureGroup: asVariant(
-      field(record, "featureGroup"),
-      `${path}.featureGroup`,
-      FEATURE_GROUP_VARIANTS,
-    ),
-    coarseOffset: asInteger(field(record, "coarseOffset"), `${path}.coarseOffset`),
-    fineOffset: asNullable(field(record, "fineOffset"), `${path}.fineOffset`, asInteger),
-    defaultValue: asInteger(field(record, "defaultValue"), `${path}.defaultValue`),
-    mergeMode: asVariant(field(record, "mergeMode"), `${path}.mergeMode`, MERGE_MODE_VARIANTS),
-    invert: asBoolean(field(record, "invert"), `${path}.invert`),
-    physicalFrom: asNumber(field(record, "physicalFrom"), `${path}.physicalFrom`),
-    physicalTo: asNumber(field(record, "physicalTo"), `${path}.physicalTo`),
-  };
-}
-
-/** One profile this desk can embed. */
-function readFixtureType(value: unknown, path: string): FixtureType {
+/** One profile of the desk's library, as a menu shows it. */
+function readLibraryEntry(value: unknown, path: string): LibraryEntry {
   const record = asRecord(value, path);
   return {
     id: asString(field(record, "id"), `${path}.id`),
@@ -414,9 +400,6 @@ function readFixtureType(value: unknown, path: string): FixtureType {
     name: asString(field(record, "name"), `${path}.name`),
     mode: asString(field(record, "mode"), `${path}.mode`),
     footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
-    attributes: asArray(field(record, "attributes"), `${path}.attributes`).map((entry, index) =>
-      readAttributeDef(entry, `${path}.attributes[${index}]`),
-    ),
   };
 }
 
@@ -452,9 +435,7 @@ export function readSnapshot(value: unknown, path: string): Snapshot {
       readOutputSnapshot(output, `${path}.outputs[${index}]`),
     ),
     health: readDaemonHealth(field(record, "health"), `${path}.health`),
-    fixtureLibrary: asArray(field(record, "fixtureLibrary"), `${path}.fixtureLibrary`).map(
-      (entry, index) => readFixtureType(entry, `${path}.fixtureLibrary[${index}]`),
-    ),
+    fixtureLibrary: asInteger(field(record, "fixtureLibrary"), `${path}.fixtureLibrary`),
   };
 }
 

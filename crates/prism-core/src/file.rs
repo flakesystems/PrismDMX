@@ -128,7 +128,7 @@ impl From<JournalError> for ShowFileError {
 /// The fields are public because the two models are edited directly by the
 /// sessions that own them — S13's programmer, S15's loader, S27's patch sheet —
 /// and wrapping every operation of both would be a third API to keep in step.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShowFile {
     /// The show: patch, profiles, groups, presets, sequences, executors.
@@ -156,6 +156,40 @@ pub struct ShowFile {
     /// [`Journal::clear`].
     #[serde(skip)]
     pub journal: Journal,
+    /// The profiles this **desk** can embed into the show — S44.
+    ///
+    /// Not part of the file, and not part of the show either: a show *embeds*
+    /// the profiles it uses (S11), so what is here is where the first copy
+    /// comes from and nothing more. A show saved on a desk with the whole Open
+    /// Fixture Library opens unchanged on one with none of it.
+    ///
+    /// It is here rather than on [`Show`] because it is the same kind of thing
+    /// as the journal: state about this *run*, which the file must not carry.
+    /// It defaults to the four generic profiles, so a `ShowFile` built in a test
+    /// can still embed something; the daemon replaces it once it has read the
+    /// profile directories.
+    #[serde(skip, default = "crate::FixtureLibrary::generic")]
+    pub library: crate::FixtureLibrary,
+}
+
+/// A fresh file, with the desk's **built-in** profiles in it.
+///
+/// Written out rather than derived, because `FixtureLibrary::default()` is
+/// deliberately *empty* — the daemon builds one by reading the operator's
+/// folder, then the installed library, then adding the generics last, and an
+/// empty start is what makes that order mean anything. A `ShowFile` on its own
+/// is the other case: a test, or a daemon that has not read anything yet, and
+/// neither should be unable to embed a dimmer.
+impl Default for ShowFile {
+    fn default() -> Self {
+        Self {
+            show: Show::default(),
+            session: SessionState::default(),
+            programmer: Programmer::default(),
+            journal: Journal::default(),
+            library: crate::FixtureLibrary::generic(),
+        }
+    }
 }
 
 impl ShowFile {
@@ -203,6 +237,13 @@ impl ShowFile {
         } else {
             self.show.apply(command)?
         };
+        if applied.effects.contains(&Effect::EmbedProfile) {
+            // The show model said a profile is wanted and could not say whether
+            // it exists — it has no library. This layer does. Carried out
+            // *before* the record is filed, so an Oops takes it back.
+            let embedded = self.finish_embed(command)?;
+            applied.absorb(Effect::EmbedProfile, embedded);
+        }
         if applied.effects.contains(&Effect::Programmer) {
             // The show has decided its half and named who finishes the job.
             // That somebody is here, so the effect is carried out rather than
@@ -232,6 +273,30 @@ impl ShowFile {
             });
         }
         Ok(applied)
+    }
+
+    /// The half of `EmbedFixtureType` the show could not finish.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownLibraryType`] when this desk carries no profile of
+    /// that key. The key is the *client's* — a client sends a key and never a
+    /// profile (D3) — so this is where a key that named nothing is refused, and
+    /// it is refused before anything is written.
+    fn finish_embed(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
+        let Command::EmbedFixtureType { type_id } = command else {
+            return Ok(Applied::default());
+        };
+        let Some(profile) = self.library.profile(type_id).cloned() else {
+            return Err(ShowFileError::Show(ShowError::UnknownLibraryType(
+                type_id.clone(),
+            )));
+        };
+        let ops = self.show.embed_fixture_type(profile)?;
+        Ok(Applied {
+            deltas: vec![Delta::ShowPatch { ops }],
+            effects: vec![Effect::Repatch],
+        })
     }
 
     /// The half of a programmer command the show could not finish.
@@ -529,8 +594,55 @@ impl ShowFile {
 mod tests {
     use super::{ShowFile, ShowFileError};
     use crate::testkit::{fixture, par_type};
-    use crate::{ProgrammerError, SessionError, ShowError};
+    use crate::{Effect, ProgrammerError, SessionError, ShowError};
     use prism_domain::{Command, Delta, ViewId, WindowInstanceId, WindowType};
+
+    /// **A profile key that names nothing is refused here**, and it changes
+    /// nothing — S44.
+    ///
+    /// The show model cannot decide this: it has no library, exactly as it has
+    /// no disk. So `Show::apply` answers `Effect::EmbedProfile` and this layer,
+    /// which has the library, is where the key is looked up. Asserted on the
+    /// file's **serialised bytes**, which is the form S11 set for every other
+    /// refusal in this crate.
+    #[test]
+    fn a_profile_this_desk_does_not_carry_is_refused_and_changes_nothing() {
+        let mut file = file();
+        let before = rmp_serde::to_vec_named(&file).unwrap();
+        assert_eq!(
+            file.apply(&Command::EmbedFixtureType {
+                type_id: "nothing.at.all".to_owned(),
+            }),
+            Err(ShowFileError::Show(ShowError::UnknownLibraryType(
+                "nothing.at.all".to_owned()
+            )))
+        );
+        assert_eq!(rmp_serde::to_vec_named(&file).unwrap(), before);
+        assert!(!file.is_dirty(), "a refusal does not light the Save lamp");
+        assert!(file.journal.is_empty(), "nor does it file a step");
+
+        // And the one it does carry is embedded, with the deltas that describe
+        // it and the effect the engine needs.
+        let applied = file
+            .apply(&Command::EmbedFixtureType {
+                type_id: "generic.rgb.par".to_owned(),
+            })
+            .expect("the desk carries an RGB PAR");
+        assert!(applied.effects.contains(&Effect::Repatch));
+        assert!(
+            applied
+                .deltas
+                .iter()
+                .any(|delta| matches!(delta, Delta::ShowPatch { .. }))
+        );
+        assert!(file.show.fixture_type("generic.rgb.par").is_some());
+        // The library is the *desk's*, and embedding took a copy: the show now
+        // owns it, which is what makes a show open on a desk without it.
+        assert_eq!(
+            file.show.fixture_type("generic.rgb.par"),
+            file.library.profile("generic.rgb.par")
+        );
+    }
 
     fn file() -> ShowFile {
         let mut file = ShowFile::new();

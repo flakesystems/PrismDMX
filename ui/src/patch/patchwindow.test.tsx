@@ -81,11 +81,11 @@ function recordedSnapshot(show?: JsonValue): Snapshot {
   };
 }
 
-/** The deltas of one recorded step. */
-function recordedDeltas(step: number): Delta[] {
-  const entry = recording.steps[step];
+/** The deltas of the recorded step about something. */
+function recordedDeltas(about: string): Delta[] {
+  const entry = recording.steps.find((step) => step.what.includes(about));
   if (entry === undefined) {
-    throw new Error(`the recording has no step ${String(step)}`);
+    throw new Error(`the recording has no step about ${JSON.stringify(about)}`);
   }
   return entry.deltas.map((encoded) => {
     const message = readServerMessage(decode(payload(encoded)));
@@ -96,11 +96,16 @@ function recordedDeltas(step: number): Delta[] {
   });
 }
 
-/** The daemon's answer at one recorded step. */
-function recordedAnswer(step: number): Answer {
-  const encoded = recording.steps[step]?.answer;
+/**
+ * The daemon's answer at the recorded step **about** something.
+ *
+ * By description rather than by number: the script grows, and an index written
+ * down here would quietly start pointing at another step.
+ */
+function recordedAnswer(about: string): Answer {
+  const encoded = recording.steps.find((step) => step.what.includes(about))?.answer;
   if (encoded === null || encoded === undefined) {
-    throw new Error(`step ${String(step)} carries no answer`);
+    throw new Error(`no recorded step about ${JSON.stringify(about)} carries an answer`);
   }
   const message = readServerMessage(decode(payload(encoded)));
   if (message.t !== "Answer") {
@@ -183,10 +188,10 @@ async function desk(show?: JsonValue) {
     });
   };
 
-  /** The daemon answers with the deltas of one recorded step. */
-  const applyStep = async (step: number): Promise<void> => {
+  /** The daemon answers with the deltas of the step about something. */
+  const applyStep = async (about: string): Promise<void> => {
     await act(async () => {
-      for (const delta of recordedDeltas(step)) {
+      for (const delta of recordedDeltas(about)) {
         network.last.deliver(serverMessage({ t: "Delta", delta }));
       }
       await Promise.resolve();
@@ -230,7 +235,7 @@ describe("the patch window", () => {
     // The rows here are 1, 2 and 5, so none of them is in it — which is the
     // half that says the marking follows the answer rather than lighting up.
     const { answerQuery } = await desk();
-    await answerQuery("PatchConflicts", recordedAnswer(5));
+    await answerQuery("PatchConflicts", recordedAnswer("now the show has an overlap"));
     for (const id of [1, 2, 5]) {
       expect(screen.getByTestId(`patch-row-${String(id)}`).className).not.toContain(
         "row-conflict",
@@ -261,7 +266,7 @@ describe("the patch window", () => {
     expect(asked).toBeGreaterThanOrEqual(2);
 
     // The daemon's own answer for a PAR at 30: free, four channels, ending 33.
-    await answerQuery("PatchPreview", recordedAnswer(1));
+    await answerQuery("PatchPreview", recordedAnswer("would a PAR fit at address 30"));
     expect(screen.getByTestId("patch-preview").textContent).toContain("Free");
     expect(screen.getByTestId("patch-preview").textContent).toContain("33");
     expect(screen.getByTestId("patch-preview").className).toContain("preview-clear");
@@ -274,7 +279,7 @@ describe("the patch window", () => {
     const { answerQuery, commands } = await desk();
     fireEvent.click(screen.getByTestId("patch-row-5"));
     type("draft-address", "32");
-    await answerQuery("PatchPreview", recordedAnswer(3));
+    await answerQuery("PatchPreview", recordedAnswer("would a second PAR at 32 clash"));
 
     const line = screen.getByTestId("patch-preview");
     expect(line.textContent).toContain("Overlaps 32–33 with fixture 6");
@@ -290,7 +295,7 @@ describe("the patch window", () => {
     const before = commands().length;
     fireEvent.click(screen.getByTestId("patch-row-5"));
     type("draft-address", "510");
-    await answerQuery("PatchPreview", recordedAnswer(6));
+    await answerQuery("PatchPreview", recordedAnswer("would it fit at 510"));
 
     expect(screen.getByTestId("patch-preview").textContent).toContain("510");
     expect(screen.getByTestId("patch-preview").className).toContain("preview-refused");
@@ -324,7 +329,7 @@ describe("the patch window", () => {
 
     // Step 2 of the recording is a patch, so its deltas are a `ShowPatch` this
     // mirror can follow — and then the row is what the daemon says it is.
-    await applyStep(2);
+    await applyStep("patch it there");
     expect(tableIds()).toEqual([1, 2, 5, 6]);
   });
 
@@ -403,26 +408,61 @@ describe("the patch window", () => {
     expect(tableIds()).toEqual([1, 2, 5]);
   });
 
-  it("offers the desk's profiles the show has not got, and embeds the one chosen", async () => {
-    const { commands } = await desk();
-    const menu = screen.getByTestId("patch-library");
-    if (!(menu instanceof HTMLSelectElement)) {
-      throw new Error("the library is a menu");
-    }
-    // The desk's library less what this show already carries: the recorded show
-    // has the dimmer and the PAR, so what is offered is the rest.
-    const offered = [...menu.options].map((option) => option.value).filter((value) => value !== "");
-    expect(offered).toContain("generic.movinghead");
-    expect(offered).not.toContain("generic.dimmer");
+  it("searches the desk's library, and embeds the profile that was chosen", async () => {
+    // **A search and not a menu** — S44. The desk's library is the Open Fixture
+    // Library, and neither a frame nor an operator can take two thousand
+    // entries: what is typed goes to the daemon and what comes back is drawn.
+    const { commands, queries, answerQuery } = await desk();
+    const search = screen.getByTestId("library-search");
+    fireEvent.focus(search);
+    fireEvent.change(search, { target: { value: "robe wash" } });
+    expect(queries().some((query) => query.t === "SearchLibrary")).toBe(true);
 
-    fireEvent.change(menu, { target: { value: "generic.movinghead" } });
+    // The daemon's own answer to that very search, out of the recording.
+    await answerQuery("SearchLibrary", recordedAnswer("search the desk's library"));
+    const matches = screen.getByTestId("library-matches");
+    expect(matches.textContent).toContain("Robe Wash 7Q5");
+    expect(matches.textContent).toContain("4ch");
+
+    fireEvent.click(screen.getByTestId("library-robe/wash-7q5/4ch"));
     expect(commands().at(-1)).toEqual({
       t: "EmbedFixtureType",
-      typeId: "generic.movinghead",
+      typeId: "robe/wash-7q5/4ch",
     });
-    // The menu snaps back to *choose…* rather than showing what was picked:
-    // what the show carries is the daemon's answer, and it arrives as a delta.
-    expect(menu.value).toBe("");
+    // And the box is cleared rather than left showing what was picked: what the
+    // show carries is the daemon's answer and arrives as a delta.
+    expect((search as HTMLInputElement).value).toBe("");
+  });
+
+  it("says so when the library has nothing matching, rather than showing everything", async () => {
+    // The failure a search that ignored an unmatched word would produce, and
+    // which an operator would read as *the library is broken*.
+    const { answerQuery } = await desk();
+    fireEvent.focus(screen.getByTestId("library-search"));
+    await answerQuery("SearchLibrary", recordedAnswer("a search that matches nothing"));
+    expect(screen.getByTestId("library-matches").textContent).toContain("Nothing in the library");
+  });
+
+  it("shows a profile the show already carries as already carried", async () => {
+    // Hidden, an operator who had just added one would look for it elsewhere.
+    const { answerQuery } = await desk();
+    fireEvent.focus(screen.getByTestId("library-search"));
+    await answerQuery("SearchLibrary", {
+      t: "LibraryMatches",
+      matches: [
+        {
+          id: "generic.dimmer",
+          manufacturer: "Generic",
+          name: "Dimmer",
+          mode: "1ch",
+          footprint: 1,
+        },
+      ],
+      total: 4,
+    });
+    const already = screen.getByTestId("library-generic.dimmer");
+    expect(already.textContent).toContain("already in this show");
+    expect(already.hasAttribute("disabled")).toBe(true);
   });
 
   it("says plainly when a show has no profiles, and offers nothing to patch", async () => {

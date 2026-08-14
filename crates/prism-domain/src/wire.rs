@@ -102,6 +102,7 @@ round_trip! {
     command => crate::Command,
     delta => crate::Delta,
 
+    library_entry => crate::LibraryEntry,
     patch_conflict => crate::PatchConflict,
     patch_preview => crate::PatchPreview,
     query => crate::Query,

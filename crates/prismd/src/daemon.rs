@@ -201,7 +201,8 @@ impl Daemon {
             .show
             .clone()
             .unwrap_or_else(|| paths::default_show_path(&data_dir));
-        let (file, store) = open_show(&show_path)?;
+        let (mut file, store) = open_show(&show_path)?;
+        file.library = load_library(&data_dir, options.fixtures.as_deref());
         let layout =
             Arc::new(crate::engine::frame_layout(options.universes).map_err(StartError::Layout)?);
         let body = build_body(&layout, &file).map_err(StartError::Patch)?;
@@ -532,6 +533,60 @@ impl Daemon {
         // The lock goes last, as it was taken first: it is dropped with `self`,
         // which removes the discovery file and releases the guard.
     }
+}
+
+/// The profiles this desk can embed — S44.
+///
+/// Three sources, and the **order is the whole of the override rule**: the
+/// operator's own folder first, then the installed Open Fixture Library, then
+/// the four built-in generics. `FixtureLibrary` keeps the first profile it is
+/// given for a key, so a file in the data directory wins over one the installer
+/// wrote, and both win over a generic.
+///
+/// Nothing here fails. A library that is not installed is an ordinary state —
+/// the desk starts with four profiles and says so — because a lighting desk
+/// that would not start over a missing directory is a worse answer than one
+/// with four profiles in it.
+fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::FixtureLibrary {
+    let mut library = prism_core::FixtureLibrary::default();
+
+    let own = paths::fixtures_dir(data_dir);
+    if own.is_dir() {
+        library.read_fixture_dir(&own, "custom", "Custom");
+    }
+
+    let installed = configured
+        .map(Path::to_path_buf)
+        .or_else(paths::installed_library_dir);
+    match installed {
+        Some(root) => {
+            library.read_ofl_tree(&root);
+            let counts = library.conversion();
+            log::info(
+                "library",
+                &format!(
+                    "{} profiles from {} ({} fixtures, {} modes skipped, {} redirects)",
+                    library.len(),
+                    root.display(),
+                    counts.fixtures,
+                    counts.modes_with_inserts,
+                    counts.redirects,
+                ),
+            );
+        }
+        None => log::warn(
+            "library",
+            "no fixture library is installed - run tools/fetch-fixtures to install the              Open Fixture Library; the built-in generic profiles are all that is offered",
+        ),
+    }
+
+    // Last, so a library profile keyed `generic.dimmer` would win over the
+    // built-in one rather than the other way round.
+    for profile in prism_core::generic_profiles() {
+        library.insert_profile(profile);
+    }
+    log::info("library", &format!("{} profiles offered", library.len()));
+    library
 }
 
 /// Opens the show file, creating an empty show if there is not one there.

@@ -13,6 +13,23 @@ import type { JsonValue } from "../bindings";
 import { MirrorFault, getAt, isArray, isObject } from "./patch";
 
 /** The value at a pointer, or `null` if the pointer names nothing. */
+/**
+ * One key, as a JSON Pointer reference token — RFC 6901 §3.
+ *
+ * **A key is operator data and may contain a `/`.** A fixture type key out of
+ * the Open Fixture Library is `manufacturer/fixture/mode` (S44), so a pointer
+ * built by pasting one in would name three levels of a document that has one,
+ * and every reader of it would answer `null` — a fixture sheet with no
+ * attributes, an encoder bar with no banks, a patch row with no footprint.
+ *
+ * `prism_core::show::escape` is the same three lines at the other end, and
+ * `mirror/patch.ts` is what unescapes them on the way in. This is the third
+ * side of that and the one a *view* needs.
+ */
+export function pointerToken(key: string): string {
+  return key.replaceAll("~", "~0").replaceAll("/", "~1");
+}
+
 export function valueAt(document: JsonValue | null, pointer: string): JsonValue | null {
   if (document === null) {
     return null;

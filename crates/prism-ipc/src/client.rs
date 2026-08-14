@@ -281,7 +281,7 @@ mod tests {
             programmer: ProgrammerState::default(),
             outputs: Vec::new(),
             health: DaemonHealth::default(),
-            fixture_library: Vec::new(),
+            fixture_library: 0,
         }
     }
 

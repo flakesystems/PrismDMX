@@ -48,6 +48,20 @@ async function desk(page: Page, port: number): Promise<string> {
   return daemon.dataDir;
 }
 
+/**
+ * Searches the desk's library and embeds one profile out of it.
+ *
+ * The library is **downloaded at install time** (S44), so what is typed here is
+ * matched against whatever this machine installed — the four built-in generic
+ * profiles are the ones that are always there, whatever else is.
+ */
+async function embedProfile(page: Page, search: string, key: string): Promise<void> {
+  const box = page.getByTestId("library-search");
+  await box.click();
+  await box.fill(search);
+  await page.getByTestId(`library-${key}`).click();
+}
+
 /** Types a whole number into one of the patch form's fields. */
 async function typeNumber(page: Page, testId: string, value: string): Promise<void> {
   const field = page.getByTestId(testId);
@@ -66,9 +80,10 @@ test("a rig is built, addressed and edited entirely from the interface", async (
   await expect(page.getByTestId("patch-no-profiles")).toBeVisible();
   await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 0 profiles");
 
-  // Take one out of the desk's library. What comes back is a `ShowPatch`: the
-  // show owns its copy of that profile from now on.
-  await page.getByTestId("patch-library").selectOption("generic.rgbw.par");
+  // Take one out of the desk's library — which is **searched**, because an
+  // installed desk knows two thousand profiles (S44). What comes back is a
+  // `ShowPatch`: the show owns its copy of that profile from now on.
+  await embedProfile(page, "generic rgbw", "generic.rgbw.par");
   await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 1 profiles");
   await expect(page.getByTestId("patch-no-profiles")).toHaveCount(0);
 
@@ -157,7 +172,7 @@ test("the fixture sheet shows the programmer and the cable, and they can differ"
 
   // A rig, built through the patch window as above but without the detours.
   await page.getByTestId("open-window").selectOption("Patch");
-  await page.getByTestId("patch-library").selectOption("generic.rgbw.par");
+  await embedProfile(page, "generic rgbw", "generic.rgbw.par");
   await page.getByRole("button", { name: "Add fixture" }).click();
   await typeNumber(page, "draft-name", "Wash 1");
   await typeNumber(page, "draft-address", "1");
@@ -206,7 +221,7 @@ test("a sheet with more rows than it has room for scrolls inside its window", as
   // document, the canvas and both bars still measuring zero.
   const dataDir = await desk(page, PORT + 2);
   await page.getByTestId("open-window").selectOption("Patch");
-  await page.getByTestId("patch-library").selectOption("generic.dimmer");
+  await embedProfile(page, "generic dimmer", "generic.dimmer");
   for (let id = 1; id <= 40; id += 1) {
     await page.getByRole("button", { name: "Add fixture" }).click();
     await typeNumber(page, "draft-address", String(id));
@@ -279,3 +294,46 @@ async function litColumns(page: Page): Promise<number> {
     return found;
   });
 }
+
+test("a real fixture out of the Open Fixture Library is searched, embedded and patched", async ({
+  page,
+}) => {
+  // **The whole point of S44**, end to end: an operator types the name printed
+  // on the light and gets the manufacturer's channel order.
+  //
+  // The library is downloaded at install time, so this test says why it is
+  // skipping rather than failing on a machine that has not installed it — CI
+  // installs it, so it runs there on every commit.
+  const dataDir = await desk(page, PORT + 3);
+  await page.getByTestId("open-window").selectOption("Patch");
+
+  const box = page.getByTestId("library-search");
+  await box.click();
+  await box.fill("stage wash 7x10");
+  const match = page.getByTestId("library-stage-right/stage-wash-7x10w-led-moving-head/9ch");
+  if ((await match.count()) === 0) {
+    test.skip(true, "no fixture library is installed - run tools/fetch-fixtures");
+    return;
+  }
+  await match.click();
+  await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 1 profiles");
+
+  await page.getByRole("button", { name: "Add fixture" }).click();
+  await typeNumber(page, "draft-name", "Head 1");
+  await typeNumber(page, "draft-address", "1");
+  // Nine channels, which is what that mode is — and the daemon says so before
+  // the patch, out of a profile it read from a JSON file this repository does
+  // not contain.
+  await expect(page.getByTestId("patch-preview")).toContainText("9 channels");
+  await expect(page.getByTestId("patch-preview")).toContainText("ending at 9");
+  await page.getByTestId("draft-apply").click();
+
+  const row = page.getByTestId("patch-row-1");
+  await expect(row).toContainText("Head 1");
+  await expect(row).toContainText("Stage Wash");
+  await expect(row).toContainText("9");
+
+  await daemon?.kill();
+  daemon = null;
+  forget(dataDir);
+});

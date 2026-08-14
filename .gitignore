@@ -60,3 +60,11 @@ ui/playwright-report/
 ui/coverage/
 ui/blob-report/
 ui/.playwright/
+
+# The Open Fixture Library, which is **downloaded at install time and not
+# committed** (S44). `tools/fetch-fixtures` puts it here; `profiles/fixtures/SOURCE.md`
+# says how and which revision. Vendoring 8.5 MB of data that has an upstream and
+# a release cadence would make this repository the second copy of it, and the
+# one that is out of date.
+/profiles/fixtures/*
+!/profiles/fixtures/SOURCE.md

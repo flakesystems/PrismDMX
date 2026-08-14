@@ -44,7 +44,7 @@
 //! second channel discriminator in the framing, which §3 rules out.
 
 use prism_domain::{
-    Answer, Command, Delta, FixtureType, JsonValue, OutputHealth, OutputId, ProgrammerState, Query,
+    Answer, Command, Delta, JsonValue, OutputHealth, OutputId, ProgrammerState, Query,
 };
 use serde::{Deserialize, Serialize};
 
@@ -278,18 +278,17 @@ pub struct Snapshot {
     pub outputs: Vec<OutputSnapshot>,
     /// How the daemon itself is doing.
     pub health: DaemonHealth,
-    /// The profiles **this desk** can embed into a show — `prism_core::library`.
+    /// How many profiles **this desk** can embed into a show.
     ///
-    /// Not show content and not session state: it is a property of the build,
-    /// it never changes while the daemon runs, and a show that has embedded one
-    /// of these owns its copy from then on (S11). It is in the snapshot rather
-    /// than behind a query because a client needs it to *offer* the list at all,
-    /// and a list that never changes has nothing to ask about.
+    /// A number and not the profiles. S27 carried the whole list here, which was
+    /// right for the four built-in ones and impossible for the two thousand S44
+    /// brought: a snapshot has to fit in a frame (§3), and a menu of two thousand
+    /// entries is not a menu. So a client **searches** — `Query::SearchLibrary` —
+    /// and this is only what it needs to say *2 157 profiles* beside the box.
     ///
-    /// Added in S27, which is when a client first had a way to patch anything:
-    /// a brand-new show carries no profiles, so without this the patch window
-    /// of a fresh show would be a form with an empty menu.
-    pub fixture_library: Vec<FixtureType>,
+    /// Zero is an ordinary state: it means this desk found no library and is
+    /// offering the built-in profiles only, which the daemon logs on the way up.
+    pub fixture_library: u32,
 }
 
 /// One DMX output, as the status panel shows it.
@@ -378,21 +377,8 @@ mod tests {
                 missed_ticks: 2,
                 unsaved_changes: true,
             },
-            fixture_library: prism_core_library(),
+            fixture_library: 2157,
         }
-    }
-
-    /// A stand-in for `prism_core::fixture_library`, which this crate may not
-    /// depend on: `prism-ipc` is the wire and knows only `prism-domain`.
-    fn prism_core_library() -> Vec<prism_domain::FixtureType> {
-        vec![prism_domain::FixtureType {
-            id: "generic.dimmer".to_owned(),
-            manufacturer: "Generic".to_owned(),
-            name: "Dimmer".to_owned(),
-            mode: "1ch".to_owned(),
-            footprint: 1,
-            attributes: Vec::new(),
-        }]
     }
 
     #[test]
@@ -500,7 +486,7 @@ mod tests {
         assert_eq!(back.outputs.len(), 1);
         assert_eq!(back.outputs[0].name, "Open DMX");
         assert_eq!(back.outputs[0].health, OutputHealth::Degraded);
-        assert_eq!(back.fixture_library, prism_core_library());
+        assert_eq!(back.fixture_library, 2157);
         assert!((back.health.tick_hz - 44.0).abs() < f64::EPSILON);
         assert_eq!(back.health.missed_ticks, 2);
         assert!(back.health.unsaved_changes);

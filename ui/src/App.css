@@ -331,10 +331,64 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The library search (S44). The desk knows two thousand profiles, so what is
+ * offered is what was asked for: a box, and the daemon's answer under it.
+ */
 .patch-embed {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.3rem;
+  color: var(--ink-dim);
+}
+
+.patch-embed label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.patch-embed input {
+  width: 14rem;
+  font: inherit;
+}
+
+/*
+ * Over the table rather than pushing it down: a list that moved the rows every
+ * time a letter was typed would be a list nobody could aim at.
+ */
+.library-matches {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1;
+  max-height: 14rem;
+  overflow-y: auto;
+  margin: 0.2rem 0 0;
+  padding: 0.2rem;
+  list-style: none;
+  min-width: 20rem;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+}
+
+.library-matches li {
+  padding: 0.1rem 0.2rem;
+}
+
+.library-matches button {
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+}
+
+.library-matches button:disabled {
+  color: var(--ink-dim);
+  cursor: default;
+}
+
+.library-empty {
   color: var(--ink-dim);
 }
 

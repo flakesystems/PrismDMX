@@ -39,14 +39,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { FixtureType, JsonValue, PatchPreview } from "../bindings";
+import type { JsonValue, LibraryEntry, PatchPreview } from "../bindings";
 import { useAsk, useDesk, useSend } from "../store/hooks";
 import type { DeskState } from "../store/desk";
 import type { PatchRow, ProfileRow } from "./patch";
 import { embeddedProfiles, nextFreeFixtureId, patchRows, profileLabel } from "./patch";
 import { PreviewRequester, conflictedFixtures, conflictsOf, isAcceptable, previewText } from "./preview";
 
-const selectLibrary = (state: DeskState): readonly FixtureType[] | null => state.fixtureLibrary;
+const selectLibrarySize = (state: DeskState): number | null => state.fixtureLibrary;
+
+/** How many library matches to ask for. A list an operator reads, not a dump. */
+const SEARCH_LIMIT = 25;
 
 /** The row being typed into. Local, and dropped when it is submitted. */
 interface Draft {
@@ -68,7 +71,7 @@ interface Draft {
 export function PatchWindow({ show }: { readonly show: JsonValue }) {
   const send = useSend();
   const ask = useAsk();
-  const library = useDesk(selectLibrary);
+  const librarySize = useDesk(selectLibrarySize);
   const rows = useMemo(() => patchRows(show), [show]);
   const profiles = useMemo(() => embeddedProfiles(show), [show]);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -183,7 +186,8 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
       <PatchToolbar
         rows={rows}
         profiles={profiles}
-        library={library}
+        librarySize={librarySize}
+        embedded={new Set(profiles.map((profile) => profile.id))}
         onAdd={add}
         onEmbed={embed}
       />
@@ -211,22 +215,29 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
   );
 }
 
-/** What there is, and the two ways to add to it. */
+/**
+ * What there is, and the two ways to add to it.
+ *
+ * The profile half is a **search** rather than a menu — S44. The desk's library
+ * is the Open Fixture Library, some two thousand profiles, which is neither a
+ * frame nor a list a person reads: so what is typed goes to the daemon as a
+ * `Query::SearchLibrary` and what comes back is at most a screenful, best first.
+ */
 function PatchToolbar({
   rows,
   profiles,
-  library,
+  librarySize,
+  embedded,
   onAdd,
   onEmbed,
 }: {
   readonly rows: readonly PatchRow[];
   readonly profiles: readonly ProfileRow[];
-  readonly library: readonly FixtureType[] | null;
+  readonly librarySize: number | null;
+  readonly embedded: ReadonlySet<string>;
   readonly onAdd: () => void;
   readonly onEmbed: (typeId: string) => void;
 }) {
-  const embedded = new Set(profiles.map((profile) => profile.id));
-  const offered = (library ?? []).filter((profile) => !embedded.has(profile.id));
   return (
     <div className="patch-bar">
       <span className="patch-count" data-testid="patch-count">
@@ -235,34 +246,92 @@ function PatchToolbar({
       <button type="button" onClick={onAdd} disabled={profiles.length === 0}>
         Add fixture
       </button>
-      <label className="patch-embed">
+      <LibrarySearch librarySize={librarySize} embedded={embedded} onEmbed={onEmbed} />
+    </div>
+  );
+}
+
+/**
+ * The desk's library, searched.
+ *
+ * What is local is the text in the box; **what matches is the daemon's answer**,
+ * and it is asked for again on every keystroke. A profile already in the show is
+ * shown as such rather than hidden, because an operator who cannot find what
+ * they just added would look for it somewhere else.
+ */
+function LibrarySearch({
+  librarySize,
+  embedded,
+  onEmbed,
+}: {
+  readonly librarySize: number | null;
+  readonly embedded: ReadonlySet<string>;
+  readonly onEmbed: (typeId: string) => void;
+}) {
+  const ask = useAsk();
+  const [text, setText] = useState("");
+  const [matches, setMatches] = useState<readonly LibraryEntry[]>([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    let current = true;
+    void ask({ t: "SearchLibrary", text, limit: SEARCH_LIMIT }).then((answer) => {
+      if (current && answer !== null && answer.t === "LibraryMatches") {
+        setMatches(answer.matches);
+      }
+    });
+    return () => {
+      // An answer to a search that has been typed over is dropped, exactly as
+      // a preview's is: drawn, it would be a list of the *previous* word.
+      current = false;
+    };
+  }, [ask, text, open]);
+
+  return (
+    <div className="patch-embed">
+      <label>
         Add profile
-        <select
-          data-testid="patch-library"
-          value=""
-          disabled={offered.length === 0}
-          onChange={(event) => {
-            if (event.target.value !== "") {
-              onEmbed(event.target.value);
-            }
+        <input
+          data-testid="library-search"
+          value={text}
+          placeholder={librarySize === null ? "" : `search ${String(librarySize)} profiles`}
+          onFocus={() => {
+            setOpen(true);
           }}
-        >
-          <option value="">
-            {offered.length === 0 ? "all of them are in this show" : "choose…"}
-          </option>
-          {offered.map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              {profileLabel({
-                id: profile.id,
-                manufacturer: profile.manufacturer,
-                name: profile.name,
-                mode: profile.mode,
-                footprint: profile.footprint,
-              })}
-            </option>
-          ))}
-        </select>
+          onChange={(event) => {
+            setOpen(true);
+            setText(event.target.value);
+          }}
+        />
       </label>
+      {open ? (
+        <ul className="library-matches" data-testid="library-matches">
+          {matches.length === 0 ? (
+            <li className="library-empty">Nothing in the library matches that.</li>
+          ) : null}
+          {matches.map((entry) => (
+            <li key={entry.id}>
+              <button
+                type="button"
+                className="linkish"
+                data-testid={`library-${entry.id}`}
+                disabled={embedded.has(entry.id)}
+                onClick={() => {
+                  onEmbed(entry.id);
+                  setOpen(false);
+                  setText("");
+                }}
+              >
+                {profileLabel(entry)}
+                {embedded.has(entry.id) ? " — already in this show" : ""}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

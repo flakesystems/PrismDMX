@@ -121,7 +121,7 @@ fn the_world() -> Snapshot {
             missed_ticks: 4,
             unsaved_changes: true,
         },
-        fixture_library: Vec::new(),
+        fixture_library: 0,
     }
 }
 

@@ -227,7 +227,7 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     programmer: emptyProgrammer(),
     outputs: [{ id: 1, name: "Mock", health: "Ok" }],
     health: health(),
-    fixtureLibrary: fixtureLibrary(),
+    fixtureLibrary: fixtureLibrary().length,
     ...overrides,
   };
 }

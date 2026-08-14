@@ -108,7 +108,7 @@ fn any_snapshot() -> impl Strategy<Value = Snapshot> {
             programmer,
             outputs,
             health,
-            fixture_library: Vec::new(),
+            fixture_library: 0,
         })
 }
 

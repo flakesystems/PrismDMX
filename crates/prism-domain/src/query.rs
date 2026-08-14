@@ -105,6 +105,32 @@ pub struct PatchPreview {
     pub conflicts: Vec<PatchConflict>,
 }
 
+/// One profile in the desk's library, as a menu shows it.
+///
+/// Deliberately **not** a [`crate::FixtureType`]: the library is some two
+/// thousand profiles (S44), and a client that was sent whole profiles could not
+/// hold them and could not receive them either — `docs/IPC_PROTOCOL.md` §3 caps
+/// a frame at 1 MiB. So a search answers with these, and
+/// `Command::EmbedFixtureType` names the one that was chosen by its key. The
+/// daemon is the only thing that ever holds a profile.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryEntry {
+    /// The key `EmbedFixtureType` names it by — `manufacturer/fixture/mode` for
+    /// a profile out of the Open Fixture Library.
+    pub id: String,
+    /// Who makes it.
+    pub manufacturer: String,
+    /// What it is called.
+    pub name: String,
+    /// Which mode of it, which is what makes two entries of one fixture
+    /// different things to patch.
+    pub mode: String,
+    /// How many channels one of them occupies.
+    pub footprint: u16,
+}
+
 /// Something a client asks that changes nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -129,6 +155,20 @@ pub enum Query {
         /// The start address it would take.
         address: u16,
     },
+    /// Profiles in the desk's library matching what has been typed.
+    ///
+    /// Asked rather than mirrored because the library is **large** (S44): some
+    /// two thousand profiles, which is neither a frame nor a menu. An empty
+    /// `text` answers with the first `limit` entries, so a client that has not
+    /// typed anything has something to show.
+    SearchLibrary {
+        /// What the operator typed. Words, in any order, matched against the
+        /// manufacturer, the name, the mode and the key.
+        text: String,
+        /// How many to answer with. Clamped by the daemon, so a client cannot
+        /// ask for an answer that would not fit in a frame.
+        limit: u32,
+    },
 }
 
 /// The daemon's answer to a [`Query`].
@@ -149,6 +189,18 @@ pub enum Answer {
     PatchPreview {
         /// The whole of it.
         preview: PatchPreview,
+    },
+    /// The profiles that matched, best first.
+    LibraryMatches {
+        /// At most the number asked for.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        matches: Vec<LibraryEntry>,
+        /// How many profiles the library holds in total, so a client can say
+        /// *50 of 2 084* rather than implying the list is all there is.
+        total: u32,
     },
 }
 

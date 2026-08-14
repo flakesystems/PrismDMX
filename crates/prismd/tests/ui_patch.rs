@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use prism_core::{Show, ShowFile, ShowMirror, ShowStore};
-use prism_domain::{Answer, Command, FixtureId, FixtureType, JsonValue, Query, UniverseId};
+use prism_domain::{Answer, Command, FixtureId, JsonValue, LibraryEntry, Query, UniverseId};
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
 use prismd::cli::{Options, OutputSpec};
 use prismd::daemon::Daemon;
@@ -74,10 +74,8 @@ fn rig_path() -> PathBuf {
 fn patch_show() -> ShowFile {
     let mut show = Show::new();
     for type_id in ["generic.dimmer", "generic.rgbw.par"] {
-        show.embed_fixture_type(
-            prism_core::library_type(type_id).expect("the desk carries this profile"),
-        )
-        .expect("a library profile is one a show accepts");
+        show.embed_fixture_type(generic(type_id))
+            .expect("a library profile is one a show accepts");
     }
     for (id, type_id, universe, address) in [
         (1_u32, "generic.dimmer", 1_u32, 1_u16),
@@ -101,6 +99,60 @@ fn patch_show() -> ShowFile {
         show,
         ..ShowFile::new()
     }
+}
+
+/// One of the desk's four built-in profiles, by key.
+fn generic(type_id: &str) -> prism_domain::FixtureType {
+    prism_core::generic_profiles()
+        .into_iter()
+        .find(|profile| profile.id == type_id)
+        .unwrap_or_else(|| panic!("the desk carries no {type_id}"))
+}
+
+/// **The library this recording is made against**, written into a directory of
+/// its own — S44.
+///
+/// Pinned rather than taken from the machine, and that is the whole point: the
+/// Open Fixture Library is *downloaded at install time*
+/// (`profiles/fixtures/SOURCE.md`), so a recording made against whatever the
+/// developer happened to have installed would be a recording that fails on a
+/// fresh clone and changes whenever upstream does. Two fixtures in OFL's own
+/// format is enough to record what a search answers.
+fn write_library(root: &Path) {
+    std::fs::create_dir_all(root.join("robe")).expect("a directory");
+    std::fs::write(
+        root.join("manufacturers.json"),
+        r#"{ "robe": { "name": "Robe" } }"#,
+    )
+    .expect("it writes");
+    std::fs::write(
+        root.join("robe/wash-7q5.json"),
+        r#"{
+          "name": "Wash 7Q5",
+          "availableChannels": {
+            "Pan": { "capability": { "type": "Pan", "angleStart": "0deg", "angleEnd": "540deg" } },
+            "Tilt": { "capability": { "type": "Tilt", "angleStart": "0deg", "angleEnd": "180deg" } },
+            "Dimmer": { "capability": { "type": "Intensity" } },
+            "Red": { "capability": { "type": "ColorIntensity", "color": "Red" } }
+          },
+          "modes": [
+            { "shortName": "4ch", "channels": ["Pan", "Tilt", "Dimmer", "Red"] },
+            { "shortName": "2ch", "channels": ["Dimmer", "Red"] }
+          ]
+        }"#,
+    )
+    .expect("it writes");
+    std::fs::write(
+        root.join("robe/ledbeam.json"),
+        r#"{
+          "name": "LEDBeam 150",
+          "availableChannels": {
+            "Dimmer": { "capability": { "type": "Intensity" } }
+          },
+          "modes": [{ "shortName": "1ch", "channels": ["Dimmer"] }]
+        }"#,
+    )
+    .expect("it writes");
 }
 
 /// Writes the rig into a `.prism` file for the daemon and the browser to open.
@@ -173,11 +225,15 @@ struct Recording {
     note: String,
     /// The protocol version these payloads belong to.
     protocol_version: u32,
-    /// The profiles **this desk** offers, as the snapshot carries them.
+    /// How many profiles this desk offers, as the snapshot carries it.
     ///
-    /// Recorded so the browser's menu is compared with `prism_core::library`
-    /// rather than merely derived from the same idea of it.
-    fixture_library: Vec<FixtureType>,
+    /// A number and not the profiles — S44. The library is two thousand entries
+    /// on an installed desk and cannot travel in a snapshot; what a client is
+    /// sent is this count and the answers to its searches.
+    library_size: u32,
+    /// Every profile the pinned library holds, so the browser can be held to
+    /// what a search *should* have found as well as to what it did.
+    library: Vec<LibraryEntry>,
     /// The snapshot the script starts from, base64.
     initial_snapshot: String,
     /// The script.
@@ -262,6 +318,43 @@ fn script() -> Vec<Scripted> {
                 id: FixtureId::new(7),
                 type_id: "generic.movinghead".to_owned(),
                 universe: UniverseId::new(1),
+                address: 100,
+            },
+        ),
+        Scripted::Ask(
+            "search the desk's library, which is where a real fixture comes from",
+            Query::SearchLibrary {
+                text: "robe wash".to_owned(),
+                limit: 10,
+            },
+        ),
+        Scripted::Ask(
+            "a search that matches nothing answers with nothing, not with everything",
+            Query::SearchLibrary {
+                text: "no such light".to_owned(),
+                limit: 10,
+            },
+        ),
+        Scripted::Ask(
+            "and an empty search is *show me something*: the whole library, clamped",
+            Query::SearchLibrary {
+                text: String::new(),
+                limit: 3,
+            },
+        ),
+        Scripted::Do(
+            "embed a real fixture, by the key the search answered with",
+            Command::EmbedFixtureType {
+                type_id: "robe/wash-7q5/4ch".to_owned(),
+            },
+        ),
+        Scripted::Do(
+            "patch it: the channels are the manufacturer's, not this desk's",
+            Command::PatchFixture {
+                id: FixtureId::new(11),
+                name: "Wash 11".to_owned(),
+                type_id: "robe/wash-7q5/4ch".to_owned(),
+                universe: UniverseId::new(2),
                 address: 100,
             },
         ),
@@ -390,10 +483,13 @@ async fn record_the_patch_script_for_the_interface() {
     let dir = tempfile::tempdir().unwrap();
     let show = dir.path().join("patch.prism");
     std::fs::copy(&rig, &show).unwrap();
+    let library = dir.path().join("library");
+    write_library(&library);
 
     let mut daemon = Daemon::start(&Options {
         data_dir: Some(dir.path().to_path_buf()),
         show: Some(show),
+        fixtures: Some(library),
         universes: 2,
         outputs: vec![OutputSpec::Mock],
         local: true,
@@ -415,7 +511,7 @@ async fn record_the_patch_script_for_the_interface() {
     });
 
     let (mut wire, initial_snapshot) = connect(&address).await;
-    let library = snapshot_of_payload(&initial_snapshot).fixture_library;
+    let library_size = snapshot_of_payload(&initial_snapshot).fixture_library;
     let mut steps = Vec::new();
     for (index, scripted) in script().into_iter().enumerate() {
         let seq = u64::try_from(index).unwrap_or(0) + 1;
@@ -475,7 +571,8 @@ async fn record_the_patch_script_for_the_interface() {
                Regenerate with: cargo test -p prismd --test ui_patch -- --ignored"
             .to_owned(),
         protocol_version: prism_ipc::PROTOCOL_VERSION,
-        fixture_library: library,
+        library_size,
+        library: pinned_library(),
         initial_snapshot: common::encode_base64(&initial_snapshot),
         steps,
         final_snapshot: common::encode_base64(&final_snapshot),
@@ -520,7 +617,7 @@ fn rows_of(show: &JsonValue) -> Vec<RecordedRow> {
                 id: key.parse().expect("a fixture is keyed by its number"),
                 name: string_at(value, "name"),
                 type_name: mirror
-                    .get(&format!("/fixtureTypes/{type_id}/name"))
+                    .get(&format!("/fixtureTypes/{}/name", escape(&type_id)))
                     .ok()
                     .and_then(|found| match found {
                         JsonValue::String(text) => Some(text.clone()),
@@ -530,7 +627,7 @@ fn rows_of(show: &JsonValue) -> Vec<RecordedRow> {
                 universe: u32::try_from(int_at(value, "universe")).unwrap_or(0),
                 address: u16::try_from(int_at(value, "address")).unwrap_or(0),
                 footprint: mirror
-                    .get(&format!("/fixtureTypes/{type_id}/footprint"))
+                    .get(&format!("/fixtureTypes/{}/footprint", escape(&type_id)))
                     .ok()
                     .and_then(|found| match found {
                         JsonValue::Int(number) => u16::try_from(*number).ok(),
@@ -543,6 +640,15 @@ fn rows_of(show: &JsonValue) -> Vec<RecordedRow> {
         .collect();
     rows.sort_by_key(|row| row.id);
     rows
+}
+
+/// One key as a JSON Pointer reference token — RFC 6901 §3.
+///
+/// A profile key out of the Open Fixture Library is `manufacturer/fixture/mode`,
+/// so a pointer built by pasting one in names three levels of a document that
+/// has one. `prism_core::show::escape` is the same three lines at the other end.
+fn escape(token: &str) -> String {
+    token.replace('~', "~0").replace('/', "~1")
 }
 
 /// The embedded profiles, out of the show document.
@@ -614,6 +720,23 @@ fn answer_of(encoded: &str) -> Answer {
 /* The checks that run on every commit                                        */
 /* -------------------------------------------------------------------------- */
 
+/// The library the recording was made against, as this build reads it.
+///
+/// Built from the same two files [`write_library`] writes, plus the four
+/// built-in generics the daemon adds last — so the guard below compares the
+/// recorded answers with what *this* build's reader and search make of the same
+/// input, rather than with a list written out by hand twice.
+fn pinned_library() -> Vec<LibraryEntry> {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    write_library(dir.path());
+    let mut library = prism_core::FixtureLibrary::default();
+    library.read_ofl_tree(dir.path());
+    for profile in prism_core::generic_profiles() {
+        library.insert_profile(profile);
+    }
+    library.entries().to_vec()
+}
+
 /// Reads the committed recording.
 fn recording() -> Recording {
     let path = recording_path();
@@ -638,9 +761,14 @@ fn the_recorded_rows_are_what_the_show_document_says() {
     );
     assert_eq!(recording.steps.len(), script().len());
     assert_eq!(
-        recording.fixture_library,
-        prism_core::fixture_library(),
-        "the recorded library is not this desk's"
+        recording.library,
+        pinned_library(),
+        "the recorded library is not what this build reads from the same files"
+    );
+    assert_eq!(
+        recording.library_size as usize,
+        recording.library.len(),
+        "the snapshot's count and the library disagree"
     );
 
     let start = snapshot_of(&recording.initial_snapshot);
@@ -748,25 +876,42 @@ fn a_question_changes_nothing() {
 #[test]
 fn a_preview_says_what_the_patch_that_follows_it_does() {
     let recording = recording();
-    let preview = |index: usize| match answer_of(
-        recording.steps[index]
-            .answer
-            .as_deref()
-            .unwrap_or_else(|| panic!("step {index} has no answer")),
-    ) {
-        Answer::PatchPreview { preview } => preview,
-        other => panic!("step {index} is not a preview: {other:?}"),
+    // Found by what the step *says it is for* rather than by a number: the
+    // script grows, and an index written down here would silently start
+    // pointing at another step.
+    let preview = |about: &str| {
+        let step = recording
+            .steps
+            .iter()
+            .find(|step| step.what.contains(about))
+            .unwrap_or_else(|| panic!("no step is about {about:?}"));
+        match answer_of(
+            step.answer
+                .as_deref()
+                .unwrap_or_else(|| panic!("the step about {about:?} has no answer")),
+        ) {
+            Answer::PatchPreview { preview } => preview,
+            other => panic!("the step about {about:?} is not a preview: {other:?}"),
+        }
+    };
+    let rows_after = |about: &str| {
+        &recording
+            .steps
+            .iter()
+            .find(|step| step.what.contains(about))
+            .unwrap_or_else(|| panic!("no step is about {about:?}"))
+            .rows
     };
 
     // A clear address: accepted, no overlap, and the end channel the daemon
     // worked out is `address + footprint - 1`.
-    let clear = preview(1);
+    let clear = preview("would a PAR fit at address 30");
     assert!(clear.accepted);
     assert_eq!(clear.footprint, 4);
     assert_eq!(clear.last_address, Some(33));
     assert!(clear.conflicts.is_empty());
     // The patch that followed put fixture 6 exactly there.
-    let after = &recording.steps[2].rows;
+    let after = rows_after("patch it there");
     let six = after
         .iter()
         .find(|row| row.id == 6)
@@ -775,7 +920,7 @@ fn a_preview_says_what_the_patch_that_follows_it_does() {
 
     // An overlapping address: **accepted all the same**, and the overlap is
     // named before it happens.
-    let clashing = preview(3);
+    let clashing = preview("would a second PAR at 32 clash");
     assert!(
         clashing.accepted,
         "cloning a fixture onto another is legal and the preview has to say so"
@@ -788,18 +933,20 @@ fn a_preview_says_what_the_patch_that_follows_it_does() {
     );
     assert_eq!((conflict.from, conflict.to), (32, 33));
     // And the show the daemon ended up with reports the same pair.
-    let Answer::PatchConflicts { conflicts } = answer_of(
-        recording.steps[5]
-            .answer
-            .as_deref()
-            .expect("step 5 is a conflicts query"),
-    ) else {
-        panic!("step 5 is not a conflicts answer");
+    let overlap_step = recording
+        .steps
+        .iter()
+        .find(|step| step.what.contains("now the show has an overlap"))
+        .expect("the script asks");
+    let Answer::PatchConflicts { conflicts } =
+        answer_of(overlap_step.answer.as_deref().expect("it was answered"))
+    else {
+        panic!("that step is not a conflicts answer");
     };
     assert_eq!(conflicts, vec![conflict]);
 
     // A refusal, said before the command was ever sent.
-    let past_the_end = preview(6);
+    let past_the_end = preview("would it fit at 510");
     assert!(!past_the_end.accepted);
     assert_eq!(past_the_end.last_address, None);
     assert!(past_the_end.conflicts.is_empty());
@@ -814,13 +961,90 @@ fn a_preview_says_what_the_patch_that_follows_it_does() {
 
     // A profile the show has not got — and the same question again after
     // `EmbedFixtureType`, which is the pair that makes the library worth having.
-    let missing = preview(7);
+    let missing = preview("a profile the show has not got");
     assert!(!missing.accepted);
     assert_eq!(missing.footprint, 0);
-    let embedded = preview(9);
+    let embedded = preview("the same question again");
     assert!(embedded.accepted);
     assert_eq!(embedded.footprint, 11);
     assert_eq!(embedded.last_address, Some(110));
+}
+
+/// **A search is answered out of the desk's library, and the answer is small.**
+///
+/// The reason the library left the snapshot (S44): two thousand profiles do not
+/// fit in a frame. What is asserted here is that the recorded answers are what
+/// *this build's* search makes of the same pinned library — so a browser held to
+/// them is held to the daemon, and a search that changed shape fails here first.
+#[test]
+fn a_search_is_answered_out_of_the_library() {
+    let recording = recording();
+    let library = pinned_library();
+    let searched = |about: &str| -> (Vec<LibraryEntry>, u32) {
+        let step = recording
+            .steps
+            .iter()
+            .find(|step| step.what.contains(about))
+            .unwrap_or_else(|| panic!("no step is about {about:?}"));
+        match answer_of(step.answer.as_deref().expect("it was answered")) {
+            Answer::LibraryMatches { matches, total } => (matches, total),
+            other => panic!("the step about {about:?} is not a search: {other:?}"),
+        }
+    };
+
+    // A search that finds something, and finds the *right* something: both
+    // modes of the Robe wash, smallest first, and nothing else.
+    let (found, total) = searched("search the desk's library");
+    assert_eq!(total as usize, library.len());
+    assert_eq!(
+        found
+            .iter()
+            .map(|entry| entry.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["robe/wash-7q5/2ch", "robe/wash-7q5/4ch"]
+    );
+    assert_eq!(found[0].manufacturer, "Robe");
+    assert_eq!(found[0].name, "Wash 7Q5");
+
+    // A search that finds nothing answers with nothing — **not** with
+    // everything, which is what a search that ignored an unmatched word would
+    // do and which an operator would read as *the library is broken*.
+    let (none, _) = searched("a search that matches nothing");
+    assert!(none.is_empty(), "{none:?}");
+
+    // And an empty search is *show me something*, clamped to what was asked for.
+    let (some, _) = searched("an empty search is");
+    assert_eq!(some.len(), 3);
+    assert!(some.len() < library.len(), "the limit was not applied");
+
+    // The key that was embedded afterwards is one the search answered with,
+    // which is the whole loop: search, choose, embed, patch.
+    let embedded = recording
+        .steps
+        .iter()
+        .find(|step| step.what.contains("embed a real fixture"))
+        .expect("the script embeds one");
+    assert!(
+        embedded
+            .profiles
+            .iter()
+            .any(|profile| profile.id == "robe/wash-7q5/4ch"),
+        "the show did not gain the profile that was searched for"
+    );
+    // And patching it put the manufacturer's channel count in the sheet.
+    let patched = recording
+        .steps
+        .iter()
+        .find(|step| step.what.contains("the channels are the manufacturer's"))
+        .expect("the script patches it");
+    let row = patched
+        .rows
+        .iter()
+        .find(|row| row.id == 11)
+        .expect("fixture 11 is patched");
+    assert_eq!(row.type_id, "robe/wash-7q5/4ch");
+    assert_eq!(row.footprint, 4);
+    assert_eq!(row.type_name, "Wash 7Q5");
 }
 
 /// The script is a rig being built, not a list that happens to apply.
@@ -916,6 +1140,13 @@ fn the_recording_is_of_a_rig_being_built() {
     );
 }
 
+/// One built-in profile by key, or `None`.
+fn generic_profiles_by_key(type_id: &str) -> Option<prism_domain::FixtureType> {
+    prism_core::generic_profiles()
+        .into_iter()
+        .find(|profile| profile.id == type_id)
+}
+
 /// The rig the browser opens is the rig this file writes.
 ///
 /// Checked on the committed file rather than on the function that wrote it, so
@@ -940,7 +1171,7 @@ fn the_committed_rig_is_the_one_this_file_describes() {
     // recorded rig cannot describe two different dimmers.
     for fixture_type in file.show.fixture_types() {
         assert_eq!(
-            prism_core::library_type(&fixture_type.id).as_ref(),
+            generic_profiles_by_key(&fixture_type.id).as_ref(),
             Some(fixture_type),
             "{} is not the desk's own profile",
             fixture_type.id

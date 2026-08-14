@@ -45,6 +45,27 @@ fn the_two_groups_together_are_the_whole_protocol() {
     }
 }
 
+/// `EmbedFixtureType` is the one show command the show model cannot finish on
+/// its own, and it is refused one layer up.
+///
+/// The show has no library — it has no disk either, which is why `SaveShow` is
+/// the same shape. What it can say is *a profile is wanted*, and
+/// `ShowFile::apply` is where the key is looked up and where a key that names
+/// nothing is refused. `src/file.rs` asserts that half, on the file's bytes.
+#[test]
+fn a_profile_key_is_not_something_the_show_model_can_refuse() {
+    let mut show = populated_show();
+    let before = snapshot(&show);
+    let applied = show
+        .apply(&Command::EmbedFixtureType {
+            type_id: "nothing.at.all".to_owned(),
+        })
+        .expect("the show cannot tell: it has no library");
+    assert_eq!(applied.effects, vec![Effect::EmbedProfile]);
+    assert!(applied.deltas.is_empty());
+    assert_eq!(snapshot(&show), before, "and it wrote nothing either");
+}
+
 #[test]
 fn every_show_command_is_decided_rather_than_ignored() {
     for command in show_commands() {
@@ -187,12 +208,6 @@ fn every_rejection_leaves_the_show_byte_identical() {
                 to: FixtureId::new(100),
             },
             ShowError::UnknownFixture(FixtureId::new(99)),
-        ),
-        (
-            Command::EmbedFixtureType {
-                type_id: "nothing.at.all".to_owned(),
-            },
-            ShowError::UnknownLibraryType("nothing.at.all".to_owned()),
         ),
     ];
 

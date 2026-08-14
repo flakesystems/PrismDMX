@@ -79,6 +79,13 @@ pub struct Options {
     pub data_dir: Option<PathBuf>,
     /// The show to open. `None` is the default show in the data directory.
     pub show: Option<PathBuf>,
+    /// Where the Open Fixture Library was installed, or `None` to look beside
+    /// the executable and up the tree from it (S44).
+    ///
+    /// A flag because the library is **downloaded at install time and not
+    /// committed** (`profiles/fixtures/SOURCE.md`), so an installer that put it
+    /// somewhere else has to be able to say where.
+    pub fixtures: Option<PathBuf>,
     /// Universes the frame layout carries.
     pub universes: u32,
     /// The outputs to open. Empty is a legitimate configuration: a daemon with
@@ -122,6 +129,7 @@ impl Default for Options {
         Self {
             data_dir: None,
             show: None,
+            fixtures: None,
             universes: DEFAULT_UNIVERSES,
             outputs: Vec::new(),
             local: true,
@@ -176,6 +184,8 @@ Options:
                         (default: the platform's user data directory, or
                         {} if it is set)
   --show <PATH>         the .prism file to open, created if it is not there
+  --fixtures <DIR>      the installed fixture library; found beside the
+                        executable when this is not given
                         (default: default.prism in the data directory)
   --universes <N>       universes the frame layout carries, 1..={DEFAULT_UNIVERSES}
                         (default: {DEFAULT_UNIVERSES})
@@ -245,6 +255,7 @@ where
             "-V" | "--version" => return Ok(Invocation::Version),
             "--data-dir" => options.data_dir = Some(PathBuf::from(value()?)),
             "--show" => options.show = Some(PathBuf::from(value()?)),
+            "--fixtures" => options.fixtures = Some(PathBuf::from(value()?)),
             "--universes" => {
                 let text = value()?;
                 let count: u32 = text

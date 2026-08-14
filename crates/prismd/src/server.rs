@@ -114,11 +114,11 @@ impl Desk {
             programmer: core.file.programmer.state().clone(),
             outputs: self.output_snapshots(),
             health: self.health(&core),
-            // What this **desk** can embed, which is a property of the build
-            // rather than of the show (S27). A client needs it to offer the
-            // list at all: a brand-new show carries no profiles, and a patch
-            // window with an empty menu is a window that can patch nothing.
-            fixture_library: prism_core::fixture_library(),
+            // How many profiles this desk can embed — a number, not the
+            // profiles. S44 made the library two thousand of them, so a client
+            // asks (`Query::SearchLibrary`) rather than being sent a menu that
+            // would not fit in a frame.
+            fixture_library: u32::try_from(core.file.library.len()).unwrap_or(u32::MAX),
         }
     }
 
@@ -184,6 +184,17 @@ impl Desk {
                     .file
                     .show
                     .preview_patch(*id, type_id, *universe, *address),
+            },
+            // The library never changes while the daemon runs, so this is a
+            // search over a table rather than anything that touches the show —
+            // and the limit is clamped here, because a client that asked for
+            // two thousand would otherwise get an answer no frame can carry.
+            Query::SearchLibrary { text, limit } => Answer::LibraryMatches {
+                matches: core
+                    .file
+                    .library
+                    .search(text, usize::try_from(*limit).unwrap_or(usize::MAX)),
+                total: u32::try_from(core.file.library.len()).unwrap_or(u32::MAX),
             },
         }
     }
@@ -472,17 +483,49 @@ mod tests {
         driver.stop();
     }
 
-    /// The desk's own profiles ride in the snapshot, because a client needs
-    /// them to offer the list at all — a brand-new show carries none.
+    /// **The snapshot carries how many profiles there are, and not the
+    /// profiles** — S44.
+    ///
+    /// A client needs the number to say *2 157 profiles* beside a search box;
+    /// it must not be sent the library, because two thousand of them do not fit
+    /// in a frame. The search is a question, and it is asked.
     #[test]
-    fn the_snapshot_carries_the_profiles_this_desk_can_embed() {
+    fn the_snapshot_counts_the_profiles_and_the_search_answers_them() {
         let dir = tempfile::tempdir().unwrap();
         let (desk, driver) = desk(dir.path());
+        // `show_file` builds a `ShowFile`, whose library defaults to the four
+        // generic profiles — this daemon never read a directory.
+        let counted = desk.snapshot().fixture_library;
+        assert_eq!(counted as usize, prism_core::generic_profiles().len());
+
+        let Answer::LibraryMatches { matches, total } = desk.query(&Query::SearchLibrary {
+            text: "par".to_owned(),
+            limit: 10,
+        }) else {
+            panic!("that is not a library answer");
+        };
         assert_eq!(
-            desk.snapshot().fixture_library,
-            prism_core::fixture_library()
+            total, counted,
+            "the total is the whole library, not the page"
         );
-        assert!(!desk.snapshot().fixture_library.is_empty());
+        assert!(!matches.is_empty(), "the generic PARs are in there");
+        assert!(
+            matches
+                .iter()
+                .all(|entry| entry.name.to_lowercase().contains("par")),
+            "{matches:?}"
+        );
+        // And a limit a client asked for is clamped rather than obeyed.
+        let Answer::LibraryMatches { matches, .. } = desk.query(&Query::SearchLibrary {
+            text: String::new(),
+            limit: u32::MAX,
+        }) else {
+            panic!("that is not a library answer");
+        };
+        assert_eq!(matches.len(), counted as usize);
+
+        // A question changes nothing, this one included.
+        assert!(!desk.snapshot().health.unsaved_changes);
         driver.stop();
     }
 

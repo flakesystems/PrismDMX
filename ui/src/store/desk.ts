@@ -30,7 +30,7 @@
  * them from until the next snapshot arrives, which is checkable and is checked.
  */
 
-import type { Answer, Command, Delta, FixtureType, NoticeLevel, ProgrammerState, Query } from "../bindings";
+import type { Answer, Command, Delta, NoticeLevel, ProgrammerState, Query } from "../bindings";
 import type { ConnectionStatus, ConnectionEvents } from "../ipc/connection";
 import type { DaemonHealth, OutputSnapshot, RejectReason, Snapshot } from "../ipc/protocol";
 import { logger } from "../log/logger";
@@ -71,14 +71,14 @@ export interface DeskState {
   /** How the daemon is doing, or `null` when not connected. */
   readonly health: DaemonHealth | null;
   /**
-   * The profiles this desk can embed, or `null` when not connected.
+   * How many profiles this desk can embed, or `null` when not connected.
    *
-   * A property of the daemon's build rather than of the show, so it arrives in
-   * the snapshot and never moves afterwards — but it goes with the documents
-   * when the connection does, for the same reason they do: a list of profiles
-   * from a daemon that has stopped is a menu that cannot be acted on.
+   * A number and not the profiles (S44): the library is two thousand entries on
+   * an installed desk, so a client **searches** it rather than holding it. What
+   * this is for is saying *2 157 profiles* beside the search box, and knowing
+   * whether there are any at all.
    */
-  readonly fixtureLibrary: readonly FixtureType[] | null;
+  readonly fixtureLibrary: number | null;
   /** Whether the show has unsaved changes — the Save lamp. */
   readonly unsavedChanges: boolean;
   /** Messages for the operator, newest last. */
