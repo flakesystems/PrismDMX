@@ -185,6 +185,16 @@ async fn telemetry_reaches_a_connected_client_and_carries_the_patched_universes(
             .collect::<Vec<_>>(),
         vec![UniverseId::new(1), UniverseId::new(2)]
     );
+    // **The first frame a client is shown is one the engine produced**, not the
+    // blank a triple buffer starts with. This is the whole assertion: the rig's
+    // first dimmer is at full at home, so a zero here would mean a client was
+    // shown a picture of a dark rig that is in fact lit.
+    //
+    // It used to hold by timing — the listeners bound long enough after the
+    // engine started that the first tick had always landed — and it failed on a
+    // CI runner once S44 put 8.5 MB of profile parsing near the start-up path.
+    // Telemetry may be *dropped* (§7); it may not be *wrong*, so the daemon now
+    // publishes nothing until the engine has published something.
     let first = &frame.universes[0];
     assert_eq!(
         first.levels[0], 255,

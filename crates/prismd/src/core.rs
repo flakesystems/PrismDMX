@@ -33,7 +33,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use prism_core::{Applied, Autosave, Effect, ShowFile, ShowFileError, ShowStore};
 use prism_domain::{
@@ -100,7 +100,6 @@ pub struct Core {
     engine_programmer: ProgrammerState,
     masters: Masters,
     autosave: Autosave,
-    started: Instant,
     /// The patch revision the current plan was built from (S11).
     patch_revision: u64,
 }
@@ -140,7 +139,6 @@ impl Core {
             engine_programmer,
             masters: Masters::default(),
             autosave: Autosave::new(),
-            started: Instant::now(),
             patch_revision,
         })
     }
@@ -160,7 +158,12 @@ impl Core {
     /// How long the daemon has been running — the clock `Autosave` is polled on.
     #[must_use]
     pub fn uptime(&self) -> Duration {
-        self.started.elapsed()
+        // The **engine's** clock, not this type's. `TickHealth` counts ticks
+        // from the moment the tick thread started, so the time it is divided by
+        // has to start there too — wiring the daemon up takes a while, and S44
+        // made it take longer by reading a fixture library. Measured from here,
+        // the reported rate read 97 Hz for an engine ticking at 44.
+        self.engine.uptime()
     }
 
     /// The universes the show actually patches, for the telemetry channel.

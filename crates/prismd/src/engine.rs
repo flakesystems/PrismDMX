@@ -62,7 +62,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use prism_engine::{
     DmxFrame, Engine, FrameLayout, FramePublisher, FrameSubscriber, MergeBody, Producer,
@@ -253,6 +253,15 @@ pub struct EngineThread {
     /// something else — slots that would not decode — so this is the daemon's
     /// own number.
     refused: u64,
+    /// When the tick thread was started.
+    ///
+    /// The origin the **tick count shares**, which is what makes
+    /// `TickHealth::rate` a rate rather than a ratio of two unrelated numbers.
+    /// It is here rather than on whatever wires the daemon up, because anything
+    /// that happens between starting the engine and finishing the wiring — S44
+    /// put a fixture library there — would otherwise be counted as ticks
+    /// against no time at all, and the reported rate would read high.
+    started: Instant,
 }
 
 /// Commands one tick may fall behind by before the queue refuses.
@@ -294,6 +303,7 @@ impl EngineThread {
             })?;
 
         Ok(Self {
+            started: Instant::now(),
             commands,
             swap,
             health,
@@ -336,6 +346,19 @@ impl EngineThread {
     /// where freeing is allowed.
     pub fn collect_retired(&self) {
         self.swap.collect();
+    }
+
+    /// How long the tick thread has been running.
+    ///
+    /// What `TickHealth::rate` is divided by, and the reason it lives here: the
+    /// tick count starts when this thread does, so the time it is divided by
+    /// has to start there too. Anything between starting the engine and
+    /// finishing the daemon's wiring — S44 put a fixture library there — would
+    /// otherwise be ticks counted against no time, and the reported rate would
+    /// read high.
+    #[must_use]
+    pub fn uptime(&self) -> Duration {
+        self.started.elapsed()
     }
 
     /// What the tick has managed.

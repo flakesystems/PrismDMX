@@ -99,6 +99,36 @@ fn every_profile_in_the_installed_library_is_one_a_show_accepts() {
     }
 }
 
+/// **What reading the whole library costs**, which S44's exit criteria ask to be
+/// measured rather than assumed.
+///
+/// Printed rather than asserted against a millisecond figure: it is measured in
+/// a *debug* build on whatever machine is running the suite, and a threshold
+/// there would fail for the machine rather than for the code. What it is for is
+/// the number going into `PROGRESS.md` — and it is what says whether this belongs
+/// on the daemon's start-up path at all.
+#[test]
+fn reading_the_whole_library_is_timed() {
+    let root = library_root();
+    if !root.join("manufacturers.json").is_file() {
+        println!("skipping: no fixture library installed");
+        return;
+    }
+    let started = std::time::Instant::now();
+    let mut library = FixtureLibrary::default();
+    library.read_ofl_tree(&root);
+    let elapsed = started.elapsed();
+    println!(
+        "
+reading {} profiles from {} files took {:?} (debug build)
+",
+        library.len(),
+        library.conversion().fixtures + library.conversion().redirects,
+        elapsed
+    );
+    assert!(library.len() > 1000);
+}
+
 /// A key names one profile, so `EmbedFixtureType` is never ambiguous.
 #[test]
 fn every_key_in_the_installed_library_is_its_own() {

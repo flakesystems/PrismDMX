@@ -128,6 +128,8 @@ pub struct Daemon {
     outputs: Vec<OutputThread>,
     recordings: Vec<MockOutputHandle>,
     telemetry: FrameSubscriber,
+    /// Whether the engine has published its first frame — see [`Self::published`].
+    telemetry_started: bool,
     layout: Arc<FrameLayout>,
     lock: DaemonLock,
     exit: Exit,
@@ -201,8 +203,16 @@ impl Daemon {
             .show
             .clone()
             .unwrap_or_else(|| paths::default_show_path(&data_dir));
-        let (mut file, store) = open_show(&show_path)?;
-        file.library = load_library(&data_dir, options.fixtures.as_deref());
+        let (file, store) = open_show(&show_path)?;
+        // **Off the critical path.** Reading the Open Fixture Library is 634
+        // files and about 8.5 MB — measured at 395 ms in a release build and
+        // 1.5 s in a debug one — and nothing between here and the first DMX
+        // frame needs it. So it is read on a thread of its own while the engine
+        // and the outputs come up, and joined below, before the listeners bind.
+        // A desk's first duty is to put light on stage; a profile menu can wait
+        // for the one client that might ask about it, and by then it has not
+        // had to.
+        let loading = spawn_library_load(&data_dir, options.fixtures.clone());
         let layout =
             Arc::new(crate::engine::frame_layout(options.universes).map_err(StartError::Layout)?);
         let body = build_body(&layout, &file).map_err(StartError::Patch)?;
@@ -224,6 +234,14 @@ impl Daemon {
         let output_count = opened.threads.len();
         let entries = opened.entries.clone();
         let engine = EngineThread::start(body, publisher)?;
+
+        // Joined **after** the engine is running and **before** anything can
+        // ask: a client's first `Snapshot` carries how many profiles this desk
+        // has, and a number that was right a moment later would be worse than a
+        // handshake that waited. By now the load has had the whole of the
+        // engine and output start-up to run in.
+        let mut file = file;
+        file.library = join_library_load(loading);
         let core =
             Core::new(file, store, engine, Arc::clone(&layout)).map_err(StartError::Patch)?;
         let desk = Arc::new(Desk::new(core, entries));
@@ -289,6 +307,7 @@ impl Daemon {
             outputs: opened.threads,
             recordings: opened.recordings,
             telemetry,
+            telemetry_started: false,
             layout,
             lock,
             exit: options.exit,
@@ -454,7 +473,17 @@ impl Daemon {
                     // Built only when somebody is listening: 32 KiB thirty times
                     // a second for nobody is the one cost a droppable channel
                     // has no excuse for.
-                    if self.server.client_count().await > 0 {
+                    //
+                    // And **not before the engine has published a frame**. A
+                    // triple buffer starts blank, so a client that connects in
+                    // the moment between the listeners binding and the first
+                    // tick would otherwise be shown a picture of a dark rig
+                    // that is in fact lit — telemetry may be dropped (§7), but
+                    // it may not be wrong. `published` latches on the first
+                    // frame and is never cleared: after that the subscriber
+                    // holds the last real one, which is what a driver on its
+                    // own cadence re-sends rather than going dark.
+                    if self.server.client_count().await > 0 && self.published() {
                         sequence = sequence.wrapping_add(1);
                         self.telemetry_frame(sequence).encode_into(&mut buffer);
                         self.server.telemetry(buffer.clone()).await;
@@ -462,6 +491,19 @@ impl Daemon {
                 }
             }
         }
+    }
+
+    /// Whether the engine has ever published a frame into the telemetry
+    /// subscriber.
+    ///
+    /// Latches: `FrameSubscriber::refresh` answers *was there a new one since
+    /// last time*, which is false for a rig that has settled as well as for one
+    /// that has not started, and those are opposite facts.
+    fn published(&mut self) -> bool {
+        if self.telemetry.refresh() {
+            self.telemetry_started = true;
+        }
+        self.telemetry_started
     }
 
     /// The current levels of the universes the show patches.
@@ -533,6 +575,42 @@ impl Daemon {
         // The lock goes last, as it was taken first: it is dropped with `self`,
         // which removes the discovery file and releases the guard.
     }
+}
+
+/// Starts reading the profile directories on a thread of its own.
+///
+/// See [`Daemon::start`] for why: the read is hundreds of milliseconds and
+/// nothing before the first DMX frame needs it. `std::thread` rather than a
+/// runtime task because it is a blocking file walk — `ARCHITECTURE_SPEC.md` §3
+/// keeps `core-main`'s executor for work that yields.
+fn spawn_library_load(
+    data_dir: &Path,
+    configured: Option<PathBuf>,
+) -> std::thread::JoinHandle<prism_core::FixtureLibrary> {
+    let data_dir = data_dir.to_path_buf();
+    std::thread::spawn(move || load_library(&data_dir, configured.as_deref()))
+}
+
+/// The library that thread read.
+///
+/// A thread that panicked leaves this desk with the built-in profiles rather
+/// than stopping it: `CLAUDE.md`'s zero-crash invariant applies to a fixture
+/// menu as much as to anything else, and a desk with four profiles is one an
+/// operator can still patch a dimmer into.
+fn join_library_load(
+    loading: std::thread::JoinHandle<prism_core::FixtureLibrary>,
+) -> prism_core::FixtureLibrary {
+    loading.join().unwrap_or_else(|_| {
+        log::error(
+            "library",
+            "reading the fixture library panicked - the built-in profiles are all that is offered",
+        );
+        let mut library = prism_core::FixtureLibrary::default();
+        for profile in prism_core::generic_profiles() {
+            library.insert_profile(profile);
+        }
+        library
+    })
 }
 
 /// The profiles this desk can embed — S44.
