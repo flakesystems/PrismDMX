@@ -224,6 +224,16 @@ test("a sheet with more rows than it has room for scrolls inside its window", as
   await embedProfile(page, "generic dimmer", "generic.dimmer");
   for (let id = 1; id <= 40; id += 1) {
     await page.getByRole("button", { name: "Add fixture" }).click();
+    // **The number is typed rather than taken from the form's suggestion**, and
+    // that is what makes this loop deterministic. `nextFreeFixtureId` proposes
+    // the lowest number *the client currently holds no fixture for*, and the
+    // client holds what the daemon has sent it — so on a machine where the
+    // round trip is slower than the next click, two drafts get the same number
+    // and the second patch is a **repatch** of the first. Thirty-nine fixtures,
+    // then, and a test that failed for a reason that has nothing to do with
+    // scrolling. The suggestion is a convenience an operator types over, and
+    // this is a test typing over it.
+    await typeNumber(page, "draft-id", String(id));
     await typeNumber(page, "draft-address", String(id));
     await page.getByTestId("draft-apply").click();
   }

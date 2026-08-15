@@ -892,8 +892,8 @@ is, is the order the work was planned to make sense in.
 |---|---|---|
 | 1 | **S27** `ui` — patch and fixture sheet | The last thing an operator cannot do at all: build a rig. Already prompted in `PROGRESS.md` §8 |
 | 2 | **S44** `prism-core`/`prismd`/`ui` — the Open Fixture Library | Asked for on 2026-08-14 as an extension of S27. Four generic profiles cannot patch a real rig, and S27 said so in as many words |
-| 3 | **S35** `ui` — desk layout and view management | A correction to what S26 shipped, done before more is built on top of the layout it got wrong |
-| 4 | **S34** core/engine — executor functions and the tick readback | Fills in the four buttons S26 had to draw disabled, and the cue number it had to draw as a dash. Everything that plays back is better afterwards |
+| 4 | **S35** `ui` — desk layout and view management | A correction to what S26 shipped, done before more is built on top of the layout it got wrong |
+| 3 | **S34** core/engine — executor functions and the tick readback | Fills in the four buttons S26 had to draw disabled, and the cue number it had to draw as a dash. Everything that plays back is better afterwards |
 | 5 | **S28** `ui` — sequences, cues, presets | Needs the executor bar finished; raises the store-mode question |
 | 6 | **S39** `prism-core` — store modes, cue editing, the update state | Answers it, and defines the update state the shell's blinking Update needs |
 | 7 | **S40** `ui` — the console shell | Needs all four above: groups and presets to select, cues to store, executors to press, views to label |
