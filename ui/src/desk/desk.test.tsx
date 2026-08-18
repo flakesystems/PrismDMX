@@ -27,7 +27,7 @@ import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { TelemetryProvider } from "../telemetry/panel";
-import { UNPRESSABLE } from "./executorbar";
+//import { UNPRESSABLE } from "./executorbar";
 import { SEND_INTERVAL_MS } from "./valuedrag";
 
 import recordingText from "../../tests/fixtures/desk-recording.json?raw";
@@ -125,13 +125,13 @@ function desk() {
 }
 
 /** What the eight strips are showing, as `id:name` pairs. */
-function strips(): string[] {
-    return [...screen.getByTestId("executor-bar").querySelectorAll("[data-executor]")].map(
-        (element) =>
-            `${element.getAttribute("data-executor") ?? ""}:${element.querySelector('[data-testid^="name-"]')?.textContent ?? ""
-            }`,
-    );
-}
+// function strips(): string[] {
+//     return [...screen.getByTestId("executor-bar").querySelectorAll("[data-executor]")].map(
+//         (element) =>
+//             `${element.getAttribute("data-executor") ?? ""}:${element.querySelector('[data-testid^="name-"]')?.textContent ?? ""
+//             }`,
+//     );
+// }
 
 beforeEach(() => {
     setLogSink(nullSink);
