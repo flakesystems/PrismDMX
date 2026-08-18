@@ -51,46 +51,46 @@ import { patchRows } from "./patch";
 
 /** The whole sheet. */
 export function FixtureSheet({
-  show,
-  session,
-  programmer,
+    show,
+    session,
+    programmer,
 }: {
-  readonly show: JsonValue;
-  readonly session: JsonValue;
-  readonly programmer: ProgrammerState | null;
+    readonly show: JsonValue;
+    readonly session: JsonValue;
+    readonly programmer: ProgrammerState | null;
 }) {
-  const rows = useMemo(() => patchRows(show), [show]);
-  const fixtures = useMemo(() => liveFixtures(show), [show]);
-  const bank = encoderBank(session);
-  const attributes = bankParameters(bank);
-  const selected = new Set(programmer?.selection ?? []);
+    const rows = useMemo(() => patchRows(show), [show]);
+    const fixtures = useMemo(() => liveFixtures(show), [show]);
+    const bank = encoderBank(session);
+    const attributes = bankParameters(bank);
+    const selected = new Set(programmer?.selection ?? []);
 
-  if (rows.length === 0) {
-    return <p className="window-note">Nothing is patched. Build a rig in the Patch window.</p>;
-  }
-  return (
-    <div className="fixture-sheet" data-testid="fixture-sheet">
-      <p className="sheet-bank" data-testid="sheet-bank">
-        {bank} — programmer, and what is on the cable
-      </p>
-      <SheetBody
-        show={show}
-        rows={rows.map((row) => ({ id: row.id, name: row.name }))}
-        fixtures={fixtures}
-        attributes={attributes}
-        programmer={programmer}
-        selected={selected}
-      />
-    </div>
-  );
+    if (rows.length === 0) {
+        return <p className="window-note">Nothing is patched. Build a rig in the Patch window.</p>;
+    }
+    return (
+        <div className="fixture-sheet" data-testid="fixture-sheet">
+            <p className="sheet-bank" data-testid="sheet-bank">
+                {bank} — programmer, and what is on the cable
+            </p>
+            <SheetBody
+                show={show}
+                rows={rows.map((row) => ({ id: row.id, name: row.name }))}
+                fixtures={fixtures}
+                attributes={attributes}
+                programmer={programmer}
+                selected={selected}
+            />
+        </div>
+    );
 }
 
 /** One row's identity, which is all the table needs from the patch. */
 interface SheetRow {
-  /** The fixture number. */
-  readonly id: number;
-  /** What it is called. */
-  readonly name: string;
+    /** The fixture number. */
+    readonly id: number;
+    /** What it is called. */
+    readonly name: string;
 }
 
 /**
@@ -104,87 +104,88 @@ interface SheetRow {
  * person can see.
  */
 function SheetBody({
-  show,
-  rows,
-  fixtures,
-  attributes,
-  programmer,
-  selected,
+    show,
+    rows,
+    fixtures,
+    attributes,
+    programmer,
+    selected,
 }: {
-  readonly show: JsonValue;
-  readonly rows: readonly SheetRow[];
-  readonly fixtures: readonly LiveFixture[];
-  readonly attributes: readonly AttributeType[];
-  readonly programmer: ProgrammerState | null;
-  readonly selected: ReadonlySet<number>;
+    readonly show: JsonValue;
+    readonly rows: readonly SheetRow[];
+    readonly fixtures: readonly LiveFixture[];
+    readonly attributes: readonly AttributeType[];
+    readonly programmer: ProgrammerState | null;
+    readonly selected: ReadonlySet<number>;
 }) {
-  const channel = useTelemetryChannel();
-  const scroller = useRef<HTMLDivElement>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
-  // A ref rather than state: the loop reads it, and a repatch must not be a
-  // reason to tear the loop down and build another one.
-  const live = useRef(fixtures);
-  live.current = fixtures;
+    const channel = useTelemetryChannel();
+    const scroller = useRef<HTMLDivElement>(null);
+    const canvas = useRef<HTMLCanvasElement>(null);
+    // A ref rather than state: the loop reads it, and a repatch must not be a
+    // reason to tear the loop down and build another one.
+    const live = useRef(fixtures);
+    live.current = fixtures;
 
-  useEffect(() => {
-    if (channel === null) {
-      return;
-    }
-    const element = canvas.current;
-    resizeCanvas(element, devicePixelRatio());
-    const build = channel.surface ?? canvasSurface;
-    const surface = element === null ? null : build(element);
-    const driver = driveFixtureLevels({
-      sink: channel.sink,
-      surface,
-      fixtures: () => live.current,
-      scrollTop: () => scroller.current?.scrollTop ?? 0,
-      scale: devicePixelRatio,
-      scheduler: channel.scheduler,
-    });
-    return () => {
-      driver.stop();
-    };
-  }, [channel]);
+    useEffect(() => {
+        if (channel === null) {
+            return;
+        }
+        const element = canvas.current;
+        resizeCanvas(element, devicePixelRatio());
+        const build = channel.surface ?? canvasSurface;
+        const surface = element === null ? null : build(element);
+        const driver = driveFixtureLevels({
+            sink: channel.sink,
+            surface,
+            fixtures: () => live.current,
+            scrollTop: () => scroller.current?.scrollTop ?? 0,
+            scale: devicePixelRatio,
+            scheduler: channel.scheduler,
+        });
+        return () => {
+            driver.stop();
+        };
+    }, [channel]);
 
-  return (
-    <div className="sheet-live">
-      <div className="sheet-scroll" ref={scroller} data-testid="sheet-scroll">
-        <table className="sheet">
-          <thead>
-            <tr>
-              <th scope="col">Fx</th>
-              <th scope="col">Name</th>
-              {attributes.map((attribute) => (
-                <th scope="col" key={attribute}>
-                  {attribute}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr
-                key={row.id}
-                style={{ height: `${String(ROW_HEIGHT)}px` }}
-                className={selected.has(row.id) ? "row-selected" : ""}
-                data-testid={`sheet-row-${String(row.id)}`}
-              >
-                <td>{row.id}</td>
-                <td>{row.name === "" ? "—" : row.name}</td>
-                {attributes.map((attribute) => (
-                  <td key={attribute} data-testid={`prog-${String(row.id)}-${attribute}`}>
-                    {programmerText(show, programmer, row.id, attribute)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <canvas className="sheet-canvas" ref={canvas} data-testid="sheet-canvas" />
-    </div>
-  );
+    return (
+        <div className="sheet-live">
+            <div className="sheet-scroll" ref={scroller} data-testid="sheet-scroll">
+                <table className="sheet">
+                    <thead>
+                        <tr>
+                            <th scope="col">Fx</th>
+                            <th scope="col">Name</th>
+                            {attributes.map((attribute) => (
+                                <th scope="col" key={attribute}>
+                                    {attribute}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map((row) => (
+                            <tr
+                                key={row.id}
+                                style={{ height: `${String(ROW_HEIGHT)}px` }}
+                                className={selected.has(row.id) ? "row-selected" : ""}
+                                data-testid={`sheet-row-${String(row.id)}`}
+                                onClick={() => console.log(row.id)}
+                            >
+                                <td>{row.id}</td>
+                                <td>{row.name === "" ? "—" : row.name}</td>
+                                {attributes.map((attribute) => (
+                                    <td key={attribute} data-testid={`prog-${String(row.id)}-${attribute}`}>
+                                        {programmerText(show, programmer, row.id, attribute)}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <canvas className="sheet-canvas" ref={canvas} data-testid="sheet-canvas" />
+        </div>
+    );
 }
 
 /**
@@ -197,14 +198,14 @@ function SheetBody({
  * attribute at all, so there is nothing there to hold. Otherwise the percentage.
  */
 function programmerText(
-  show: JsonValue,
-  programmer: ProgrammerState | null,
-  fixture: number,
-  attribute: AttributeType,
+    show: JsonValue,
+    programmer: ProgrammerState | null,
+    fixture: number,
+    attribute: AttributeType,
 ): string {
-  if (groupOf(show, fixture, attribute) === null) {
-    return "";
-  }
-  const value = valueFor(programmer, fixture, attribute);
-  return value === null ? "—" : `${String(percentOfLevel(value))}%`;
+    if (groupOf(show, fixture, attribute) === null) {
+        return "";
+    }
+    const value = valueFor(programmer, fixture, attribute);
+    return value === null ? "—" : `${String(percentOfLevel(value))}%`;
 }

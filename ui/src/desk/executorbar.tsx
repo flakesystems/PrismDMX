@@ -42,157 +42,152 @@ import { ValueDrag } from "./valuedrag";
 
 /** What the bar needs: two documents and the commands it issues. */
 export interface ExecutorBarProps {
-  /** The session document. */
-  readonly session: JsonValue;
-  /** The show document. */
-  readonly show: JsonValue;
-  /** Sends a `SetExecutorPage`. */
-  readonly onPage: (page: number) => void;
-  /** Sends a `SelectExecutor`. */
-  readonly onSelect: (executorId: number) => void;
-  /** Sends a `SetExecutorMaster`. */
-  readonly onMaster: (executorId: number, level: number) => void;
-  /** Sends an `ExecutorGo`. */
-  readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
-  /** Sends an `ExecutorOff`. */
-  readonly onOff: (executorId: number) => void;
+    /** The session document. */
+    readonly session: JsonValue;
+    /** The show document. */
+    readonly show: JsonValue;
+    /** Sends a `SetExecutorPage`. */
+    readonly onPage: (page: number) => void;
+    /** Sends a `SelectExecutor`. */
+    readonly onSelect: (executorId: number) => void;
+    /** Sends a `SetExecutorMaster`. */
+    readonly onMaster: (executorId: number, level: number) => void;
+    /** Sends an `ExecutorGo`. */
+    readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
+    /** Sends an `ExecutorOff`. */
+    readonly onOff: (executorId: number) => void;
 }
 
 /** The bar. */
 export function ExecutorBar({
-  session,
-  show,
-  onPage,
-  onSelect,
-  onMaster,
-  onGo,
-  onOff,
+    session,
+    show,
+    onPage,
+    onSelect,
+    onMaster,
+    onGo,
+    onOff,
 }: ExecutorBarProps) {
-  const page = executorPage(session);
-  const selected = selectedExecutor(session);
-  const strips = pageStrips(session, show);
+    const page = executorPage(session);
+    const selected = selectedExecutor(session);
+    const strips = pageStrips(session, show);
 
-  return (
-    <section className="execbar" data-testid="executor-bar" aria-label="Executors">
-      <div className="execbar-page">
-        <button
-          type="button"
-          className="page-step"
-          data-testid="page-down"
-          aria-label="Previous executor page"
-          disabled={page === 0}
-          onClick={() => {
-            onPage(page - 1);
-          }}
-        >
-          ◀
-        </button>
-        <span className="page-number" data-testid="page-number">
-          {page}
-        </span>
-        <button
-          type="button"
-          className="page-step"
-          data-testid="page-up"
-          aria-label="Next executor page"
-          onClick={() => {
-            onPage(page + 1);
-          }}
-        >
-          ▶
-        </button>
-      </div>
-      {strips.map((strip) => (
-        <Strip
-          key={strip.slot}
-          strip={strip}
-          selected={strip.executorId === selected}
-          onSelect={onSelect}
-          onMaster={onMaster}
-          onGo={onGo}
-          onOff={onOff}
-        />
-      ))}
-    </section>
-  );
+    return (
+        <section className="execbar" data-testid="executor-bar" aria-label="Executors">
+            <div className="execbar-page">
+                <button
+                    type="button"
+                    className="page-step"
+                    data-testid="page-down"
+                    aria-label="Previous executor page"
+                    disabled={page === 0}
+                    onClick={() => {
+                        onPage(page - 1);
+                    }}
+                >
+                    ◀
+                </button>
+                <span className="page-number" data-testid="page-number">
+                    {page}
+                </span>
+                <button
+                    type="button"
+                    className="page-step"
+                    data-testid="page-up"
+                    aria-label="Next executor page"
+                    onClick={() => {
+                        onPage(page + 1);
+                    }}
+                >
+                    ▶
+                </button>
+            </div>
+            {strips.map((strip) => (
+                <Strip
+                    key={strip.slot}
+                    strip={strip}
+                    selected={strip.executorId === selected}
+                    onSelect={onSelect}
+                    onMaster={onMaster}
+                    onGo={onGo}
+                    onOff={onOff}
+                />
+            ))}
+        </section>
+    );
 }
 
 /** One of the eight. */
 function Strip({
-  strip,
-  selected,
-  onSelect,
-  onMaster,
-  onGo,
-  onOff,
+    strip,
+    selected,
+    onSelect,
+    onMaster,
+    onGo,
+    onOff,
 }: {
-  readonly strip: ExecutorStrip;
-  readonly selected: boolean;
-  readonly onSelect: (executorId: number) => void;
-  readonly onMaster: (executorId: number, level: number) => void;
-  readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
-  readonly onOff: (executorId: number) => void;
+    readonly strip: ExecutorStrip;
+    readonly selected: boolean;
+    readonly onSelect: (executorId: number) => void;
+    readonly onMaster: (executorId: number, level: number) => void;
+    readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
+    readonly onOff: (executorId: number) => void;
 }) {
-  const shown = useFader(strip, onMaster);
-  const percent = wholePercent(shown.level);
+    const shown = useFader(strip, onMaster);
+    const percent = wholePercent(shown.level);
 
-  return (
-    <div
-      className={`strip${selected ? " strip-selected" : ""}${strip.assigned ? "" : " strip-empty"}`}
-      data-testid={`strip-${String(strip.slot)}`}
-      data-executor={strip.executorId}
-      data-selected={selected ? "yes" : "no"}
-      data-assigned={strip.assigned ? "yes" : "no"}
-    >
-      <button
-        type="button"
-        className={`strip-head${strip.isActive ? " strip-running" : ""}`}
-        data-testid={`select-${String(strip.slot)}`}
-        title={`Select executor ${String(strip.executorId)}`}
-        onClick={() => {
-          onSelect(strip.executorId);
-        }}
-      >
-        <span className="strip-number">{strip.executorId}</span>
-        <span className="strip-name" data-testid={`name-${String(strip.slot)}`}>
-          {strip.name ?? (strip.assigned ? "—" : "")}
-        </span>
-      </button>
-      <div
-        className="strip-fader"
-        data-testid={`fader-${String(strip.slot)}`}
-        data-level={shown.level}
-        role="slider"
-        aria-label={`Master of executor ${String(strip.executorId)}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        aria-disabled={strip.assigned ? undefined : true}
-        onPointerDown={shown.begin}
-      >
-        <div className="strip-level" style={{ height: `${String(percent)}%` }} />
-      </div>
-      <span className="strip-percent" data-testid={`percent-${String(strip.slot)}`}>
-        {strip.assigned ? `${String(percent)}%` : "·"}
-      </span>
-      <div className="strip-buttons">
-        {strip.buttonFunctions.map((fn, index) => (
-          <FunctionButton
-            key={`${String(index)}-${fn}`}
-            slot={strip.slot}
-            index={index}
-            fn={fn}
-            executorId={strip.executorId}
-            onGo={onGo}
-            onOff={onOff}
-          />
-        ))}
-      </div>
-      <span className="strip-cue" data-testid={`cue-${String(strip.slot)}`}>
-        {strip.currentCueIndex === null ? "—" : `Q${String(strip.currentCueIndex + 1)}`}
-      </span>
-    </div>
-  );
+    return (
+        <div
+            className={`strip${selected ? " strip-selected" : ""}${strip.assigned ? " strip-assigned" : " strip-empty"}`}
+            data-testid={`strip-${String(strip.slot)}`}
+            data-executor={strip.executorId}
+            data-selected={selected ? "yes" : "no"}
+            data-assigned={strip.assigned ? "yes" : "no"}
+            onClick={() => {
+                onSelect(strip.executorId);
+            }}
+        >
+            <div className={`strip-head${strip.isActive ? " strip-running" : ""}`}>
+                <span className="strip-number">{strip.executorId}</span>
+                <span className="strip-name" data-testid={`name-${String(strip.slot)}`}>
+                    {strip.name ?? (strip.assigned ? "—" : "")}
+                </span>
+            </div>
+            <div
+                className="strip-fader"
+                data-testid={`fader-${String(strip.slot)}`}
+                data-level={shown.level}
+                role="slider"
+                aria-label={`Master of executor ${String(strip.executorId)}`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent}
+                aria-disabled={strip.assigned ? undefined : true}
+                onPointerDown={shown.begin}
+            >
+                <div className="strip-level" style={{ height: `${String(percent)}%` }} />
+            </div>
+            <span className="strip-percent" data-testid={`percent-${String(strip.slot)}`}>
+                {strip.assigned ? `${String(percent)}%` : "·"}
+            </span>
+            <div className="strip-buttons">
+                {strip.buttonFunctions.map((fn, index) => (
+                    <FunctionButton
+                        key={`${String(index)}-${fn}`}
+                        slot={strip.slot}
+                        index={index}
+                        fn={fn}
+                        executorId={strip.executorId}
+                        onGo={onGo}
+                        onOff={onOff}
+                    />
+                ))}
+            </div>
+            <span className="strip-cue" data-testid={`cue-${String(strip.slot)}`}>
+                {strip.currentCueIndex === null ? "—" : `Q${String(strip.currentCueIndex + 1)}`}
+            </span>
+        </div>
+    );
 }
 
 /**
@@ -202,72 +197,72 @@ function Strip({
  * console, and drawing a dead key there would be four dead keys per strip.
  */
 function FunctionButton({
-  slot,
-  index,
-  fn,
-  executorId,
-  onGo,
-  onOff,
+    slot,
+    index,
+    fn,
+    executorId,
+    onGo,
+    onOff,
 }: {
-  readonly slot: number;
-  readonly index: number;
-  readonly fn: ExecutorButtonFunction;
-  readonly executorId: number;
-  readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
-  readonly onOff: (executorId: number) => void;
+    readonly slot: number;
+    readonly index: number;
+    readonly fn: ExecutorButtonFunction;
+    readonly executorId: number;
+    readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
+    readonly onOff: (executorId: number) => void;
 }) {
-  if (fn === "Empty") {
-    return null;
-  }
-  const testId = `button-${String(slot)}-${String(index)}`;
-  const press = pressFor(fn);
-  if (press === null) {
+    if (fn === "Empty") {
+        return null;
+    }
+    const testId = `button-${String(slot)}-${String(index)}`;
+    const press = pressFor(fn);
+    if (press === null) {
+        return (
+            <button
+                type="button"
+                className="strip-button strip-button-unbound"
+                data-testid={testId}
+                data-function={fn}
+                disabled
+                title={UNPRESSABLE}
+            >
+                {LABELS[fn]}
+            </button>
+        );
+    }
     return (
-      <button
-        type="button"
-        className="strip-button strip-button-unbound"
-        data-testid={testId}
-        data-function={fn}
-        disabled
-        title={UNPRESSABLE}
-      >
-        {LABELS[fn]}
-      </button>
+        <button
+            type="button"
+            className="strip-button"
+            data-testid={testId}
+            data-function={fn}
+            title={`${LABELS[fn]} on executor ${String(executorId)}`}
+            onClick={() => {
+                press(executorId, onGo, onOff);
+            }}
+        >
+            {LABELS[fn]}
+        </button>
     );
-  }
-  return (
-    <button
-      type="button"
-      className="strip-button"
-      data-testid={testId}
-      data-function={fn}
-      title={`${LABELS[fn]} on executor ${String(executorId)}`}
-      onClick={() => {
-        press(executorId, onGo, onOff);
-      }}
-    >
-      {LABELS[fn]}
-    </button>
-  );
 }
 
 /** What a button says, which is shorter than what the show calls it. */
 const LABELS: Readonly<Record<ExecutorButtonFunction, string>> = {
-  Empty: "",
-  "Go+": "Go",
-  "Go-": "Bk",
-  LearnSpeed: "Lrn",
-  Off: "Off",
-  On: "On",
-  Flash: "Fl",
-  Toggle: "Tog",
+    Empty: "",
+    "Go+": "Go",
+    "Go-": "Bk",
+    LearnSpeed: "Lrn",
+    Off: "Off",
+    On: "On",
+    Flash: "Fl",
+    Toggle: "Tog",
 };
 
 /** Why four of the eight functions are drawn but cannot be pressed. */
 export const UNPRESSABLE =
-  "The protocol has no command that presses an executor's button: On, Flash, " +
-  "Toggle and Learn Speed are functions the executor decides, and no client may " +
-  "decide them for it. See docs/MCU_MAPPING.md §4.2.1.";
+    "The protocol has no command that presses an executor's button: On, Flash, " +
+    "Toggle and Learn Speed are functions the executor decides, and no client may " +
+    "decide them for it. See docs/MCU_MAPPING.md §4.2.1.";
 
 /**
  * What pressing a button does, or `null` when the protocol cannot say.
@@ -278,33 +273,33 @@ export const UNPRESSABLE =
  * the other end of the desk and for the same reason.
  */
 function pressFor(
-  fn: ExecutorButtonFunction,
+    fn: ExecutorButtonFunction,
 ): | ((
-      executorId: number,
-      onGo: (executorId: number, direction: "Next" | "Prev") => void,
-      onOff: (executorId: number) => void,
-    ) => void)
-  | null {
-  switch (fn) {
-    case "Go+":
-      return (executorId, onGo) => {
-        onGo(executorId, "Next");
-      };
-    case "Go-":
-      return (executorId, onGo) => {
-        onGo(executorId, "Prev");
-      };
-    case "Off":
-      return (executorId, _onGo, onOff) => {
-        onOff(executorId);
-      };
-    case "Empty":
-    case "On":
-    case "Flash":
-    case "Toggle":
-    case "LearnSpeed":
-      return null;
-  }
+    executorId: number,
+    onGo: (executorId: number, direction: "Next" | "Prev") => void,
+    onOff: (executorId: number) => void,
+) => void)
+    | null {
+    switch (fn) {
+        case "Go+":
+            return (executorId, onGo) => {
+                onGo(executorId, "Next");
+            };
+        case "Go-":
+            return (executorId, onGo) => {
+                onGo(executorId, "Prev");
+            };
+        case "Off":
+            return (executorId, _onGo, onOff) => {
+                onOff(executorId);
+            };
+        case "Empty":
+        case "On":
+        case "Flash":
+        case "Toggle":
+        case "LearnSpeed":
+            return null;
+    }
 }
 
 /**
@@ -315,57 +310,57 @@ function pressFor(
  * daemon that refuses it springs back. See `./valuedrag.ts`.
  */
 function useFader(
-  strip: ExecutorStrip,
-  onMaster: (executorId: number, level: number) => void,
+    strip: ExecutorStrip,
+    onMaster: (executorId: number, level: number) => void,
 ): { readonly level: number; readonly begin: (event: ReactPointerEvent) => void } {
-  const [drag, setDrag] = useState<ValueDrag | null>(null);
-  const [shown, setShown] = useState<number | null>(null);
+    const [drag, setDrag] = useState<ValueDrag | null>(null);
+    const [shown, setShown] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (drag === null) {
-      return;
-    }
-    const move = (event: PointerEvent): void => {
-      setShown(drag.to(event.clientY, Date.now()));
-    };
-    const finish = (): void => {
-      drag.end(Date.now());
-      // Dropped, not reconciled: what the fader shows from this moment is what
-      // the session says the master is.
-      setDrag(null);
-      setShown(null);
-    };
-    globalThis.addEventListener("pointermove", move);
-    globalThis.addEventListener("pointerup", finish);
-    globalThis.addEventListener("pointercancel", finish);
-    return () => {
-      globalThis.removeEventListener("pointermove", move);
-      globalThis.removeEventListener("pointerup", finish);
-      globalThis.removeEventListener("pointercancel", finish);
-    };
-  }, [drag]);
+    useEffect(() => {
+        if (drag === null) {
+            return;
+        }
+        const move = (event: PointerEvent): void => {
+            setShown(drag.to(event.clientY, Date.now()));
+        };
+        const finish = (): void => {
+            drag.end(Date.now());
+            // Dropped, not reconciled: what the fader shows from this moment is what
+            // the session says the master is.
+            setDrag(null);
+            setShown(null);
+        };
+        globalThis.addEventListener("pointermove", move);
+        globalThis.addEventListener("pointerup", finish);
+        globalThis.addEventListener("pointercancel", finish);
+        return () => {
+            globalThis.removeEventListener("pointermove", move);
+            globalThis.removeEventListener("pointerup", finish);
+            globalThis.removeEventListener("pointercancel", finish);
+        };
+    }, [drag]);
 
-  const begin = (event: ReactPointerEvent): void => {
-    // A slot with no executor has no master to move, and `SetExecutorMaster`
-    // on one is refused — so the gesture is not offered rather than sent and
-    // rejected.
-    if (event.button !== 0 || !strip.assigned) {
-      return;
-    }
-    event.preventDefault();
-    const box = event.currentTarget.getBoundingClientRect();
-    const started = new ValueDrag({
-      origin: strip.masterLevel,
-      from: event.clientY,
-      travel: box.height,
-      inverted: true,
-      send: (level) => {
-        onMaster(strip.executorId, level);
-      },
-    });
-    setDrag(started);
-    setShown(started.level);
-  };
+    const begin = (event: ReactPointerEvent): void => {
+        // A slot with no executor has no master to move, and `SetExecutorMaster`
+        // on one is refused — so the gesture is not offered rather than sent and
+        // rejected.
+        if (event.button !== 0 || !strip.assigned) {
+            return;
+        }
+        event.preventDefault();
+        const box = event.currentTarget.getBoundingClientRect();
+        const started = new ValueDrag({
+            origin: strip.masterLevel,
+            from: event.clientY,
+            travel: box.height,
+            inverted: true,
+            send: (level) => {
+                onMaster(strip.executorId, level);
+            },
+        });
+        setDrag(started);
+        setShown(started.level);
+    };
 
-  return { level: shown ?? strip.masterLevel, begin };
+    return { level: shown ?? strip.masterLevel, begin };
 }

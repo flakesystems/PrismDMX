@@ -32,7 +32,7 @@
  * nowhere here for the answer to be kept instead.
  */
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
 import "./App.css";
 import type { Command, FeatureGroup, JsonValue, WindowType } from "./bindings";
@@ -59,28 +59,28 @@ const selectNotices = (state: DeskState): readonly Notice[] => state.notices;
 
 /** The whole interface. */
 export default function App() {
-  const status = useDesk(selectStatus);
-  const connected = status.kind === "connected";
-  return (
-    <main className="desk">
-      <header className="desk-header">
-        <h1>PrismDMX</h1>
-        <StatusPill status={status} />
-        {connected ? <Views /> : null}
-      </header>
-      {connected ? <Desk /> : <NotConnected status={status} />}
-      <Notices />
-    </main>
-  );
+    const status = useDesk(selectStatus);
+    const connected = status.kind === "connected";
+    return (
+        <main className="desk">
+            <header className="desk-header">
+                <h1>PrismDMX</h1>
+                <StatusPill status={status} />
+                {connected ? <Views /> : null}
+            </header>
+            {connected ? <Desk /> : <NotConnected status={status} />}
+            <Notices />
+        </main>
+    );
 }
 
 /** The connection state, in the words §8 asks for. */
 function StatusPill({ status }: { readonly status: ConnectionStatus }) {
-  return (
-    <p className={`status status-${status.kind}`} data-testid="connection-status">
-      {statusText(status)}
-    </p>
-  );
+    return (
+        <p className={`status status-${status.kind}`} data-testid="connection-status">
+            {statusText(status)}
+        </p>
+    );
 }
 
 /**
@@ -92,191 +92,191 @@ function StatusPill({ status }: { readonly status: ConnectionStatus }) {
  * readouts *not* existing is the half that matters.
  */
 function NotConnected({ status }: { readonly status: ConnectionStatus }) {
-  return (
-    <section className="panel panel-empty" data-testid="no-daemon">
-      <p>
-        {status.kind === "incompatible"
-          ? "The engine is running a different version of the protocol. Update the interface or the engine; they cannot talk until the versions match."
-          : "The engine is not answering. The show is unaffected by this window: prismd holds the show, the session and every output, and DMX keeps running with no interface attached."}
-      </p>
-    </section>
-  );
+    return (
+        <section className="panel panel-empty" data-testid="no-daemon">
+            <p>
+                {status.kind === "incompatible"
+                    ? "The engine is running a different version of the protocol. Update the interface or the engine; they cannot talk until the versions match."
+                    : "The engine is not answering. Check that it is running and that the network is working."}
+            </p>
+        </section>
+    );
 }
 
 /** The View Selector Bar, once there is a session to read it from. */
 function Views() {
-  const documents = useDesk(selectDocuments);
-  const send = useSend();
-  const onSelectView = useCallback(
-    (viewId: number) => {
-      send({ t: "SelectView", viewId });
-    },
-    [send],
-  );
-  const onStoreView = useCallback(
-    (viewId: number, name: string) => {
-      send({ t: "StoreView", viewId, name });
-    },
-    [send],
-  );
-  const onOpenWindow = useCallback(
-    (type: WindowType) => {
-      send({ t: "OpenWindow", window: type });
-    },
-    [send],
-  );
-  if (documents === null) {
-    return null;
-  }
-  return (
-    <ViewBar
-      session={documents.session}
-      onSelectView={onSelectView}
-      onStoreView={onStoreView}
-      onOpenWindow={onOpenWindow}
-    />
-  );
+    const documents = useDesk(selectDocuments);
+    const send = useSend();
+    const onSelectView = useCallback(
+        (viewId: number) => {
+            send({ t: "SelectView", viewId });
+        },
+        [send],
+    );
+    const onStoreView = useCallback(
+        (viewId: number, name: string) => {
+            send({ t: "StoreView", viewId, name });
+        },
+        [send],
+    );
+    const onOpenWindow = useCallback(
+        (type: WindowType) => {
+            send({ t: "OpenWindow", window: type });
+        },
+        [send],
+    );
+    if (documents === null) {
+        return null;
+    }
+    return (
+        <ViewBar
+            session={documents.session}
+            onSelectView={onSelectView}
+            onStoreView={onStoreView}
+            onOpenWindow={onOpenWindow}
+        />
+    );
 }
 
 /** The canvas, the two bars and the strip under them. */
 function Desk() {
-  const documents = useDesk(selectDocuments);
-  const send = useSend();
+    const documents = useDesk(selectDocuments);
+    const send = useSend();
 
-  const onPlace = useCallback(
-    (instanceId: number, rect: Rect) => {
-      send({ t: "PlaceWindow", instanceId, x: rect.x, y: rect.y, w: rect.w, h: rect.h });
-    },
-    [send],
-  );
-  const onFocus = useCallback(
-    (instanceId: number) => {
-      send({ t: "FocusWindow", instanceId });
-    },
-    [send],
-  );
-  const onClose = useCallback(
-    (instanceId: number) => {
-      send({ t: "CloseWindow", instanceId });
-    },
-    [send],
-  );
+    const onPlace = useCallback(
+        (instanceId: number, rect: Rect) => {
+            send({ t: "PlaceWindow", instanceId, x: rect.x, y: rect.y, w: rect.w, h: rect.h });
+        },
+        [send],
+    );
+    const onFocus = useCallback(
+        (instanceId: number) => {
+            send({ t: "FocusWindow", instanceId });
+        },
+        [send],
+    );
+    const onClose = useCallback(
+        (instanceId: number) => {
+            send({ t: "CloseWindow", instanceId });
+        },
+        [send],
+    );
 
-  // The executor bar's five.
-  const onPage = useCallback(
-    (page: number) => {
-      send({ t: "SetExecutorPage", page });
-    },
-    [send],
-  );
-  const onSelect = useCallback(
-    (executorId: number) => {
-      send({ t: "SelectExecutor", executorId });
-    },
-    [send],
-  );
-  const onMaster = useCallback(
-    (executorId: number, level: number) => {
-      send({ t: "SetExecutorMaster", executorId, level });
-    },
-    [send],
-  );
-  const onGo = useCallback(
-    (executorId: number, direction: "Next" | "Prev") => {
-      send({ t: "ExecutorGo", executorId, direction });
-    },
-    [send],
-  );
-  const onOff = useCallback(
-    (executorId: number) => {
-      send({ t: "ExecutorOff", executorId });
-    },
-    [send],
-  );
+    // The executor bar's five.
+    const onPage = useCallback(
+        (page: number) => {
+            send({ t: "SetExecutorPage", page });
+        },
+        [send],
+    );
+    const onSelect = useCallback(
+        (executorId: number) => {
+            send({ t: "SelectExecutor", executorId });
+        },
+        [send],
+    );
+    const onMaster = useCallback(
+        (executorId: number, level: number) => {
+            send({ t: "SetExecutorMaster", executorId, level });
+        },
+        [send],
+    );
+    const onGo = useCallback(
+        (executorId: number, direction: "Next" | "Prev") => {
+            send({ t: "ExecutorGo", executorId, direction });
+        },
+        [send],
+    );
+    const onOff = useCallback(
+        (executorId: number) => {
+            send({ t: "ExecutorOff", executorId });
+        },
+        [send],
+    );
 
-  // The encoder bar's four.
-  const onBank = useCallback(
-    (group: FeatureGroup) => {
-      send({ t: "SetEncoderBank", group });
-    },
-    [send],
-  );
-  const onParam = useCallback(
-    (direction: "Prev" | "Next") => {
-      send({ t: "SelectProgrammerParam", direction });
-    },
-    [send],
-  );
-  const onTurn = useCallback(
-    (reading: ParameterReading, delta: number) => {
-      // Relative, so the daemon starts from what the programmer holds — or
-      // from the attribute's home value when it holds nothing. Working that out
-      // here would be this interface deciding what a value *is*.
-      send({ t: "SetAttribute", attribute: reading.attribute, value: delta, relative: true });
-    },
-    [send],
-  );
-  const onClear = useCallback(() => {
-    send({ t: "ClearProgrammer" });
-  }, [send]);
+    // The encoder bar's four.
+    const onBank = useCallback(
+        (group: FeatureGroup) => {
+            send({ t: "SetEncoderBank", group });
+        },
+        [send],
+    );
+    const onParam = useCallback(
+        (direction: "Prev" | "Next") => {
+            send({ t: "SelectProgrammerParam", direction });
+        },
+        [send],
+    );
+    const onTurn = useCallback(
+        (reading: ParameterReading, delta: number) => {
+            // Relative, so the daemon starts from what the programmer holds — or
+            // from the attribute's home value when it holds nothing. Working that out
+            // here would be this interface deciding what a value *is*.
+            send({ t: "SetAttribute", attribute: reading.attribute, value: delta, relative: true });
+        },
+        [send],
+    );
+    const onClear = useCallback(() => {
+        send({ t: "ClearProgrammer" });
+    }, [send]);
 
-  // The command line's two.
-  const onCommands = useCallback(
-    (commands: readonly Command[]) => {
-      for (const command of commands) {
-        send(command);
-      }
-    },
-    [send],
-  );
-  const onText = useCallback(
-    (text: string) => {
-      send({ t: "CommandLineInput", text });
-    },
-    [send],
-  );
+    // The command line's two.
+    const onCommands = useCallback(
+        (commands: readonly Command[]) => {
+            for (const command of commands) {
+                send(command);
+            }
+        },
+        [send],
+    );
+    const onText = useCallback(
+        (text: string) => {
+            send({ t: "CommandLineInput", text });
+        },
+        [send],
+    );
 
-  if (documents === null) {
-    return null;
-  }
-  return (
-    <>
-      <Canvas
-        session={documents.session}
-        show={documents.show}
-        programmer={documents.programmer}
-        onPlace={onPlace}
-        onFocus={onFocus}
-        onClose={onClose}
-      />
-      <EncoderBar
-        session={documents.session}
-        show={documents.show}
-        programmer={documents.programmer}
-        onBank={onBank}
-        onParam={onParam}
-        onTurn={onTurn}
-        onClear={onClear}
-      />
-      <ExecutorBar
-        session={documents.session}
-        show={documents.show}
-        onPage={onPage}
-        onSelect={onSelect}
-        onMaster={onMaster}
-        onGo={onGo}
-        onOff={onOff}
-      />
-      <footer className="desk-footer">
-        <CommandLine
-          daemonLine={commandLine(documents.session)}
-          onCommands={onCommands}
-          onText={onText}
-        />
-        <StatusStrip session={documents.session} show={documents.show} />
-      </footer>
-    </>
-  );
+    if (documents === null) {
+        return null;
+    }
+    return (
+        <>
+            <Canvas
+                session={documents.session}
+                show={documents.show}
+                programmer={documents.programmer}
+                onPlace={onPlace}
+                onFocus={onFocus}
+                onClose={onClose}
+            />
+            <EncoderBar
+                session={documents.session}
+                show={documents.show}
+                programmer={documents.programmer}
+                onBank={onBank}
+                onParam={onParam}
+                onTurn={onTurn}
+                onClear={onClear}
+            />
+            <ExecutorBar
+                session={documents.session}
+                show={documents.show}
+                onPage={onPage}
+                onSelect={onSelect}
+                onMaster={onMaster}
+                onGo={onGo}
+                onOff={onOff}
+            />
+            <footer className="desk-footer">
+                <CommandLine
+                    daemonLine={commandLine(documents.session)}
+                    onCommands={onCommands}
+                    onText={onText}
+                />
+                <StatusStrip session={documents.session} show={documents.show} />
+            </footer>
+        </>
+    );
 }
 
 /**
@@ -288,97 +288,143 @@ function Desk() {
  * engine running*.
  */
 function StatusStrip({ session, show }: { readonly session: JsonValue; readonly show: JsonValue }) {
-  const health = useDesk(selectHealth);
-  const outputs = useDesk(selectOutputs);
-  const unsaved = useDesk(selectUnsaved);
-  if (health === null || outputs === null) {
-    return null;
-  }
-  return (
-    <dl className="strip" data-testid="status-strip">
-      <Reading label="Fixtures" value={text(countAt(show, "/fixtures"))} testId="fixtures" />
-      <Reading label="Groups" value={text(countAt(show, "/groups"))} testId="groups" />
-      <Reading label="Seqs" value={text(countAt(show, "/sequences"))} testId="sequences" />
-      <Reading label="Execs" value={text(countAt(show, "/executors"))} testId="executors" />
-      <Reading
-        label="View"
-        value={text(numberAt(session, "/session/activeViewId"))}
-        testId="active-view"
-      />
-      <Reading
-        label="Windows"
-        value={text(countAt(session, "/session/openWindows"))}
-        testId="open-windows"
-      />
-      <Reading
-        label="Page"
-        value={text(numberAt(session, "/session/executorPage"))}
-        testId="executor-page"
-      />
-      <Reading
-        label="Bank"
-        value={text(stringAt(session, "/session/encoderBank"))}
-        testId="encoder-bank"
-      />
-      <Reading
-        label="Param"
-        value={text(numberAt(session, "/session/programmerParamIndex"))}
-        testId="param-index"
-      />
-      <Reading label="Protocol" value={String(health.protocolVersion)} testId="protocol" />
-      <Reading label="Tick" value={`${health.tickHz.toFixed(1)} Hz`} testId="tick-hz" />
-      <Reading label="Missed" value={String(health.missedTicks)} testId="missed-ticks" />
-      <Reading label="Show" value={unsaved ? "unsaved changes" : "saved"} testId="dirty-flag" />
-      {outputs.map((output) => (
-        <Reading
-          key={output.id}
-          label={`Out ${String(output.id)}`}
-          value={`${output.name}: ${output.health}`}
-          testId={`output-${String(output.id)}`}
-        />
-      ))}
-    </dl>
-  );
+    const health = useDesk(selectHealth);
+    const outputs = useDesk(selectOutputs);
+    const unsaved = useDesk(selectUnsaved);
+    if (health === null || outputs === null) {
+        return null;
+    }
+    return (
+        <dl className="strip" data-testid="status-strip">
+            <Reading label="Fixtures" value={text(countAt(show, "/fixtures"))} testId="fixtures" />
+            <Reading label="Groups" value={text(countAt(show, "/groups"))} testId="groups" />
+            <Reading label="Seqs" value={text(countAt(show, "/sequences"))} testId="sequences" />
+            <Reading label="Execs" value={text(countAt(show, "/executors"))} testId="executors" />
+            <Reading
+                label="View"
+                value={text(numberAt(session, "/session/activeViewId"))}
+                testId="active-view"
+            />
+            <Reading
+                label="Windows"
+                value={text(countAt(session, "/session/openWindows"))}
+                testId="open-windows"
+            />
+            <Reading
+                label="Page"
+                value={text(numberAt(session, "/session/executorPage"))}
+                testId="executor-page"
+            />
+            <Reading
+                label="Bank"
+                value={text(stringAt(session, "/session/encoderBank"))}
+                testId="encoder-bank"
+            />
+            <Reading
+                label="Param"
+                value={text(numberAt(session, "/session/programmerParamIndex"))}
+                testId="param-index"
+            />
+            <Reading label="Protocol" value={String(health.protocolVersion)} testId="protocol" />
+            <Reading label="Tick" value={`${health.tickHz.toFixed(1)} Hz`} testId="tick-hz" />
+            <Reading label="Missed" value={String(health.missedTicks)} testId="missed-ticks" />
+            <Reading label="Show" value={unsaved ? "unsaved changes" : "saved"} testId="dirty-flag" />
+            {outputs.map((output) => (
+                <Reading
+                    key={output.id}
+                    label={`Out ${String(output.id)}`}
+                    value={`${output.name}: ${output.health}`}
+                    testId={`output-${String(output.id)}`}
+                />
+            ))}
+        </dl>
+    );
 }
 
 /** One label and one value. */
 function Reading({
-  label,
-  value,
-  testId,
+    label,
+    value,
+    testId,
 }: {
-  readonly label: string;
-  readonly value: string;
-  readonly testId: string;
+    readonly label: string;
+    readonly value: string;
+    readonly testId: string;
 }) {
-  return (
-    <div className="reading">
-      <dt>{label}</dt>
-      <dd data-testid={testId}>{value}</dd>
-    </div>
-  );
+    return (
+        <div className="reading">
+            <dt>{label}</dt>
+            <dd data-testid={testId}>{value}</dd>
+        </div>
+    );
 }
 
 /** Messages from the daemon, newest last. */
 function Notices() {
-  const notices = useDesk(selectNotices);
-  if (notices.length === 0) {
-    return null;
-  }
-  return (
-    <section className="notices" data-testid="notices">
-      <ul>
-        {notices.map((notice) => (
-          <li key={notice.id} className={`notice notice-${notice.level.toLowerCase()}`}>
-            {notice.message}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+    const notices = useDesk(selectNotices);
+    const [dismissedIds, setDismissedIds] = useState<Array<number | string>>([]);
+
+    const handleDismiss = (id: number | string) => {
+        // 1. Klasse 'notice-dismissed' sofort setzen (startet CSS-Animation)
+        setDismissedIds((prev) => [...prev, id]);
+
+        // 2. Element erst nach Ende der CSS-Animation (300ms) komplett entfernen
+        setTimeout(() => {
+            // Falls du eine Action hast, kannst du hier auch optional den Store benachrichtigen
+        }, 300);
+    };
+
+    // Prüfen, ob noch nicht vollständig ausgeblendete Elemente existieren
+    const hasVisibleNotices = notices.some((notice) => !dismissedIds.includes(notice.id));
+
+    // Wenn keine Notices mehr da sind, wird der Rahmen (.notices) aus dem DOM entfernt
+    if (notices.length === 0 || (!hasVisibleNotices && dismissedIds.length === notices.length)) {
+        return null;
+    }
+
+    return (
+        <section className="notices" data-testid="notices">
+            <ul>
+                {notices.map((notice) => {
+                    const isDismissed = dismissedIds.includes(notice.id);
+
+                    return (
+                        <li
+                            key={notice.id}
+                            className={`notice notice-${notice.level.toLowerCase()} ${isDismissed ? "notice-dismissed" : ""
+                                }`}
+                        >
+                            <div className="notice-wrapper">
+                                <div className="notice-content">
+                                    {notice.message}
+                                </div>
+                                <button
+                                    type="button"
+                                    className="notice-close"
+                                    data-testid={`notice-close-${notice.id}`}
+                                    onClick={() => handleDismiss(notice.id)}
+                                    aria-label="Notice schließen"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        height="20px"
+                                        viewBox="0 -960 960 960"
+                                        width="20px"
+                                        fill="currentColor"
+                                    >
+                                        <path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
+        </section>
+    );
 }
 
 /** A reading that is not in the document reads as an em dash, not as zero. */
 function text(value: number | string | null): string {
-  return value === null ? "—" : String(value);
+    return value === null ? "—" : String(value);
 }

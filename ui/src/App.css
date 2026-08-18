@@ -14,147 +14,147 @@
  */
 
 :root {
-  --ink: #e8e9ec;
-  --ink-dim: #9aa0a8;
-  --ground: #14161a;
-  --panel: #1c1f25;
-  --edge: #2b3038;
-  --edge-lit: #4b5563;
-  --ok: #4ade80;
-  --warn: #fbbf24;
-  --bad: #f87171;
-  --accent: #38bdf8;
+    --ink: #e8e9ec;
+    --ink-dim: #9aa0a8;
+    --ground: #14161a;
+    --panel: #1c1f25;
+    --edge: #2b3038;
+    --edge-lit: #4b5563;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --accent: #38bdf8;
 }
 
 .desk {
-  position: relative;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--ground);
-  color: var(--ink);
-  font: 13px/1.45 ui-monospace, "Cascadia Mono", "Consolas", monospace;
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--ground);
+    color: var(--ink);
+    font: 13px/1.45 ui-monospace, "Cascadia Mono", "Consolas", monospace;
 }
 
 /* ---- header ------------------------------------------------------------- */
 
 .desk-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--edge);
-  background: var(--panel);
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--edge);
+    background: var(--panel);
 }
 
 .desk-header h1 {
-  margin: 0;
-  font-size: 0.85rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink);
+    margin: 0;
+    font-size: 0.85rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink);
 }
 
 .status {
-  margin: 0;
-  padding: 0.1rem 0.55rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 999px;
-  white-space: nowrap;
-  color: var(--ink-dim);
+    margin: 0;
+    padding: 0.1rem 0.55rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 999px;
+    white-space: nowrap;
+    color: var(--ink-dim);
 }
 
 .status-connected {
-  border-color: var(--ok);
-  color: var(--ok);
+    border-color: var(--ok);
+    color: var(--ok);
 }
 
 .status-disconnected,
 .status-incompatible {
-  border-color: var(--bad);
-  color: var(--bad);
+    border-color: var(--bad);
+    color: var(--bad);
 }
 
 /* ---- the View Selector Bar ---------------------------------------------- */
 
 .viewbar {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  min-width: 0;
-  overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .viewbar-label {
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
 }
 
 .viewbar-windows {
-  margin-left: 0.75rem;
+    margin-left: 0.75rem;
 }
 
 .view-button,
 .view-store,
 .window-picker {
-  padding: 0.2rem 0.55rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: var(--ground);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
 }
 
 .view-button {
-  display: inline-flex;
-  gap: 0.4rem;
-  align-items: baseline;
-  white-space: nowrap;
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: baseline;
+    white-space: nowrap;
 }
 
 .view-number {
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
 }
 
 /* The lit button is the session's `activeViewId` and nothing else. */
 .view-active {
-  border-color: var(--accent);
-  color: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .view-active .view-number {
-  color: var(--accent);
+    color: var(--accent);
 }
 
 /* ---- the canvas --------------------------------------------------------- */
 
 .canvas {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: hidden;
-  background:
-    linear-gradient(transparent 95%, rgba(255, 255, 255, 0.03) 95%),
-    linear-gradient(90deg, transparent 95%, rgba(255, 255, 255, 0.03) 95%);
-  background-size: 3.125% 5.55%;
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    background:
+        linear-gradient(transparent 95%, rgba(255, 255, 255, 0.03) 95%),
+        linear-gradient(90deg, transparent 95%, rgba(255, 255, 255, 0.03) 95%);
+    background-size: 3.125% 5.55%;
 }
 
 .canvas-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 1rem;
-  text-align: center;
-  color: var(--ink-dim);
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 1rem;
+    text-align: center;
+    color: var(--ink-dim);
 }
 
 /*
@@ -167,131 +167,129 @@
  * only thing that may express it.
  */
 .window {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: var(--panel);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
-  overflow: hidden;
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--panel);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
+    overflow: hidden;
 }
 
 .window-focused {
-  border-color: var(--accent);
+    border-color: var(--accent);
 }
 
 .window-dragging {
-  /* No transition while a pointer is driving it: an animation would put the
+    /* No transition while a pointer is driving it: an animation would put the
      window somewhere neither the pointer nor the daemon asked for. */
-  opacity: 0.94;
+    opacity: 0.94;
 }
 
 .window-title {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.2rem 0.25rem 0.5rem;
-  border-bottom: 1px solid var(--edge);
-  background: #232830;
-  cursor: move;
-  touch-action: none;
-  user-select: none;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.2rem 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--edge);
+    background: #232830;
+    cursor: move;
+    touch-action: none;
+    user-select: none;
 }
 
 .window-focused .window-title {
-  background: #2b323d;
+    background: #2b323d;
 }
 
 .window-name {
-  flex: 1 1 auto;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--ink);
+    flex: 1 1 auto;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ink);
 }
 
 .window-number {
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
 }
 
 .window-close {
-  border: 0;
-  padding: 0 0.45rem;
-  background: transparent;
-  color: var(--ink-dim);
-  font: inherit;
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
+    border: 0;
+    padding: 0 0.45rem;
+    background: transparent;
+    color: var(--ink-dim);
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
 }
 
 .window-close:hover {
-  color: var(--bad);
+    color: var(--bad);
 }
 
 .window-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  /* The one place scrolling is allowed: inside a window an operator sized. */
-  overflow: auto;
-  padding: 0.4rem 0.5rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* The one place scrolling is allowed: inside a window an operator sized. */
+    overflow: auto;
+    padding: 0.4rem 0.5rem;
 }
 
 .window-grip {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  touch-action: none;
-  background: linear-gradient(
-    135deg,
-    transparent 50%,
-    var(--edge-lit) 50%,
-    var(--edge-lit) 65%,
-    transparent 65%,
-    transparent 80%,
-    var(--edge-lit) 80%
-  );
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    touch-action: none;
+    background: linear-gradient(135deg,
+            transparent 50%,
+            var(--edge-lit) 50%,
+            var(--edge-lit) 65%,
+            transparent 65%,
+            transparent 80%,
+            var(--edge-lit) 80%);
 }
 
 /* ---- what windows contain ----------------------------------------------- */
 
 .window-note {
-  margin: 0;
-  color: var(--ink-dim);
+    margin: 0;
+    color: var(--ink-dim);
 }
 
 .sheet {
-  width: 100%;
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
 }
 
 .sheet th {
-  position: sticky;
-  top: 0;
-  text-align: left;
-  padding: 0 0.4rem 0.2rem 0;
-  background: var(--panel);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+    position: sticky;
+    top: 0;
+    text-align: left;
+    padding: 0 0.4rem 0.2rem 0;
+    background: var(--panel);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
 }
 
 .sheet td {
-  padding: 0.05rem 0.4rem 0.05rem 0;
-  border-top: 1px solid var(--edge);
-  white-space: nowrap;
+    padding: 0.05rem 0.4rem 0.05rem 0;
+    border-top: 1px solid var(--edge);
+    white-space: nowrap;
 }
 
 /*
@@ -305,30 +303,30 @@
  */
 .patch,
 .fixture-sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  height: 100%;
-  min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    height: 100%;
+    min-height: 0;
 }
 
 .sheet-scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
 }
 
 .patch-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
 }
 
 .patch-count {
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -336,22 +334,22 @@
  * offered is what was asked for: a box, and the daemon's answer under it.
  */
 .patch-embed {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: var(--ink-dim);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--ink-dim);
 }
 
 .patch-embed label {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
 }
 
 .patch-embed input {
-  width: 14rem;
-  font: inherit;
+    width: 14rem;
+    font: inherit;
 }
 
 /*
@@ -359,37 +357,37 @@
  * time a letter was typed would be a list nobody could aim at.
  */
 .library-matches {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 1;
-  max-height: 14rem;
-  overflow-y: auto;
-  margin: 0.2rem 0 0;
-  padding: 0.2rem;
-  list-style: none;
-  min-width: 20rem;
-  background: var(--panel);
-  border: 1px solid var(--edge);
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 1;
+    max-height: 14rem;
+    overflow-y: auto;
+    margin: 0.2rem 0 0;
+    padding: 0.2rem;
+    list-style: none;
+    min-width: 20rem;
+    background: var(--panel);
+    border: 1px solid var(--edge);
 }
 
 .library-matches li {
-  padding: 0.1rem 0.2rem;
+    padding: 0.1rem 0.2rem;
 }
 
 .library-matches button {
-  width: 100%;
-  text-align: left;
-  text-decoration: none;
+    width: 100%;
+    text-align: left;
+    text-decoration: none;
 }
 
 .library-matches button:disabled {
-  color: var(--ink-dim);
-  cursor: default;
+    color: var(--ink-dim);
+    cursor: default;
 }
 
 .library-empty {
-  color: var(--ink-dim);
+    color: var(--ink-dim);
 }
 
 /*
@@ -398,105 +396,105 @@
  * and by people who do not all see red the same way (`CLAUDE.md`).
  */
 .row-conflict td {
-  color: var(--warn, #ffd479);
-  font-weight: 600;
+    color: var(--warn, #ffd479);
+    font-weight: 600;
 }
 
 .row-editing td {
-  background: var(--edge-lit, rgba(255, 255, 255, 0.08));
+    background: var(--edge-lit, rgba(255, 255, 255, 0.08));
 }
 
 .row-selected td {
-  background: var(--edge-lit, rgba(255, 255, 255, 0.08));
+    background: var(--edge-lit, rgba(255, 255, 255, 0.08));
 }
 
 .linkish {
-  background: none;
-  border: 0;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  text-decoration: underline dotted;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline dotted;
 }
 
 .patch-form {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--edge);
-  padding-top: 0.35rem;
+    flex: 0 0 auto;
+    border-top: 1px solid var(--edge);
+    padding-top: 0.35rem;
 }
 
 .patch-form fieldset {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  border: 0;
-  margin: 0;
-  padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    border: 0;
+    margin: 0;
+    padding: 0;
 }
 
 .patch-form legend {
-  padding: 0;
-  color: var(--ink-dim);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+    padding: 0;
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .patch-form label {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: var(--ink-dim);
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--ink-dim);
 }
 
 .patch-form input {
-  width: 7rem;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
+    width: 7rem;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
 }
 
 .patch-form input[data-testid="draft-id"],
 .patch-form input[data-testid="draft-universe"],
 .patch-form input[data-testid="draft-address"] {
-  width: 4rem;
+    width: 4rem;
 }
 
 /* The three things the preview line can be saying, told apart at a glance. */
 .patch-preview {
-  margin: 0.3rem 0;
-  min-height: 1.2em;
+    margin: 0.3rem 0;
+    min-height: 1.2em;
 }
 
 .preview-waiting {
-  color: var(--ink-dim);
+    color: var(--ink-dim);
 }
 
 .preview-clear {
-  color: var(--ok, #7bd88f);
+    color: var(--ok, #7bd88f);
 }
 
 .preview-overlap {
-  color: var(--warn, #ffd479);
+    color: var(--warn, #ffd479);
 }
 
 .preview-refused {
-  color: var(--bad, #ff6b6b);
+    color: var(--bad, #ff6b6b);
 }
 
 .patch-actions {
-  display: flex;
-  gap: 0.4rem;
+    display: flex;
+    gap: 0.4rem;
 }
 
 .sheet-bank {
-  margin: 0;
-  flex: 0 0 auto;
-  color: var(--ink-dim);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+    margin: 0;
+    flex: 0 0 auto;
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 /*
@@ -508,36 +506,36 @@
  * nine thousand pixels of bitmap for the twenty a person can see.
  */
 .sheet-live {
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
-  gap: 0.4rem;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 0.4rem;
 }
 
 .sheet-canvas {
-  flex: 0 0 8rem;
-  align-self: stretch;
-  min-height: 0;
-  background: var(--panel-deep, #0b0e13);
-  border-left: 1px solid var(--edge);
+    flex: 0 0 8rem;
+    align-self: stretch;
+    min-height: 0;
+    background: var(--panel-deep, #0b0e13);
+    border-left: 1px solid var(--edge);
 }
 
 .pool {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
 .pool li {
-  display: flex;
-  gap: 0.5rem;
-  border-top: 1px solid var(--edge);
+    display: flex;
+    gap: 0.5rem;
+    border-top: 1px solid var(--edge);
 }
 
 .pool-number {
-  min-width: 2.5em;
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
+    min-width: 2.5em;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -546,32 +544,32 @@
  * after the one line of numbers.
  */
 .panel-telemetry {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  height: 100%;
-  min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    height: 100%;
+    min-height: 0;
 }
 
 .panel-telemetry h2 {
-  display: none;
+    display: none;
 }
 
 .telemetry-canvas {
-  display: block;
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 0;
-  border: 1px solid var(--edge);
-  border-radius: 3px;
-  background: #0b0e13;
+    display: block;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    background: #0b0e13;
 }
 
 .telemetry-readout {
-  flex: 0 0 auto;
-  margin: 0;
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
+    flex: 0 0 auto;
+    margin: 0;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ---- the encoder bar ---------------------------------------------------- */
@@ -583,47 +581,47 @@
  * every time an executor was assigned.
  */
 .encbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
-  height: 3.1rem;
-  padding: 0.25rem 0.6rem;
-  border-top: 1px solid var(--edge);
-  background: var(--panel);
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+    height: 3.1rem;
+    padding: 0.25rem 0.6rem;
+    border-top: 1px solid var(--edge);
+    background: var(--panel);
 }
 
 .encbar-banks,
 .encbar-encoders,
 .encbar-param {
-  display: flex;
-  align-items: stretch;
-  gap: 0.25rem;
+    display: flex;
+    align-items: stretch;
+    gap: 0.25rem;
 }
 
 .encbar-encoders {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .bank {
-  padding: 0 0.5rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: var(--ground);
-  color: var(--ink-dim);
-  font: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: pointer;
+    padding: 0 0.5rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink-dim);
+    font: inherit;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
 }
 
 /* The lit bank is the session's `encoderBank` and nothing else. */
 .bank-active {
-  border-color: var(--accent);
-  color: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 /*
@@ -633,234 +631,221 @@
  * something in it.
  */
 .bank-touched {
-  border-bottom-width: 3px;
-  border-bottom-color: var(--ok);
+    border-bottom-width: 3px;
+    border-bottom-color: var(--ok);
 }
 
 .encoder {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  min-width: 5.2rem;
-  padding: 0 0.4rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: var(--ground);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: ew-resize;
-  touch-action: none;
-  user-select: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    min-width: 5.2rem;
+    padding: 0 0.4rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: ew-resize;
+    touch-action: none;
+    user-select: none;
 }
 
 /* The one the jog wheel turns — `programmerParamIndex`. */
 .encoder-selected {
-  border-color: var(--accent);
+    border-color: var(--accent);
 }
 
 .encoder-absent {
-  color: var(--ink-dim);
-  cursor: default;
+    color: var(--ink-dim);
+    cursor: default;
 }
 
 .encoder-name {
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
 }
 
 .encoder-selected .encoder-name {
-  color: var(--accent);
+    color: var(--accent);
 }
 
 .encoder-value {
-  font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums;
 }
 
 .encoder-count {
-  font-size: 0.6rem;
-  color: var(--ink-dim);
+    font-size: 0.6rem;
+    color: var(--ink-dim);
 }
 
 .encbar-readout {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-  margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    margin: 0;
 }
 
 .clear-button {
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: var(--ground);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
 }
 
 /* The three-stage Clear says which stage it is at, because the next press
    does something different at each one. */
 .clear-stage-1 {
-  border-color: var(--warn);
-  color: var(--warn);
+    border-color: var(--warn);
+    color: var(--warn);
 }
 
 .clear-stage-2 {
-  border-color: var(--bad);
-  color: var(--bad);
+    border-color: var(--bad);
+    color: var(--bad);
 }
 
 /* ---- the executor bar --------------------------------------------------- */
 
 .execbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: stretch;
-  gap: 0.25rem;
-  height: 6.4rem;
-  padding: 0.25rem 0.6rem;
-  border-top: 1px solid var(--edge);
-  background: var(--panel);
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    gap: 0.25rem;
+    height: 6.4rem;
+    padding: 0.25rem 0.6rem;
+    border-top: 1px solid var(--edge);
+    background: var(--panel);
 }
 
 .execbar-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-  padding-right: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    padding-right: 0.4rem;
 }
 
 .page-step {
-  padding: 0 0.4rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: var(--ground);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
+    padding: 0 0.4rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
 }
 
 .page-step:disabled {
-  color: var(--edge-lit);
-  cursor: default;
+    color: var(--edge-lit);
+    cursor: default;
 }
 
 .page-number {
-  font-variant-numeric: tabular-nums;
-  color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
 }
 
 /* Eight strips, equal width, whatever is on them. A page with nothing
    assigned is eight empty strips and not an absence. */
 .strip {
-  flex: 1 1 0;
-  min-width: 0;
-  display: grid;
-  grid-template-rows: auto 1fr auto auto auto;
-  gap: 0.12rem;
-  padding: 0.15rem;
-  border: 1px solid var(--edge);
-  border-radius: 3px;
-  background: var(--ground);
+    flex: 1 1 0;
+    min-width: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto auto auto;
+    gap: 0.12rem;
+    padding: 0.15rem;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    background: var(--ground);
 }
 
 .strip-selected {
-  border-color: var(--accent);
+    border-color: var(--accent);
+    cursor: default;
 }
 
 .strip-empty {
-  opacity: 0.55;
+    opacity: 0.55;
+}
+
+.strip-assigned {
+    cursor: pointer;
 }
 
 .strip-head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.3rem;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.66rem;
-  cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.66rem;
+    cursor: pointer;
 }
 
 /* A running executor. The lamp is the border of its head, so it reads at a
    glance across eight strips. */
 .strip-running {
-  color: var(--ok);
+    color: var(--ok);
 }
 
 .strip-number {
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
 }
 
 .strip-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  text-align: left;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-align: left;
 }
 
 .strip-fader {
-  position: relative;
-  min-height: 0.9rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 2px;
-  background: #0b0e13;
-  cursor: ns-resize;
-  touch-action: none;
-  user-select: none;
-  overflow: hidden;
+    position: relative;
+    min-height: 0.9rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 2px;
+    background: #0b0e13;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+    overflow: hidden;
 }
 
 .strip-fader[aria-disabled="true"] {
-  cursor: default;
+    cursor: default;
 }
 
 .strip-level {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--accent);
-  opacity: 0.75;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--accent);
+    opacity: 0.75;
 }
 
 .strip-percent,
 .strip-cue {
-  font-size: 0.62rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-dim);
-  text-align: right;
-}
-
-.strip-buttons {
-  display: flex;
-  gap: 0.1rem;
-}
-
-.strip-button {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0.05rem 0;
-  border: 1px solid var(--edge-lit);
-  border-radius: 2px;
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.58rem;
-  cursor: pointer;
+    font-size: 0.62rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-dim);
+    text-align: right;
 }
 
 /*
@@ -869,114 +854,114 @@
  * interface deciding what the executor's own setting means.
  */
 .strip-button-unbound {
-  border-style: dashed;
-  color: var(--ink-dim);
-  cursor: not-allowed;
+    border-style: dashed;
+    color: var(--ink-dim);
+    cursor: not-allowed;
 }
 
 /* ---- footer ------------------------------------------------------------- */
 
 .desk-footer {
-  flex: 0 0 auto;
-  border-top: 1px solid var(--edge);
-  background: var(--panel);
+    flex: 0 0 auto;
+    border-top: 1px solid var(--edge);
+    background: var(--panel);
 }
 
 .command-line {
-  display: flex;
-  align-items: baseline;
-  gap: 1rem;
-  padding: 0.3rem 0.6rem;
-  border-bottom: 1px solid var(--edge);
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--edge);
 }
 
 .command-line form {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  flex: 1 1 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex: 1 1 auto;
 }
 
 .command-line label {
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
 }
 
 .command-line input {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 0.2rem 0.4rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: var(--ground);
-  color: var(--ink);
-  font: inherit;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
 }
 
 .daemon-line {
-  margin: 0;
-  flex: 1 1 auto;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--ink-dim);
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ink-dim);
 }
 
 .daemon-line output {
-  color: var(--ink);
+    color: var(--ink);
 }
 
 .strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 1.1rem;
-  margin: 0;
-  padding: 0.25rem 0.6rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1.1rem;
+    margin: 0;
+    padding: 0.25rem 0.6rem;
 }
 
 .reading {
-  display: flex;
-  align-items: baseline;
-  gap: 0.35rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
 }
 
 .reading dt {
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
 }
 
 .reading dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 /* ---- what is not connected, and what went wrong ------------------------- */
 
 .panel {
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--edge);
-  border-radius: 4px;
-  background: var(--panel);
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--edge);
+    border-radius: 4px;
+    background: var(--panel);
 }
 
 .panel-empty {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 1rem;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 1rem;
 }
 
 .panel-empty p {
-  margin: 0;
-  max-width: 60ch;
-  color: var(--ink-dim);
+    margin: 0;
+    max-width: 60ch;
+    color: var(--ink-dim);
 }
 
 /*
@@ -984,26 +969,74 @@
  * that resized the canvas would move every window on the screen.
  */
 .notices {
-  position: absolute;
-  left: 0.6rem;
-  bottom: 4.2rem;
-  max-width: 48ch;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid var(--edge-lit);
-  border-radius: 3px;
-  background: rgb(20 22 26 / 94%);
+    position: absolute;
+    left: 0.6rem;
+    bottom: 4.2rem;
+    max-width: 50ch;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: rgb(20 22 26 / 94%);
+    transition: padding 0.3s ease, border-color 0.3s ease, background-color 0.3s ease;
 }
 
 .notices ul {
-  margin: 0;
-  padding-left: 1rem;
-  color: var(--ink-dim);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--ink-dim);
+}
+
+/* Höhen- und Opacity-Animation für einzelne Einträge */
+.notice {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.3s ease, opacity 0.25s ease;
+    opacity: 1;
+}
+
+.notice-wrapper {
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.2rem 0;
+}
+
+/* Zustand beim Schließen */
+.notice.notice-dismissed {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.notice-content {
+    flex: 1;
+}
+
+/* Button & Hover-Effekt */
+.notice-close {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border-radius: 4px;
+    color: inherit;
+    transition: background-color 0.2s ease;
+}
+
+.notice-close:hover {
+    background-color: rgba(255, 255, 255, 0.12);
 }
 
 .notice-warn {
-  color: var(--warn);
+    color: var(--warn);
 }
 
 .notice-error {
-  color: var(--bad);
+    color: var(--bad);
 }

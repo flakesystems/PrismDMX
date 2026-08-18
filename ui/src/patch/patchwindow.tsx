@@ -53,166 +53,166 @@ const SEARCH_LIMIT = 25;
 
 /** The row being typed into. Local, and dropped when it is submitted. */
 interface Draft {
-  /** The fixture number as it stands now, which is the key everything uses. */
-  readonly id: number;
-  /** The number this row started at, so a change of number is a renumber. */
-  readonly wasId: number | null;
-  /** The name. */
-  readonly name: string;
-  /** The profile key. */
-  readonly typeId: string;
-  /** The universe. */
-  readonly universe: number;
-  /** The start address. */
-  readonly address: number;
+    /** The fixture number as it stands now, which is the key everything uses. */
+    readonly id: number;
+    /** The number this row started at, so a change of number is a renumber. */
+    readonly wasId: number | null;
+    /** The name. */
+    readonly name: string;
+    /** The profile key. */
+    readonly typeId: string;
+    /** The universe. */
+    readonly universe: number;
+    /** The start address. */
+    readonly address: number;
 }
 
 /** The whole window. */
 export function PatchWindow({ show }: { readonly show: JsonValue }) {
-  const send = useSend();
-  const ask = useAsk();
-  const librarySize = useDesk(selectLibrarySize);
-  const rows = useMemo(() => patchRows(show), [show]);
-  const profiles = useMemo(() => embeddedProfiles(show), [show]);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [preview, setPreview] = useState<PatchPreview | null>(null);
-  const [conflicted, setConflicted] = useState<ReadonlySet<number>>(new Set());
+    const send = useSend();
+    const ask = useAsk();
+    const librarySize = useDesk(selectLibrarySize);
+    const rows = useMemo(() => patchRows(show), [show]);
+    const profiles = useMemo(() => embeddedProfiles(show), [show]);
+    const [draft, setDraft] = useState<Draft | null>(null);
+    const [preview, setPreview] = useState<PatchPreview | null>(null);
+    const [conflicted, setConflicted] = useState<ReadonlySet<number>>(new Set());
 
-  // The overlaps in the show **as it stands**, which is the daemon's answer and
-  // not a second opinion. Asked again whenever the show document moves, which
-  // is exactly when the answer can have changed.
-  useEffect(() => {
-    let current = true;
-    void ask({ t: "PatchConflicts" }).then((answer) => {
-      if (current) {
-        setConflicted(conflictedFixtures(conflictsOf(answer)));
-      }
-    });
-    return () => {
-      current = false;
-    };
-  }, [ask, show]);
+    // The overlaps in the show **as it stands**, which is the daemon's answer and
+    // not a second opinion. Asked again whenever the show document moves, which
+    // is exactly when the answer can have changed.
+    useEffect(() => {
+        let current = true;
+        void ask({ t: "PatchConflicts" }).then((answer) => {
+            if (current) {
+                setConflicted(conflictedFixtures(conflictsOf(answer)));
+            }
+        });
+        return () => {
+            current = false;
+        };
+    }, [ask, show]);
 
-  // And what the row being typed into *would* do, asked per keystroke. The
-  // requester drops answers to drafts that have been typed over.
-  const requester = useRef<PreviewRequester | null>(null);
-  useEffect(() => {
-    const live = new PreviewRequester(ask, setPreview);
-    requester.current = live;
-    return () => {
-      live.stop();
-      requester.current = null;
-    };
-  }, [ask]);
-  useEffect(() => {
-    if (draft === null) {
-      setPreview(null);
-      return;
-    }
-    requester.current?.request({
-      t: "PatchPreview",
-      id: draft.id,
-      typeId: draft.typeId,
-      universe: draft.universe,
-      address: draft.address,
-    });
-  }, [draft]);
+    // And what the row being typed into *would* do, asked per keystroke. The
+    // requester drops answers to drafts that have been typed over.
+    const requester = useRef<PreviewRequester | null>(null);
+    useEffect(() => {
+        const live = new PreviewRequester(ask, setPreview);
+        requester.current = live;
+        return () => {
+            live.stop();
+            requester.current = null;
+        };
+    }, [ask]);
+    useEffect(() => {
+        if (draft === null) {
+            setPreview(null);
+            return;
+        }
+        requester.current?.request({
+            t: "PatchPreview",
+            id: draft.id,
+            typeId: draft.typeId,
+            universe: draft.universe,
+            address: draft.address,
+        });
+    }, [draft]);
 
-  const edit = useCallback((row: PatchRow) => {
-    setDraft({
-      id: row.id,
-      wasId: row.id,
-      name: row.name,
-      typeId: row.typeId,
-      universe: row.universe,
-      address: row.address,
-    });
-  }, []);
+    const edit = useCallback((row: PatchRow) => {
+        setDraft({
+            id: row.id,
+            wasId: row.id,
+            name: row.name,
+            typeId: row.typeId,
+            universe: row.universe,
+            address: row.address,
+        });
+    }, []);
 
-  const add = useCallback(() => {
-    const first = profiles[0];
-    setDraft({
-      id: nextFreeFixtureId(rows),
-      wasId: null,
-      name: "",
-      typeId: first?.id ?? "",
-      universe: 1,
-      address: 1,
-    });
-  }, [profiles, rows]);
+    const add = useCallback(() => {
+        const first = profiles[0];
+        setDraft({
+            id: nextFreeFixtureId(rows),
+            wasId: null,
+            name: "",
+            typeId: first?.id ?? "",
+            universe: 1,
+            address: 1,
+        });
+    }, [profiles, rows]);
 
-  const apply = useCallback(() => {
-    if (draft === null) {
-      return;
-    }
-    // A change of number is its own command, and it goes first: the number is
-    // the key the patch is filed under, so an unpatch-and-patch pair would
-    // leave the rig without that fixture in between — which is why
-    // `RenumberFixture` exists at all. Both travel on one ordered channel.
-    if (draft.wasId !== null && draft.wasId !== draft.id) {
-      send({ t: "RenumberFixture", id: draft.wasId, to: draft.id });
-    }
-    send({
-      t: "PatchFixture",
-      id: draft.id,
-      name: draft.name,
-      typeId: draft.typeId,
-      universe: draft.universe,
-      address: draft.address,
-    });
-    // **Dropped, not kept.** What the fixture is comes back as a `ShowPatch`;
-    // a draft held here until the delta arrived would be this interface having
-    // an opinion about the show for as long as the round trip took.
-    setDraft(null);
-  }, [draft, send]);
+    const apply = useCallback(() => {
+        if (draft === null) {
+            return;
+        }
+        // A change of number is its own command, and it goes first: the number is
+        // the key the patch is filed under, so an unpatch-and-patch pair would
+        // leave the rig without that fixture in between — which is why
+        // `RenumberFixture` exists at all. Both travel on one ordered channel.
+        if (draft.wasId !== null && draft.wasId !== draft.id) {
+            send({ t: "RenumberFixture", id: draft.wasId, to: draft.id });
+        }
+        send({
+            t: "PatchFixture",
+            id: draft.id,
+            name: draft.name,
+            typeId: draft.typeId,
+            universe: draft.universe,
+            address: draft.address,
+        });
+        // **Dropped, not kept.** What the fixture is comes back as a `ShowPatch`;
+        // a draft held here until the delta arrived would be this interface having
+        // an opinion about the show for as long as the round trip took.
+        setDraft(null);
+    }, [draft, send]);
 
-  const remove = useCallback(
-    (id: number) => {
-      send({ t: "UnpatchFixture", id });
-      setDraft(null);
-    },
-    [send],
-  );
-
-  const embed = useCallback(
-    (typeId: string) => {
-      send({ t: "EmbedFixtureType", typeId });
-    },
-    [send],
-  );
-
-  return (
-    <div className="patch" data-testid="patch">
-      <PatchToolbar
-        rows={rows}
-        profiles={profiles}
-        librarySize={librarySize}
-        embedded={new Set(profiles.map((profile) => profile.id))}
-        onAdd={add}
-        onEmbed={embed}
-      />
-      {profiles.length === 0 ? (
-        <p className="window-note" data-testid="patch-no-profiles">
-          This show carries no fixture profiles, so nothing can be patched into it yet. Add one
-          from the desk&rsquo;s library above; the show keeps its own copy of it from then on.
-        </p>
-      ) : null}
-      <PatchTable rows={rows} conflicted={conflicted} editing={draft?.wasId ?? null} onEdit={edit} />
-      {draft === null ? null : (
-        <PatchForm
-          draft={draft}
-          profiles={profiles}
-          preview={preview}
-          onChange={setDraft}
-          onApply={apply}
-          onRemove={remove}
-          onCancel={() => {
+    const remove = useCallback(
+        (id: number) => {
+            send({ t: "UnpatchFixture", id });
             setDraft(null);
-          }}
-        />
-      )}
-    </div>
-  );
+        },
+        [send],
+    );
+
+    const embed = useCallback(
+        (typeId: string) => {
+            send({ t: "EmbedFixtureType", typeId });
+        },
+        [send],
+    );
+
+    return (
+        <div className="patch" data-testid="patch">
+            <PatchToolbar
+                rows={rows}
+                profiles={profiles}
+                librarySize={librarySize}
+                embedded={new Set(profiles.map((profile) => profile.id))}
+                onAdd={add}
+                onEmbed={embed}
+            />
+            {profiles.length === 0 ? (
+                <p className="window-note" data-testid="patch-no-profiles">
+                    This show carries no fixture profiles, so nothing can be patched into it yet. Add one
+                    from the desk&rsquo;s library above; the show keeps its own copy of it from then on.
+                </p>
+            ) : null}
+            <PatchTable rows={rows} conflicted={conflicted} editing={draft?.wasId ?? null} onEdit={edit} />
+            {draft === null ? null : (
+                <PatchForm
+                    draft={draft}
+                    profiles={profiles}
+                    preview={preview}
+                    onChange={setDraft}
+                    onApply={apply}
+                    onRemove={remove}
+                    onCancel={() => {
+                        setDraft(null);
+                    }}
+                />
+            )}
+        </div>
+    );
 }
 
 /**
@@ -224,31 +224,31 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
  * `Query::SearchLibrary` and what comes back is at most a screenful, best first.
  */
 function PatchToolbar({
-  rows,
-  profiles,
-  librarySize,
-  embedded,
-  onAdd,
-  onEmbed,
+    rows,
+    profiles,
+    librarySize,
+    embedded,
+    onAdd,
+    onEmbed,
 }: {
-  readonly rows: readonly PatchRow[];
-  readonly profiles: readonly ProfileRow[];
-  readonly librarySize: number | null;
-  readonly embedded: ReadonlySet<string>;
-  readonly onAdd: () => void;
-  readonly onEmbed: (typeId: string) => void;
+    readonly rows: readonly PatchRow[];
+    readonly profiles: readonly ProfileRow[];
+    readonly librarySize: number | null;
+    readonly embedded: ReadonlySet<string>;
+    readonly onAdd: () => void;
+    readonly onEmbed: (typeId: string) => void;
 }) {
-  return (
-    <div className="patch-bar">
-      <span className="patch-count" data-testid="patch-count">
-        {rows.length} fixtures · {profiles.length} profiles
-      </span>
-      <button type="button" onClick={onAdd} disabled={profiles.length === 0}>
-        Add fixture
-      </button>
-      <LibrarySearch librarySize={librarySize} embedded={embedded} onEmbed={onEmbed} />
-    </div>
-  );
+    return (
+        <div className="patch-bar">
+            <span className="patch-count" data-testid="patch-count">
+                {rows.length} fixtures · {profiles.length} profiles
+            </span>
+            <button type="button" onClick={onAdd} disabled={profiles.length === 0}>
+                Add fixture
+            </button>
+            <LibrarySearch librarySize={librarySize} embedded={embedded} onEmbed={onEmbed} />
+        </div>
+    );
 }
 
 /**
@@ -260,263 +260,263 @@ function PatchToolbar({
  * they just added would look for it somewhere else.
  */
 function LibrarySearch({
-  librarySize,
-  embedded,
-  onEmbed,
+    librarySize,
+    embedded,
+    onEmbed,
 }: {
-  readonly librarySize: number | null;
-  readonly embedded: ReadonlySet<string>;
-  readonly onEmbed: (typeId: string) => void;
+    readonly librarySize: number | null;
+    readonly embedded: ReadonlySet<string>;
+    readonly onEmbed: (typeId: string) => void;
 }) {
-  const ask = useAsk();
-  const [text, setText] = useState("");
-  const [matches, setMatches] = useState<readonly LibraryEntry[]>([]);
-  const [open, setOpen] = useState(false);
+    const ask = useAsk();
+    const [text, setText] = useState("");
+    const [matches, setMatches] = useState<readonly LibraryEntry[]>([]);
+    const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    let current = true;
-    void ask({ t: "SearchLibrary", text, limit: SEARCH_LIMIT }).then((answer) => {
-      if (current && answer !== null && answer.t === "LibraryMatches") {
-        setMatches(answer.matches);
-      }
-    });
-    return () => {
-      // An answer to a search that has been typed over is dropped, exactly as
-      // a preview's is: drawn, it would be a list of the *previous* word.
-      current = false;
-    };
-  }, [ask, text, open]);
+    useEffect(() => {
+        if (!open) {
+            return;
+        }
+        let current = true;
+        void ask({ t: "SearchLibrary", text, limit: SEARCH_LIMIT }).then((answer) => {
+            if (current && answer !== null && answer.t === "LibraryMatches") {
+                setMatches(answer.matches);
+            }
+        });
+        return () => {
+            // An answer to a search that has been typed over is dropped, exactly as
+            // a preview's is: drawn, it would be a list of the *previous* word.
+            current = false;
+        };
+    }, [ask, text, open]);
 
-  return (
-    <div className="patch-embed">
-      <label>
-        Add profile
-        <input
-          data-testid="library-search"
-          value={text}
-          placeholder={librarySize === null ? "" : `search ${String(librarySize)} profiles`}
-          onFocus={() => {
-            setOpen(true);
-          }}
-          onChange={(event) => {
-            setOpen(true);
-            setText(event.target.value);
-          }}
-        />
-      </label>
-      {open ? (
-        <ul className="library-matches" data-testid="library-matches">
-          {matches.length === 0 ? (
-            <li className="library-empty">Nothing in the library matches that.</li>
-          ) : null}
-          {matches.map((entry) => (
-            <li key={entry.id}>
-              <button
-                type="button"
-                className="linkish"
-                data-testid={`library-${entry.id}`}
-                disabled={embedded.has(entry.id)}
-                onClick={() => {
-                  onEmbed(entry.id);
-                  setOpen(false);
-                  setText("");
-                }}
-              >
-                {profileLabel(entry)}
-                {embedded.has(entry.id) ? " — already in this show" : ""}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
+    return (
+        <div className="patch-embed">
+            <label>
+                Add profile
+                <input
+                    data-testid="library-search"
+                    value={text}
+                    placeholder={librarySize === null ? "" : `search ${String(librarySize)} profiles`}
+                    onFocus={() => {
+                        setOpen(true);
+                    }}
+                    onChange={(event) => {
+                        setOpen(true);
+                        setText(event.target.value);
+                    }}
+                />
+            </label>
+            {open ? (
+                <ul className="library-matches" data-testid="library-matches">
+                    {matches.length === 0 ? (
+                        <li className="library-empty">Nothing in the library matches that.</li>
+                    ) : null}
+                    {matches.map((entry) => (
+                        <li key={entry.id}>
+                            <button
+                                type="button"
+                                className="linkish"
+                                data-testid={`library-${entry.id}`}
+                                disabled={embedded.has(entry.id)}
+                                onClick={() => {
+                                    onEmbed(entry.id);
+                                    setOpen(false);
+                                    setText("");
+                                }}
+                            >
+                                {profileLabel(entry)}
+                                {embedded.has(entry.id) ? " — already in this show" : ""}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            ) : null}
+        </div>
+    );
 }
 
 /** The patch itself. */
 function PatchTable({
-  rows,
-  conflicted,
-  editing,
-  onEdit,
+    rows,
+    conflicted,
+    editing,
+    onEdit,
 }: {
-  readonly rows: readonly PatchRow[];
-  readonly conflicted: ReadonlySet<number>;
-  readonly editing: number | null;
-  readonly onEdit: (row: PatchRow) => void;
+    readonly rows: readonly PatchRow[];
+    readonly conflicted: ReadonlySet<number>;
+    readonly editing: number | null;
+    readonly onEdit: (row: PatchRow) => void;
 }) {
-  if (rows.length === 0) {
-    return <p className="window-note">Nothing is patched.</p>;
-  }
-  return (
-    <div className="sheet-scroll">
-      <table className="sheet">
-        <thead>
-          <tr>
-            <th scope="col">Fx</th>
-            <th scope="col">Name</th>
-            <th scope="col">Type</th>
-            <th scope="col">Univ</th>
-            <th scope="col">Addr</th>
-            <th scope="col">Ch</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.id}
-              className={rowClass(conflicted.has(row.id), editing === row.id)}
-              data-testid={`patch-row-${String(row.id)}`}
-              onClick={() => {
-                onEdit(row);
-              }}
-            >
-              <td>
-                <button type="button" className="linkish" aria-label={`Edit fixture ${String(row.id)}`}>
-                  {row.id}
-                </button>
-              </td>
-              <td>{row.name === "" ? "—" : row.name}</td>
-              <td>{row.typeName}</td>
-              <td>{row.universe}</td>
-              <td>{row.address}</td>
-              <td>{row.footprint === 0 ? "—" : row.footprint}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+    if (rows.length === 0) {
+        return <p className="window-note">Nothing is patched.</p>;
+    }
+    return (
+        <div className="sheet-scroll">
+            <table className="sheet">
+                <thead>
+                    <tr>
+                        <th scope="col">Fx</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Univ</th>
+                        <th scope="col">Addr</th>
+                        <th scope="col">Ch</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map((row) => (
+                        <tr
+                            key={row.id}
+                            className={rowClass(conflicted.has(row.id), editing === row.id)}
+                            data-testid={`patch-row-${String(row.id)}`}
+                            onClick={() => {
+                                onEdit(row);
+                            }}
+                        >
+                            <td>
+                                <button type="button" className="linkish" aria-label={`Edit fixture ${String(row.id)}`}>
+                                    {row.id}
+                                </button>
+                            </td>
+                            <td>{row.name === "" ? "—" : row.name}</td>
+                            <td>{row.typeName}</td>
+                            <td>{row.universe}</td>
+                            <td>{row.address}</td>
+                            <td>{row.footprint === 0 ? "—" : row.footprint}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
 }
 
 /** The classes one row carries. */
 function rowClass(clashes: boolean, editing: boolean): string {
-  return [clashes ? "row-conflict" : "", editing ? "row-editing" : ""].filter(Boolean).join(" ");
+    return [clashes ? "row-conflict" : "", editing ? "row-editing" : ""].filter(Boolean).join(" ");
 }
 
 /** The row being typed into, and what the daemon says it would do. */
 function PatchForm({
-  draft,
-  profiles,
-  preview,
-  onChange,
-  onApply,
-  onRemove,
-  onCancel,
+    draft,
+    profiles,
+    preview,
+    onChange,
+    onApply,
+    onRemove,
+    onCancel,
 }: {
-  readonly draft: Draft;
-  readonly profiles: readonly ProfileRow[];
-  readonly preview: PatchPreview | null;
-  readonly onChange: (draft: Draft) => void;
-  readonly onApply: () => void;
-  readonly onRemove: (id: number) => void;
-  readonly onCancel: () => void;
+    readonly draft: Draft;
+    readonly profiles: readonly ProfileRow[];
+    readonly preview: PatchPreview | null;
+    readonly onChange: (draft: Draft) => void;
+    readonly onApply: () => void;
+    readonly onRemove: (id: number) => void;
+    readonly onCancel: () => void;
 }) {
-  const clashes = preview !== null && preview.accepted && preview.conflicts.length > 0;
-  return (
-    <form
-      className="patch-form"
-      data-testid="patch-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onApply();
-      }}
-    >
-      <fieldset>
-        <legend>{draft.wasId === null ? "New fixture" : `Fixture ${String(draft.wasId)}`}</legend>
-        <NumberField
-          label="Number"
-          testId="draft-id"
-          value={draft.id}
-          onChange={(id) => {
-            onChange({ ...draft, id });
-          }}
-        />
-        <label>
-          Name
-          <input
-            data-testid="draft-name"
-            value={draft.name}
-            onChange={(event) => {
-              onChange({ ...draft, name: event.target.value });
+    const clashes = preview !== null && preview.accepted && preview.conflicts.length > 0;
+    return (
+        <form
+            className="patch-form"
+            data-testid="patch-form"
+            onSubmit={(event) => {
+                event.preventDefault();
+                onApply();
             }}
-          />
-        </label>
-        <label>
-          Type
-          <select
-            data-testid="draft-type"
-            value={draft.typeId}
-            onChange={(event) => {
-              onChange({ ...draft, typeId: event.target.value });
-            }}
-          >
-            {profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profileLabel(profile)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <NumberField
-          label="Universe"
-          testId="draft-universe"
-          value={draft.universe}
-          onChange={(universe) => {
-            onChange({ ...draft, universe });
-          }}
-        />
-        <NumberField
-          label="Address"
-          testId="draft-address"
-          value={draft.address}
-          onChange={(address) => {
-            onChange({ ...draft, address });
-          }}
-        />
-      </fieldset>
-      <p
-        className={`patch-preview ${previewClass(preview, clashes)}`}
-        data-testid="patch-preview"
-        role="status"
-      >
-        {previewText(preview, draft.id)}
-      </p>
-      <div className="patch-actions">
-        <button type="submit" disabled={!isAcceptable(preview)} data-testid="draft-apply">
-          {draft.wasId === null ? "Patch" : "Apply"}
-        </button>
-        {draft.wasId === null ? null : (
-          <button
-            type="button"
-            data-testid="draft-remove"
-            onClick={() => {
-              onRemove(draft.wasId ?? draft.id);
-            }}
-          >
-            Unpatch
-          </button>
-        )}
-        <button type="button" onClick={onCancel} data-testid="draft-cancel">
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
+        >
+            <fieldset>
+                <legend>{draft.wasId === null ? "New fixture" : `Fixture ${String(draft.wasId)}`}</legend>
+                <NumberField
+                    label="Number"
+                    testId="draft-id"
+                    value={draft.id}
+                    onChange={(id) => {
+                        onChange({ ...draft, id });
+                    }}
+                />
+                <label>
+                    Name
+                    <input
+                        data-testid="draft-name"
+                        value={draft.name}
+                        onChange={(event) => {
+                            onChange({ ...draft, name: event.target.value });
+                        }}
+                    />
+                </label>
+                <label>
+                    Type
+                    <select
+                        data-testid="draft-type"
+                        value={draft.typeId}
+                        onChange={(event) => {
+                            onChange({ ...draft, typeId: event.target.value });
+                        }}
+                    >
+                        {profiles.map((profile) => (
+                            <option key={profile.id} value={profile.id}>
+                                {profileLabel(profile)}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <NumberField
+                    label="Universe"
+                    testId="draft-universe"
+                    value={draft.universe}
+                    onChange={(universe) => {
+                        onChange({ ...draft, universe });
+                    }}
+                />
+                <NumberField
+                    label="Address"
+                    testId="draft-address"
+                    value={draft.address}
+                    onChange={(address) => {
+                        onChange({ ...draft, address });
+                    }}
+                />
+            </fieldset>
+            <p
+                className={`patch-preview ${previewClass(preview, clashes)}`}
+                data-testid="patch-preview"
+                role="status"
+            >
+                {previewText(preview, draft.id)}
+            </p>
+            <div className="patch-actions">
+                <button type="submit" disabled={!isAcceptable(preview)} data-testid="draft-apply">
+                    {draft.wasId === null ? "Patch" : "Apply"}
+                </button>
+                {draft.wasId === null ? null : (
+                    <button
+                        type="button"
+                        data-testid="draft-remove"
+                        onClick={() => {
+                            onRemove(draft.wasId ?? draft.id);
+                        }}
+                    >
+                        Unpatch
+                    </button>
+                )}
+                <button type="button" onClick={onCancel} data-testid="draft-cancel">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    );
 }
 
 /** Which of the three things the preview line is saying. */
 function previewClass(preview: PatchPreview | null, clashes: boolean): string {
-  if (preview === null) {
-    return "preview-waiting";
-  }
-  if (!preview.accepted) {
-    return "preview-refused";
-  }
-  return clashes ? "preview-overlap" : "preview-clear";
+    if (preview === null) {
+        return "preview-waiting";
+    }
+    if (!preview.accepted) {
+        return "preview-refused";
+    }
+    return clashes ? "preview-overlap" : "preview-clear";
 }
 
 /**
@@ -528,30 +528,30 @@ function previewClass(preview: PatchPreview | null, clashes: boolean): string {
  * a new one is.
  */
 function NumberField({
-  label,
-  testId,
-  value,
-  onChange,
+    label,
+    testId,
+    value,
+    onChange,
 }: {
-  readonly label: string;
-  readonly testId: string;
-  readonly value: number;
-  readonly onChange: (value: number) => void;
+    readonly label: string;
+    readonly testId: string;
+    readonly value: number;
+    readonly onChange: (value: number) => void;
 }) {
-  return (
-    <label>
-      {label}
-      <input
-        data-testid={testId}
-        inputMode="numeric"
-        value={String(value)}
-        onChange={(event) => {
-          const typed = Number(event.target.value.trim());
-          if (event.target.value.trim() !== "" && Number.isInteger(typed) && typed >= 0) {
-            onChange(typed);
-          }
-        }}
-      />
-    </label>
-  );
+    return (
+        <label>
+            {label}
+            <input
+                data-testid={testId}
+                inputMode="numeric"
+                value={String(value)}
+                onChange={(event) => {
+                    const typed = Number(event.target.value.trim());
+                    if (event.target.value.trim() !== "" && Number.isInteger(typed) && typed >= 0) {
+                        onChange(typed);
+                    }
+                }}
+            />
+        </label>
+    );
 }
