@@ -122,6 +122,11 @@ type Command =
   | { t: "ApplyPreset"; presetId: PresetId }
   | { t: "ClearProgrammer" }
   | { t: "StoreCue"; sequenceId: SequenceId; cueNumber: string }
+  | { t: "StorePreset"; presetId: PresetId; pool: FeatureGroup; name: string; color: RgbColor | null }
+  | { t: "CreateSequence"; sequenceId: SequenceId; name: string }
+  | { t: "SetCueProperty"; sequenceId: SequenceId; cueNumber: string; property: CueProperty }
+  | { t: "DeleteCue"; sequenceId: SequenceId; cueNumber: string }
+  | { t: "AssignExecutor"; executorId: ExecutorId; sequenceId: SequenceId | null }
   | { t: "ExecutorGo"; executorId: ExecutorId; direction: "Next" | "Prev" }
   | { t: "ExecutorOff"; executorId: ExecutorId }
   | { t: "SetExecutorMaster"; executorId: ExecutorId; level: number }
@@ -152,6 +157,20 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 
 > **Three commands the patch needed** *(S27)*. `PatchFixture` alone can only ever *add* to a rig, so a patch nobody could correct was the state the interface was in until S27. `UnpatchFixture` takes one out, and does **not** cascade into groups, presets or cues — a show outlives the rig it was written on (S11), and `Show::issues` reports what now dangles rather than deleting an operator's stored looks. `RenumberFixture` is one command and not an unpatch plus a patch, because the number is the key the patch is filed under: doing it in two steps leaves the rig without that fixture in between, and leaves it deleted if the second step is refused. `EmbedFixtureType` carries **a key and nothing else**, resolved by the daemon against `prism_core::library` — the same rule `PatchFixture` follows in carrying no channels, since a client that sent a whole `FixtureType` would be authoring show content for the daemon to validate. Without it a brand-new show, which carries no profiles at all, could not be patched from an interface.
 
+> **Five commands a show needed** *(S28)*. Before them the protocol could store a cue and apply a preset, and nothing else about a show could be written from an interface: there was no way to make a sequence to store into, no way to put one on an executor so it could be fired, no way to correct a cue that had been stored, and no way to make a preset for `ApplyPreset` to apply. So a show could only ever be written by hand, in a file, somewhere else.
+>
+> `CreateSequence` makes an **empty** cue list and is refused when the number is taken — a *create* that replaced a running cue list would empty a playback that is on stage. It is deliberately not S39's `StoreSequence`, which is a different act with a mode on it: that one stores the *programmer* into a sequence.
+>
+> `SetCueProperty` carries **one field** (`CueProperty`: number, name, fade in, fade out, delay, trigger). The alternative — one command carrying every editable field — makes a client read the cue, change one member and send the rest back, which is a read-modify-write over state the daemon owns; two operators editing two different columns would then each undo the other. What a cue *sets* is not among the fields, for the reason `PatchFixture` carries no channels: values come from the programmer.
+>
+> `DeleteCue` does not renumber what is left. A cue number is what an operator has written on a running order and what a Goto names.
+>
+> `AssignExecutor` puts a sequence on a slot, or takes one off. An empty slot gains an executor with **the desk's defaults** — the three button functions the protocol can actually press and a master at full — because what a fader and four buttons do is show content, and a client that chose it would be authoring the show. Taking the sequence off keeps everything else the slot has.
+>
+> `StorePreset` is `StoreCue`'s mirror, with two differences that both come from the type: it carries a name and a colour, so a store with an **empty programmer** onto a preset that exists is an ordinary relabel (and onto one that does not exist it is refused, because an empty preset applies nothing); and which values go in depends on the `pool`, since a colour preset takes the colour values and the bank an attribute is filed under is the *profile's* answer rather than the attribute name's.
+>
+> **None of the five carries a store mode**, and that is the session's one deliberate omission: `prism_core::Programmer` merges unconditionally, S39 adds Merge / Override / Remove, and a client carrying a mode the daemon did not honour would be describing an outcome that did not happen. What S28 does instead is *say so first* — see `Query::StorePreview` in §5.2.
+
 > **`PlaceWindow` is twelfth and is not in `ARCHITECTURE_SPEC.md` §4.4** *(S25)*. §4.4 lists what the *console* issues, and an X-Touch opens and closes windows without ever dragging one. But §4.1 puts `x`, `y`, `w` and `h` in the session, so a window moved on one screen has to move on every other one — and a client that kept the geometry to itself would be holding session state locally, which is precisely what **D11** exists to prevent. The gap was found when the canvas was built and there was no honest way to drag a window; the four coordinates are canvas units and are rejected as NaN or infinity in both directions, like every other `f64` in the domain.
 
 > **Three commands a view library needed** *(S35)*. Until S35 a view could be stored and selected and nothing else: no rename, no delete, and no way to put views in the order an operator wants to step through. All three are session commands that `ARCHITECTURE_SPEC.md` §4.4 does not list, for `PlaceWindow`'s reason — §4.4 is what a *console* issues, and an X-Touch cannot type a name — while §4.1 puts the view library in the session, so a client that reordered views locally would be holding session state.
@@ -175,15 +194,34 @@ reported afterwards beside a patch that has already moved.
 type Query =
   | { t: "PatchConflicts" }
   | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number }
-  | { t: "SearchLibrary"; text: string; limit: number };
+  | { t: "SearchLibrary"; text: string; limit: number }
+  | { t: "StorePreview"; target: StoreTarget };
+
+type StoreTarget =
+  | { t: "Cue"; sequenceId: SequenceId; cueNumber: string }
+  | { t: "Preset"; presetId: PresetId; pool: FeatureGroup };
 
 type Answer =
   | { t: "PatchConflicts"; conflicts: PatchConflict[] }
   | { t: "PatchPreview"; preview: PatchPreview }
-  | { t: "LibraryMatches"; matches: LibraryEntry[]; total: number };
+  | { t: "LibraryMatches"; matches: LibraryEntry[]; total: number }
+  | { t: "StorePreview"; preview: StorePreview };
+
+interface StorePreview {
+  accepted: boolean; refusal: string | null;
+  exists: boolean;  name: string;        // what is filed there now
+  mode: "Merge";                          // StoreMode — one value today, three in S39
+  added: number; replaced: number; kept: number;
+}
 ```
 
 > **`SearchLibrary` is the variant that made the mechanism necessary** *(S44)*. `PatchPreview` could conceivably have been a client's own arithmetic, wrongly; the fixture library could not be sent at all. The desk knows some two thousand profiles, an answer has to fit in a frame, and a `LibraryEntry` is deliberately not a `FixtureType` — a key, a manufacturer, a name, a mode and a footprint, which is what a menu row shows. The profile itself never leaves the daemon: `Command::EmbedFixtureType` names the one that was chosen by its key, and the daemon copies it into the show. The `limit` a client asks for is **clamped by the daemon**, because a client that asked for two thousand would otherwise get an answer no frame can carry.
+
+> **`StorePreview` is the variant S28 needed** *(S28)*. The exit criterion was *a store that would overwrite says what it will do **before** it does it, even where the only mode available is Merge* — which is `PatchPreview`'s shape one gesture along, and for the same reason: a store that reported afterwards would have reported it by *doing* it, on a show somebody is about to run.
+>
+> Three of the fields are the counts, and they are the whole of what Merge means: `added` is what the store puts in that is not there, `replaced` is what it writes over, and **`kept` is what it leaves alone** — exactly what an Override would have thrown away. The fourth is `mode`, and it is on the answer rather than in the client because `prism_core::Programmer` is what decides it: S39 adds Override and Remove, and an interface that had spelled `"Merge"` itself would go on looking right and be wrong. A client renders the word it is given.
+>
+> It takes its refusal from the **same** builders the store runs (`Programmer::cue`, `Programmer::preset`), so a preview and the store after it cannot disagree — the rule `PatchPreview` and `check_patch` already share.
 
 Four rules, and the first three are what make it safe to ask one on a desk that
 is running a show:
@@ -277,5 +315,6 @@ A client is never a dependency of the engine. Disconnecting every client leaves 
 | Backpressure | Attach a deliberately slow client; assert telemetry is dropped, commands are not, and other clients are unaffected *(S16 built the mechanism through a 512-byte socket; S18 measures it against a running daemon — the slow client loses more telemetry frames than it receives, receives every control message in order afterwards, and the client beside it has its commands answered throughout)* |
 | **Telemetry layout, from the client's end** | Decode frames a running daemon sent and compare against what `TelemetryFrame::decode` made of the same bytes; assert a layout version this build does not know is **dropped** *(S24: `crates/prismd/tests/ui_telemetry.rs` records the frames and writes down `decode`'s own answers; `ui/src/telemetry/frame.test.ts` holds the browser to them. There is no encoder in the client — a client never sends telemetry (§4), and one would exist only to feed the decoder its own idea of the format)* |
 | **Telemetry into a picture** | Assert the frame reaches a canvas and **not** reactive state, and that drawing it fits the budget *(S24: a `<Profiler>` counts zero React commits over 300 frames of 64 universes; `ui/e2e/telemetry.spec.ts` measures decode and paint in Chromium against a real daemon publishing 64 real universes — 0.30 ms median, 1.10 ms p99. A frame this build cannot read costs one picture and nothing else, asserted by sending malformed frames and then a delta that has to arrive)* |
+| **A store says what it will do first (§5.2)** | Record a script of stores and questions off a running daemon; assert every question was answered, broadcast **no** deltas, and left the sequences, the presets and the executors exactly as the step before it did — and that the counts a preview answered with are the cue the daemon ended up holding *(S28: `crates/prismd/tests/ui_show.rs`. The same file asserts the session's hardest claim, that **editing a preset moves the values of the cues that reference it**: the recorded cue's blues change and its whites, which the store never mentioned, do not)* |
 | **Queries change nothing (§5.2)** | Record a script of commands and questions off a running daemon; assert every question was answered, broadcast **no** deltas at all, and left the patch and the profiles exactly as the step before it did *(S27: `crates/prismd/tests/ui_patch.rs`. The same file asserts the harder half — that a preview is what the patch that follows it does: the address a preview called free is the address the fixture ends up at, and the overlap a preview named before the command is the overlap `Show::conflicts` reports afterwards)* |
 | Transport parity | Run the full suite over both named pipe / UDS and WebSocket; results must be identical *(S16: one suite, called three times — the third transport is the in-process duplex — plus a scripted session recorded over each and compared as bytes)* |

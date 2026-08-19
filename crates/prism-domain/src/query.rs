@@ -32,7 +32,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{FixtureId, UniverseId};
+use crate::{FeatureGroup, FixtureId, PresetId, SequenceId, UniverseId};
 
 /// Two fixtures sharing DMX channels.
 ///
@@ -131,6 +131,94 @@ pub struct LibraryEntry {
     pub footprint: u16,
 }
 
+/// What a store would be filed under — the cue or the preset it would land in.
+///
+/// Carries the same fields the command does, minus the ones a preview cannot be
+/// affected by: `Command::StorePreset`'s name and colour are written whatever is
+/// already there, so asking about them would be asking about the client's own
+/// text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(tag = "t", rename_all_fields = "camelCase")]
+pub enum StoreTarget {
+    /// A cue of a sequence, by the number an operator types.
+    Cue {
+        /// The sequence it would go into.
+        sequence_id: SequenceId,
+        /// The cue number, as typed.
+        cue_number: String,
+    },
+    /// A preset of a pool.
+    Preset {
+        /// The preset number.
+        preset_id: PresetId,
+        /// The pool, which is **what decides which programmer values are
+        /// taken**: a colour preset stores the colour values and nothing else,
+        /// and which bank an attribute is on is the *profile's* answer rather
+        /// than the attribute name's.
+        pool: FeatureGroup,
+    },
+}
+
+/// How a store combines with what is already there.
+///
+/// **One value, and that is the point of the type.** `prism_core::Programmer`
+/// merges unconditionally and its own documentation names Merge / Override /
+/// Remove as the distinction a console makes — which is **S39**'s to build. Until
+/// then the daemon answers with the mode it will actually use and the interface
+/// puts that word on the button, rather than offering a choice it cannot honour.
+///
+/// A client must not spell the word itself: when S39 adds the other two, a
+/// hard-coded "Merge" in an interface would go on being right-looking and wrong.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum StoreMode {
+    /// What is stored is added to what is there; nothing is taken away.
+    ///
+    /// The programmer is sparse by specification, so a store carries only what
+    /// was touched this time — and overwriting would delete every value in the
+    /// cue the operator did not happen to touch, which is data loss the command
+    /// has no way to ask for.
+    #[default]
+    Merge,
+}
+
+/// What storing the programmer into a cue or a preset *would* do.
+///
+/// S28's exit criterion in one type: **a store that would overwrite says what it
+/// will do before it does it, even where the only mode available is Merge.** So
+/// the three counts are the whole of what Merge means, said as numbers rather
+/// than as a warning an operator learns to click past.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct StorePreview {
+    /// Whether the store would be applied.
+    pub accepted: bool,
+    /// Why it would not be, in words an operator can read. `None` when it would.
+    pub refusal: Option<String>,
+    /// Whether something is already filed under that number.
+    ///
+    /// The difference between *create* and *overwrite*, which is the first thing
+    /// an operator needs to know and the one a button label can carry.
+    pub exists: bool,
+    /// What is filed there now, or empty when nothing is.
+    pub name: String,
+    /// How this store would combine with what is there.
+    pub mode: StoreMode,
+    /// Values the programmer would add that are not stored yet.
+    pub added: u32,
+    /// Values already stored that the programmer would write over.
+    pub replaced: u32,
+    /// Values already stored that this store would **leave alone**.
+    ///
+    /// The number that makes Merge legible: it is exactly what an Override would
+    /// have thrown away.
+    pub kept: u32,
+}
+
 /// Something a client asks that changes nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -169,6 +257,18 @@ pub enum Query {
         /// ask for an answer that would not fit in a frame.
         limit: u32,
     },
+    /// What storing the programmer into this cue or preset would do.
+    ///
+    /// Asked rather than worked out because the answer depends on three things a
+    /// client holds none of together: what the programmer holds, what is already
+    /// filed under that number, and **which store mode this build actually has**
+    /// (`StoreMode`). S28's criterion is that a store says what it will do
+    /// before it does it, and a client that counted the overlap itself would be
+    /// a second opinion about `prism_core::Programmer`'s own merge.
+    StorePreview {
+        /// Where it would go.
+        target: StoreTarget,
+    },
 }
 
 /// The daemon's answer to a [`Query`].
@@ -202,12 +302,17 @@ pub enum Answer {
         /// *50 of 2 084* rather than implying the list is all there is.
         total: u32,
     },
+    /// What that store would do.
+    StorePreview {
+        /// The whole of it.
+        preview: StorePreview,
+    },
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Answer, PatchConflict, PatchPreview, Query};
-    use crate::{FixtureId, UniverseId};
+    use super::{Answer, PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget};
+    use crate::{FeatureGroup, FixtureId, PresetId, SequenceId, UniverseId};
 
     fn conflict() -> PatchConflict {
         PatchConflict {
@@ -325,5 +430,91 @@ mod tests {
             let packed = rmp_serde::to_vec_named(&answer).unwrap();
             assert_eq!(rmp_serde::from_slice::<Answer>(&packed).unwrap(), answer);
         }
+    }
+
+    /// A store target names the cue or the preset, and nothing about the store.
+    #[test]
+    fn a_store_target_is_where_it_would_go_and_not_what_would_go_there() {
+        assert_eq!(
+            serde_json::to_string(&StoreTarget::Cue {
+                sequence_id: SequenceId::new(5),
+                cue_number: "1.5".to_owned(),
+            })
+            .unwrap(),
+            r#"{"t":"Cue","sequenceId":5,"cueNumber":"1.5"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&StoreTarget::Preset {
+                preset_id: PresetId::new(4),
+                pool: FeatureGroup::Color,
+            })
+            .unwrap(),
+            r#"{"t":"Preset","presetId":4,"pool":"Color"}"#
+        );
+    }
+
+    /// **The mode is the daemon's word, and today there is one of them.**
+    ///
+    /// Asserted rather than assumed, because the whole reason `StoreMode` is a
+    /// type is that S39 will add Override and Remove — and an interface that had
+    /// spelled `"Merge"` itself would go on looking right after that. When this
+    /// assertion fails, every reader of `StorePreview::mode` has a second case
+    /// to answer for.
+    #[test]
+    fn merge_is_the_only_store_mode_this_build_has() {
+        assert_eq!(
+            serde_json::to_string(&StoreMode::Merge).unwrap(),
+            r#""Merge""#
+        );
+        assert_eq!(StoreMode::default(), StoreMode::Merge);
+    }
+
+    /// A preview says what a store would do, and *would overwrite* is not the
+    /// same fact as *would be refused*.
+    #[test]
+    fn a_store_preview_can_overwrite_and_still_be_accepted() {
+        let preview = StorePreview {
+            accepted: true,
+            refusal: None,
+            exists: true,
+            name: "Warm wash".to_owned(),
+            mode: StoreMode::Merge,
+            added: 2,
+            replaced: 1,
+            kept: 7,
+        };
+        let json = serde_json::to_string(&preview).unwrap();
+        assert!(json.contains(r#""exists":true"#), "{json}");
+        assert!(json.contains(r#""kept":7"#), "{json}");
+        assert_eq!(
+            serde_json::from_str::<StorePreview>(&json).unwrap(),
+            preview
+        );
+
+        let packed = rmp_serde::to_vec_named(&Answer::StorePreview {
+            preview: preview.clone(),
+        })
+        .unwrap();
+        assert_eq!(
+            rmp_serde::from_slice::<Answer>(&packed).unwrap(),
+            Answer::StorePreview { preview }
+        );
+    }
+
+    /// The question travels in the same envelope as the other three.
+    #[test]
+    fn a_store_preview_is_asked_like_every_other_question() {
+        let query = Query::StorePreview {
+            target: StoreTarget::Cue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "2".to_owned(),
+            },
+        };
+        assert_eq!(
+            serde_json::to_string(&query).unwrap(),
+            r#"{"t":"StorePreview","target":{"t":"Cue","sequenceId":1,"cueNumber":"2"}}"#
+        );
+        let packed = rmp_serde::to_vec_named(&query).unwrap();
+        assert_eq!(rmp_serde::from_slice::<Query>(&packed).unwrap(), query);
     }
 }

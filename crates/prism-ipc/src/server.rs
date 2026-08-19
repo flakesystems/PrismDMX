@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use core::fmt;
-use prism_domain::{Answer, Command, Delta, Query};
+use prism_domain::{Answer, Command, Delta, Query, StoreMode, StorePreview};
 use tokio::sync::{Mutex, Notify};
 
 use crate::backpressure::{Outbound, OutboundStats};
@@ -126,6 +126,18 @@ pub trait ServerHandler: Send + Sync + 'static {
             Query::SearchLibrary { .. } => Answer::LibraryMatches {
                 matches: Vec::new(),
                 total: 0,
+            },
+            Query::StorePreview { .. } => Answer::StorePreview {
+                preview: StorePreview {
+                    accepted: false,
+                    refusal: Some("this handler holds no show".to_owned()),
+                    exists: false,
+                    name: String::new(),
+                    mode: StoreMode::Merge,
+                    added: 0,
+                    replaced: 0,
+                    kept: 0,
+                },
             },
         }
     }

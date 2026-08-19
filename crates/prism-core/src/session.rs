@@ -360,6 +360,11 @@ impl SessionState {
             | Command::EmbedFixtureType { .. }
             | Command::Oops
             | Command::Redo
+            | Command::StorePreset { .. }
+            | Command::CreateSequence { .. }
+            | Command::SetCueProperty { .. }
+            | Command::DeleteCue { .. }
+            | Command::AssignExecutor { .. }
             | Command::SaveShow => return Err(SessionError::NotASessionCommand),
         };
         Ok(if ops.is_empty() {

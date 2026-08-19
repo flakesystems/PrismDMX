@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AttributeType, ExecutorId, FeatureGroup, FixtureId, JsonValue, PresetId, SequenceId,
-    UniverseId, ViewId, WindowInstanceId, WindowType,
+    AttributeType, CueProperty, ExecutorId, FeatureGroup, FixtureId, JsonValue, PresetId, RgbColor,
+    SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -96,11 +96,103 @@ pub enum Command {
     /// Advance the three-stage Clear.
     ClearProgrammer,
     /// Store the programmer contents into a cue.
+    ///
+    /// **Merged, not overwritten** — `prism_core::Programmer::cue`, whose
+    /// documentation names Merge / Override / Remove as **S39**'s distinction to
+    /// build. There is deliberately no mode on this command yet: a client that
+    /// carried one the daemon did not honour would be describing an outcome that
+    /// did not happen. What S28 does instead is *say so first* — `Query::
+    /// StorePreview` answers with the mode and with what it would add, replace
+    /// and keep, and the interface puts that on the button.
     StoreCue {
         /// Target sequence.
         sequence_id: SequenceId,
         /// Cue number as typed, e.g. `1.5`.
         cue_number: String,
+    },
+    /// Store the programmer contents into a preset of a pool.
+    ///
+    /// **The mirror of [`Self::StoreCue`], with two differences that are both the
+    /// type's rather than the session's.**
+    ///
+    /// It carries a name and a colour, because a preset has both and a cue's name
+    /// is edited through [`Self::SetCueProperty`] instead. So a store with an
+    /// empty programmer onto a preset that already exists is an ordinary relabel
+    /// and is accepted; onto a preset that does not exist it is refused, because
+    /// creating an empty preset gives an operator something that applies nothing.
+    ///
+    /// And which values are taken depends on the `pool`: a colour preset stores
+    /// the colour values of the programmer and leaves the rest, where a cue takes
+    /// everything. The bank an attribute is filed under is the **profile's**
+    /// answer (`AttributeDef::featureGroup`) rather than the attribute name's, so
+    /// this is a question only the daemon can settle.
+    ///
+    /// Added in **S28**, with [`Self::CreateSequence`], [`Self::SetCueProperty`],
+    /// [`Self::DeleteCue`] and [`Self::AssignExecutor`]: before them
+    /// `ApplyPreset` could apply a preset no interface could create.
+    StorePreset {
+        /// The preset number. Unique across pools — `prism_core::Show::
+        /// store_preset` explains why, and [`Self::ApplyPreset`] is the reason.
+        preset_id: PresetId,
+        /// Which pool it is filed in, and which values it takes.
+        pool: FeatureGroup,
+        /// Operator-facing name.
+        name: String,
+        /// Colour for the scribble strip, if one was chosen.
+        color: Option<RgbColor>,
+    },
+    /// Create an empty sequence.
+    ///
+    /// **Not `StoreSequence`**, which is S39's and is a different act: that one
+    /// stores the *programmer* into a sequence with a mode. This one makes the
+    /// cue list exist, which is what [`Self::StoreCue`] needs before it can put a
+    /// cue anywhere and what a show with nothing in it has none of. It is refused
+    /// when the number is taken, so it can never empty a cue list that is on
+    /// stage.
+    CreateSequence {
+        /// The sequence number.
+        sequence_id: SequenceId,
+        /// Operator-facing name.
+        name: String,
+    },
+    /// Change one field of one cue.
+    ///
+    /// One field rather than a whole cue — see [`CueProperty`]. What a cue
+    /// *does* is not among the fields: values come from the programmer through
+    /// [`Self::StoreCue`], the same rule that keeps channels out of
+    /// [`Self::PatchFixture`].
+    SetCueProperty {
+        /// The sequence the cue is in.
+        sequence_id: SequenceId,
+        /// The cue, by the number it has **now**.
+        cue_number: String,
+        /// The field, and its new value.
+        property: CueProperty,
+    },
+    /// Take a cue out of a sequence.
+    ///
+    /// Does not cascade and does not renumber: the cues after it keep their
+    /// numbers, because a cue number is what an operator has written on a running
+    /// order and what an F-key may be bound to.
+    DeleteCue {
+        /// The sequence.
+        sequence_id: SequenceId,
+        /// The cue, by number.
+        cue_number: String,
+    },
+    /// Put a sequence on an executor, or take one off.
+    ///
+    /// The command that makes a cue list playable *from an interface*: until S28
+    /// an executor could be given a sequence only by a show file somebody else
+    /// had written, so `ExecutorGo` had nothing to reach. An empty slot gains an
+    /// executor with the desk's defaults — see `prism_core::Show::
+    /// assign_executor`, which owns them, because a client choosing what a fader
+    /// and four buttons do would be authoring show content.
+    AssignExecutor {
+        /// The executor slot, `page * 8 + slot` (**D7**).
+        executor_id: ExecutorId,
+        /// The sequence to put on it, or `None` to clear the slot's sequence.
+        sequence_id: Option<SequenceId>,
     },
     /// Step an executor.
     ExecutorGo {
@@ -425,9 +517,9 @@ impl Command {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AttributeType, Command, ExecutorId, FeatureGroup, FixtureId, GoDirection, JsonValue,
-        ParamDirection, PresetId, SelectionMode, SequenceId, UniverseId, ViewId, WindowInstanceId,
-        WindowType,
+        AttributeType, Command, CueProperty, ExecutorId, FeatureGroup, FixtureId, GoDirection,
+        JsonValue, ParamDirection, PresetId, RgbColor, SelectionMode, SequenceId, UniverseId,
+        ViewId, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -553,6 +645,31 @@ mod tests {
             Command::EmbedFixtureType {
                 type_id: "generic.rgbw.par".to_owned(),
             },
+            Command::StorePreset {
+                preset_id: PresetId::new(4),
+                pool: FeatureGroup::Color,
+                name: "Deep blue".to_owned(),
+                color: Some(RgbColor { r: 0, g: 0, b: 255 }),
+            },
+            Command::CreateSequence {
+                sequence_id: SequenceId::new(1),
+                name: "Act 1".to_owned(),
+            },
+            Command::SetCueProperty {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+                property: CueProperty::Name {
+                    name: "Blackout".to_owned(),
+                },
+            },
+            Command::DeleteCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+            },
+            Command::AssignExecutor {
+                executor_id: ExecutorId::new(0),
+                sequence_id: Some(SequenceId::new(1)),
+            },
             Command::Oops,
             Command::Redo,
             Command::SaveShow,
@@ -606,7 +723,7 @@ mod tests {
                 text: "1 thru 4 at full".to_owned(),
             },
         ];
-        assert_eq!(commands.len(), 30);
+        assert_eq!(commands.len(), 35);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {

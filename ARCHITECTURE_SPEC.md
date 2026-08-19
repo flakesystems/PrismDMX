@@ -191,6 +191,8 @@ These eleven are what the **console** issues. Four more session commands are del
 
 The **F1–F8 XKeys** are therefore freely assignable to "open Fixture Sheet", "open Patch", "jump to view 2" or macros — drawing on the same command list the UI buttons use. There is no second command world for the console.
 
+> **There is no *selected sequence*, and S28 marked that rather than inventing one** *(S28)*. The Sequence Sheet and the Cue Viewer show the sequence on `selectedExecutor`, which is the reading that needs nothing added to §4.1: every part of it is already in the two documents. Whether the desk should instead carry a selected sequence of its own is **S39**'s decision, and it *is* one — both answers are defensible, and only one can be right for `Store Cue 5` typed with no executor selected. Until then, choosing a sequence in the interface is a `Command::AssignExecutor`, so two screens cannot disagree about which one is in force.
+
 > **`SelectProgrammerParam` is relative and stays relative** *(S26)*. It steps, because `Zoom ◀▶` steps; there is no *set the parameter to n* command and the interface does not need one — clicking an encoder in the encoder bar composes the steps between where the highlight is and where it was clicked, which for a bank of at most six parameters is at most five commands. A thirteenth session command would have been a second way of saying the same thing, and the console could not issue it. The **upper** bound is the client's: `prism-core` deliberately does not know how many parameters a bank has (S13), so the bar stops offering *next* at the end of the bank rather than letting the index run past it, where the jog wheel would turn nothing at all.
 
 > **Multi-session (later):** the model permits several sessions so two operators can work with independent views. V1 has exactly one session and the programmer belongs to it. Multiple programmers would be a merge question (LTP between them) and are deliberately out of scope.
@@ -272,7 +274,9 @@ interface Preset {
 interface CuePart {
   fixture: FixtureId; attribute: AttributeType;
   value: number;               // 0..65535
-  presetRef: PresetId | null;  // preset link keeps the cue live-updatable
+  presetRef: PresetId | null;  // preset link keeps the cue live-updatable:
+                               // storing the preset rewrites this part's value
+                               // (prism_core::Show::relink, S28)
 }
 
 interface Cue {
@@ -325,6 +329,15 @@ type WindowType =
 //   FixtureSheet — the *state*: what the programmer holds and what is on the
 //                  cable, per fixture, live. Watched, not edited.
 //   DmxSheet     — the *cable*: channel by channel, with no fixtures in it.
+// S28 settled the three that are about *looks*:
+//   SequenceSheet— the *cue list*: which sequences there are, which one is in
+//                  force, and its cues with their numbers, names, times and
+//                  triggers, edited in place. The one window that stores a look.
+//   CueViewer    — the *cue*: what those cues set, fixture by fixture, with the
+//                  preset links visible. Watched, not edited — what a cue sets
+//                  comes from the programmer through StoreCue.
+//   PresetPool   — the *pools*: named looks per feature group, applied and
+//                  stored, with the colour the scribble strips use.
 
 interface WindowInstance {
   instanceId: number; type: WindowType;
@@ -341,7 +354,7 @@ The `Command` and `Delta` wire types are specified in [`docs/IPC_PROTOCOL.md`](d
 
 Applying a command produces a compact `UndoRecord` holding the inverse and the affected scope, kept in a 200-entry ring buffer.
 
-**Deliberately not undoable:** playback actions (`ExecutorGo`, `ExecutorOff`, master moves) and every session command from §4.4. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
+**Deliberately not undoable:** playback actions (`ExecutorGo`, `ExecutorOff`, master moves) and every session command from §4.4. The show edits S28 added — `StorePreset`, `CreateSequence`, `SetCueProperty`, `DeleteCue`, `AssignExecutor` — **are** undoable, and a `StorePreset` images the sequences its preset reaches as well as the preset itself: storing a preset rewrites the cue parts linked to it, so restoring the pool alone would take the edit back in one place and leave it standing in every cue. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
 
 ---
 

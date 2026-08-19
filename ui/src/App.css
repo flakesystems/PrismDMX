@@ -713,7 +713,8 @@
 .encbar-param,
 .encbar-page {
     display: flex;
-    align-items: stretch;
+    align-items: center;
+    justify-content: center;
     gap: 0.25rem;
 }
 
@@ -740,10 +741,6 @@
     gap: 0.2rem;
 }
 
-.encbar-page {
-    align-items: center;
-    justify-content: center;
-}
 
 .encbar-page-number {
     font-variant-numeric: tabular-nums;
@@ -1226,4 +1223,206 @@
 
 .notice-error {
     color: var(--bad);
+}
+/*
+ * ---- the look windows (S28) ---------------------------------------------
+ *
+ * Sequence Sheet, Cue Viewer and Preset Pool. Three windows over one layout:
+ * a bar of what there is, a body that scrolls **inside the window**, and — where
+ * something can be stored — a bar at the bottom whose button says what the store
+ * will do before it is pressed.
+ *
+ * `min-height: 0` on the column for the reason at the top of this file: without
+ * it a cue list of four hundred rows pushes the store bar off the bottom of the
+ * window rather than scrolling inside it.
+ */
+.looks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    height: 100%;
+    min-height: 0;
+}
+
+.looks-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    flex: 0 0 auto;
+}
+
+.looks-count {
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+/* One sequence in the pool, and one of the five preset-pool tabs. */
+.pool-chip,
+.pool-tab {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    background: var(--panel);
+    color: inherit;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    padding: 0.1rem 0.4rem;
+    cursor: pointer;
+    font: inherit;
+}
+
+.pool-chip-current,
+.pool-tab-current {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.pool-note {
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Which executor the sheet is following, what it is doing, and the three keys
+ * that fire it. The cue reading is a dash until S34 fills `currentCueIndex`.
+ */
+.looks-exec {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex: 0 0 auto;
+    border-top: 1px solid var(--edge);
+    border-bottom: 1px solid var(--edge);
+    padding: 0.2rem 0;
+}
+
+.looks-exec[data-active="yes"] .looks-exec-state {
+    color: var(--ok);
+}
+
+.looks-exec-state,
+.looks-exec-cue {
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+.looks-exec-keys {
+    display: flex;
+    gap: 0.3rem;
+    margin-left: auto;
+}
+
+/* A cell that is a value until it is clicked, and an input after that. */
+.cell {
+    width: 100%;
+    text-align: left;
+}
+
+.cell-input {
+    background: var(--ground);
+    color: var(--ink);
+    border: 1px solid var(--edge-lit);
+    border-radius: 2px;
+    font: inherit;
+    width: 100%;
+    min-width: 3rem;
+}
+
+.cell-input-narrow {
+    width: 4.5rem;
+    min-width: 0;
+}
+
+.trigger-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* A cue part that follows a preset, which is the thing worth seeing. */
+.row-linked td {
+    color: var(--accent);
+}
+
+/*
+ * The store bar. The button carries a sentence rather than a word, so it is
+ * allowed to be as wide as the sentence: an operator reads it before pressing
+ * it, and a truncated *3 replaced* is worse than no preview at all.
+ */
+.store-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--edge);
+    padding-top: 0.3rem;
+}
+
+.store-bar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* The preset pool proper: boxes, as a console draws them. */
+.pool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.preset-box {
+    display: grid;
+    grid-template-columns: 0.9rem 2.2rem 1fr;
+    grid-template-areas:
+        "swatch number name"
+        "swatch note   note";
+    align-items: center;
+    gap: 0.1rem 0.35rem;
+    width: 100%;
+    text-align: left;
+    background: var(--panel);
+    color: inherit;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    padding: 0.2rem 0.3rem;
+    cursor: pointer;
+    font: inherit;
+}
+
+.preset-swatch {
+    grid-area: swatch;
+    align-self: stretch;
+    border-radius: 2px;
+    background: var(--edge);
+}
+
+.preset-box .pool-number {
+    grid-area: number;
+}
+
+.preset-box .pool-name {
+    grid-area: name;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preset-box .pool-note {
+    grid-area: note;
+}
+
+/* A heading that is only there for a screen reader. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }

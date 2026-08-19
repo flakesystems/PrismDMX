@@ -60,7 +60,8 @@ use core::fmt;
 use std::collections::VecDeque;
 
 use prism_domain::{
-    Command, Fixture, FixtureId, FixtureType, ProgrammerState, Sequence, SequenceId,
+    Command, Executor, ExecutorId, Fixture, FixtureId, FixtureType, Preset, PresetId,
+    ProgrammerState, Sequence, SequenceId,
 };
 
 /// Why an Oops or a Redo could not be carried out.
@@ -99,6 +100,10 @@ pub enum UndoScope {
     FixtureType(String),
     /// One sequence, with its cues.
     Sequence(SequenceId),
+    /// One preset.
+    Preset(PresetId),
+    /// One executor slot.
+    Executor(ExecutorId),
     /// The programmer, whole.
     Programmer,
     /// The session's programmer page and jog-wheel parameter index — the two
@@ -125,15 +130,24 @@ pub(crate) enum Image {
     /// same shape a fixture has — and for the same reason, since S27 made both
     /// reachable from the interface.
     FixtureType(String, Option<FixtureType>),
-    /// A sequence and its cues.
+    /// A sequence and its cues. `None`: the show did not have it.
     ///
-    /// Not optional, where a fixture is. The only command that images a
-    /// sequence is `StoreCue`, and `Show::apply` refuses it outright if the
-    /// sequence is not there — so a *stored* record's sequence always existed,
-    /// both before the command and after it. Nothing in
-    /// `docs/IPC_PROTOCOL.md` §5 creates or deletes a sequence; S28's editor
-    /// will, and that is when this grows an absence of its own.
-    Sequence(Sequence),
+    /// The absence arrived in **S28**, exactly where the note here said it
+    /// would: `Command::CreateSequence` makes a sequence that was not there, so
+    /// "no sequence" is now the inverse of an ordinary edit rather than a state
+    /// no record could be in.
+    Sequence(SequenceId, Option<Sequence>),
+    /// One preset. `None`: the show did not carry it.
+    ///
+    /// A `StorePreset` images the **sequences that reference the preset** as
+    /// well, because storing a preset rewrites the cue parts linked to it
+    /// (`Show::relink`). Restoring the preset alone would take the edit back in
+    /// the pool and leave it standing in every cue — and where the preset was
+    /// created by the store, restoring it means removing it, which relinks
+    /// nothing at all.
+    Preset(PresetId, Option<Preset>),
+    /// One executor slot. `None`: the slot was empty.
+    Executor(ExecutorId, Option<Executor>),
     /// The whole programmer state, Clear stage included.
     Programmer(ProgrammerState),
     /// The session's page state.
@@ -151,7 +165,9 @@ impl Image {
         match self {
             Self::Fixture(id, _) => UndoScope::Fixture(*id),
             Self::FixtureType(type_id, _) => UndoScope::FixtureType(type_id.clone()),
-            Self::Sequence(sequence) => UndoScope::Sequence(sequence.id),
+            Self::Sequence(id, _) => UndoScope::Sequence(*id),
+            Self::Preset(id, _) => UndoScope::Preset(*id),
+            Self::Executor(id, _) => UndoScope::Executor(*id),
             Self::Programmer(_) => UndoScope::Programmer,
             Self::ProgrammerPage { .. } => UndoScope::ProgrammerPage,
         }
@@ -406,13 +422,60 @@ mod tests {
 
     #[test]
     fn a_sequence_image_names_its_sequence() {
-        let image = Image::Sequence(Sequence {
-            id: SequenceId::new(3),
-            name: "Sequence 3".to_owned(),
-            cues: Vec::new(),
-            looping: false,
-        });
+        let image = Image::Sequence(
+            SequenceId::new(3),
+            Some(Sequence {
+                id: SequenceId::new(3),
+                name: "Sequence 3".to_owned(),
+                cues: Vec::new(),
+                looping: false,
+            }),
+        );
         assert_eq!(image.scope(), UndoScope::Sequence(SequenceId::new(3)));
+    }
+
+    /// **An absent sequence is still a scope**, which is what S28's
+    /// `CreateSequence` needed: the inverse of creating one is *there is no
+    /// sequence 3*, and a record has to be able to say that.
+    #[test]
+    fn a_sequence_that_is_not_there_names_its_number_all_the_same() {
+        let image = Image::Sequence(SequenceId::new(3), None);
+        assert_eq!(image.scope(), UndoScope::Sequence(SequenceId::new(3)));
+
+        let created = UndoRecord::new(
+            Command::CreateSequence {
+                sequence_id: SequenceId::new(3),
+                name: "Act 1".to_owned(),
+            },
+            vec![image],
+            vec![Image::Sequence(
+                SequenceId::new(3),
+                Some(Sequence {
+                    id: SequenceId::new(3),
+                    name: "Act 1".to_owned(),
+                    cues: Vec::new(),
+                    looping: false,
+                }),
+            )],
+        );
+        assert!(created.is_a_step());
+        assert_eq!(
+            created.scope(),
+            vec![UndoScope::Sequence(SequenceId::new(3))]
+        );
+    }
+
+    /// A preset and an executor each name themselves, present or not.
+    #[test]
+    fn a_preset_and_an_executor_image_name_what_they_are_of() {
+        assert_eq!(
+            Image::Preset(prism_domain::PresetId::new(4), None).scope(),
+            UndoScope::Preset(prism_domain::PresetId::new(4))
+        );
+        assert_eq!(
+            Image::Executor(prism_domain::ExecutorId::new(2), None).scope(),
+            UndoScope::Executor(prism_domain::ExecutorId::new(2))
+        );
     }
 
     #[test]

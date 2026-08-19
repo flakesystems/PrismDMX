@@ -189,6 +189,12 @@ impl Desk {
             // search over a table rather than anything that touches the show —
             // and the limit is clamped here, because a client that asked for
             // two thousand would otherwise get an answer no frame can carry.
+            // What a store would do, which needs the show, the programmer and
+            // the store mode this build has — all three of which live on the
+            // one `ShowFile`. See `prism_core::ShowFile::preview_store`.
+            Query::StorePreview { target } => Answer::StorePreview {
+                preview: core.file.preview_store(target),
+            },
             Query::SearchLibrary { text, limit } => Answer::LibraryMatches {
                 matches: core
                     .file

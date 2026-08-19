@@ -228,6 +228,53 @@ impl Show {
                 }
                 Ok(Applied::effect(Effect::Programmer))
             }
+            // The show sees the half of a preset store it can see: which pool
+            // and which number. The values come out of the programmer, which
+            // this model does not hold — the same split `StoreCue` has.
+            Command::StorePreset { .. } => Ok(Applied::effect(Effect::Programmer)),
+            Command::CreateSequence { sequence_id, name } => {
+                let ops = self.create_sequence(*sequence_id, name)?;
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::ReloadSequence(*sequence_id)],
+                })
+            }
+            Command::SetCueProperty {
+                sequence_id,
+                cue_number,
+                property,
+            } => {
+                let ops = self.set_cue_property(*sequence_id, cue_number, property)?;
+                Ok(sequence_changed(*sequence_id, ops))
+            }
+            Command::DeleteCue {
+                sequence_id,
+                cue_number,
+            } => {
+                let ops = self.remove_cue(*sequence_id, cue_number)?;
+                Ok(sequence_changed(*sequence_id, ops))
+            }
+            Command::AssignExecutor {
+                executor_id,
+                sequence_id,
+            } => {
+                let ops = self.assign_executor(*executor_id, *sequence_id)?;
+                if ops.is_empty() {
+                    return Ok(Applied::default());
+                }
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    // The executor grid is what the merge body binds sequences
+                    // to, so a slot that gained one has to be loaded exactly as
+                    // a sequence that gained a cue does.
+                    effects: match sequence_id {
+                        Some(sequence) => vec![Effect::ReloadSequence(*sequence)],
+                        None => vec![Effect::ExecutorOff {
+                            executor: *executor_id,
+                        }],
+                    },
+                })
+            }
             Command::ExecutorGo {
                 executor_id,
                 direction,
@@ -383,6 +430,21 @@ impl Show {
             return Err(ShowError::ExecutorHasNoSequence(id));
         }
         Ok(())
+    }
+}
+
+/// A sequence edit, or nothing at all when the edit changed nothing.
+///
+/// An empty operation list is not an empty `ShowPatch`: a delta describing a
+/// document that did not move is a broadcast to every client saying nothing, and
+/// S27 met the same case in `RenumberFixture`.
+fn sequence_changed(sequence: SequenceId, ops: Vec<JsonPatchOp>) -> Applied {
+    if ops.is_empty() {
+        return Applied::default();
+    }
+    Applied {
+        deltas: vec![Delta::ShowPatch { ops }],
+        effects: vec![Effect::ReloadSequence(sequence)],
     }
 }
 

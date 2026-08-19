@@ -32,6 +32,8 @@ import type {
   PatchPreview,
   ProgrammerState,
   Query,
+  StoreMode,
+  StorePreview,
 } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
@@ -39,6 +41,7 @@ import {
   NOTICE_LEVEL_VARIANTS,
   OUTPUT_HEALTH_VARIANTS,
   PROGRAMMER_VALUE_SOURCE_VARIANTS,
+  STORE_MODE_VARIANTS,
 } from "../bindings";
 import type { JsonPatchOp, JsonValue, ProgrammerEntry, ProgrammerValue } from "../bindings";
 import type { Payload } from "./shape";
@@ -363,6 +366,40 @@ function readPatchPreview(value: unknown, path: string): PatchPreview {
   };
 }
 
+/**
+ * What a store would do, as the daemon worked it out.
+ *
+ * The `mode` is narrowed against the generated table rather than taken as read:
+ * `StoreMode` has one value today and **S39** adds two, so an answer naming a
+ * mode this build cannot draw is one to refuse rather than to render as a word
+ * nobody chose.
+ */
+function readStorePreview(value: unknown, path: string): StorePreview {
+  const record = asRecord(value, path);
+  const mode = asString(field(record, "mode"), `${path}.mode`);
+  if (!isStoreMode(mode)) {
+    throw new ProtocolFault(
+      `${path}.mode`,
+      `a store mode this build knows, not ${JSON.stringify(mode)}`,
+    );
+  }
+  return {
+    accepted: asBoolean(field(record, "accepted"), `${path}.accepted`),
+    refusal: asNullable(field(record, "refusal"), `${path}.refusal`, asString),
+    exists: asBoolean(field(record, "exists"), `${path}.exists`),
+    name: asString(field(record, "name"), `${path}.name`),
+    mode,
+    added: asInteger(field(record, "added"), `${path}.added`),
+    replaced: asInteger(field(record, "replaced"), `${path}.replaced`),
+    kept: asInteger(field(record, "kept"), `${path}.kept`),
+  };
+}
+
+/** Whether a string is one of the store modes this build knows. */
+function isStoreMode(value: string): value is StoreMode {
+  return (STORE_MODE_VARIANTS as readonly string[]).includes(value);
+}
+
 /** The daemon's answer to a question. */
 export function readAnswer(value: unknown, path: string): Answer {
   const record = asRecord(value, path);
@@ -377,6 +414,11 @@ export function readAnswer(value: unknown, path: string): Answer {
       return {
         t: "PatchPreview",
         preview: readPatchPreview(field(record, "preview"), `${path}.preview`),
+      };
+    case "StorePreview":
+      return {
+        t: "StorePreview",
+        preview: readStorePreview(field(record, "preview"), `${path}.preview`),
       };
     case "LibraryMatches":
       return {

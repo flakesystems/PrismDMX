@@ -28,8 +28,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use prism_domain::{
-    Cue, Executor, ExecutorId, Fixture, FixtureType, Group, GroupId, JsonPatchOp, JsonValue,
-    Preset, PresetId, Sequence, SequenceId, UniverseId,
+    Cue, CueProperty, Executor, ExecutorButtonFunction, ExecutorEncoderFunction,
+    ExecutorFaderFunction, ExecutorId, Fixture, FixtureType, Group, GroupId, JsonPatchOp,
+    JsonValue, Preset, PresetId, Sequence, SequenceId, UniverseId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +55,12 @@ pub(crate) const EXECUTORS: &str = "executors";
 /// Every variant leaves the show exactly as it was: validation happens before
 /// anything is written, which is what makes "a rejection changes nothing" a
 /// property of the code rather than a promise in a comment.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// **Not `Eq`**, since S28: [`Self::NegativeTime`] carries the number that was
+/// refused, so an operator is told what was wrong with the time they typed
+/// rather than that something was. An `f64` has no total equality, and a
+/// refusal is compared for equality in tests and nowhere else.
+#[derive(Debug, Clone, PartialEq)]
 pub enum ShowError {
     /// A fixture type key that is not embedded in this show.
     UnknownFixtureType(String),
@@ -146,6 +152,20 @@ pub enum ShowError {
         /// The number used twice.
         number: String,
     },
+    /// A cue number that is not in the sequence.
+    UnknownCue {
+        /// The sequence.
+        sequence: SequenceId,
+        /// The number asked for.
+        number: String,
+    },
+    /// A sequence was asked to be created under a number that is taken. Two
+    /// sequences cannot share one, and replacing the other would empty a cue
+    /// list that may be on stage.
+    SequenceNumberInUse(SequenceId),
+    /// A fade, a delay or a trigger time below zero. Time runs one way, and a
+    /// negative fade is a cue that would have finished before it started.
+    NegativeTime(f64),
     /// An absolute attribute value outside `0..=65535`.
     ValueOutOfRange(i32),
     /// A session command reached the show applier. `ARCHITECTURE_SPEC.md` §4.4
@@ -212,6 +232,15 @@ impl fmt::Display for ShowError {
             Self::EmptyCueNumber => write!(f, "a cue needs a number"),
             Self::DuplicateCueNumber { sequence, number } => {
                 write!(f, "sequence {sequence} already has a cue {number:?}")
+            }
+            Self::UnknownCue { sequence, number } => {
+                write!(f, "sequence {sequence} has no cue {number:?}")
+            }
+            Self::SequenceNumberInUse(id) => {
+                write!(f, "sequence {id} already exists")
+            }
+            Self::NegativeTime(seconds) => {
+                write!(f, "{seconds} seconds is not a time a cue can have")
             }
             Self::ValueOutOfRange(value) => {
                 write!(f, "attribute value {value} is outside 0..=65535")
@@ -727,9 +756,93 @@ impl Show {
         }
         let path = pointer(PRESETS, &preset.id.to_string());
         let op = put(path, &preset, self.presets.contains_key(&preset.id))?;
+        // Everything fallible first, then nothing is written until all of it
+        // has succeeded — S11's rule, and the reason the sequences are built
+        // beside the old ones rather than edited in place.
+        let relinked = self.relink(&preset)?;
+        let mut ops = vec![op];
+        for (op, sequence) in relinked {
+            ops.push(op);
+            self.sequences.insert(sequence.id, sequence);
+        }
         self.presets.insert(preset.id, preset);
         self.touch();
-        Ok(vec![op])
+        Ok(ops)
+    }
+
+    /// Every cue part linked to this preset, given the preset's new values.
+    ///
+    /// **This is what makes a preset link a link.** `prism_domain::preset` says
+    /// it in the first paragraph of its module documentation — *a cue part that
+    /// carries a `presetRef` follows later edits of the preset, which is what
+    /// makes "change the blue everywhere" a one-touch operation on a real
+    /// console* — and until S28 nothing did it: a cue stored the preset's value
+    /// and the number beside it, and editing the preset moved neither.
+    ///
+    /// It is done here, in the show, rather than in the engine, because the
+    /// engine plays `CuePart::value` and must not resolve anything per tick
+    /// (§3.1). So the value in the cue is always the value that will be output,
+    /// and the link is what keeps it current.
+    ///
+    /// A part linked to a preset that no longer carries that fixture and
+    /// attribute keeps **both** its value and its link. Dropping the value would
+    /// change light nobody asked to change, and dropping the link would mean a
+    /// preset that regained the value could never reach the cue again —
+    /// `Show::remove_preset` already takes the same view of a preset that has
+    /// gone altogether.
+    fn relink(&self, preset: &Preset) -> Result<Vec<(JsonPatchOp, Sequence)>, ShowError> {
+        let mut updated = Vec::new();
+        for sequence in self.sequences.values() {
+            let mut next = sequence.clone();
+            let mut moved = false;
+            for cue in &mut next.cues {
+                for part in &mut cue.parts {
+                    if part.preset_ref != Some(preset.id) {
+                        continue;
+                    }
+                    let Some(value) = preset
+                        .values
+                        .iter()
+                        .find(|value| {
+                            value.fixture == part.fixture && value.attribute == part.attribute
+                        })
+                        .map(|value| value.value)
+                    else {
+                        continue;
+                    };
+                    if part.value != value {
+                        part.value = value;
+                        moved = true;
+                    }
+                }
+            }
+            if moved {
+                let path = pointer(SEQUENCES, &next.id.to_string());
+                updated.push((put(path, &next, true)?, next));
+            }
+        }
+        Ok(updated)
+    }
+
+    /// Which sequences a preset's values reach, so a caller can reload exactly
+    /// those.
+    ///
+    /// Reported rather than inferred from [`Self::store_preset`]'s operations,
+    /// because the caller needs it **before** the store in order to name the
+    /// engine effect, and because an operation list is a description of a
+    /// document rather than of what has to be reloaded.
+    #[must_use]
+    pub fn sequences_using_preset(&self, preset: PresetId) -> Vec<SequenceId> {
+        self.sequences
+            .values()
+            .filter(|sequence| {
+                sequence
+                    .cues
+                    .iter()
+                    .any(|cue| cue.parts.iter().any(|part| part.preset_ref == Some(preset)))
+            })
+            .map(|sequence| sequence.id)
+            .collect()
     }
 
     /// Removes a preset.
@@ -838,6 +951,190 @@ impl Show {
         self.sequences.insert(sequence_id, updated);
         self.touch();
         Ok(vec![op])
+    }
+
+    /// Creates an empty sequence.
+    ///
+    /// **Refused when the number is taken**, which is the whole difference
+    /// between this and [`Self::store_sequence`]: this is what an interface
+    /// sends, and a *create* that silently replaced a cue list would empty a
+    /// playback that may be running. `Command::CreateSequence` explains why it
+    /// is not S39's `StoreSequence`, which is a different act with a mode on it.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::SequenceNumberInUse`] if there is already a sequence there.
+    pub fn create_sequence(
+        &mut self,
+        id: SequenceId,
+        name: &str,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        if self.sequences.contains_key(&id) {
+            return Err(ShowError::SequenceNumberInUse(id));
+        }
+        self.store_sequence(Sequence {
+            id,
+            name: name.to_owned(),
+            cues: Vec::new(),
+            looping: false,
+        })
+    }
+
+    /// Changes one field of one cue.
+    ///
+    /// The delta carries the whole sequence, for [`Self::store_cue`]'s reason: a
+    /// cue list is small, and a renumber moves the cue within it.
+    ///
+    /// Answers with **no operations at all** when the field already holds that
+    /// value. A `ShowPatch` describing a document that did not move is a
+    /// broadcast to every client that says nothing, and — as
+    /// `Command::RenumberFixture` found in S27 — it is also an Oops step an
+    /// operator would press and watch do nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownSequence`], [`ShowError::UnknownCue`],
+    /// [`ShowError::EmptyCueNumber`], [`ShowError::DuplicateCueNumber`] for a
+    /// renumber onto a cue that exists, or [`ShowError::NegativeTime`].
+    pub fn set_cue_property(
+        &mut self,
+        sequence_id: SequenceId,
+        cue_number: &str,
+        property: &CueProperty,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(sequence) = self.sequences.get(&sequence_id) else {
+            return Err(ShowError::UnknownSequence(sequence_id));
+        };
+        // The operator typed the number, so `" 2 "` and `"2"` are the same cue —
+        // the rule `Programmer::cue` already applies on the way in.
+        let wanted = cue_number.trim();
+        let Some(index) = sequence.cues.iter().position(|cue| cue.number == wanted) else {
+            return Err(ShowError::UnknownCue {
+                sequence: sequence_id,
+                number: wanted.to_owned(),
+            });
+        };
+
+        let mut next = sequence.clone();
+        let moved = apply_cue_property(&mut next, index, property, sequence_id)?;
+        if !moved {
+            return Ok(Vec::new());
+        }
+        next.cues
+            .sort_by(|left, right| Cue::compare_numbers(&left.number, &right.number));
+        let op = put(pointer(SEQUENCES, &sequence_id.to_string()), &next, true)?;
+        self.sequences.insert(sequence_id, next);
+        self.touch();
+        Ok(vec![op])
+    }
+
+    /// Takes one cue out of a sequence.
+    ///
+    /// The cues after it **keep their numbers**. A cue number is what an
+    /// operator has written on a running order and what a Goto names, so
+    /// closing the gap would silently move every cue after the deleted one.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownSequence`] or [`ShowError::UnknownCue`].
+    pub fn remove_cue(
+        &mut self,
+        sequence_id: SequenceId,
+        cue_number: &str,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(sequence) = self.sequences.get(&sequence_id) else {
+            return Err(ShowError::UnknownSequence(sequence_id));
+        };
+        let wanted = cue_number.trim();
+        let Some(index) = sequence.cues.iter().position(|cue| cue.number == wanted) else {
+            return Err(ShowError::UnknownCue {
+                sequence: sequence_id,
+                number: wanted.to_owned(),
+            });
+        };
+        let mut next = sequence.clone();
+        next.cues.remove(index);
+        let op = put(pointer(SEQUENCES, &sequence_id.to_string()), &next, true)?;
+        self.sequences.insert(sequence_id, next);
+        self.touch();
+        Ok(vec![op])
+    }
+
+    /// Puts a sequence on an executor, or takes one off.
+    ///
+    /// An empty slot gains an executor with **the desk's defaults**, and those
+    /// defaults are here rather than in a client for the reason
+    /// `Command::PatchFixture` carries no channels: what a fader and four
+    /// buttons do is show content, and a client that chose it would be authoring
+    /// the show for the daemon to accept. They are the three functions the
+    /// protocol can actually press (S22, S26) in the order a console has them,
+    /// and a fourth button left [`ExecutorButtonFunction::Empty`] — because the
+    /// five functions that have no command yet are **S34**'s, and a default that
+    /// put one there would ship a button the interface has to draw disabled.
+    ///
+    /// The master starts at full: a newly assigned executor whose Go produced no
+    /// light would be indistinguishable from one that is broken.
+    ///
+    /// Answers with no operations when that executor already plays that
+    /// sequence.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownSequence`] if the sequence does not exist.
+    pub fn assign_executor(
+        &mut self,
+        id: ExecutorId,
+        sequence_id: Option<SequenceId>,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        if let Some(sequence) = sequence_id
+            && !self.sequences.contains_key(&sequence)
+        {
+            return Err(ShowError::UnknownSequence(sequence));
+        }
+        let existed = self.executors.contains_key(&id);
+        let next = match self.executors.get(&id) {
+            Some(executor) if executor.sequence_id == sequence_id => return Ok(Vec::new()),
+            // An existing slot keeps everything else it has: its master, its
+            // button functions and its encoder. Taking the sequence off is not
+            // the same act as emptying the slot, and S34 and S38 are what give
+            // an operator a reason to have set those in the first place.
+            Some(executor) => Executor {
+                sequence_id,
+                ..executor.clone()
+            },
+            None => match sequence_id {
+                Some(_) => default_executor(id, sequence_id),
+                // There is nothing to take off a slot that has nothing on it,
+                // and making an empty executor in order to clear it would leave
+                // the show a row longer than it started.
+                None => return Ok(Vec::new()),
+            },
+        };
+        let op = put(pointer(EXECUTORS, &id.to_string()), &next, existed)?;
+        self.executors.insert(id, next);
+        self.touch();
+        Ok(vec![op])
+    }
+
+    /// Empties an executor slot.
+    ///
+    /// The inverse of the [`Self::assign_executor`] that created one, and the
+    /// only way a slot leaves the show — which is why it exists: an Oops over a
+    /// newly assigned executor has to be able to put the grid back exactly as it
+    /// was, and a slot left behind with no sequence on it is a row the show did
+    /// not have before.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownExecutor`] if the slot is already empty.
+    pub fn remove_executor(&mut self, id: ExecutorId) -> Result<Vec<JsonPatchOp>, ShowError> {
+        if self.executors.remove(&id).is_none() {
+            return Err(ShowError::UnknownExecutor(id));
+        }
+        self.touch();
+        Ok(vec![JsonPatchOp::Remove {
+            path: pointer(EXECUTORS, &id.to_string()),
+        }])
     }
 
     /// Stores an executor, replacing the one in that slot.
@@ -989,6 +1286,110 @@ impl Show {
             }
         }
         Ok(())
+    }
+}
+
+/// One field of a cue, written into a copy of the sequence.
+///
+/// Answers whether anything moved. Every refusal happens before the copy is
+/// handed back, so a rejected edit leaves the sequence untouched.
+fn apply_cue_property(
+    sequence: &mut Sequence,
+    index: usize,
+    property: &CueProperty,
+    sequence_id: SequenceId,
+) -> Result<bool, ShowError> {
+    match property {
+        CueProperty::Number { number } => {
+            let wanted = number.trim();
+            if wanted.is_empty() {
+                return Err(ShowError::EmptyCueNumber);
+            }
+            if sequence.cues[index].number == wanted {
+                return Ok(false);
+            }
+            // Refused rather than replacing, exactly as `RenumberFixture` is:
+            // the number is the key, and taking one that is in use would delete
+            // a look nobody asked to delete.
+            if sequence
+                .cues
+                .iter()
+                .enumerate()
+                .any(|(other, cue)| other != index && cue.number == wanted)
+            {
+                return Err(ShowError::DuplicateCueNumber {
+                    sequence: sequence_id,
+                    number: wanted.to_owned(),
+                });
+            }
+            sequence.cues[index].number = wanted.to_owned();
+            Ok(true)
+        }
+        CueProperty::Name { name } => Ok(replace(&mut sequence.cues[index].name, name.clone())),
+        CueProperty::FadeIn { seconds } => {
+            Ok(replace(&mut sequence.cues[index].fade_in, time(*seconds)?))
+        }
+        CueProperty::FadeOut { seconds } => {
+            Ok(replace(&mut sequence.cues[index].fade_out, time(*seconds)?))
+        }
+        CueProperty::Delay { seconds } => {
+            Ok(replace(&mut sequence.cues[index].delay, time(*seconds)?))
+        }
+        CueProperty::Trigger {
+            trigger,
+            trigger_time,
+        } => {
+            let checked = match trigger_time {
+                Some(seconds) => Some(time(*seconds)?),
+                None => None,
+            };
+            let cue = &mut sequence.cues[index];
+            let moved = replace(&mut cue.trigger, *trigger);
+            Ok(replace(&mut cue.trigger_time, checked) || moved)
+        }
+    }
+}
+
+/// Writes a value and answers whether it was different.
+fn replace<T: PartialEq>(target: &mut T, value: T) -> bool {
+    if *target == value {
+        return false;
+    }
+    *target = value;
+    true
+}
+
+/// A time a cue can have.
+///
+/// Non-finite values never reach here — `prism_domain::finite` refuses them at
+/// the decoder — so the only thing left to check is the sign, and a fade that
+/// ran backwards would be a cue that finished before it started.
+fn time(seconds: f64) -> Result<f64, ShowError> {
+    if seconds < 0.0 {
+        return Err(ShowError::NegativeTime(seconds));
+    }
+    Ok(seconds)
+}
+
+/// The executor an empty slot gains when a sequence is put on it.
+///
+/// See [`Show::assign_executor`] for why the defaults are the daemon's.
+fn default_executor(id: ExecutorId, sequence_id: Option<SequenceId>) -> Executor {
+    Executor {
+        id,
+        sequence_id,
+        fader_function: ExecutorFaderFunction::Master,
+        // Rec, Solo, Mute, Select — the hardware order (`docs/MCU_MAPPING.md`).
+        button_functions: vec![
+            ExecutorButtonFunction::GoForward,
+            ExecutorButtonFunction::GoBack,
+            ExecutorButtonFunction::Off,
+            ExecutorButtonFunction::Empty,
+        ],
+        encoder_function: ExecutorEncoderFunction::Empty,
+        master_level: u16::MAX,
+        is_active: false,
+        current_cue_index: None,
     }
 }
 

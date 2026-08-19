@@ -1,7 +1,7 @@
 /**
  * What each kind of window shows.
  *
- * Four of the eleven read the show document; the rest say plainly that they
+ * Seven of the eleven read the show document; the rest say plainly that they
  * are not built yet, which is a deliberate answer rather than a gap — the
  * session is authoritative, an X-Touch F-key can open any of them, and a window
  * that rendered nothing would look like a fault.
@@ -81,17 +81,24 @@ describe("a window's body", () => {
     expect(sheet).not.toContain("Addr");
   });
 
-  it("shows the pools the show has, by number and name", () => {
+  it("shows the sequence pool, and follows the executor for the cue list", () => {
+    // S28 filled these in: the sheet lists what there is and follows the
+    // sequence on the **selected executor**, which is the marked assumption in
+    // `show/looks.ts`. The recorded session has no executor selected, so what
+    // it says is that there is nothing in force — and it still lists the pool.
     expect(body("SequenceSheet")).toContain("Sequence 1");
-    expect(body("CueViewer")).toContain("Sequence 1");
+    expect(body("SequenceSheet")).toContain("No executor selected");
+    expect(body("CueViewer")).toContain("No cue list is in force");
   });
 
   it("says what is missing rather than showing an empty box", () => {
     expect(body("Patch", {})).toContain("Nothing is patched");
     expect(body("FixtureSheet", {})).toContain("Nothing is patched");
     expect(body("Groups", {})).toContain("No groups yet");
-    expect(body("SequenceSheet", {})).toContain("No sequences yet");
-    expect(body("PresetPool", {})).toContain("No presets yet");
+    expect(body("SequenceSheet", {})).toContain("0 sequences");
+    expect(body("SequenceSheet", {})).toContain("no cue list in force");
+    expect(body("CueViewer", {})).toContain("No cue list is in force");
+    expect(body("PresetPool", {})).toContain("pool is empty");
     // A collection that is there but is not a collection — a hand-edited show,
     // or a daemon that changed shape.
     expect(body("Groups", { groups: 7 })).toContain("No groups yet");

@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 44c77f53c3c5d513661886cbb095b392314aecacc6df4c0be1728c72d2a5298d # shrinks to commands = [SelectFixtures { ids: [FixtureId(1)], mode: Set }]
+cc 80474b5a4da26995fa2b2705b9e8e4a1ae9f907ae4ea09383944c502a48a3f2a # shrinks to commands = [AssignExecutor { executor_id: ExecutorId(2), sequence_id: None }]

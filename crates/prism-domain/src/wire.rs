@@ -71,6 +71,7 @@ round_trip! {
     preset => crate::Preset,
 
     cue_trigger => crate::CueTrigger,
+    cue_property => crate::CueProperty,
     cue_part => crate::CuePart,
     cue => crate::Cue,
     sequence => crate::Sequence,
@@ -105,6 +106,9 @@ round_trip! {
     library_entry => crate::LibraryEntry,
     patch_conflict => crate::PatchConflict,
     patch_preview => crate::PatchPreview,
+    store_target => crate::StoreTarget,
+    store_mode => crate::StoreMode,
+    store_preview => crate::StorePreview,
     query => crate::Query,
     answer => crate::Answer,
 }

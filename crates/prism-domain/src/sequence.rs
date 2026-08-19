@@ -113,6 +113,93 @@ impl Cue {
     }
 }
 
+/// One field of a cue, changed on its own.
+///
+/// # Why one field rather than a whole cue
+///
+/// A cue sheet edits a cell: a name, a fade time, a trigger. The obvious
+/// alternative — a command carrying every editable field at once — makes a
+/// client read the cue, change one member and send the rest back, which is a
+/// read-modify-write over state the daemon owns. Two operators editing two
+/// different columns of one cue would then each undo the other's edit, and
+/// neither would have done anything wrong. So the command names the field.
+///
+/// [`Self::Parts`] is deliberately **not** here. What a cue *does* comes from
+/// the programmer through `Command::StoreCue`; a client that sent values would
+/// be authoring show content, which is the same rule that keeps channels out of
+/// `Command::PatchFixture` and profiles out of `Command::EmbedFixtureType`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(tag = "t", rename_all_fields = "camelCase")]
+pub enum CueProperty {
+    /// The number an operator types to reach the cue.
+    ///
+    /// The number is the key a cue is filed under inside its sequence, so this
+    /// is a rename of the key — refused when the sequence already has a cue with
+    /// that number, for `Command::RenumberFixture`'s reason: replacing the other
+    /// one would delete a look nobody asked to delete.
+    Number {
+        /// The new number, as typed.
+        number: String,
+    },
+    /// What the cue is called.
+    Name {
+        /// The new name. May be empty: a cue is reached by its number.
+        name: String,
+    },
+    /// Fade-in time in seconds.
+    FadeIn {
+        /// Seconds, never negative.
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::seconds()")
+        )]
+        seconds: f64,
+    },
+    /// Fade-out time in seconds.
+    FadeOut {
+        /// Seconds, never negative.
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::seconds()")
+        )]
+        seconds: f64,
+    },
+    /// Delay before the fade starts, in seconds.
+    Delay {
+        /// Seconds, never negative.
+        #[serde(with = "crate::finite")]
+        #[ts(as = "f64")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::seconds()")
+        )]
+        seconds: f64,
+    },
+    /// What starts the cue, and after how long.
+    ///
+    /// The two travel together because [`CueTrigger::Time`] is the only trigger
+    /// `trigger_time` means anything for: setting them separately leaves a cue
+    /// that is triggered by a time nobody has given yet, which is a state an
+    /// operator would meet halfway through an edit.
+    Trigger {
+        /// The trigger.
+        trigger: CueTrigger,
+        /// Seconds, for [`CueTrigger::Time`]. `None` for the others.
+        #[serde(with = "crate::finite::option")]
+        #[ts(as = "Option<f64>")]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "proptest::option::of(crate::arb::seconds())")
+        )]
+        trigger_time: Option<f64>,
+    },
+}
+
 /// A cue list.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -138,7 +225,9 @@ pub struct Sequence {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AttributeType, Cue, CuePart, CueTrigger, FixtureId, Sequence, SequenceId};
+    use crate::{
+        AttributeType, Cue, CuePart, CueProperty, CueTrigger, FixtureId, Sequence, SequenceId,
+    };
 
     fn cue(number: &str) -> Cue {
         Cue {
@@ -221,5 +310,61 @@ mod tests {
         let json = serde_json::to_value(&sequence).unwrap();
         assert_eq!(json["loop"], true);
         assert_eq!(json["cues"].as_array().unwrap().len(), 2);
+    }
+
+    /// A cue property is one field, tagged like every other message.
+    #[test]
+    fn a_cue_property_names_the_field_it_changes() {
+        assert_eq!(
+            serde_json::to_string(&CueProperty::Name {
+                name: "Blackout".to_owned()
+            })
+            .unwrap(),
+            r#"{"t":"Name","name":"Blackout"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&CueProperty::FadeIn { seconds: 2.5 }).unwrap(),
+            r#"{"t":"FadeIn","seconds":2.5}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&CueProperty::Trigger {
+                trigger: CueTrigger::Time,
+                trigger_time: Some(4.0),
+            })
+            .unwrap(),
+            r#"{"t":"Trigger","trigger":"Time","triggerTime":4.0}"#
+        );
+    }
+
+    /// The trigger and its time travel together, and a trigger that needs no
+    /// time says so with a `null` rather than by leaving the field out.
+    #[test]
+    fn a_trigger_carries_its_time_or_a_null() {
+        let json = serde_json::to_value(CueProperty::Trigger {
+            trigger: CueTrigger::Go,
+            trigger_time: None,
+        })
+        .unwrap();
+        assert!(json["triggerTime"].is_null(), "{json}");
+    }
+
+    /// A fade time that is not a number never reaches a cue: `crate::finite`
+    /// guards this field on the way in as well as on the way out, because
+    /// MessagePack can carry a NaN faithfully and a cue with one would never
+    /// finish fading.
+    #[test]
+    fn a_fade_time_that_is_not_a_number_is_refused_in_both_directions() {
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(
+                serde_json::to_string(&CueProperty::FadeIn { seconds: value }).is_err(),
+                "{value} was written"
+            );
+        }
+        let packed = rmp_serde::to_vec_named(&serde_json::json!({
+            "t": "FadeOut",
+            "seconds": f64::INFINITY,
+        }))
+        .unwrap();
+        assert!(rmp_serde::from_slice::<CueProperty>(&packed).is_err());
     }
 }

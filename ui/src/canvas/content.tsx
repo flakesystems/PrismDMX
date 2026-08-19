@@ -2,13 +2,13 @@
  * What is inside a window.
  *
  * S25 builds the canvas, not the sheets: the fixture sheet is S27, the cue
- * viewer is S28 and the 3D viewer is S30. So most of these are one honest line
- * saying the window exists and is not built yet — an operator who opens a
- * `PhaserEditor` from an X-Touch F-key should find a window that says so
+ * viewer is S28 and the 3D viewer is S30. So the ones that are left are one
+ * honest line saying the window exists and is not built yet — an operator who
+ * opens a `PhaserEditor` from an X-Touch F-key should find a window that says so
  * rather than an empty rectangle they will file a bug about.
  *
- * The three of the family that are built are the three about light rather than
- * about looks, and S27 is where the difference between them was settled:
+ * Six of the eleven are built. Three are about **light**, and S27 settled the
+ * difference between them:
  *
  * - **Patch** is the *rig* — which fixtures exist and where their channels are.
  *   It is the one window in this interface that changes the show's shape.
@@ -17,6 +17,16 @@
  * - **DMX Sheet** is the *cable* — S24's level view, channel by channel, with no
  *   fixtures in it at all. It is the reason `WindowType` grew a variant in S25:
  *   none of `ARCHITECTURE_SPEC.md` §6's ten named the DMX output itself.
+ *
+ * Three are about **looks**, and S28 settled the difference between those:
+ *
+ * - **Sequence Sheet** is the *cue list* — which sequences there are, which is in
+ *   force, and its cues with their numbers, names, times and triggers. It is the
+ *   one window that stores a look.
+ * - **Cue Viewer** is the *cue* — what those cues set, fixture by fixture, with
+ *   the preset links visible. Watched, not edited.
+ * - **Preset Pool** is the *pools* — named looks per feature group, applied and
+ *   stored, with the colour the scribble strips use.
  *
  * # Scrolling
  *
@@ -31,6 +41,9 @@ import { isObject } from "../mirror/patch";
 import { stringAt, valueAt } from "../mirror/select";
 import { PatchWindow } from "../patch/patchwindow";
 import { FixtureSheet } from "../patch/sheet";
+import { CueViewer } from "../show/cueviewer";
+import { PresetPool } from "../show/presetpool";
+import { SequenceSheet } from "../show/sequencesheet";
 import { TelemetryPanel } from "../telemetry/panel";
 import type { CanvasWindow } from "./windows";
 import { windowTitle } from "./windows";
@@ -57,10 +70,11 @@ export function WindowContent({
     case "Groups":
       return <NameList show={show} collection="groups" empty="No groups yet" />;
     case "SequenceSheet":
+      return <SequenceSheet show={show} session={session} programmer={programmer} />;
     case "CueViewer":
-      return <NameList show={show} collection="sequences" empty="No sequences yet" />;
+      return <CueViewer show={show} session={session} />;
     case "PresetPool":
-      return <NameList show={show} collection="presets" empty="No presets yet" />;
+      return <PresetPool show={show} programmer={programmer} />;
     case "Viewer3D":
     case "PhaserEditor":
     case "ClockViewer":

@@ -61,7 +61,10 @@
 //! and it has no field for a desk; the schema in [`crate::ShowStore`] has no
 //! table for one either, nor for the programmer or the journal.
 
-use prism_domain::{ClearStage, Command, Delta, NoticeLevel};
+use prism_domain::{
+    AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, NoticeLevel, PresetId,
+    SequenceId, StoreMode, StorePreview, StoreTarget,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::command::{Applied, Effect};
@@ -74,7 +77,10 @@ use crate::show::{Show, ShowError};
 ///
 /// One error type over all three appliers, so a caller can route a command
 /// without knowing in advance which half will answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// **Not `Eq`**, because [`ShowError`] is not: `ShowError::NegativeTime` carries
+/// the number an operator typed.
+#[derive(Debug, Clone, PartialEq)]
 pub enum ShowFileError {
     /// The show refused it.
     Show(ShowError),
@@ -220,6 +226,88 @@ impl ShowFile {
         show || session
     }
 
+    /// What storing the programmer into a cue or a preset **would** do.
+    ///
+    /// The answer to `Query::StorePreview`, and S28's exit criterion: *a store
+    /// that would overwrite says what it will do before it does it, even where
+    /// the only mode available is Merge.*
+    ///
+    /// It is here rather than on [`Show`] because it needs all three of the
+    /// things this type holds together — what the programmer is holding, what is
+    /// already filed under that number, and which store mode this build has.
+    /// And it takes its refusal from the **same** builders the store runs
+    /// ([`crate::Programmer::cue`] and [`crate::Programmer::preset`]), so a
+    /// preview and the store after it cannot disagree — exactly as
+    /// `Show::preview_patch` shares `check_patch` with the patch (S27).
+    ///
+    /// Writes nothing.
+    #[must_use]
+    pub fn preview_store(&self, target: &StoreTarget) -> StorePreview {
+        match target {
+            StoreTarget::Cue {
+                sequence_id,
+                cue_number,
+            } => self.preview_cue(*sequence_id, cue_number),
+            StoreTarget::Preset { preset_id, pool } => self.preview_preset(*preset_id, *pool),
+        }
+    }
+
+    /// [`Self::preview_store`] for a cue.
+    fn preview_cue(&self, sequence_id: SequenceId, cue_number: &str) -> StorePreview {
+        let wanted = cue_number.trim();
+        let existing = self
+            .show
+            .sequence(sequence_id)
+            .and_then(|sequence| sequence.cues.iter().find(|cue| cue.number == wanted));
+        let stored: Vec<(FixtureId, AttributeType)> = existing
+            .map(|cue| {
+                cue.parts
+                    .iter()
+                    .map(|part| (part.fixture, part.attribute))
+                    .collect()
+            })
+            .unwrap_or_default();
+        match self.programmer.cue(&self.show, sequence_id, cue_number) {
+            Ok(_) => counted(
+                existing.map(|cue| cue.name.as_str()),
+                &stored,
+                &self.programmer.stored_keys(&self.show, None),
+            ),
+            Err(error) => refused(existing.map(|cue| cue.name.as_str()), &error.to_string()),
+        }
+    }
+
+    /// [`Self::preview_store`] for a preset.
+    fn preview_preset(&self, preset_id: PresetId, pool: FeatureGroup) -> StorePreview {
+        let existing = self.show.preset(preset_id);
+        let stored: Vec<(FixtureId, AttributeType)> = existing
+            .map(|preset| {
+                preset
+                    .values
+                    .iter()
+                    .map(|value| (value.fixture, value.attribute))
+                    .collect()
+            })
+            .unwrap_or_default();
+        // The name is the *client's* here — `StorePreset` carries it — so what
+        // is reported is what the preset is called now, which is the fact an
+        // operator is about to write over.
+        match self
+            .programmer
+            .preset(&self.show, preset_id, pool, "", None)
+        {
+            Ok(_) => counted(
+                existing.map(|preset| preset.name.as_str()),
+                &stored,
+                &self.programmer.stored_keys(&self.show, Some(pool)),
+            ),
+            Err(error) => refused(
+                existing.map(|preset| preset.name.as_str()),
+                &error.to_string(),
+            ),
+        }
+    }
+
     /// Routes a command to the applier that owns it, applies it, and files the
     /// step it took.
     ///
@@ -336,6 +424,29 @@ impl ShowFile {
             }
         }
 
+        if let Command::StorePreset {
+            preset_id,
+            pool,
+            name,
+            color,
+        } = command
+        {
+            // The same order as `StoreCue`: the fallible, *writing* step first,
+            // so a refusal leaves the programmer exactly as it was.
+            let preset = self
+                .programmer
+                .preset(&self.show, *preset_id, *pool, name, *color)?;
+            // Read **before** the store, because a store that changes a linked
+            // value has to reload the sequence it changed — and afterwards the
+            // question would be asked of a show that had already moved.
+            let affected = self.show.sequences_using_preset(*preset_id);
+            let ops = self.show.store_preset(preset)?;
+            applied.deltas.push(Delta::ShowPatch { ops });
+            applied
+                .effects
+                .extend(affected.into_iter().map(Effect::ReloadSequence));
+        }
+
         let selection_before = self.programmer.state().selection.clone();
         applied
             .deltas
@@ -399,19 +510,36 @@ impl ShowFile {
             | Command::ApplyPreset { .. }
             | Command::ClearProgrammer => self.programmer_image(),
             Command::StoreCue { sequence_id, .. } => {
-                // A sequence that is not there is not imaged, and the record is
-                // never filed either: `Show::apply` refuses the command before
-                // anything is written. See [`Image::Sequence`].
-                let mut images: Vec<Image> = self
-                    .show
-                    .sequence(*sequence_id)
-                    .cloned()
-                    .map(Image::Sequence)
-                    .into_iter()
-                    .collect();
+                let mut images = vec![self.sequence_image(*sequence_id)];
                 images.extend(self.programmer_image());
                 images
             }
+            // The preset **and** every sequence it reaches, in that order: a
+            // store rewrites the cue parts linked to the preset
+            // (`Show::relink`), and the sequence images are restored last so
+            // that they win over what putting the old preset back relinks. See
+            // [`Image::Preset`].
+            Command::StorePreset { preset_id, .. } => {
+                let mut images = vec![Image::Preset(
+                    *preset_id,
+                    self.show.preset(*preset_id).cloned(),
+                )];
+                images.extend(
+                    self.show
+                        .sequences_using_preset(*preset_id)
+                        .into_iter()
+                        .map(|id| self.sequence_image(id)),
+                );
+                images.extend(self.programmer_image());
+                images
+            }
+            Command::CreateSequence { sequence_id, .. }
+            | Command::SetCueProperty { sequence_id, .. }
+            | Command::DeleteCue { sequence_id, .. } => vec![self.sequence_image(*sequence_id)],
+            Command::AssignExecutor { executor_id, .. } => vec![Image::Executor(
+                *executor_id,
+                self.show.executor(*executor_id).cloned(),
+            )],
             // The three playback actions, the two journal commands, the save
             // and the fifteen session commands — named rather than caught by a
             // wildcard, so a command added to the protocol is a compile error
@@ -438,6 +566,11 @@ impl ShowFile {
             | Command::SelectProgrammerParam { .. }
             | Command::CommandLineInput { .. } => Vec::new(),
         }
+    }
+
+    /// One sequence as it stands, or its absence.
+    fn sequence_image(&self, id: SequenceId) -> Image {
+        Image::Sequence(id, self.show.sequence(id).cloned())
     }
 
     /// The programmer and the session's page state, which is the pair every
@@ -556,10 +689,28 @@ impl ShowFile {
                     applied.deltas.push(Delta::ShowPatch { ops });
                     applied.effects.push(Effect::Repatch);
                 }
-                Image::Sequence(sequence) => {
-                    let ops = self.show.store_sequence(sequence.clone())?;
+                Image::Sequence(id, sequence) => {
+                    let ops = match sequence {
+                        Some(sequence) => self.show.store_sequence(sequence.clone())?,
+                        None => self.show.remove_sequence(*id)?,
+                    };
                     applied.deltas.push(Delta::ShowPatch { ops });
-                    applied.effects.push(Effect::ReloadSequence(sequence.id));
+                    applied.effects.push(Effect::ReloadSequence(*id));
+                }
+                Image::Preset(id, preset) => {
+                    let ops = match preset {
+                        Some(preset) => self.show.store_preset(preset.clone())?,
+                        None => self.show.remove_preset(*id)?,
+                    };
+                    applied.deltas.push(Delta::ShowPatch { ops });
+                }
+                Image::Executor(id, executor) => {
+                    let ops = match executor {
+                        Some(executor) => self.show.store_executor(executor.clone())?,
+                        None => self.show.remove_executor(*id)?,
+                    };
+                    applied.deltas.push(Delta::ShowPatch { ops });
+                    applied.effects.push(Effect::ExecutorOff { executor: *id });
                 }
                 Image::Programmer(_) | Image::ProgrammerPage { .. } => {}
             }
@@ -586,10 +737,61 @@ impl ShowFile {
                         applied.deltas.push(Delta::SessionPatch { ops });
                     }
                 }
-                Image::Fixture(..) | Image::FixtureType(..) | Image::Sequence(_) => {}
+                Image::Fixture(..)
+                | Image::FixtureType(..)
+                | Image::Sequence(..)
+                | Image::Preset(..)
+                | Image::Executor(..) => {}
             }
         }
         Ok(applied)
+    }
+}
+
+/// A preview of a store that would go through.
+///
+/// `incoming` is what the store would **write** — `Programmer::stored_keys`,
+/// which is the same filter the store itself runs — and not what it would end
+/// up holding. The distinction is the whole of Merge: a merged cue contains
+/// everything it had before, so counting the *result* would report every value
+/// the store left alone as one it had replaced.
+fn counted(
+    name: Option<&str>,
+    stored: &[(FixtureId, AttributeType)],
+    incoming: &[(FixtureId, AttributeType)],
+) -> StorePreview {
+    let mut added = 0;
+    let mut replaced = 0;
+    for key in incoming {
+        if stored.contains(key) {
+            replaced += 1;
+        } else {
+            added += 1;
+        }
+    }
+    StorePreview {
+        accepted: true,
+        refusal: None,
+        exists: name.is_some(),
+        name: name.unwrap_or_default().to_owned(),
+        mode: StoreMode::Merge,
+        added,
+        replaced,
+        kept: u32::try_from(stored.len()).unwrap_or(u32::MAX) - replaced,
+    }
+}
+
+/// A preview of a store that would be refused, in the refusal's own words.
+fn refused(name: Option<&str>, why: &str) -> StorePreview {
+    StorePreview {
+        accepted: false,
+        refusal: Some(why.to_owned()),
+        exists: name.is_some(),
+        name: name.unwrap_or_default().to_owned(),
+        mode: StoreMode::Merge,
+        added: 0,
+        replaced: 0,
+        kept: 0,
     }
 }
 

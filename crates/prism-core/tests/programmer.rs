@@ -49,7 +49,7 @@ fn snapshot(file: &ShowFile) -> Vec<u8> {
 // -- the group ------------------------------------------------------------
 
 #[test]
-fn the_five_programmer_commands_are_the_ones_the_show_hands_on() {
+fn the_six_programmer_commands_are_the_ones_the_show_hands_on() {
     // S11 decided the split by answering `Effect::Programmer`; this session is
     // the other half of exactly those five. Pinning the two lists together
     // means a sixth command cannot be given to one and not the other.
@@ -63,6 +63,15 @@ fn the_five_programmer_commands_are_the_ones_the_show_hands_on() {
         Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "3".to_owned(),
+        },
+        // S28's sixth, and it is the mirror of `StoreCue`: the show can say
+        // which pool and which number, and only the programmer knows what would
+        // go in it.
+        Command::StorePreset {
+            preset_id: PresetId::new(4),
+            pool: FeatureGroup::Color,
+            name: "Deep blue".to_owned(),
+            color: None,
         },
     ];
 
@@ -79,7 +88,7 @@ fn the_five_programmer_commands_are_the_ones_the_show_hands_on() {
             "{command:?}"
         );
     }
-    assert_eq!(programmer_commands.len(), 5);
+    assert_eq!(programmer_commands.len(), 6);
 }
 
 #[test]
@@ -97,6 +106,7 @@ fn a_command_that_is_not_the_programmers_is_refused_here() {
                 | Command::ApplyPreset { .. }
                 | Command::ClearProgrammer
                 | Command::StoreCue { .. }
+                | Command::StorePreset { .. }
         ) {
             continue;
         }

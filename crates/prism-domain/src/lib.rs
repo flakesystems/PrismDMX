@@ -64,6 +64,8 @@ pub use programmer::{
     ClearStage, InvalidClearStage, ProgrammerEntry, ProgrammerState, ProgrammerValue,
     ProgrammerValueSource, ProgrammerValues,
 };
-pub use query::{Answer, LibraryEntry, PatchConflict, PatchPreview, Query};
-pub use sequence::{Cue, CuePart, CueTrigger, Sequence};
+pub use query::{
+    Answer, LibraryEntry, PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget,
+};
+pub use sequence::{Cue, CuePart, CueProperty, CueTrigger, Sequence};
 pub use session::{Session, View, WindowInstance, WindowType};

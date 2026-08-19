@@ -42,7 +42,8 @@ use core::fmt;
 
 use prism_domain::{
     AttributeType, ClearStage, Command, Cue, CuePart, CueTrigger, Delta, FeatureGroup, FixtureId,
-    PresetId, ProgrammerState, ProgrammerValue, ProgrammerValueSource, SelectionMode, SequenceId,
+    Preset, PresetId, PresetValue, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
+    RgbColor, SelectionMode, SequenceId,
 };
 
 use crate::command::Applied;
@@ -236,8 +237,115 @@ impl Programmer {
         Ok(cue)
     }
 
-    /// The touched values as cue parts, in fixture then attribute order.
-    fn cue_parts(&self, show: &Show) -> Vec<CuePart> {
+    /// The preset this programmer stores into a pool.
+    ///
+    /// **The mirror of [`Self::cue`], with two differences that both come from
+    /// the command rather than from the session.**
+    ///
+    /// It is filtered by `pool`. A colour preset stores the colour values and
+    /// leaves the position alone, which is what a pool *is* on a console; and
+    /// the bank an attribute is filed under is the profile's answer
+    /// (`AttributeDef::feature_group`) rather than the attribute name's, which
+    /// is the same rule [`Self::feature_groups`] follows.
+    ///
+    /// And a store with nothing to store is accepted when the preset already
+    /// exists, because `Command::StorePreset` carries the name and the colour —
+    /// so an empty programmer is an ordinary relabel. Onto a preset that does
+    /// not exist it is refused: an empty preset applies nothing, and an operator
+    /// who made one by accident would have no way to tell it from one that did
+    /// not work.
+    ///
+    /// **Merged, not overwritten**, exactly as [`Self::cue`] is, and for the
+    /// same reason — see that method for the S39 note. A value the show can no
+    /// longer resolve is left out rather than refused.
+    ///
+    /// # Errors
+    ///
+    /// [`ProgrammerError::NothingToStore`] if the preset does not exist and the
+    /// programmer holds nothing that belongs in this pool.
+    pub fn preset(
+        &self,
+        show: &Show,
+        id: PresetId,
+        pool: FeatureGroup,
+        name: &str,
+        color: Option<RgbColor>,
+    ) -> Result<Preset, ProgrammerError> {
+        let values = self.preset_values(show, pool);
+        let existing = show.preset(id);
+        if values.is_empty() && existing.is_none() {
+            return Err(ProgrammerError::NothingToStore);
+        }
+        let mut preset = Preset {
+            id,
+            pool,
+            name: name.to_owned(),
+            color,
+            values: existing
+                .map(|preset| preset.values.clone())
+                .unwrap_or_default(),
+        };
+        for value in values {
+            match preset
+                .values
+                .iter_mut()
+                .find(|held| held.fixture == value.fixture && held.attribute == value.attribute)
+            {
+                Some(held) => *held = value,
+                None => preset.values.push(value),
+            }
+        }
+        preset
+            .values
+            .sort_by_key(|value| (value.fixture.get(), value.attribute));
+        Ok(preset)
+    }
+
+    /// The touched values that belong in a pool, in fixture then attribute
+    /// order.
+    fn preset_values(&self, show: &Show, pool: FeatureGroup) -> Vec<PresetValue> {
+        self.touched(show, Some(pool))
+            .map(|(fixture, attribute, value)| PresetValue {
+                fixture,
+                attribute,
+                value: value.value,
+            })
+            .collect()
+    }
+
+    /// **What a store would write**, as the keys it would write them under.
+    ///
+    /// The answer `ShowFile::preview_store` counts against what is already
+    /// stored, and it comes from here rather than from the merged result: the
+    /// merge *keeps* what it did not touch, so counting the merged cue would
+    /// report every untouched value as one this store had replaced.
+    ///
+    /// `pool` is `None` for a cue, which takes everything, and `Some` for a
+    /// preset, which takes its own pool.
+    #[must_use]
+    pub fn stored_keys(
+        &self,
+        show: &Show,
+        pool: Option<FeatureGroup>,
+    ) -> Vec<(FixtureId, AttributeType)> {
+        self.touched(show, pool)
+            .map(|(fixture, attribute, _)| (fixture, attribute))
+            .collect()
+    }
+
+    /// The touched values the show can still resolve, optionally of one pool.
+    ///
+    /// The one filter behind [`Self::cue_parts`], [`Self::preset_values`] and
+    /// [`Self::stored_keys`], so a preview and the store it previews cannot
+    /// disagree about which values are even candidates. A value the show can no
+    /// longer resolve — an unpatched fixture, or a profile without that
+    /// attribute — is not one of them; see [`Self::unresolved`], which is what
+    /// tells the operator about it.
+    fn touched<'a>(
+        &'a self,
+        show: &'a Show,
+        pool: Option<FeatureGroup>,
+    ) -> impl Iterator<Item = (FixtureId, AttributeType, &'a ProgrammerValue)> + 'a {
         self.state
             .values
             .iter()
@@ -246,7 +354,15 @@ impl Programmer {
                     .iter()
                     .map(move |(&attribute, value)| (fixture, attribute, value))
             })
-            .filter(|&(fixture, attribute, _)| show.attribute_def(fixture, attribute).is_some())
+            .filter(move |&(fixture, attribute, _)| {
+                show.attribute_def(fixture, attribute)
+                    .is_some_and(|def| pool.is_none_or(|pool| def.feature_group == pool))
+            })
+    }
+
+    /// The touched values as cue parts, in fixture then attribute order.
+    fn cue_parts(&self, show: &Show) -> Vec<CuePart> {
+        self.touched(show, None)
             .map(|(fixture, attribute, value)| CuePart {
                 fixture,
                 attribute,
@@ -300,11 +416,27 @@ impl Programmer {
                 self.cue(show, *sequence_id, cue_number)?;
                 self.touch()
             }
-            // The other nineteen commands, named rather than caught by a
+            Command::StorePreset {
+                preset_id,
+                pool,
+                name,
+                color,
+            } => {
+                // Validated for the same reason `StoreCue` is: a direct caller
+                // must not get a bare stage reset out of a store that could not
+                // have happened.
+                self.preset(show, *preset_id, *pool, name, *color)?;
+                self.touch()
+            }
+            // The other twenty-three commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
             // the protocol is a compile error here as well as in `Show::apply`
             // and `SessionState::apply`.
-            Command::ExecutorGo { .. }
+            Command::CreateSequence { .. }
+            | Command::SetCueProperty { .. }
+            | Command::DeleteCue { .. }
+            | Command::AssignExecutor { .. }
+            | Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
             | Command::SetExecutorMaster { .. }
             | Command::PatchFixture { .. }

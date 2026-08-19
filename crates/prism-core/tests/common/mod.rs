@@ -152,8 +152,8 @@ pub fn patch_command(id: u32, universe: u32, address: u16) -> Command {
     }
 }
 
-/// The twelve commands of the show group (`docs/IPC_PROTOCOL.md` §5), each in a
-/// form that [`populated_show`] can apply.
+/// Every command of the show group (`docs/IPC_PROTOCOL.md` §5), each in a form
+/// that [`populated_show`] can apply.
 pub fn show_commands() -> Vec<Command> {
     vec![
         Command::SelectFixtures {
@@ -197,6 +197,34 @@ pub fn show_commands() -> Vec<Command> {
         },
         Command::EmbedFixtureType {
             type_id: "generic.rgb.par".to_owned(),
+        },
+        // The five S28 added. Each is in a form the populated show accepts:
+        // preset 4 exists and holds a colour value, sequence 1 exists and has a
+        // cue 1, sequence 9 is free, and executor 2 is an empty slot.
+        Command::StorePreset {
+            preset_id: PresetId::new(4),
+            pool: FeatureGroup::Color,
+            name: "Deep blue".to_owned(),
+            color: None,
+        },
+        Command::CreateSequence {
+            sequence_id: SequenceId::new(9),
+            name: "Act 2".to_owned(),
+        },
+        Command::SetCueProperty {
+            sequence_id: SequenceId::new(1),
+            cue_number: "1".to_owned(),
+            property: prism_domain::CueProperty::Name {
+                name: "Blackout".to_owned(),
+            },
+        },
+        Command::DeleteCue {
+            sequence_id: SequenceId::new(1),
+            cue_number: "2".to_owned(),
+        },
+        Command::AssignExecutor {
+            executor_id: ExecutorId::new(2),
+            sequence_id: Some(SequenceId::new(1)),
         },
         Command::Oops,
         Command::Redo,
