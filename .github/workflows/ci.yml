@@ -205,8 +205,27 @@ jobs:
       - name: Install
         run: npm ci
 
+      # The browser binary, cached across runs so a working mirror is needed
+      # once rather than every time.
+      - name: Cache the browser
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('ui/package-lock.json') }}
+
+      # **Deliberately not `--with-deps`.** That flag runs `apt-get update` and
+      # installs Chromium's shared libraries, and `ubuntu-latest` already ships
+      # them. What it actually bought was a dependency on the Ubuntu mirrors:
+      # on 2026-08-19 `azure.archive.ubuntu.com` stopped answering, apt fell
+      # back to `archive.ubuntu.com`, fetched three index files and then sat
+      # silent for twenty-two minutes until the job was killed — twice, on two
+      # runners, having taken 27 s the run before. Without the flag no apt runs
+      # at all. If a library is ever genuinely missing, Chromium fails to launch
+      # and the end-to-end tests say so loudly, which is a better failure than a
+      # package manager that never returns.
       - name: Install the browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       # The Open Fixture Library, which is **downloaded at install time and not
       # committed** (S44, profiles/fixtures/SOURCE.md). Fetched here so the
