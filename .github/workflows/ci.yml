@@ -126,8 +126,34 @@ jobs:
       #
       # The reasoning behind accepting a C dependency at all - and what the
       # alternatives were - is in PROGRESS.md's decision log under S15.
+      #
+      # `apt-get update` talks to the Ubuntu mirrors, and on 2026-08-19 they
+      # stopped answering: `azure.archive.ubuntu.com` returned nothing, apt fell
+      # back to `archive.ubuntu.com`, fetched three index files and then sat
+      # silent until the job was killed. It cost this job ten minutes and the
+      # end-to-end job twenty-two, and neither had anything to do with the code.
+      #
+      # So the update is no longer on the path when it is not needed. The runner
+      # image ships package lists, and `gcc-aarch64-linux-gnu` is an ordinary
+      # package in them, so the plain install is tried first. Only if that fails
+      # is the index refreshed, and every step is under a timeout: a stalled
+      # mirror now costs a minute and says so, instead of consuming the job.
       - name: Cross C toolchain
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+        run: |
+          if timeout 120 sudo apt-get install -y gcc-aarch64-linux-gnu; then
+            exit 0
+          fi
+          echo "the cached package lists were not enough; refreshing the index"
+          for attempt in 1 2 3; do
+            if timeout 180 sudo apt-get update \
+              && timeout 300 sudo apt-get install -y gcc-aarch64-linux-gnu; then
+              exit 0
+            fi
+            echo "attempt $attempt failed; the Ubuntu mirrors may be down"
+            sleep 15
+          done
+          echo "::error::could not install the cross C toolchain after three tries"
+          exit 1
 
       # This catches the realistic failure - platform-specific code leaking
       # into a crate that is supposed to be neutral.
