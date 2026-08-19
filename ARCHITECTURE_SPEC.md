@@ -154,7 +154,7 @@ interface Session {
   executorPage: number;                // Faderbank ◀▶
   selectedExecutor: ExecutorId | null; // drives main fader, Flip, transport
   encoderBank: FeatureGroup;           // Dimmer / Position / Color / Beam / Focus
-  programmerPage: number;              // Zoom ▲▼
+  programmerPage: number;              // Zoom ▲▼ — pages the encoder bar (S35)
   programmerParamIndex: number;        // Zoom ◀▶ — what the jog wheel turns
   commandLine: string;                 // contents of the console line
 }
@@ -185,7 +185,9 @@ Routing through the UI (MIDI → daemon → UI → daemon) would add two IPC rou
 
 `SelectView`, `StoreView`, `OpenWindow`, `CloseWindow`, `FocusWindow`, `SetExecutorPage`, `SelectExecutor`, `SetEncoderBank`, `SetProgrammerPage`, `SelectProgrammerParam`, `CommandLineInput`.
 
-These eleven are what the **console** issues. A twelfth session command, `PlaceWindow`, was added in **S25** and is deliberately not in this list: a console never drags a window, but §4.1 puts a window's position and size in the session, so a canvas that moved one without telling the daemon would be holding session state locally. It travels with the eleven, is journalled with them (that is, not at all — §6.1), and is specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md) §5.
+These eleven are what the **console** issues. Four more session commands are deliberately not in this list, for one reason: a console cannot issue them, but §4.1 puts what they change in the session, so a client that changed it locally would be holding session state. `PlaceWindow` (**S25**) — a console never drags a window. `RenameView`, `DeleteView` and `MoveView` (**S35**) — a console has no way to type a name, and managing a view library is something an operator does with a pointer. All four travel with the eleven, are journalled with them (that is, not at all — §6.1), and are specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md) §5.
+
+> **The view library's order is its numbers** *(S35)*. `views` is keyed by number, the View Selector Bar draws in number order, `SelectView` names a number and `Channel ◀▶` steps from one number to the next — so `MoveView` **exchanges two views' numbers** rather than recording an order beside them. One order means the console cannot step to a view other than the one drawn next. It costs what it has to: after a move, `SelectView 3` names a different layout, and an F-key bound to a view number reaches whatever now sits in that place.
 
 The **F1–F8 XKeys** are therefore freely assignable to "open Fixture Sheet", "open Patch", "jump to view 2" or macros — drawing on the same command list the UI buttons use. There is no second command world for the console.
 

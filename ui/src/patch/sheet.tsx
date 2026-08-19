@@ -169,7 +169,6 @@ function SheetBody({
                                 style={{ height: `${String(ROW_HEIGHT)}px` }}
                                 className={selected.has(row.id) ? "row-selected" : ""}
                                 data-testid={`sheet-row-${String(row.id)}`}
-                                onClick={() => console.log(row.id)}
                             >
                                 <td>{row.id}</td>
                                 <td>{row.name === "" ? "—" : row.name}</td>

@@ -38,8 +38,10 @@ import type { ParameterReading } from "./programmer";
 import {
   bankReadings,
   clearStage,
-  selectionSize,
+  encoderPage,
   selectionText,
+  selectionSize,
+  sourceText,
   touchedBanks,
   touchedCount,
   valueText,
@@ -59,6 +61,8 @@ export interface EncoderBarProps {
   readonly onBank: (group: FeatureGroup) => void;
   /** Sends a `SelectProgrammerParam`, once per step. */
   readonly onParam: (direction: "Prev" | "Next") => void;
+  /** Sends a `SetProgrammerPage`, which is absolute. */
+  readonly onPage: (page: number) => void;
   /** Sends a `SetAttribute` with `relative` set. */
   readonly onTurn: (reading: ParameterReading, delta: number) => void;
   /** Sends a `ClearProgrammer`. */
@@ -72,6 +76,7 @@ export function EncoderBar({
   programmer,
   onBank,
   onParam,
+  onPage,
   onTurn,
   onClear,
 }: EncoderBarProps) {
@@ -80,6 +85,11 @@ export function EncoderBar({
   const selectedIndex = programmerParamIndex(session);
   const touched = touchedBanks(programmer, show);
   const stage = clearStage(programmer);
+  // The page the *session* is asking for, clamped to what this bank has. Both
+  // hands change the same field: `Zoom ▲▼` on the console and the two buttons
+  // below send `SetProgrammerPage`, and neither of them moves anything until the
+  // delta comes back.
+  const paged = encoderPage(readings, programmerPage(session));
 
   return (
     <section className="encbar" data-testid="encoder-bar" aria-label="Encoders">
@@ -109,7 +119,7 @@ export function EncoderBar({
       </div>
 
       <div className="encbar-encoders" data-testid="encoders">
-        {readings.map((reading) => (
+        {paged.readings.map((reading) => (
           <Encoder
             key={reading.attribute}
             reading={reading}
@@ -123,34 +133,72 @@ export function EncoderBar({
         ))}
       </div>
 
-      <div className="encbar-param">
-        <button
-          type="button"
-          className="page-step"
-          data-testid="param-prev"
-          aria-label="Previous parameter"
-          disabled={selectedIndex === 0}
-          onClick={() => {
-            onParam("Prev");
-          }}
-        >
-          ◀
-        </button>
-        <button
-          type="button"
-          className="page-step"
-          data-testid="param-next"
-          aria-label="Next parameter"
-          // The daemon does not bound this — it cannot, because how many
-          // parameters there are is the bank's question — so the bar does. An
-          // index past the end leaves the jog wheel turning nothing at all.
-          disabled={selectedIndex >= readings.length - 1}
-          onClick={() => {
-            onParam("Next");
-          }}
-        >
-          ▶
-        </button>
+      <div className="encbar-steps">
+        <div className="encbar-param" data-testid="param-steps">
+          <button
+            type="button"
+            className="page-step"
+            data-testid="param-prev"
+            aria-label="Previous parameter"
+            disabled={selectedIndex === 0}
+            onClick={() => {
+              onParam("Prev");
+            }}
+          >
+            ◀
+          </button>
+          <button
+            type="button"
+            className="page-step"
+            data-testid="param-next"
+            aria-label="Next parameter"
+            // The daemon does not bound this — it cannot, because how many
+            // parameters there are is the bank's question — so the bar does. An
+            // index past the end leaves the jog wheel turning nothing at all.
+            disabled={selectedIndex >= readings.length - 1}
+            onClick={() => {
+              onParam("Next");
+            }}
+          >
+            ▶
+          </button>
+        </div>
+        {/*
+          The page control, which is `Zoom ▲▼` on the console (D8,
+          `docs/MCU_MAPPING.md` §4.1). Both send `SetProgrammerPage` and neither
+          moves anything until the delta comes back — so *paging from either end
+          is the same act*, which is what S35 put this here for. A bank that fits
+          on one page disables both, because there is nowhere to go.
+        */}
+        <div className="encbar-page" data-testid="page-steps">
+          <button
+            type="button"
+            className="page-step"
+            data-testid="encoder-page-up"
+            aria-label="Previous parameter page"
+            disabled={paged.page === 0}
+            onClick={() => {
+              onPage(paged.page - 1);
+            }}
+          >
+            ▲
+          </button>
+          <span className="encbar-page-number" data-testid="programmer-page">
+            {paged.page + 1}/{paged.pages}
+          </span>
+          <button
+            type="button"
+            className="page-step"
+            data-testid="encoder-page-down"
+            aria-label="Next parameter page"
+            disabled={paged.page >= paged.pages - 1}
+            onClick={() => {
+              onPage(paged.page + 1);
+            }}
+          >
+            ▼
+          </button>
+        </div>
       </div>
 
       <dl className="encbar-readout" data-testid="programmer-readout">
@@ -161,15 +209,6 @@ export function EncoderBar({
         <div className="reading">
           <dt>Values</dt>
           <dd data-testid="touched">{touchedCount(programmer)}</dd>
-        </div>
-        <div className="reading">
-          <dt>P</dt>
-          {/*
-            The programmer page. Nothing here changes it — five banks of at most
-            six parameters fit on one page — but the console's `Zoom ▲▼` does,
-            and a number an operator moved has to be visible somewhere.
-          */}
-          <dd data-testid="programmer-page">{programmerPage(session)}</dd>
         </div>
         <button
           type="button"
@@ -246,8 +285,13 @@ function Encoder({
       <span className="encoder-value" data-testid={`value-${reading.attribute}`}>
         {valueText(reading)}
       </span>
-      <span className="encoder-count">
-        {reading.available === 0 ? "—" : `${String(reading.held)}/${String(reading.available)}`}
+      <span className="encoder-foot">
+        <span className="encoder-source" data-testid={`source-${reading.attribute}`}>
+          {sourceText(reading)}
+        </span>
+        <span className="encoder-count" data-testid={`count-${reading.attribute}`}>
+          {reading.available === 0 ? "—" : `${String(reading.held)}/${String(reading.available)}`}
+        </span>
       </span>
     </button>
   );

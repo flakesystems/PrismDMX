@@ -3,6 +3,21 @@
   "plugins": ["react", "typescript", "oxc"],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "eslint/no-console": "error"
+  },
+  "overrides": [
+    {
+      "files": ["src/log/logger.ts"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "e2e/**", "src/testing/**"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    }
+  ]
 }

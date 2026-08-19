@@ -89,6 +89,15 @@ const SCRIPT: readonly Command[] = [
   { t: "SelectView", viewId: 2 },
   { t: "SelectView", viewId: 9 },
   { t: "SelectView", viewId: 1 },
+  // S35's eight, in the order `crates/prismd/tests/ui_session.rs` sends them.
+  { t: "StoreView", viewId: 5, name: "Busking" },
+  { t: "RenameView", viewId: 5, name: "Front of house" },
+  { t: "RenameView", viewId: 9, name: "Nowhere" },
+  { t: "MoveView", viewId: 5, direction: "Prev" },
+  { t: "MoveView", viewId: 1, direction: "Prev" },
+  { t: "SelectView", viewId: 2 },
+  { t: "DeleteView", viewId: 2 },
+  { t: "DeleteView", viewId: 9 },
 ];
 
 /** Bytes out of a base64 payload, the way a browser does it (S23). */
@@ -194,8 +203,14 @@ describe("what the canvas reads out of a session", () => {
       for (const encodedDelta of step.deltas) {
         documents = applyDelta(documents, deltaOf(encodedDelta));
       }
-      // A refused command produces no delta at all — not an empty one.
-      expect(step.deltas.length === 0, `step ${String(index)}: refused`).toBe(step.refused);
+      // A refused command produces no delta at all — not an empty one. Only
+      // that direction: a command can also be *accepted* and change nothing,
+      // which `prism-core` answers with no delta rather than a `SessionPatch`
+      // holding no operations. S35's script has one — moving the first view
+      // further left — and it is a no-op, not a refusal.
+      if (step.refused) {
+        expect(step.deltas, `step ${String(index)}: a refusal spoke`).toEqual([]);
+      }
 
       // 3. The three questions the canvas asks, against the daemon's answers.
       expect(answers(documents.session), `step ${String(index)}: ${step.what}`).toEqual({

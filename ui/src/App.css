@@ -572,7 +572,93 @@
     font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The menu over a view button (S35).
+ *
+ * `position: fixed` and not `absolute`: the bar lives in the header, and a menu
+ * that belonged to the header's box would be clipped by it. Fixed also means the
+ * menu cannot make the page scroll, which `CLAUDE.md` forbids outside the canvas
+ * and `e2e/session.spec.ts` measures.
+ */
+.view-menu {
+    position: fixed;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 14rem;
+    padding: 0.25rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--panel);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 45%);
+}
+
+.view-menu-title {
+    margin: 0;
+    padding: 0.2rem 0.45rem 0.3rem;
+    border-bottom: 1px solid var(--edge);
+    color: var(--ink-dim);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.view-menu > button {
+    padding: 0.3rem 0.45rem;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.74rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.view-menu > button:hover:not(:disabled) {
+    background: var(--ground);
+}
+
+.view-menu > button:disabled {
+    color: var(--edge-lit);
+    cursor: default;
+}
+
+.view-menu-danger:not(:disabled) {
+    color: var(--bad);
+}
+
+.view-menu-rename {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem 0.45rem;
+}
+
+.view-menu-rename input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.15rem 0.3rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 2px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.74rem;
+}
+
+.view-menu-rename button {
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 2px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
 /* ---- the encoder bar ---------------------------------------------------- */
+
 
 /*
  * Both bars take their height from the same column as the canvas, so the canvas
@@ -580,29 +666,89 @@
  * boxes: a bar whose height depended on what was on it would move the canvas
  * every time an executor was assigned.
  */
-.encbar {
+/*
+ * The band under the canvas: the encoders and the executors side by side (S35).
+ *
+ * S26 gave each a full-width band, which took two bands of height off the canvas
+ * and left the encoders 3.1 rem for five banks, six parameters and a readout.
+ * One band is 6.8 rem — a little more than the executor bar alone used to be,
+ * and 2.7 rem back for the canvas.
+ *
+ * The height is **fixed** rather than taken from the contents, which is S26's
+ * rule and still the important one: a band that grew when an executor was
+ * assigned would move every window on the screen. Both halves therefore have to
+ * fit inside it, and `e2e/desk.spec.ts` is what checks they do — it reads
+ * `scrollWidth − clientWidth` and `scrollHeight − clientHeight` off the
+ * document, the canvas and both bars and demands eight zeros. A split too tight
+ * for the encoders shows up there rather than in a screenshot.
+ *
+ * The encoders sit on the left at a fixed width, the executors take what is
+ * left: eight strips share whatever the screen has, which is what they did when
+ * they had a band of their own.
+ */
+.deskband {
     flex: 0 0 auto;
     display: flex;
     align-items: stretch;
-    gap: 0.5rem;
-    height: 3.1rem;
+    gap: 0.4rem;
+    height: 6.8rem;
     padding: 0.25rem 0.6rem;
     border-top: 1px solid var(--edge);
     background: var(--panel);
 }
 
+.encbar {
+    flex: 0 0 27rem;
+    min-width: 0;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 1fr auto;
+    gap: 0.25rem 0.4rem;
+    padding-right: 0.6rem;
+    border-right: 1px solid var(--edge);
+}
+
 .encbar-banks,
 .encbar-encoders,
-.encbar-param {
+.encbar-param,
+.encbar-page {
     display: flex;
     align-items: stretch;
     gap: 0.25rem;
 }
 
+.encbar-banks {
+    grid-row: 1;
+    grid-column: 1;
+    min-width: 0;
+}
+
 .encbar-encoders {
-    flex: 1 1 auto;
+    grid-row: 2;
+    grid-column: 1;
     min-width: 0;
     overflow: hidden;
+}
+
+/* The two step controls, stacked: the parameter the wheel turns, and the page. */
+.encbar-steps {
+    grid-row: 2;
+    grid-column: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.2rem;
+}
+
+.encbar-page {
+    align-items: center;
+    justify-content: center;
+}
+
+.encbar-page-number {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.62rem;
+    color: var(--accent);
 }
 
 .bank {
@@ -684,9 +830,11 @@
 }
 
 .encbar-readout {
+    grid-row: 1;
+    grid-column: 2;
     display: flex;
     align-items: center;
-    gap: 0.9rem;
+    gap: 0.6rem;
     margin: 0;
 }
 
@@ -715,14 +863,11 @@
 /* ---- the executor bar --------------------------------------------------- */
 
 .execbar {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     align-items: stretch;
     gap: 0.25rem;
-    height: 6.4rem;
-    padding: 0.25rem 0.6rem;
-    border-top: 1px solid var(--edge);
-    background: var(--panel);
 }
 
 .execbar-page {
@@ -770,15 +915,10 @@
 
 .strip-selected {
     border-color: var(--accent);
-    cursor: default;
 }
 
 .strip-empty {
     opacity: 0.55;
-}
-
-.strip-assigned {
-    cursor: pointer;
 }
 
 .strip-head {
@@ -793,6 +933,16 @@
     font: inherit;
     font-size: 0.66rem;
     cursor: pointer;
+}
+
+/*
+ * The cursor belongs on the head, because the head is the only part of a strip
+ * that selects: the fader drags and the four buttons are their own gestures.
+ * Selecting the executor that is already selected does nothing, and the pointer
+ * says so before it is clicked.
+ */
+.strip-selected .strip-head {
+    cursor: default;
 }
 
 /* A running executor. The lamp is the border of its head, so it reads at a
@@ -848,10 +998,33 @@
     text-align: right;
 }
 
+/* An executor's own four buttons, whatever the show has put on them. */
+.strip-buttons {
+    display: flex;
+    gap: 0.1rem;
+}
+
+.strip-button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.05rem 0;
+    border: 1px solid var(--edge-lit);
+    border-radius: 2px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.58rem;
+    cursor: pointer;
+}
+
 /*
  * A button the show assigns and the protocol has no command for. Drawn, because
  * it is on the executor; disabled, because pressing it would mean this
  * interface deciding what the executor's own setting means.
+ *
+ * Dashed on top of `.strip-button`'s solid border — without that rule there is
+ * no border width for a style to apply to, and the button stops reading as
+ * disabled at all.
  */
 .strip-button-unbound {
     border-style: dashed;
@@ -914,7 +1087,13 @@
     color: var(--ink);
 }
 
-.strip {
+/*
+ * The status strip's readings. Named `.status-strip` and not `.strip`: it shared
+ * that class with the executor strip, and being the later rule it was quietly
+ * deciding the executor strip's `display`, `gap`, `margin` and `padding` — so
+ * the eight strips have never used the grid their own rule sets up.
+ */
+.status-strip {
     display: flex;
     flex-wrap: wrap;
     gap: 0 1.1rem;
@@ -987,7 +1166,15 @@
     color: var(--ink-dim);
 }
 
-/* Höhen- und Opacity-Animation für einzelne Einträge */
+/*
+ * One message, and the way it leaves.
+ *
+ * `grid-template-rows` is what collapses, and `App.tsx` removes the message
+ * when *that* property's `transitionend` arrives — so the duration is written
+ * here and nowhere else. Changing the property or removing the transition would
+ * leave the close button doing nothing, which is why the component names the
+ * property rather than listening for any transition at all.
+ */
 .notice {
     display: grid;
     grid-template-rows: 1fr;
@@ -1004,7 +1191,7 @@
     padding: 0.2rem 0;
 }
 
-/* Zustand beim Schließen */
+/* On the way out. */
 .notice.notice-dismissed {
     grid-template-rows: 0fr;
     opacity: 0;
@@ -1015,7 +1202,7 @@
     flex: 1;
 }
 
-/* Button & Hover-Effekt */
+/* The close button, which is only ink until it is under the pointer. */
 .notice-close {
     background: transparent;
     border: none;

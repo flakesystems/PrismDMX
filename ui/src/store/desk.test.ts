@@ -182,6 +182,51 @@ describe("deltas", () => {
     store.notice("Info", "the show was saved");
     expect(store.getState().notices.at(-1)?.level).toBe("Info");
   });
+
+  /**
+   * Dismissing is what makes the notices list the only one there is. A view
+   * that kept its own set of dismissed identifiers would still be holding
+   * `notice 0` long after `NOTICE_LIMIT` had evicted it — which is the case
+   * asserted here, because it is the one that produced an empty frame nobody
+   * could get rid of.
+   */
+  it("drops a dismissed notice and leaves the rest alone", () => {
+    const store = new DeskStore();
+    store.applySnapshot(snapshot());
+    store.notice("Warn", "one");
+    store.notice("Warn", "two");
+    store.notice("Warn", "three");
+    const [, second] = store.getState().notices;
+
+    store.dismissNotice(second?.id ?? -1);
+    expect(store.getState().notices.map((notice) => notice.message)).toEqual(["one", "three"]);
+  });
+
+  it("dismissing a notice that is not there is not a change", () => {
+    const store = new DeskStore();
+    store.applySnapshot(snapshot());
+    store.notice("Warn", "one");
+    const before = store.getState();
+
+    store.dismissNotice(9999);
+    // The same object, not merely an equal one: a new state here would be a
+    // re-render of every subscriber for nothing.
+    expect(store.getState()).toBe(before);
+  });
+
+  it("forgets a dismissed identifier rather than remembering it", () => {
+    const store = new DeskStore();
+    store.applySnapshot(snapshot());
+    for (let index = 0; index < NOTICE_LIMIT + 5; index += 1) {
+      store.notice("Warn", `notice ${index}`);
+    }
+    // Dismiss every one that is still held. The list is then empty, and the
+    // count of what has been dismissed is not kept anywhere to disagree with it.
+    for (const notice of [...store.getState().notices]) {
+      store.dismissNotice(notice.id);
+    }
+    expect(store.getState().notices).toEqual([]);
+  });
 });
 
 describe("losing the daemon", () => {

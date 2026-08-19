@@ -12,7 +12,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { JsonValue, ProgrammerState } from "../bindings";
-import { bankParameters, bankReadings, groupOf, touchedBanks, valueText } from "./programmer";
+import {
+  ENCODERS_PER_PAGE,
+  bankParameters,
+  bankReadings,
+  encoderPage,
+  groupOf,
+  sourceText,
+  touchedBanks,
+  valueText,
+} from "./programmer";
 
 /** A show with two dimmers and one head, in the shape `prism-core` serialises. */
 const SHOW: JsonValue = {
@@ -168,7 +177,113 @@ describe("which bank an attribute is on", () => {
   });
 });
 
+/**
+ * The page arithmetic on its own, for the cases a bank cannot produce.
+ *
+ * Every generated feature group has at least one attribute, so an *empty* bank
+ * and a fractional page number are only reachable from a document — and a
+ * document is not a promise.
+ */
+describe("paging a bank", () => {
+  /** `n` readings, distinguishable by index. */
+  const readings = (n: number) =>
+    Array.from({ length: n }, (_, index) => ({ ...emptyReading(), index }));
+
+  it("is one page for a bank that fits, and never nought pages", () => {
+    expect(encoderPage(readings(1), 0)).toMatchObject({ page: 0, pages: 1 });
+    expect(encoderPage(readings(ENCODERS_PER_PAGE), 0)).toMatchObject({ page: 0, pages: 1 });
+    // An empty bank is one empty page, not no page at all: `pages: 0` would
+    // make `pages - 1` negative and disable nothing.
+    expect(encoderPage([], 0)).toEqual({ readings: [], page: 0, pages: 1 });
+  });
+
+  it("splits a bank into pages of four, last page short", () => {
+    const six = encoderPage(readings(6), 0);
+    expect(six.pages).toBe(2);
+    expect(six.readings.map((reading) => reading.index)).toEqual([0, 1, 2, 3]);
+    expect(encoderPage(readings(6), 1).readings.map((reading) => reading.index)).toEqual([4, 5]);
+    // Exactly two full pages, rather than three with an empty one.
+    expect(encoderPage(readings(8), 0).pages).toBe(2);
+    expect(encoderPage(readings(9), 0).pages).toBe(3);
+  });
+
+  it("clamps a page number the bank cannot honour", () => {
+    expect(encoderPage(readings(6), 99).page).toBe(1);
+    expect(encoderPage(readings(6), -3).page).toBe(0);
+    expect(encoderPage(readings(6), 1.9).page).toBe(1);
+  });
+});
+
+/**
+ * Where a value came from, which the encoder bar got the room to show when S35
+ * put the two bars in one band.
+ *
+ * It matters before a store rather than after one: `presetRef` is what keeps a
+ * preset link alive through `StoreCue` (S13), so *this encoder is on a preset*
+ * is the thing an operator would otherwise only discover once the cue was
+ * written.
+ */
+describe("where a value came from", () => {
+  it("says nothing for an encoder holding nothing", () => {
+    const [dimmer] = bankReadings(programmer([1, 2]), SHOW, "Dimmer");
+    expect(dimmer?.source).toBeNull();
+    expect(sourceText(dimmer ?? emptyReading())).toBe("");
+  });
+
+  it("names the source when the whole selection agrees", () => {
+    const [dimmer] = bankReadings(
+      programmer([1, 2], [[1, "Dimmer", 32767], [2, "Dimmer", 32767]]),
+      SHOW,
+      "Dimmer",
+    );
+    // `programmer()` builds manual values, which is what an encoder turn makes.
+    expect(dimmer?.source).toBe("Manual");
+    expect(sourceText(dimmer ?? emptyReading())).toBe("man");
+  });
+
+  it("says `~` when the selection holds values from different places", () => {
+    // Fixture 1's dimmer came from an encoder and fixture 2's from a preset.
+    // Naming one of them would be picking a winner, which is `valueText`'s rule
+    // for the value itself.
+    const state = programmer([1, 2], [[1, "Dimmer", 32767]]);
+    const mixed = {
+      ...state,
+      values: [
+        ...state.values,
+        {
+          fixture: 2,
+          attribute: "Dimmer" as const,
+          value: { value: 32767, source: "Preset" as const, presetRef: 4 },
+        },
+      ],
+    };
+    const [dimmer] = bankReadings(mixed, SHOW, "Dimmer");
+    expect(dimmer?.held).toBe(2);
+    expect(dimmer?.source).toBeNull();
+    expect(sourceText(dimmer ?? emptyReading())).toBe("~");
+  });
+
+  it("names each source with a word of its own", () => {
+    for (const [source, text] of [
+      ["Manual", "man"],
+      ["Preset", "preset"],
+      ["Recalled", "cue"],
+      [null, "~"],
+    ] as const) {
+      expect(sourceText({ ...emptyReading(), held: 1, source })).toBe(text);
+    }
+  });
+});
+
 /** A reading of nothing, for the cases above that index into an array. */
 function emptyReading() {
-  return { attribute: "Dimmer", index: 0, level: null, mixed: false, held: 0, available: 0 } as const;
+  return {
+    attribute: "Dimmer",
+    index: 0,
+    level: null,
+    mixed: false,
+    held: 0,
+    available: 0,
+    source: null,
+  } as const;
 }

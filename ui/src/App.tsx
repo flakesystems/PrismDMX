@@ -39,6 +39,7 @@ import type { Command, FeatureGroup, JsonValue, WindowType } from "./bindings";
 import { Canvas } from "./canvas/canvas";
 import type { Rect } from "./canvas/geometry";
 import { ViewBar } from "./canvas/viewbar";
+import type { MoveDirection } from "./canvas/viewbar";
 import { CommandLine } from "./desk/commandline";
 import { EncoderBar } from "./desk/encoderbar";
 import { ExecutorBar } from "./desk/executorbar";
@@ -47,7 +48,7 @@ import { commandLine } from "./desk/session";
 import type { ConnectionStatus } from "./ipc/connection";
 import { countAt, numberAt, stringAt } from "./mirror/select";
 import { statusText } from "./status";
-import { useDesk, useSend } from "./store/hooks";
+import { useDesk, useDeskStore, useSend } from "./store/hooks";
 import type { DeskState, Notice } from "./store/desk";
 
 const selectStatus = (state: DeskState): ConnectionStatus => state.status;
@@ -97,7 +98,7 @@ function NotConnected({ status }: { readonly status: ConnectionStatus }) {
             <p>
                 {status.kind === "incompatible"
                     ? "The engine is running a different version of the protocol. Update the interface or the engine; they cannot talk until the versions match."
-                    : "The engine is not answering. Check that it is running and that the network is working."}
+                    : "The engine is not answering. The show is unaffected by this window: prismd holds the show, the session and every output, and DMX keeps running with no interface attached. Check that it is running and that the network is working."}
             </p>
         </section>
     );
@@ -119,6 +120,27 @@ function Views() {
         },
         [send],
     );
+    // S35's three. Each is a command whose answer is a `SessionPatch`: what a
+    // view *is*, whether it still exists, and what order the bar draws them in
+    // are all the daemon's, and this component holds none of them.
+    const onRenameView = useCallback(
+        (viewId: number, name: string) => {
+            send({ t: "RenameView", viewId, name });
+        },
+        [send],
+    );
+    const onDeleteView = useCallback(
+        (viewId: number) => {
+            send({ t: "DeleteView", viewId });
+        },
+        [send],
+    );
+    const onMoveView = useCallback(
+        (viewId: number, direction: MoveDirection) => {
+            send({ t: "MoveView", viewId, direction });
+        },
+        [send],
+    );
     const onOpenWindow = useCallback(
         (type: WindowType) => {
             send({ t: "OpenWindow", window: type });
@@ -133,6 +155,9 @@ function Views() {
             session={documents.session}
             onSelectView={onSelectView}
             onStoreView={onStoreView}
+            onRenameView={onRenameView}
+            onDeleteView={onDeleteView}
+            onMoveView={onMoveView}
             onOpenWindow={onOpenWindow}
         />
     );
@@ -194,7 +219,7 @@ function Desk() {
         [send],
     );
 
-    // The encoder bar's four.
+    // The encoder bar's five.
     const onBank = useCallback(
         (group: FeatureGroup) => {
             send({ t: "SetEncoderBank", group });
@@ -204,6 +229,16 @@ function Desk() {
     const onParam = useCallback(
         (direction: "Prev" | "Next") => {
             send({ t: "SelectProgrammerParam", direction });
+        },
+        [send],
+    );
+    // `SetProgrammerPage` is absolute, unlike `SelectProgrammerParam` — the
+    // console's `Zoom ▲▼` resolves its step against the session and sends a
+    // number (`prism_surface::binding::step_page`), so both hands put the same
+    // kind of command on the wire and the daemon holds the one page.
+    const onProgrammerPage = useCallback(
+        (page: number) => {
+            send({ t: "SetProgrammerPage", page });
         },
         [send],
     );
@@ -249,24 +284,36 @@ function Desk() {
                 onFocus={onFocus}
                 onClose={onClose}
             />
-            <EncoderBar
-                session={documents.session}
-                show={documents.show}
-                programmer={documents.programmer}
-                onBank={onBank}
-                onParam={onParam}
-                onTurn={onTurn}
-                onClear={onClear}
-            />
-            <ExecutorBar
-                session={documents.session}
-                show={documents.show}
-                onPage={onPage}
-                onSelect={onSelect}
-                onMaster={onMaster}
-                onGo={onGo}
-                onOff={onOff}
-            />
+            {/*
+              One band, two halves (S35). S26 gave each bar a full-width band of
+              its own, which cost the canvas two bands of height and left the
+              encoders 3.1 rem for five banks and six parameters. Side by side
+              they take one, and the encoders get the room a real encoder needs.
+              The band's height is fixed in the stylesheet rather than taken from
+              its contents, for S26's reason: a bar that grew when an executor
+              was assigned would move every window on the screen.
+            */}
+            <div className="deskband" data-testid="desk-band">
+                <EncoderBar
+                    session={documents.session}
+                    show={documents.show}
+                    programmer={documents.programmer}
+                    onBank={onBank}
+                    onParam={onParam}
+                    onPage={onProgrammerPage}
+                    onTurn={onTurn}
+                    onClear={onClear}
+                />
+                <ExecutorBar
+                    session={documents.session}
+                    show={documents.show}
+                    onPage={onPage}
+                    onSelect={onSelect}
+                    onMaster={onMaster}
+                    onGo={onGo}
+                    onOff={onOff}
+                />
+            </div>
             <footer className="desk-footer">
                 <CommandLine
                     daemonLine={commandLine(documents.session)}
@@ -295,7 +342,7 @@ function StatusStrip({ session, show }: { readonly session: JsonValue; readonly 
         return null;
     }
     return (
-        <dl className="strip" data-testid="status-strip">
+        <dl className="status-strip" data-testid="status-strip">
             <Reading label="Fixtures" value={text(countAt(show, "/fixtures"))} testId="fixtures" />
             <Reading label="Groups" value={text(countAt(show, "/groups"))} testId="groups" />
             <Reading label="Seqs" value={text(countAt(show, "/sequences"))} testId="sequences" />
@@ -359,66 +406,79 @@ function Reading({
     );
 }
 
-/** Messages from the daemon, newest last. */
+/**
+ * Messages from the daemon, newest last, each with a way to be got rid of.
+ *
+ * # Two states, and only one of them is a list
+ *
+ * *Which messages exist* is the store's (`DeskStore::dismissNotice`). What is
+ * held here is only *which one is currently sliding out* — transient, per
+ * screen, and gone the moment the transition ends. That is §4.2's category, the
+ * same as hover and drag state, and it is deliberately not a second list of
+ * notices: a view that remembered dismissed ids of its own would diverge from
+ * the store the first time `NOTICE_LIMIT` evicted one of them.
+ *
+ * # The removal waits for the animation, and does not use a timer
+ *
+ * `transitionend` is what says the collapse has finished, so the duration lives
+ * in the stylesheet alone. A `setTimeout` here would be a second copy of the
+ * 300 ms, and the two would disagree the first time somebody adjusted the CSS.
+ */
 function Notices() {
     const notices = useDesk(selectNotices);
-    const [dismissedIds, setDismissedIds] = useState<Array<number | string>>([]);
+    const store = useDeskStore();
+    const [leaving, setLeaving] = useState<ReadonlySet<number>>(() => new Set());
 
-    const handleDismiss = (id: number | string) => {
-        // 1. Klasse 'notice-dismissed' sofort setzen (startet CSS-Animation)
-        setDismissedIds((prev) => [...prev, id]);
-
-        // 2. Element erst nach Ende der CSS-Animation (300ms) komplett entfernen
-        setTimeout(() => {
-            // Falls du eine Action hast, kannst du hier auch optional den Store benachrichtigen
-        }, 300);
-    };
-
-    // Prüfen, ob noch nicht vollständig ausgeblendete Elemente existieren
-    const hasVisibleNotices = notices.some((notice) => !dismissedIds.includes(notice.id));
-
-    // Wenn keine Notices mehr da sind, wird der Rahmen (.notices) aus dem DOM entfernt
-    if (notices.length === 0 || (!hasVisibleNotices && dismissedIds.length === notices.length)) {
+    if (notices.length === 0) {
         return null;
     }
-
     return (
         <section className="notices" data-testid="notices">
             <ul>
-                {notices.map((notice) => {
-                    const isDismissed = dismissedIds.includes(notice.id);
-
-                    return (
-                        <li
-                            key={notice.id}
-                            className={`notice notice-${notice.level.toLowerCase()} ${isDismissed ? "notice-dismissed" : ""
-                                }`}
-                        >
-                            <div className="notice-wrapper">
-                                <div className="notice-content">
-                                    {notice.message}
-                                </div>
-                                <button
-                                    type="button"
-                                    className="notice-close"
-                                    data-testid={`notice-close-${notice.id}`}
-                                    onClick={() => handleDismiss(notice.id)}
-                                    aria-label="Notice schließen"
+                {notices.map((notice) => (
+                    <li
+                        key={notice.id}
+                        className={`notice notice-${notice.level.toLowerCase()}${
+                            leaving.has(notice.id) ? " notice-dismissed" : ""
+                        }`}
+                        data-leaving={leaving.has(notice.id) ? "yes" : "no"}
+                        onTransitionEnd={(event) => {
+                            // Only the collapse, and only this item's own: a
+                            // transition on the button's background would
+                            // otherwise drop a message the operator can still
+                            // see.
+                            if (
+                                event.target === event.currentTarget &&
+                                event.propertyName === "grid-template-rows"
+                            ) {
+                                store.dismissNotice(notice.id);
+                            }
+                        }}
+                    >
+                        <div className="notice-wrapper">
+                            <div className="notice-content">{notice.message}</div>
+                            <button
+                                type="button"
+                                className="notice-close"
+                                data-testid={`notice-close-${String(notice.id)}`}
+                                aria-label={`Dismiss: ${notice.message}`}
+                                onClick={() => {
+                                    setLeaving((held) => new Set(held).add(notice.id));
+                                }}
+                            >
+                                <svg
+                                    height="20px"
+                                    viewBox="0 -960 960 960"
+                                    width="20px"
+                                    fill="currentColor"
+                                    aria-hidden="true"
                                 >
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        height="20px"
-                                        viewBox="0 -960 960 960"
-                                        width="20px"
-                                        fill="currentColor"
-                                    >
-                                        <path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </li>
-                    );
-                })}
+                                    <path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </li>
+                ))}
             </ul>
         </section>
     );

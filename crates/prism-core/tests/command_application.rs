@@ -36,7 +36,7 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
 #[test]
 fn the_two_groups_together_are_the_whole_protocol() {
     // A new command variant has to be given a home here, or this fails.
-    assert_eq!(show_commands().len() + session_commands().len(), 26);
+    assert_eq!(show_commands().len() + session_commands().len(), 30);
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
     }

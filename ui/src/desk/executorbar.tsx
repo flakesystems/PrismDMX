@@ -143,16 +143,30 @@ function Strip({
             data-executor={strip.executorId}
             data-selected={selected ? "yes" : "no"}
             data-assigned={strip.assigned ? "yes" : "no"}
-            onClick={() => {
-                onSelect(strip.executorId);
-            }}
         >
-            <div className={`strip-head${strip.isActive ? " strip-running" : ""}`}>
+            {/*
+              The head is the select target, and it is a `button` because that is
+              what it is: focusable, reachable from the keyboard, and announced.
+              Putting the click on the strip *container* instead — which is what
+              it briefly was — makes every Go, every Off and every fader drag
+              also send a `SelectExecutor`, because a pointer down and up on the
+              fader synthesises a click that bubbles. Two commands for one
+              gesture, and the second one is not what the operator asked for.
+            */}
+            <button
+                type="button"
+                className={`strip-head${strip.isActive ? " strip-running" : ""}`}
+                data-testid={`select-${String(strip.slot)}`}
+                title={`Select executor ${String(strip.executorId)}`}
+                onClick={() => {
+                    onSelect(strip.executorId);
+                }}
+            >
                 <span className="strip-number">{strip.executorId}</span>
                 <span className="strip-name" data-testid={`name-${String(strip.slot)}`}>
                     {strip.name ?? (strip.assigned ? "—" : "")}
                 </span>
-            </div>
+            </button>
             <div
                 className="strip-fader"
                 data-testid={`fader-${String(strip.slot)}`}

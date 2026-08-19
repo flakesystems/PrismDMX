@@ -43,7 +43,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use prism_core::SessionMirror;
-use prism_domain::{Command, JsonValue, ViewId, WindowInstanceId, WindowType};
+use prism_domain::{Command, JsonValue, ParamDirection, ViewId, WindowInstanceId, WindowType};
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
 use prismd::cli::{Options, OutputSpec};
 use prismd::daemon::Daemon;
@@ -234,6 +234,62 @@ fn script() -> Vec<(&'static str, Command)> {
             "select view 1: the canvas empties, because view 1 was stored empty",
             Command::SelectView {
                 view_id: ViewId::new(1),
+            },
+        ),
+        // S35's three. Appended rather than woven in, so every index the
+        // browser's tests already look a step up by stays where it was — and
+        // read by their `what` text all the same, which is S44's finding.
+        (
+            "store the canvas as view 5, leaving a gap: views are not consecutive",
+            Command::StoreView {
+                view_id: ViewId::new(5),
+                name: "Busking".to_owned(),
+            },
+        ),
+        (
+            "rename view 5: the name changes and its windows do not",
+            Command::RenameView {
+                view_id: ViewId::new(5),
+                name: "Front of house".to_owned(),
+            },
+        ),
+        (
+            "rename a view that was never stored: refused, nothing changes",
+            Command::RenameView {
+                view_id: ViewId::new(9),
+                name: "Nowhere".to_owned(),
+            },
+        ),
+        (
+            "move view 5 left: it swaps numbers with view 2, so it becomes view 2",
+            Command::MoveView {
+                view_id: ViewId::new(5),
+                direction: ParamDirection::Prev,
+            },
+        ),
+        (
+            "move view 1 further left: it is already first, so nothing at all happens",
+            Command::MoveView {
+                view_id: ViewId::new(1),
+                direction: ParamDirection::Prev,
+            },
+        ),
+        (
+            "select view 2 — which is now the layout that used to be view 5",
+            Command::SelectView {
+                view_id: ViewId::new(2),
+            },
+        ),
+        (
+            "delete the active view: the daemon decides what the canvas then shows",
+            Command::DeleteView {
+                view_id: ViewId::new(2),
+            },
+        ),
+        (
+            "delete a view that was never stored: refused",
+            Command::DeleteView {
+                view_id: ViewId::new(9),
             },
         ),
     ]
@@ -744,14 +800,16 @@ fn the_recording_is_of_a_canvas_being_used() {
         }),
         "nothing was ever brought to the front"
     );
-    // Two refusals, and neither of them changes anything.
+    // Four refusals, and none of them changes anything: a window dragged after
+    // it closed, a view selected that was never stored, and S35's two — a
+    // rename and a delete naming a view that is not there.
     let refusals: Vec<usize> = steps
         .iter()
         .enumerate()
         .filter(|(_, step)| step.refused)
         .map(|(index, _)| index)
         .collect();
-    assert_eq!(refusals.len(), 2, "the script has two refusals in it");
+    assert_eq!(refusals.len(), 4, "the script has four refusals in it");
     for index in refusals {
         assert!(
             steps[index].deltas.is_empty(),
@@ -783,4 +841,134 @@ fn the_recording_is_of_a_canvas_being_used() {
         })
         .collect();
     assert!(kinds.len() >= 3, "only {kinds:?} ever appeared");
+
+    // -- S35: managing a view, and the ordering decision ----------------------
+    //
+    // Every assertion below reads the *daemon's* answer out of the recording.
+    // The browser compares its readers against the same file, so neither side is
+    // checking itself. Steps are found by what they are *for* rather than by
+    // number, which is S44's finding.
+    let at = |what: &str| {
+        steps
+            .iter()
+            .position(|step| step.what.contains(what))
+            .unwrap_or_else(|| panic!("no step is about {what:?}"))
+    };
+    let named = |step: &Step| -> Vec<(u32, String)> {
+        let mut pairs: Vec<(u32, String)> = step
+            .stored_views
+            .iter()
+            .map(|(id, name, _)| (*id, name.clone()))
+            .collect();
+        pairs.sort_by_key(|(id, _)| *id);
+        pairs
+    };
+
+    // A rename changes the name and leaves the windows alone — the reason it is
+    // not `StoreView` with the old name.
+    let renamed = at("rename view 5");
+    let windows_of = |step: &Step, id: u32| {
+        step.stored_views
+            .iter()
+            .find(|(view, _, _)| *view == id)
+            .map(|(_, _, count)| *count)
+    };
+    assert_eq!(
+        steps[renamed - 1]
+            .stored_views
+            .iter()
+            .find(|(id, _, _)| *id == 5)
+            .map(|(_, name, _)| name.as_str()),
+        Some("Busking")
+    );
+    assert_eq!(
+        steps[renamed]
+            .stored_views
+            .iter()
+            .find(|(id, _, _)| *id == 5)
+            .map(|(_, name, _)| name.as_str()),
+        Some("Front of house")
+    );
+    assert_eq!(
+        windows_of(&steps[renamed - 1], 5),
+        windows_of(&steps[renamed], 5),
+        "a rename changed the view's windows"
+    );
+    assert_eq!(
+        steps[renamed - 1].stored_views.len(),
+        steps[renamed].stored_views.len(),
+        "a rename added or removed a view"
+    );
+
+    // **The ordering decision.** A move exchanges the two numbers, so the names
+    // travel and the numbers stay where they are on the bar.
+    let moved = at("move view 5 left");
+    assert_eq!(
+        named(&steps[moved - 1]),
+        vec![
+            (1, "View 1".to_owned()),
+            (2, "Programming".to_owned()),
+            (5, "Front of house".to_owned()),
+        ]
+    );
+    assert_eq!(
+        named(&steps[moved]),
+        vec![
+            (1, "View 1".to_owned()),
+            (2, "Front of house".to_owned()),
+            (5, "Programming".to_owned()),
+        ],
+        "a move must exchange the two numbers, not record an order beside them"
+    );
+    // Views are **not** consecutive, so a move steps to the next stored number
+    // rather than to `id ± 1`. The gap between 2 and 5 is what makes the
+    // assertion above mean something.
+    assert!(
+        steps[moved].stored_views.iter().any(|(id, _, _)| *id == 5),
+        "the script lost the gap that gives the previous assertion its meaning"
+    );
+
+    // A view already at the end of the bar does not move, and says nothing at
+    // all — a no-op rather than a refusal, like the jog wheel at the first
+    // parameter.
+    let stuck = at("move view 1 further left");
+    assert!(
+        steps[stuck].deltas.is_empty(),
+        "a move that could not happen spoke"
+    );
+    assert!(!steps[stuck].refused, "it is a no-op, not a refusal");
+    assert_eq!(named(&steps[stuck]), named(&steps[stuck - 1]));
+
+    // **Deleting the active view: what the canvas then shows is the daemon's.**
+    let deleted = at("delete the active view");
+    assert_eq!(
+        steps[deleted - 1].active_view_id,
+        2,
+        "view 2 was not active"
+    );
+    assert!(
+        !steps[deleted]
+            .stored_views
+            .iter()
+            .any(|(id, _, _)| *id == 2),
+        "view 2 is still stored"
+    );
+    assert_ne!(
+        steps[deleted].active_view_id, 2,
+        "`activeViewId` still names a view that was deleted"
+    );
+    assert!(
+        steps[deleted]
+            .stored_views
+            .iter()
+            .any(|(id, _, _)| *id == steps[deleted].active_view_id),
+        "the daemon left `activeViewId` naming nothing"
+    );
+    // And the canvas is that view's layout rather than whatever was open: the
+    // interface does not have to invent one, and this is the answer it reads.
+    assert_eq!(
+        Some(steps[deleted].windows.len()),
+        windows_of(&steps[deleted], steps[deleted].active_view_id),
+        "the canvas after a delete is not the successor view's layout"
+    );
 }

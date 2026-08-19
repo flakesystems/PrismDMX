@@ -213,6 +213,55 @@ pub enum Command {
         /// Name for the view.
         name: String,
     },
+    /// Rename a stored view, leaving its windows alone.
+    ///
+    /// **Not one of `ARCHITECTURE_SPEC.md` §4.4's eleven**, for the same reason
+    /// as [`Self::PlaceWindow`]: §4.4 lists what the *console* issues, and an
+    /// X-Touch has no way to type a name. It travels with the twelve, is
+    /// journalled with them — that is, not at all, §6.1 — and exists because
+    /// §4.1 puts the view library in the session, so a client that renamed a
+    /// view locally would be holding session state.
+    ///
+    /// Deliberately separate from [`Self::StoreView`], which overwrites the
+    /// windows: renaming a view must not silently replace the layout in it with
+    /// whatever happens to be on the canvas.
+    RenameView {
+        /// The view to rename.
+        view_id: ViewId,
+        /// The new name.
+        name: String,
+    },
+    /// Delete a stored view.
+    ///
+    /// The **last** view cannot be deleted: `activeViewId` names a view from the
+    /// first moment (`prism_core::SessionState::new`) and a session whose active
+    /// view is not a view is a dangling reference. Deleting the *active* view is
+    /// allowed, and what the canvas then shows is the daemon's to decide — see
+    /// `prism_core::SessionState::delete_view`.
+    DeleteView {
+        /// The view to delete.
+        view_id: ViewId,
+    },
+    /// Move a stored view one place along the bar.
+    ///
+    /// # The number is the order
+    ///
+    /// Views are held by number and drawn in number order, and `Channel ◀▶`
+    /// (**D8**) steps that same order. So moving a view **exchanges its number
+    /// with its neighbour's** rather than recording an order beside the numbers:
+    /// there is one order, and the console cannot disagree with the screen about
+    /// what comes next because there is nothing for it to disagree with.
+    ///
+    /// The cost is real and deliberate: after a move, `SelectView 3` names a
+    /// different layout, and an F-key bound to a view number follows the *place*
+    /// rather than the layout that used to be there. That is how a console's
+    /// page numbers behave, and it is the price of the two never drifting apart.
+    MoveView {
+        /// The view to move.
+        view_id: ViewId,
+        /// Which way along the bar.
+        direction: ParamDirection,
+    },
     /// Open a window on the canvas.
     OpenWindow {
         /// Which window to open.
@@ -325,13 +374,20 @@ impl Command {
     ///
     /// `ARCHITECTURE_SPEC.md` §4.4's eleven, plus [`Self::PlaceWindow`], which
     /// is twelfth because §4.4 lists what the *console* issues and a canvas is
-    /// not a console. See that variant for why it has to exist at all.
+    /// not a console, plus [`Self::RenameView`], [`Self::DeleteView`] and
+    /// [`Self::MoveView`], which are thirteenth to fifteenth for the same
+    /// reason: managing a view library is something an operator does with a
+    /// pointer, and §4.1 puts that library in the session. See those variants
+    /// for why they have to exist at all.
     #[must_use]
     pub const fn is_session_command(&self) -> bool {
         matches!(
             self,
             Self::SelectView { .. }
                 | Self::StoreView { .. }
+                | Self::RenameView { .. }
+                | Self::DeleteView { .. }
+                | Self::MoveView { .. }
                 | Self::OpenWindow { .. }
                 | Self::CloseWindow { .. }
                 | Self::FocusWindow { .. }
@@ -507,6 +563,17 @@ mod tests {
                 view_id: ViewId::new(1),
                 name: "Programming".to_owned(),
             },
+            Command::RenameView {
+                view_id: ViewId::new(1),
+                name: "Busking".to_owned(),
+            },
+            Command::DeleteView {
+                view_id: ViewId::new(1),
+            },
+            Command::MoveView {
+                view_id: ViewId::new(1),
+                direction: ParamDirection::Next,
+            },
             Command::OpenWindow {
                 window: WindowType::Patch,
                 params: None,
@@ -539,7 +606,7 @@ mod tests {
                 text: "1 thru 4 at full".to_owned(),
             },
         ];
-        assert_eq!(commands.len(), 27);
+        assert_eq!(commands.len(), 30);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -551,11 +618,13 @@ mod tests {
     }
 
     #[test]
-    fn session_commands_are_the_architecture_spec_list_plus_the_one_a_canvas_needs() {
-        // ARCHITECTURE_SPEC.md §4.4's eleven, and `PlaceWindow` — which is not
-        // in that list because the list is what a *console* issues. §4.1 puts a
-        // window's position and size in the session all the same, so dragging
-        // one is a command or it is client-local state pretending not to be.
+    fn session_commands_are_the_architecture_spec_list_plus_the_ones_a_screen_needs() {
+        // ARCHITECTURE_SPEC.md §4.4's eleven, plus the four a *screen* needs and
+        // a console cannot issue: `PlaceWindow`, because §4.1 puts a window's
+        // position and size in the session and an X-Touch never drags one, and
+        // `RenameView` / `DeleteView` / `MoveView`, because §4.1 puts the view
+        // library there too and an X-Touch cannot type a name. Each of them is a
+        // command or it is client-local state pretending not to be.
         let session_commands = [
             Command::SelectView {
                 view_id: ViewId::new(1),
@@ -563,6 +632,17 @@ mod tests {
             Command::StoreView {
                 view_id: ViewId::new(1),
                 name: String::new(),
+            },
+            Command::RenameView {
+                view_id: ViewId::new(1),
+                name: String::new(),
+            },
+            Command::DeleteView {
+                view_id: ViewId::new(1),
+            },
+            Command::MoveView {
+                view_id: ViewId::new(1),
+                direction: ParamDirection::Next,
             },
             Command::OpenWindow {
                 window: WindowType::Patch,
@@ -596,7 +676,7 @@ mod tests {
                 text: String::new(),
             },
         ];
-        assert_eq!(session_commands.len(), 12);
+        assert_eq!(session_commands.len(), 15);
         for command in session_commands {
             assert!(command.is_session_command(), "{command:?}");
         }

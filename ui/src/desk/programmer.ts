@@ -24,7 +24,13 @@
  * is held to them.
  */
 
-import type { AttributeType, FeatureGroup, JsonValue, ProgrammerState } from "../bindings";
+import type {
+  AttributeType,
+  FeatureGroup,
+  JsonValue,
+  ProgrammerState,
+  ProgrammerValueSource,
+} from "../bindings";
 import { FEATURE_GROUP_ATTRIBUTES, FEATURE_GROUP_VARIANTS } from "../bindings/variants";
 import { isArray, isObject } from "../mirror/patch";
 import { pointerToken, stringAt, valueAt } from "../mirror/select";
@@ -47,6 +53,16 @@ export interface ParameterReading {
   readonly held: number;
   /** How many of the selected fixtures have this attribute at all. */
   readonly available: number;
+  /**
+   * Where the held values came from, when every one of them came from the same
+   * place; `null` when nothing is held or when they disagree.
+   *
+   * A value an operator dialled in and a value a preset put there are worth
+   * telling apart before storing a cue — `presetRef` is what keeps a preset link
+   * alive through a store (S13), so *this encoder is on a preset* is the thing
+   * that would otherwise only be discovered afterwards.
+   */
+  readonly source: ProgrammerValueSource | null;
 }
 
 /**
@@ -59,6 +75,53 @@ export interface ParameterReading {
  */
 export function bankParameters(bank: FeatureGroup): readonly AttributeType[] {
   return FEATURE_GROUP_ATTRIBUTES[bank];
+}
+
+/**
+ * How many parameters one page of the encoder bar holds.
+ *
+ * **The interface's decision, and only the interface's.** Four is what fits with
+ * the name, the value, where the value came from and how much of the selection
+ * it covers all legible at once — which is the room S35 moved the bar into one
+ * band to get. The daemon has no opinion: `programmerPage` is a bare number in
+ * `ARCHITECTURE_SPEC.md` §4.1, and a desk with a different screen would page it
+ * differently.
+ */
+export const ENCODERS_PER_PAGE = 4;
+
+/** One page of a bank's encoders, and where it sits in the bank. */
+export interface EncoderPage {
+  /** The parameters to draw, at most {@link ENCODERS_PER_PAGE} of them. */
+  readonly readings: readonly ParameterReading[];
+  /** The page actually being shown, counted from zero. */
+  readonly page: number;
+  /** How many pages the bank has. Never zero: an empty bank is one empty page. */
+  readonly pages: number;
+}
+
+/**
+ * The page of a bank the session is asking for, clamped to the bank.
+ *
+ * **The upper bound is the client's**, exactly as it already is for
+ * `SelectProgrammerParam` (`ARCHITECTURE_SPEC.md` §4.4): `prism-core`
+ * deliberately does not know how many parameters a bank has (S13), so it cannot
+ * refuse a page past the end and the bar has to stop at one. A bank that fits on
+ * a single page reports `pages === 1`, which is what disables the page control.
+ *
+ * A session page past the last one shows the **last** page rather than an empty
+ * bar — a screen that went blank because a number was too big would be a screen
+ * an operator cannot get back.
+ */
+export function encoderPage(
+  readings: readonly ParameterReading[],
+  page: number,
+): EncoderPage {
+  const pages = Math.max(1, Math.ceil(readings.length / ENCODERS_PER_PAGE));
+  // `programmerPage` is a `u32` on the wire, so it cannot be negative; the lower
+  // clamp is here because a document is not a promise.
+  const shown = Math.min(Math.max(Math.trunc(page), 0), pages - 1);
+  const from = shown * ENCODERS_PER_PAGE;
+  return { readings: readings.slice(from, from + ENCODERS_PER_PAGE), page: shown, pages };
 }
 
 /** What the encoders of a bank read, given the selection and the show. */
@@ -84,13 +147,21 @@ function readingOf(
   let held = 0;
   let level: number | null = null;
   let mixed = false;
+  let source: ProgrammerValueSource | null = null;
+  let mixedSource = false;
   for (const fixture of selection) {
     if (groupOf(show, fixture, attribute) !== null) {
       available += 1;
     }
-    const value = valueFor(programmer, fixture, attribute);
-    if (value === null) {
+    const entry = entryFor(programmer, fixture, attribute);
+    const value = entry?.value.value ?? null;
+    if (entry === null || value === null) {
       continue;
+    }
+    if (held === 0) {
+      source = entry.value.source;
+    } else if (source !== entry.value.source) {
+      mixedSource = true;
     }
     held += 1;
     if (level === null) {
@@ -99,7 +170,32 @@ function readingOf(
       mixed = true;
     }
   }
-  return { attribute, index, level: mixed ? null : level, mixed, held, available };
+  return {
+    attribute,
+    index,
+    level: mixed ? null : level,
+    mixed,
+    held,
+    available,
+    source: mixedSource ? null : source,
+  };
+}
+
+/** The programmer's whole entry for one fixture and attribute, or `null`. */
+function entryFor(
+  programmer: ProgrammerState | null,
+  fixture: number,
+  attribute: AttributeType,
+): ProgrammerState["values"][number] | null {
+  if (programmer === null) {
+    return null;
+  }
+  for (const entry of programmer.values) {
+    if (entry.fixture === fixture && entry.attribute === attribute) {
+      return entry;
+    }
+  }
+  return null;
 }
 
 /** The programmer's value for one fixture and attribute, or `null`. */
@@ -108,15 +204,31 @@ export function valueFor(
   fixture: number,
   attribute: AttributeType,
 ): number | null {
-  if (programmer === null) {
-    return null;
+  return entryFor(programmer, fixture, attribute)?.value.value ?? null;
+}
+
+/**
+ * Where an encoder's value came from, in one short word.
+ *
+ * Empty when nothing is held — there is no source for a value that does not
+ * exist, and a dash there would compete with the dash the value itself shows.
+ * `~` when the selection holds values from different places, for the same reason
+ * `valueText` says *mixed*: naming one of them would be picking a winner.
+ */
+export function sourceText(reading: ParameterReading): string {
+  if (reading.held === 0) {
+    return "";
   }
-  for (const entry of programmer.values) {
-    if (entry.fixture === fixture && entry.attribute === attribute) {
-      return entry.value.value;
-    }
+  switch (reading.source) {
+    case "Manual":
+      return "man";
+    case "Preset":
+      return "preset";
+    case "Recalled":
+      return "cue";
+    case null:
+      return "~";
   }
-  return null;
 }
 
 /**

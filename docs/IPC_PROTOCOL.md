@@ -133,6 +133,9 @@ type Command =
   // ---- Session and interface (D11) — issued by console and UI alike ----
   | { t: "SelectView"; viewId: number }
   | { t: "StoreView"; viewId: number; name: string }
+  | { t: "RenameView"; viewId: number; name: string }
+  | { t: "DeleteView"; viewId: number }
+  | { t: "MoveView"; viewId: number; direction: "Prev" | "Next" }
   | { t: "OpenWindow"; window: WindowType; params?: Record<string, unknown> }
   | { t: "CloseWindow"; instanceId: number }
   | { t: "FocusWindow"; instanceId: number }
@@ -150,6 +153,12 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > **Three commands the patch needed** *(S27)*. `PatchFixture` alone can only ever *add* to a rig, so a patch nobody could correct was the state the interface was in until S27. `UnpatchFixture` takes one out, and does **not** cascade into groups, presets or cues — a show outlives the rig it was written on (S11), and `Show::issues` reports what now dangles rather than deleting an operator's stored looks. `RenumberFixture` is one command and not an unpatch plus a patch, because the number is the key the patch is filed under: doing it in two steps leaves the rig without that fixture in between, and leaves it deleted if the second step is refused. `EmbedFixtureType` carries **a key and nothing else**, resolved by the daemon against `prism_core::library` — the same rule `PatchFixture` follows in carrying no channels, since a client that sent a whole `FixtureType` would be authoring show content for the daemon to validate. Without it a brand-new show, which carries no profiles at all, could not be patched from an interface.
 
 > **`PlaceWindow` is twelfth and is not in `ARCHITECTURE_SPEC.md` §4.4** *(S25)*. §4.4 lists what the *console* issues, and an X-Touch opens and closes windows without ever dragging one. But §4.1 puts `x`, `y`, `w` and `h` in the session, so a window moved on one screen has to move on every other one — and a client that kept the geometry to itself would be holding session state locally, which is precisely what **D11** exists to prevent. The gap was found when the canvas was built and there was no honest way to drag a window; the four coordinates are canvas units and are rejected as NaN or infinity in both directions, like every other `f64` in the domain.
+
+> **Three commands a view library needed** *(S35)*. Until S35 a view could be stored and selected and nothing else: no rename, no delete, and no way to put views in the order an operator wants to step through. All three are session commands that `ARCHITECTURE_SPEC.md` §4.4 does not list, for `PlaceWindow`'s reason — §4.4 is what a *console* issues, and an X-Touch cannot type a name — while §4.1 puts the view library in the session, so a client that reordered views locally would be holding session state.
+>
+> **`MoveView` exchanges the two views' numbers**, and that is a decision rather than an implementation detail. A view library carries its order either in the numbers or in an ordering beside them; the second gives two things that can disagree, and the disagreement an operator would meet is `Channel ◀▶` stepping to a view other than the one drawn next. Since `views` is keyed by number, the bar draws in number order and `SelectView` names a number, making the number *be* the order leaves nothing to keep in step. The price, paid deliberately: after a move `SelectView 3` names a different layout, and an F-key bound to a view number follows the **place** rather than the layout that used to be there — which is how a console's page numbers behave.
+>
+> **`DeleteView` refuses the last view** (`SessionError::LastView`): `activeViewId` names a view from the first moment and `ShowStore` refuses a file whose active view is not stored, so a session with no views could satisfy neither. Deleting the **active** view is allowed, and what the canvas then shows is the *daemon's*: it selects the neighbour before it, or the one after it when there is none, exactly as `SelectView` would have. A client does not choose a successor, so two screens cannot choose differently.
 
 ### 5.1 Latency path
 

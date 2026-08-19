@@ -288,12 +288,15 @@ impl Show {
             Command::Oops => Ok(Applied::effect(Effect::Undo)),
             Command::Redo => Ok(Applied::effect(Effect::Redo)),
             Command::SaveShow => Ok(Applied::effect(Effect::Save)),
-            // The twelve session commands, named rather than caught by a
+            // The fifteen session commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
             // the protocol is a compile error here instead of a silent
             // rejection at run time.
             Command::SelectView { .. }
             | Command::StoreView { .. }
+            | Command::RenameView { .. }
+            | Command::DeleteView { .. }
+            | Command::MoveView { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }

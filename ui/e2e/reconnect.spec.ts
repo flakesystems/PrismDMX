@@ -89,6 +89,9 @@ test("with no daemon at all it says so and keeps trying", async ({ page }) => {
     await page.goto(`/?daemon=${encodeURIComponent(`ws://127.0.0.1:${PORT + 1}/ipc`)}`);
     await expect(page.getByTestId("connection-status")).toContainText("Disconnected");
     await expect(page.getByTestId("no-daemon")).toContainText("The engine is not answering");
+    // The half that matters, and the reason this assertion is on the wording:
+    // the operator whose screen has just gone dark is told the rig has not.
+    await expect(page.getByTestId("no-daemon")).toContainText("DMX keeps running");
 
     // And when one appears, it is found without the page being reloaded.
     daemon = await startDaemon(PORT + 1);

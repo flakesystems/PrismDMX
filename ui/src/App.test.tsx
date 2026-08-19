@@ -265,55 +265,112 @@ describe("the command line", () => {
     });
 });
 
-//TODO: Fix
-// describe("notices", () => {
-//     it("renders notices from store and allows dismissing them with animation delay", async () => {
-//         // 1. Fake Timers aktivieren, um das 300ms setTimeout kontrollieren zu können
-//         vi.useFakeTimers();
+/**
+ * **Dismissing a message, and where the two halves of that live.**
+ *
+ * The class goes on at once and the message stays in the document; the store
+ * only drops it when the collapse has actually finished. So the assertions are
+ * on both moments — a component that removed the message on click would pass a
+ * test that only looked at the end, and the animation would never be seen.
+ *
+ * `jsdom` runs no transitions, so the end of one is dispatched here. That is the
+ * honest shape: the event is the contract, and `App.css` owns the duration.
+ */
+describe("notices", () => {
+    /** Raises one message through the same path a refusal takes. */
+    function withNotice() {
+        const desked = desk();
+        serve(desked.network);
+        act(() => {
+            desked.network.last.deliver(
+                serverMessage({
+                    t: "Reject",
+                    seq: 1,
+                    reason: "CommandRefused",
+                    message: "no executor 9 is loaded",
+                }),
+            );
+        });
+        return desked;
+    }
 
-//         const { network } = desk();
-//         serve(network);
+    /** The end of the collapse, which is what `App.tsx` listens for. */
+    function endCollapse(item: Element) {
+        act(() => {
+            item.dispatchEvent(
+                new TransitionEvent("transitionend", {
+                    bubbles: true,
+                    propertyName: "grid-template-rows",
+                }),
+            );
+        });
+    }
 
-//         // Simulator-Empfang einer Reject-Nachricht, die eine Notice auslöst
-//         act(() => {
-//             network.last.deliver(
-//                 serverMessage({
-//                     t: "Reject",
-//                     seq: 1,
-//                     reason: "CommandRefused",
-//                     message: "Syntax error in command line",
-//                 }),
-//             );
-//         });
+    it("keeps the message up until the collapse has finished", () => {
+        const { store } = withNotice();
+        const notices = screen.getByTestId("notices");
+        expect(notices.textContent).toContain("no executor 9 is loaded");
 
-//         // Prüfen, ob die Notice und der Close-Button sichtbar sind
-//         const noticesSection = screen.getByTestId("notices");
-//         expect(noticesSection).not.toBeNull();
-//         expect(noticesSection.textContent).toContain("Syntax error in command line");
+        const id = store.getState().notices[0]?.id ?? -1;
+        act(() => {
+            screen.getByTestId(`notice-close-${String(id)}`).click();
+        });
 
-//         const closeButton = screen.getByTestId("notice-close-1");
-//         expect(closeButton).not.toBeNull();
+        // Marked as leaving, and still there: this is the frame the transition
+        // runs in, and a message removed here would never animate.
+        const item = notices.querySelector(".notice");
+        expect(item?.classList.contains("notice-dismissed")).toBe(true);
+        expect(screen.queryByTestId("notices")).not.toBeNull();
+        expect(store.getState().notices).toHaveLength(1);
 
-//         // 2. Klick auf den Schließen-Button ausführen
-//         await act(async () => {
-//             closeButton.click();
-//         });
+        endCollapse(item as Element);
+        expect(screen.queryByTestId("notices")).toBeNull();
+        expect(store.getState().notices).toEqual([]);
+    });
 
-//         // Sofortige Auswirkung: Die Klasse "notice-dismissed" muss gesetzt sein
-//         const noticeItem = noticesSection.querySelector(".notice");
-//         expect(noticeItem?.classList.contains("notice-dismissed")).toBe(true);
+    it("ignores the end of a transition that is not the collapse", () => {
+        const { store } = withNotice();
+        const item = screen.getByTestId("notices").querySelector(".notice");
+        act(() => {
+            (item as Element).dispatchEvent(
+                new TransitionEvent("transitionend", {
+                    bubbles: true,
+                    // The close button's hover, which bubbles to the same list
+                    // item and must not drop a message still on the screen.
+                    propertyName: "background-color",
+                }),
+            );
+        });
+        expect(store.getState().notices).toHaveLength(1);
+        expect(screen.queryByTestId("notices")).not.toBeNull();
+    });
 
-//         // Element ist vor Ablauf der 300ms Animation immer noch im DOM
-//         expect(screen.queryByTestId("notices")).not.toBeNull();
+    it("drops only the message that was dismissed", () => {
+        const { network, store } = withNotice();
+        act(() => {
+            network.last.deliver(
+                serverMessage({
+                    t: "Reject",
+                    seq: 2,
+                    reason: "CommandRefused",
+                    message: "no fixture 12 is patched",
+                }),
+            );
+        });
+        expect(store.getState().notices).toHaveLength(2);
 
-//         // 3. Zeit um 300ms vorspulen (Animationsende)
-//         act(() => {
-//             vi.advanceTimersByTime(300);
-//         });
+        const first = store.getState().notices[0]?.id ?? -1;
+        act(() => {
+            screen.getByTestId(`notice-close-${String(first)}`).click();
+        });
+        const items = [...screen.getByTestId("notices").querySelectorAll(".notice")];
+        expect(items.map((item) => item.getAttribute("data-leaving"))).toEqual(["yes", "no"]);
 
-//         // Jetzt ist die komplette Notices-Sektion aus dem DOM entfernt
-//         expect(screen.queryByTestId("notices")).toBeNull();
-
-//         vi.useRealTimers();
-//     });
-// });
+        endCollapse(items[0] as Element);
+        expect(store.getState().notices.map((notice) => notice.message)).toEqual([
+            "no fixture 12 is patched",
+        ]);
+        // The frame is still up, because there is still something in it.
+        expect(screen.getByTestId("notices").textContent).toContain("no fixture 12 is patched");
+    });
+});

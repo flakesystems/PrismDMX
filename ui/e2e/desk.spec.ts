@@ -58,6 +58,15 @@ const ASSIGN_COLOR = 42;
 /** Cursor ▶, note 99 — `XTouch.txt`'s `Zoom ▶`: the next programmer parameter. */
 const CURSOR_RIGHT = 99;
 
+/** Encoder Assign / Plug-in, note 43 — the default profile's Beam bank. */
+const ASSIGN_BEAM = 43;
+
+/** Cursor ▲, note 96 — `Zoom ▲`: the previous programmer page (§4.1). */
+const ZOOM_UP = 96;
+
+/** Cursor ▼, note 97 — `Zoom ▼`: the next programmer page. */
+const ZOOM_DOWN = 97;
+
 /**
  * The colour `LevelPainter` draws a channel at 127 in.
  *
@@ -271,6 +280,60 @@ test("the console line is the session's, and a syntax error is a message", async
   await expect(page.getByTestId("notices")).toContainText("9");
   await expect(page.getByTestId("selection")).toHaveText("—");
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+});
+
+test("**paging the encoders agrees**: the console's `Zoom ▲▼` and the bar move one page", async ({
+  page,
+}) => {
+  // **S35's second exit criterion, observed rather than asserted.** The two page
+  // controls in the encoder bar and the two keys on the console change the same
+  // `programmerPage`, so a browser that had its own idea of the page would drift
+  // from the desk within two presses. Nothing here reads a page out of the
+  // interface's own state: every number below is drawn from a `SessionPatch`.
+  const started = await deskDaemon(PORT + 5);
+  daemon = started.daemon;
+  await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+
+  // Dimmer has one parameter, so there is one page and nowhere to go.
+  await expect(page.getByTestId("bank-Dimmer")).toHaveAttribute("data-active", "yes");
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/1");
+  await expect(page.getByTestId("encoder-page-down")).toBeDisabled();
+  await expect(page.getByTestId("encoder-page-up")).toBeDisabled();
+
+  // **The press.** Three bytes appended to a file by a process that is neither
+  // this browser nor this daemon: Encoder Assign / Plug-in, which the default
+  // profile binds to the Beam bank.
+  pressConsole(started.keys, ASSIGN_BEAM);
+  await expect(page.getByTestId("bank-Beam")).toHaveAttribute("data-active", "yes");
+
+  // Beam has six parameters, so four are drawn and there is a second page.
+  await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(4);
+  await expect(page.getByTestId("encoder-Iris")).toBeVisible();
+  await expect(page.getByTestId("encoder-Prism")).toBeVisible();
+  await expect(page.getByTestId("encoder-Shutter")).toHaveCount(0);
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
+  await expect(page.getByTestId("encoder-page-down")).toBeEnabled();
+
+  // **`Zoom ▼` on the console pages the browser.**
+  pressConsole(started.keys, ZOOM_DOWN);
+  await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
+  await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(2);
+  await expect(page.getByTestId("encoder-Shutter")).toBeVisible();
+  await expect(page.getByTestId("encoder-Control")).toBeVisible();
+  await expect(page.getByTestId("encoder-Iris")).toHaveCount(0);
+
+  // Now the *interface* pages, and the console's next press carries on from
+  // where the browser left it — which is the criterion: **one page number**.
+  await page.getByTestId("encoder-page-up").click();
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
+  await expect(page.getByTestId("encoder-Iris")).toBeVisible();
+
+  pressConsole(started.keys, ZOOM_DOWN);
+  await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
+  pressConsole(started.keys, ZOOM_UP);
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
+  await expect(page.getByTestId("encoder-page-up")).toBeDisabled();
 });
 
 test("the screen is still a device screen with both bars on it", async ({ page }) => {

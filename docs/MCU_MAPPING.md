@@ -494,8 +494,8 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 | **Play / Stop / Forward / Backward** | On / Off / Go+ / Go− on the selected executor | Engine | yes — **and this row is the one to spend carefully: it is the part of the panel that stays PrismDMX's in shared operation (§4.3), so it wants live-show functions, free assignments included** |
 | **Record** | `Clear` (three-stage) | Programmer | yes — same section, same reasoning |
 | **Faderbank ◀▶** | executor **page** down / up — 8 per page (D7) | **Session** | — |
-| **Channel ◀▶** | **switch UI view** — `SelectView` (D8) | **Session** | — |
-| **Zoom ▲▼** | programmer page up / down | **Session** | — |
+| **Channel ◀▶** | **switch UI view** — `SelectView` (D8) | **Session** | — · **steps the order the View Selector Bar draws (S35)**: `MoveView` exchanges two views' numbers, so there is one order and the console cannot reach a view other than the one drawn next |
+| **Zoom ▲▼** | programmer page up / down | **Session** | — · **this pages the encoder bar (S35)**. `programmerPage` had been in `ARCHITECTURE_SPEC.md` §4.1 since S12 with nothing reading it; the bar now draws four parameters to a page. How many fit is the *interface's* decision and the upper bound is too — `prism-core` deliberately does not know how many parameters a bank has (S13), the same split `SelectProgrammerParam` already has |
 | **Zoom ◀▶** | select previous / next programmer parameter | **Session** | — |
 | Jog wheel | change the value of the selected programmer parameter | Programmer | — · **which parameter that is comes from `FeatureGroup::attributes` (S26)** — one table, exported to the interface as `FEATURE_GROUP_ATTRIBUTES`, so the encoder bar highlights what the wheel turns |
 | Encoder Assign section | switch encoder bank — Dimmer / Position / Color / Beam / Focus | **Session** | yes |

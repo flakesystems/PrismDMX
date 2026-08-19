@@ -167,6 +167,114 @@ test("**D11**: a view switched at the console appears in the browser, unasked", 
   forget(dataDir);
 });
 
+test("**after a move, `Channel ▶` steps to the view that is drawn next**", async ({ page }) => {
+  // **S35's last exit criterion.** The bar draws views in number order and
+  // `prismd::surface::context_of` steps the same numbers, so moving a view has
+  // to move what the console reaches — and it does, because moving *is*
+  // exchanging the numbers. There is no second order for the two to disagree
+  // about; this test is what says so out loud, with a real console and a real
+  // daemon.
+  const directory = join(process.cwd(), "test-results");
+  keys = join(directory, `console-${String(Date.now())}.midi`);
+  daemon = await startDaemon(PORT + 3, undefined, { mockSurface: keys });
+  const dataDir = daemon.dataDir;
+  await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+
+  // Three views, each with a layout that says which one it is: view 1 empty,
+  // view 2 with a Groups window, view 3 with a Patch window.
+  await page.getByTestId("open-window").selectOption("Groups");
+  await expect(page.getByTestId("window-1")).toBeVisible();
+  await page.getByTestId("new-view").click();
+  await expect(page.getByTestId("view-2")).toBeVisible();
+
+  await page.getByTestId("close-window-1").click();
+  await page.getByTestId("open-window").selectOption("Patch");
+  await expect(page.getByTestId("window-2")).toBeVisible();
+  await page.getByTestId("new-view").click();
+  await expect(page.getByTestId("view-3")).toBeVisible();
+
+  // Back to view 1, which is where `Channel ▶` counts from.
+  await page.getByTestId("view-1").click();
+  await expect(page.getByTestId("view-1")).toHaveAttribute("data-active", "yes");
+
+  // Before the move: view 2 holds the Groups window, so `Channel ▶` reaches it.
+  pressConsole(keys, CHANNEL_RIGHT);
+  await expect(page.getByTestId("view-2")).toHaveAttribute("data-active", "yes");
+  await expect(page.getByTestId("window-1")).toHaveAttribute("data-window-type", "Groups");
+
+  // **The move**, from the interface: view 3 goes left, so it becomes view 2
+  // and the Groups layout becomes view 3.
+  await page.getByTestId("view-3").click({ button: "right" });
+  await expect(page.getByTestId("view-menu")).toBeVisible();
+  await page.getByTestId("view-move-prev").click();
+  await expect(page.getByTestId("view-menu")).toHaveCount(0);
+
+  // The daemon answered, and the active view followed the *view* rather than
+  // the number: the canvas still shows what it showed.
+  await expect(page.getByTestId("view-3")).toHaveAttribute("data-active", "yes");
+  await expect(page.getByTestId("window-1")).toHaveAttribute("data-window-type", "Groups");
+
+  // Back to view 1 again, and the console's next step now reaches the view that
+  // is *drawn* second — which is the Patch layout, not the Groups one.
+  await page.getByTestId("view-1").click();
+  await expect(page.getByTestId("view-1")).toHaveAttribute("data-active", "yes");
+
+  pressConsole(keys, CHANNEL_RIGHT);
+  await expect(page.getByTestId("view-2")).toHaveAttribute("data-active", "yes");
+  await expect(page.getByTestId("active-view")).toHaveText("2");
+  await expect(page.getByTestId("window-2")).toHaveAttribute("data-window-type", "Patch");
+
+  await daemon.kill();
+  daemon = null;
+  forget(dataDir);
+});
+
+test("a view is renamed and deleted from the interface, and the daemon says what follows", async ({
+  page,
+}) => {
+  daemon = await startDaemon(PORT + 4);
+  const dataDir = daemon.dataDir;
+  await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+
+  await page.getByTestId("open-window").selectOption("Groups");
+  await expect(page.getByTestId("window-1")).toBeVisible();
+  await page.getByTestId("new-view").click();
+  await expect(page.getByTestId("view-2")).toBeVisible();
+  await expect(page.getByTestId("view-2")).toContainText("View 2");
+
+  // Rename: a command out, and the name that comes back is the daemon's.
+  await page.getByTestId("view-2").click({ button: "right" });
+  await page.getByTestId("view-rename").click();
+  await page.getByTestId("view-rename-input").fill("Front of house");
+  await page.getByTestId("view-rename-apply").click();
+  await expect(page.getByTestId("view-2")).toContainText("Front of house");
+  // And the layout it was storing is untouched by a rename.
+  await page.getByTestId("view-2").click();
+  await expect(page.getByTestId("window-1")).toHaveAttribute("data-window-type", "Groups");
+
+  // Delete the **active** view. What the canvas becomes is the daemon's answer:
+  // view 1 was stored empty, so the canvas empties.
+  await expect(page.getByTestId("view-2")).toHaveAttribute("data-active", "yes");
+  await page.getByTestId("view-2").click({ button: "right" });
+  await page.getByTestId("view-delete").click();
+
+  await expect(page.getByTestId("view-2")).toHaveCount(0);
+  await expect(page.getByTestId("view-1")).toHaveAttribute("data-active", "yes");
+  await expect(page.getByTestId("active-view")).toHaveText("1");
+  await expect(page.getByTestId("canvas-empty")).toBeVisible();
+
+  // The last view cannot go: the session must always have one for
+  // `activeViewId` to name, and the interface says so before the daemon has to.
+  await page.getByTestId("view-1").click({ button: "right" });
+  await expect(page.getByTestId("view-delete")).toBeDisabled();
+
+  await daemon.kill();
+  daemon = null;
+  forget(dataDir);
+});
+
 test("the screen is a device screen: nothing outside the canvas scrolls", async ({ page }) => {
   // `CLAUDE.md`, checked rather than asserted in a stylesheet review: with
   // several windows open and a fixture sheet full of rows, the *page* must

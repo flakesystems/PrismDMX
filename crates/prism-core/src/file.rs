@@ -413,7 +413,7 @@ impl ShowFile {
                 images
             }
             // The three playback actions, the two journal commands, the save
-            // and the twelve session commands — named rather than caught by a
+            // and the fifteen session commands — named rather than caught by a
             // wildcard, so a command added to the protocol is a compile error
             // here as well as in the three appliers.
             Command::ExecutorGo { .. }
@@ -424,6 +424,9 @@ impl ShowFile {
             | Command::SaveShow
             | Command::SelectView { .. }
             | Command::StoreView { .. }
+            | Command::RenameView { .. }
+            | Command::DeleteView { .. }
+            | Command::MoveView { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }

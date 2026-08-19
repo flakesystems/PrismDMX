@@ -115,6 +115,13 @@ const CLIENT_LOCAL_PARAM_KEYS: [&str; 7] = [
 pub enum SessionError {
     /// A view number that has never been stored.
     UnknownView(ViewId),
+    /// The only stored view cannot be deleted.
+    ///
+    /// `activeViewId` names a view from the first moment ([`SessionState::new`])
+    /// and [`crate::ShowStore`] refuses a file whose active view is not stored.
+    /// A session with no views at all could satisfy neither, so the last one is
+    /// a floor rather than something the caller has to remember.
+    LastView(ViewId),
     /// A window number that is not open.
     UnknownWindow(WindowInstanceId),
     /// An executor page whose slots cannot all be addressed.
@@ -148,6 +155,10 @@ impl fmt::Display for SessionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownView(id) => write!(f, "no view {id} has been stored"),
+            Self::LastView(id) => write!(
+                f,
+                "view {id} is the only one stored, and the session must always have one"
+            ),
             Self::UnknownWindow(id) => write!(f, "window {id} is not open"),
             Self::ExecutorPageOutOfRange { page } => write!(
                 f,
@@ -311,6 +322,9 @@ impl SessionState {
         let ops = match command {
             Command::SelectView { view_id } => self.select_view(*view_id)?,
             Command::StoreView { view_id, name } => self.store_view(*view_id, name)?,
+            Command::RenameView { view_id, name } => self.rename_view(*view_id, name)?,
+            Command::DeleteView { view_id } => self.delete_view(*view_id)?,
+            Command::MoveView { view_id, direction } => self.move_view(*view_id, *direction)?,
             Command::OpenWindow { window, params } => self.open_window(*window, params.as_ref())?,
             Command::CloseWindow { instance_id } => self.close_window(*instance_id)?,
             Command::FocusWindow { instance_id } => self.focus_window(*instance_id)?,
@@ -401,6 +415,165 @@ impl SessionState {
         self.views.insert(id, view);
         self.dirty = true;
         Ok(vec![op])
+    }
+
+    /// Renames a stored view, leaving its windows exactly as they are.
+    ///
+    /// Deliberately not [`SessionState::store_view`] with the old name: storing
+    /// overwrites the layout with whatever is on the canvas now, and an operator
+    /// correcting a typo has not asked for that.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::UnknownView`] if no such view has been stored.
+    pub fn rename_view(
+        &mut self,
+        id: ViewId,
+        name: &str,
+    ) -> Result<Vec<JsonPatchOp>, SessionError> {
+        let Some(view) = self.views.get(&id) else {
+            return Err(SessionError::UnknownView(id));
+        };
+        if view.name == name {
+            return Ok(Vec::new());
+        }
+        let renamed = View {
+            id,
+            name: name.to_owned(),
+            windows: view.windows.clone(),
+        };
+        let op = put(pointer(VIEWS, &id.to_string()), &renamed, true)?;
+        self.views.insert(id, renamed);
+        self.dirty = true;
+        Ok(vec![op])
+    }
+
+    /// Deletes a stored view.
+    ///
+    /// # What the canvas shows afterwards is decided here
+    ///
+    /// Deleting the **active** view leaves `activeViewId` naming something that
+    /// no longer exists, and that has to be resolved by the daemon rather than
+    /// by whichever client happened to send the command — otherwise two screens
+    /// would answer it differently. The rule: the neighbour along the bar, the
+    /// one **before** it if there is one and the one after it otherwise, is
+    /// selected exactly as [`SessionState::select_view`] would have selected it.
+    /// So the canvas is a stored layout and never an arbitrary leftover.
+    ///
+    /// Deleting a view that is *not* active leaves the canvas alone.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::UnknownView`] if no such view has been stored, or
+    /// [`SessionError::LastView`] if it is the only one.
+    pub fn delete_view(&mut self, id: ViewId) -> Result<Vec<JsonPatchOp>, SessionError> {
+        if !self.views.contains_key(&id) {
+            return Err(SessionError::UnknownView(id));
+        }
+        if self.views.len() == 1 {
+            return Err(SessionError::LastView(id));
+        }
+        // The successor is chosen before anything is removed, so a failure to
+        // encode leaves the session untouched — the rule `commit` exists for.
+        let successor = (self.session.active_view_id == id).then(|| {
+            self.neighbour(id, ParamDirection::Prev)
+                .or_else(|| self.neighbour(id, ParamDirection::Next))
+        });
+        let mut ops = vec![JsonPatchOp::Remove {
+            path: pointer(VIEWS, &id.to_string()),
+        }];
+        if let Some(Some(next_id)) = successor {
+            // `select_view` reads `self.views`, so the removal happens first —
+            // and the view being selected is not the one being removed.
+            let windows = self.views.get(&next_id).map(|view| view.windows.clone());
+            self.views.remove(&id);
+            if let Some(windows) = windows {
+                let mut next = self.session.clone();
+                next.active_view_id = next_id;
+                next.focused_window = windows.last().map(|window| window.instance_id);
+                next.open_windows = windows;
+                ops.extend(self.commit(next)?);
+            }
+        } else {
+            self.views.remove(&id);
+        }
+        self.dirty = true;
+        Ok(ops)
+    }
+
+    /// Moves a stored view one place along the bar by exchanging its number.
+    ///
+    /// See [`prism_domain::Command::MoveView`] for why the number *is* the
+    /// order. The consequence handled here is that `activeViewId` follows the
+    /// **view**, not the number: an operator who moves the view they are looking
+    /// at is still looking at it afterwards.
+    ///
+    /// A view already at the end of the bar has nowhere to go, and that produces
+    /// no operations at all rather than an error — the same shape as turning the
+    /// jog wheel left at the first parameter.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::UnknownView`] if no such view has been stored.
+    pub fn move_view(
+        &mut self,
+        id: ViewId,
+        direction: ParamDirection,
+    ) -> Result<Vec<JsonPatchOp>, SessionError> {
+        if !self.views.contains_key(&id) {
+            return Err(SessionError::UnknownView(id));
+        }
+        let Some(other) = self.neighbour(id, direction) else {
+            return Ok(Vec::new());
+        };
+        // Both are known to exist, so the two clones below cannot fail; they are
+        // taken before anything is written for `commit`'s reason.
+        let (Some(here), Some(there)) = (self.views.get(&id), self.views.get(&other)) else {
+            return Err(SessionError::UnknownView(other));
+        };
+        let moved = View {
+            id: other,
+            name: here.name.clone(),
+            windows: here.windows.clone(),
+        };
+        let displaced = View {
+            id,
+            name: there.name.clone(),
+            windows: there.windows.clone(),
+        };
+        let mut ops = vec![
+            put(pointer(VIEWS, &id.to_string()), &displaced, true)?,
+            put(pointer(VIEWS, &other.to_string()), &moved, true)?,
+        ];
+        self.views.insert(id, displaced);
+        self.views.insert(other, moved);
+
+        // The active view is a number, and one of these two views has just
+        // changed its number. Following the view is what keeps the canvas the
+        // operator is looking at under the button that is lit.
+        let active = self.session.active_view_id;
+        if active == id || active == other {
+            let mut next = self.session.clone();
+            next.active_view_id = if active == id { other } else { id };
+            ops.extend(self.commit(next)?);
+        }
+        self.dirty = true;
+        Ok(ops)
+    }
+
+    /// The stored view one place along the bar from `id`, if there is one.
+    ///
+    /// The **only** place the order of the bar is expressed, so that
+    /// `MoveView`, `DeleteView`'s choice of successor and `prismd`'s
+    /// `context_of` — which is what `Channel ◀▶` steps — cannot disagree about
+    /// what *next* means. Written by comparing numbers rather than by index so
+    /// that an `activeViewId` naming a view that is not stored, which a
+    /// hand-edited file can produce, still has neighbours.
+    fn neighbour(&self, id: ViewId, direction: ParamDirection) -> Option<ViewId> {
+        match direction {
+            ParamDirection::Prev => self.views.keys().rev().find(|key| **key < id).copied(),
+            ParamDirection::Next => self.views.keys().find(|key| **key > id).copied(),
+        }
     }
 
     /// Opens a window on the canvas and focuses it.
@@ -921,6 +1094,259 @@ mod tests {
         assert_eq!(session.session().open_windows.len(), 2);
         assert!(!session.select_view(ViewId::new(2)).unwrap().is_empty());
         assert_eq!(session.session().open_windows.len(), 1);
+    }
+
+    /// Renaming changes the name and **nothing else** — which is the whole
+    /// reason it is not `StoreView` with the old name.
+    #[test]
+    fn renaming_a_view_leaves_its_windows_alone() {
+        let mut session = session();
+        // The canvas has two windows; view 2 was stored holding one.
+        assert_eq!(session.session().open_windows.len(), 2);
+        let before = session.view(ViewId::new(2)).unwrap().windows.clone();
+
+        let ops = session.rename_view(ViewId::new(2), "Busking").unwrap();
+        let view = session.view(ViewId::new(2)).unwrap();
+        assert_eq!(view.name, "Busking");
+        assert_eq!(view.windows, before);
+        assert_eq!(view.windows.len(), 1);
+        // One operation, on the view and not on the session.
+        assert_eq!(ops.len(), 1);
+        assert!(matches!(
+            &ops[0],
+            JsonPatchOp::Replace { path, .. } if path == "/views/2"
+        ));
+        assert!(session.is_dirty());
+    }
+
+    #[test]
+    fn renaming_a_view_to_the_name_it_has_is_not_a_change() {
+        let mut session = session();
+        let before = rmp_serde::to_vec_named(&session).unwrap();
+        assert!(
+            session
+                .rename_view(ViewId::new(2), "Programming")
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(rmp_serde::to_vec_named(&session).unwrap(), before);
+        assert!(!session.is_dirty());
+    }
+
+    #[test]
+    fn a_view_that_was_never_stored_cannot_be_renamed_deleted_or_moved() {
+        let mut session = session();
+        let missing = ViewId::new(9);
+        assert_eq!(
+            session.rename_view(missing, "Nope"),
+            Err(SessionError::UnknownView(missing))
+        );
+        assert_eq!(
+            session.delete_view(missing),
+            Err(SessionError::UnknownView(missing))
+        );
+        assert_eq!(
+            session.move_view(missing, ParamDirection::Next),
+            Err(SessionError::UnknownView(missing))
+        );
+        assert!(!session.is_dirty());
+    }
+
+    #[test]
+    fn the_last_view_cannot_be_deleted() {
+        let mut fresh = SessionState::new();
+        let only = fresh.session().active_view_id;
+        assert_eq!(fresh.views().count(), 1);
+        let before = rmp_serde::to_vec_named(&fresh).unwrap();
+
+        assert_eq!(fresh.delete_view(only), Err(SessionError::LastView(only)));
+
+        // Refused and byte-identical, which is this module's rule for every
+        // rejection — and the invariant `ShowStore` relies on still holds.
+        assert_eq!(rmp_serde::to_vec_named(&fresh).unwrap(), before);
+        assert_eq!(fresh.views().count(), 1);
+        assert!(fresh.view(fresh.session().active_view_id).is_some());
+        assert!(!fresh.is_dirty());
+    }
+
+    #[test]
+    fn deleting_a_view_that_is_not_active_leaves_the_canvas_alone() {
+        let mut session = session();
+        session.store_view(ViewId::new(5), "Busking").unwrap();
+        let canvas = session.session().open_windows.clone();
+        let active = session.session().active_view_id;
+
+        let ops = session.delete_view(ViewId::new(5)).unwrap();
+        assert!(session.view(ViewId::new(5)).is_none());
+        assert_eq!(session.session().open_windows, canvas);
+        assert_eq!(session.session().active_view_id, active);
+        // The removal, and nothing on the session at all.
+        assert_eq!(
+            ops,
+            vec![JsonPatchOp::Remove {
+                path: "/views/5".to_owned()
+            }]
+        );
+    }
+
+    /// **The exit criterion**: the canvas after deleting the active view is the
+    /// daemon's answer, and it is a *stored layout* rather than whatever
+    /// happened to be open.
+    #[test]
+    fn deleting_the_active_view_selects_the_one_before_it() {
+        let mut session = session();
+        // Views 1 and 2 exist; 1 was stored empty, 2 holds the fixture sheet.
+        session.select_view(ViewId::new(2)).unwrap();
+        assert_eq!(session.session().active_view_id, ViewId::new(2));
+        assert_eq!(session.session().open_windows.len(), 1);
+
+        session.delete_view(ViewId::new(2)).unwrap();
+        assert!(session.view(ViewId::new(2)).is_none());
+        // View 1 is the neighbour before, and it was stored with nothing open.
+        assert_eq!(session.session().active_view_id, ViewId::new(1));
+        assert!(session.session().open_windows.is_empty());
+        assert_eq!(session.session().focused_window, None);
+    }
+
+    #[test]
+    fn deleting_the_first_view_falls_forward_to_the_next_one() {
+        let mut session = session();
+        // Active is view 1, and view 2 is the only other one.
+        assert_eq!(session.session().active_view_id, ViewId::new(1));
+
+        session.delete_view(ViewId::new(1)).unwrap();
+        assert_eq!(session.session().active_view_id, ViewId::new(2));
+        // View 2's layout, loaded — not the two windows that were on the canvas.
+        assert_eq!(session.session().open_windows.len(), 1);
+        assert_eq!(
+            session.session().open_windows[0].window_type,
+            WindowType::FixtureSheet
+        );
+    }
+
+    /// **The ordering decision, asserted.** Moving exchanges the numbers, so
+    /// the drawn order and the numbers are the same one thing — and
+    /// `SelectView 2` afterwards names the layout that moved into place.
+    #[test]
+    fn moving_a_view_exchanges_its_number_with_its_neighbour() {
+        let mut session = session();
+        assert_eq!(
+            session
+                .views()
+                .map(|view| (view.id.get(), view.name.clone()))
+                .collect::<Vec<_>>(),
+            vec![(1, "View 1".to_owned()), (2, "Programming".to_owned())]
+        );
+        let programming = session.view(ViewId::new(2)).unwrap().windows.clone();
+
+        let ops = session
+            .move_view(ViewId::new(2), ParamDirection::Prev)
+            .unwrap();
+
+        assert_eq!(
+            session
+                .views()
+                .map(|view| (view.id.get(), view.name.clone()))
+                .collect::<Vec<_>>(),
+            vec![(1, "Programming".to_owned()), (2, "View 1".to_owned())]
+        );
+        // The layout travelled with the name, not with the number.
+        assert_eq!(session.view(ViewId::new(1)).unwrap().windows, programming);
+        // Both views were rewritten; neither was added or removed. The third
+        // operation is `activeViewId` following the view it names — view 1 was
+        // active, and view 1's layout is now numbered 2.
+        let paths: Vec<&str> = ops
+            .iter()
+            .map(|op| match op {
+                JsonPatchOp::Replace { path, .. } => path.as_str(),
+                _ => panic!("a move adds and removes nothing: {op:?}"),
+            })
+            .collect();
+        // The view that was asked to move is written first, then the one it
+        // displaced. Both are `Replace` on distinct paths, so a mirror applying
+        // them in either order lands in the same place.
+        assert_eq!(paths, vec!["/views/2", "/views/1", "/session/activeViewId"]);
+        assert!(session.is_dirty());
+    }
+
+    /// The active view is a *number*, and a move changes numbers. Following the
+    /// view is what keeps the lit button under the canvas being looked at.
+    #[test]
+    fn moving_the_active_view_keeps_it_active() {
+        let mut session = session();
+        session.select_view(ViewId::new(2)).unwrap();
+        let windows = session.session().open_windows.clone();
+
+        session
+            .move_view(ViewId::new(2), ParamDirection::Prev)
+            .unwrap();
+
+        assert_eq!(session.session().active_view_id, ViewId::new(1));
+        assert_eq!(session.view(ViewId::new(1)).unwrap().name, "Programming");
+        // The canvas did not move: only the number under it did.
+        assert_eq!(session.session().open_windows, windows);
+    }
+
+    /// The other half: the view the active one was swapped *with* also changes
+    /// number, and the active id has to follow that too.
+    #[test]
+    fn moving_a_view_onto_the_active_one_carries_the_active_number_back() {
+        let mut session = session();
+        // Active is view 1. Moving view 2 onto it makes view 1's layout view 2.
+        assert_eq!(session.session().active_view_id, ViewId::new(1));
+        let windows = session.session().open_windows.clone();
+
+        session
+            .move_view(ViewId::new(2), ParamDirection::Prev)
+            .unwrap();
+
+        assert_eq!(session.session().active_view_id, ViewId::new(2));
+        assert_eq!(session.view(ViewId::new(2)).unwrap().name, "View 1");
+        assert_eq!(session.session().open_windows, windows);
+    }
+
+    #[test]
+    fn a_view_at_the_end_of_the_bar_does_not_move() {
+        let mut session = session();
+        let before = rmp_serde::to_vec_named(&session).unwrap();
+        assert!(
+            session
+                .move_view(ViewId::new(1), ParamDirection::Prev)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            session
+                .move_view(ViewId::new(2), ParamDirection::Next)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(rmp_serde::to_vec_named(&session).unwrap(), before);
+        assert!(!session.is_dirty());
+    }
+
+    /// Views are **not** consecutive, so a move must step to the next stored
+    /// number rather than to `id ± 1`.
+    #[test]
+    fn moving_steps_to_the_next_stored_number_and_not_the_next_integer() {
+        let mut session = session();
+        session.store_view(ViewId::new(9), "Busking").unwrap();
+
+        session
+            .move_view(ViewId::new(9), ParamDirection::Prev)
+            .unwrap();
+
+        assert_eq!(
+            session
+                .views()
+                .map(|view| (view.id.get(), view.name.clone()))
+                .collect::<Vec<_>>(),
+            vec![
+                (1, "View 1".to_owned()),
+                (2, "Busking".to_owned()),
+                (9, "Programming".to_owned()),
+            ]
+        );
     }
 
     #[test]

@@ -306,6 +306,25 @@ export class DeskStore {
     this.#set(this.#withNotice(this.#state, level, message));
   }
 
+  /**
+   * Drops one message, because the operator has read it.
+   *
+   * Here rather than in the component that draws the close button, so that
+   * *which messages exist* has one answer. A view holding its own set of
+   * dismissed ids would be a second list, and the two diverge the moment
+   * `NOTICE_LIMIT` evicts an id the view is still remembering.
+   *
+   * Notices are client-local either way — §4.2 — so this dismisses the message
+   * on this screen and sends nothing.
+   */
+  dismissNotice(id: number): void {
+    const notices = this.#state.notices.filter((notice) => notice.id !== id);
+    if (notices.length === this.#state.notices.length) {
+      return;
+    }
+    this.#set({ ...this.#state, notices });
+  }
+
   /** The deltas that are not documents: the status panel, the save lamp, the messages. */
   #sideEffects(state: DeskState, delta: Delta): DeskState {
     switch (delta.t) {

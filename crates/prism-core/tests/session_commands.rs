@@ -27,13 +27,16 @@ fn snapshot(session: &SessionState) -> (Vec<u8>, bool) {
 }
 
 #[test]
-fn the_eleven_commands_of_section_4_4_are_the_session_group() {
-    assert_eq!(session_commands().len(), 11);
+fn the_fifteen_session_commands_are_the_session_group() {
+    // §4.4's eleven, plus the four a screen needs and a console cannot issue —
+    // `PlaceWindow` and S35's three view-management commands. See
+    // `common::session_commands`.
+    assert_eq!(session_commands().len(), 15);
     for command in session_commands() {
         assert!(command.is_session_command(), "{command:?}");
     }
     // And the two groups together are still the whole protocol.
-    assert_eq!(show_commands().len() + session_commands().len(), 26);
+    assert_eq!(show_commands().len() + session_commands().len(), 30);
 }
 
 #[test]

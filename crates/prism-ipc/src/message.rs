@@ -347,7 +347,7 @@ mod tests {
     use crate::{decode, encode};
     use prism_domain::{
         Answer, Command, Delta, FixtureId, JsonValue, NoticeLevel, OutputHealth, OutputId,
-        PatchConflict, PatchPreview, ProgrammerState, Query, UniverseId,
+        ParamDirection, PatchConflict, PatchPreview, ProgrammerState, Query, UniverseId, ViewId,
     };
 
     fn snapshot() -> Snapshot {
@@ -402,6 +402,30 @@ mod tests {
             ClientMessage::Command {
                 seq: u64::MAX,
                 command: Command::ClearProgrammer,
+            },
+            // S35's three. A command carrying a `String` and one carrying an
+            // enum, through the envelope rather than only through `Command`'s
+            // own round trip: the name an operator typed is the part that would
+            // survive `serde_json` and not MessagePack if the tag were wrong.
+            ClientMessage::Command {
+                seq: 5,
+                command: Command::RenameView {
+                    view_id: ViewId::new(2),
+                    name: "Busking — front of house".to_owned(),
+                },
+            },
+            ClientMessage::Command {
+                seq: 6,
+                command: Command::DeleteView {
+                    view_id: ViewId::new(2),
+                },
+            },
+            ClientMessage::Command {
+                seq: 7,
+                command: Command::MoveView {
+                    view_id: ViewId::new(2),
+                    direction: ParamDirection::Prev,
+                },
             },
             ClientMessage::Query {
                 seq: 3,

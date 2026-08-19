@@ -316,6 +316,9 @@ impl Programmer {
             | Command::SaveShow
             | Command::SelectView { .. }
             | Command::StoreView { .. }
+            | Command::RenameView { .. }
+            | Command::DeleteView { .. }
+            | Command::MoveView { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }

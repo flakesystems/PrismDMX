@@ -204,8 +204,16 @@ pub fn show_commands() -> Vec<Command> {
     ]
 }
 
-/// The eleven interface commands of `ARCHITECTURE_SPEC.md` §4.4, each in a form
-/// that changes something in a [`populated_session`].
+/// Every command the session applier accepts, each in a form that changes
+/// something in a [`populated_session`].
+///
+/// `ARCHITECTURE_SPEC.md` §4.4's eleven, and the four that are session commands
+/// without being on that list because §4.4 says what a *console* issues:
+/// `PlaceWindow` (S25) and `RenameView` / `DeleteView` / `MoveView` (S35). They
+/// are here rather than in a second list because every property in
+/// `session_commands.rs` is true of all fifteen — being refused by the show
+/// applier, emitting a `SessionPatch`, asking nothing of anyone else — and a
+/// list that held only some of them would silently stop covering the rest.
 pub fn session_commands() -> Vec<Command> {
     vec![
         Command::SelectView {
@@ -214,6 +222,24 @@ pub fn session_commands() -> Vec<Command> {
         Command::StoreView {
             view_id: ViewId::new(3),
             name: "Playback".to_owned(),
+        },
+        Command::RenameView {
+            view_id: ViewId::new(2),
+            name: "Busking".to_owned(),
+        },
+        Command::DeleteView {
+            view_id: ViewId::new(2),
+        },
+        Command::MoveView {
+            view_id: ViewId::new(2),
+            direction: ParamDirection::Prev,
+        },
+        Command::PlaceWindow {
+            instance_id: WindowInstanceId::new(1),
+            x: 12.0,
+            y: 34.0,
+            w: 320.0,
+            h: 240.0,
         },
         Command::OpenWindow {
             window: WindowType::SequenceSheet,
