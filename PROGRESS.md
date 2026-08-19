@@ -92,8 +92,8 @@
 | S27 | Patch and fixture sheet | ✅ | 2026-08-14 | All exit criteria verified — see §2.28. **A rig is built from an empty show entirely in a browser — profile, fixture, address, name, number, unpatch — and an address conflict is named by the daemon before the command is sent.** The protocol grew a third shape for it: `Query`/`Answer`, which changes nothing and is answered to the one client that asked; plus `UnpatchFixture`, `RenumberFixture` and `EmbedFixtureType`, and the desk's own profile library in the snapshot. The Fixture Sheet shows the programmer in React and the cable on a canvas, and S24's zero-commit count still reads zero. 440 UI tests, coverage **99.07 % lines**; 1 472 in the workspace |
 | S44 | The Open Fixture Library | ✅ | 2026-08-15 | All exit criteria verified — see §2.29. **A real moving head is searched by name, embedded and patched in a browser, and its channels are the manufacturer's.** The library is *downloaded at install time* rather than committed — 634 fixtures, 2 157 profiles, 0 files rejected — and it therefore left the snapshot for `Query::SearchLibrary`, which is the query channel S27 added earning its keep. A `/` in a profile key turned out to have been silently unreadable by every view since S26. 441 UI tests, coverage **99.07 % lines**; 1 504 in the workspace |
 | S35 | Desk layout, encoder pages, view management | ✅ | 2026-08-19 | All exit criteria verified, CI green on run **32252325489** — see §2.30. **Both bars in one band, `programmerPage` paging four encoders at a time with the console's `Zoom ▲▼` and the browser on one number, and views that can be renamed, deleted and moved.** Three new session commands through `prism-domain`, `prism-core` and `prism-ipc`; the ordering decision — the number **is** the order — made, argued and asserted from three directions. The review that opened the session found a shipped `console.log`, a notices panel keeping a second list, and `.strip` defined twice so the executor strips had never used their own grid. 470 UI tests, coverage **99.11 % lines**; 1 517 in the workspace |
-| S34 | Executor functions and the tick readback | ☐ | | Added 2026-08-14. `Command::ExecutorButton`, `Flash`, `Toggle`, speed masters, and the cue-index channel — the two findings S26 recorded rather than invented |
-| S28 | Sequences, cues, presets | ☐ | | Raises the store-mode question; S39 answers it |
+| S28 | Sequences, cues, presets | ☐ | | Moved ahead of S34 on 2026-08-19 — it depends on S26, not on S34. Raises the store-mode question; S39 answers it |
+| S34 | Executor functions and the tick readback | ☐ | | Added 2026-08-14. `Command::ExecutorButton`, `Flash`, `Toggle`, speed masters, and the cue-index channel — the two findings S26 recorded rather than invented, and which S28 will have had to draw as a dash too |
 | S39 | Store modes, cue editing, the update state | ☐ | | Added 2026-08-14. `prism-core`: Merge/Override/Remove, `StoreSequence`, `EditCue`, and the state that makes Update blink |
 | S40 | The console shell | ☐ | | Added 2026-08-14. S26's parser grown up: groups, presets, store prompts, labels, cue editing |
 | S43 | Interface cleanup and polish | ☐ | | Added 2026-08-14. The §7 *carried out of* lists, gone through one entry at a time |
@@ -2337,10 +2337,18 @@ tests that were S26's own exit criteria; and `.strip` defined **twice** in the
 stylesheet, so the eight executor strips had never once used the five-row grid
 their own rule sets up.
 
-**Begin S34** (`prism-core` + `prism-engine` — executor functions and the
-feedback from the tick: `Command::ExecutorButton`, `Flash`, `Toggle`, speed
-masters, and the channel that finally fills `currentCueIndex`). Use the prompt in
-§8.
+**Begin S28** (`ui` — sequences, cues and presets: the cue sheets, the preset
+pools, firing a cue list on an executor, and the store-mode question, which S28
+*raises* and S39 answers). Use the prompt in §8.
+
+**S34 moves to after it**, by decision on 2026-08-19. `IMPLEMENTATION_PLAN.md`
+gives S28 `Depends on: S26`, so nothing in the dependency graph required S34
+first — and running the interface work together keeps one context. The cost is
+named in S28's prompt rather than discovered: `Delta::ExecutorState`'s
+`cueIndex` is still never filled and five of the eight `ExecutorButtonFunction`
+values still have no command, so a cue sheet built in S28 shows *which* executor
+is running but not *where* it is, and writes a dash rather than a number it
+invented. S34 closes both.
 
 Carried out of S35:
 - **The console can page `programmerPage` past the end of a bank.**
@@ -3168,8 +3176,7 @@ it assumes no memory of this conversation and no knowledge of the project.
 ---
 
 ```
-PrismDMX — Session S34: `prism-core` + `prism-engine` — was die Executor-Tasten
-tun, und der Weg vom Tick zurück
+PrismDMX — Session S28: `ui` — Sequenzen, Cues und Presets
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
@@ -3177,180 +3184,186 @@ Der Daemon hält den Zustand, das Pult bedient ihn ohne Oberfläche (D2 in S18,
 D11 in S22), und die Oberfläche ist seit S23–S27, S44 und S35 ein Pult: ein
 Spiegel, ein Bild der Ausgabe, ein Canvas mit Fenstern aus dem Daemon, ein Band
 mit acht Executor-Zügen und fünf Encoder-Bänken, eine Kommandozeile, ein
-Patch-Fenster und eine View-Leiste, die man ordnen kann. Diese Session macht
-etwas anderes: sie **schließt zwei Lücken, die S26 aufgeschrieben statt erfunden
-hat** — und beide sind daran zu erkennen, dass die Oberfläche heute ehrlich sagt,
-dass sie nichts weiß.
+Patch-Fenster, in dem ein Rig entsteht, und eine View-Leiste, die man ordnen
+kann. Was ein Operator damit **nicht** kann: einen Look aufheben. Diese Session
+baut das, was aus einem Rig eine Show macht — Sequenzen, Cues und Presets.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
-                                  Teststandards. Besonders: die
-                                  Zero-Crash-Invariante (der DMX-Ausgabe-Thread
-                                  darf **nie** abstürzen oder stehenbleiben),
-                                  `strict: true` und **kein `any`** auf der
-                                  TS-Seite, kein `console.log` in
-                                  Produktionscode, ≥ 85 % Coverage global und
-                                  **> 95 % auf `engine/`, `programmer/` und
-                                  `protocols/`**
+                                  Teststandards. Besonders: `strict: true`,
+                                  **kein `any`**, explizite Interfaces für alle
+                                  Domänentypen, kein `console.log` in
+                                  Produktionscode, ≥ 85 % Coverage global — und
+                                  der Absatz zur UI-Schicht: eine Oberfläche wie
+                                  ein Gerätebildschirm, **kein Scrollen
+                                  außerhalb des Canvas**, schnelles Erkennen der
+                                  Bereiche vor Ästhetik
 2. PROGRESS.md                  — Stand, Decision Log, gemessene Zahlen;
-                                  besonders §2.30 (S35, gerade fertig), §2.27
-                                  (S26 — **dort stehen die beiden Lücken, die
-                                  diese Session schließt**), §3 (Coverage und
-                                  die Performance-Gates, vor allem *Tick
-                                  allocations* und *Tick jitter*), §3.1 (wie die
-                                  langen Tests laufen) und §7 „Carried out of
-                                  S35" **und** „Carried out of S26" **und**
-                                  „Carried out of S20" — diese Listen sind Teil
+                                  besonders §2.30 (S35, zuletzt fertig), §2.28
+                                  (S27 — das Patch-Fenster, dessen Form ein
+                                  Cue-Sheet erbt), §2.27 (S26 — die
+                                  Executor-Leiste und **die beiden Lücken, die
+                                  diese Session noch vorfindet**), §3 (Coverage
+                                  und Performance-Gates) und §7 „Carried out of
+                                  S35" **und** „Carried out of S27" **und**
+                                  „Carried out of S26" — diese Listen sind Teil
                                   der Anforderungen
-3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S34.
+3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S28.
                                   Dort steht auch, warum die Sessionnummern
                                   Identität und nicht Reihenfolge sind, und die
                                   Laufreihenfolge unter „Running order"
-4. ARCHITECTURE_SPEC.md §3      — das Threading-Modell und was im Tick nicht
-                                  passieren darf; dazu §5 (die Pipeline eines
-                                  Ticks, in Reihenfolge) und §6.1 (was Oops
-                                  journalisiert und was ausdrücklich nicht)
-5. docs/DMX_MERGE.md            — die Merge-Regeln. Besonders §4: die Ebenen und
-                                  ihre Reihenfolge, und Punkt 3, der die
-                                  Speed-Master beschreibt
-6. docs/MCU_MAPPING.md §4.1     — welche Taste welche Funktion ist. **Drei
-                                  Zeilen dieser Tabelle lösen sich heute nicht
-                                  auf**, und das Profil trägt dafür einen
-                                  `deviationsFromSection41`-Block; §4.2.1 ist die
-                                  Notiz dazu und wird am Ende Geschichte
-7. crates/prism-domain/src/executor.rs — `ExecutorButtonFunction` hat **acht**
-                                  Werte, `ExecutorFaderFunction` drei, und
-                                  `Executor::currentCueIndex` steht im Modell und
-                                  auf der Leitung
-8. crates/prism-core/src/command.rs und session.rs — wie ein Kommando validiert,
-                                  angewandt und in Deltas beantwortet wird. Die
-                                  beiden Applier sind **erschöpfend** über
-                                  `prism_domain::Command`, in entgegengesetzte
-                                  Richtungen: ein neues Kommando ist ein
-                                  Compilerfehler in beiden. `command_application.rs`
-                                  und `session_commands.rs` zählen die Gruppen ab
-9. crates/prism-engine/src/       — der Tick. `TickCommand::SetExecutorActive`
-                                  gibt es seit S5. **Im Tick wird nicht
-                                  allokiert** (§3 misst es), also ist der Kanal
-                                  zurück eine Entscheidung dieser Session und
-                                  keine Formalität
-10. crates/prismd/src/core.rs   — `record_executor`, das `currentCueIndex`
-                                  heute aus der Show zurückliest, und wo ein
-                                  Delta entsteht
-11. ui/src/desk/executorbar.tsx und crates/prismd/tests/ui_programmer.rs — die
-                                  Leiste, die vier Tasten **abgeschaltet mit dem
-                                  Grund darauf** zeichnet, und die Aufnahme,
-                                  deren Test verlangt, dass jeder Cue-Index
-                                  `null` ist
+4. ARCHITECTURE_SPEC.md §6      — das Domänenmodell: `Sequence`, `Cue`,
+                                  `CuePart`, `CueTrigger`, `Preset`,
+                                  `PresetValue`, `Executor`. Dazu §6.1 (was Oops
+                                  journalisiert) und §4.1/§4.2 (was Session-
+                                  Zustand ist und was ausdrücklich client-lokal
+                                  bleibt)
+5. docs/IPC_PROTOCOL.md §5      — die dreißig Kommandos, §5.2 die `Query`/
+                                  `Answer`-Form (eine Frage, die nichts ändert
+                                  und nur den fragenden Client erreicht), und §6
+                                  die Deltas. `StoreCue` und `ApplyPreset` gibt
+                                  es; **`StoreSequence`, `EditCue` und ein
+                                  Speichermodus gibt es nicht** — siehe unten
+6. crates/prism-core/src/programmer.rs — `Programmer::cue`, das
+                                  **bedingungslos merged**, und dessen
+                                  Dokumentation Merge / Overwrite / Remove als
+                                  Anforderung an S39 benennt. Das ist die
+                                  Entscheidung, die diese Session *stellt* und
+                                  nicht beantwortet
+7. crates/prism-core/src/show.rs — wie Sequenzen, Cues und Presets im
+                                  Show-Dokument liegen, und wie `presetRef` eine
+                                  Cue mit einem Preset verbindet
+8. ui/src/patch/patchwindow.tsx und ui/src/patch/patch.ts — **die Form, die
+                                  diese Session erbt**: ein Fenster mit einer
+                                  Tabelle, einem Formular und einer Vorschau,
+                                  und daneben eine Datei, in der das getypte
+                                  Lesen des Dokuments steht und sonst nichts
+9. ui/src/desk/executorbar.tsx  — die acht Züge, die eine Cue-Liste feuern
+                                  sollen; `strip-running` ist heute schon die
+                                  Rückmeldung des Daemons
+10. crates/prismd/tests/ui_patch.rs — das Muster für eine Aufnahme: Skript,
+                                  Antworten aus einem frischen Snapshot,
+                                  Wächter-Tests in Rust. Ein Schritt wird über
+                                  seinen `what`-Text gefunden, nicht über seine
+                                  Nummer
 
 Stand — nichts davon musst du neu bauen:
 - Phasen 1–5 vollständig, `prismd` fährt headless, `prism-surface` bedient ein
   Pult ohne Oberfläche. **1 517 Tests im Workspace grün, 19 ignoriert.**
-- Die Oberfläche ist fertig genug, dass diese Session sofort sichtbar wird: das
-  Band unter dem Canvas zeichnet acht Züge mit Fader, Kopf, den Tasten der Show
-  und einem Cue-Feld. **470 UI-Tests bei 99,11 % Zeilenabdeckung**, dazu **18
-  Ende-zu-Ende-Tests**.
+- `ui` hat Client, Spiegel, Store, Hooks, Logger, Telemetriekanal mit
+  Canvas-Renderer, Fenstersystem mit View-Leiste und Kontextmenü, ein Band mit
+  Executor- und Encoder-Leiste nebeneinander, eine Kommandozeile, ein
+  Patch-Fenster und ein Fixture Sheet. **470 Tests bei 99,11 % Zeilenabdeckung**,
+  dazu **18 Ende-zu-Ende-Tests**.
+- `WindowType` kennt `SequenceSheet`, `CueViewer` und `PresetPool` bereits —
+  die Fenster gibt es im Modell, sie sind nur leer.
 - **Die Fixture-Bibliothek wird beim Installieren geladen, nicht mitgeliefert**
   (S44): `tools/fetch-fixtures/fetch-fixtures.ps1` bzw. `.sh` holt die Open
-  Fixture Library nach `profiles/fixtures/`. Ohne sie startet der Daemon mit vier
-  eingebauten Profilen und sagt das im Log. Für einen vollständigen Testlauf
+  Fixture Library nach `profiles/fixtures/`. Für einen vollständigen Testlauf
   einmal ausführen.
-- Das Protokoll hat drei Nachrichtenformen: `Command` (Absicht), `Delta`
-  (Tatsache) und `Query`/`Answer` (eine Frage, die nichts ändert und nur den
-  fragenden Client erreicht — docs/IPC_PROTOCOL.md §5.2).
 - Der Daemon lässt sich headless starten:
   `cargo run -p prismd -- --mock-output --websocket --run-for 30`
 - `npm ci` in `ui/` genügt. Für die Ende-zu-Ende-Tests zusätzlich
   `npx playwright install chromium`.
 
-Aufgabe: Session S34 umsetzen — die Executor-Funktionen und die Rückmeldung aus
-dem Tick.
+**Was S34 noch nicht getan hat, und was das für diese Session heißt.** S34
+(Executor-Funktionen und der Kanal aus dem Tick) läuft **nach** dieser Session.
+Zwei Dinge sind deshalb noch offen und dürfen hier **nicht erfunden werden**:
+- `Delta::ExecutorState` trägt `cueIndex`, und **der Daemon füllt es nie**: auf
+  welchem Cue eine Wiedergabe steht, lebt auf dem Tick-Thread ohne Kanal zurück.
+  `isActive` dagegen **kommt** an (S26 hat es beobachtet). Ein Cue-Sheet zeigt
+  also, welcher Executor läuft, aber nicht, bei welchem Cue er steht — und
+  schreibt dort einen Strich statt einer Zahl, die es sich ausgedacht hat.
+  `crates/prismd/tests/ui_programmer.rs` verlangt ausdrücklich, dass jeder
+  aufgenommene Cue-Index `null` ist; dieser Test soll rot werden, wenn S34 den
+  Kanal baut, und er gehört *nicht* hier geändert.
+- Von den acht `ExecutorButtonFunction`-Werten kann das Protokoll drei: `Go+`,
+  `Go-` und `Off`. Die anderen zeichnet die Leiste abgeschaltet **mit dem Grund
+  darauf**. Feuern heißt in dieser Session also diese drei.
 
-Was heute da ist und was daran fehlt. `ExecutorButtonFunction` hat acht Werte und
-das Protokoll kann **drei** davon ausdrücken: `Go+`, `Go-` und `Off`. `On`,
-`Flash`, `Toggle`, `LearnSpeed` und `Empty` haben kein Kommando, also zeichnet
-S26s Executor-Leiste sie abgeschaltet **mit dem Grund auf der Taste** — weil
-`Toggle` gegen `isActive` aufzulösen hieße, dass ein Client entscheidet, was die
-Einstellung der Show bedeutet. Getrennt davon steht `Executor::currentCueIndex`
-im Modell und auf der Leitung, und **nichts füllt es**: auf welchem Cue eine
-Wiedergabe steht, lebt auf dem Tick-Thread, und es gibt keinen Kanal zurück in
-den Core. Die Leiste zeigt deshalb einen Strich statt einer Zahl, die sie
-erfunden hätte.
+Aufgabe: Session S28 umsetzen — Sequenzen, Cues und Presets.
 
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
-- Jeder der acht `ExecutorButtonFunction`-Werte tut, was sein Name sagt, geprüft
-  an **Frames** und nicht an Zustand
-- Ein gedrückter und wieder losgelassener `Flash` lässt den **gespeicherten**
-  Master byte-identisch; ein `Flash`, der über ein `SetExecutorMaster` gehalten
-  wird, verliert den neuen Wert nicht
-- `Toggle` auf einem Executor, den ein zweiter Client gerade gestartet hat,
-  **stoppt** ihn — ein Pult, eine Antwort
-- `currentCueIndex` wird gefüllt, während eine Sequenz läuft, und die
-  **Abwesenheits-Prüfung in `crates/prismd/tests/ui_programmer.rs` wird
-  umgedreht** und die Aufnahme neu erzeugt — S26 hat diesen Test geschrieben,
-  damit diese Session ihn rot findet
-- Die drei Zeilen aus `docs/MCU_MAPPING.md` §4.1 lösen sich zu echten Kommandos
-  auf, der `deviationsFromSection41`-Block im ausgelieferten Profil wird
-  **geleert**, und §4.2.1 wird als Geschichte umgeschrieben
-- **Null Allokationen im Tick**, neu gemessen; Coverage auf `prism-engine` und
-  `prism-core` bleibt **> 95 %**
-- Die gemessenen Zahlen aus S24–S27 und S35 bleiben gültig: null React-Re-Renders
-  aus Telemetrie, Canvas-Rendern unter 8 ms bei 64 Universen, und **alle achtzehn
+- Cues lassen sich aus der Oberfläche **speichern, bearbeiten und feuern**
+- Preset-Pools wenden an und speichern; **Preset-Verknüpfungen bleiben lebendig**
+  — wird ein Preset bearbeitet, ändern sich die Cues, die es referenzieren
+- Ein Speichern, das etwas überschreiben würde, **sagt vorher, was es tun wird**,
+  auch dort, wo der einzige verfügbare Modus Merge ist
+- Über eine Cue, eine Sequenz oder ein Preset hält die Oberfläche **nichts**:
+  alle drei sind Leser über das Show-Dokument, geprüft gegen ein aufgenommenes
+  Daemon-Skript
+- `npx tsc -b --force` sauber mit `strict: true`, **nirgends `any`**
+- `npm run build`, `npm run lint`, `npm run test` sauber
+- Coverage ≥ 85 % auf dem, was diese Session schreibt, gemessen und in
+  PROGRESS.md notiert
+- Die Zahlen aus S24–S27 und S35 bleiben gültig: null React-Re-Renders aus
+  Telemetrie, Canvas-Rendern unter 8 ms bei 64 Universen, und **alle achtzehn
   Ende-zu-Ende-Tests grün**
 
 Wichtige Randbedingungen:
-- **Der Kanal aus dem Tick zurück ist die eigentliche Arbeit dieser Session.**
-  §3 misst *null Allokationen im Tick nach dem Warmlaufen* und §3.1 sagt, wie man
-  das nachfährt. Ein Kanal, der pro Tick eine `Vec` baut, macht dieses Gate rot —
-  und das Gate ist die Zero-Crash-Invariante in Zahlen. Der Dreifachpuffer, den
-  `prism-engine` für Frames schon hat, ist die Form, die es dort bereits gibt.
-- **`Toggle` wird im Daemon aufgelöst, nicht im Client.** `isActive` gehört an
-  genau einer Stelle, und zwei Clients, die gleichzeitig drücken, müssen dasselbe
-  Ergebnis bekommen. Das ist derselbe Grund, aus dem S26 die Taste lieber
-  abgeschaltet gezeichnet als geraten hat.
-- **`Flash` ist eine Ebene im Merge, kein `SetExecutorMaster`.** Ein Flash, der
-  den gespeicherten Master überschreibt und beim Loslassen zurückschreibt,
-  verliert jeden Wert, den jemand in der Zwischenzeit gesetzt hat.
-  `docs/DMX_MERGE.md` §4 sagt, wo die Ebene hingehört.
-- **`Command::ExecutorButton` trägt `pressed`**, weil `Flash` es braucht — und
-  wird über die `buttonFunctions` **des Executors** geroutet, damit der Executor
-  entscheidet, was ein Druck bedeutet, und kein Client.
+- **Die Frage der Speichermodi wird hier gestellt und in S39 beantwortet.**
+  `prism_core::Programmer::cue` merged bedingungslos, und seine Dokumentation
+  nennt Merge / Overwrite / Remove als Anforderung. S28 **darf** mit dem
+  Merge-Verhalten ausliefern, das es gibt — vorausgesetzt, es **steht auf dem
+  Knopf**. Was es nicht darf: einen Modus im Client erfinden, den der Daemon
+  nicht kennt.
+- **Die gewählte Sequenz** — worin ein Speichern ohne genannte Sequenz landet —
+  ist ebenfalls S39s Sache. S28 nimmt die Sequenz des gewählten Executors und
+  **markiert die Annahme**, statt sie dauerhaft zu machen.
+- **Es gibt kein optimistisches Anwenden** (D3). Ein Cue-Feld, das bearbeitet
+  wird, schickt ein Kommando; was die Cue *ist*, kommt als `ShowPatch` zurück.
+  `ui/src/canvas/drag.ts`, `ui/src/desk/valuedrag.ts` und
+  `ui/src/patch/patchwindow.tsx` schreiben diese Auflösung hin — Eigentum beim
+  Daemon, Kadenz lokal, der lokale Wert wird beim Loslassen fallengelassen.
 - **Ein Test, der die zu prüfende Funktion zum Prüfen benutzt, prüft nichts.**
-  Was eine Taste tut, wird an den **Frames** geprüft, die der Merge erzeugt —
-  nicht daran, dass ein Feld sich geändert hat.
-- **Neue Kommandos sind ein Compilerfehler in beiden Appliern**, und zwei
-  Zählungen im Testbaum halten das fest: `session_commands.rs` (fünfzehn
-  Session-Kommandos) und `command_application.rs` (dreißig insgesamt). Beide
-  wollen aktualisiert werden, und dass sie rot werden, ist ihr Zweck.
+  Die Erwartung an das, was ein `StoreCue` oder ein `ApplyPreset` mit der Show
+  macht, kommt aus dem Daemon: aus einer Aufnahme (`ui/tests/fixtures/*.json`),
+  aus einem laufenden `prismd`, oder aus einem neuen Rust-Ziel nach dem Muster
+  von `crates/prismd/tests/ui_patch.rs`. Nicht aus einer zweiten Meinung in
+  TypeScript. **`locator.count()` ist die eine Playwright-Methode ohne
+  Auto-Wait** und darf nie darüber entscheiden, ob es etwas gibt — sie hat in
+  S35 einen Test still übersprungen lassen, der behauptete, eine Bibliothek sei
+  nicht installiert, während 634 Fixtures dalagen.
+- **Telemetrie darf niemals in reaktiven Zustand** (docs/IPC_PROTOCOL.md §7,
+  letzter Absatz); `ui/src/telemetry/render.test.tsx` zählt React-Commits über
+  300 Frames und muss bei null bleiben.
+- **Kein Scrollen außerhalb des Canvas** (CLAUDE.md). Ein Cue-Sheet mit
+  vierhundert Zeilen scrollt **innerhalb seines Fensterrahmens**;
+  `ui/src/patch/live.ts` ist die Form dafür, und `e2e/desk.spec.ts` prüft acht
+  Nullen an Dokument, Canvas und beiden Leisten.
 - **Die generierten Bindings sind Quelltext aus Rust.** `ui/src/bindings/` wird
   von `prism_domain::export_bindings` geschrieben. Fehlt ein Typ oder eine
   Tabelle, ist das eine Änderung in `prism-domain`.
+- **Neue npm-Abhängigkeiten sind eine Entscheidung, keine Formalität.** S23 hat
+  Zustand und Immer abgelehnt und begründet, S24 für einen Canvas keine
+  gebraucht, S25 für ein Fenstersystem keine, S26 für einen Parser keine, S27
+  für ein Formular und eine Tabelle keine, S35 für ein Kontextmenü keine. Wenn
+  du eine nimmst, begründe sie so wie S23 `@msgpack/msgpack` begründet hat.
 - **Die fünf Aufnahmen sind ein Satz.** Wer die Form einer Nachricht ändert,
   erzeugt alle fünf neu und liest die Diffs:
   `cargo test -p prismd --test ui_recording -- --ignored`, und dasselbe für
-  `ui_session`, `ui_telemetry`, `ui_programmer` und `ui_patch`. Ein Schritt wird
-  über seinen `what`-Text gefunden, nicht über seine Nummer.
-- **Vor jeder Zeitmessung die Systemlast prüfen.** Das Telemetrie-Gate und die
-  Tick-Jitter-Läufe sind Durchsatzmessungen auf einem Desktop: bei 80–96 % CPU
-  liest das Gate 15–19 Hz statt 30, was von einem echten Fehler nicht zu
-  unterscheiden ist. `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor
-  -Filter "Name='_Total'"` — der `Get-Counter`-Pfad ist lokalisiert und schlägt
-  auf einer deutschen Installation fehl.
+  `ui_session`, `ui_telemetry`, `ui_programmer` und `ui_patch`.
+- **Vor jeder Zeitmessung die Systemlast prüfen.** Das Telemetrie-Gate ist eine
+  Durchsatzmessung auf einem Desktop: bei 80–96 % CPU liest es 15–19 Hz statt
+  30, was von einem echten Fehler nicht zu unterscheiden ist.
+  `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter
+  "Name='_Total'"` — der `Get-Counter`-Pfad ist lokalisiert und schlägt auf
+  einer deutschen Installation fehl.
 - Ein Test darf niemals ein Gerät anfassen. Der Daemon läuft im
   Mock-Output-Modus, das Pult ist `--mock-surface`.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
   Node 24.11, `cargo-llvm-cov`, Playwright/Chromium).
 
 Zum Abschluss der Session:
-- PROGRESS.md aktualisieren: S34-Status, jede gemessene Zahl, Decision Log bei
+- PROGRESS.md aktualisieren: S28-Status, jede gemessene Zahl, Decision Log bei
   Abweichungen und bei Funden, die spätere Sessions betreffen
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
-  **Session S28** (`ui` — Sequenzen, Cues, Presets: die Cue-Sheets, die
-  Preset-Pools, das Feuern einer Cue-Liste auf einem Executor, und die
-  Speichermodus-Frage, die S39 beantwortet) überschreiben. Die Laufreihenfolge
-  steht in IMPLEMENTATION_PLAN.md unter „Running order", und die Sessionnummern
-  sind Identität, nicht Reihenfolge
-- Mit Conventional-Commit-Message committen, z. B. feat(engine): …
+  **Session S34** (`prism-core` + `prism-engine` — Executor-Funktionen und die
+  Rückmeldung aus dem Tick: `Command::ExecutorButton`, `Flash`, `Toggle`,
+  Speed-Master, und der Kanal, der `currentCueIndex` endlich füllt)
+  überschreiben. Die Laufreihenfolge steht in IMPLEMENTATION_PLAN.md unter
+  „Running order", und die Sessionnummern sind Identität, nicht Reihenfolge
+- Mit Conventional-Commit-Message committen, z. B. feat(ui): …
 - Danach pushen, den CI-Lauf beobachten und das Ergebnis in PROGRESS.md
   eintragen (IMPLEMENTATION_PLAN.md, Session-Protokoll Punkt 6)
 ```
