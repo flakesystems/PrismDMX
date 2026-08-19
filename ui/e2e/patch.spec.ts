@@ -321,10 +321,21 @@ test("a real fixture out of the Open Fixture Library is searched, embedded and p
   await box.click();
   await box.fill("stage wash 7x10");
   const match = page.getByTestId("library-stage-right/stage-wash-7x10w-led-moving-head/9ch");
-  if ((await match.count()) === 0) {
+
+  // **Whether a library is installed is the daemon's answer, not the search's.**
+  // The search is a `Query` round trip and `locator.count()` does *not* wait, so
+  // counting the matches asks "has the answer arrived yet" and reads the answer
+  // *no* as "there is no library". On 2026-08-19 that skipped this test on CI
+  // with 634 fixtures installed, and a skip is silent. The placeholder carries
+  // the count the snapshot brought, which is a fact by the time the window is
+  // open; the match itself is then waited for like anything else.
+  const placeholder = (await box.getAttribute("placeholder")) ?? "";
+  const installed = /search (\d+) profiles/.exec(placeholder);
+  if (installed === null || installed[1] === "0") {
     test.skip(true, "no fixture library is installed - run tools/fetch-fixtures");
     return;
   }
+  await expect(match).toBeVisible();
   await match.click();
   await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 1 profiles");
 
