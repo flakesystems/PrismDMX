@@ -176,9 +176,12 @@ impl PlaybackReport {
         }
     }
 
-    /// Records how many playbacks were published. **Called from inside the
-    /// tick**, after [`Self::publish`], so a reader never sees a length that
-    /// reaches past what has been written this tick.
+    /// Records how many playbacks the tick published.
+    ///
+    /// **Called from inside the tick, on whichever side of [`Self::publish`]
+    /// keeps the window narrow** — before the entries when the count has
+    /// shrunk, after them when it has grown. `MergeBody::publish_playbacks` is
+    /// the one caller and carries the reasoning.
     pub(crate) fn publish_len(&self, len: usize) {
         if self.len.load(Ordering::Relaxed) != len {
             self.len.store(len, Ordering::Relaxed);
@@ -255,6 +258,29 @@ mod tests {
 
         report.publish_len(3);
         assert_eq!(report.get(2), Some(state(9, true, Some(0))));
+    }
+
+    #[test]
+    fn a_grid_that_shrinks_narrows_the_window_before_it_rewrites_the_entries() {
+        // What `MergeBody::publish_playbacks` does, asserted on the table it
+        // does it to: a reader must not see a stale entry under a length that
+        // still covers it. Three playbacks, then a body with one.
+        let report = PlaybackReport::new(4);
+        for (index, executor) in [1u32, 5, 9].into_iter().enumerate() {
+            report.publish(index, state(executor, true, Some(1)));
+        }
+        report.publish_len(3);
+        assert_eq!(report.states().count(), 3);
+
+        // The shrink: the length first, then the entry.
+        report.publish_len(1);
+        assert_eq!(report.states().count(), 1);
+        assert_eq!(report.get(1), None, "a playback the grid no longer has");
+        report.publish(0, state(2, false, None));
+        assert_eq!(
+            report.states().collect::<Vec<_>>(),
+            vec![state(2, false, None)]
+        );
     }
 
     #[test]

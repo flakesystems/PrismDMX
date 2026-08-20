@@ -226,18 +226,25 @@ impl MergeBody {
 
     /// Writes every playback into the report. Called at the end of every tick,
     /// and allocation-free: the table was sized when the report was built.
+    ///
+    /// **The length moves on whichever side of the entries keeps the window
+    /// narrow.** A body rebuilt with *fewer* executors would otherwise leave a
+    /// reader one poll in which the old length still covers an entry this tick
+    /// no longer wrote; a body with *more* would leave one in which the new
+    /// length covers an entry this tick has not written yet. Neither would be a
+    /// fault — a sample may be one tick out of date — but both would be a
+    /// reading of a playback that is not there, and this costs one comparison.
     fn publish_playbacks(&self) {
         let Some(report) = self.report.as_ref() else {
             return;
         };
-        let mut published = 0;
-        for player in self.cues.players() {
-            report.publish(published, state_of(player, &self.layer));
-            published += 1;
+        let published = self.cues.player_count();
+        if published < report.len() {
+            report.publish_len(published);
         }
-        // After the entries, never before: a length that reached past what has
-        // been written this tick would let a reader see last tick's executor
-        // under this tick's number.
+        for (index, player) in self.cues.players().iter().enumerate() {
+            report.publish(index, state_of(player, &self.layer));
+        }
         report.publish_len(published);
     }
 
