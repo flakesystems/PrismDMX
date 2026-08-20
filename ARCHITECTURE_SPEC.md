@@ -222,6 +222,51 @@ The **F1–F8 XKeys** are therefore freely assignable to "open Fixture Sheet", "
 
 > **Multi-session (later):** the model permits several sessions so two operators can work with independent views. V1 has exactly one session and the programmer belongs to it. Multiple programmers would be a merge question (LTP between them) and are deliberately out of scope.
 
+### 4.5 The command line is the primary interface *(S40)*
+
+**A key on the desk writes a word into the command line. It does not act.**
+
+That is the decision, and it is a decision about the whole interface rather than
+about one window. `Session::commandLine` is §4.1 state, so what an operator is
+part-way through typing is already shared by every attached client; making the
+keys write into it means the line is not a second way of doing things beside the
+buttons — it is the **one** way, with the buttons as a faster keyboard for it.
+
+Three shapes, and every control on the screen is one of them:
+
+| Shape | Example | What pressing it does |
+|---|---|---|
+| **A whole command with no argument** | `Clear`, `Oops`, `Update`, `Full` | writes the word and **executes it at once** |
+| **A command that needs arguments** | `Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Assign` | writes the word and **waits** — the operator types the rest and presses Enter, which is also a key on the surface |
+| **An argument keyword** | `Fixture`, `Group`, `Sequence`, `Cue`, `Preset`, `View`, `Executor` | **appends** the word to the line as it stands |
+
+So `Fixture` `1` `Enter` is three presses that build `Fixture 1`, and it is the
+same line an operator could have typed. An item picked out of a **list** — a
+group in the group pool, a fixture in the patch, a cue in the sheet — writes the
+command that names it *and submits it*, because the pointer has supplied the
+argument the line was waiting for.
+
+**Why this rather than buttons that send commands directly.** Four things follow
+from it that do not follow from the obvious alternative:
+
+- **One vocabulary to learn, and the screen teaches it.** An operator who has
+  only ever used the pointer has been reading the lines they were building, and
+  the day they start typing they already know the words.
+- **One path to test.** What a gesture means is what the line means, so a
+  recording of lines is a recording of the whole interface — and a button that
+  built a line nobody could have typed would be a second grammar with no parser.
+- **The prompt has somewhere to live.** A store into a cue that exists asks
+  *merge, override or cancel*; the question belongs in the line the store came
+  from, and Escape cancels it (§4.4's rule that a prompt is not a modal).
+- **`commandLine` is session state, so a second screen follows the first.** An
+  operator part-way through a command is visible on every client, which is the
+  same argument §4 makes for the active view.
+
+The exceptions are the ones a line cannot express and are deliberately small:
+the **executor keys and faders** (a Go is a gesture with timing in it, §4.3),
+the **encoders**, and direct manipulation of the canvas — dragging a window,
+resizing it (§4.2). Everything else is the line.
+
 ---
 
 ## 5. DMX engine pipeline

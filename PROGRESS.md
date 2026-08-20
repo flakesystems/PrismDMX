@@ -96,7 +96,7 @@
 | S28 | Sequences, cues, presets | ✅ | 2026-08-19 | All exit criteria verified — see §2.31. **A show is written from a rig that had none: a cue list made, put on an executor, stored into, corrected in place, fired, and a preset whose edit changes the light a cue puts out** — counted off the telemetry canvas in Chromium. Five commands and a sixth question through `prism-domain`, `prism-core`, `prism-ipc` and `prismd`; the store-mode question is *asked on the button* rather than answered, because the mode is a value on the daemon’s reply and no word in the client. `Show::relink` makes `presetRef` mean what `prism-domain` has claimed since S1. 533 UI tests, coverage **99.05 % lines**; 1 562 in the workspace. CI green on run **32292211176** |
 | S34 | Executor functions and the tick readback | ✅ | 2026-08-20 | All exit criteria verified, CI green on run **32325628021** — see §2.32. **Every one of the eight `ExecutorButtonFunction` values does what its name says, checked on the frames a mock output received; and the tick answers back, so the desk shows a cue number for the first time.** `Command::ExecutorButton` carries *which button* and the executor decides; `Flash` is a layer over the master and never a write into it; `Toggle` is resolved against `isActive` by the daemon and by nobody else. Speed masters and the tap that learns one exist at last — `docs/DMX_MERGE.md` §4 item 3 had named them since S3. `docs/MCU_MAPPING.md` §4.1's three unbindable rows are bound as written and the shipped profile's `deviationsFromSection41` block is **empty** |
 | S39 | Store modes, cue editing, the update state | ✅ | 2026-08-20 | All exit criteria verified, CI green on run **32412552879** — see §2.33. **A store on top of something that is already there now does what the operator asked for**: Merge, Override and Remove on `StoreCue` and `StorePreset`, Append / Override / Merge on the new `StoreSequence`, each asserted on the **stored cue** rather than on the command being accepted. `EditCue` loads a cue back into the programmer with every `presetRef` kept and `Update` puts it down byte-identically; `Session::editingCue` is what makes an Update key blink and it clears on a Clear, a delete and another load. The selected sequence was **decided** and it went the other way from S28's assumption: `Session::selectedSequence` is a field of its own, because `Store Cue 5` with no executor selected has to mean something. The two tests written to go red did, and both are turned round. 542 UI tests, coverage **99.05 % lines**; 1 645 in the workspace |
-| S40 | The console shell | ☐ | | Added 2026-08-14. S26's parser grown up: groups, presets, store prompts, labels, cue editing. **Next** — see §8 for the prompt that starts it |
+| S40 | The console shell | ☐ | | Added 2026-08-14, **scope grown 2026-08-20**. S26's parser grown up — and with it the decision that the command line is *the* interface rather than one of two (`ARCHITECTURE_SPEC.md` §4.5): a key writes a word into the line, it does not act. The vocabulary in `IMPLEMENTATION_PLAN.md` is the requirement and is to be built in full, which makes this a protocol session as well as a `ui` one: `Goto`, the deletes, the copies, an absolute `Move`, `Label` for sequences and groups, and playback addressed to a **sequence** rather than only to a fader are all things the protocol cannot say yet. **Next** — see §8 for the prompt that starts it |
 | S43 | Interface cleanup and polish | ☐ | | Added 2026-08-14. The §7 *carried out of* lists, gone through one entry at a time |
 | S29 | `prism-app` Tauri shell | ☐ | | Needs MSVC Build Tools |
 
@@ -3713,7 +3713,7 @@ it assumes no memory of this conversation and no knowledge of the project.
 ---
 
 ```
-PrismDMX — Session S40: `ui` — die Konsolen-Shell
+PrismDMX — Session S40: `ui` + Protokoll — die Konsolen-Shell
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
@@ -3722,48 +3722,50 @@ D11 in S22), und die Oberfläche ist seit S23–S28, S44, S35, S34 und S39 ein
 Pult: ein Canvas mit Fenstern, ein Band mit acht Executor-Zügen und fünf
 Encoder-Bänken, eine Kommandozeile, ein Patch-Fenster, ein Cue-Sheet, ein Cue
 Viewer und Preset-Pools. Ein Rig entsteht im Browser, eine Show wird darin
-geschrieben, gespeichert und gefeuert; jeder der acht Executor-Knöpfe tut, was
-sein Name sagt, und **seit S39 wählt der Operator, was ein Store mit dem macht,
-was schon da ist** — Merge, Override oder Remove, und das Wort auf dem Knopf ist
-die Antwort des Daemons auf genau diese Wahl.
+geschrieben, gespeichert und gefeuert, und seit S39 wählt der Operator, was ein
+Store mit dem macht, was schon da ist.
 
-**Was fehlt, ist das Tippen.** S26 hat eine Kommandozeile gebaut, die sieben
-Formen kennt (`1 thru 4 at 50`, `clear`, `go 0`, `page 2`) und deren
-Modul-Dokumentation ausdrücklich sagt, was sie *nicht* kann: Cues speichern,
-Gruppen und Presets auswählen, oder irgendetwas, das die Show lesen müsste. Ein
-Pult wird aber getippt bedient, sobald der Operator es kennt. Diese Session ist
-dieser Parser, erwachsen geworden — und **beide Regeln überleben es**: er liest
-die Show nicht, und er wirft nie.
+**Was fehlt, ist das Tippen — und zwar nicht als Zweitweg, sondern als der
+Weg.** S26 hat eine Kommandozeile gebaut, die sieben Formen kennt und deren
+Modul-Dokumentation ausdrücklich sagt, was sie *nicht* kann. Diese Session ist
+dieser Parser, erwachsen geworden, plus das Protokoll, das er dafür braucht.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
                                   Teststandards. Besonders: `strict: true`,
                                   **kein `any`**, explizite Interfaces für alle
                                   Domänentypen, kein `console.log` in
-                                  Produktionscode, ≥ 85 % Coverage global —
-                                  und der Absatz zur UI: ein Gerätebildschirm,
-                                  kein Scrollen außerhalb des Canvas, schnelle
-                                  Wiedererkennung von Bereichen vor Ästhetik
-2. PROGRESS.md                  — Stand, Decision Log, gemessene Zahlen;
+                                  Produktionscode, ≥ 85 % Coverage global und
+                                  **> 95 % auf engine/, programmer/ und
+                                  protocols/** — und der Absatz zur UI: ein
+                                  Gerätebildschirm, kein Scrollen außerhalb des
+                                  Canvas, schnelle Wiedererkennung von Bereichen
+                                  vor Ästhetik
+2. IMPLEMENTATION_PLAN.md       — Session-Protokoll und **die Definition von
+                                  S40**. Sie ist am 2026-08-20 erweitert worden:
+                                  die Befehlsliste dort ist die Anforderung,
+                                  wortwörtlich, und der eingerückte Block davor
+                                  sagt, warum das keine reine `ui`-Session mehr
+                                  ist. Dort steht auch, warum die Sessionnummern
+                                  Identität und nicht Reihenfolge sind
+3. ARCHITECTURE_SPEC.md §4.5    — **das Prinzip dieser Session**: eine Taste
+                                  schreibt ein Wort in die Kommandozeile, sie
+                                  handelt nicht. Dazu §4.1 (Session-Zustand,
+                                  inklusive `commandLine`, `selectedSequence`
+                                  und `editingCue`), §4.2 (was ausdrücklich
+                                  client-lokal ist — die Historie gehört
+                                  dorthin), §4.3 (das Latenzbudget, das erklärt,
+                                  warum die Executor-Tasten die Ausnahme sind),
+                                  §4.4 (die zwölf Kommandos des Pults) und §6.1
+                                  (Oops)
+4. PROGRESS.md                  — Stand, Decision Log, gemessene Zahlen;
                                   besonders §2.33 (S39, zuletzt fertig), §2.27
                                   (S26 — **der Parser, den diese Session
-                                  erweitert**), §2.31 (S28 — Store-Vorschau und
-                                  Preset-Pools), §2.30 (S35 — Views und
-                                  Encoder-Seiten), §3 (Coverage- und
-                                  Performance-Gates) **und** §7 „Carried out of
-                                  S39", „Carried out of S28" und „Carried out of
-                                  S26" — diese Listen sind Teil der
-                                  Anforderungen
-3. IMPLEMENTATION_PLAN.md       — Session-Protokoll und die Definition von S40.
-                                  Dort steht auch, warum die Sessionnummern
-                                  Identität und nicht Reihenfolge sind, und die
-                                  Laufreihenfolge unter „Running order"
-4. ARCHITECTURE_SPEC.md §4.1    — was zum Session-Zustand gehört, **inklusive
-                                  `commandLine`, `selectedSequence` und
-                                  `editingCue`**; §4.2 (was ausdrücklich
-                                  client-lokal ist — die Historie gehört
-                                  dorthin); §4.4 (die zwölf Kommandos, die das
-                                  Pult ausgibt) und §6.1 (Oops)
+                                  erweitert**), §2.31 (S28), §2.30 (S35), §3
+                                  (Coverage- und Performance-Gates) **und** §7
+                                  „Carried out of S39", „Carried out of S28" und
+                                  „Carried out of S26" — diese Listen sind Teil
+                                  der Anforderungen
 5. docs/IPC_PROTOCOL.md §5      — die 40 Kommandos, §5.2 (`Query`/`Answer`,
                                   `StorePreview` mit Modus) und §6 (die Deltas)
 6. ui/src/desk/console.ts       — **der Parser, um den es geht**: sieben Formen,
@@ -3771,14 +3773,17 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                   auflistet, was fehlt und warum
 7. ui/src/desk/console.test.ts und commandline.tsx — wie er geprüft wird und wo
                                   die Zeile auf dem Schirm lebt
-8. ui/src/show/store.ts, storemode.tsx und sequencesheet.tsx — wie eine
-                                  Store-Vorschau heute gestellt und gezeichnet
-                                  wird, und wo der Update-Knopf blinkt
-9. crates/prism-domain/src/command.rs — `StoreMode`, `SequenceStoreMode`,
-                                  `EditCue`, `Update`, `SelectSequence`
-10. crates/prism-core/src/file.rs — `preview_store` und `follow_cue_edit`: was
-                                  eine Vorschau beantwortet und was den
-                                  Update-Zustand bewegt
+8. ui/src/desk/executorbar.tsx, encoderbar.tsx und ui/src/show/*.tsx — **jede
+                                  Taste und jede Liste darin ist ein Kandidat**:
+                                  was heute ein Kommando schickt, soll künftig
+                                  eine Zeile schreiben
+9. crates/prism-domain/src/command.rs — die vierzig Kommandos und die
+                                  Modus-Enums; `is_session_command` und
+                                  `is_undoable`
+10. crates/prism-core/src/show.rs — `remove_group`, `remove_preset`,
+                                  `remove_sequence`, `remove_executor`,
+                                  `store_group`: **vier Methoden ohne Kommando
+                                  davor**, und genau die brauchen jetzt eines
 
 Stand — nichts davon musst du neu bauen:
 - Phasen 1–5 vollständig, `prismd` fährt headless, `prism-surface` bedient ein
@@ -3800,32 +3805,108 @@ Stand — nichts davon musst du neu bauen:
 
 Aufgabe: Session S40 umsetzen — die Konsolen-Shell.
 
+**Das Prinzip, und es gilt für die ganze Oberfläche:**
+**Eine Taste auf dem Pult schreibt ein Wort in die Kommandozeile. Sie handelt
+nicht.** `Session::commandLine` ist Session-Zustand (§4.1), also sieht jeder
+angeschlossene Client mit, was gerade halb getippt dasteht. Drei Formen, und
+jedes Bedienelement auf dem Schirm ist eine davon:
+
+- **Ein Kommando ohne Argument** — `Clear`, `Oops`, `Update`, `Full`: wird
+  geschrieben und **sofort ausgeführt**.
+- **Ein Kommando, das Argumente braucht** — `Store`, `Edit`, `Goto`, `Move`,
+  `Copy`, `Delete`, `Label`, `Assign`: wird geschrieben und **wartet**. Der
+  Operator tippt den Rest und drückt Enter, das ebenfalls eine Taste auf der
+  Oberfläche ist.
+- **Ein Argument-Schlüsselwort** — `Fixture`, `Group`, `Sequence`, `Cue`,
+  `Preset`, `View`, `Executor`: wird an die Zeile **angehängt**, so wie sie
+  gerade dasteht.
+
+Szenario 1: Die Taste `Fixture` schreibt `Fixture ` in die Zeile; danach tippt
+der Operator `1` und drückt Enter. Drei Tastendrücke, eine Zeile, und es ist
+dieselbe Zeile, die er auch hätte tippen können.
+Szenario 2: Ein Fixture oder eine Gruppe wird **in einer Liste angeklickt** —
+dann wird das passende Kommando geschrieben *und automatisch abgeschickt*, weil
+der Zeiger das Argument geliefert hat, auf das die Zeile gewartet hat.
+
+Die Ausnahmen sind die, die eine Zeile nicht ausdrücken kann, und sie sind
+absichtlich klein: die **Executor-Tasten und -Fader** (ein Go ist eine Geste mit
+Timing darin, §4.3), die **Encoder**, und das direkte Ziehen und Skalieren von
+Fenstern auf dem Canvas (§4.2). Alles andere ist die Zeile.
+
+**Die Befehlsliste in `IMPLEMENTATION_PLAN.md` unter S40 ist die Anforderung,
+und sie ist ausnahmslos umzusetzen.** Sie ist am 2026-08-20 erweitert worden und
+verlangt mehr als einen Parser: mehr als die Hälfte davon benennt etwas, das das
+Protokoll heute nicht sagen kann. Konkret fehlt:
+
+- **`Goto Cue 5`** — es gibt weder ein `Command::Goto` noch ein
+  `prism_engine::TickCommand` dafür. Ein Cue direkt anzuspringen ist eine
+  Engine-Änderung, keine Parser-Änderung.
+- **`Delete Sequence/Cue/Group/Preset/View/Executor`** — nur `DeleteCue` und
+  `DeleteView` existieren. `Show::remove_sequence`, `remove_preset`,
+  `remove_group` und `remove_executor` sind da und haben **kein Kommando davor**.
+  Achtung auf die geforderte Semantik: ein gelöschter Executor lässt seinen
+  **Platz bestehen** und ist nur leer — `Show::remove_executor` nimmt die Zeile
+  ganz weg, `assign_executor(id, None)` ist näher dran. Das ist zu entscheiden
+  und zu begründen.
+- **`Move Executor 1 Executor 5`, `Move View 1 View 3`, `Move Cue 3 Cue 8`** —
+  `MoveView` ist heute **relativ** (`Prev`/`Next`, S35) und nicht *nach Nummer*.
+  Für Views gilt weiterhin S35s Entscheidung, dass die **Nummer die Ordnung
+  ist**: ein Move tauscht die Nummern, der Inhalt reist mit. Für Cues ist ein
+  Move ein Renumber mit Modus-Frage — `SetCueProperty::Number` lehnt eine
+  belegte Nummer heute ab.
+- **`Copy Sequence/Cue/Group/Preset/View 2 … 6`** — gibt es für nichts.
+- **`On/Off/Go+/Go-` mit einer Sequenz als Ziel** — jedes Playback-Kommando ist
+  heute an einen **Executor** adressiert. `On Sequence 1` für eine Sequenz, die
+  auf keinem Fader liegt, hat gar keine Darstellung. Das ist die größte der
+  Strukturfragen und sie gehört ausdrücklich in den Decision Log.
+- **`Label` für Sequenzen und Gruppen** — für Cues gibt es
+  `SetCueProperty::Name`, für Presets trägt `StorePreset` den Namen; Sequenzen
+  und Gruppen haben nichts.
+- **`Store Preset 1`** — `StorePreset` braucht einen Pool, und die Zeile nennt
+  keinen. Woher er kommt (naheliegend: `Session::encoderBank`) ist zu
+  entscheiden und aufzuschreiben.
+
+Wo eine Zeile ein Kommando braucht, das es nicht gibt, wird das Kommando gebaut;
+wo sie einen Modus auf einem vorhandenen Kommando braucht, wird der Modus
+ergänzt; wo der Daemon eine Methode ohne Kommando hat, ist das das Kommando.
+**Was nicht passieren darf, ist eine Zeile, die der Parser annimmt und der
+Daemon nicht einlösen kann** — das ist S28s Regel, und S39 ist, was es gekostet
+hat, sie zu halten. Leichte Strukturänderungen an bestehenden Typen und
+Kommandos sind ausdrücklich erlaubt und erwartet.
+
 Exit-Kriterien — die Session gilt erst als fertig, wenn diese wirklich zutreffen:
+- **Jede Zeile aus der Liste funktioniert, ausnahmslos**, und zwar gegen einen
+  echten Daemon und nicht nur im Parser-Test — die eingeschlossen, für die erst
+  ein Kommando, ein Modus oder eine Engine-Nachricht entstehen musste
 - Jede getippte Zeile erzeugt **die Kommandos, die ein Daemon dafür angenommen
   hat**, geprüft gegen eine Aufnahme in der Form, die S26 etabliert hat — nichts
   in TypeScript entscheidet, was eine Zeile bedeuten soll
-- `Select Group 1`, `Select Fixture 12 thru 16`, `Select Preset 3`,
-  `Store Cue 5`, `Store Sequence 4`, `Edit Sequence 5 Cue 3`,
-  `Label View 1 "Programmer"` — und S26s `go`, `off`, `page`, `clear`, `at`
-  ungebrochen daneben
+- **Eine Taste schreibt in die Zeile, sie handelt nicht** — als Geste geprüft
+  und nicht als Behauptung: `Fixture` legt `Fixture ` in `Session::commandLine`
+  und schickt **kein** `Command`; `Clear` führt sofort aus; ein Klick auf eine
+  Gruppe im Pool schreibt `Group 3` **und schickt ab**. Ein zweiter Client sieht
+  die halb getippte Zeile, weil `commandLine` Session-Zustand ist
 - **Ein Prompt blockiert das Pult nicht.** `Store Cue 5` auf einen Cue, den es
   gibt, fragt *merge, override oder cancel* — die Show läuft weiter, Escape
   bricht ab, und ein Go vom X-Touch wartet nicht darauf. Ein abgebrochener
   Prompt ändert **gar nichts**, geprüft an der Show und nicht an der Oberfläche
-- **Die Wahl reist im Kommando.** Der Prompt fragt den Operator, und was er
-  wählt, ist der `StoreMode` bzw. `SequenceStoreMode` auf dem Kommando — die
-  Regel, die S28 aufgestellt und S39 eingelöst hat
-- **Das blinkende Update ist der Session-Zustand** (`Session::editingCue`,
-  S39) und kein Timer, den diese Oberfläche hält — geprüft dadurch, dass ein
-  zweiter Client mitblinkt
+- **Die Wahl reist im Kommando.** Was der Prompt fragt, ist der `StoreMode` bzw.
+  `SequenceStoreMode` auf dem Kommando — die Regel, die S28 aufgestellt und S39
+  eingelöst hat
+- **Das blinkende Update ist der Session-Zustand** (`Session::editingCue`, S39)
+  und kein Timer, den diese Oberfläche hält — geprüft dadurch, dass ein zweiter
+  Client mitblinkt
 - Vervollständigung und Historie: was die Wörter sind, was **an dieser Stelle
   der Zeile** zulässig ist, und die letzten Zeilen mit den Pfeiltasten zurück —
   client-lokal (§4.2), damit die Historie des einen Operators nicht die des
   anderen ist
 - Der Parser wirft weiterhin **nie**, über einem generierten Korpus, mit der
   gewachsenen Grammatik
+- Jedes neue Kommando ist undoable oder ausdrücklich nicht (§6.1), und S14s
+  Property-Test über **alle** Kommandos hält weiter
 - Eine Readme-Datei erklärt die Kommandostruktur, S26s Kommandos eingeschlossen
-- Coverage ≥ 85 % auf allem, was diese Session schreibt
+- Coverage ≥ 85 % auf allem, was diese Session schreibt, und **> 95 %** auf
+  allem, was sie zu `engine/`, `programmer/` oder `protocols/` hinzufügt
 - `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` sauber;
   `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D
   warnings`, `cargo fmt --all --check` sauber
@@ -3838,17 +3919,18 @@ Wichtige Randbedingungen:
   der den Patch befragt, kann über den Zustand des Daemons falsch liegen. Was
   eine Zeile bedeutet, hängt nur an der Zeile. Was es *gibt*, entscheidet der
   Daemon, indem er das Kommando annimmt oder ablehnt — und eine Ablehnung ist
-  eine Meldung, keine Ausnahme.
+  eine Meldung, keine Ausnahme. Das gilt auch für die neuen Formen: `Copy
+  Sequence 2 Sequence 6` heißt dasselbe, ob es Sequenz 2 gibt oder nicht.
 - **`Store Cue 5` geht in die gewählte Sequenz**, und die ist seit S39 ein
   eigenes Session-Feld (`Session::selectedSequence`, `Command::SelectSequence`).
   Nicht die Sequenz des gewählten Executors — die Entscheidung steht in
   `ARCHITECTURE_SPEC.md` §4.1 und §4.4 mit ihrer Begründung.
-- **`StoreSequence` hat keine Vorschau**, und das ist eine Entscheidung aus S39:
-  die drei Zahlen von `StorePreview` sind über die *Werte* eines Cues, ein
-  Sequenz-Store ist über *Cues*. `SequenceStoreMode::Override` ist damit das
+- **`StoreSequence` hat heute keine Vorschau**, und das ist eine Entscheidung
+  aus S39: die vier Zahlen von `StorePreview` sind über die *Werte* eines Cues,
+  ein Sequenz-Store ist über *Cues*. `SequenceStoreMode::Override` ist damit das
   zerstörerischste Kommando in §5 mit nichts davor außer Oops. Diese Session
-  fragt entweder vorher oder ergänzt `StoreTarget` um eine vierte Form mit der
-  Antwortform, die dazugehört (§7, „Carried out of S39").
+  fragt entweder vorher (der Prompt tut das ohnehin) oder ergänzt `StoreTarget`
+  um eine vierte Form mit der Antwortform, die dazugehört (§7).
 - **Ein `Update` schreibt im Override-Modus zurück** und trägt nichts: welcher
   Cue und welcher Modus sind beides Sache des Pults. Ein `Merge` in den gerade
   bearbeiteten Cue lässt die Taste weiterblinken, ein `Override` nicht — die
@@ -3860,6 +3942,29 @@ Wichtige Randbedingungen:
 - **Kein Modal, das den Canvas sperrt.** `CLAUDE.md` verlangt einen
   Gerätebildschirm ohne Scrollen außerhalb des Canvas; ein Prompt lebt in der
   Kommandozeile, nicht in einem Fenster darüber.
+- **Ein neues Kommando braucht in beiden Appliern ein Zuhause.**
+  `crates/prism-core/tests/common/mod.rs::show_commands` und
+  `session_commands`, plus die fest verdrahteten Zahlen (40 Kommandos, 16 davon
+  Session) in `command_application.rs`, `session_commands.rs`,
+  `prism-domain/src/command.rs` und `prism-core/src/file.rs`. Sie existieren
+  genau dafür.
+- **Ein `Command`-Variant kostet Stack im Property-Test.** Der 36. hat
+  `prism-core`s `tests/oops.rs` und `prism-ipc`s `tests/framing.rs` in einem
+  Debug-Build den Stack gekostet, weil `proptest_derive` einen Wertebaum baut,
+  der jede Variante zugleich enthält. Beide Stellen sind `.boxed()` und tragen
+  die Notiz; wer eine Variante mit großem Inhalt anlegt, greift dorthin und
+  **nicht** zu `RUST_MIN_STACK`. Bei einem Dutzend neuer Kommandos ist damit zu
+  rechnen.
+- **Ein Feld auf einem persistierten Typ braucht `#[serde(default)]`.** Eine
+  `.prism`-Datei hält Session und Executoren als undurchsichtige
+  MessagePack-Blobs (S15), also trägt eine ältere Datei ein neues Feld nicht.
+  Das eingefrorene Version-1-Fixture findet das in unter einer Minute — es hat
+  S34 und S39 je einmal erwischt.
+- **Ein Flex-Scrollbereich braucht einen Boden, nicht nur `min-height: 0`.**
+  S39s Fund: eine Leiste, die umbricht, quetscht die Tabelle darüber auf null,
+  und deren erste Zeile landet unter dem klebenden Kopf, wo niemand sie
+  anklicken kann. `.sheet-scroll` hat jetzt `min-height: 3rem`; wer eine Leiste
+  breiter macht, prüft das auf einem schmalen Fenster nach.
 - **Vor jeder Zeitmessung die Systemlast prüfen.** Das Telemetrie-Gate ist eine
   Durchsatzmessung auf einem Desktop: bei 80–96 % CPU liest es 15–19 Hz statt
   30, was von einem echten Fehler nicht zu unterscheiden ist.
@@ -3875,6 +3980,10 @@ Wichtige Randbedingungen:
 - **Die generierten Bindings sind Quelltext aus Rust.** `ui/src/bindings/` wird
   von `prism_domain::export_bindings` geschrieben. Fehlt ein Typ oder eine
   Tabelle, ist das eine Änderung in `prism-domain`.
+- **CI hat `channel = "stable"`, also trifft sie jede neue Lint-Menge zuerst.**
+  Rust 1.98 hat S39 einen roten Build über Code beschert, der seit S2
+  unangetastet war. Ein grünes lokales `clippy` ist eine Aussage über die
+  installierte Toolchain.
 - Ein Test darf niemals ein Gerät anfassen. Der Daemon läuft im
   Mock-Output-Modus, das Pult ist `--mock-surface`.
 - Toolchain ist eingerichtet (Rust 1.97.1 msvc, MSVC Build Tools 2022,
@@ -3882,7 +3991,11 @@ Wichtige Randbedingungen:
 
 Zum Abschluss der Session:
 - PROGRESS.md aktualisieren: S40-Status, jede gemessene Zahl, Decision Log bei
-  Abweichungen und bei Funden, die spätere Sessions betreffen
+  Abweichungen und bei Funden, die spätere Sessions betreffen — die
+  Strukturfragen oben (Playback an eine Sequenz, die Semantik von *Delete
+  Executor*, woher `Store Preset` seinen Pool nimmt) gehören ausdrücklich dorthin
+- `docs/IPC_PROTOCOL.md` §5 und `ARCHITECTURE_SPEC.md` §4.4/§6.1 um jedes neue
+  Kommando ergänzen, mit der Begründung daneben
 - PROGRESS.md §8 mit einem neuen, ebenfalls kontextfreien Follow-up-Prompt für
   die nächste Session überschreiben. Die Laufreihenfolge steht in
   IMPLEMENTATION_PLAN.md unter „Running order", und die Sessionnummern sind

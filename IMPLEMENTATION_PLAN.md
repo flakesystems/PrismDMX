@@ -599,8 +599,8 @@ thread and there is no channel back into the core.
 - §4.1's three rows resolve to real commands, the shipped profile's `deviationsFromSection41` block is **emptied**, and §4.2.1 is rewritten as history
 - Zero allocations inside the tick, re-measured; coverage on `prism-engine` and `prism-core` stays **> 95 %**
 
-## S40 · `ui` — the console shell
-**Size:** L · **Depends on:** S39, S34, S35, S28
+## S40 · `ui` + protocol — the console shell
+**Size:** XL · **Depends on:** S39, S34, S35, S28
 
 **Goal:** most of the programming work and much of the playback work done by typing, which is how a console is operated once its operator knows it.
 
@@ -608,25 +608,76 @@ thread and there is no channel back into the core.
 already existed, never consults the show, and never throws. This is that parser
 grown up, and both of those rules survive it.
 
+> **This is no longer a `ui`-only session, and the vocabulary below is why.**
+> More than half of it names something the protocol cannot say yet: there is no
+> `Goto` in `Command` *or* in `prism_engine::TickCommand`; there is no delete
+> command for a sequence, a preset, a group or an executor, though
+> `Show::remove_*` exists for all four; there is no copy command for anything;
+> `MoveView` is **relative** (`Prev`/`Next`) rather than *move view 1 to view 3*;
+> and every playback command is addressed to an **executor**, so `On Sequence 1`
+> — a sequence that is on no fader — has no representation at all. Building the
+> vocabulary therefore means building through `prism-domain`, `prism-core`,
+> `prism-engine`, `prism-ipc` and `prismd` before the parser can send anything.
+>
+> **The vocabulary is to be implemented in full and without exception**, and the
+> structural changes it needs are part of the session rather than a reason to
+> narrow it. Where a line needs a command that does not exist, the command is
+> added; where it needs a mode on a command that has one, the mode is added;
+> where the daemon has a method with no command in front of it, that is the
+> command to add. What may **not** happen is a line the parser accepts and the
+> daemon cannot honour — S28's rule, and S39 is what it cost to keep it.
+
+**The principle** — `ARCHITECTURE_SPEC.md` §4.5, written down there because it
+outlives this session: **a key on the desk writes a word into the command line;
+it does not act.** A command with no argument (`Clear`, `Oops`, `Update`,
+`Full`) is written and executed at once; a command that needs arguments
+(`Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Assign`) is
+written and **waits** for the operator to finish the line and press Enter; a
+keyword (`Fixture`, `Group`, `Sequence`, `Cue`, `Preset`, `View`, `Executor`)
+is **appended** to the line as it stands. Picking an item out of a list writes
+the command that names it *and submits it*, because the pointer has supplied
+the argument the line was waiting for. The exceptions are the ones a line
+cannot express: the executor keys and faders, the encoders, and dragging a
+window on the canvas.
+
 **Deliverables** — the vocabulary, on top of S26's:
-- `Select Group 1`, `Select Fixture 12 thru 16`, `Select Preset 3`
+- `Group 1`, `Fixture 12 thru 16`, `Preset 3` — Selects the given Fixtures/Groups
 - `Store Cue 5` — into the selected sequence. When cue 5 exists, a prompt offering **merge, override or cancel**, and the answer travels in the command
-- `Store Sequence 4` — when sequence 4 exists, a prompt offering **append, override, merge or cancel**
+- `Store Sequence 4` — when sequence 4 exists, a prompt offering **append, override, merge or cancel**, else create Sequence 4
+- `Store Preset 1` — store preset. When it exists ask for **merge, override or cancel**
 - `Label View 1 "Programmer"` — and with no label given, a window to type one into. The same for cues, sequences, groups and presets
 - `Edit Sequence 5 Cue 3` — loads it into the programmer, and **Update starts blinking** as soon as something is changed. `Update` stores back in Override mode, and so does the Update key on the console
+- `Goto Cue 5` — jumps to cue 5 in the active sequence
+- `Delete Sequence/Cue/Group/Preset/View/Executor` — Deletes Sequence/Cue/Group/Preset/View/Executor. Make sure the command just clears the spot instead of deleting it (After I deleted Executor 1 there should still be an Executor Spot one, it should just be empty)
+- `Move Executor 1 Executor 5` — assignes the content of Executor 1 to Executor 5 and cleares Executor one instead. If Executor 5 holds something, they swap instead
+- `Move View 1 View 3` — swaps View 1 and 3 (The number is assigned to the spot not the content so the numbers dont swap with the content)
+- `Move Cue 3 Cue 8` — moves Cue 1 at Cue 8 (doesnt swap). If Cue 8 is used, it asks to **merge, override or cancel**
+- `Copy Sequence/Cue/Group/Preset/View 2 Sequence/Cue/Group/Preset/View 6` — Copies Sequence/Cue/Group/Preset/View 2 at Sequence/Cue/Group/Preset/View 6. Asks to **merge, override or cancel** when used.
+- `On` — when given a Sequence (`On Sequence 1`), executes on that Sequence. When given an Executor (`On Executor 1`), executes on that Executors content. When run empty executes on the active Sequence.
+- `Off` — when given a Sequence (`Off Sequence 1`), executes on that Sequence. When given an Executor (`Off Executor 1`), executes on that Executors content. When run empty executes on the active Sequence.
+- `Go+` — when given a Sequence (`Go+ Sequence 1`), executes on that Sequence. When given an Executor (`Go+ Executor 1`), executes on that Executors content. When run empty executes on the active Sequence.
+- `Go-` — when given a Sequence (`Go- Sequence 1`), executes on that Sequence. When given an Executor (`Go- Executor 1`), executes on that Executors content. When run empty executes on the active Sequence.
+- `Clear`
+- `Full`
+- `Oops`
+- `Assign Sequence 5 Executor 1` — assigns Sequence 5 to Executor 1 (not all Sequences have an Executor)
 - S26's `go`, `off`, `page`, `clear` and `at`, kept and unbroken
-- Most Button Presses outside of executor handlers either write a no argument command (like Update, Clear and Oops) and execute it directly, write multiple argument command (like Select, Edit, Label and Store) and wait for Enter to execute the command (Which is also mapped to a button on the surface), or append an argument to a command (like Fixture, Group, Sequence, Cue and View)
+- Most Button Presses outside of executor handlers either write a no argument command (like Update, Clear and Oops) and execute it directly, write multiple argument command (like Edit, Goto, Move, Copy, Delete, Fixture, Group, Label and Store) and wait for Enter to execute the command (Which is also mapped to a button on the surface), or append an argument to a command (like Sequence, Cue and View)
+- **Every control on the screen is one of those three shapes**, and a control that sent a command without writing the line first is the thing this session exists to remove — `ARCHITECTURE_SPEC.md` §4.5
 - Completion and history: what the words are, what is legal *at this point in the line*, and the last lines back with the arrow keys — client-local (§4.2), so one operator's history is not another's
 - A readme file explaining the command structure. Also contains explanation for commands from S26
 - **A prompt is not a modal that blocks the desk.** The show carries on, the console line holds the question, Escape cancels, and a Go from the X-Touch is not waiting on it
 
 **Exit criteria**
+- **Every line in the vocabulary above works, without exception**, and works against a real daemon rather than against a parser test — including the ones that needed a new command, a new mode or a new engine message to exist at all
 - Every command above produces the commands a daemon accepted for it, held to a recording in the shape S26 established — nothing in TypeScript decides what a line ought to mean
+- **A key writes into the line; it does not act.** Asserted as a gesture, not as a claim: pressing `Fixture` puts `Fixture ` in `Session::commandLine` and sends no `Command` at all; pressing `Clear` executes at once; clicking a group in the pool writes `Group 3` and submits it. A second client sees the half-typed line, because `commandLine` is session state
 - A prompt that is cancelled changes **nothing at all**, asserted on the show rather than on the interface
 - A prompt left open blocks neither another client nor the console
 - The parser still never throws, over a generated corpus, with the grammar grown
 - The blinking Update is the **session's** update state (S39) and not a timer this interface keeps — asserted by a second client blinking too
-- Coverage ≥ 85 % on what this session writes
+- Every new command is undoable or deliberately not, per `ARCHITECTURE_SPEC.md` §6.1, and S14's property test over **all** commands still holds
+- Coverage ≥ 85 % on what this session writes, and **> 95 %** on anything it adds to `engine/`, `programmer/` or `protocols/` (`CLAUDE.md`)
 
 ## S43 · `ui` — cleanup and polish
 **Size:** M · **Depends on:** S40, S37, S38
@@ -896,7 +947,7 @@ is, is the order the work was planned to make sense in.
 | 4 | **S28** `ui` — sequences, cues, presets | Raises the store-mode question. Moved ahead of S34 on 2026-08-19: it depends on S26 rather than on S34, so the graph allows it, and it keeps the interface work in one stretch. What it costs is named in its own prompt — a cue sheet can show *which* executor is running but not *where* it is, because nothing fills `cueIndex` until S34. **Done 2026-08-19** — see `PROGRESS.md` §2.31. It raised the store-mode question the way the plan asked: no command carries a mode, and the daemon answers with the one it has so the button can say it |
 | 5 | **S34** core/engine — executor functions and the tick readback | Fills in the four buttons S26 had to draw disabled, and the cue number S26 *and* S28 had to draw as a dash. Everything that plays back is better afterwards. **Done 2026-08-20** — see `PROGRESS.md` §2.32. The two tests written to go red when it landed did — `ui_show.rs::the_cue_index_is_still_a_dash` and the browser's *draws the cue index as absent* — and both are inverted now |
 | 6 | **S39** `prism-core` — store modes, cue editing, the update state | Answers it, and defines the update state the shell's blinking Update needs. **Done 2026-08-20**, CI green on run **32412552879** — see `PROGRESS.md` §2.33. The two tests written to go red when it landed did: `prism-domain`'s `merge_is_the_only_store_mode_this_build_has` and the browser's *every recorded preview is a Merge*, and both are turned round. It also decided the selected sequence the other way from S28's assumption: `Session::selectedSequence` is a field of its own |
-| 7 | **S40** `ui` — the console shell | Needs all four above: groups and presets to select, cues to store, executors to press, views to label. **Next** |
+| 7 | **S40** `ui` + protocol — the console shell | Needs all four above: groups and presets to select, cues to store, executors to press, views to label. Grew on 2026-08-20 into the session that makes the command line **the** interface rather than one of two (`ARCHITECTURE_SPEC.md` §4.5), which pulled a dozen missing commands into it — Goto, the deletes, the copies, an absolute Move, and playback addressed to a sequence rather than only to a fader. **Next** |
 | 8 | **S33** core/protocols — the output patch | The first session a venue rather than a laptop needs. Independent of everything above, so it may equally run earlier if hardware is waiting |
 | 9 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock |
 | 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure |
