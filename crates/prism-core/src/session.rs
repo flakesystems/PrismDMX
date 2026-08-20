@@ -349,7 +349,7 @@ impl SessionState {
                 self.select_programmer_param(*direction)?
             }
             Command::CommandLineInput { text } => self.set_command_line(text)?,
-            // The twelve show commands, named rather than caught by a wildcard,
+            // The twenty-four show commands, named rather than caught by a wildcard,
             // so this match is exhaustive and a command added to the protocol
             // is a compile error here as well as in `Show::apply`.
             Command::SelectFixtures { .. }

@@ -654,7 +654,7 @@ impl ShowFile {
     /// record, so an Oops cannot reach it. `Command::is_undoable` remains the
     /// definition rather than this list —
     /// `a_command_has_a_scope_exactly_when_it_is_undoable` holds the two
-    /// together over all twenty-four commands, so a new command cannot be
+    /// together over every command that has one, so a new command cannot be
     /// given a scope here and left out of the list there, or the reverse.
     fn image(&self, command: &Command) -> Vec<Image> {
         match command {
@@ -1257,11 +1257,15 @@ mod tests {
     fn a_command_has_a_scope_exactly_when_it_is_undoable() {
         use prism_domain::{
             AttributeType, ExecutorId, FeatureGroup, FixtureId, GoDirection, ParamDirection,
-            PresetId, SelectionMode, SequenceId,
+            PresetId, SelectionMode, SequenceId, StoreMode,
         };
 
         let file = file();
-        // docs/IPC_PROTOCOL.md §5, all twenty-three.
+        // A sample of `docs/IPC_PROTOCOL.md` §5 rather than all forty of it —
+        // `tests/command_application.rs` is what holds the whole list — and it
+        // has to contain **every command with a scope**, or a new one could be
+        // given an image here and left out of `is_undoable` without either
+        // saying so. The undoable count below is the guard on that.
         let commands = [
             Command::SelectFixtures {
                 ids: vec![FixtureId::new(1)],
@@ -1340,8 +1344,49 @@ mod tests {
             Command::CommandLineInput {
                 text: String::new(),
             },
+            // The four S28 added that write show content, and S39's four.
+            Command::StorePreset {
+                preset_id: PresetId::new(1),
+                pool: FeatureGroup::Color,
+                name: String::new(),
+                color: None,
+                mode: StoreMode::Merge,
+            },
+            Command::CreateSequence {
+                sequence_id: SequenceId::new(9),
+                name: String::new(),
+            },
+            Command::SetCueProperty {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+                property: prism_domain::CueProperty::Name {
+                    name: String::new(),
+                },
+            },
+            Command::DeleteCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+            },
+            Command::AssignExecutor {
+                executor_id: ExecutorId::new(0),
+                sequence_id: None,
+            },
+            Command::StoreSequence {
+                sequence_id: SequenceId::new(1),
+                mode: prism_domain::SequenceStoreMode::Append,
+            },
+            Command::EditCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+            },
+            Command::Update,
+            // A session command, so it has no scope — the one of S39's four
+            // that an Oops must not reach.
+            Command::SelectSequence {
+                sequence_id: SequenceId::new(1),
+            },
         ];
-        assert_eq!(commands.len(), 24);
+        assert_eq!(commands.len(), 33);
         let mut undoable = 0;
         for command in &commands {
             assert_eq!(
@@ -1351,9 +1396,9 @@ mod tests {
             );
             undoable += usize::from(command.is_undoable());
         }
-        // The five programmer commands and the patch: twenty-three less the
-        // three playback actions, `Oops`, `Redo`, `SaveShow` and the eleven
-        // §4.4 session commands.
-        assert_eq!(undoable, 6);
+        // What is left after the four playback actions, `Oops`, `Redo`,
+        // `SaveShow` and the §4.4 session commands: the five programmer
+        // commands, the patch, S28's five show edits and S39's three.
+        assert_eq!(undoable, 14);
     }
 }

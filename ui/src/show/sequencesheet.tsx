@@ -392,10 +392,7 @@ function CueTable({
             <th scope="col">Trigger</th>
             <th scope="col">Values</th>
             <th scope="col">
-              <span className="visually-hidden">Edit</span>
-            </th>
-            <th scope="col">
-              <span className="visually-hidden">Delete</span>
+              <span className="visually-hidden">Edit and delete</span>
             </th>
           </tr>
         </thead>
@@ -461,7 +458,14 @@ function CueTable({
                 />
               </td>
               <td data-testid={`cue-parts-${cue.number}`}>{cue.parts.length}</td>
-              <td>
+              {/*
+                Both keys in **one** cell rather than a column each. A cue sheet
+                is a dense table on a screen that must not scroll sideways
+                (`CLAUDE.md`), and an eighth column pushed the rows far enough
+                that the sticky header started intercepting clicks on the first
+                one — which CI found on a Linux runner and this machine did not.
+              */}
+              <td className="cue-keys">
                 <button
                   type="button"
                   className="linkish"
@@ -482,8 +486,6 @@ function CueTable({
                 >
                   Edit
                 </button>
-              </td>
-              <td>
                 <button
                   type="button"
                   className="linkish"

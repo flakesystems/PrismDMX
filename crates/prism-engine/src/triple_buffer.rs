@@ -122,13 +122,14 @@ impl Slots {
             return;
         };
         sequence.store(frame.sequence(), Ordering::Relaxed);
+        // `as_chunks` gives `&[u8; 8]` rather than `&[u8]`, so the copy into a
+        // fixed array that `from_le_bytes` needs is the chunk itself — one
+        // fewer place where a length could be wrong.
         for (word, chunk) in data
             .iter()
-            .zip(frame.channels().chunks_exact(BYTES_PER_WORD))
+            .zip(frame.channels().as_chunks::<BYTES_PER_WORD>().0)
         {
-            let mut bytes = [0u8; BYTES_PER_WORD];
-            bytes.copy_from_slice(chunk);
-            word.store(u64::from_le_bytes(bytes), Ordering::Relaxed);
+            word.store(u64::from_le_bytes(*chunk), Ordering::Relaxed);
         }
     }
 
@@ -141,9 +142,9 @@ impl Slots {
         frame.set_sequence(sequence.load(Ordering::Relaxed));
         for (word, chunk) in data
             .iter()
-            .zip(frame.channels_mut().chunks_exact_mut(BYTES_PER_WORD))
+            .zip(frame.channels_mut().as_chunks_mut::<BYTES_PER_WORD>().0)
         {
-            chunk.copy_from_slice(&word.load(Ordering::Relaxed).to_le_bytes());
+            *chunk = word.load(Ordering::Relaxed).to_le_bytes();
         }
     }
 }

@@ -8,9 +8,10 @@
 //!
 //! # What the show model can and cannot finish
 //!
-//! Five of the twelve show commands are the operator's *programmer*:
-//! `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` and
-//! `StoreCue`. The show model still has something to say about all five, and it
+//! Nine of the twenty-four show commands are the operator's *programmer*:
+//! `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer`,
+//! `StoreCue`, `StorePreset`, `StoreSequence`, `EditCue` and `Update` (S39).
+//! The show model still has something to say about all of them, and it
 //! is the half that only the show knows — that fixture 12 is not patched, that
 //! preset 4 does not exist, that sequence 7 is not there to store into. It
 //! validates that half, changes nothing, and answers [`Effect::Programmer`].

@@ -62,11 +62,16 @@ export function StoreModeChooser({
   readonly testId: string;
 }) {
   return (
-    <label>
-      Mode
+    // **No text label**, and that is density rather than laziness: a store bar
+    // is one row of a window that is mostly a table, and the words *Mode* beside
+    // a select that already reads *Merge* say nothing twice. It cost a wrapped
+    // bar on a Linux runner the first time round, which squeezed the table above
+    // it — see `.sheet-scroll` in `App.css`.
+    <label className="store-mode" aria-label="Store mode">
       <select
         className="cell-input cell-input-narrow"
         data-testid={testId}
+        title="How this store combines with what is already there"
         value={mode}
         onChange={(event) => {
           const chosen = event.target.value;

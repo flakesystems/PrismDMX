@@ -290,6 +290,17 @@
     padding: 0.05rem 0.4rem 0.05rem 0;
     border-top: 1px solid var(--edge);
     white-space: nowrap;
+
+    /*
+     * **Room for the sticky header when something scrolls a row into view.**
+     * `scrollIntoView` puts the row at the top of `.sheet-scroll`, which is
+     * exactly where the header is — so the header ends up over the cell and a
+     * click on it lands on the header instead. It is invisible until the sheet
+     * is long enough to scroll, which is why CI found it on a Linux runner and
+     * this machine did not; `scroll-margin-top` is what stops it, and it stops
+     * it for every sheet rather than only for the one that met it.
+     */
+    scroll-margin-top: 1.6rem;
 }
 
 /*
@@ -325,7 +336,20 @@
 
 .sheet-scroll {
     flex: 1 1 auto;
-    min-height: 0;
+
+    /*
+     * **A floor rather than zero**, and the reason is a click that could not be
+     * made. `min-height: 0` is the flexbox idiom that lets a scroll area shrink
+     * below its content — which is right — but it also lets the bars above and
+     * below squeeze it to *nothing*, and a table with no room for a row is a
+     * table whose first row gets scrolled under the sticky header. That is what
+     * CI met on a Linux runner when S39's store bar gained a mode chooser and
+     * wrapped onto a second line at that runner's font metrics.
+     *
+     * Two rows' worth. It still shrinks below its content, which is what a
+     * scroll area is for; what it will not do is disappear.
+     */
+    min-height: 3rem;
     overflow: auto;
 }
 
@@ -1377,6 +1401,16 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+}
+
+/* Edit and × share one cell, so the cue sheet keeps the seven columns it had
+   before S39 — an eighth pushed the rows under the sticky header on a narrow
+   viewport, which is a click an operator cannot make. */
+.cue-keys {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
 }
 
 /* The Update key (S39): it is on the store bar because it is a store, and it

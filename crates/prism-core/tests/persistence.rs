@@ -658,8 +658,26 @@ fn a_process_killed_mid_write_leaves_the_last_committed_state() {
     let mut wrote_the_second = 0;
     let mut died_writing = 0;
     let mut largest_log = 0;
-    let delays = [17, 43, 71, 113, 149, 211];
+    let mut kills = 0;
+    // **The window this is aiming at is narrow, so there are a lot of shots.**
+    // A save of this show takes a fraction of a millisecond and the marker file
+    // is written on either side of it, so a kill lands *inside* one only some
+    // of the time — and how often depends entirely on how fast the machine's
+    // disk is. Six delays were enough here for five sessions and then a CI
+    // runner took all six between saves, at which point the test asserted that
+    // it had proved nothing, which is exactly what it should do.
+    //
+    // So: twenty-four delays rather than six, spread finely, and the loop
+    // **stops as soon as it has seen all three things it is looking for** —
+    // usually after three or four kills. Running the whole list is the unlucky
+    // case rather than the ordinary one, and twenty-four consecutive misses is
+    // a real finding about the store rather than about the runner.
+    let delays = [
+        17, 43, 71, 113, 149, 211, 3, 29, 57, 91, 131, 179, 7, 23, 37, 61, 83, 101, 127, 163, 197,
+        233, 13, 47,
+    ];
     for delay in delays {
+        kills += 1;
         let mut child = OsCommand::new(std::env::current_exe().unwrap())
             .args([
                 "a_writer_that_saves_until_it_is_killed",
@@ -703,16 +721,22 @@ fn a_process_killed_mid_write_leaves_the_last_committed_state() {
         );
         wrote_the_second += usize::from(found == second);
         drop(store);
+
+        // Everything this test is about has been seen at least once. Going on
+        // would only cost a second per kill.
+        if died_writing > 0 && wrote_the_second > 0 && largest_log > 0 {
+            break;
+        }
     }
 
     println!(
-        "crash test: {} kills, {died_writing} inside a save, {wrote_the_second} \
-         after a commit, largest write-ahead log {largest_log} bytes",
-        delays.len()
+        "crash test: {kills} kills, {died_writing} inside a save, {wrote_the_second} \
+         after a commit, largest write-ahead log {largest_log} bytes"
     );
     assert!(
         died_writing > 0,
-        "no process was killed inside a save, so nothing about a crash was tested"
+        "none of {kills} kills landed inside a save, so nothing about a crash \
+         was tested"
     );
     assert!(
         wrote_the_second > 0,

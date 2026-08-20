@@ -56,9 +56,13 @@ struct Ring {
 
 impl Ring {
     fn slot(&self, counter: usize) -> Option<&[AtomicU8]> {
+        // `as_chunks` because the size is a constant, so this is an index
+        // rather than a walk — `clippy::chunks_exact_to_as_chunks`, 1.98.
         self.bytes
-            .chunks_exact(PAYLOAD_BYTES)
-            .nth(counter % self.capacity)
+            .as_chunks::<PAYLOAD_BYTES>()
+            .0
+            .get(counter % self.capacity)
+            .map(|slot| slot.as_slice())
     }
 }
 

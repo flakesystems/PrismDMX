@@ -5,7 +5,7 @@
 //! [`SessionState::apply`](crate::SessionState::apply): it validates, it
 //! applies, it answers with the delta that describes what changed, and a
 //! rejection leaves the state byte-identical. All three matches name every one
-//! of the 23 commands without a wildcard, so a command added to the protocol is
+//! of the 40 commands without a wildcard, so a command added to the protocol is
 //! a compile error in three places rather than a silent rejection in any of
 //! them.
 //!

@@ -153,20 +153,33 @@ impl DmxFrame {
     }
 
     /// How many universes this frame carries.
+    ///
+    /// `as_chunks` rather than `chunks_exact`, here and in the two below,
+    /// because the chunk size is a constant: it is one index rather than a
+    /// walk, and the array type says the length is 512 without anybody having
+    /// to check. Rust 1.98's `clippy::chunks_exact_to_as_chunks` is what asked.
     #[must_use]
     pub fn universe_count(&self) -> usize {
-        self.channels.chunks_exact(UNIVERSE_CHANNELS).len()
+        self.channels.as_chunks::<UNIVERSE_CHANNELS>().0.len()
     }
 
     /// The 512 channels of one universe, by frame position.
     #[must_use]
     pub fn universe(&self, index: usize) -> Option<&[u8]> {
-        self.channels.chunks_exact(UNIVERSE_CHANNELS).nth(index)
+        self.channels
+            .as_chunks::<UNIVERSE_CHANNELS>()
+            .0
+            .get(index)
+            .map(|universe| universe.as_slice())
     }
 
     /// The 512 channels of one universe, by frame position, for writing.
     pub fn universe_mut(&mut self, index: usize) -> Option<&mut [u8]> {
-        self.channels.chunks_exact_mut(UNIVERSE_CHANNELS).nth(index)
+        self.channels
+            .as_chunks_mut::<UNIVERSE_CHANNELS>()
+            .0
+            .get_mut(index)
+            .map(|universe| universe.as_mut_slice())
     }
 
     /// One channel, addressed the way an operator addresses it: `1..=512`.
