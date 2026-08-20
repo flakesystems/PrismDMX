@@ -31,12 +31,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { FeatureGroup, JsonValue, ProgrammerState, StorePreview } from "../bindings";
+import type {
+  FeatureGroup,
+  JsonValue,
+  ProgrammerState,
+  StoreMode,
+  StorePreview,
+} from "../bindings";
 import { FEATURE_GROUP_VARIANTS } from "../bindings/variants";
 import { useAsk, useSend } from "../store/hooks";
 import type { PresetRow } from "./looks";
 import { colorStyle, nextFreeNumber, poolRows, presetRows, presetsDocument } from "./looks";
 import { StoreRequester, isStorable, storeText } from "./store";
+import { StoreModeChooser } from "./storemode";
 
 /** The whole window. */
 export function PresetPool({
@@ -172,6 +179,7 @@ function PresetStoreBar({
 }) {
   const [number, setNumber] = useState<number | null>(null);
   const [name, setName] = useState<string | null>(null);
+  const [mode, setMode] = useState<StoreMode>("Merge");
   const [preview, setPreview] = useState<StorePreview | null>(null);
   const presetId = number ?? nextFreeNumber(presets);
   const existing = presets.find((row) => row.id === presetId);
@@ -193,9 +201,12 @@ function PresetStoreBar({
   // what a store would do once per cue of a chase. `presetsDoc` is the subtree
   // a preview actually depends on, and structural sharing keeps its identity
   // still while executors run (`looks.ts::presetsDocument`).
+  // The **mode** is a dependency too, since S39: choosing one asks the question
+  // again, so the counts on the button are what that mode would cost rather
+  // than what the last one would have.
   useEffect(() => {
-    requester.current?.request({ t: "Preset", presetId, pool });
-  }, [pool, presetId, presetsDoc, programmer]);
+    requester.current?.request({ t: "Preset", presetId, pool }, mode);
+  }, [mode, pool, presetId, presetsDoc, programmer]);
 
   return (
     <form
@@ -213,6 +224,8 @@ function PresetStoreBar({
           // Carrying the one that is already there is what stops a relabel
           // throwing an operator's colour away.
           color: existing?.color ?? null,
+          // The operator's choice, carried rather than assumed — S39.
+          mode,
         });
         setNumber(null);
         setName(null);
@@ -247,6 +260,7 @@ function PresetStoreBar({
           }}
         />
       </label>
+      <StoreModeChooser mode={mode} onChoose={setMode} testId="preset-store-mode" />
       <button type="submit" data-testid="store-preset" disabled={!isStorable(preview)}>
         {storeText(preview, `preset ${String(presetId)}`)}
       </button>

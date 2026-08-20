@@ -20,7 +20,7 @@ use common::{
 use prism_core::{Effect, Show, ShowError};
 use prism_domain::{
     AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, PresetId, SelectionMode,
-    SequenceId, UniverseId,
+    SequenceId, StoreMode, UniverseId,
 };
 use proptest::prelude::*;
 
@@ -36,7 +36,7 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
 #[test]
 fn the_two_groups_together_are_the_whole_protocol() {
     // A new command variant has to be given a home here, or this fails.
-    assert_eq!(show_commands().len() + session_commands().len(), 36);
+    assert_eq!(show_commands().len() + session_commands().len(), 40);
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
     }
@@ -126,6 +126,7 @@ fn every_rejection_leaves_the_show_byte_identical() {
             Command::StoreCue {
                 sequence_id: SequenceId::new(99),
                 cue_number: "1".to_owned(),
+                mode: StoreMode::Merge,
             },
             ShowError::UnknownSequence(SequenceId::new(99)),
         ),
@@ -133,6 +134,7 @@ fn every_rejection_leaves_the_show_byte_identical() {
             Command::StoreCue {
                 sequence_id: SequenceId::new(1),
                 cue_number: String::new(),
+                mode: StoreMode::Merge,
             },
             ShowError::EmptyCueNumber,
         ),

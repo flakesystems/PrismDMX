@@ -31,11 +31,42 @@ beforeEach(() => {
 
 describe("what the Store button says", () => {
   it("names the mode the daemon named, and never one of its own", () => {
-    // The whole reason `StoreMode` is a value on the answer: S39 adds Override
-    // and Remove, and a spelled-out "Merge" here would go on looking right.
+    // The whole reason `StoreMode` is a value on the answer, and it matters
+    // more since S39 rather than less: there are three modes now, the question
+    // carries the one the operator chose, and the answer echoes it. A bar that
+    // spelled its own would put one mode's word over another mode's numbers.
     const preview = previewAbout("this is the overwrite an operator");
     expect(preview.mode).toBe("Merge");
     expect(storeText(preview, "cue 1")).toContain(preview.mode);
+    const overriding = previewAbout("the same store as an Override");
+    expect(overriding.mode).toBe("Override");
+    expect(storeText(overriding, "cue 1")).toContain("Override");
+    const removing = previewAbout("and as a Remove");
+    expect(removing.mode).toBe("Remove");
+    expect(storeText(removing, "cue 1")).toContain("Remove");
+  });
+
+  it("says what an Override would throw away, which is the warning", () => {
+    // S39's clause. `removed` is the number an operator is deciding on, and it
+    // is zero under a Merge — so it is left out there and shown here.
+    const preview = previewAbout("one an operator has to be warned about");
+    const text = storeText(preview, "cue 1");
+    expect(preview.removed).toBe(4);
+    expect(text).toContain("4 removed");
+    expect(text).toContain("1 replaced");
+    expect(storeText(previewAbout("this is the overwrite an operator"), "cue 1")).not.toContain(
+      "removed",
+    );
+  });
+
+  it("says what a Remove takes out and what it leaves", () => {
+    const preview = previewAbout("a Remove of the same value from cue 1.5");
+    const text = storeText(preview, "cue 1.5");
+    expect(text).toContain("4 kept");
+    expect(text).toContain("1 removed");
+    // A Remove writes nothing, so neither clause about writing appears.
+    expect(text).not.toContain("added");
+    expect(text).not.toContain("replaced");
   });
 
   it("says what an overwrite costs, in the daemon's numbers", () => {
@@ -90,6 +121,7 @@ describe("what the Store button says", () => {
           added: 0,
           replaced: 0,
           kept: 0,
+          removed: 0,
         },
         "cue 2",
       ),
@@ -116,6 +148,7 @@ describe("what the Store button says", () => {
       added: 0,
       replaced: 0,
       kept: 0,
+      removed: 0,
     };
     expect(storeText(preview, "cue 1")).toContain("nothing changes");
   });
@@ -127,17 +160,21 @@ describe("what the Store button says", () => {
 });
 
 describe("the store requester", () => {
-  it("asks with the target it was given", async () => {
+  it("asks with the target and the mode it was given", async () => {
     const asked: Query[] = [];
     const ask = vi.fn(async (query: Query) => {
       asked.push(query);
       return Promise.resolve<Answer | null>(null);
     });
     const requester = new StoreRequester(ask, () => undefined);
-    requester.request({ t: "Cue", sequenceId: 3, cueNumber: "1.5" });
+    requester.request({ t: "Cue", sequenceId: 3, cueNumber: "1.5" }, "Override");
     await Promise.resolve();
     expect(asked).toEqual([
-      { t: "StorePreview", target: { t: "Cue", sequenceId: 3, cueNumber: "1.5" } },
+      {
+        t: "StorePreview",
+        target: { t: "Cue", sequenceId: 3, cueNumber: "1.5" },
+        mode: "Override",
+      },
     ]);
   });
 
@@ -153,8 +190,8 @@ describe("the store requester", () => {
     const seen: (StorePreview | null)[] = [];
     const requester = new StoreRequester(ask, (preview) => seen.push(preview));
 
-    requester.request({ t: "Cue", sequenceId: 1, cueNumber: "1" });
-    requester.request({ t: "Cue", sequenceId: 1, cueNumber: "2" });
+    requester.request({ t: "Cue", sequenceId: 1, cueNumber: "1" }, "Merge");
+    requester.request({ t: "Cue", sequenceId: 1, cueNumber: "2" }, "Merge");
     // The *older* question is answered first, which is the order this is for.
     pending[0]?.(answerAbout("it does not exist yet"));
     pending[1]?.(answerAbout("this is the overwrite an operator"));
@@ -173,7 +210,7 @@ describe("the store requester", () => {
       });
     const seen: (StorePreview | null)[] = [];
     const requester = new StoreRequester(ask, (preview) => seen.push(preview));
-    requester.request({ t: "Preset", presetId: 1, pool: "Color" });
+    requester.request({ t: "Preset", presetId: 1, pool: "Color" }, "Merge");
     requester.stop();
     pending[0]?.(answerAbout("it does not exist yet"));
     await Promise.resolve();
@@ -196,9 +233,25 @@ describe("the recorded answers", () => {
     expect(previews.some((preview) => preview.kept > 0)).toBe(true);
     expect(previews.some((preview) => preview.replaced > 0)).toBe(true);
     expect(previews.some((preview) => !preview.accepted)).toBe(true);
-    // And every one of them is a `Merge`, because that is the only mode this
-    // build has — the assertion that goes red when S39 lands.
-    expect(previews.every((preview) => preview.mode === "Merge")).toBe(true);
+    // **And the script asked in all three modes.** This assertion used to read
+    // *every one of them is a `Merge`*, and S28 wrote it that way so that it
+    // would go red the day S39 added the other two — because that is the day
+    // every reader of `StorePreview::mode` gained two cases to answer for. It
+    // has been turned round rather than deleted: what it protects is the
+    // sentence on the Store button, which is the one thing on the screen that
+    // tells an operator what they are about to lose.
+    const modes = new Set(previews.map((preview) => preview.mode));
+    expect([...modes].sort()).toEqual(["Merge", "Override", "Remove"]);
+    // And the counts a Remove answers with are about taking away rather than
+    // writing, which no Merge in the recording ever says.
+    expect(
+      previews.some((preview) => preview.mode === "Remove" && preview.removed > 0),
+    ).toBe(true);
+    expect(
+      previews.every(
+        (preview) => preview.mode !== "Merge" || preview.removed === 0,
+      ),
+    ).toBe(true);
   });
 
   it("came with no deltas at all, because a question changes nothing", () => {

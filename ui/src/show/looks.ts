@@ -22,6 +22,12 @@
  * a second answer to a question the show has already answered, and the two would
  * disagree for exactly as long as a round trip.
  *
+ * **Which cue list is in force**, and **which cue the programmer is editing**.
+ * Both are `Session`'s since S39 ({@link sequenceInForce},
+ * {@link cueEditInForce}) — read out of the session document rather than worked
+ * out from the executor grid, which is what S28 had to do and marked as an
+ * assumption for this session to settle.
+ *
  * **Which cue an executor is on** is the daemon's answer and not a reading.
  * `Executor::currentCueIndex` was in the domain and on the wire from S1 with
  * nothing filling it — what cue a playback is on lives on the tick thread, and
@@ -265,15 +271,15 @@ export function poolRows(show: JsonValue | null, pool: FeatureGroup): readonly P
 }
 
 /**
- * What the sheets are looking at: the selected executor and the sequence on it.
+ * The selected executor and the sequence on it — the **transport**, since S39.
  *
- * **This is S28's marked assumption.** `ARCHITECTURE_SPEC.md` §4.1 has no
- * *selected sequence* field, and `IMPLEMENTATION_PLAN.md` gives the decision to
- * **S39** — whether it is a session field of its own or the selected executor's
- * sequence is a real choice, and only one of the two can be right for
- * `Store Cue 5`. Until then the interface uses the selected executor's, which is
- * the reading that needs nothing invented: every part of it is already in the
- * two documents.
+ * **S28's marked assumption is settled and this is no longer the sequence in
+ * force.** It was, until S39: `ARCHITECTURE_SPEC.md` §4.1 had no *selected
+ * sequence* field, so the sheets followed the sequence on the selected executor
+ * and the assumption was written down in three places rather than made
+ * permanent. §4.4 named S39 as the session that would decide, and it decided the
+ * other way — see {@link sequenceInForce}. What is left here is what an executor
+ * is actually for: Go, Back and Off, and which cue the playback is standing on.
  */
 export function executorInForce(
   session: JsonValue | null,
@@ -289,6 +295,61 @@ export function executorInForce(
     sequenceId: numberAt(executor, "/sequenceId"),
     isActive: valueAt(executor, "/isActive") === true,
     currentCueIndex: numberAt(executor, "/currentCueIndex"),
+  };
+}
+
+/**
+ * **The cue list a store goes into** — `Session::selectedSequence`, S39.
+ *
+ * One line, and it is a decision rather than a lookup: S28 read this off the
+ * selected executor because the session had no field for it, and S39 gave it
+ * one. The two reasons, both of which the executor reading cannot meet: a
+ * `Store Cue 5` typed with no executor selected has to mean something, and a cue
+ * list nobody has put on a fader has to be editable without occupying a playback
+ * slot to reach it.
+ *
+ * It is **not** coupled to {@link executorInForce}: an operator programming cue
+ * list 7 while executor 3 plays the show is the ordinary case on a console, and
+ * a desk that moved this every time a fader was selected would store into
+ * whatever was last touched. Choosing one is a `Command::SelectSequence`, so
+ * nothing here is state this interface holds and two screens cannot disagree.
+ */
+export function sequenceInForce(session: JsonValue | null): number | null {
+  return numberAt(session, "/session/selectedSequence");
+}
+
+/** Which cue the programmer is editing, and whether it has moved since. */
+export interface CueEditInForce {
+  /** The sequence the cue is in. */
+  readonly sequenceId: number;
+  /** The cue, by its number. */
+  readonly cueNumber: string;
+  /** Whether the programmer has changed since it was loaded. */
+  readonly modified: boolean;
+}
+
+/**
+ * **The update state** — `Session::editingCue`, S39.
+ *
+ * What an Update key blinks on, and it is the daemon's answer rather than
+ * anything worked out here: a second screen has to blink the same key, and one
+ * that derived this from its own mirror of the programmer would have to know
+ * which cue that programmer came from — which is exactly the fact this carries.
+ */
+export function cueEditInForce(session: JsonValue | null): CueEditInForce | null {
+  const editing = valueAt(session, "/session/editingCue");
+  if (!isObject(editing)) {
+    return null;
+  }
+  const sequenceId = numberAt(editing, "/sequenceId");
+  const cueNumber = stringAt(editing, "/cueNumber");
+  if (sequenceId === null || cueNumber === null) {
+    return null;
+  }
+  return {
+    sequenceId,
+    cueNumber,
+    modified: booleanAt(editing, "/modified") === true,
   };
 }
 

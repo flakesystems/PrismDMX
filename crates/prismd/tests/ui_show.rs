@@ -35,8 +35,8 @@ use std::time::Duration;
 use prism_core::{Show, ShowFile, ShowMirror, ShowStore};
 use prism_domain::{
     Answer, AttributeType, Command, CueProperty, CueTrigger, ExecutorId, FeatureGroup, FixtureId,
-    GoDirection, JsonValue, PresetId, RgbColor, SelectionMode, SequenceId, StoreMode, StoreTarget,
-    UniverseId,
+    GoDirection, JsonValue, PresetId, RgbColor, SelectionMode, SequenceId, SequenceStoreMode,
+    StoreMode, StoreTarget, UniverseId,
 };
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
 use prismd::cli::{Options, OutputSpec};
@@ -187,6 +187,20 @@ struct RecordedExecutor {
     current_cue_index: Option<u32>,
 }
 
+/// The **update state** after a step — S39's `Session::editingCue`.
+///
+/// Recorded beside the show rather than derived from it, because it is the one
+/// answer in this file that is not in the show document at all: which cue the
+/// programmer is editing lives in the session, and an interface blinking an
+/// Update key reads it there.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecordedCueEdit {
+    sequence_id: u32,
+    cue_number: String,
+    modified: bool,
+}
+
 /// One step: either a command that changed the show, or a question that did not.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,6 +224,10 @@ struct Step {
     presets: Vec<RecordedPreset>,
     /// The executor grid afterwards.
     executors: Vec<RecordedExecutor>,
+    /// The cue list in force afterwards — S39's `Session::selectedSequence`.
+    selected_sequence: Option<u32>,
+    /// The update state afterwards — S39's `Session::editingCue`.
+    editing_cue: Option<RecordedCueEdit>,
 }
 
 /// The whole file.
@@ -259,23 +277,35 @@ fn dial(attribute: AttributeType, value: u16) -> Command {
     }
 }
 
-/// The question a Store button asks before it lights up.
-fn preview_cue(sequence: u32, number: &str) -> Query {
+/// The question a Store button asks before it lights up, in the mode the
+/// operator has chosen — S39.
+fn preview_cue(sequence: u32, number: &str, mode: StoreMode) -> Query {
     Query::StorePreview {
         target: StoreTarget::Cue {
             sequence_id: SequenceId::new(sequence),
             cue_number: number.to_owned(),
         },
+        mode,
     }
 }
 
 /// The same question for a preset pool.
-fn preview_preset(preset: u32, pool: FeatureGroup) -> Query {
+fn preview_preset(preset: u32, pool: FeatureGroup, mode: StoreMode) -> Query {
     Query::StorePreview {
         target: StoreTarget::Preset {
             preset_id: PresetId::new(preset),
             pool,
         },
+        mode,
+    }
+}
+
+/// Storing the programmer into a cue, in a mode.
+fn store_cue(sequence: u32, number: &str, mode: StoreMode) -> Command {
+    Command::StoreCue {
+        sequence_id: SequenceId::new(sequence),
+        cue_number: number.to_owned(),
+        mode,
     }
 }
 
@@ -300,41 +330,46 @@ fn script() -> Vec<Scripted> {
                 sequence_id: Some(SequenceId::new(1)),
             },
         ),
+        Scripted::Do(
+            "and put it in force, which is what a store with no cue list named \
+             goes into — S39's session field, and the decision S28 marked",
+            Command::SelectSequence {
+                sequence_id: SequenceId::new(1),
+            },
+        ),
         Scripted::Do("select three PARs", select(&[1, 2, 3])),
         Scripted::Do("and dial them red", dial(AttributeType::Red, 65535)),
         Scripted::Ask(
             "what would storing cue 1 do? it does not exist yet, so this is a create",
-            preview_cue(1, "1"),
+            preview_cue(1, "1", StoreMode::Merge),
         ),
-        Scripted::Do(
-            "store it",
-            Command::StoreCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "1".to_owned(),
-            },
-        ),
+        Scripted::Do("store it", store_cue(1, "1", StoreMode::Merge)),
         Scripted::Do("select two of them again", select(&[1, 2])),
         Scripted::Do("and dial them green", dial(AttributeType::Green, 40000)),
         Scripted::Ask(
             "what would storing cue 1 again do? **this is the overwrite an operator \
              has to be told about**: the three reds are still in the programmer, so \
              they are replaced, and the two greens are added",
-            preview_cue(1, "1"),
+            preview_cue(1, "1", StoreMode::Merge),
+        ),
+        Scripted::Ask(
+            "and the same store as an Override? the same two added and the same \
+             three replaced, and **nothing thrown away** — because this \
+             programmer happens to hold everything the cue holds, which is the \
+             case where the two modes coincide and an operator needs to be able \
+             to see that they do",
+            preview_cue(1, "1", StoreMode::Override),
+        ),
+        Scripted::Ask(
+            "and as a Remove? it writes nothing at all: the three values the cue \
+             and the programmer share are what goes",
+            preview_cue(1, "1", StoreMode::Remove),
         ),
         Scripted::Do(
-            "store it anyway: merge is what the daemon has, and it said so",
-            Command::StoreCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "1".to_owned(),
-            },
+            "store it as a Merge, which is what the operator chose",
+            store_cue(1, "1", StoreMode::Merge),
         ),
-        Scripted::Do(
-            "store a second cue",
-            Command::StoreCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "2".to_owned(),
-            },
-        ),
+        Scripted::Do("store a second cue", store_cue(1, "2", StoreMode::Merge)),
         Scripted::Do(
             "name it",
             Command::SetCueProperty {
@@ -402,7 +437,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Ask(
             "what would storing preset 1 in the Colour pool do? a create, and it \
              counts the colour values only",
-            preview_preset(1, FeatureGroup::Color),
+            preview_preset(1, FeatureGroup::Color, StoreMode::Merge),
         ),
         Scripted::Do(
             "store it, with a name and a scribble-strip colour",
@@ -411,6 +446,7 @@ fn script() -> Vec<Scripted> {
                 pool: FeatureGroup::Color,
                 name: "Deep blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 255 }),
+                mode: StoreMode::Merge,
             },
         ),
         Scripted::Do("clear again", Command::ClearProgrammer),
@@ -423,10 +459,7 @@ fn script() -> Vec<Scripted> {
         ),
         Scripted::Do(
             "store a cue out of it: its parts carry the preset reference",
-            Command::StoreCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "3".to_owned(),
-            },
+            store_cue(1, "3", StoreMode::Merge),
         ),
         Scripted::Do("clear once more", Command::ClearProgrammer),
         Scripted::Do("select the PARs", select(&[1, 2, 3])),
@@ -434,7 +467,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Ask(
             "what would storing over preset 1 do? an edit of a preset: the three \
              blues are replaced and the three whites are kept",
-            preview_preset(1, FeatureGroup::Color),
+            preview_preset(1, FeatureGroup::Color, StoreMode::Merge),
         ),
         Scripted::Do(
             "edit the preset — **and cue 3 follows it**, which is the whole claim",
@@ -443,12 +476,13 @@ fn script() -> Vec<Scripted> {
                 pool: FeatureGroup::Color,
                 name: "Darker blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 120 }),
+                mode: StoreMode::Merge,
             },
         ),
         Scripted::Ask(
             "a preview of a store into a sequence that is not there: refused, in \
              the daemon's own words",
-            preview_cue(404, "1"),
+            preview_cue(404, "1", StoreMode::Merge),
         ),
         Scripted::Do(
             "clear the programmer for the last time",
@@ -457,7 +491,75 @@ fn script() -> Vec<Scripted> {
         Scripted::Ask(
             "and a preview with nothing to store: refused, but it still says what \
              is filed under that number",
-            preview_cue(1, "1"),
+            preview_cue(1, "1", StoreMode::Merge),
+        ),
+        // ---- S39: cue editing, the update state, and the store modes -------
+        Scripted::Do(
+            "load cue 3 back into the programmer — **its preset links come with \
+             it**, which is the claim `EditCue` exists to keep",
+            Command::EditCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "3".to_owned(),
+            },
+        ),
+        Scripted::Do(
+            "put it straight back with nothing changed: **byte-identical**, links \
+             and all, and the Update key stops blinking",
+            Command::Update,
+        ),
+        Scripted::Do(
+            "now change something while the cue is loaded, which is what makes \
+             the key blink",
+            dial(AttributeType::White, 30000),
+        ),
+        Scripted::Do("and put that back", Command::Update),
+        Scripted::Do(
+            "an Update after the programmer has been cleared: refused, because \
+             clearing the programmer clears the update state",
+            Command::ClearProgrammer,
+        ),
+        Scripted::Do("...and this is the refusal", Command::Update),
+        Scripted::Do("select a PAR", select(&[1])),
+        Scripted::Do("dial a green on it", dial(AttributeType::Green, 12345)),
+        Scripted::Ask(
+            "what would an Override of cue 1 do now? **this is the one an \
+             operator has to be warned about**: one value replaced and four \
+             thrown away",
+            preview_cue(1, "1", StoreMode::Override),
+        ),
+        Scripted::Do(
+            "store it as an Override: the cue ends up holding exactly this one \
+             value, and the four that were there are gone",
+            store_cue(1, "1", StoreMode::Override),
+        ),
+        Scripted::Ask(
+            "and a Remove of the same value from cue 1.5, which holds four \
+             others: one goes and four stay",
+            preview_cue(1, "1.5", StoreMode::Remove),
+        ),
+        Scripted::Do(
+            "take it out with a **Remove**: the cue keeps everything else",
+            store_cue(1, "1.5", StoreMode::Remove),
+        ),
+        Scripted::Do(
+            "the same Remove again: refused, because the value is gone and a \
+             store that removes nothing is one an operator would press twice",
+            store_cue(1, "1.5", StoreMode::Remove),
+        ),
+        Scripted::Do(
+            "append the programmer to the cue list: a new cue at the highest \
+             number, which is 4",
+            Command::StoreSequence {
+                sequence_id: SequenceId::new(1),
+                mode: SequenceStoreMode::Append,
+            },
+        ),
+        Scripted::Do(
+            "and merge it into every cue there is",
+            Command::StoreSequence {
+                sequence_id: SequenceId::new(1),
+                mode: SequenceStoreMode::Merge,
+            },
         ),
         Scripted::Do(
             "delete a cue: the numbers left do not close up",
@@ -679,6 +781,8 @@ async fn record_the_show_script_for_the_interface() {
             sequences: sequences_of(&snapshot.show),
             presets: presets_of(&snapshot.show),
             executors: executors_of(&snapshot.show),
+            selected_sequence: selected_sequence_of(&snapshot.session),
+            editing_cue: editing_cue_of(&snapshot.session),
         });
     }
 
@@ -810,6 +914,30 @@ fn presets_of(show: &JsonValue) -> Vec<RecordedPreset> {
         .collect();
     rows.sort_by_key(|row| row.id);
     rows
+}
+
+/// The cue list in force, out of the **session** document — S39.
+fn selected_sequence_of(session: &JsonValue) -> Option<u32> {
+    match member(member(session, "session")?, "selectedSequence")? {
+        &JsonValue::Int(number) => u32::try_from(number).ok(),
+        _ => None,
+    }
+}
+
+/// The update state, out of the session document — S39.
+fn editing_cue_of(session: &JsonValue) -> Option<RecordedCueEdit> {
+    // The member is there and it is `null` when nothing is being edited, which
+    // is the ordinary case for most of this script — so the absence is read
+    // rather than treated as a missing key.
+    let editing = match member(member(session, "session")?, "editingCue")? {
+        JsonValue::Null => return None,
+        value => value,
+    };
+    Some(RecordedCueEdit {
+        sequence_id: u32::try_from(int_at(editing, "sequenceId")).ok()?,
+        cue_number: string_at(editing, "cueNumber"),
+        modified: bool_at(editing, "modified"),
+    })
 }
 
 /// The executor grid, out of the show document.
@@ -949,6 +1077,182 @@ fn preview_at(recording: &Recording, about: &str) -> prism_domain::StorePreview 
         Answer::StorePreview { preview } => preview,
         other => panic!("the step about {about:?} is not a store preview: {other:?}"),
     }
+}
+
+/// **A cue loaded with `EditCue` and put straight back is byte-identical** —
+/// S39's exit criterion, asserted on the recording rather than in a unit test,
+/// so it is true of the cue a *daemon* ended up holding.
+///
+/// The one that carries the session: a cue's parts include their `presetRef`,
+/// and cue 3 is the one the script stored out of an applied preset — so if the
+/// load dropped the links, the cue after the update would differ from the cue
+/// before it in the only field that is easy to lose and impossible to see.
+#[test]
+fn a_cue_loaded_and_put_back_unchanged_is_the_cue_that_was_loaded() {
+    let recording = recording();
+    let before = cue_named(step(&recording, "load cue 3 back into the programmer"), "3");
+    let after = cue_named(step(&recording, "put it straight back"), "3");
+    assert_eq!(
+        before, after,
+        "a load and an update with nothing changed moved the cue"
+    );
+    assert!(
+        before.parts.iter().any(|part| part.preset_ref.is_some()),
+        "the cue this is asserted on carries no preset link, so it could not \
+         have caught one being dropped: {before:?}"
+    );
+    // And **every** part of it kept its link, not merely one of them. Cue 3 was
+    // stored out of an applied preset, so all six of its parts carry one — the
+    // three whites included, because `White` is a *colour* attribute on an RGBW
+    // profile and the pool is the profile's answer rather than the name's (S28).
+    assert_eq!(
+        before
+            .parts
+            .iter()
+            .filter(|part| part.preset_ref == Some(1))
+            .count(),
+        before.parts.len(),
+        "a load-and-update dropped a preset link: {before:?}"
+    );
+    assert_eq!(before.parts.len(), 6);
+}
+
+/// **The update state, and the three things that clear it** — S39.
+///
+/// Read off the session document a *fresh* client is served, so it is state the
+/// daemon holds rather than something a client worked out: an Update key blinks
+/// on `editingCue.modified`, and a second screen has to blink it too.
+#[test]
+fn the_update_state_says_which_cue_is_loaded_and_whether_it_has_moved() {
+    let recording = recording();
+
+    // Nothing is loaded until something loads one.
+    assert!(
+        recording.steps[0].editing_cue.is_none(),
+        "a fresh desk is editing nothing"
+    );
+
+    let loaded = step(&recording, "load cue 3 back into the programmer")
+        .editing_cue
+        .clone()
+        .expect("EditCue puts the desk into an edit");
+    assert_eq!(loaded.sequence_id, 1);
+    assert_eq!(loaded.cue_number, "3");
+    assert!(
+        !loaded.modified,
+        "a cue just loaded has not been changed since it was loaded"
+    );
+
+    // An Update leaves the edit standing and stops the key blinking.
+    let updated = step(&recording, "put it straight back")
+        .editing_cue
+        .clone()
+        .expect("an update does not end the edit");
+    assert!(!updated.modified);
+
+    // And a programmer edit while a cue is loaded is what makes it blink.
+    let touched = step(&recording, "now change something while the cue is loaded")
+        .editing_cue
+        .clone()
+        .expect("the edit survives an encoder");
+    assert_eq!(touched.cue_number, "3");
+    assert!(
+        touched.modified,
+        "this is the state an Update key blinks on, and it did not arrive"
+    );
+    assert!(
+        !step(&recording, "and put that back")
+            .editing_cue
+            .clone()
+            .expect("still editing")
+            .modified,
+        "the second update did not stop the key blinking"
+    );
+
+    // Clearing the programmer clears it — the values it was holding are gone.
+    assert!(
+        step(
+            &recording,
+            "an Update after the programmer has been cleared"
+        )
+        .editing_cue
+        .is_none(),
+        "a cleared programmer is not editing a cue"
+    );
+    // ...and the Update that follows is refused rather than storing something.
+    assert!(step(&recording, "...and this is the refusal").refused);
+}
+
+/// **The cue list in force is the desk's, and it is a field of its own** — S39's
+/// other decision, seen from the wire.
+#[test]
+fn the_selected_sequence_is_session_state() {
+    let recording = recording();
+    assert!(
+        recording.steps[0].selected_sequence.is_none(),
+        "a fresh desk has no cue list in force"
+    );
+    let chosen = step(&recording, "and put it in force");
+    assert_eq!(chosen.selected_sequence, Some(1));
+    // And it stays chosen for the rest of the script, because nothing else in
+    // it selects one — including the steps that assign executors, which is the
+    // coupling S39 deliberately did not build.
+    assert!(
+        recording
+            .steps
+            .iter()
+            .skip_while(|step| step.selected_sequence.is_none())
+            .all(|step| step.selected_sequence == Some(1)),
+        "something moved the selected sequence that was not a SelectSequence"
+    );
+}
+
+/// **A store into a whole cue list** — S39's `StoreSequence`.
+#[test]
+fn appending_adds_a_cue_at_the_highest_number_and_merging_reaches_every_cue() {
+    let recording = recording();
+    let before = &step(&recording, "the same Remove again").sequences[0].cues;
+    let appended = &step(&recording, "append the programmer to the cue list").sequences[0].cues;
+    assert_eq!(
+        appended.len(),
+        before.len() + 1,
+        "an Append leaves every cue that was there and adds one"
+    );
+    assert_eq!(
+        appended.last().expect("a cue was appended").number,
+        "4",
+        "the highest number in 1, 1.5, 3 is 3, so the new cue is 4"
+    );
+
+    // And a Merge writes into **every** cue, which is what makes it the
+    // sequence-level Merge rather than a second Append.
+    let merged = &step(&recording, "merge it into every cue there is").sequences[0].cues;
+    assert_eq!(merged.len(), appended.len(), "a Merge adds no cue");
+    for (was, now) in appended.iter().zip(merged) {
+        assert_eq!(was.number, now.number, "a Merge renumbered a cue");
+        assert!(
+            now.parts
+                .iter()
+                .any(|part| part.attribute == "Green" && part.value == 12345),
+            "cue {} did not get the merged value",
+            now.number
+        );
+        assert!(
+            now.parts.len() >= was.parts.len(),
+            "a Merge took something out of cue {}",
+            now.number
+        );
+    }
+}
+
+/// The cue with this number, out of the sequences a step recorded.
+fn cue_named(step: &Step, number: &str) -> RecordedCue {
+    step.sequences
+        .iter()
+        .flat_map(|sequence| sequence.cues.iter())
+        .find(|cue| cue.number == number)
+        .unwrap_or_else(|| panic!("no cue {number} in {:?}", step.what))
+        .clone()
 }
 
 /// **The recorded rows are what the show document actually says.**
@@ -1103,7 +1407,7 @@ fn a_preview_says_what_the_store_that_follows_it_does() {
         (2, 3, 0),
         "the two greens added and the three reds replaced"
     );
-    let merged = &step(&recording, "store it anyway").sequences[0].cues[0];
+    let merged = &step(&recording, "store it as a Merge").sequences[0].cues[0];
     assert_eq!(merged.number, "1");
     assert_eq!(
         merged.parts.len(),
@@ -1123,6 +1427,98 @@ fn a_preview_says_what_the_store_that_follows_it_does() {
     assert_eq!(
         edit.name, "Deep blue",
         "the preview names what is there now"
+    );
+
+    // **The same store in the other two modes, asked one after the other** —
+    // S39, and the whole of what a mode chooser is for: the operator sees what
+    // each choice costs before choosing. The keys are identical in all three, so
+    // the only thing that moves is which column the numbers land in.
+    let overriding = preview_at(&recording, "the same store as an Override");
+    assert_eq!(overriding.mode, StoreMode::Override);
+    assert!(overriding.accepted);
+    assert_eq!(
+        (
+            overriding.added,
+            overriding.replaced,
+            overriding.kept,
+            overriding.removed
+        ),
+        (2, 3, 0, 0),
+        "this programmer holds every value the cue holds, so an Override throws \
+         nothing away and reads exactly like the Merge beside it"
+    );
+    let removing = preview_at(&recording, "and as a Remove");
+    assert_eq!(removing.mode, StoreMode::Remove);
+    assert!(removing.accepted);
+    assert_eq!(
+        (
+            removing.added,
+            removing.replaced,
+            removing.kept,
+            removing.removed
+        ),
+        (0, 0, 0, 3),
+        "a Remove writes nothing at all: the three shared values are what goes"
+    );
+    // And the three describe one cue: whatever the mode, the counts account for
+    // every value that is filed under that number.
+    for preview in [&overwrite, &overriding, &removing] {
+        assert_eq!(
+            preview.kept + preview.replaced + preview.removed,
+            3,
+            "the four counts do not add up to the cue that is there: {preview:?}"
+        );
+    }
+
+    // **And the pair where the modes really differ**, which is the pair an
+    // operator is choosing between: the programmer holds one value, and the cue
+    // holds four others.
+    let destructive = preview_at(
+        &recording,
+        "one an \
+             operator has to be warned about",
+    );
+    assert_eq!(
+        (
+            destructive.added,
+            destructive.replaced,
+            destructive.kept,
+            destructive.removed
+        ),
+        (0, 1, 0, 4),
+        "an Override here throws four values away, and that is the number the \
+         Store button has to be able to say"
+    );
+    let after_override = &step(&recording, "store it as an Override").sequences[0].cues[0];
+    assert_eq!(after_override.number, "1");
+    assert_eq!(
+        after_override.parts.len(),
+        1,
+        "the cue holds exactly what the programmer held"
+    );
+    let taking_out = preview_at(&recording, "a Remove of the same value from cue 1.5");
+    assert_eq!(
+        (
+            taking_out.added,
+            taking_out.replaced,
+            taking_out.kept,
+            taking_out.removed
+        ),
+        (0, 0, 4, 1),
+        "a Remove takes one value out and leaves the four the programmer never \
+         mentioned"
+    );
+    let after_remove = &step(&recording, "take it out with a **Remove**").sequences[0].cues[1];
+    assert_eq!(after_remove.number, "1.5");
+    assert_eq!(
+        after_remove.parts.len(),
+        usize::try_from(taking_out.kept).expect("a small count"),
+        "the cue after a Remove is what the preview called kept"
+    );
+    // And the second Remove is refused, having nothing left to take.
+    assert!(
+        step(&recording, "the same Remove again").refused,
+        "a store that would remove nothing is refused rather than applied"
     );
 
     // Two refusals, each said before anything was sent.

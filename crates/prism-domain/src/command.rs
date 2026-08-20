@@ -15,7 +15,7 @@ use ts_rs::TS;
 
 use crate::{
     AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, JsonValue,
-    PresetId, RgbColor, SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
+    PresetId, RgbColor, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -44,6 +44,46 @@ pub enum GoDirection {
     Next,
     /// Back to the previous cue.
     Prev,
+}
+
+/// How a store into a whole **sequence** combines with the cue list that is
+/// there — `Command::StoreSequence` (S39).
+///
+/// A deliberately different three from [`crate::StoreMode`], because a sequence
+/// store is about *cues* where a cue store is about *values*. What each name
+/// means one level up is the same thing it means one level down: append leaves
+/// everything and adds, override replaces the lot, merge writes into what is
+/// already there.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum SequenceStoreMode {
+    /// A **new cue at the highest number**, holding what the programmer holds.
+    ///
+    /// The number is one past the highest whole number in the list, so a list of
+    /// `1`, `1.5`, `2` gains a `3` — an operator building a show presses this
+    /// over and over and gets `1`, `2`, `3`, which is what a cue list looks
+    /// like. The default, because it is the one that cannot lose a cue.
+    #[default]
+    Append,
+    /// The sequence **becomes** this look: one cue, numbered `1`, and the cue
+    /// list that was there is gone.
+    ///
+    /// The most destructive command in `docs/IPC_PROTOCOL.md` §5, and the reason
+    /// it is a mode on a command rather than a command of its own is that an
+    /// operator chooses between the three in one gesture. It is undoable like
+    /// every other show edit (`ARCHITECTURE_SPEC.md` §6.1), and an interface
+    /// offering it should say what it will cost first.
+    Override,
+    /// The look is merged into **every cue** of the sequence.
+    ///
+    /// *Add this to the whole list* — the cue-level [`crate::StoreMode::Merge`]
+    /// applied to each cue in turn, so a colour added to a ten-cue list is one
+    /// gesture rather than ten. Refused on a sequence with no cues: there is
+    /// nothing to merge into, and silently appending instead would be a
+    /// different command than the one that was sent.
+    Merge,
 }
 
 /// Which way the programmer parameter selection moves.
@@ -97,18 +137,23 @@ pub enum Command {
     ClearProgrammer,
     /// Store the programmer contents into a cue.
     ///
-    /// **Merged, not overwritten** — `prism_core::Programmer::cue`, whose
-    /// documentation names Merge / Override / Remove as **S39**'s distinction to
-    /// build. There is deliberately no mode on this command yet: a client that
-    /// carried one the daemon did not honour would be describing an outcome that
-    /// did not happen. What S28 does instead is *say so first* — `Query::
-    /// StorePreview` answers with the mode and with what it would add, replace
-    /// and keep, and the interface puts that on the button.
+    /// **The mode is the operator's and it travels here** (S39). S28 shipped
+    /// this command without one on purpose: `prism_core::Programmer` merged
+    /// unconditionally, and a client carrying a mode the daemon did not honour
+    /// would have been describing an outcome that did not happen. What S28 did
+    /// instead was *say so first* — `Query::StorePreview`, which now carries the
+    /// chosen mode as well and answers with what **that** would cost.
+    ///
+    /// So the daemon never guesses, and the outcome does not depend on which
+    /// client sent the command. See [`crate::StoreMode`] for what each of the
+    /// three does.
     StoreCue {
         /// Target sequence.
         sequence_id: SequenceId,
         /// Cue number as typed, e.g. `1.5`.
         cue_number: String,
+        /// How it combines with the cue that is already there.
+        mode: StoreMode,
     },
     /// Store the programmer contents into a preset of a pool.
     ///
@@ -140,7 +185,62 @@ pub enum Command {
         name: String,
         /// Colour for the scribble strip, if one was chosen.
         color: Option<RgbColor>,
+        /// How it combines with the preset that is already there (S39).
+        ///
+        /// The mirror of [`Self::StoreCue`]'s, and it has to exist for the same
+        /// reason the preview does: `Query::StorePreview` can be asked about a
+        /// preset in any of the three modes, and an answer describing an outcome
+        /// no command can produce is exactly what S28 refused to ship.
+        mode: StoreMode,
     },
+    /// Store the programmer contents into a whole **sequence** (S39).
+    ///
+    /// A different act from [`Self::StoreCue`], which is why it is a different
+    /// command: that one names a cue and this one does not. `Append` puts the
+    /// look on a new cue at the highest number, `Override` makes the sequence be
+    /// that look, and `Merge` writes it into every cue there is — see
+    /// [`SequenceStoreMode`].
+    ///
+    /// It is also **not** [`Self::CreateSequence`], which makes an empty cue
+    /// list and stores nothing.
+    StoreSequence {
+        /// Target sequence, which must already exist.
+        sequence_id: SequenceId,
+        /// What to do with the cue list that is there.
+        mode: SequenceStoreMode,
+    },
+    /// Load a stored cue back into the programmer (S39).
+    ///
+    /// **Every attribute of that cue, with each `presetRef` kept.** A load that
+    /// took the values and dropped the links would break every preset link in
+    /// the cue the next time it was stored — invisibly, until somebody edited
+    /// the preset and watched the cue not follow. `prism_domain::preset` has
+    /// said since S1 that a linked part follows later edits of its preset, and
+    /// `prism_core::Show::relink` (S28) is what makes that true.
+    ///
+    /// The values arrive as [`crate::ProgrammerValueSource::Recalled`], which is
+    /// what that variant has been waiting for since S1: pulled back out of the
+    /// show rather than set by hand or applied from a pool.
+    ///
+    /// It also sets the **update state** — see [`Self::Update`].
+    EditCue {
+        /// The sequence the cue is in.
+        sequence_id: SequenceId,
+        /// The cue, by its number.
+        cue_number: String,
+    },
+    /// Store the programmer back into the cue it was loaded from (S39).
+    ///
+    /// Carries nothing at all, because everything it needs is the desk's:
+    /// `Session::editingCue` says which cue the programmer is editing, and the
+    /// mode is [`crate::StoreMode::Override`] by definition — an Update that
+    /// merged could never take a value *out* of the cue it is updating, which is
+    /// the whole reason an operator loads one.
+    ///
+    /// Refused when nothing is being edited. It is a **show edit** and therefore
+    /// undoable, unlike the playback actions beside it in
+    /// `ARCHITECTURE_SPEC.md` §6.1.
+    Update,
     /// Create an empty sequence.
     ///
     /// **Not `StoreSequence`**, which is S39's and is a different act: that one
@@ -468,6 +568,28 @@ pub enum Command {
         /// The executor to select.
         executor_id: ExecutorId,
     },
+    /// Select the sequence a store with no cue list named goes into (S39).
+    ///
+    /// **S39's decision, and it was a decision.** `ARCHITECTURE_SPEC.md` §4.1
+    /// had no *selected sequence* until this command existed, and S28 marked the
+    /// absence rather than inventing one: the cue sheet followed the selected
+    /// executor's sequence, which needed nothing added to the session. §4.4
+    /// named S39 as the session that would settle it, and it settles it the
+    /// other way — a sequence is selected in its own right, because otherwise
+    /// `Store Cue 5` typed with no executor selected means nothing at all, and a
+    /// cue list nobody has put on a fader cannot be edited without occupying a
+    /// playback slot to do it.
+    ///
+    /// It is session state and not client state for `SelectExecutor`'s reason:
+    /// two screens must not disagree about which cue list is in force, and the
+    /// console has to be able to say it (S40's command line).
+    SelectSequence {
+        /// The sequence to select. It is **not** validated against the show,
+        /// exactly as [`Self::SelectExecutor`] is not: the session applier has
+        /// no show, and a selection naming a sequence that has gone reads as
+        /// nothing rather than as a refusal.
+        sequence_id: SequenceId,
+    },
     /// Switch the encoder bank.
     SetEncoderBank {
         /// The feature group to switch to.
@@ -500,6 +622,10 @@ impl Command {
     /// reason: managing a view library is something an operator does with a
     /// pointer, and §4.1 puts that library in the session. See those variants
     /// for why they have to exist at all.
+    ///
+    /// [`Self::SelectSequence`] is the sixteenth and it **is** on §4.4's list
+    /// since S39, because a console issues it: `Sequence 5` on the command line
+    /// is how an operator picks a cue list without a pointer.
     #[must_use]
     pub const fn is_session_command(&self) -> bool {
         matches!(
@@ -515,6 +641,7 @@ impl Command {
                 | Self::PlaceWindow { .. }
                 | Self::SetExecutorPage { .. }
                 | Self::SelectExecutor { .. }
+                | Self::SelectSequence { .. }
                 | Self::SetEncoderBank { .. }
                 | Self::SetProgrammerPage { .. }
                 | Self::SelectProgrammerParam { .. }
@@ -549,7 +676,7 @@ mod tests {
     use crate::{
         AttributeType, Command, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup,
         FixtureId, GoDirection, JsonValue, ParamDirection, PresetId, RgbColor, SelectionMode,
-        SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
+        SequenceId, SequenceStoreMode, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -646,7 +773,19 @@ mod tests {
             Command::StoreCue {
                 sequence_id: SequenceId::new(1),
                 cue_number: "1".to_owned(),
+                mode: StoreMode::Merge,
             },
+            // S39's three: a store into a whole cue list, a cue loaded back into
+            // the programmer, and the store that puts it back.
+            Command::StoreSequence {
+                sequence_id: SequenceId::new(1),
+                mode: SequenceStoreMode::Append,
+            },
+            Command::EditCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+            },
+            Command::Update,
             Command::ExecutorGo {
                 executor_id: ExecutorId::new(0),
                 direction: GoDirection::Next,
@@ -685,6 +824,7 @@ mod tests {
                 pool: FeatureGroup::Color,
                 name: "Deep blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 255 }),
+                mode: StoreMode::Override,
             },
             Command::CreateSequence {
                 sequence_id: SequenceId::new(1),
@@ -747,6 +887,9 @@ mod tests {
             Command::SelectExecutor {
                 executor_id: ExecutorId::new(0),
             },
+            Command::SelectSequence {
+                sequence_id: SequenceId::new(1),
+            },
             Command::SetEncoderBank {
                 group: FeatureGroup::Color,
             },
@@ -758,7 +901,7 @@ mod tests {
                 text: "1 thru 4 at full".to_owned(),
             },
         ];
-        assert_eq!(commands.len(), 36);
+        assert_eq!(commands.len(), 40);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -817,6 +960,11 @@ mod tests {
             Command::SelectExecutor {
                 executor_id: ExecutorId::new(0),
             },
+            // S39's, and the one of the four that a console *can* issue: the
+            // command line's `Sequence 5`.
+            Command::SelectSequence {
+                sequence_id: SequenceId::new(1),
+            },
             Command::SetEncoderBank {
                 group: FeatureGroup::Dimmer,
             },
@@ -828,7 +976,7 @@ mod tests {
                 text: String::new(),
             },
         ];
-        assert_eq!(session_commands.len(), 15);
+        assert_eq!(session_commands.len(), 16);
         for command in session_commands {
             assert!(command.is_session_command(), "{command:?}");
         }
@@ -891,6 +1039,12 @@ mod tests {
             Command::SelectView {
                 view_id: ViewId::new(1),
             },
+            // S39's session command, excluded for every session command's
+            // reason: an Oops must not pull a cue list out from under an
+            // operator any more than it pulls a window.
+            Command::SelectSequence {
+                sequence_id: SequenceId::new(1),
+            },
             Command::Oops,
             Command::Redo,
             Command::SaveShow,
@@ -906,7 +1060,20 @@ mod tests {
             Command::StoreCue {
                 sequence_id: SequenceId::new(1),
                 cue_number: "1".to_owned(),
+                mode: StoreMode::Remove,
             },
+            // S39's three, and `Update` is the one worth naming: it is a store,
+            // so it is a show edit, so `ARCHITECTURE_SPEC.md` §6.1 makes it
+            // undoable however playback-shaped the key on the desk looks.
+            Command::StoreSequence {
+                sequence_id: SequenceId::new(1),
+                mode: SequenceStoreMode::Override,
+            },
+            Command::EditCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+            },
+            Command::Update,
             // The three S27 added. A patch edit is exactly the kind of thing
             // Oops is for: it is not light the operator is currently driving.
             Command::UnpatchFixture {

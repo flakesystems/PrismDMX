@@ -13,7 +13,7 @@ use common::{par_type, populated_show, preset, show_commands};
 use prism_core::{Programmer, ProgrammerError, ShowFile};
 use prism_domain::{
     AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, PresetId,
-    ProgrammerValueSource, SelectionMode, SequenceId,
+    ProgrammerValueSource, SelectionMode, SequenceId, StoreMode,
 };
 use proptest::prelude::*;
 
@@ -49,7 +49,7 @@ fn snapshot(file: &ShowFile) -> Vec<u8> {
 // -- the group ------------------------------------------------------------
 
 #[test]
-fn the_six_programmer_commands_are_the_ones_the_show_hands_on() {
+fn the_nine_programmer_commands_are_the_ones_the_show_hands_on() {
     // S11 decided the split by answering `Effect::Programmer`; this session is
     // the other half of exactly those five. Pinning the two lists together
     // means a sixth command cannot be given to one and not the other.
@@ -63,6 +63,7 @@ fn the_six_programmer_commands_are_the_ones_the_show_hands_on() {
         Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "3".to_owned(),
+            mode: StoreMode::Merge,
         },
         // S28's sixth, and it is the mirror of `StoreCue`: the show can say
         // which pool and which number, and only the programmer knows what would
@@ -72,7 +73,22 @@ fn the_six_programmer_commands_are_the_ones_the_show_hands_on() {
             pool: FeatureGroup::Color,
             name: "Deep blue".to_owned(),
             color: None,
+            mode: StoreMode::Merge,
         },
+        // S39's three. `StoreSequence` and `Update` are stores, so they are the
+        // same split again — the show validates the half it can see and the
+        // programmer supplies the values. `EditCue` is the one that runs the
+        // other way: the show says the cue is there and the programmer is what
+        // it is loaded into.
+        Command::StoreSequence {
+            sequence_id: SequenceId::new(1),
+            mode: prism_domain::SequenceStoreMode::Append,
+        },
+        Command::EditCue {
+            sequence_id: SequenceId::new(1),
+            cue_number: "1".to_owned(),
+        },
+        Command::Update,
     ];
 
     for command in show_commands() {
@@ -88,7 +104,7 @@ fn the_six_programmer_commands_are_the_ones_the_show_hands_on() {
             "{command:?}"
         );
     }
-    assert_eq!(programmer_commands.len(), 6);
+    assert_eq!(programmer_commands.len(), 9);
 }
 
 #[test]
@@ -107,6 +123,9 @@ fn a_command_that_is_not_the_programmers_is_refused_here() {
                 | Command::ClearProgrammer
                 | Command::StoreCue { .. }
                 | Command::StorePreset { .. }
+                | Command::StoreSequence { .. }
+                | Command::EditCue { .. }
+                | Command::Update
         ) {
             continue;
         }
@@ -353,6 +372,7 @@ fn a_store_can_never_meet_a_non_zero_clear_stage() {
         file.apply(&Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "3".to_owned(),
+            mode: StoreMode::Merge,
         })
         .is_err()
     );
@@ -420,6 +440,7 @@ fn a_preset_reaches_the_cue_with_its_link_intact() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
 
@@ -492,6 +513,7 @@ fn storing_merges_into_the_cue_that_is_already_there() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "1".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
 
@@ -527,6 +549,7 @@ fn storing_an_empty_programmer_is_refused_rather_than_storing_nothing() {
         file.apply(&Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "9".to_owned(),
+            mode: StoreMode::Merge,
         })
         .is_err()
     );
@@ -554,6 +577,7 @@ fn values_naming_a_fixture_that_has_been_unpatched_are_dropped_and_reported() {
         .apply(&Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "4".to_owned(),
+            mode: StoreMode::Merge,
         })
         .unwrap();
     assert!(
@@ -615,10 +639,12 @@ fn every_rejection_leaves_the_programmer_byte_identical() {
         Command::StoreCue {
             sequence_id: SequenceId::new(99),
             cue_number: "1".to_owned(),
+            mode: StoreMode::Merge,
         },
         Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "  ".to_owned(),
+            mode: StoreMode::Merge,
         },
         Command::SetAttribute {
             attribute: AttributeType::Red,
@@ -688,6 +714,7 @@ fn any_programmer_command() -> impl Strategy<Value = Command> {
         (1u32..=2, "[0-9]").prop_map(|(id, number)| Command::StoreCue {
             sequence_id: SequenceId::new(id),
             cue_number: number,
+            mode: StoreMode::Merge,
         }),
     ]
 }

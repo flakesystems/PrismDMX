@@ -62,8 +62,8 @@
 //! table for one either, nor for the programmer or the journal.
 
 use prism_domain::{
-    AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, NoticeLevel, PresetId,
-    SequenceId, StoreMode, StorePreview, StoreTarget,
+    AttributeType, ClearStage, Command, CueEdit, CueProperty, Delta, FeatureGroup, FixtureId,
+    JsonPatchOp, NoticeLevel, PresetId, SequenceId, StoreMode, StorePreview, StoreTarget,
 };
 use serde::{Deserialize, Serialize};
 
@@ -242,18 +242,23 @@ impl ShowFile {
     ///
     /// Writes nothing.
     #[must_use]
-    pub fn preview_store(&self, target: &StoreTarget) -> StorePreview {
+    pub fn preview_store(&self, target: &StoreTarget, mode: StoreMode) -> StorePreview {
         match target {
             StoreTarget::Cue {
                 sequence_id,
                 cue_number,
-            } => self.preview_cue(*sequence_id, cue_number),
-            StoreTarget::Preset { preset_id, pool } => self.preview_preset(*preset_id, *pool),
+            } => self.preview_cue(*sequence_id, cue_number, mode),
+            StoreTarget::Preset { preset_id, pool } => self.preview_preset(*preset_id, *pool, mode),
         }
     }
 
     /// [`Self::preview_store`] for a cue.
-    fn preview_cue(&self, sequence_id: SequenceId, cue_number: &str) -> StorePreview {
+    fn preview_cue(
+        &self,
+        sequence_id: SequenceId,
+        cue_number: &str,
+        mode: StoreMode,
+    ) -> StorePreview {
         let wanted = cue_number.trim();
         let existing = self
             .show
@@ -267,18 +272,31 @@ impl ShowFile {
                     .collect()
             })
             .unwrap_or_default();
-        match self.programmer.cue(&self.show, sequence_id, cue_number) {
+        match self
+            .programmer
+            .cue(&self.show, sequence_id, cue_number, mode)
+        {
             Ok(_) => counted(
                 existing.map(|cue| cue.name.as_str()),
                 &stored,
                 &self.programmer.stored_keys(&self.show, None),
+                mode,
             ),
-            Err(error) => refused(existing.map(|cue| cue.name.as_str()), &error.to_string()),
+            Err(error) => refused(
+                existing.map(|cue| cue.name.as_str()),
+                &error.to_string(),
+                mode,
+            ),
         }
     }
 
     /// [`Self::preview_store`] for a preset.
-    fn preview_preset(&self, preset_id: PresetId, pool: FeatureGroup) -> StorePreview {
+    fn preview_preset(
+        &self,
+        preset_id: PresetId,
+        pool: FeatureGroup,
+        mode: StoreMode,
+    ) -> StorePreview {
         let existing = self.show.preset(preset_id);
         let stored: Vec<(FixtureId, AttributeType)> = existing
             .map(|preset| {
@@ -294,16 +312,18 @@ impl ShowFile {
         // operator is about to write over.
         match self
             .programmer
-            .preset(&self.show, preset_id, pool, "", None)
+            .preset(&self.show, preset_id, pool, "", None, mode)
         {
             Ok(_) => counted(
                 existing.map(|preset| preset.name.as_str()),
                 &stored,
                 &self.programmer.stored_keys(&self.show, Some(pool)),
+                mode,
             ),
             Err(error) => refused(
                 existing.map(|preset| preset.name.as_str()),
                 &error.to_string(),
+                mode,
             ),
         }
     }
@@ -348,6 +368,12 @@ impl ShowFile {
         if applied.effects.contains(&Effect::Redo) {
             let redone = self.redo()?;
             applied.absorb(Effect::Redo, redone);
+        }
+        // After the show write and before the record is filed, so an Oops takes
+        // the update state back with the edit that moved it.
+        let ops = self.follow_cue_edit(command)?;
+        if !ops.is_empty() {
+            applied.deltas.push(Delta::SessionPatch { ops });
         }
         self.record(command, before);
         // The show applier raises the flag for its own half; here the flag is
@@ -396,16 +422,36 @@ impl ShowFile {
     /// accepted.
     fn finish_programmer(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
         let mut applied = Applied::default();
-        if let Command::StoreCue {
-            sequence_id,
-            cue_number,
-        } = command
-        {
+        // `Update` is a `StoreCue` in Override mode whose target is the desk's
+        // rather than the client's, so it is *resolved* into one here rather
+        // than implemented twice. That is also what makes the update state's one
+        // rule — an Override store into the cue being edited clears the flag —
+        // true of both of them without being written down twice.
+        let resolved = match command {
+            Command::StoreCue {
+                sequence_id,
+                cue_number,
+                mode,
+            } => Some((*sequence_id, cue_number.clone(), *mode)),
+            Command::Update => {
+                let Some(editing) = self.session.session().editing_cue.clone() else {
+                    return Err(ShowFileError::Programmer(
+                        ProgrammerError::NothingIsBeingEdited,
+                    ));
+                };
+                Some((editing.sequence_id, editing.cue_number, StoreMode::Override))
+            }
+            _ => None,
+        };
+        if let Some((sequence_id, cue_number, mode)) = resolved {
+            let cue_number = cue_number.as_str();
             let unresolved = self.programmer.unresolved(&self.show);
-            let cue = self.programmer.cue(&self.show, *sequence_id, cue_number)?;
-            let ops = self.show.store_cue(*sequence_id, cue)?;
+            let cue = self
+                .programmer
+                .cue(&self.show, sequence_id, cue_number, mode)?;
+            let ops = self.show.store_cue(sequence_id, cue)?;
             applied.deltas.push(Delta::ShowPatch { ops });
-            applied.effects.push(Effect::ReloadSequence(*sequence_id));
+            applied.effects.push(Effect::ReloadSequence(sequence_id));
             if !unresolved.is_empty() {
                 // S6 asked for this in as many words: a value dropped silently
                 // is one an operator cannot learn about.
@@ -424,18 +470,27 @@ impl ShowFile {
             }
         }
 
+        if let Command::StoreSequence { sequence_id, mode } = command {
+            // The same order again: the fallible, *writing* step first.
+            let sequence = self.programmer.sequence(&self.show, *sequence_id, *mode)?;
+            let ops = self.show.store_sequence(sequence)?;
+            applied.deltas.push(Delta::ShowPatch { ops });
+            applied.effects.push(Effect::ReloadSequence(*sequence_id));
+        }
+
         if let Command::StorePreset {
             preset_id,
             pool,
             name,
             color,
+            mode,
         } = command
         {
             // The same order as `StoreCue`: the fallible, *writing* step first,
             // so a refusal leaves the programmer exactly as it was.
             let preset = self
                 .programmer
-                .preset(&self.show, *preset_id, *pool, name, *color)?;
+                .preset(&self.show, *preset_id, *pool, name, *color, *mode)?;
             // Read **before** the store, because a store that changes a linked
             // value has to reload the sequence it changed — and afterwards the
             // question would be asked of a show that had already moved.
@@ -448,9 +503,21 @@ impl ShowFile {
         }
 
         let selection_before = self.programmer.state().selection.clone();
-        applied
-            .deltas
-            .extend(self.programmer.apply(command, &self.show)?.deltas);
+        // **A store that has already been written is not asked about again.**
+        // The cue, the preset or the cue list was built above out of the show as
+        // it stood *before* the write; re-deriving it through `Programmer::apply`
+        // would ask the same question of the show this store has just changed,
+        // and `StoreMode::Remove` answers it differently — there is nothing left
+        // to remove — so the command would be refused after it had been applied.
+        // See [`Programmer::stored`].
+        let half = match command {
+            Command::StoreCue { .. }
+            | Command::StorePreset { .. }
+            | Command::StoreSequence { .. }
+            | Command::Update => self.programmer.stored(),
+            other => self.programmer.apply(other, &self.show)?,
+        };
+        applied.deltas.extend(half.deltas);
 
         // A new selection is a new list of parameters, so the wheel goes back
         // to the first of them — S12 put the index in the session and asked
@@ -474,6 +541,106 @@ impl ShowFile {
                 .push(Delta::SessionPatch { ops: session_ops });
         }
         Ok(applied)
+    }
+
+    // -- the update state (S39) -------------------------------------------
+
+    /// Moves `Session::editing_cue` to wherever this command has left it.
+    ///
+    /// **Six transitions, and every one of them is a thing that happened to the
+    /// cue or to the programmer** — which is why this is a method on the file
+    /// and not a rule in the session applier: only this type sees both.
+    ///
+    /// | Command | What becomes of the update state |
+    /// |---|---|
+    /// | `EditCue` | it *is* the update state: that cue, unmodified |
+    /// | `Update`, and a `StoreCue` in Override mode into the cue being edited | unmodified again — the cue and the programmer now agree |
+    /// | `ClearProgrammer` | **cleared**: the values it was holding are gone, whatever stage the button was in |
+    /// | `DeleteCue` of the cue being edited | **cleared**: there is nothing to put back |
+    /// | a renumber of the cue being edited | it **follows** — see below |
+    /// | any other programmer edit | modified, which is what blinks the key |
+    ///
+    /// A renumber follows rather than clearing, and that is the one decision in
+    /// here. The alternative is to clear, and the reason not to is what an
+    /// `Update` would do afterwards: it stores in Override mode into the number
+    /// it remembers, so a cleared-and-not-cleared mistake here would **recreate
+    /// the cue at its old number** — an operator who corrects `1` to `1.5` and
+    /// presses Update would end up with both. The cue an operator is editing is
+    /// still that cue after they have corrected its number.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::NotRepresentable`] only, and only by way of the session
+    /// edit — a `CueEdit` is two numbers and a flag.
+    fn follow_cue_edit(&mut self, command: &Command) -> Result<Vec<JsonPatchOp>, ShowFileError> {
+        let editing = self.session.session().editing_cue.clone();
+        let next = match command {
+            Command::EditCue {
+                sequence_id,
+                cue_number,
+            } => Some(CueEdit {
+                sequence_id: *sequence_id,
+                cue_number: cue_number.trim().to_owned(),
+                modified: false,
+            }),
+            Command::ClearProgrammer => None,
+            Command::Update => editing.clone().map(|edit| CueEdit {
+                modified: false,
+                ..edit
+            }),
+            Command::StoreCue {
+                sequence_id,
+                cue_number,
+                mode,
+            } => match editing.clone() {
+                Some(edit)
+                    if *mode == StoreMode::Override
+                        && edit.sequence_id == *sequence_id
+                        && edit.cue_number == cue_number.trim() =>
+                {
+                    Some(CueEdit {
+                        modified: false,
+                        ..edit
+                    })
+                }
+                other => other.map(touched),
+            },
+            Command::DeleteCue {
+                sequence_id,
+                cue_number,
+            } => editing
+                .clone()
+                .filter(|edit| !edit.is_of(*sequence_id, cue_number)),
+            Command::SetCueProperty {
+                sequence_id,
+                cue_number,
+                property: CueProperty::Number { number },
+            } => editing.clone().map(|edit| {
+                if edit.is_of(*sequence_id, cue_number) {
+                    CueEdit {
+                        cue_number: number.trim().to_owned(),
+                        ..edit
+                    }
+                } else {
+                    edit
+                }
+            }),
+            // Every other programmer command marks it modified — and only if it
+            // actually moved the programmer, which is what `Effect::Programmer`
+            // having produced a `ProgrammerChanged` already told us. Reading the
+            // command rather than the delta would mark an encoder turned with
+            // nothing selected as an edit.
+            Command::SelectFixtures { .. }
+            | Command::SetAttribute { .. }
+            | Command::ApplyPreset { .. }
+            | Command::StoreSequence { .. }
+            | Command::StorePreset { .. } => editing.clone().map(touched),
+            _ => editing.clone(),
+        };
+        if next == editing {
+            return Ok(Vec::new());
+        }
+        Ok(self.session.set_editing_cue(next)?)
     }
 
     // -- the journal ------------------------------------------------------
@@ -509,8 +676,23 @@ impl ShowFile {
             | Command::SetAttribute { .. }
             | Command::ApplyPreset { .. }
             | Command::ClearProgrammer => self.programmer_image(),
-            Command::StoreCue { sequence_id, .. } => {
+            Command::StoreCue { sequence_id, .. }
+            | Command::StoreSequence { sequence_id, .. }
+            | Command::EditCue { sequence_id, .. } => {
                 let mut images = vec![self.sequence_image(*sequence_id)];
+                images.extend(self.programmer_image());
+                images
+            }
+            // An `Update` names its cue through the session, so its scope is
+            // read from the session rather than from the command — the one
+            // command whose scope is not on its face. A stale reference is not a
+            // problem here: the sequence image of a sequence that has gone is
+            // an absence, and the store would have been refused anyway.
+            Command::Update => {
+                let mut images = match &self.session.session().editing_cue {
+                    Some(edit) => vec![self.sequence_image(edit.sequence_id)],
+                    None => Vec::new(),
+                };
                 images.extend(self.programmer_image());
                 images
             }
@@ -533,9 +715,14 @@ impl ShowFile {
                 images.extend(self.programmer_image());
                 images
             }
-            Command::CreateSequence { sequence_id, .. }
-            | Command::SetCueProperty { sequence_id, .. }
-            | Command::DeleteCue { sequence_id, .. } => vec![self.sequence_image(*sequence_id)],
+            // The update state is in the scope of the two that can move it: a
+            // deleted cue clears it and a renumbered cue carries it, so an Oops
+            // over either has to put it back where it was (S39).
+            Command::SetCueProperty { sequence_id, .. }
+            | Command::DeleteCue { sequence_id, .. } => {
+                vec![self.sequence_image(*sequence_id), self.cue_edit_image()]
+            }
+            Command::CreateSequence { sequence_id, .. } => vec![self.sequence_image(*sequence_id)],
             Command::AssignExecutor { executor_id, .. } => vec![Image::Executor(
                 *executor_id,
                 self.show.executor(*executor_id).cloned(),
@@ -548,6 +735,7 @@ impl ShowFile {
             | Command::ExecutorOff { .. }
             | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
+            | Command::SelectSequence { .. }
             | Command::Oops
             | Command::Redo
             | Command::SaveShow
@@ -592,7 +780,19 @@ impl ShowFile {
                 page: self.session.session().programmer_page,
                 param_index: self.session.session().programmer_param_index,
             },
+            self.cue_edit_image(),
         ]
+    }
+
+    /// The update state as it stands, or its absence — S39.
+    ///
+    /// In the scope of every programmer command for the page state's reason,
+    /// which [`Self::programmer_image`] gives: an undo that put the programmer
+    /// back and left the desk claiming to be editing a different cue would
+    /// restore half a state, and the half left standing is the one the Update
+    /// key acts on.
+    fn cue_edit_image(&self) -> Image {
+        Image::CueEdit(self.session.session().editing_cue.clone())
     }
 
     /// Files the step a command has just taken, if it took one.
@@ -713,7 +913,7 @@ impl ShowFile {
                     applied.deltas.push(Delta::ShowPatch { ops });
                     applied.effects.push(Effect::ExecutorOff { executor: *id });
                 }
-                Image::Programmer(_) | Image::ProgrammerPage { .. } => {}
+                Image::Programmer(_) | Image::ProgrammerPage { .. } | Image::CueEdit(_) => {}
             }
         }
         // A show image is written unconditionally, and does not need to ask
@@ -734,6 +934,12 @@ impl ShowFile {
                 Image::ProgrammerPage { page, param_index } => {
                     let mut ops = self.session.set_programmer_page(*page)?;
                     ops.extend(self.session.set_programmer_param_index(*param_index)?);
+                    if !ops.is_empty() {
+                        applied.deltas.push(Delta::SessionPatch { ops });
+                    }
+                }
+                Image::CueEdit(editing) => {
+                    let ops = self.session.set_editing_cue(editing.clone())?;
                     if !ops.is_empty() {
                         applied.deltas.push(Delta::SessionPatch { ops });
                     }
@@ -760,39 +966,64 @@ fn counted(
     name: Option<&str>,
     stored: &[(FixtureId, AttributeType)],
     incoming: &[(FixtureId, AttributeType)],
+    mode: StoreMode,
 ) -> StorePreview {
-    let mut added = 0;
-    let mut replaced = 0;
+    let mut overlap = 0;
+    let mut fresh = 0;
     for key in incoming {
         if stored.contains(key) {
-            replaced += 1;
+            overlap += 1;
         } else {
-            added += 1;
+            fresh += 1;
         }
     }
+    let untouched = u32::try_from(stored.len()).unwrap_or(u32::MAX) - overlap;
+    // The one place the three modes turn into numbers, and it is the table in
+    // `StorePreview`'s own documentation. Writing S for what is stored and I for
+    // what the programmer brings, the four counts partition S∪I every time — so
+    // a mode added later that forgot a column would be visible as a sum that no
+    // longer adds up rather than as a plausible wrong number.
+    let (added, replaced, kept, removed) = match mode {
+        StoreMode::Merge => (fresh, overlap, untouched, 0),
+        StoreMode::Override => (fresh, overlap, 0, untouched),
+        StoreMode::Remove => (0, 0, untouched, overlap),
+    };
     StorePreview {
         accepted: true,
         refusal: None,
         exists: name.is_some(),
         name: name.unwrap_or_default().to_owned(),
-        mode: StoreMode::Merge,
+        mode,
         added,
         replaced,
-        kept: u32::try_from(stored.len()).unwrap_or(u32::MAX) - replaced,
+        kept,
+        removed,
+    }
+}
+
+/// The same edit, marked as having moved since the cue was loaded — S39.
+///
+/// One function rather than a struct-update expression in six places, so that
+/// *what makes the Update key blink* has one spelling.
+fn touched(edit: CueEdit) -> CueEdit {
+    CueEdit {
+        modified: true,
+        ..edit
     }
 }
 
 /// A preview of a store that would be refused, in the refusal's own words.
-fn refused(name: Option<&str>, why: &str) -> StorePreview {
+fn refused(name: Option<&str>, why: &str, mode: StoreMode) -> StorePreview {
     StorePreview {
         accepted: false,
         refusal: Some(why.to_owned()),
         exists: name.is_some(),
         name: name.unwrap_or_default().to_owned(),
-        mode: StoreMode::Merge,
+        mode,
         added: 0,
         replaced: 0,
         kept: 0,
+        removed: 0,
     }
 }
 
@@ -801,7 +1032,7 @@ mod tests {
     use super::{ShowFile, ShowFileError};
     use crate::testkit::{fixture, par_type};
     use crate::{Effect, ProgrammerError, SessionError, ShowError};
-    use prism_domain::{Command, Delta, ViewId, WindowInstanceId, WindowType};
+    use prism_domain::{Command, Delta, StoreMode, ViewId, WindowInstanceId, WindowType};
 
     /// **A profile key that names nothing is refused here**, and it changes
     /// nothing — S44.
@@ -924,6 +1155,7 @@ mod tests {
             file.apply(&Command::StoreCue {
                 sequence_id: prism_domain::SequenceId::new(1),
                 cue_number: "1".to_owned(),
+                mode: StoreMode::Merge,
             }),
             Err(ShowFileError::Programmer(ProgrammerError::NothingToStore))
         );
@@ -1047,6 +1279,7 @@ mod tests {
             Command::StoreCue {
                 sequence_id: SequenceId::new(1),
                 cue_number: "1".to_owned(),
+                mode: StoreMode::Merge,
             },
             Command::ExecutorGo {
                 executor_id: ExecutorId::new(0),

@@ -1195,6 +1195,7 @@ mod tests {
         core.apply(&Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "2".to_owned(),
+            mode: prism_domain::StoreMode::Merge,
         })
         .unwrap();
         until("the reloaded cue list", || {

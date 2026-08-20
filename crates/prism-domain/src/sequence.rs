@@ -44,6 +44,52 @@ pub struct CuePart {
     pub preset_ref: Option<PresetId>,
 }
 
+/// Which cue the programmer is editing, and whether it has moved since (S39).
+///
+/// **The update state.** `Command::EditCue` loads a cue into the programmer and
+/// puts one of these in `Session::editing_cue`; `Command::Update` stores it back
+/// and clears [`Self::modified`]. What it is *for* is the Update key: a desk
+/// blinks it when there is an edit to put back, which is exactly
+/// `editing_cue.is_some() && modified`.
+///
+/// It is session state rather than programmer state because it is **operating**
+/// state in `ARCHITECTURE_SPEC.md` §4.1's sense: every attached client has to
+/// blink the same key, and a second screen that worked it out from its own
+/// mirror of the programmer would have to know which cue that programmer came
+/// from — which is precisely the fact this carries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct CueEdit {
+    /// The sequence the cue is in.
+    pub sequence_id: SequenceId,
+    /// The cue, by its number.
+    ///
+    /// The number and not an index, for `Command::DeleteCue`'s reason: a number
+    /// is what an operator wrote on a running order, and an index moves when a
+    /// cue is inserted above it. A renumber of the cue being edited **carries
+    /// this with it** — see `prism_core::ShowFile`.
+    pub cue_number: String,
+    /// Whether the programmer has changed since the cue was loaded.
+    ///
+    /// False the moment `EditCue` lands and false again after an `Update`. Any
+    /// programmer edit in between sets it, which is what makes the key blink.
+    pub modified: bool,
+}
+
+impl CueEdit {
+    /// Whether this edit is of that cue of that sequence.
+    ///
+    /// The number is **trimmed on both sides**, because an operator typed one of
+    /// them: `" 2 "` and `"2"` are the same cue everywhere else in the desk
+    /// (`prism_core::Show::cue`), and an update state that did not agree would
+    /// survive a `DeleteCue` of the very cue it names.
+    #[must_use]
+    pub fn is_of(&self, sequence: SequenceId, number: &str) -> bool {
+        self.sequence_id == sequence && self.cue_number.trim() == number.trim()
+    }
+}
+
 /// One step of a sequence.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -228,6 +274,23 @@ mod tests {
     use crate::{
         AttributeType, Cue, CuePart, CueProperty, CueTrigger, FixtureId, Sequence, SequenceId,
     };
+
+    /// **The number is trimmed on both sides**, because an operator typed one
+    /// of them: `" 2 "` and `"2"` are the same cue everywhere else in the desk,
+    /// and an update state that did not agree would survive a `DeleteCue` of
+    /// the very cue it names.
+    #[test]
+    fn a_cue_edit_is_of_the_cue_whatever_spacing_the_operator_typed() {
+        let edit = crate::CueEdit {
+            sequence_id: SequenceId::new(1),
+            cue_number: " 1.5 ".to_owned(),
+            modified: false,
+        };
+        assert!(edit.is_of(SequenceId::new(1), "1.5"));
+        assert!(edit.is_of(SequenceId::new(1), "  1.5"));
+        assert!(!edit.is_of(SequenceId::new(1), "1.50"));
+        assert!(!edit.is_of(SequenceId::new(2), "1.5"));
+    }
 
     fn cue(number: &str) -> Cue {
         Cue {

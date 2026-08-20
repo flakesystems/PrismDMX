@@ -11,7 +11,8 @@ use prism_domain::{
     AttributeDef, AttributeType, Command, Cue, CuePart, CueTrigger, Executor,
     ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FeatureGroup, Fixture, FixtureId,
     FixtureType, Group, GroupId, ParamDirection, Preset, PresetId, PresetValue, SelectionMode,
-    Sequence, SequenceId, UniverseId, Vec3, ViewId, WindowInstanceId, WindowType,
+    Sequence, SequenceId, SequenceStoreMode, StoreMode, UniverseId, Vec3, ViewId, WindowInstanceId,
+    WindowType,
 };
 
 /// An 8-bit attribute at a given offset, with everything else neutral.
@@ -173,6 +174,7 @@ pub fn show_commands() -> Vec<Command> {
         Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: "3".to_owned(),
+            mode: StoreMode::Merge,
         },
         Command::ExecutorGo {
             executor_id: ExecutorId::new(0),
@@ -219,7 +221,25 @@ pub fn show_commands() -> Vec<Command> {
             pool: FeatureGroup::Color,
             name: "Deep blue".to_owned(),
             color: None,
+            mode: StoreMode::Merge,
         },
+        // The three S39 added, each in a form the populated show accepts:
+        // sequence 1 exists and has cues 1 and 2 in it, so an Append has a list
+        // to append to and an `EditCue` has a cue to load. `Update` is last of
+        // the three on purpose — it is the one whose target is the *session*,
+        // and the `EditCue` before it is what puts one there. Both orderings
+        // matter to `every_show_command_is_decided_rather_than_ignored`, which
+        // applies each of these to a fresh show: an `Update` on its own is a
+        // refusal, so the list is applied in order where it is applied at all.
+        Command::StoreSequence {
+            sequence_id: SequenceId::new(1),
+            mode: SequenceStoreMode::Append,
+        },
+        Command::EditCue {
+            sequence_id: SequenceId::new(1),
+            cue_number: "1".to_owned(),
+        },
+        Command::Update,
         Command::CreateSequence {
             sequence_id: SequenceId::new(9),
             name: "Act 2".to_owned(),
@@ -248,13 +268,14 @@ pub fn show_commands() -> Vec<Command> {
 /// Every command the session applier accepts, each in a form that changes
 /// something in a [`populated_session`].
 ///
-/// `ARCHITECTURE_SPEC.md` §4.4's eleven, and the four that are session commands
-/// without being on that list because §4.4 says what a *console* issues:
-/// `PlaceWindow` (S25) and `RenameView` / `DeleteView` / `MoveView` (S35). They
-/// are here rather than in a second list because every property in
-/// `session_commands.rs` is true of all fifteen — being refused by the show
-/// applier, emitting a `SessionPatch`, asking nothing of anyone else — and a
-/// list that held only some of them would silently stop covering the rest.
+/// `ARCHITECTURE_SPEC.md` §4.4's twelve — the eleven plus S39's `SelectSequence`
+/// — and the four that are session commands without being on that list because
+/// §4.4 says what a *console* issues: `PlaceWindow` (S25) and `RenameView` /
+/// `DeleteView` / `MoveView` (S35). They are here rather than in a second list
+/// because every property in `session_commands.rs` is true of all sixteen —
+/// being refused by the show applier, emitting a `SessionPatch`, asking nothing
+/// of anyone else — and a list that held only some of them would silently stop
+/// covering the rest.
 pub fn session_commands() -> Vec<Command> {
     vec![
         Command::SelectView {
@@ -295,6 +316,11 @@ pub fn session_commands() -> Vec<Command> {
         Command::SetExecutorPage { page: 1 },
         Command::SelectExecutor {
             executor_id: ExecutorId::new(3),
+        },
+        // S39's, and the reason it is a session command at all: a store with no
+        // cue list named has to go somewhere, and the desk is what says where.
+        Command::SelectSequence {
+            sequence_id: SequenceId::new(1),
         },
         Command::SetEncoderBank {
             group: FeatureGroup::Color,

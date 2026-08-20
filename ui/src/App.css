@@ -1379,6 +1379,34 @@
     gap: 0.3rem;
 }
 
+/* The Update key (S39): it is on the store bar because it is a store, and it
+   blinks on `Session::editingCue.modified` — the daemon's state, so two screens
+   blink together. `prefers-reduced-motion` gets the colour and not the flash;
+   a lamp that cannot be turned off is worse than one that does not move. */
+.update-key {
+    border-color: var(--accent);
+    font-weight: 600;
+}
+
+.update-key.update-blinking {
+    background: var(--accent);
+    color: #04121c;
+    animation: update-blink 1s steps(1, end) infinite;
+}
+
+@keyframes update-blink {
+    50% {
+        background: transparent;
+        color: var(--accent);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .update-key.update-blinking {
+        animation: none;
+    }
+}
+
 /* The preset pool proper: boxes, as a console draws them. */
 .pool-grid {
     display: grid;

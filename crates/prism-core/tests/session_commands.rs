@@ -31,12 +31,12 @@ fn the_fifteen_session_commands_are_the_session_group() {
     // §4.4's eleven, plus the four a screen needs and a console cannot issue —
     // `PlaceWindow` and S35's three view-management commands. See
     // `common::session_commands`.
-    assert_eq!(session_commands().len(), 15);
+    assert_eq!(session_commands().len(), 16);
     for command in session_commands() {
         assert!(command.is_session_command(), "{command:?}");
     }
     // And the two groups together are still the whole protocol.
-    assert_eq!(show_commands().len() + session_commands().len(), 36);
+    assert_eq!(show_commands().len() + session_commands().len(), 40);
 }
 
 #[test]
@@ -244,9 +244,11 @@ fn keys(value: &serde_json::Value, into: &mut Vec<String>) {
 
 #[test]
 fn client_local_state_is_absent_from_the_session_document() {
-    // §4.1's eleven members, and nothing else. The session type is
+    // §4.1's thirteen members, and nothing else. The session type is
     // `prism_domain::Session`, so this is the assertion that the daemon's
-    // session document is that type plus the views it selects between.
+    // session document is that type plus the views it selects between. The two
+    // S39 added are `selectedSequence` — the decision S28 marked and §4.4 gave
+    // to this session — and `editingCue`, the state an Update key blinks on.
     let session = populated_session();
     let document = serde_json::to_value(session.to_json().unwrap()).unwrap();
     let members: Vec<&str> = document["session"]
@@ -260,6 +262,7 @@ fn client_local_state_is_absent_from_the_session_document() {
         [
             "activeViewId",
             "commandLine",
+            "editingCue",
             "encoderBank",
             "executorPage",
             "focusedWindow",
@@ -269,6 +272,7 @@ fn client_local_state_is_absent_from_the_session_document() {
             "programmerPage",
             "programmerParamIndex",
             "selectedExecutor",
+            "selectedSequence",
         ]
     );
     assert_eq!(

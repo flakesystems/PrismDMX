@@ -19,7 +19,7 @@ use common::{
 use prism_core::{Effect, Journal, JournalError, ShowFile, ShowFileError, UndoScope};
 use prism_domain::{
     AttributeType, ClearStage, Command, Delta, ExecutorId, FixtureId, GoDirection, PresetId,
-    ProgrammerState, SelectionMode, SequenceId, UniverseId,
+    ProgrammerState, SelectionMode, SequenceId, StoreMode, UniverseId,
 };
 use proptest::prelude::*;
 
@@ -220,6 +220,7 @@ fn undoable_command() -> impl Strategy<Value = Command> {
         (1u32..=3).prop_map(|number| Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: number.to_string(),
+            mode: StoreMode::Merge,
         }),
         (1u32..=6, 1u32..=2, 1u16..=20)
             .prop_map(|(id, universe, address)| patch_command(id, universe, address)),
@@ -289,6 +290,7 @@ fn a_redo_puts_back_exactly_what_the_oops_took_away() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
     let stored = state(&file);
@@ -492,6 +494,7 @@ fn undoing_a_store_reloads_the_sequence() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
 
@@ -541,7 +544,11 @@ fn one_record_can_cover_the_show_the_programmer_and_the_session() {
     assert_eq!(record.command(), &Command::ClearProgrammer);
     assert_eq!(
         record.scope(),
-        vec![UndoScope::Programmer, UndoScope::ProgrammerPage]
+        vec![
+            UndoScope::Programmer,
+            UndoScope::ProgrammerPage,
+            UndoScope::CueEdit,
+        ]
     );
 
     file.apply(&Command::Oops).unwrap();
@@ -568,12 +575,17 @@ fn a_record_covers_the_scope_of_its_command_and_no_more() {
     let record = file.journal.undoable().unwrap();
     assert_eq!(
         record.scope(),
-        vec![UndoScope::Programmer, UndoScope::ProgrammerPage]
+        vec![
+            UndoScope::Programmer,
+            UndoScope::ProgrammerPage,
+            UndoScope::CueEdit,
+        ]
     );
 
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
     let record = file.journal.undoable().unwrap();
@@ -583,6 +595,7 @@ fn a_record_covers_the_scope_of_its_command_and_no_more() {
             UndoScope::Sequence(SequenceId::new(1)),
             UndoScope::Programmer,
             UndoScope::ProgrammerPage,
+            UndoScope::CueEdit,
         ]
     );
 }
@@ -627,6 +640,7 @@ fn a_redo_that_is_refused_leaves_everything_where_it_was() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
     file.apply(&Command::Oops).unwrap();
@@ -673,6 +687,7 @@ fn an_undo_that_is_refused_leaves_everything_where_it_was() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
     // Cue 1 names fixture 1, and the record's inverse is the cue list that
@@ -856,6 +871,7 @@ fn an_undo_can_take_something_away_as_well_as_put_it_back() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "1".to_owned(),
+        mode: StoreMode::Merge,
     })
     .unwrap();
     assert_eq!(

@@ -53,7 +53,7 @@ use std::time::Duration;
 use prism_core::{JsonMirror, SessionMirror, ShowMirror};
 use prism_domain::{
     AttributeType, Command, Delta, ExecutorId, FeatureGroup, FixtureId, GoDirection, JsonValue,
-    ProgrammerState, SelectionMode, SequenceId, UniverseId, ViewId, WindowType,
+    ProgrammerState, SelectionMode, SequenceId, StoreMode, UniverseId, ViewId, WindowType,
 };
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
 use prismd::cli::{Options, OutputSpec};
@@ -218,6 +218,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
         12 => Command::StoreCue {
             sequence_id: SequenceId::new(1),
             cue_number: format!("{}", 1 + rng.below(4)),
+            mode: StoreMode::Merge,
         },
         _ => {
             if rng.below(2) == 0 {

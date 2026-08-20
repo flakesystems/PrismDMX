@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use core::fmt;
-use prism_domain::{Answer, Command, Delta, Query, StoreMode, StorePreview};
+use prism_domain::{Answer, Command, Delta, Query, StorePreview};
 use tokio::sync::{Mutex, Notify};
 
 use crate::backpressure::{Outbound, OutboundStats};
@@ -127,16 +127,20 @@ pub trait ServerHandler: Send + Sync + 'static {
                 matches: Vec::new(),
                 total: 0,
             },
-            Query::StorePreview { .. } => Answer::StorePreview {
+            // The mode is **echoed**, not chosen: a handler with no show still
+            // has to answer about the mode it was asked about, or a client
+            // would draw a refusal beside a word nobody typed (S39).
+            Query::StorePreview { mode, .. } => Answer::StorePreview {
                 preview: StorePreview {
                     accepted: false,
                     refusal: Some("this handler holds no show".to_owned()),
                     exists: false,
                     name: String::new(),
-                    mode: StoreMode::Merge,
+                    mode,
                     added: 0,
                     replaced: 0,
                     kept: 0,
+                    removed: 0,
                 },
             },
         }

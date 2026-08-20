@@ -43,7 +43,7 @@ use core::fmt;
 use prism_domain::{
     AttributeType, ClearStage, Command, Cue, CuePart, CueTrigger, Delta, FeatureGroup, FixtureId,
     Preset, PresetId, PresetValue, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
-    RgbColor, SelectionMode, SequenceId,
+    RgbColor, SelectionMode, Sequence, SequenceId, SequenceStoreMode, StoreMode,
 };
 
 use crate::command::Applied;
@@ -74,7 +74,24 @@ pub enum ProgrammerError {
     ValueOutOfRange(i32),
     /// A store with nothing in the programmer to store.
     NothingToStore,
-    /// A command that is not one of the five the programmer owns.
+    /// A [`StoreMode::Remove`] against a cue that is not there, or that holds
+    /// none of the values the programmer is holding (S39).
+    ///
+    /// Refused rather than accepted as a no-op, because a store that writes
+    /// nothing and removes nothing is one an operator would press twice, and the
+    /// second press is the one that reaches for a different button.
+    NothingToRemove {
+        /// What was named, in the words an operator would read it in — `cue 3
+        /// of sequence 1`, or `preset 4`. A string rather than a pair, because
+        /// the same refusal covers a cue and a preset and a variant per target
+        /// would be two refusals that say the same thing.
+        what: String,
+    },
+    /// A [`SequenceStoreMode::Merge`] into a sequence with no cues in it (S39).
+    NoCuesToMergeInto(SequenceId),
+    /// An `Update` with no cue loaded — nothing is being edited (S39).
+    NothingIsBeingEdited,
+    /// A command that is not one of the programmer's.
     NotAProgrammerCommand,
 }
 
@@ -92,6 +109,18 @@ impl fmt::Display for ProgrammerError {
             }
             Self::NothingToStore => {
                 write!(f, "the programmer is empty, so there is nothing to store")
+            }
+            Self::NothingToRemove { what } => {
+                write!(
+                    f,
+                    "{what} holds none of these values, so there is nothing to remove"
+                )
+            }
+            Self::NoCuesToMergeInto(id) => {
+                write!(f, "sequence {id} has no cues to merge into")
+            }
+            Self::NothingIsBeingEdited => {
+                write!(f, "no cue is loaded, so there is nothing to update")
             }
             Self::NotAProgrammerCommand => {
                 write!(f, "this command does not belong to the programmer")
@@ -171,16 +200,28 @@ impl Programmer {
             .collect()
     }
 
-    /// The cue this programmer stores into a sequence.
+    /// The cue this programmer stores into a sequence, in the mode the operator
+    /// chose.
     ///
-    /// **Merged, not overwritten.** The programmer is sparse by specification,
-    /// so a store carries only what was touched this time; overwriting would
-    /// delete every value in the cue the operator did not happen to touch,
-    /// which is data loss the command has no way to ask for. An existing cue
-    /// keeps its name, its times and its trigger — a store is about the look.
-    /// **S28 requirement:** Merge / Overwrite / Remove is a real distinction on
-    /// a console, and offering it means adding a mode to `StoreCue` in
-    /// `docs/IPC_PROTOCOL.md` §5.
+    /// **The three modes are S39's, and S28 named them here before they
+    /// existed.** Until then this merged unconditionally, and the reason was
+    /// written in this paragraph: the programmer is sparse by specification, so
+    /// a store carries only what was touched this time, and overwriting would
+    /// delete every value in the cue the operator did not happen to touch. That
+    /// is still true of [`StoreMode::Merge`], which is still the default — what
+    /// changed is that the other two are now *asked for* rather than assumed
+    /// away.
+    ///
+    /// - [`StoreMode::Merge`] — the programmer's values are written in and
+    ///   everything else is left alone.
+    /// - [`StoreMode::Override`] — the cue's parts become **exactly** the
+    ///   programmer's.
+    /// - [`StoreMode::Remove`] — the programmer's values are taken **out**, and
+    ///   their levels are not used at all.
+    ///
+    /// An existing cue keeps its name, its times and its trigger under all
+    /// three: a store is about the look, and a cue's name is
+    /// `Command::SetCueProperty`'s.
     ///
     /// Values the show can no longer resolve are left out rather than refused;
     /// see [`Self::unresolved`]. A `presetRef` naming a preset that has since
@@ -189,41 +230,60 @@ impl Programmer {
     ///
     /// # Errors
     ///
-    /// [`ProgrammerError::UnknownSequence`] if there is no such sequence, or
-    /// [`ProgrammerError::NothingToStore`] if nothing would be written.
+    /// [`ProgrammerError::UnknownSequence`] if there is no such sequence,
+    /// [`ProgrammerError::NothingToStore`] if nothing would be written, or
+    /// [`ProgrammerError::NothingToRemove`] for a [`StoreMode::Remove`] against
+    /// a cue that is not there or holds none of these values.
     pub fn cue(
         &self,
         show: &Show,
         sequence_id: SequenceId,
         number: &str,
+        mode: StoreMode,
     ) -> Result<Cue, ProgrammerError> {
         let Some(sequence) = show.sequence(sequence_id) else {
             return Err(ProgrammerError::UnknownSequence(sequence_id));
         };
-        let parts = self.cue_parts(show);
-        if parts.is_empty() {
-            return Err(ProgrammerError::NothingToStore);
-        }
-
         // The operator typed the number, so `" 2 "` and `"2"` are the same cue:
         // two cues that both read as 2 would sort equally (`Cue::compare_numbers`
         // trims) and a Goto could not say which one it meant.
         let number = number.trim();
-        let mut cue = sequence
-            .cues
-            .iter()
-            .find(|cue| cue.number == number)
-            .cloned()
-            .unwrap_or_else(|| Cue {
-                number: number.to_owned(),
-                name: String::new(),
-                fade_in: DEFAULT_FADE_SECONDS,
-                fade_out: DEFAULT_FADE_SECONDS,
-                delay: 0.0,
-                trigger: CueTrigger::Go,
-                trigger_time: None,
-                parts: Vec::new(),
-            });
+        let existing = sequence.cues.iter().find(|cue| cue.number == number);
+
+        if mode == StoreMode::Remove {
+            // A Remove writes nothing, so its refusals are the other way round
+            // from the other two: there has to be something to take away.
+            let Some(existing) = existing else {
+                return Err(ProgrammerError::NothingToRemove {
+                    what: format!("cue {number} of sequence {sequence_id}"),
+                });
+            };
+            let going = self.stored_keys(show, None);
+            let mut cue = existing.clone();
+            cue.parts
+                .retain(|part| !going.contains(&(part.fixture, part.attribute)));
+            if cue.parts.len() == existing.parts.len() {
+                return Err(ProgrammerError::NothingToRemove {
+                    what: format!("cue {number} of sequence {sequence_id}"),
+                });
+            }
+            return Ok(cue);
+        }
+
+        let parts = self.cue_parts(show);
+        if parts.is_empty() {
+            return Err(ProgrammerError::NothingToStore);
+        }
+        let mut cue = existing.cloned().unwrap_or_else(|| Cue {
+            number: number.to_owned(),
+            parts: Vec::new(),
+            ..blank_cue()
+        });
+        if mode == StoreMode::Override {
+            // Everything the store does not mention goes. The name and the
+            // times stay, because they are not the look.
+            cue.parts.clear();
+        }
         for part in parts {
             match cue.parts.iter_mut().find(|existing| {
                 existing.fixture == part.fixture && existing.attribute == part.attribute
@@ -235,6 +295,127 @@ impl Programmer {
         cue.parts
             .sort_by_key(|part| (part.fixture.get(), part.attribute));
         Ok(cue)
+    }
+
+    /// The whole cue list this programmer stores into a sequence — S39's
+    /// `Command::StoreSequence`.
+    ///
+    /// [`Self::cue`] one level up, and the three modes mean at the level of
+    /// cues what [`StoreMode`]'s three mean at the level of values:
+    ///
+    /// - [`SequenceStoreMode::Append`] — a **new cue at the highest number**,
+    ///   which is one past the highest whole number the list already has, so an
+    ///   operator pressing it repeatedly gets `1`, `2`, `3`.
+    /// - [`SequenceStoreMode::Override`] — the sequence *becomes* this look: one
+    ///   cue, numbered `1`.
+    /// - [`SequenceStoreMode::Merge`] — the look is merged into **every** cue.
+    ///
+    /// The sequence keeps its name and its loop flag under all three.
+    ///
+    /// # Errors
+    ///
+    /// [`ProgrammerError::UnknownSequence`] if there is no such sequence,
+    /// [`ProgrammerError::NothingToStore`] if the programmer holds nothing the
+    /// show can resolve, or [`ProgrammerError::NoCuesToMergeInto`] for a
+    /// [`SequenceStoreMode::Merge`] into a cue list with no cues in it.
+    pub fn sequence(
+        &self,
+        show: &Show,
+        sequence_id: SequenceId,
+        mode: SequenceStoreMode,
+    ) -> Result<Sequence, ProgrammerError> {
+        let Some(sequence) = show.sequence(sequence_id) else {
+            return Err(ProgrammerError::UnknownSequence(sequence_id));
+        };
+        let parts = self.cue_parts(show);
+        if parts.is_empty() {
+            return Err(ProgrammerError::NothingToStore);
+        }
+        let mut next = sequence.clone();
+        match mode {
+            SequenceStoreMode::Append => next.cues.push(Cue {
+                number: append_number(&next.cues),
+                parts,
+                ..blank_cue()
+            }),
+            SequenceStoreMode::Override => {
+                next.cues = vec![Cue {
+                    number: "1".to_owned(),
+                    parts,
+                    ..blank_cue()
+                }];
+            }
+            SequenceStoreMode::Merge => {
+                if next.cues.is_empty() {
+                    return Err(ProgrammerError::NoCuesToMergeInto(sequence_id));
+                }
+                for cue in &mut next.cues {
+                    for part in parts.iter().cloned() {
+                        match cue.parts.iter_mut().find(|existing| {
+                            existing.fixture == part.fixture && existing.attribute == part.attribute
+                        }) {
+                            Some(existing) => *existing = part,
+                            None => cue.parts.push(part),
+                        }
+                    }
+                    cue.parts
+                        .sort_by_key(|part| (part.fixture.get(), part.attribute));
+                }
+            }
+        }
+        Ok(next)
+    }
+
+    /// Loads a stored cue into the programmer — S39's `Command::EditCue`.
+    ///
+    /// **Every part, with its `presetRef` kept.** A load that took the values
+    /// and dropped the links would break every preset link in the cue the next
+    /// time it was stored, and it would break it *invisibly*: nothing looks
+    /// different until somebody edits the preset and watches the cue not follow
+    /// it. `prism_domain::preset` has claimed since S1 that a linked part
+    /// follows later edits of its preset and `Show::relink` made the claim true
+    /// in S28; this is the third place that promise can be broken and it is the
+    /// easiest one to break by accident.
+    ///
+    /// The selection becomes the cue's fixtures, in fixture order — a cue is a
+    /// look on a set of fixtures, and loading one without selecting them would
+    /// leave the operator with values no encoder reaches. The values arrive as
+    /// [`ProgrammerValueSource::Recalled`], which is what that variant has been
+    /// for since S1.
+    ///
+    /// A part the show can no longer resolve is left out, exactly as
+    /// [`Self::cue`] leaves it out on the way back — so a cue naming a fixture
+    /// somebody has unpatched loads as the part of it that still means
+    /// something.
+    ///
+    /// Returns whether anything changed.
+    pub fn load_cue(&mut self, show: &Show, cue: &Cue) -> bool {
+        let mut next = ProgrammerState {
+            active_feature_group: self.state.active_feature_group,
+            ..ProgrammerState::default()
+        };
+        for part in &cue.parts {
+            if show.attribute_def(part.fixture, part.attribute).is_none() {
+                continue;
+            }
+            if !next.selection.contains(&part.fixture) {
+                next.selection.push(part.fixture);
+            }
+            next.set_value(
+                part.fixture,
+                part.attribute,
+                ProgrammerValue {
+                    value: part.value,
+                    // A link is what it came in with. A part with no link is
+                    // `Recalled` and nothing more; a part with one keeps it, so
+                    // storing the cue back leaves the preset reaching it.
+                    source: ProgrammerValueSource::Recalled,
+                    preset_ref: part.preset_ref,
+                },
+            );
+        }
+        next.selection.sort_by_key(|fixture| fixture.get());
+        self.commit(next)
     }
 
     /// The preset this programmer stores into a pool.
@@ -255,14 +436,20 @@ impl Programmer {
     /// who made one by accident would have no way to tell it from one that did
     /// not work.
     ///
-    /// **Merged, not overwritten**, exactly as [`Self::cue`] is, and for the
-    /// same reason — see that method for the S39 note. A value the show can no
-    /// longer resolve is left out rather than refused.
+    /// It takes a [`StoreMode`] for the same reason [`Self::cue`] does, and
+    /// each of the three means the same thing over a pool's values as it means
+    /// over a cue's parts. It has to: `Query::StorePreview` can be asked about a
+    /// preset in any of them, and an answer describing an outcome no command can
+    /// produce is precisely what S28 refused to ship.
+    ///
+    /// A value the show can no longer resolve is left out rather than refused.
     ///
     /// # Errors
     ///
     /// [`ProgrammerError::NothingToStore`] if the preset does not exist and the
-    /// programmer holds nothing that belongs in this pool.
+    /// programmer holds nothing that belongs in this pool, or
+    /// [`ProgrammerError::NothingToRemove`] for a [`StoreMode::Remove`] against
+    /// a preset that is not there or holds none of these values.
     pub fn preset(
         &self,
         show: &Show,
@@ -270,9 +457,35 @@ impl Programmer {
         pool: FeatureGroup,
         name: &str,
         color: Option<RgbColor>,
+        mode: StoreMode,
     ) -> Result<Preset, ProgrammerError> {
         let values = self.preset_values(show, pool);
         let existing = show.preset(id);
+
+        if mode == StoreMode::Remove {
+            // The mirror of the cue's Remove, with the preset's own filter on
+            // the way in: a colour Remove takes colour values out and leaves
+            // the rest of the pool alone.
+            let Some(held) = existing else {
+                return Err(ProgrammerError::NothingToRemove {
+                    what: format!("preset {id}"),
+                });
+            };
+            let going = self.stored_keys(show, Some(pool));
+            let mut preset = held.clone();
+            preset.name = name.to_owned();
+            preset.color = color;
+            preset
+                .values
+                .retain(|value| !going.contains(&(value.fixture, value.attribute)));
+            if preset.values.len() == held.values.len() {
+                return Err(ProgrammerError::NothingToRemove {
+                    what: format!("preset {id}"),
+                });
+            }
+            return Ok(preset);
+        }
+
         if values.is_empty() && existing.is_none() {
             return Err(ProgrammerError::NothingToStore);
         }
@@ -281,9 +494,13 @@ impl Programmer {
             pool,
             name: name.to_owned(),
             color,
-            values: existing
-                .map(|preset| preset.values.clone())
-                .unwrap_or_default(),
+            values: match (mode, existing) {
+                // An Override keeps the number, the pool, the name and the
+                // colour, and nothing else: the pool ends up holding exactly
+                // what the programmer holds of it.
+                (StoreMode::Override, _) | (_, None) => Vec::new(),
+                (_, Some(preset)) => preset.values.clone(),
+            },
         };
         for value in values {
             match preset
@@ -409,11 +626,12 @@ impl Programmer {
             Command::StoreCue {
                 sequence_id,
                 cue_number,
+                mode,
             } => {
                 // Validated even though the cue is written elsewhere, so that a
                 // direct caller cannot get a bare stage reset out of a store
                 // that could not have happened.
-                self.cue(show, *sequence_id, cue_number)?;
+                self.cue(show, *sequence_id, cue_number, *mode)?;
                 self.touch()
             }
             Command::StorePreset {
@@ -421,17 +639,40 @@ impl Programmer {
                 pool,
                 name,
                 color,
+                mode,
             } => {
                 // Validated for the same reason `StoreCue` is: a direct caller
                 // must not get a bare stage reset out of a store that could not
                 // have happened.
-                self.preset(show, *preset_id, *pool, name, *color)?;
+                self.preset(show, *preset_id, *pool, name, *color, *mode)?;
                 self.touch()
             }
-            // The other twenty-three commands, named rather than caught by a
-            // wildcard: this match is then exhaustive, so a command added to
-            // the protocol is a compile error here as well as in `Show::apply`
-            // and `SessionState::apply`.
+            Command::StoreSequence { sequence_id, mode } => {
+                self.sequence(show, *sequence_id, *mode)?;
+                self.touch()
+            }
+            // The one command that *fills* the programmer rather than reading
+            // it. The show has already said the cue exists — this is where it
+            // becomes the operator's live edit.
+            Command::EditCue {
+                sequence_id,
+                cue_number,
+            } => {
+                let Some(cue) = show.cue(*sequence_id, cue_number) else {
+                    return Err(ProgrammerError::UnknownSequence(*sequence_id));
+                };
+                let cue = cue.clone();
+                self.load_cue(show, &cue)
+            }
+            // `Update` is a store whose target is the **session's**, and this
+            // type has no session. `ShowFile::apply` resolves it and writes the
+            // cue; all that is left here is the Clear stage, exactly as it is
+            // for the three stores above.
+            Command::Update => self.touch(),
+            // The other commands, named rather than caught by a wildcard: this
+            // match is then exhaustive, so a command added to the protocol is a
+            // compile error here as well as in `Show::apply` and
+            // `SessionState::apply`.
             Command::CreateSequence { .. }
             | Command::SetCueProperty { .. }
             | Command::DeleteCue { .. }
@@ -461,11 +702,45 @@ impl Programmer {
             | Command::SetEncoderBank { .. }
             | Command::SetProgrammerPage { .. }
             | Command::SelectProgrammerParam { .. }
+            | Command::SelectSequence { .. }
             | Command::CommandLineInput { .. } => {
                 return Err(ProgrammerError::NotAProgrammerCommand);
             }
         };
-        Ok(if changed {
+        Ok(self.answer(changed))
+    }
+
+    /// The programmer's half of a store that has **already been carried out**.
+    ///
+    /// Only the Clear stage: the cue or the preset was built and written by
+    /// [`ShowFile::apply`](crate::ShowFile::apply) before this is called.
+    ///
+    /// **It exists because re-deriving the store here would be a question about
+    /// a different show** — the one the store has just written. Until S39 that
+    /// distinction cost nothing, because merging twice answers the same both
+    /// times; [`StoreMode::Remove`] is where it stops being free. A Remove that
+    /// has been applied has taken its values out, so asking a second time
+    /// whether there is anything to remove answers *no* — and the command would
+    /// be refused **after** it had changed the show, which is the one thing a
+    /// refusal may never do. Found by `prismd`'s recording, whose replay and
+    /// snapshot disagreed about a cue.
+    ///
+    /// [`Self::apply`] still validates a store, and that is not a duplicate of
+    /// this: it is the answer for a **direct** caller, who has no show write in
+    /// front of them and must not get a bare stage reset out of a store that
+    /// could not have happened.
+    pub fn stored(&mut self) -> Applied {
+        let changed = self.touch();
+        self.answer(changed)
+    }
+
+    /// What an edit that did or did not change something answers with.
+    ///
+    /// A change that changed nothing produces no delta at all: a
+    /// `ProgrammerChanged` carrying the state a client already has is a
+    /// broadcast that says nothing.
+    fn answer(&self, changed: bool) -> Applied {
+        if changed {
             Applied {
                 deltas: vec![Delta::ProgrammerChanged {
                     state: self.state.clone(),
@@ -474,7 +749,7 @@ impl Programmer {
             }
         } else {
             Applied::default()
-        })
+        }
     }
 
     // -- edits ------------------------------------------------------------
@@ -727,6 +1002,44 @@ impl Programmer {
     }
 }
 
+/// A cue with nothing set: the times, the trigger and the name a store gives a
+/// cue it is creating.
+///
+/// One function rather than three literals, because [`Programmer::cue`] and
+/// [`Programmer::sequence`] both create cues and a default that differed between
+/// them would be two answers to *what does a fresh cue do*.
+fn blank_cue() -> Cue {
+    Cue {
+        number: String::new(),
+        name: String::new(),
+        fade_in: DEFAULT_FADE_SECONDS,
+        fade_out: DEFAULT_FADE_SECONDS,
+        delay: 0.0,
+        trigger: CueTrigger::Go,
+        trigger_time: None,
+        parts: Vec::new(),
+    }
+}
+
+/// The number [`SequenceStoreMode::Append`] gives the cue it adds.
+///
+/// **One past the highest whole number in the list**, so `1`, `1.5`, `2` gains a
+/// `3` and an operator pressing Append over and over gets `1`, `2`, `3`. Not one
+/// past the highest number *of any kind*, which would answer `2.5` there and
+/// give a show a running order nobody would write by hand; and not the count of
+/// cues, which would collide the moment a cue was deleted.
+///
+/// A cue number that is not a number at all sorts after every number that is
+/// (`Cue::compare_numbers`) and is ignored here for the same reason: it is a
+/// label, and the next label is not a thing arithmetic can find.
+fn append_number(cues: &[Cue]) -> String {
+    let highest = cues
+        .iter()
+        .filter_map(|cue| cue.number.trim().parse::<f64>().ok())
+        .fold(0.0_f64, f64::max);
+    format!("{}", highest.floor() as i64 + 1)
+}
+
 /// A relative move, saturating at both ends of the attribute range.
 ///
 /// The delta is an `i32` because an encoder turns both ways and a client may
@@ -747,7 +1060,7 @@ mod tests {
     use prism_domain::{
         AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, Preset, PresetId,
         PresetValue, ProgrammerState, ProgrammerValue, ProgrammerValueSource, SelectionMode,
-        SequenceId,
+        SequenceId, SequenceStoreMode, StoreMode,
     };
 
     /// Three PARs and a dimmer, one preset, one sequence.
@@ -1021,7 +1334,9 @@ mod tests {
         programmer.apply_preset(PresetId::new(4), &show).unwrap();
         show.remove_preset(PresetId::new(4)).unwrap();
 
-        let cue = programmer.cue(&show, SequenceId::new(1), "2").unwrap();
+        let cue = programmer
+            .cue(&show, SequenceId::new(1), "2", StoreMode::Merge)
+            .unwrap();
         assert_eq!(cue.parts.len(), 1);
         assert_eq!(cue.parts[0].value, 65535);
         assert_eq!(cue.parts[0].preset_ref, None);
@@ -1040,7 +1355,9 @@ mod tests {
     fn a_new_cue_starts_with_no_time_and_no_name() {
         let show = show();
         let programmer = programmer(&show);
-        let cue = programmer.cue(&show, SequenceId::new(1), " 2 ").unwrap();
+        let cue = programmer
+            .cue(&show, SequenceId::new(1), " 2 ", StoreMode::Merge)
+            .unwrap();
         assert_eq!(cue.number, "2", "the typed number is trimmed");
         assert_eq!(cue.name, "");
         assert!(cue.fade_in.abs() < f64::EPSILON);
@@ -1056,11 +1373,11 @@ mod tests {
         let show = show();
         let programmer = programmer(&show);
         assert_eq!(
-            programmer.cue(&show, SequenceId::new(9), "1"),
+            programmer.cue(&show, SequenceId::new(9), "1", StoreMode::Merge),
             Err(ProgrammerError::UnknownSequence(SequenceId::new(9)))
         );
         assert_eq!(
-            Programmer::new().cue(&show, SequenceId::new(1), "1"),
+            Programmer::new().cue(&show, SequenceId::new(1), "1", StoreMode::Merge),
             Err(ProgrammerError::NothingToStore)
         );
     }
@@ -1075,7 +1392,9 @@ mod tests {
             programmer.unresolved(&show),
             vec![(FixtureId::new(2), AttributeType::Red)]
         );
-        let cue = programmer.cue(&show, SequenceId::new(1), "2").unwrap();
+        let cue = programmer
+            .cue(&show, SequenceId::new(1), "2", StoreMode::Merge)
+            .unwrap();
         assert_eq!(cue.parts.len(), 1);
         assert_eq!(cue.parts[0].fixture, FixtureId::new(1));
         // It is not counted as a feature group either: the show no longer knows
@@ -1106,6 +1425,237 @@ mod tests {
         programmer.clear();
         assert!(programmer.state().values.is_empty());
         assert_eq!(programmer.feature_groups(&show), Vec::new());
+    }
+
+    /// **The store commands are validated here as well, for a direct caller.**
+    ///
+    /// `ShowFile::apply` does not come through this path — it builds the cue
+    /// itself and then calls [`Programmer::stored`], because re-deriving a store
+    /// against the show it has just written asks a different question (see that
+    /// method). What is left here is the answer for somebody calling the
+    /// programmer on its own, and it has to be the same answer: a store that
+    /// could not have happened may not leave a bare Clear-stage reset behind.
+    #[test]
+    fn a_store_a_direct_caller_could_not_have_made_is_refused_here_too() {
+        let show = show();
+        let mut programmer = programmer(&show);
+        // The Clear stage is where a refused store could show up, so it is put
+        // somewhere a reset would be visible.
+        programmer.clear();
+        let before = programmer.state().clone();
+
+        for (command, expected) in [
+            (
+                Command::StoreCue {
+                    sequence_id: SequenceId::new(404),
+                    cue_number: "1".to_owned(),
+                    mode: StoreMode::Merge,
+                },
+                ProgrammerError::UnknownSequence(SequenceId::new(404)),
+            ),
+            (
+                Command::StoreCue {
+                    sequence_id: SequenceId::new(1),
+                    cue_number: "9".to_owned(),
+                    mode: StoreMode::Remove,
+                },
+                ProgrammerError::NothingToRemove {
+                    what: "cue 9 of sequence 1".to_owned(),
+                },
+            ),
+            (
+                Command::StoreSequence {
+                    sequence_id: SequenceId::new(404),
+                    mode: SequenceStoreMode::Append,
+                },
+                ProgrammerError::UnknownSequence(SequenceId::new(404)),
+            ),
+            (
+                Command::EditCue {
+                    sequence_id: SequenceId::new(1),
+                    cue_number: "404".to_owned(),
+                },
+                ProgrammerError::UnknownSequence(SequenceId::new(1)),
+            ),
+        ] {
+            assert_eq!(
+                programmer.apply(&command, &show),
+                Err(expected),
+                "{command:?}"
+            );
+            assert_eq!(programmer.state(), &before, "{command:?} moved the state");
+        }
+
+        // A store with an empty pool onto a preset that does not exist.
+        let mut empty = Programmer::new();
+        assert_eq!(
+            empty.apply(
+                &Command::StorePreset {
+                    preset_id: PresetId::new(9),
+                    pool: FeatureGroup::Color,
+                    name: String::new(),
+                    color: None,
+                    mode: StoreMode::Merge,
+                },
+                &show,
+            ),
+            Err(ProgrammerError::NothingToStore)
+        );
+    }
+
+    /// A store that *can* happen touches the Clear stage and **nothing else** —
+    /// and from an idle stage that is no change at all, so it is no delta
+    /// either.
+    ///
+    /// S13 proved that a store can never meet a non-zero Clear stage: pressing
+    /// Clear once takes the values with it, so a programmer with something to
+    /// store is a programmer at stage 0. What is left to assert is the half
+    /// that matters — a store is not a clear, and the look survives it.
+    #[test]
+    fn a_store_leaves_the_look_in_the_programmer_and_says_nothing_it_need_not() {
+        let show = show();
+        let mut programmer = programmer(&show);
+        let before = programmer.state().clone();
+        assert_eq!(before.clear_stage, ClearStage::Idle);
+
+        for command in [
+            Command::StoreCue {
+                sequence_id: SequenceId::new(1),
+                cue_number: "1".to_owned(),
+                mode: StoreMode::Merge,
+            },
+            Command::StorePreset {
+                preset_id: PresetId::new(4),
+                pool: FeatureGroup::Color,
+                name: "Deep red".to_owned(),
+                color: None,
+                mode: StoreMode::Merge,
+            },
+            Command::StoreSequence {
+                sequence_id: SequenceId::new(1),
+                mode: SequenceStoreMode::Merge,
+            },
+            // And `Update`, which this type cannot validate at all: its target
+            // is the session's, and `ShowFile::apply` is what resolves it.
+            Command::Update,
+        ] {
+            let applied = programmer
+                .apply(&command, &show)
+                .unwrap_or_else(|error| panic!("{command:?}: {error}"));
+            assert!(
+                applied.deltas.is_empty(),
+                "{command:?} broadcast a state that had not moved"
+            );
+            assert_eq!(programmer.state(), &before, "{command:?} moved the look");
+        }
+
+        // `Programmer::stored` is the same answer with no re-derivation in
+        // front of it — which is the whole difference, and the reason
+        // `ShowFile::apply` uses it. It reports a change only when the stage
+        // really moves.
+        assert!(programmer.stored().deltas.is_empty());
+        let mut cleared = programmer.clone();
+        cleared.clear();
+        assert_eq!(cleared.state().clear_stage, ClearStage::ValuesCleared);
+        assert_eq!(cleared.stored().deltas.len(), 1);
+        assert_eq!(cleared.state().clear_stage, ClearStage::Idle);
+    }
+
+    /// Every refusal says what was wrong, in words an operator can read.
+    #[test]
+    fn the_new_refusals_read_as_themselves() {
+        assert_eq!(
+            ProgrammerError::NothingToRemove {
+                what: "cue 3 of sequence 1".to_owned(),
+            }
+            .to_string(),
+            "cue 3 of sequence 1 holds none of these values, so there is nothing to remove"
+        );
+        assert_eq!(
+            ProgrammerError::NoCuesToMergeInto(SequenceId::new(9)).to_string(),
+            "sequence 9 has no cues to merge into"
+        );
+        assert_eq!(
+            ProgrammerError::NothingIsBeingEdited.to_string(),
+            "no cue is loaded, so there is nothing to update"
+        );
+    }
+
+    /// **A cue part the show can no longer resolve is left out of the load**,
+    /// exactly as it is left out of the store — so a cue naming a fixture
+    /// somebody has unpatched loads as the part of it that still means
+    /// something.
+    #[test]
+    fn loading_a_cue_leaves_out_what_the_show_can_no_longer_resolve() {
+        let mut show = show();
+        show.store_sequence(sequence(
+            2,
+            vec![prism_domain::Cue {
+                number: "1".to_owned(),
+                name: String::new(),
+                fade_in: 0.0,
+                fade_out: 0.0,
+                delay: 0.0,
+                trigger: prism_domain::CueTrigger::Go,
+                trigger_time: None,
+                parts: vec![
+                    prism_domain::CuePart {
+                        fixture: FixtureId::new(1),
+                        attribute: AttributeType::Red,
+                        value: 11,
+                        preset_ref: None,
+                    },
+                    prism_domain::CuePart {
+                        fixture: FixtureId::new(2),
+                        attribute: AttributeType::Red,
+                        value: 22,
+                        preset_ref: None,
+                    },
+                ],
+            }],
+        ))
+        .unwrap();
+        show.unpatch_fixture(FixtureId::new(2)).unwrap();
+
+        let mut programmer = Programmer::new();
+        assert!(
+            programmer
+                .apply(
+                    &Command::EditCue {
+                        sequence_id: SequenceId::new(2),
+                        cue_number: "1".to_owned(),
+                    },
+                    &show,
+                )
+                .unwrap()
+                .deltas
+                .len()
+                == 1
+        );
+        assert_eq!(programmer.state().selection, vec![FixtureId::new(1)]);
+        assert_eq!(programmer.state().values.len(), 1);
+        assert!(
+            programmer
+                .state()
+                .value(FixtureId::new(2), AttributeType::Red)
+                .is_none()
+        );
+
+        // And loading the same cue twice changes nothing the second time, which
+        // is what stops a repeated Edit broadcasting a delta that says nothing.
+        assert!(
+            programmer
+                .apply(
+                    &Command::EditCue {
+                        sequence_id: SequenceId::new(2),
+                        cue_number: "1".to_owned(),
+                    },
+                    &show,
+                )
+                .unwrap()
+                .deltas
+                .is_empty()
+        );
     }
 
     #[test]

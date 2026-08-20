@@ -13,7 +13,9 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{ExecutorId, FeatureGroup, JsonValue, SessionId, ViewId, WindowInstanceId};
+use crate::{
+    CueEdit, ExecutorId, FeatureGroup, JsonValue, SequenceId, SessionId, ViewId, WindowInstanceId,
+};
 
 /// The kinds of window the canvas can hold.
 #[derive(
@@ -147,6 +149,35 @@ pub struct Session {
     pub executor_page: u32,
     /// The executor the main fader, Flip and transport act on.
     pub selected_executor: Option<ExecutorId>,
+    /// The cue list a store with no sequence named goes into (S39).
+    ///
+    /// **S39's decision.** Until it existed the sheets followed
+    /// `selected_executor`'s sequence and S28 marked the assumption rather than
+    /// making it permanent; `ARCHITECTURE_SPEC.md` §4.4 named this session as
+    /// the one that would settle it. It is settled by adding the field, because
+    /// the alternative cannot answer `Store Cue 5` typed with no executor
+    /// selected, and cannot reach a cue list nobody has put on a fader.
+    ///
+    /// Deliberately **not** coupled to `selected_executor`: an operator
+    /// programming cue list 7 while executor 3 plays the show is the ordinary
+    /// case on a console, not the edge case, and a desk that moved this every
+    /// time a fader was selected would store into whatever was last touched.
+    ///
+    /// `#[serde(default)]` because a `.prism` file keeps each session as an
+    /// opaque MessagePack blob (S15), so a file written before this field
+    /// existed does not carry it — the rule `Executor::speed` found in S34.
+    #[serde(default)]
+    pub selected_sequence: Option<SequenceId>,
+    /// Which cue the programmer is editing, and whether it has moved since
+    /// (S39) — the state an Update key blinks on. See [`CueEdit`].
+    ///
+    /// `#[serde(default)]` for [`Self::selected_sequence`]'s reason. Reopening a
+    /// show is not resuming an edit: the programmer is deliberately not in the
+    /// file either (`prism_core::Programmer`), so an `editingCue` restored
+    /// beside an empty programmer would blink an Update that had nothing to put
+    /// back.
+    #[serde(default)]
+    pub editing_cue: Option<CueEdit>,
     /// The encoder bank currently selected.
     pub encoder_bank: FeatureGroup,
     /// Programmer page (Zoom up/down on the console).
@@ -169,6 +200,8 @@ impl Session {
             focused_window: None,
             executor_page: 0,
             selected_executor: None,
+            selected_sequence: None,
+            editing_cue: None,
             encoder_bank: FeatureGroup::Dimmer,
             programmer_page: 0,
             programmer_param_index: 0,
@@ -180,8 +213,8 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ExecutorId, FeatureGroup, JsonValue, Session, SessionId, View, ViewId, WindowInstance,
-        WindowInstanceId, WindowType,
+        CueEdit, ExecutorId, FeatureGroup, JsonValue, SequenceId, Session, SessionId, View, ViewId,
+        WindowInstance, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
     use ts_rs::{Config, TS};
@@ -207,6 +240,8 @@ mod tests {
             focused_window: Some(WindowInstanceId::new(1)),
             executor_page: 0,
             selected_executor: Some(ExecutorId::new(2)),
+            selected_sequence: Some(SequenceId::new(7)),
+            editing_cue: None,
             encoder_bank: FeatureGroup::Dimmer,
             programmer_page: 0,
             programmer_param_index: 0,
@@ -236,6 +271,7 @@ mod tests {
             [
                 "activeViewId",
                 "commandLine",
+                "editingCue",
                 "encoderBank",
                 "executorPage",
                 "focusedWindow",
@@ -245,6 +281,7 @@ mod tests {
                 "programmerPage",
                 "programmerParamIndex",
                 "selectedExecutor",
+                "selectedSequence",
             ]
         );
     }
@@ -254,9 +291,54 @@ mod tests {
         let fresh = Session::new(SessionId::new(1), "Main");
         assert_eq!(fresh.focused_window, None);
         assert_eq!(fresh.selected_executor, None);
+        // S39's two, and both start empty: a desk that opened on a cue list
+        // nobody chose would store into it.
+        assert_eq!(fresh.selected_sequence, None);
+        assert_eq!(fresh.editing_cue, None);
         assert_eq!(fresh.encoder_bank, FeatureGroup::Dimmer);
         assert!(fresh.open_windows.is_empty());
         assert!(fresh.command_line.is_empty());
+    }
+
+    /// **A session written before S39 reads back with neither field**, which is
+    /// how an opaque-document schema grows: `.prism` keeps the session as a
+    /// MessagePack blob (S15), so a field added later is one older files do not
+    /// carry. `Executor::speed` found this in S34 within a minute.
+    #[test]
+    fn a_session_written_before_s39_opens_with_nothing_selected_and_nothing_edited() {
+        let mut json = serde_json::to_value(session()).unwrap();
+        let object = json.as_object_mut().unwrap();
+        object.remove("selectedSequence");
+        object.remove("editingCue");
+        let read: Session = serde_json::from_value(json).unwrap();
+        assert_eq!(read.selected_sequence, None);
+        assert_eq!(read.editing_cue, None);
+        assert_eq!(read.selected_executor, Some(ExecutorId::new(2)));
+    }
+
+    /// The update state is *which cue* and *whether it has moved*, and both
+    /// travel.
+    #[test]
+    fn a_cue_edit_names_the_cue_and_says_whether_it_has_moved() {
+        let edit = CueEdit {
+            sequence_id: SequenceId::new(3),
+            cue_number: "1.5".to_owned(),
+            modified: true,
+        };
+        assert_eq!(
+            serde_json::to_string(&edit).unwrap(),
+            r#"{"sequenceId":3,"cueNumber":"1.5","modified":true}"#
+        );
+        let session = Session {
+            editing_cue: Some(edit.clone()),
+            ..session()
+        };
+        let json = serde_json::to_value(&session).unwrap();
+        assert_eq!(json["editingCue"]["cueNumber"], "1.5");
+        assert_eq!(
+            serde_json::from_value::<Session>(json).unwrap().editing_cue,
+            Some(edit)
+        );
     }
 
     #[test]

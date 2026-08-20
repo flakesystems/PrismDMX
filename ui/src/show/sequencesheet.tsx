@@ -16,17 +16,23 @@
  * - **Preset Pool** — the *pools*. Named looks per feature group, applied and
  *   stored, with the colour the scribble strips use.
  *
- * # The sequence in force is the selected executor's
+ * # The sequence in force is the desk's, and the executor is the transport
  *
- * **And that is a marked assumption, not a decision.** `ARCHITECTURE_SPEC.md`
- * §4.1 has no *selected sequence*, and whether it should be a session field of
- * its own is **S39**'s to settle — both answers are defensible and only one can
- * be right for `Store Cue 5`. Until then this window uses the selected
- * executor's sequence, which is the reading that needs nothing invented: every
- * part of it is already in the two documents, so nothing here is state this
- * interface holds. Choosing a sequence from the pool is therefore an
- * `AssignExecutor` — a command out, a `ShowPatch` back — and not a local
- * selection two screens could disagree about.
+ * **S28's marked assumption is settled.** §4.1 had no *selected sequence* and
+ * this window used the selected executor's, with the assumption written down
+ * rather than made permanent; §4.4 named S39 as the session that would decide,
+ * and S39 gave the session a field of its own. So the cue list this sheet shows
+ * is `Session::selectedSequence` and choosing one is a `Command::SelectSequence`
+ * — a command out, a `SessionPatch` back, and not a local selection two screens
+ * could disagree about.
+ *
+ * What changed for an operator: a cue list can be written **before** anybody
+ * decides which fader it goes on, and `Store Cue 5` means something with no
+ * executor selected. The executor line below the pool is what it always was —
+ * Go, Back, Off and which cue the playback is standing on — and it follows the
+ * *executor*, so the two can legitimately be looking at different sequences.
+ * That is the case a console has when one list is being programmed while
+ * another is on stage.
  *
  * # Nothing on this window is state this interface holds
  *
@@ -47,21 +53,25 @@ import type {
   CueTrigger,
   JsonValue,
   ProgrammerState,
+  StoreMode,
   StorePreview,
 } from "../bindings";
 import { CUE_TRIGGER_VARIANTS } from "../bindings/variants";
 import { useAsk, useSend } from "../store/hooks";
-import type { CueRow, SequenceRow } from "./looks";
+import type { CueEditInForce, CueRow, SequenceRow } from "./looks";
 import {
+  cueEditInForce,
   executorInForce,
   nextCueNumber,
   nextFreeNumber,
   secondsText,
+  sequenceInForce,
   sequenceRow,
   sequenceRows,
   sequencesDocument,
 } from "./looks";
 import { StoreRequester, isStorable, storeText } from "./store";
+import { StoreModeChooser } from "./storemode";
 
 /** Which cell of which cue is being typed into. Local, and dropped on commit. */
 interface CellDraft {
@@ -97,7 +107,14 @@ export function SequenceSheet({
   const ask = useAsk();
   const sequences = useMemo(() => sequenceRows(show), [show]);
   const inForce = useMemo(() => executorInForce(session, show), [session, show]);
-  const sequence = useMemo(
+  const chosen = useMemo(() => sequenceInForce(session), [session]);
+  const editing = useMemo(() => cueEditInForce(session), [session]);
+  const sequence = useMemo(() => sequenceRow(show, chosen), [show, chosen]);
+  // The transport line names the executor's **own** cue list, which since S39
+  // need not be the one being edited: a strip that borrowed the sheet's name
+  // would tell an operator that the fader under their hand plays a list it does
+  // not play.
+  const onExecutor = useMemo(
     () => sequenceRow(show, inForce.sequenceId),
     [show, inForce.sequenceId],
   );
@@ -105,9 +122,14 @@ export function SequenceSheet({
   const create = useCallback(() => {
     const sequenceId = nextFreeNumber(sequences);
     send({ t: "CreateSequence", sequenceId, name: `Sequence ${String(sequenceId)}` });
-    // And put it where it can be played, if there is an executor to put it on.
-    // Two commands rather than one, and each is meaningful on its own: an
-    // operator who has selected no executor still gets the cue list.
+    // And put it in force, so the sheet is looking at the list that was just
+    // made. Two commands rather than one, and each is meaningful on its own —
+    // making a cue list and choosing which one to edit are different acts, and
+    // since S39 neither of them needs an executor.
+    send({ t: "SelectSequence", sequenceId });
+    // A fader as well, if one is selected: a cue list nobody can fire is a cue
+    // list nobody can check. Refused where the slot is taken by another list,
+    // which is the daemon's decision and not this window's.
     if (inForce.executorId !== null) {
       send({ t: "AssignExecutor", executorId: inForce.executorId, sequenceId });
     }
@@ -115,26 +137,24 @@ export function SequenceSheet({
 
   const choose = useCallback(
     (sequenceId: number) => {
-      if (inForce.executorId === null) {
-        return;
-      }
-      send({ t: "AssignExecutor", executorId: inForce.executorId, sequenceId });
+      // No executor needed since S39 — which is half the reason the field
+      // exists. See the module documentation.
+      send({ t: "SelectSequence", sequenceId });
     },
-    [inForce.executorId, send],
+    [send],
   );
 
   return (
     <div className="looks" data-testid="sequence-sheet">
       <SequenceBar
         sequences={sequences}
-        current={inForce.sequenceId}
-        canChoose={inForce.executorId !== null}
+        current={chosen}
         onChoose={choose}
         onCreate={create}
       />
       <ExecutorLine
         executorId={inForce.executorId}
-        sequenceName={sequence?.name ?? null}
+        sequenceName={onExecutor?.name ?? null}
         isActive={inForce.isActive}
         currentCueIndex={inForce.currentCueIndex}
         onGo={(direction) => {
@@ -150,21 +170,29 @@ export function SequenceSheet({
       />
       {sequence === null ? (
         <p className="window-note" data-testid="no-sequence">
-          {inForce.executorId === null
-            ? "No executor is selected, so there is no cue list in force. Select one on the executor bar; the sheet follows it."
-            : "That executor has no sequence on it. Choose one above, or make a new one — it is put on this executor."}
+          No cue list is in force. Choose one above, or make a new one — a cue
+          list does not need a fader to be written.
         </p>
       ) : (
         <>
           <CueTable
             sequence={sequence}
-            currentCueIndex={inForce.isActive ? inForce.currentCueIndex : null}
+            // The playback marker only where the two are looking at the same
+            // list: an executor running sequence 3 says nothing about which row
+            // of sequence 7 an operator is editing, and a marker drawn from it
+            // would point at a cue nobody is on.
+            currentCueIndex={
+              inForce.isActive && inForce.sequenceId === sequence.id
+                ? inForce.currentCueIndex
+                : null
+            }
             onSend={send}
           />
           <StoreBar
             sequence={sequence}
             sequencesDoc={sequencesDocument(show)}
             programmer={programmer}
+            editing={editing}
             ask={ask}
             onSend={send}
           />
@@ -178,13 +206,11 @@ export function SequenceSheet({
 function SequenceBar({
   sequences,
   current,
-  canChoose,
   onChoose,
   onCreate,
 }: {
   readonly sequences: readonly SequenceRow[];
   readonly current: number | null;
-  readonly canChoose: boolean;
   readonly onChoose: (sequenceId: number) => void;
   readonly onCreate: () => void;
 }) {
@@ -200,12 +226,7 @@ function SequenceBar({
           className={`pool-chip${row.id === current ? " pool-chip-current" : ""}`}
           data-testid={`sequence-${String(row.id)}`}
           data-current={row.id === current ? "yes" : "no"}
-          disabled={!canChoose}
-          title={
-            canChoose
-              ? `Put ${row.name} on the selected executor`
-              : "Select an executor first: the sheet follows the sequence on it"
-          }
+          title={`Edit ${row.name}`}
           onClick={() => {
             onChoose(row.id);
           }}
@@ -371,6 +392,9 @@ function CueTable({
             <th scope="col">Trigger</th>
             <th scope="col">Values</th>
             <th scope="col">
+              <span className="visually-hidden">Edit</span>
+            </th>
+            <th scope="col">
               <span className="visually-hidden">Delete</span>
             </th>
           </tr>
@@ -437,6 +461,28 @@ function CueTable({
                 />
               </td>
               <td data-testid={`cue-parts-${cue.number}`}>{cue.parts.length}</td>
+              <td>
+                <button
+                  type="button"
+                  className="linkish"
+                  data-testid={`cue-edit-${cue.number}`}
+                  aria-label={`Edit cue ${cue.number}`}
+                  title="Load this cue into the programmer"
+                  onClick={() => {
+                    // **The one gesture that fills the programmer** — S39. What
+                    // comes back is the cue's every value with its preset links
+                    // kept, and the desk remembers which cue it came from, which
+                    // is what the Update key below acts on.
+                    onSend({
+                      t: "EditCue",
+                      sequenceId: sequence.id,
+                      cueNumber: cue.number,
+                    });
+                  }}
+                >
+                  Edit
+                </button>
+              </td>
               <td>
                 <button
                   type="button"
@@ -583,6 +629,7 @@ function StoreBar({
   sequence,
   sequencesDoc,
   programmer,
+  editing,
   ask,
   onSend,
 }: {
@@ -598,10 +645,18 @@ function StoreBar({
    */
   readonly sequencesDoc: JsonValue | null;
   readonly programmer: ProgrammerState | null;
+  /**
+   * The cue the programmer is editing, or `null` — S39's update state.
+   *
+   * The daemon's, not this window's: `Session::editingCue` is what every client
+   * blinks the Update key on, so a second screen agrees without being told.
+   */
+  readonly editing: CueEditInForce | null;
   readonly ask: ReturnType<typeof useAsk>;
   readonly onSend: ReturnType<typeof useSend>;
 }) {
   const [number, setNumber] = useState<string | null>(null);
+  const [mode, setMode] = useState<StoreMode>("Merge");
   const [preview, setPreview] = useState<StorePreview | null>(null);
   const wanted = number ?? nextCueNumber(sequence.cues);
 
@@ -620,15 +675,19 @@ function StoreBar({
   // different again once they have touched another encoder. **Not** whenever
   // the show moves — see `sequencesDoc`.
   useEffect(() => {
-    requester.current?.request({
-      t: "Cue",
-      sequenceId: sequence.id,
-      cueNumber: wanted,
-    });
+    requester.current?.request(
+      {
+        t: "Cue",
+        sequenceId: sequence.id,
+        cueNumber: wanted,
+      },
+      mode,
+    );
     // `sequence` is deliberately absent: `sequence.id` and `sequencesDoc`
     // between them say everything a preview depends on, and the row object is
-    // rebuilt on every render.
-  }, [programmer, sequence.id, sequencesDoc, wanted]);
+    // rebuilt on every render. `mode` is here because S39 made it part of the
+    // question — the counts on the button are what *that* mode would cost.
+  }, [mode, programmer, sequence.id, sequencesDoc, wanted]);
 
   return (
     <form
@@ -636,7 +695,7 @@ function StoreBar({
       data-testid="cue-store"
       onSubmit={(event) => {
         event.preventDefault();
-        onSend({ t: "StoreCue", sequenceId: sequence.id, cueNumber: wanted });
+        onSend({ t: "StoreCue", sequenceId: sequence.id, cueNumber: wanted, mode });
         // Dropped, not kept: what the cue list is comes back as a `ShowPatch`,
         // and the box goes back to offering the next number of whatever the
         // daemon ends up holding.
@@ -654,9 +713,31 @@ function StoreBar({
           }}
         />
       </label>
+      <StoreModeChooser mode={mode} onChoose={setMode} testId="cue-store-mode" />
       <button type="submit" data-testid="store-cue" disabled={!isStorable(preview)}>
         {storeText(preview, `cue ${wanted}`)}
       </button>
+      {editing === null ? null : (
+        <button
+          type="button"
+          // **The blink is the daemon's state and not a timer this window
+          // keeps** — `Session::editingCue.modified`. Two screens looking at
+          // one desk therefore blink together, and a client that had counted
+          // its own keystrokes would drift the moment a console touched an
+          // encoder.
+          className={`update-key${editing.modified ? " update-blinking" : ""}`}
+          data-testid="update-cue"
+          data-modified={editing.modified ? "yes" : "no"}
+          title="Store the programmer back into the cue it came from"
+          onClick={() => {
+            // It carries nothing: which cue, and that the mode is Override, are
+            // both the desk's — see `Command::Update`.
+            onSend({ t: "Update" });
+          }}
+        >
+          Update cue {editing.cueNumber}
+        </button>
+      )}
     </form>
   );
 }

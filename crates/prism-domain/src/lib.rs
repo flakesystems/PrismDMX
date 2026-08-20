@@ -45,7 +45,7 @@ mod session;
 mod wire;
 
 pub use attribute::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
-pub use command::{Command, GoDirection, ParamDirection, SelectionMode};
+pub use command::{Command, GoDirection, ParamDirection, SelectionMode, SequenceStoreMode};
 pub use delta::{Delta, NoticeLevel};
 pub use executor::{
     EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction, ExecutorButtonRef,
@@ -67,5 +67,5 @@ pub use programmer::{
 pub use query::{
     Answer, LibraryEntry, PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget,
 };
-pub use sequence::{Cue, CuePart, CueProperty, CueTrigger, Sequence};
+pub use sequence::{Cue, CueEdit, CuePart, CueProperty, CueTrigger, Sequence};
 pub use session::{Session, View, WindowInstance, WindowType};

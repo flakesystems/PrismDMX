@@ -22,6 +22,7 @@ import type { RecordedCue, RecordedPreset, RecordedSequence } from "../testing/s
 import { deltaOf, showRecording, snapshotOf, stepAbout } from "../testing/show-recording";
 import {
   colorStyle,
+  cueEditInForce,
   executorInForce,
   executorsPlaying,
   nextCueNumber,
@@ -29,6 +30,7 @@ import {
   poolRows,
   presetRows,
   secondsText,
+  sequenceInForce,
   sequenceRow,
   sequenceRows,
   triggerText,
@@ -106,6 +108,37 @@ describe("the looks, read out of the show document", () => {
     const end = snapshotOf(recording.finalSnapshot);
     expect(sequenceRows(documents.show)).toEqual(sequenceRows(end.show));
     expect(presetRows(documents.show)).toEqual(presetRows(end.show));
+  });
+
+  it("reads the cue list in force and the update state off the daemon's session", () => {
+    // **S39's two fields, replayed rather than invented.** The recording carries
+    // what a *fresh client's* snapshot said after every step, so these readers
+    // are held to the daemon's answer and not to this interface's arithmetic —
+    // which is the whole reason the update state is session state at all: a
+    // second screen has to blink the same Update key.
+    let documents = initialDocuments();
+    expect(sequenceInForce(documents.session)).toBeNull();
+    expect(cueEditInForce(documents.session)).toBeNull();
+
+    recording.steps.forEach((step, index) => {
+      for (const encoded of step.deltas) {
+        documents = applyDelta(documents, deltaOf(encoded));
+      }
+      expect(
+        sequenceInForce(documents.session),
+        `step ${String(index)} (${step.what}): the cue list in force`,
+      ).toEqual(step.selectedSequence);
+      expect(
+        cueEditInForce(documents.session),
+        `step ${String(index)} (${step.what}): the update state`,
+      ).toEqual(step.editingCue);
+    });
+
+    // And the script really did exercise both, or this would pass over a
+    // recording in which nothing was ever selected or loaded.
+    expect(recording.steps.some((step) => step.selectedSequence !== null)).toBe(true);
+    expect(recording.steps.some((step) => step.editingCue?.modified === true)).toBe(true);
+    expect(recording.steps.some((step) => step.editingCue?.modified === false)).toBe(true);
   });
 
   it("reads a preset link out of the cue rather than looking the preset up", () => {

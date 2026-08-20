@@ -17,6 +17,11 @@
  *    gesture is a command out and a `ShowPatch` back, and a `page.reload()`
  *    finds the show exactly as the daemon left it.
  *
+ * S39 added a fifth, which is the answer to the question S28 raised and did not
+ * answer: **the operator chooses the store mode**, the question carries the
+ * choice, the sentence on the button is the daemon's answer about *that* choice,
+ * and a cue can be loaded back into the programmer and put down again.
+ *
  * # Nothing here touches a device
  *
  * `CLAUDE.md`'s rule. The output is `--mock-output` and there is no console in
@@ -234,6 +239,79 @@ test("a show is written, corrected and fired entirely from the interface", async
   await expect(page.getByTestId("sequence-sheet")).toBeVisible();
   await expect(page.getByTestId("cue-row-0.5")).toBeVisible();
   await expect(page.getByTestId("sequences")).toHaveText("1");
+});
+
+test("**the operator chooses the mode, and the daemon says what it will cost first**", async ({
+  page,
+}) => {
+  // **S39, in a browser.** S28 shipped a Store button that said *Merge* because
+  // that was the only mode the daemon had, and left two tests written to go red
+  // the day the other two landed. This is the gesture those tests were about:
+  // the operator picks, the question carries the pick, and the sentence on the
+  // button is the daemon's answer about **that** pick.
+  await desk(page, PORT);
+  await page.getByTestId("open-window").selectOption("SequenceSheet");
+  await page.getByTestId("new-sequence").click();
+  await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
+  // And no executor was selected to get here, which is the other half of S39's
+  // decision: a cue list is written before anybody decides which fader it is on.
+  await expect(page.getByTestId("looks-executor-name")).toHaveText("No executor selected");
+
+  // A look of five values, stored into cue 1.
+  await command(page, "1 thru 3 red at 100");
+  await command(page, "1 thru 2 green at 60");
+  await page.getByTestId("store-cue").click();
+  await expect(page.getByTestId("cue-parts-1")).toHaveText("5");
+
+  // A different, smaller look: one fixture, one attribute.
+  await clearProgrammer(page);
+  await command(page, "1 blue at 100");
+  await page.getByTestId("store-number").fill("1");
+
+  // Merge is the default and it says so: one value added, nothing lost.
+  await expect(page.getByTestId("store-cue")).toContainText("Merge into cue 1");
+  await expect(page.getByTestId("store-cue")).toContainText("1 added");
+  await expect(page.getByTestId("store-cue")).not.toContainText("removed");
+
+  // **Choosing Override asks the daemon again**, and the answer is a different
+  // sentence about the same gesture: five values would go.
+  await page.getByTestId("cue-store-mode").selectOption("Override");
+  await expect(page.getByTestId("store-cue")).toContainText("Override into cue 1");
+  await expect(page.getByTestId("store-cue")).toContainText("5 removed");
+
+  // And a Remove writes nothing at all — refused here, because the blue is not
+  // in the cue, and the refusal is the daemon's own words on the button.
+  await page.getByTestId("cue-store-mode").selectOption("Remove");
+  await expect(page.getByTestId("store-cue")).toContainText("nothing to remove");
+  await expect(page.getByTestId("store-cue")).toBeDisabled();
+
+  // Back to Override, and press it: the cue afterwards is what was promised.
+  await page.getByTestId("cue-store-mode").selectOption("Override");
+  await page.getByTestId("store-cue").click();
+  await expect(page.getByTestId("cue-parts-1")).toHaveText("1");
+
+  // **And a cue is loaded back and put down again.** S39's `EditCue` and
+  // `Update`: the values come back into the programmer, one is changed, and the
+  // Update key puts the change into the cue without a number being typed.
+  await expect(page.getByTestId("cue-edit-1")).toBeVisible();
+  await page.getByTestId("cue-edit-1").click();
+  await expect(page.getByTestId("update-cue")).toHaveText("Update cue 1");
+  await expect(page.getByTestId("update-cue")).not.toHaveClass(/update-blinking/);
+  await command(page, "1 white at 100");
+  await expect(page.getByTestId("update-cue")).toHaveClass(/update-blinking/);
+  await page.getByTestId("update-cue").click();
+  await expect(page.getByTestId("cue-parts-1")).toHaveText("2");
+  await expect(page.getByTestId("update-cue")).not.toHaveClass(/update-blinking/);
+
+  // Clearing the programmer ends the edit, which is one of the three rules
+  // `prism_core` asserts and the one an operator meets by accident.
+  await clearProgrammer(page);
+  await expect(page.getByTestId("update-cue")).toHaveCount(0);
+
+  // Nothing of this is held here either.
+  await page.reload();
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  await expect(page.getByTestId("cue-parts-1")).toHaveText("2");
 });
 
 test("a preset link is alive: editing the preset changes the light a cue puts out", async ({

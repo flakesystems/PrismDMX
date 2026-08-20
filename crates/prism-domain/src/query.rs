@@ -162,14 +162,18 @@ pub enum StoreTarget {
 
 /// How a store combines with what is already there.
 ///
-/// **One value, and that is the point of the type.** `prism_core::Programmer`
-/// merges unconditionally and its own documentation names Merge / Override /
-/// Remove as the distinction a console makes — which is **S39**'s to build. Until
-/// then the daemon answers with the mode it will actually use and the interface
-/// puts that word on the button, rather than offering a choice it cannot honour.
+/// **Three values since S39, and the operator picks one.** S28 shipped this
+/// type with a single variant and the argument in its own documentation: the
+/// daemon answered with the mode it would actually use, because
+/// `prism_core::Programmer` merged unconditionally and a client carrying a mode
+/// the daemon did not honour would be describing an outcome that did not
+/// happen. S39 built the other two, so the mode now travels **in the command**
+/// as well as in the answer, and the outcome no longer depends on which client
+/// sent it.
 ///
-/// A client must not spell the word itself: when S39 adds the other two, a
-/// hard-coded "Merge" in an interface would go on being right-looking and wrong.
+/// A client still must not spell the word itself where it is *describing* a
+/// store: [`StorePreview::mode`] is the daemon's echo of the mode that was
+/// asked about, and the counts beside it are what that mode would do.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
 )]
@@ -179,18 +183,54 @@ pub enum StoreMode {
     ///
     /// The programmer is sparse by specification, so a store carries only what
     /// was touched this time — and overwriting would delete every value in the
-    /// cue the operator did not happen to touch, which is data loss the command
-    /// has no way to ask for.
+    /// cue the operator did not happen to touch, which is data loss no operator
+    /// asked for. The default for that reason: it is the mode that cannot lose
+    /// anything.
     #[default]
     Merge,
+    /// What is there is replaced by what is stored.
+    ///
+    /// The cue or the preset ends up holding **exactly** the programmer's
+    /// values: everything the store does not mention is thrown away. That is
+    /// what [`StorePreview::kept`] counts under Merge, and it is what
+    /// [`StorePreview::removed`] counts under this one — the same values, named
+    /// by what each mode does to them.
+    ///
+    /// The name and the times of a cue survive it. A store is about the *look*,
+    /// and a cue's name is edited through `Command::SetCueProperty`.
+    Override,
+    /// The programmer's values are **taken out** of what is there.
+    ///
+    /// The mode that stores nothing: what the programmer holds names the values
+    /// to remove, and their levels are not used at all. It is how an operator
+    /// takes a fixture back out of a cue without rebuilding the cue — refused
+    /// where there is nothing filed under that number, and refused where none of
+    /// the programmer's values are in it, because a store that writes nothing
+    /// and removes nothing is one an operator would press twice.
+    Remove,
 }
 
 /// What storing the programmer into a cue or a preset *would* do.
 ///
 /// S28's exit criterion in one type: **a store that would overwrite says what it
-/// will do before it does it, even where the only mode available is Merge.** So
-/// the three counts are the whole of what Merge means, said as numbers rather
-/// than as a warning an operator learns to click past.
+/// will do before it does it.** So the four counts are the whole of what a mode
+/// means, said as numbers rather than as a warning an operator learns to click
+/// past.
+///
+/// **The four counts account for every value on both sides**, whichever mode was
+/// asked about. Writing *S* for what is filed there now and *I* for what the
+/// programmer would bring:
+///
+/// | Mode | `added` | `replaced` | `kept` | `removed` |
+/// |---|---|---|---|---|
+/// | [`StoreMode::Merge`] | I∖S | I∩S | S∖I | 0 |
+/// | [`StoreMode::Override`] | I∖S | I∩S | 0 | S∖I |
+/// | [`StoreMode::Remove`] | 0 | 0 | S∖I | I∩S |
+///
+/// so `kept + replaced + removed` is what is filed there now, and what the store
+/// leaves behind is `added + replaced + kept`. The one number an operator is
+/// really reading is whichever of `kept` and `removed` is not zero: they are the
+/// same values, named by what the mode they chose does to them (S39).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "camelCase")]
@@ -215,8 +255,14 @@ pub struct StorePreview {
     /// Values already stored that this store would **leave alone**.
     ///
     /// The number that makes Merge legible: it is exactly what an Override would
-    /// have thrown away.
+    /// have thrown away — which is [`Self::removed`] under that mode.
     pub kept: u32,
+    /// Values already stored that this store would **take away** (S39).
+    ///
+    /// Zero under [`StoreMode::Merge`], which is why S28 could ship without it.
+    /// Under [`StoreMode::Override`] it is everything the programmer does not
+    /// mention; under [`StoreMode::Remove`] it is everything it does.
+    pub removed: u32,
 }
 
 /// Something a client asks that changes nothing.
@@ -261,13 +307,22 @@ pub enum Query {
     ///
     /// Asked rather than worked out because the answer depends on three things a
     /// client holds none of together: what the programmer holds, what is already
-    /// filed under that number, and **which store mode this build actually has**
-    /// (`StoreMode`). S28's criterion is that a store says what it will do
-    /// before it does it, and a client that counted the overlap itself would be
-    /// a second opinion about `prism_core::Programmer`'s own merge.
+    /// filed under that number, and what a store mode **does** — which is
+    /// `prism_core::Programmer`'s arithmetic and nobody else's. S28's criterion
+    /// is that a store says what it will do before it does it, and a client that
+    /// counted the overlap itself would be a second opinion about that.
+    ///
+    /// **The mode is asked rather than answered, since S39.** Until the other
+    /// two modes existed there was only one answer to give, so the daemon gave
+    /// it; now the operator chooses, the choice travels in the question, and the
+    /// answer says what *that* choice would cost. `Answer::StorePreview` echoes
+    /// it back, so a bar drawing an answer beside a chooser that has since moved
+    /// cannot describe the wrong one.
     StorePreview {
         /// Where it would go.
         target: StoreTarget,
+        /// Which mode to answer about — the one the operator has chosen.
+        mode: StoreMode,
     },
 }
 
@@ -312,7 +367,7 @@ pub enum Answer {
 #[cfg(test)]
 mod tests {
     use super::{Answer, PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget};
-    use crate::{FeatureGroup, FixtureId, PresetId, SequenceId, UniverseId};
+    use crate::{FeatureGroup, FixtureId, PresetId, SequenceId, SequenceStoreMode, UniverseId};
 
     fn conflict() -> PatchConflict {
         PatchConflict {
@@ -453,20 +508,56 @@ mod tests {
         );
     }
 
-    /// **The mode is the daemon's word, and today there is one of them.**
+    /// **The three modes are on the wire, and Merge is still the default.**
     ///
-    /// Asserted rather than assumed, because the whole reason `StoreMode` is a
-    /// type is that S39 will add Override and Remove — and an interface that had
-    /// spelled `"Merge"` itself would go on looking right after that. When this
-    /// assertion fails, every reader of `StorePreview::mode` has a second case
-    /// to answer for.
+    /// This test used to be `merge_is_the_only_store_mode_this_build_has`, and
+    /// S28 wrote it so that it would go **red** the day S39 added the other two
+    /// — because every reader of `StorePreview::mode` then had two more cases to
+    /// answer for, and an interface that had spelled `"Merge"` itself would have
+    /// gone on looking right. It has been turned round rather than deleted: the
+    /// spellings are what a client's decoder narrows against, and the default is
+    /// what a store falls back to when nothing was chosen, which has to be the
+    /// mode that cannot lose anything.
     #[test]
-    fn merge_is_the_only_store_mode_this_build_has() {
+    fn the_three_store_modes_are_on_the_wire() {
         assert_eq!(
             serde_json::to_string(&StoreMode::Merge).unwrap(),
             r#""Merge""#
         );
+        assert_eq!(
+            serde_json::to_string(&StoreMode::Override).unwrap(),
+            r#""Override""#
+        );
+        assert_eq!(
+            serde_json::to_string(&StoreMode::Remove).unwrap(),
+            r#""Remove""#
+        );
         assert_eq!(StoreMode::default(), StoreMode::Merge);
+        for mode in [StoreMode::Merge, StoreMode::Override, StoreMode::Remove] {
+            let json = serde_json::to_string(&mode).unwrap();
+            assert_eq!(serde_json::from_str::<StoreMode>(&json).unwrap(), mode);
+        }
+    }
+
+    /// The sequence-level modes are a **different** three, and deliberately so.
+    #[test]
+    fn a_sequence_store_has_its_own_three_modes() {
+        for mode in [
+            SequenceStoreMode::Append,
+            SequenceStoreMode::Override,
+            SequenceStoreMode::Merge,
+        ] {
+            let json = serde_json::to_string(&mode).unwrap();
+            assert_eq!(
+                serde_json::from_str::<SequenceStoreMode>(&json).unwrap(),
+                mode
+            );
+        }
+        assert_eq!(
+            serde_json::to_string(&SequenceStoreMode::Append).unwrap(),
+            r#""Append""#
+        );
+        assert_eq!(SequenceStoreMode::default(), SequenceStoreMode::Append);
     }
 
     /// A preview says what a store would do, and *would overwrite* is not the
@@ -482,10 +573,12 @@ mod tests {
             added: 2,
             replaced: 1,
             kept: 7,
+            removed: 0,
         };
         let json = serde_json::to_string(&preview).unwrap();
         assert!(json.contains(r#""exists":true"#), "{json}");
         assert!(json.contains(r#""kept":7"#), "{json}");
+        assert!(json.contains(r#""removed":0"#), "{json}");
         assert_eq!(
             serde_json::from_str::<StorePreview>(&json).unwrap(),
             preview
@@ -501,7 +594,8 @@ mod tests {
         );
     }
 
-    /// The question travels in the same envelope as the other three.
+    /// The question travels in the same envelope as the other three, and since
+    /// S39 it **carries the mode** the operator chose.
     #[test]
     fn a_store_preview_is_asked_like_every_other_question() {
         let query = Query::StorePreview {
@@ -509,12 +603,38 @@ mod tests {
                 sequence_id: SequenceId::new(1),
                 cue_number: "2".to_owned(),
             },
+            mode: StoreMode::Override,
         };
         assert_eq!(
             serde_json::to_string(&query).unwrap(),
-            r#"{"t":"StorePreview","target":{"t":"Cue","sequenceId":1,"cueNumber":"2"}}"#
+            r#"{"t":"StorePreview","target":{"t":"Cue","sequenceId":1,"cueNumber":"2"},"mode":"Override"}"#
         );
         let packed = rmp_serde::to_vec_named(&query).unwrap();
         assert_eq!(rmp_serde::from_slice::<Query>(&packed).unwrap(), query);
+    }
+
+    /// **A preview of a Remove says what it takes away rather than what it
+    /// writes**, and the type has to be able to carry that.
+    #[test]
+    fn a_removing_store_writes_nothing_and_says_what_goes() {
+        let preview = StorePreview {
+            accepted: true,
+            refusal: None,
+            exists: true,
+            name: "Opening".to_owned(),
+            mode: StoreMode::Remove,
+            added: 0,
+            replaced: 0,
+            kept: 2,
+            removed: 3,
+        };
+        let packed = rmp_serde::to_vec_named(&Answer::StorePreview {
+            preview: preview.clone(),
+        })
+        .unwrap();
+        assert_eq!(
+            rmp_serde::from_slice::<Answer>(&packed).unwrap(),
+            Answer::StorePreview { preview }
+        );
     }
 }

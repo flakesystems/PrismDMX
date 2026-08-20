@@ -8,10 +8,10 @@
  * until the delta came back.
  *
  * The snapshot, the deltas and the answers are all a real `prismd`'s, out of
- * `ui/tests/fixtures/show-recording.json`. The two things this file invents are
- * the *windows* and the *selected executor*: the recorded show was opened with a
- * fresh session, and which windows are open is S25's ground while the selection
- * is S26's, both asserted there.
+ * `ui/tests/fixtures/show-recording.json`. The three things this file invents
+ * are the *windows*, the *selected executor* and the *selected sequence*: the
+ * recorded show was opened with a fresh session, and which windows are open is
+ * S25's ground while the two selections are S26's and S39's, all asserted there.
  */
 
 import { decode } from "@msgpack/msgpack";
@@ -32,8 +32,20 @@ import { answerAbout, deltasAbout, showRecording, snapshotOf } from "../testing/
 import { TelemetryProvider } from "../telemetry/panel";
 import { CueViewer } from "./cueviewer";
 
-/** The recorded snapshot, with one window open and one executor selected. */
-function recordedSnapshot(window: WindowType, selectedExecutor: number | null): Snapshot {
+/**
+ * The recorded snapshot, with one window open, one executor selected and one cue
+ * list in force.
+ *
+ * The two selections are **separate** since S39, and this helper takes them
+ * separately for that reason: the sheet follows `selectedSequence` and the
+ * transport line follows `selectedExecutor`, and a test that could only set them
+ * together could not tell one from the other.
+ */
+function recordedSnapshot(
+  window: WindowType,
+  selectedExecutor: number | null,
+  selectedSequence: number | null,
+): Snapshot {
   return {
     ...snapshotOf(showRecording.initialSnapshot),
     session: {
@@ -43,6 +55,8 @@ function recordedSnapshot(window: WindowType, selectedExecutor: number | null): 
         focusedWindow: 1,
         executorPage: 0,
         selectedExecutor,
+        selectedSequence,
+        editingCue: null,
         encoderBank: "Dimmer",
         commandLine: "",
         programmerPage: 0,
@@ -59,7 +73,11 @@ type Sent =
   | { readonly t: "Query"; readonly seq: number; readonly query: { readonly t: string } };
 
 /** A whole interface with a daemon the test drives. */
-async function desk(window: WindowType = "SequenceSheet", selectedExecutor: number | null = 0) {
+async function desk(
+  window: WindowType = "SequenceSheet",
+  selectedExecutor: number | null = 0,
+  selectedSequence: number | null = 1,
+) {
   const network = new FakeNetwork();
   const clock = new ManualTimer();
   const store = new DeskStore();
@@ -86,7 +104,10 @@ async function desk(window: WindowType = "SequenceSheet", selectedExecutor: numb
     connection.start();
     network.last.open();
     network.last.deliver(
-      serverMessage({ t: "Snapshot", snapshot: recordedSnapshot(window, selectedExecutor) }),
+      serverMessage({
+        t: "Snapshot",
+        snapshot: recordedSnapshot(window, selectedExecutor, selectedSequence),
+      }),
     );
     await Promise.resolve();
   });
@@ -145,6 +166,7 @@ async function desk(window: WindowType = "SequenceSheet", selectedExecutor: numb
 const A_CUE_LIST = [
   "make a cue list to store into",
   "put it on an executor",
+  "and put it in force",
   "store it",
   "store a second cue",
   "name it",
@@ -174,22 +196,37 @@ beforeEach(() => {
 
 describe("the sequence sheet", () => {
   it("says what there is to look at when there is nothing", async () => {
-    await desk("SequenceSheet", 0);
+    await desk("SequenceSheet", 0, null);
     expect(screen.getByTestId("sequence-count").textContent).toBe("0 sequences");
-    // A fresh show has no sequences and the selected executor has none on it,
-    // which is a state the sheet has to be legible in rather than blank.
+    // A fresh show has no sequences and nothing is in force, which is a state
+    // the sheet has to be legible in rather than blank.
     expect(screen.getByTestId("no-sequence")).toBeTruthy();
     expect(screen.getByTestId("looks-executor-name").textContent).toBe("Executor 0");
   });
 
-  it("says that nothing is in force when no executor is selected", async () => {
-    await desk("SequenceSheet", null);
+  it("says that no cue list is in force rather than blaming the executor", async () => {
+    // **S39's decision, seen from the screen.** Until it landed this note said
+    // *select an executor first*, because the sheet followed the executor's
+    // sequence; a cue list is chosen in its own right now, so an operator with
+    // no executor selected is told what to do about the cue list rather than
+    // about a fader they may not want yet.
+    await desk("SequenceSheet", null, null);
     expect(screen.getByTestId("looks-executor-name").textContent).toBe("No executor selected");
-    expect(screen.getByTestId("no-sequence").textContent).toContain("No executor is selected");
-    // And the three keys are dead, because there is nothing to fire.
+    expect(screen.getByTestId("no-sequence").textContent).toContain("No cue list is in force");
+    expect(screen.getByTestId("no-sequence").textContent).not.toContain("executor");
+    // And the three transport keys are dead, because there is nothing to fire.
     for (const key of ["looks-go", "looks-back", "looks-off"]) {
       expect(screen.getByTestId(key).hasAttribute("disabled")).toBe(true);
     }
+  });
+
+  it("shows a cue list nobody has put on a fader", async () => {
+    // The other half of S39's decision, and the one an operator meets first: a
+    // show is written before anybody decides which fader each list goes on.
+    const { applyStep } = await desk("SequenceSheet", null, 1);
+    await applyStep(...A_CUE_LIST);
+    expect(screen.getByTestId("looks-executor-name").textContent).toBe("No executor selected");
+    expect(cueNumbers()).toEqual(["1", "2"]);
   });
 
   it("shows the cue list the daemon is holding, once there is one", async () => {
@@ -202,33 +239,39 @@ describe("the sequence sheet", () => {
     expect(screen.getByTestId("cue-parts-1").textContent).toBe("5");
   });
 
-  it("creates a sequence and puts it on the selected executor, in that order", async () => {
-    const { commands } = await desk();
+  it("creates a sequence, puts it in force and puts it on a fader, in that order", async () => {
+    const { commands } = await desk("SequenceSheet", 0, null);
     fireEvent.click(screen.getByTestId("new-sequence"));
-    // Two commands, and the order is the one that can succeed: a sequence has
-    // to exist before an executor can be given it.
+    // Three commands, and the order is the one that can succeed: a sequence has
+    // to exist before it can be selected or given to an executor.
     expect(commands()).toEqual([
       { t: "CreateSequence", sequenceId: 1, name: "Sequence 1" },
+      { t: "SelectSequence", sequenceId: 1 },
       { t: "AssignExecutor", executorId: 0, sequenceId: 1 },
     ]);
     // And nothing on the screen moved: the sheet still says there is nothing.
     expect(screen.getByTestId("sequence-count").textContent).toBe("0 sequences");
   });
 
-  it("creates a sequence and nothing else when no executor is selected", async () => {
-    const { commands } = await desk("SequenceSheet", null);
+  it("creates a sequence and selects it when no executor is selected", async () => {
+    // **S39.** Before it this sent one command and left the operator with a cue
+    // list they could not look at; a fader is a separate decision now.
+    const { commands } = await desk("SequenceSheet", null, null);
     fireEvent.click(screen.getByTestId("new-sequence"));
-    expect(commands()).toEqual([{ t: "CreateSequence", sequenceId: 1, name: "Sequence 1" }]);
+    expect(commands()).toEqual([
+      { t: "CreateSequence", sequenceId: 1, name: "Sequence 1" },
+      { t: "SelectSequence", sequenceId: 1 },
+    ]);
   });
 
-  it("chooses a sequence by putting it on the executor, not by remembering it", async () => {
-    const { commands, applyStep } = await desk();
+  it("chooses a cue list with a command and not by remembering it", async () => {
+    const { commands, applyStep } = await desk("SequenceSheet", null, null);
     await applyStep(...A_CUE_LIST);
     fireEvent.click(screen.getByTestId("sequence-1"));
-    // **The selected sequence is the selected executor's** — S28's marked
-    // assumption, and it is why choosing one is a command rather than a click
-    // this interface remembers.
-    expect(commands()).toEqual([{ t: "AssignExecutor", executorId: 0, sequenceId: 1 }]);
+    // **The cue list in force is the session's** — S39's decision, and it is
+    // why choosing one is a command rather than a click this interface
+    // remembers. No executor is selected and the chip is live all the same.
+    expect(commands()).toEqual([{ t: "SelectSequence", sequenceId: 1 }]);
   });
 
   it("edits one field of one cue, naming the cue by the number it started at", async () => {
@@ -461,10 +504,103 @@ describe("the store bar", () => {
     expect(numberIn("store-number")).toBe("3");
     type("store-number", "1");
     fireEvent.submit(screen.getByTestId("cue-store"));
-    expect(commands()).toEqual([{ t: "StoreCue", sequenceId: 1, cueNumber: "1" }]);
+    expect(commands()).toEqual([
+      // **The mode is on the command** since S39, and it is the chooser's
+      // default rather than the daemon's assumption.
+      { t: "StoreCue", sequenceId: 1, cueNumber: "1", mode: "Merge" },
+    ]);
     // **Dropped, not kept**: the box goes back to offering the next number of
     // whatever the daemon ends up holding.
     expect(numberIn("store-number")).toBe("3");
+  });
+
+  it("asks again in the mode the operator chose, and sends that mode", async () => {
+    // **S39, and the two halves have to move together.** Choosing a mode is not
+    // a label change: it asks `Query::StorePreview` again with that mode on it,
+    // because the counts beside the word are what *that* mode would cost. A bar
+    // that changed the word without re-asking would put "Override" over a
+    // Merge's numbers, which is worse than the hard-coded "Merge" S28 refused.
+    const { commands, queries, applyStep } = await desk();
+    await applyStep(...A_CUE_LIST);
+    const before = queries().filter((query) => query.t === "StorePreview").length;
+
+    const chooser = screen.getByTestId("cue-store-mode");
+    if (!(chooser instanceof HTMLSelectElement)) {
+      throw new Error("the mode chooser is not a select");
+    }
+    // The three the daemon has, drawn from the generated table rather than from
+    // a list this file keeps.
+    expect([...chooser.options].map((option) => option.value)).toEqual([
+      "Merge",
+      "Override",
+      "Remove",
+    ]);
+    expect(chooser.value).toBe("Merge");
+
+    fireEvent.change(chooser, { target: { value: "Override" } });
+    expect(queries().filter((query) => query.t === "StorePreview").length).toBe(before + 1);
+
+    fireEvent.submit(screen.getByTestId("cue-store"));
+    expect(commands().at(-1)).toEqual({
+      t: "StoreCue",
+      sequenceId: 1,
+      cueNumber: "3",
+      mode: "Override",
+    });
+  });
+
+  it("puts the daemon's word on the button and never one of its own", async () => {
+    // The mode on the button is `preview.mode` — the mode the *answer* carried,
+    // not the one the chooser reads now. Answering an Override question while
+    // the chooser says Override is the ordinary case; this asserts the wiring
+    // by answering with a mode the chooser is *not* on, which is the state a
+    // client is in for one round trip after every change.
+    const { answerQuery, applyStep } = await desk();
+    await applyStep(...A_CUE_LIST);
+    await answerQuery("StorePreview", answerAbout("one an operator has to be warned about"));
+    const button = screen.getByTestId("store-cue");
+    expect(button.textContent).toContain("Override");
+    expect(button.textContent).toContain("4 removed");
+    const chooser = screen.getByTestId("cue-store-mode");
+    if (!(chooser instanceof HTMLSelectElement)) {
+      throw new Error("the mode chooser is not a select");
+    }
+    expect(chooser.value).toBe("Merge");
+  });
+
+  it("loads a cue with a command and puts it back with one that carries nothing", async () => {
+    // **S39's `EditCue` and `Update`.** Neither of them is a gesture this
+    // window resolves: `EditCue` names the cue and the *daemon* fills the
+    // programmer, and `Update` names nothing at all because which cue and which
+    // mode are both the desk's.
+    const { commands, applyStep } = await desk();
+    await applyStep(...A_CUE_LIST);
+    // No cue is loaded, so there is no key to press.
+    expect(screen.queryByTestId("update-cue")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("cue-edit-1"));
+    expect(commands().at(-1)).toEqual({ t: "EditCue", sequenceId: 1, cueNumber: "1" });
+    // **And the key still is not there**, because nothing about the update
+    // state is held here: it arrives as a `SessionPatch`.
+    expect(screen.queryByTestId("update-cue")).toBeNull();
+
+    await applyStep("load cue 3 back into the programmer");
+    const key = screen.getByTestId("update-cue");
+    expect(key.textContent).toBe("Update cue 3");
+    expect(key.getAttribute("data-modified")).toBe("no");
+    expect(key.className).not.toContain("update-blinking");
+
+    // The blink is the daemon's state and not a timer this window keeps.
+    await applyStep("now change something while the cue is loaded");
+    expect(screen.getByTestId("update-cue").getAttribute("data-modified")).toBe("yes");
+    expect(screen.getByTestId("update-cue").className).toContain("update-blinking");
+
+    fireEvent.click(screen.getByTestId("update-cue"));
+    expect(commands().at(-1)).toEqual({ t: "Update" });
+
+    // And a cleared programmer ends the edit, so the key goes.
+    await applyStep("an Update after the programmer has been cleared");
+    expect(screen.queryByTestId("update-cue")).toBeNull();
   });
 
   it("goes dead when the daemon says the store would be refused", async () => {

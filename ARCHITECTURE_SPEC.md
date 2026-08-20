@@ -162,6 +162,8 @@ interface Session {
   focusedWindow: number | null;
   executorPage: number;                // Faderbank ◀▶
   selectedExecutor: ExecutorId | null; // drives main fader, Flip, transport
+  selectedSequence: SequenceId | null; // the cue list a store goes into (S39)
+  editingCue: CueEdit | null;          // which cue the programmer is editing (S39)
   encoderBank: FeatureGroup;           // Dimmer / Position / Color / Beam / Focus
   programmerPage: number;              // Zoom ▲▼ — pages the encoder bar (S35)
   programmerParamIndex: number;        // Zoom ◀▶ — what the jog wheel turns
@@ -169,7 +171,21 @@ interface Session {
 }
 ```
 
-Sessions are persisted with the show file: reopening a show restores the console exactly as it was saved.
+```typescript
+interface CueEdit {
+  sequenceId: SequenceId;
+  cueNumber: string;   // the number, not an index — a number is what an operator wrote down
+  modified: boolean;   // whether the programmer has moved since the cue was loaded
+}
+```
+
+Sessions are persisted with the show file: reopening a show restores the console exactly as it was saved. The two S39 fields are `#[serde(default)]`, because a `.prism` file keeps the session as an opaque document (S15) and a file written before them does not carry them; `editingCue` is also **not** an edit that resumes, since the programmer is deliberately not in the file either.
+
+> **The selected sequence is a field of its own, and that was S39's decision** *(S39)*. Until it existed the cue sheet followed the sequence on `selectedExecutor`, and S28 marked that as an assumption rather than making it permanent — §4.4 named S39 as the session that would settle it. It is settled by adding the field, for two reasons the executor reading cannot meet: `Store Cue 5` typed with **no executor selected** has to mean something, and a cue list nobody has put on a fader has to be editable without occupying a playback slot to reach it.
+>
+> It is deliberately **not** coupled to `selectedExecutor`. An operator programming cue list 7 while executor 3 plays the show is the ordinary case on a console, not the edge case, and a desk that moved this every time a fader was selected would store into whatever was last touched. The two are separate selections and the interface draws both: the cue sheet follows this one and the transport line follows the executor.
+
+> **`editingCue` is the update state, and it is here rather than in the programmer** *(S39)*. It is what makes an Update key blink — `editingCue !== null && editingCue.modified` — and every attached client has to blink the same key, which is precisely what §4's opening paragraph is about. A client that worked it out from its own mirror of the programmer would have to know which cue that programmer came from, and that is the fact this field carries. It is cleared when the programmer is cleared, when the cue is deleted, and when a different cue is loaded; a renumber of the cue being edited **carries it**, because otherwise an Update would recreate the cue at the number it used to have.
 
 ### 4.2 What does not (client-local)
 
@@ -192,15 +208,15 @@ Routing through the UI (MIDI → daemon → UI → daemon) would add two IPC rou
 
 ### 4.4 Commands the console issues for the interface
 
-`SelectView`, `StoreView`, `OpenWindow`, `CloseWindow`, `FocusWindow`, `SetExecutorPage`, `SelectExecutor`, `SetEncoderBank`, `SetProgrammerPage`, `SelectProgrammerParam`, `CommandLineInput`.
+`SelectView`, `StoreView`, `OpenWindow`, `CloseWindow`, `FocusWindow`, `SetExecutorPage`, `SelectExecutor`, `SelectSequence`, `SetEncoderBank`, `SetProgrammerPage`, `SelectProgrammerParam`, `CommandLineInput`.
 
-These eleven are what the **console** issues. Four more session commands are deliberately not in this list, for one reason: a console cannot issue them, but §4.1 puts what they change in the session, so a client that changed it locally would be holding session state. `PlaceWindow` (**S25**) — a console never drags a window. `RenameView`, `DeleteView` and `MoveView` (**S35**) — a console has no way to type a name, and managing a view library is something an operator does with a pointer. All four travel with the eleven, are journalled with them (that is, not at all — §6.1), and are specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md) §5.
+These twelve are what the **console** issues — eleven since S12, plus `SelectSequence` (**S39**), which a console issues by typing `Sequence 5` on the command line. Four more session commands are deliberately not in this list, for one reason: a console cannot issue them, but §4.1 puts what they change in the session, so a client that changed it locally would be holding session state. `PlaceWindow` (**S25**) — a console never drags a window. `RenameView`, `DeleteView` and `MoveView` (**S35**) — a console has no way to type a name, and managing a view library is something an operator does with a pointer. All four travel with the eleven, are journalled with them (that is, not at all — §6.1), and are specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md) §5.
 
 > **The view library's order is its numbers** *(S35)*. `views` is keyed by number, the View Selector Bar draws in number order, `SelectView` names a number and `Channel ◀▶` steps from one number to the next — so `MoveView` **exchanges two views' numbers** rather than recording an order beside them. One order means the console cannot step to a view other than the one drawn next. It costs what it has to: after a move, `SelectView 3` names a different layout, and an F-key bound to a view number reaches whatever now sits in that place.
 
 The **F1–F8 XKeys** are therefore freely assignable to "open Fixture Sheet", "open Patch", "jump to view 2" or macros — drawing on the same command list the UI buttons use. There is no second command world for the console.
 
-> **There is no *selected sequence*, and S28 marked that rather than inventing one** *(S28)*. The Sequence Sheet and the Cue Viewer show the sequence on `selectedExecutor`, which is the reading that needs nothing added to §4.1: every part of it is already in the two documents. Whether the desk should instead carry a selected sequence of its own is **S39**'s decision, and it *is* one — both answers are defensible, and only one can be right for `Store Cue 5` typed with no executor selected. Until then, choosing a sequence in the interface is a `Command::AssignExecutor`, so two screens cannot disagree about which one is in force.
+> **There is a *selected sequence*, and S39 decided it should be one** *(S28, decided in S39)*. S28 met this and marked it: the Sequence Sheet and the Cue Viewer followed the sequence on `selectedExecutor`, which needed nothing added to §4.1, and choosing one was a `Command::AssignExecutor`. Both readings were defensible and only one could be right for `Store Cue 5` typed with no executor selected — so S39 added `Session::selectedSequence` and `Command::SelectSequence`, for the reasons in §4.1. What it costs is a second selection on the screen; what it buys is a cue list that can be written before anybody decides which fader it goes on. The one reader that had to change was `ui/src/show/looks.ts::executorInForce`, exactly as S28 predicted.
 
 > **`SelectProgrammerParam` is relative and stays relative** *(S26)*. It steps, because `Zoom ◀▶` steps; there is no *set the parameter to n* command and the interface does not need one — clicking an encoder in the encoder bar composes the steps between where the highlight is and where it was clicked, which for a bank of at most six parameters is at most five commands. A thirteenth session command would have been a second way of saying the same thing, and the console could not issue it. The **upper** bound is the client's: `prism-core` deliberately does not know how many parameters a bank has (S13), so the bar stops offering *next* at the end of the bank rather than letting the index run past it, where the jog wheel would turn nothing at all.
 
@@ -376,7 +392,9 @@ The `Command` and `Delta` wire types are specified in [`docs/IPC_PROTOCOL.md`](d
 
 Applying a command produces a compact `UndoRecord` holding the inverse and the affected scope, kept in a 200-entry ring buffer.
 
-**Deliberately not undoable:** playback actions (`ExecutorGo`, `ExecutorOff`, `ExecutorButton`, master moves) and every session command from §4.4. The show edits S28 added — `StorePreset`, `CreateSequence`, `SetCueProperty`, `DeleteCue`, `AssignExecutor` — **are** undoable, and a `StorePreset` images the sequences its preset reaches as well as the preset itself: storing a preset rewrites the cue parts linked to it, so restoring the pool alone would take the edit back in one place and leave it standing in every cue. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
+**Deliberately not undoable:** playback actions (`ExecutorGo`, `ExecutorOff`, `ExecutorButton`, master moves) and every session command from §4.4 — `SelectSequence` (S39) among them, because an Oops must not pull a cue list out from under an operator any more than it pulls a window. The show edits S28 added — `StorePreset`, `CreateSequence`, `SetCueProperty`, `DeleteCue`, `AssignExecutor` — **are** undoable, and a `StorePreset` images the sequences its preset reaches as well as the preset itself: storing a preset rewrites the cue parts linked to it, so restoring the pool alone would take the edit back in one place and leave it standing in every cue. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
+
+S39's three are undoable for the same reason: `StoreSequence` and `Update` are stores, and `EditCue` fills the programmer. **Their scope carries the update state** (`Session::editingCue`), which does not contradict the exclusion of the session *commands* above — that exclusion is about an undo pulling windows out from under an operator, and this is the cursor into the cue the programmer came from. An Oops over an `EditCue` that put the programmer back and left the desk claiming to be editing cue 3 would restore half a state, and the half it left standing is the one the Update key acts on. `DeleteCue` and a renumber carry it too, because both can move it.
 
 ---
 

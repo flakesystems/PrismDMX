@@ -369,10 +369,11 @@ function readPatchPreview(value: unknown, path: string): PatchPreview {
 /**
  * What a store would do, as the daemon worked it out.
  *
- * The `mode` is narrowed against the generated table rather than taken as read:
- * `StoreMode` has one value today and **S39** adds two, so an answer naming a
- * mode this build cannot draw is one to refuse rather than to render as a word
- * nobody chose.
+ * The `mode` is narrowed against the generated table rather than taken as read.
+ * It is the mode the **question** carried since S39, echoed back, so a bar
+ * drawing an answer beside a chooser that has since moved cannot describe the
+ * wrong one — and a daemon naming a mode this build cannot draw is refused
+ * rather than rendered as a word nobody chose.
  */
 function readStorePreview(value: unknown, path: string): StorePreview {
   const record = asRecord(value, path);
@@ -392,6 +393,7 @@ function readStorePreview(value: unknown, path: string): StorePreview {
     added: asInteger(field(record, "added"), `${path}.added`),
     replaced: asInteger(field(record, "replaced"), `${path}.replaced`),
     kept: asInteger(field(record, "kept"), `${path}.kept`),
+    removed: asInteger(field(record, "removed"), `${path}.removed`),
   };
 }
 

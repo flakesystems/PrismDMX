@@ -55,8 +55,9 @@ use core::fmt;
 use std::collections::BTreeMap;
 
 use prism_domain::{
-    Command, Delta, EXECUTORS_PER_PAGE, ExecutorId, FeatureGroup, JsonPatchOp, JsonValue,
-    ParamDirection, Session, SessionId, View, ViewId, WindowInstance, WindowInstanceId, WindowType,
+    Command, CueEdit, Delta, EXECUTORS_PER_PAGE, ExecutorId, FeatureGroup, JsonPatchOp, JsonValue,
+    ParamDirection, SequenceId, Session, SessionId, View, ViewId, WindowInstance, WindowInstanceId,
+    WindowType,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,6 +79,10 @@ const FOCUSED_WINDOW: &str = "focusedWindow";
 const EXECUTOR_PAGE: &str = "executorPage";
 /// Wire name of `Session::selected_executor`.
 const SELECTED_EXECUTOR: &str = "selectedExecutor";
+/// Wire name of `Session::selected_sequence`.
+const SELECTED_SEQUENCE: &str = "selectedSequence";
+/// Wire name of `Session::editing_cue`.
+const EDITING_CUE: &str = "editingCue";
 /// Wire name of `Session::encoder_bank`.
 const ENCODER_BANK: &str = "encoderBank";
 /// Wire name of `Session::programmer_page`.
@@ -337,6 +342,7 @@ impl SessionState {
             } => self.place_window(*instance_id, *x, *y, *w, *h)?,
             Command::SetExecutorPage { page } => self.set_executor_page(*page)?,
             Command::SelectExecutor { executor_id } => self.select_executor(Some(*executor_id))?,
+            Command::SelectSequence { sequence_id } => self.select_sequence(Some(*sequence_id))?,
             Command::SetEncoderBank { group } => self.set_encoder_bank(*group)?,
             Command::SetProgrammerPage { page } => self.set_programmer_page(*page)?,
             Command::SelectProgrammerParam { direction } => {
@@ -351,6 +357,9 @@ impl SessionState {
             | Command::ApplyPreset { .. }
             | Command::ClearProgrammer
             | Command::StoreCue { .. }
+            | Command::StoreSequence { .. }
+            | Command::EditCue { .. }
+            | Command::Update
             | Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
             | Command::ExecutorButton { .. }
@@ -743,6 +752,50 @@ impl SessionState {
         self.commit(next)
     }
 
+    /// Selects the cue list a store with no sequence named goes into, or
+    /// nothing — S39.
+    ///
+    /// Deliberately **not** validated against the show and deliberately not
+    /// coupled to [`Self::select_executor`], for that method's two reasons
+    /// repeated one field along: this applier has no show, and an operator
+    /// programming cue list 7 while executor 3 plays the show is the ordinary
+    /// case. `Option` is here for the daemon, so a sequence deleted from the
+    /// show can leave the selection naming nothing rather than naming a ghost.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::NotRepresentable`] only.
+    pub fn select_sequence(
+        &mut self,
+        sequence: Option<SequenceId>,
+    ) -> Result<Vec<JsonPatchOp>, SessionError> {
+        let mut next = self.session.clone();
+        next.selected_sequence = sequence;
+        self.commit(next)
+    }
+
+    /// Records which cue the programmer is editing, or that it is editing none
+    /// — S39's update state.
+    ///
+    /// **There is no command for this**, and that is the point: it is not
+    /// something an operator sets, it is what `Command::EditCue`,
+    /// `Command::Update`, `Command::ClearProgrammer` and `Command::DeleteCue`
+    /// leave behind. [`crate::ShowFile`] is the one caller, because it is the
+    /// only place that sees the programmer and the session at once — the same
+    /// door the jog wheel's parameter index goes through (S13).
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::NotRepresentable`] only.
+    pub fn set_editing_cue(
+        &mut self,
+        editing: Option<CueEdit>,
+    ) -> Result<Vec<JsonPatchOp>, SessionError> {
+        let mut next = self.session.clone();
+        next.editing_cue = editing;
+        self.commit(next)
+    }
+
     /// Switches the encoder bank.
     ///
     /// # Errors
@@ -861,6 +914,12 @@ impl SessionState {
         }
         if next.selected_executor != current.selected_executor {
             ops.push(replace(SELECTED_EXECUTOR, &next.selected_executor)?);
+        }
+        if next.selected_sequence != current.selected_sequence {
+            ops.push(replace(SELECTED_SEQUENCE, &next.selected_sequence)?);
+        }
+        if next.editing_cue != current.editing_cue {
+            ops.push(replace(EDITING_CUE, &next.editing_cue)?);
         }
         if next.encoder_bank != current.encoder_bank {
             ops.push(replace(ENCODER_BANK, &next.encoder_bank)?);

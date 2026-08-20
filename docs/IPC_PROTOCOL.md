@@ -121,8 +121,11 @@ type Command =
   | { t: "SetAttribute"; attribute: AttributeType; value: number; relative: boolean }
   | { t: "ApplyPreset"; presetId: PresetId }
   | { t: "ClearProgrammer" }
-  | { t: "StoreCue"; sequenceId: SequenceId; cueNumber: string }
-  | { t: "StorePreset"; presetId: PresetId; pool: FeatureGroup; name: string; color: RgbColor | null }
+  | { t: "StoreCue"; sequenceId: SequenceId; cueNumber: string; mode: StoreMode }
+  | { t: "StorePreset"; presetId: PresetId; pool: FeatureGroup; name: string; color: RgbColor | null; mode: StoreMode }
+  | { t: "StoreSequence"; sequenceId: SequenceId; mode: SequenceStoreMode }
+  | { t: "EditCue"; sequenceId: SequenceId; cueNumber: string }
+  | { t: "Update" }
   | { t: "CreateSequence"; sequenceId: SequenceId; name: string }
   | { t: "SetCueProperty"; sequenceId: SequenceId; cueNumber: string; property: CueProperty }
   | { t: "DeleteCue"; sequenceId: SequenceId; cueNumber: string }
@@ -148,6 +151,7 @@ type Command =
   | { t: "PlaceWindow"; instanceId: number; x: number; y: number; w: number; h: number }
   | { t: "SetExecutorPage"; page: number }
   | { t: "SelectExecutor"; executorId: ExecutorId }
+  | { t: "SelectSequence"; sequenceId: SequenceId }
   | { t: "SetEncoderBank"; group: FeatureGroup }
   | { t: "SetProgrammerPage"; page: number }
   | { t: "SelectProgrammerParam"; direction: "Prev" | "Next" }
@@ -170,7 +174,24 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 >
 > `StorePreset` is `StoreCue`'s mirror, with two differences that both come from the type: it carries a name and a colour, so a store with an **empty programmer** onto a preset that exists is an ordinary relabel (and onto one that does not exist it is refused, because an empty preset applies nothing); and which values go in depends on the `pool`, since a colour preset takes the colour values and the bank an attribute is filed under is the *profile's* answer rather than the attribute name's.
 >
-> **None of the five carries a store mode**, and that is the session's one deliberate omission: `prism_core::Programmer` merges unconditionally, S39 adds Merge / Override / Remove, and a client carrying a mode the daemon did not honour would be describing an outcome that did not happen. What S28 does instead is *say so first* — see `Query::StorePreview` in §5.2.
+> **None of the five carried a store mode**, and that was S28's one deliberate omission: `prism_core::Programmer` merged unconditionally, and a client carrying a mode the daemon did not honour would have been describing an outcome that did not happen. What S28 did instead was *say so first* — see `Query::StorePreview` in §5.2. **S39 built the other two modes and put the mode on the commands**, which is the paragraph below.
+
+> **The store modes, and the four commands S39 added** *(S39)*. `StoreMode` has three values and the **operator** chooses one, so it travels in the command and the daemon never guesses — and the outcome no longer depends on which client sent it.
+>
+> ```typescript
+> type StoreMode = "Merge" | "Override" | "Remove";
+> type SequenceStoreMode = "Append" | "Override" | "Merge";
+> ```
+>
+> Against a cue: `Merge` writes the programmer's values in and leaves everything else standing; `Override` makes the cue's parts **exactly** the programmer's, so what it does not mention is gone; `Remove` takes the programmer's values **out** and does not use their levels at all. A cue keeps its name, its times and its trigger under all three — a store is about the look, and a cue's name is `SetCueProperty`'s. A `Remove` against a cue that is not there, or one that would remove nothing, is **refused**: a store that writes nothing and removes nothing is one an operator would press twice. A `Remove` that empties a cue leaves an **empty cue**, because deleting one is `DeleteCue`'s job and a store that took a number off a running order as a side effect would be a surprise. `StorePreset` carries the same three, and it has to: §5.2's preview can be asked about a preset in any of them, and an answer describing an outcome no command can produce is exactly what S28 refused to ship.
+>
+> **`StoreSequence` is a different act** and therefore a different command: it names a cue *list* and not a cue. `Append` adds a cue at **one past the highest whole number** the list has, so pressing it repeatedly gives `1`, `2`, `3`; `Override` makes the sequence *be* this look — one cue, numbered `1`, and the list that was there is gone; `Merge` writes the look into **every** cue, which is the cue-level Merge one level up. A `Merge` into a cue list with no cues is refused rather than quietly appending, because appending would be a different command than the one that was sent. It is deliberately **not** `CreateSequence`, which makes an empty list and stores nothing. There is no preview for it: §5.2's counts are about the values of one cue, and a sequence store is about cues — an honest answer needs a different shape, and the interface that needs one is S40's.
+>
+> **`EditCue` loads a stored cue back into the programmer, with every `presetRef` kept.** A load that took the values and dropped the links would break every preset link in the cue the next time it was stored, and it would break it *invisibly*: nothing looks different until somebody edits the preset and the cue does not follow. The values arrive as `ProgrammerValueSource::Recalled`, which is what that variant has been for since S1, and the cue's fixtures become the selection so an encoder reaches them.
+>
+> **`Update` carries nothing at all**, because everything it needs is the desk's: `Session::editingCue` says which cue, and the mode is `Override` by definition — an Update that merged could never take a value *out* of the cue it is updating, which is why an operator loads one. It is refused when nothing is loaded, and it is a **show edit**, so §6.1 makes it undoable however playback-shaped the key on the desk looks. A cue loaded with `EditCue` and updated with nothing changed is byte-identical to the cue that was loaded.
+>
+> **`SelectSequence` is the sixteenth session command**, and the one of the four §4.4 gained since S12 that a console *can* issue — `Sequence 5` on the command line. `ARCHITECTURE_SPEC.md` §4.1 has why it exists at all.
 
 > **One command presses an executor's button** *(S34)*. `ExecutorButton` carries *which button*, never what it means:
 >
@@ -210,7 +231,7 @@ type Query =
   | { t: "PatchConflicts" }
   | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number }
   | { t: "SearchLibrary"; text: string; limit: number }
-  | { t: "StorePreview"; target: StoreTarget };
+  | { t: "StorePreview"; target: StoreTarget; mode: StoreMode };
 
 type StoreTarget =
   | { t: "Cue"; sequenceId: SequenceId; cueNumber: string }
@@ -225,8 +246,8 @@ type Answer =
 interface StorePreview {
   accepted: boolean; refusal: string | null;
   exists: boolean;  name: string;        // what is filed there now
-  mode: "Merge";                          // StoreMode — one value today, three in S39
-  added: number; replaced: number; kept: number;
+  mode: StoreMode;                        // echoed back from the question (S39)
+  added: number; replaced: number; kept: number; removed: number;
 }
 ```
 
@@ -234,7 +255,17 @@ interface StorePreview {
 
 > **`StorePreview` is the variant S28 needed** *(S28)*. The exit criterion was *a store that would overwrite says what it will do **before** it does it, even where the only mode available is Merge* — which is `PatchPreview`'s shape one gesture along, and for the same reason: a store that reported afterwards would have reported it by *doing* it, on a show somebody is about to run.
 >
-> Three of the fields are the counts, and they are the whole of what Merge means: `added` is what the store puts in that is not there, `replaced` is what it writes over, and **`kept` is what it leaves alone** — exactly what an Override would have thrown away. The fourth is `mode`, and it is on the answer rather than in the client because `prism_core::Programmer` is what decides it: S39 adds Override and Remove, and an interface that had spelled `"Merge"` itself would go on looking right and be wrong. A client renders the word it is given.
+> Four of the fields are the counts, and they account for **every value on both sides** whichever mode was asked about. Writing *S* for what is filed there now and *I* for what the programmer would bring:
+>
+> | Mode | `added` | `replaced` | `kept` | `removed` |
+> |---|---|---|---|---|
+> | `Merge` | I∖S | I∩S | S∖I | 0 |
+> | `Override` | I∖S | I∩S | 0 | S∖I |
+> | `Remove` | 0 | 0 | S∖I | I∩S |
+>
+> so `kept + replaced + removed` is what is filed there now, and what the store leaves behind is `added + replaced + kept`. The one number an operator is really reading is whichever of `kept` and `removed` is not zero: they are the same values, named by what the chosen mode does to them. `removed` arrived in **S39** and is zero under Merge, which is why S28 could ship without it.
+>
+> **The mode is asked rather than answered, since S39.** S28 put it on the *answer*, because `prism_core::Programmer` was what decided it and an interface that had spelled `"Merge"` itself would have gone on looking right and been wrong. Now the operator chooses, the choice travels in the question, and the answer **echoes it** — so a bar drawing an answer beside a chooser that has since moved cannot describe the wrong one. A client still renders the word it is given rather than the word it sent.
 >
 > It takes its refusal from the **same** builders the store runs (`Programmer::cue`, `Programmer::preset`), so a preview and the store after it cannot disagree — the rule `PatchPreview` and `check_patch` already share.
 
@@ -337,5 +368,6 @@ A client is never a dependency of the engine. Disconnecting every client leaves 
 | **Telemetry layout, from the client's end** | Decode frames a running daemon sent and compare against what `TelemetryFrame::decode` made of the same bytes; assert a layout version this build does not know is **dropped** *(S24: `crates/prismd/tests/ui_telemetry.rs` records the frames and writes down `decode`'s own answers; `ui/src/telemetry/frame.test.ts` holds the browser to them. There is no encoder in the client — a client never sends telemetry (§4), and one would exist only to feed the decoder its own idea of the format)* |
 | **Telemetry into a picture** | Assert the frame reaches a canvas and **not** reactive state, and that drawing it fits the budget *(S24: a `<Profiler>` counts zero React commits over 300 frames of 64 universes; `ui/e2e/telemetry.spec.ts` measures decode and paint in Chromium against a real daemon publishing 64 real universes — 0.30 ms median, 1.10 ms p99. A frame this build cannot read costs one picture and nothing else, asserted by sending malformed frames and then a delta that has to arrive)* |
 | **A store says what it will do first (§5.2)** | Record a script of stores and questions off a running daemon; assert every question was answered, broadcast **no** deltas, and left the sequences, the presets and the executors exactly as the step before it did — and that the counts a preview answered with are the cue the daemon ended up holding *(S28: `crates/prismd/tests/ui_show.rs`. The same file asserts the session's hardest claim, that **editing a preset moves the values of the cues that reference it**: the recorded cue's blues change and its whites, which the store never mentioned, do not)* |
+| **Each store mode does what its name says (§5)** | Assert on the **stored cue** rather than on the command being accepted, for every mode and against a cue that already exists; assert that a cue loaded with `EditCue` and updated unchanged is **byte-identical**, that every `presetRef` survives the round trip, and that the update state clears on a Clear, a delete and another load *(S39: `crates/prism-core/tests/store_modes.rs`, plus the same claims off a running daemon in `crates/prismd/tests/ui_show.rs` — where the preview of each mode is compared against the cue the daemon ended up holding)* |
 | **Queries change nothing (§5.2)** | Record a script of commands and questions off a running daemon; assert every question was answered, broadcast **no** deltas at all, and left the patch and the profiles exactly as the step before it did *(S27: `crates/prismd/tests/ui_patch.rs`. The same file asserts the harder half — that a preview is what the patch that follows it does: the address a preview called free is the address the fixture ends up at, and the overlap a preview named before the command is the overlap `Show::conflicts` reports afterwards)* |
 | Transport parity | Run the full suite over both named pipe / UDS and WebSocket; results must be identical *(S16: one suite, called three times — the third transport is the in-process duplex — plus a scripted session recorded over each and compared as bytes)* |

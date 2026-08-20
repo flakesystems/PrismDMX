@@ -96,7 +96,7 @@ describe("a window's body", () => {
     expect(body("FixtureSheet", {})).toContain("Nothing is patched");
     expect(body("Groups", {})).toContain("No groups yet");
     expect(body("SequenceSheet", {})).toContain("0 sequences");
-    expect(body("SequenceSheet", {})).toContain("no cue list in force");
+    expect(body("SequenceSheet", {})).toContain("No cue list is in force");
     expect(body("CueViewer", {})).toContain("No cue list is in force");
     expect(body("PresetPool", {})).toContain("pool is empty");
     // A collection that is there but is not a collection — a hand-edited show,

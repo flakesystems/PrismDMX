@@ -64,6 +64,13 @@ export interface RecordedExecutor {
   readonly currentCueIndex: number | null;
 }
 
+/** The update state a step left behind — S39's `Session::editingCue`. */
+export interface RecordedCueEdit {
+  readonly sequenceId: number;
+  readonly cueNumber: string;
+  readonly modified: boolean;
+}
+
 /** One step of the recorded script. */
 export interface RecordedStep {
   readonly what: string;
@@ -74,6 +81,10 @@ export interface RecordedStep {
   readonly sequences: readonly RecordedSequence[];
   readonly presets: readonly RecordedPreset[];
   readonly executors: readonly RecordedExecutor[];
+  /** The cue list in force afterwards — S39. */
+  readonly selectedSequence: number | null;
+  /** The update state afterwards — S39. */
+  readonly editingCue: RecordedCueEdit | null;
 }
 
 /** The whole file. */

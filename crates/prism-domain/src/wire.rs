@@ -74,7 +74,9 @@ round_trip! {
     cue_property => crate::CueProperty,
     cue_part => crate::CuePart,
     cue => crate::Cue,
+    cue_edit => crate::CueEdit,
     sequence => crate::Sequence,
+    sequence_store_mode => crate::SequenceStoreMode,
 
     executor_button_function => crate::ExecutorButtonFunction,
     executor_button_ref => crate::ExecutorButtonRef,

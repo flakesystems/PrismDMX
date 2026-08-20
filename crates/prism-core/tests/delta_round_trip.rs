@@ -26,7 +26,7 @@ use prism_core::{
 use prism_domain::{
     AttributeType, Command, Cue, CuePart, Delta, Executor, ExecutorId, Fixture, FixtureId,
     FixtureType, Group, GroupId, JsonPatchOp, ParamDirection, Preset, PresetId, PresetValue,
-    Sequence, SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
+    Sequence, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 use proptest::prelude::*;
 
@@ -672,6 +672,7 @@ fn a_scripted_programmer_is_reproduced_command_by_command() {
     pair.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     });
     // And the three stages of the Clear, the last of which moves the session.
     for _ in 0..3 {
@@ -704,6 +705,7 @@ fn an_undo_and_a_redo_reach_all_three_mirrors() {
     pair.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
     });
     // And the third Clear, which is the session as well — so walking back from
     // here crosses all three documents.

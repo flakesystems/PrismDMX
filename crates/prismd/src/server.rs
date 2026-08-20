@@ -190,10 +190,11 @@ impl Desk {
             // and the limit is clamped here, because a client that asked for
             // two thousand would otherwise get an answer no frame can carry.
             // What a store would do, which needs the show, the programmer and
-            // the store mode this build has — all three of which live on the
-            // one `ShowFile`. See `prism_core::ShowFile::preview_store`.
-            Query::StorePreview { target } => Answer::StorePreview {
-                preview: core.file.preview_store(target),
+            // what the chosen mode *means* — all three of which live on the one
+            // `ShowFile`. See `prism_core::ShowFile::preview_store`. The mode is
+            // the operator's since S39 and travels in the question.
+            Query::StorePreview { target, mode } => Answer::StorePreview {
+                preview: core.file.preview_store(target, *mode),
             },
             Query::SearchLibrary { text, limit } => Answer::LibraryMatches {
                 matches: core

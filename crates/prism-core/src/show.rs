@@ -383,6 +383,22 @@ impl Show {
         self.sequences.get(&id)
     }
 
+    /// One cue of one sequence, by the number an operator typed.
+    ///
+    /// Trimmed on the way in, so `" 2 "` and `"2"` are the same cue — the rule
+    /// [`Programmer::cue`](crate::Programmer::cue) and
+    /// [`Self::set_cue_property`] already apply, in one place so that S39's
+    /// `EditCue` cannot read a number the store would file differently.
+    #[must_use]
+    pub fn cue(&self, sequence: SequenceId, number: &str) -> Option<&Cue> {
+        let wanted = number.trim();
+        self.sequences
+            .get(&sequence)?
+            .cues
+            .iter()
+            .find(|cue| cue.number == wanted)
+    }
+
     /// The executors, in number order.
     pub fn executors(&self) -> impl Iterator<Item = &Executor> {
         self.executors.values()

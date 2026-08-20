@@ -94,6 +94,7 @@ fn editing_a_preset_changes_the_cues_that_reference_it() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "7".to_owned(),
+        mode: StoreMode::Merge,
     })
     .expect("sequence 1 exists");
 
@@ -113,6 +114,7 @@ fn editing_a_preset_changes_the_cues_that_reference_it() {
             pool: FeatureGroup::Color,
             name: "Half red".to_owned(),
             color: Some(RgbColor { r: 128, g: 0, b: 0 }),
+            mode: StoreMode::Merge,
         })
         .expect("the store is accepted");
 
@@ -161,6 +163,7 @@ fn editing_a_preset_leaves_the_values_that_are_not_linked_to_it() {
         pool: FeatureGroup::Color,
         name: "Dim red".to_owned(),
         color: None,
+        mode: StoreMode::Merge,
     })
     .expect("the store is accepted");
 
@@ -188,6 +191,7 @@ fn a_link_to_a_value_the_preset_does_not_carry_survives_untouched() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "7".to_owned(),
+        mode: StoreMode::Merge,
     })
     .expect("sequence 1 exists");
 
@@ -200,6 +204,7 @@ fn a_link_to_a_value_the_preset_does_not_carry_survives_untouched() {
         pool: FeatureGroup::Color,
         name: "Preset 4".to_owned(),
         color: None,
+        mode: StoreMode::Merge,
     })
     .expect("the store is accepted");
 
@@ -223,6 +228,7 @@ fn an_oops_over_a_preset_edit_puts_the_cues_back_too() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "7".to_owned(),
+        mode: StoreMode::Merge,
     })
     .expect("sequence 1 exists");
     let before = bytes(&file.show);
@@ -234,6 +240,7 @@ fn an_oops_over_a_preset_edit_puts_the_cues_back_too() {
         pool: FeatureGroup::Color,
         name: "Nearly off".to_owned(),
         color: None,
+        mode: StoreMode::Merge,
     })
     .expect("the store is accepted");
     assert_ne!(bytes(&file.show), before, "the store changed nothing");
@@ -262,6 +269,7 @@ fn a_preset_stores_the_values_of_its_own_pool_only() {
         pool: FeatureGroup::Color,
         name: "Reds".to_owned(),
         color: None,
+        mode: StoreMode::Merge,
     })
     .expect("the store is accepted");
 
@@ -283,6 +291,7 @@ fn an_empty_store_creates_nothing_and_relabels_what_is_there() {
         pool: FeatureGroup::Position,
         name: "Nowhere".to_owned(),
         color: None,
+        mode: StoreMode::Merge,
     });
     assert!(
         matches!(refusal, Err(ShowFileError::Programmer(_))),
@@ -296,6 +305,7 @@ fn an_empty_store_creates_nothing_and_relabels_what_is_there() {
         pool: FeatureGroup::Color,
         name: "Renamed".to_owned(),
         color: Some(RgbColor { r: 1, g: 2, b: 3 }),
+        mode: StoreMode::Merge,
     })
     .expect("a relabel is accepted");
     let stored = file.show.preset(PresetId::new(4)).expect("preset 4");
@@ -321,10 +331,13 @@ fn a_store_preview_says_what_the_store_that_follows_it_does() {
     // (a replacement) and fixture 2 red (an addition).
     dial(&mut file, &[1, 2], AttributeType::Red, 4321);
 
-    let preview = file.preview_store(&StoreTarget::Cue {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
-    });
+    let preview = file.preview_store(
+        &StoreTarget::Cue {
+            sequence_id: SequenceId::new(1),
+            cue_number: "1".to_owned(),
+        },
+        StoreMode::Merge,
+    );
     assert!(preview.accepted);
     assert!(preview.exists, "cue 1 is already there");
     assert_eq!(preview.name, "Cue 1");
@@ -335,6 +348,7 @@ fn a_store_preview_says_what_the_store_that_follows_it_does() {
     file.apply(&Command::StoreCue {
         sequence_id: SequenceId::new(1),
         cue_number: "1".to_owned(),
+        mode: StoreMode::Merge,
     })
     .expect("the store is accepted");
     assert_ne!(bytes(&file.show), before);
@@ -364,10 +378,13 @@ fn a_store_preview_says_what_the_store_that_follows_it_does() {
 fn a_preview_of_a_cue_that_does_not_exist_is_a_create() {
     let mut file = file();
     dial(&mut file, &[1, 2], AttributeType::Red, 100);
-    let preview = file.preview_store(&StoreTarget::Cue {
-        sequence_id: SequenceId::new(1),
-        cue_number: "88".to_owned(),
-    });
+    let preview = file.preview_store(
+        &StoreTarget::Cue {
+            sequence_id: SequenceId::new(1),
+            cue_number: "88".to_owned(),
+        },
+        StoreMode::Merge,
+    );
     assert!(preview.accepted);
     assert!(!preview.exists);
     assert_eq!(preview.name, "");
@@ -378,10 +395,13 @@ fn a_preview_of_a_cue_that_does_not_exist_is_a_create() {
 #[test]
 fn a_preview_carries_the_refusal_the_store_would_answer_with() {
     let file = file();
-    let empty = file.preview_store(&StoreTarget::Cue {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
-    });
+    let empty = file.preview_store(
+        &StoreTarget::Cue {
+            sequence_id: SequenceId::new(1),
+            cue_number: "1".to_owned(),
+        },
+        StoreMode::Merge,
+    );
     assert!(!empty.accepted);
     assert!(empty.refusal.is_some());
     // Even refused, it still says what is there — an operator looking at cue 1
@@ -389,10 +409,13 @@ fn a_preview_carries_the_refusal_the_store_would_answer_with() {
     assert!(empty.exists);
     assert_eq!(empty.name, "Cue 1");
 
-    let missing = file.preview_store(&StoreTarget::Cue {
-        sequence_id: SequenceId::new(404),
-        cue_number: "1".to_owned(),
-    });
+    let missing = file.preview_store(
+        &StoreTarget::Cue {
+            sequence_id: SequenceId::new(404),
+            cue_number: "1".to_owned(),
+        },
+        StoreMode::Merge,
+    );
     assert!(!missing.accepted);
     assert!(!missing.exists);
     assert!(
@@ -431,7 +454,7 @@ fn a_store_preview_writes_nothing_at_all() {
             pool: FeatureGroup::Beam,
         },
     ] {
-        let _ = file.preview_store(&target);
+        let _ = file.preview_store(&target, StoreMode::Merge);
     }
     assert_eq!(bytes(&file.show), before);
     assert_eq!(file.programmer.state(), &programmer);
@@ -445,17 +468,23 @@ fn a_preset_preview_counts_only_the_values_of_its_pool() {
     dial(&mut file, &[1], AttributeType::Red, 65535);
     dial(&mut file, &[4], AttributeType::Dimmer, 500);
 
-    let colour = file.preview_store(&StoreTarget::Preset {
-        preset_id: PresetId::new(4),
-        pool: FeatureGroup::Color,
-    });
+    let colour = file.preview_store(
+        &StoreTarget::Preset {
+            preset_id: PresetId::new(4),
+            pool: FeatureGroup::Color,
+        },
+        StoreMode::Merge,
+    );
     // Preset 4 holds fixture 1 red already, so this replaces one and adds none.
     assert_eq!((colour.added, colour.replaced, colour.kept), (0, 1, 0));
 
-    let dimmer = file.preview_store(&StoreTarget::Preset {
-        preset_id: PresetId::new(4),
-        pool: FeatureGroup::Dimmer,
-    });
+    let dimmer = file.preview_store(
+        &StoreTarget::Preset {
+            preset_id: PresetId::new(4),
+            pool: FeatureGroup::Dimmer,
+        },
+        StoreMode::Merge,
+    );
     // The dimmer value is the only one of that pool, and preset 4's one stored
     // value is **kept**, which is exactly what Merge means.
     assert_eq!((dimmer.added, dimmer.replaced, dimmer.kept), (1, 0, 1));

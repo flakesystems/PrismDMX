@@ -22,12 +22,15 @@
 //! | `PatchFixture`, `UnpatchFixture` | that one fixture's patch entry |
 //! | `RenumberFixture` | **both** numbers' patch entries — the one it left and the one it took |
 //! | `EmbedFixtureType` | that one embedded profile |
-//! | `StoreCue` | that one sequence, the programmer, the programmer's page state |
-//! | `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` | the programmer and its page state |
+//! | `StoreCue`, `StoreSequence`, `EditCue`, `Update` | that one sequence and the whole desk state a programmer command moves |
+//! | `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` | the desk state, which is the programmer, its page state and the update state |
+//! | `CreateSequence`, `SetCueProperty`, `DeleteCue` | that one sequence, and the update state it can clear |
+//! | `StorePreset` | that preset, every sequence it reaches, and the desk state |
+//! | `AssignExecutor` | that one executor slot |
 //!
-//! Those six are exactly the undoable commands: the twenty-three of
-//! `docs/IPC_PROTOCOL.md` §5 less the three playback actions, less `Oops`,
-//! `Redo` and `SaveShow`, less the eleven §4.4 session commands.
+//! Those are exactly the undoable commands: the forty of
+//! `docs/IPC_PROTOCOL.md` §5 less the four playback actions, less `Oops`,
+//! `Redo` and `SaveShow`, less the sixteen §4.4 session commands.
 //!
 //! # Why the record holds two images rather than one inverse
 //!
@@ -60,7 +63,7 @@ use core::fmt;
 use std::collections::VecDeque;
 
 use prism_domain::{
-    Command, Executor, ExecutorId, Fixture, FixtureId, FixtureType, Preset, PresetId,
+    Command, CueEdit, Executor, ExecutorId, Fixture, FixtureId, FixtureType, Preset, PresetId,
     ProgrammerState, Sequence, SequenceId,
 };
 
@@ -109,6 +112,9 @@ pub enum UndoScope {
     /// The session's programmer page and jog-wheel parameter index — the two
     /// §4.1 fields a programmer command reaches into (S13).
     ProgrammerPage,
+    /// The session's update state: which cue the programmer is editing, and
+    /// whether it has moved since (S39).
+    CueEdit,
 }
 
 /// One piece of state, as it stood at one moment.
@@ -157,6 +163,17 @@ pub(crate) enum Image {
         /// `Session::programmer_param_index`.
         param_index: u32,
     },
+    /// The session's update state — `Session::editing_cue` (S39). `None`: the
+    /// programmer was editing nothing.
+    ///
+    /// **In the scope for [`Self::ProgrammerPage`]'s reason**, which §6.1's
+    /// exclusion of the session *commands* does not contradict: the exclusion is
+    /// about an undo pulling windows out from under an operator, and this is the
+    /// cursor into the cue the programmer came from. An Oops over an `EditCue`
+    /// that put the programmer back and left the desk claiming to be editing cue
+    /// 3 would restore half a state — and the half it left standing is the one
+    /// an Update key acts on.
+    CueEdit(Option<CueEdit>),
 }
 
 impl Image {
@@ -170,6 +187,7 @@ impl Image {
             Self::Executor(id, _) => UndoScope::Executor(*id),
             Self::Programmer(_) => UndoScope::Programmer,
             Self::ProgrammerPage { .. } => UndoScope::ProgrammerPage,
+            Self::CueEdit(_) => UndoScope::CueEdit,
         }
     }
 }
@@ -462,6 +480,31 @@ mod tests {
         assert_eq!(
             created.scope(),
             vec![UndoScope::Sequence(SequenceId::new(3))]
+        );
+    }
+
+    /// **The update state is a scope of its own**, present or not — S39. An
+    /// Oops over an `EditCue` has to be able to say *the programmer was editing
+    /// nothing*, which is the same absence a created sequence needed in S28.
+    #[test]
+    fn a_cue_edit_image_names_itself_whether_or_not_a_cue_was_loaded() {
+        assert_eq!(Image::CueEdit(None).scope(), UndoScope::CueEdit);
+        let loaded = Image::CueEdit(Some(prism_domain::CueEdit {
+            sequence_id: SequenceId::new(1),
+            cue_number: "3".to_owned(),
+            modified: false,
+        }));
+        assert_eq!(loaded.scope(), UndoScope::CueEdit);
+        assert!(
+            UndoRecord::new(
+                Command::EditCue {
+                    sequence_id: SequenceId::new(1),
+                    cue_number: "3".to_owned(),
+                },
+                vec![Image::CueEdit(None)],
+                vec![loaded],
+            )
+            .is_a_step()
         );
     }
 

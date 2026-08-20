@@ -268,6 +268,7 @@ impl Show {
             Command::StoreCue {
                 sequence_id,
                 cue_number,
+                ..
             } => {
                 if self.sequence(*sequence_id).is_none() {
                     return Err(ShowError::UnknownSequence(*sequence_id));
@@ -281,6 +282,36 @@ impl Show {
             // and which number. The values come out of the programmer, which
             // this model does not hold — the same split `StoreCue` has.
             Command::StorePreset { .. } => Ok(Applied::effect(Effect::Programmer)),
+            // S39's three, and all three are the `StoreCue` split again: the
+            // show says the half only it can see and names who finishes.
+            Command::StoreSequence { sequence_id, .. } => {
+                if self.sequence(*sequence_id).is_none() {
+                    return Err(ShowError::UnknownSequence(*sequence_id));
+                }
+                Ok(Applied::effect(Effect::Programmer))
+            }
+            Command::EditCue {
+                sequence_id,
+                cue_number,
+            } => {
+                if self.sequence(*sequence_id).is_none() {
+                    return Err(ShowError::UnknownSequence(*sequence_id));
+                }
+                if self.cue(*sequence_id, cue_number).is_none() {
+                    return Err(ShowError::UnknownCue {
+                        sequence: *sequence_id,
+                        number: cue_number.trim().to_owned(),
+                    });
+                }
+                Ok(Applied::effect(Effect::Programmer))
+            }
+            // **The one show command the show cannot validate at all**, and it
+            // is not the same shape as `EmbedFixtureType`'s missing library: an
+            // `Update` names its cue through `Session::editingCue`, so the show
+            // does not know *which* cue until `ShowFile::apply` has read the
+            // session. There is nothing here to check that would not be checked
+            // again there against the cue that turns out to be meant.
+            Command::Update => Ok(Applied::effect(Effect::Programmer)),
             Command::CreateSequence { sequence_id, name } => {
                 let ops = self.create_sequence(*sequence_id, name)?;
                 Ok(Applied {
@@ -382,7 +413,7 @@ impl Show {
             Command::Oops => Ok(Applied::effect(Effect::Undo)),
             Command::Redo => Ok(Applied::effect(Effect::Redo)),
             Command::SaveShow => Ok(Applied::effect(Effect::Save)),
-            // The fifteen session commands, named rather than caught by a
+            // The sixteen session commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
             // the protocol is a compile error here instead of a silent
             // rejection at run time.
@@ -400,6 +431,7 @@ impl Show {
             | Command::SetEncoderBank { .. }
             | Command::SetProgrammerPage { .. }
             | Command::SelectProgrammerParam { .. }
+            | Command::SelectSequence { .. }
             | Command::CommandLineInput { .. } => Err(ShowError::NotAShowCommand),
         }
     }
@@ -625,7 +657,7 @@ mod tests {
     use crate::{Show, ShowError};
     use prism_domain::{
         AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, JsonPatchOp,
-        NoticeLevel, PresetId, SelectionMode, SequenceId, UniverseId,
+        NoticeLevel, PresetId, SelectionMode, SequenceId, StoreMode, UniverseId,
     };
 
     fn show() -> Show {
@@ -819,6 +851,7 @@ mod tests {
             Command::StoreCue {
                 sequence_id: SequenceId::new(1),
                 cue_number: "2".to_owned(),
+                mode: StoreMode::Merge,
             },
         ] {
             let applied = show.apply(&command).unwrap();
@@ -848,6 +881,7 @@ mod tests {
             show.apply(&Command::StoreCue {
                 sequence_id: SequenceId::new(9),
                 cue_number: "1".to_owned(),
+                mode: StoreMode::Merge,
             }),
             Err(ShowError::UnknownSequence(SequenceId::new(9)))
         );
@@ -855,6 +889,7 @@ mod tests {
             show.apply(&Command::StoreCue {
                 sequence_id: SequenceId::new(1),
                 cue_number: "  ".to_owned(),
+                mode: StoreMode::Merge,
             }),
             Err(ShowError::EmptyCueNumber)
         );

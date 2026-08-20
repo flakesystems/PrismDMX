@@ -226,7 +226,7 @@ describe("the preset pools", () => {
     type("preset-name", "Tight");
     fireEvent.submit(screen.getByTestId("preset-store"));
     expect(commands()).toEqual([
-      { t: "StorePreset", presetId: 2, pool: "Beam", name: "Tight", color: null },
+      { t: "StorePreset", presetId: 2, pool: "Beam", name: "Tight", color: null, mode: "Merge" },
     ]);
     // **Dropped, not kept**: the boxes go back to offering what the daemon's
     // pool says next.
@@ -251,6 +251,9 @@ describe("the preset pools", () => {
         // A relabel that dropped the colour would throw away something an
         // operator chose and nothing on this screen can put back.
         color: { r: 0, g: 0, b: 255 },
+        // The chooser's default, carried rather than assumed by the daemon —
+        // S39. A relabel is a Merge, which is the mode that cannot lose a value.
+        mode: "Merge",
       },
     ]);
   });
@@ -304,7 +307,7 @@ describe("the preset pools", () => {
     expect(valueIn("preset-number")).toBe("2");
     fireEvent.submit(screen.getByTestId("preset-store"));
     expect(commands()).toEqual([
-      { t: "StorePreset", presetId: 2, pool: "Color", name: "Color 2", color: null },
+      { t: "StorePreset", presetId: 2, pool: "Color", name: "Color 2", color: null, mode: "Merge" },
     ]);
   });
 });
