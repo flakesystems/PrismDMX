@@ -279,14 +279,15 @@ mod tests {
         let file = show_file();
         let store = ShowStore::open(dir.join("test.prism")).unwrap();
         let layout = Arc::new(crate::engine::frame_layout(4).unwrap());
-        let body = crate::core::build_body(&layout, &file).unwrap();
+        let report = Arc::new(prism_engine::PlaybackReport::new(8));
+        let body = crate::core::build_body(&layout, &file, &report).unwrap();
 
         let mut publisher = FramePublisher::new(Arc::clone(&layout));
         let subscriber = publisher.subscribe();
         let output = MockOutput::new(OutputId::new(1), [prism_domain::UniverseId::new(1)]);
         let driver = spawn("out-mock", output, subscriber, RunnerConfig::default()).unwrap();
         let engine = EngineThread::start(body, publisher).unwrap();
-        let core = Core::new(file, store, engine, layout).unwrap();
+        let core = Core::new(file, store, engine, layout, report).unwrap();
 
         let outputs = vec![OutputEntry {
             id: OutputId::new(1),
@@ -378,11 +379,22 @@ mod tests {
         let CommandOutcome::Applied { deltas } = outcome else {
             panic!("a Go on a loaded executor is applied, not {outcome:?}");
         };
+        // A Go carries no deltas of its own: since S34 what the executor is
+        // doing comes back from the tick, through `Core::poll_playback`, which
+        // the daemon's own loop calls. What this asserts is that the command was
+        // *applied* rather than refused.
+        assert!(deltas.is_empty(), "{deltas:?}");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut reported = Vec::new();
+        while std::time::Instant::now() < deadline && reported.is_empty() {
+            reported.extend(desk.core().poll_playback());
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
         assert!(
-            deltas
+            reported
                 .iter()
                 .any(|delta| matches!(delta, Delta::ExecutorState { .. })),
-            "{deltas:?}"
+            "{reported:?}"
         );
 
         let outcome = desk.command(Command::ExecutorGo {

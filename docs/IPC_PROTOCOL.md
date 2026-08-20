@@ -129,6 +129,7 @@ type Command =
   | { t: "AssignExecutor"; executorId: ExecutorId; sequenceId: SequenceId | null }
   | { t: "ExecutorGo"; executorId: ExecutorId; direction: "Next" | "Prev" }
   | { t: "ExecutorOff"; executorId: ExecutorId }
+  | { t: "ExecutorButton"; executorId: ExecutorId; button: ExecutorButtonRef; pressed: boolean }
   | { t: "SetExecutorMaster"; executorId: ExecutorId; level: number }
   | { t: "PatchFixture"; /* … */ }
   | { t: "UnpatchFixture"; id: FixtureId }
@@ -170,6 +171,20 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > `StorePreset` is `StoreCue`'s mirror, with two differences that both come from the type: it carries a name and a colour, so a store with an **empty programmer** onto a preset that exists is an ordinary relabel (and onto one that does not exist it is refused, because an empty preset applies nothing); and which values go in depends on the `pool`, since a colour preset takes the colour values and the bank an attribute is filed under is the *profile's* answer rather than the attribute name's.
 >
 > **None of the five carries a store mode**, and that is the session's one deliberate omission: `prism_core::Programmer` merges unconditionally, S39 adds Merge / Override / Remove, and a client carrying a mode the daemon did not honour would be describing an outcome that did not happen. What S28 does instead is *say so first* — see `Query::StorePreview` in §5.2.
+
+> **One command presses an executor's button** *(S34)*. `ExecutorButton` carries *which button*, never what it means:
+>
+> ```typescript
+> type ExecutorButtonRef =
+>   | { t: "Slot"; index: number }                         // a hardware position
+>   | { t: "Function"; function: ExecutorButtonFunction };  // a profile's own row
+> ```
+>
+> `prism_core::Show::apply` resolves it against that executor's `buttonFunctions`, which is **show data**, and it is the only place `isActive` is read to decide what a `Toggle` comes out as. A client that resolved one for itself would race a second client doing the same, and the daemon would be told to do something nobody pressed. `pressed` exists for `Flash`, which is momentary: the release is half the gesture, and every other function ignores it.
+>
+> Before it, three of the eight `ExecutorButtonFunction` values had commands and five did not. `docs/MCU_MAPPING.md` §4.2.1 records the whole history — S22 found the gap in the binding table, S26 met it again in the executor bar and drew four keys disabled with the reason on them, and this closed all three of §4.1's unresolved rows at once.
+>
+> **`SetExecutorMaster` did not change and its meaning did.** It is still one command for a fader, and since S34 the daemon routes it through the executor's own `faderFunction`: `Master` moves the master, `Speed` moves the speed master (`docs/DMX_MERGE.md` §4.1), `XFade` drives a manual crossfade and carries no show state at all, and `Empty` does nothing. `ARCHITECTURE_SPEC.md` §6 has said what a fader does is the executor's setting since S1; this is the daemon reading it.
 
 > **`PlaceWindow` is twelfth and is not in `ARCHITECTURE_SPEC.md` §4.4** *(S25)*. §4.4 lists what the *console* issues, and an X-Touch opens and closes windows without ever dragging one. But §4.1 puts `x`, `y`, `w` and `h` in the session, so a window moved on one screen has to move on every other one — and a client that kept the geometry to itself would be holding session state locally, which is precisely what **D11** exists to prevent. The gap was found when the canvas was built and there was no honest way to drag a window; the four coordinates are canvas units and are rejected as NaN or infinity in both directions, like every other `f64` in the domain.
 
@@ -261,6 +276,12 @@ type Delta =
 ```
 
 Deltas are ordered per connection. A client that has applied every delta since its snapshot holds state identical to the daemon's.
+
+> **`ExecutorState` is the tick's, and only the tick's** *(S34)*. `isActive` and `cueIndex` are what `prism_engine::PlaybackReport` published on the last tick, sampled by the daemon at 25 ms and broadcast **only when one of them has changed**. Two things follow.
+>
+> It **does not arrive with the command that caused it**: an `ExecutorGo` is acknowledged with no delta at all, and the state follows a fraction of a second later. That is deliberate — until S34 the daemon wrote `isActive` on the way past because nothing else could, and with a readback that becomes two authors racing, whose symptom is a strip that lights, goes dark and lights again. `ARCHITECTURE_SPEC.md` §3.1.1 has the rest.
+>
+> And it is **silent while a fade runs**. A cue index changes when a cue changes, not when a level does, so this delta does not move at playback rates — which matters because it moves the show *document*, and a client that re-asks a question on every show change (`Query::StorePreview`, §5.2) would otherwise be asking it per frame.
 
 ---
 

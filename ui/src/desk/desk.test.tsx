@@ -28,7 +28,6 @@ import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { TelemetryProvider } from "../telemetry/panel";
-import { UNPRESSABLE } from "./executorbar";
 import { ENCODERS_PER_PAGE } from "./programmer";
 import { SEND_INTERVAL_MS } from "./valuedrag";
 
@@ -216,7 +215,14 @@ it("asks for an executor to be selected rather than lighting it", () => {
     expect(screen.getByTestId("strip-2").dataset["selected"]).toBe("yes");
 });
 
-it("sends Go and Off from the buttons the show assigns", () => {
+/** Presses a strip button and lets it go, the way a finger does. */
+function pressButton(testId: string) {
+    const button = screen.getByTestId(testId);
+    fireEvent.pointerDown(button, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(button, { pointerId: 1 });
+}
+
+it("sends which button was pressed, and never what it means", () => {
     const { commands, answer } = desk();
     // Strip 0's four are Go+, Go−, Off, Empty — and Empty draws nothing.
     expect(screen.getByTestId("button-0-0").dataset["function"]).toBe("Go+");
@@ -224,13 +230,18 @@ it("sends Go and Off from the buttons the show assigns", () => {
     expect(screen.getByTestId("button-0-2").dataset["function"]).toBe("Off");
     expect(screen.queryByTestId("button-0-3")).toBeNull();
 
-    fireEvent.click(screen.getByTestId("button-0-0"));
-    fireEvent.click(screen.getByTestId("button-0-1"));
-    fireEvent.click(screen.getByTestId("button-0-2"));
+    pressButton("button-0-0");
+    pressButton("button-0-2");
+    // **The position, not the function.** The daemon resolves it against this
+    // executor's own `buttonFunctions`; a command carrying `ExecutorGo` here
+    // would be this interface deciding what a show setting means (S34,
+    // `docs/MCU_MAPPING.md` §4.2.1). Both edges go out, because `Flash` is
+    // momentary and this bar cannot know which key has one.
     expect(commands()).toEqual([
-        { t: "ExecutorGo", executorId: 0, direction: "Next" },
-        { t: "ExecutorGo", executorId: 0, direction: "Prev" },
-        { t: "ExecutorOff", executorId: 0 },
+        { t: "ExecutorButton", executorId: 0, button: { t: "Slot", index: 0 }, pressed: true },
+        { t: "ExecutorButton", executorId: 0, button: { t: "Slot", index: 0 }, pressed: false },
+        { t: "ExecutorButton", executorId: 0, button: { t: "Slot", index: 2 }, pressed: true },
+        { t: "ExecutorButton", executorId: 0, button: { t: "Slot", index: 2 }, pressed: false },
     ]);
 
     // The executor is not running until the daemon says so. Steps 0–5 include
@@ -245,36 +256,67 @@ it("sends Go and Off from the buttons the show assigns", () => {
 });
 
 /**
- * **The finding, drawn rather than hidden and not guessed at.**
+ * **The four buttons S26 had to draw disabled are pressable now, and they are
+ * pressed exactly like the other four.**
  *
- * `On`, `Flash`, `Toggle` and `LearnSpeed` are executor *functions* — show
- * data — and the protocol has no command that presses an executor's button
- * and lets the executor decide what that means (S22,
- * `docs/MCU_MAPPING.md` §4.2.1). Strip 2's four are exactly those, so the bar
- * draws four buttons that say why they cannot be pressed.
+ * `On`, `Flash`, `Toggle` and `LearnSpeed` are executor *functions* — show data
+ * — and until S34 the protocol had no command that pressed an executor's button
+ * and let the executor decide what that meant (S22,
+ * `docs/MCU_MAPPING.md` §4.2.1). Strip 2's four are exactly those, so this is
+ * where the bar would have to invent a meaning if it were ever going to. It
+ * sends the position and nothing else.
  */
-    it("draws the buttons it cannot press, and says why", () => {
+    it("presses the four functions it once had to draw disabled", () => {
         const { commands } = desk();
         for (const [index, fn] of ["Flash", "Toggle", "On", "LearnSpeed"].entries()) {
             const button = screen.getByTestId(`button-2-${String(index)}`);
             expect(button.dataset["function"]).toBe(fn);
-            expect(button.hasAttribute("disabled")).toBe(true);
-            expect(button.title).toBe(UNPRESSABLE);
-            fireEvent.click(button);
+            expect(button.hasAttribute("disabled")).toBe(false);
+            pressButton(`button-2-${String(index)}`);
         }
-        // Four presses, and not one command: resolving `Toggle` against
-        // `isActive` would be this interface deciding what the show's own
-        // setting means. Not one `SelectExecutor` either — the select target is
-        // the strip's head, so pressing a button on a strip does not also
-        // select it.
-        expect(commands()).toEqual([]);
+        // Four presses and four releases, all of them the same shape. Not one
+        // `ExecutorGo` and not one `ExecutorOff`: this interface never decides
+        // what a function means. Not one `SelectExecutor` either — the select
+        // target is the strip's head, so pressing a button on a strip does not
+        // also select it.
+        expect(commands()).toEqual(
+            [0, 1, 2, 3].flatMap((index) => [
+                { t: "ExecutorButton", executorId: 2, button: { t: "Slot", index }, pressed: true },
+                {
+                    t: "ExecutorButton",
+                    executorId: 2,
+                    button: { t: "Slot", index },
+                    pressed: false,
+                },
+            ]),
+        );
     });
 
-    it("has no cue number to show, because nothing feeds one back", () => {
-        // `Executor::currentCueIndex` is in the domain and on the wire, and
-        // `prismd` never fills it — see the decision log. A dash rather than a
-        // number an interface made up.
-        desk();
+    it("releases a flash even when the pointer slides off the key", () => {
+        // The half of `Flash` that puts the stored master back. A press with no
+        // release is a strip left at full for the rest of the show.
+        const { commands } = desk();
+        const button = screen.getByTestId("button-2-0");
+        fireEvent.pointerDown(button, { button: 0, pointerId: 1 });
+        fireEvent.pointerCancel(button, { pointerId: 1 });
+        expect(commands()).toEqual([
+            { t: "ExecutorButton", executorId: 2, button: { t: "Slot", index: 0 }, pressed: true },
+            { t: "ExecutorButton", executorId: 2, button: { t: "Slot", index: 0 }, pressed: false },
+        ]);
+    });
+
+    it("shows the cue the daemon says the playback is on", () => {
+        // S26 and S28 both had to draw a dash here, because nothing filled
+        // `Executor::currentCueIndex`. S34's readback does, and the recorded
+        // script is a real daemon's answer rather than a number this interface
+        // made up.
+        const { answer } = desk();
+        expect(screen.getByTestId("cue-0").textContent).toBe("—");
+        for (const step of [0, 1, 2, 3, 4, 5]) {
+            answer(step);
+        }
+        expect(screen.getByTestId("cue-0").textContent).toBe("Q1");
+        answer(6);
         expect(screen.getByTestId("cue-0").textContent).toBe("—");
     });
 

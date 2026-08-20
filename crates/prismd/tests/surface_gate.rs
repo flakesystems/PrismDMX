@@ -78,6 +78,7 @@ fn write_console_show(path: &Path) {
             button_functions: Vec::new(),
             encoder_function: ExecutorEncoderFunction::Empty,
             master_level: 12_345,
+            speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
         })

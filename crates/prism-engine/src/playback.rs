@@ -48,6 +48,15 @@ pub struct PlaybackSource {
     executor: ExecutorId,
     activation: Option<u64>,
     master: u16,
+    /// The level a held `Flash` is contributing at, if one is held.
+    ///
+    /// A **layer over** the master rather than a write into it
+    /// (`docs/DMX_MERGE.md` §2.1 applies the master before the maximum, and this
+    /// is what is applied). Releasing a flash therefore restores exactly the
+    /// master that was stored, including one that arrived *while* the flash was
+    /// held — which `SetExecutorMaster` writing into `master` gets right and a
+    /// save-and-restore in the flash would lose.
+    flash: Option<u16>,
     values: Box<[u16]>,
     present: Box<[bool]>,
     touched: Box<[u32]>,
@@ -62,6 +71,7 @@ impl PlaybackSource {
             // A fader nobody has touched reads full: an executor switched on
             // before its master is moved has to produce light.
             master: FULL,
+            flash: None,
             values: vec![0; slots].into_boxed_slice(),
             present: vec![false; slots].into_boxed_slice(),
             touched: vec![0; slots].into_boxed_slice(),
@@ -88,10 +98,29 @@ impl PlaybackSource {
         self.activation
     }
 
-    /// The executor's master level, `0..=65535`.
+    /// The executor's **stored** master level, `0..=65535`.
+    ///
+    /// What the show holds and what a rebuild puts back. A held flash does not
+    /// appear here — see [`Self::flash`] and [`Self::effective_master`].
     #[must_use]
     pub const fn master(&self) -> u16 {
         self.master
+    }
+
+    /// The level a held flash is contributing at, if one is held.
+    #[must_use]
+    pub const fn flash(&self) -> Option<u16> {
+        self.flash
+    }
+
+    /// The master the merge actually applies: the flash while one is held, and
+    /// the stored master otherwise.
+    #[must_use]
+    pub const fn effective_master(&self) -> u16 {
+        match self.flash {
+            Some(level) => level,
+            None => self.master,
+        }
     }
 
     /// How many attributes this source is providing.
@@ -299,11 +328,31 @@ impl PlaybackLayer {
         }
     }
 
-    /// Sets an executor's master level. Returns `false` if it is unknown.
+    /// Sets an executor's stored master level. Returns `false` if it is unknown.
+    ///
+    /// Writes the stored level even while a flash is held: the flash goes on
+    /// overriding it until it is released, and then the level that arrived
+    /// meanwhile is the one that stands. A flash that had saved the old value
+    /// and put it back would silently throw that command away.
     pub fn set_master(&mut self, executor: ExecutorId, level: u16) -> bool {
         match self.source_mut(executor) {
             Some(source) => {
                 source.master = level;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Holds or releases a flash over an executor's master.
+    ///
+    /// Returns `false` if the executor is unknown. `Some(level)` holds the
+    /// flash at that level, `None` releases it and the stored master takes over
+    /// again — byte for byte, because it was never written to.
+    pub fn set_flash(&mut self, executor: ExecutorId, level: Option<u16>) -> bool {
+        match self.source_mut(executor) {
+            Some(source) => {
+                source.flash = level;
                 true
             }
             None => false,
@@ -344,7 +393,7 @@ impl PlaybackLayer {
                     MergeMode::Htp => {
                         // The master is applied here, before the maximum, not to
                         // the winner afterwards - `docs/DMX_MERGE.md` §2.1.
-                        let mastered = apply_master(value, source.master);
+                        let mastered = apply_master(value, source.effective_master());
                         if !accumulator.covered || mastered > accumulator.value {
                             accumulator.value = mastered;
                         }

@@ -206,15 +206,18 @@ function Desk() {
         },
         [send],
     );
-    const onGo = useCallback(
-        (executorId: number, direction: "Next" | "Prev") => {
-            send({ t: "ExecutorGo", executorId, direction });
-        },
-        [send],
-    );
-    const onOff = useCallback(
-        (executorId: number) => {
-            send({ t: "ExecutorOff", executorId });
+    // Which button, never what it means: `prism-core` resolves the position
+    // against that executor's own `buttonFunctions` (S34). A client that read
+    // `isActive` and sent a Go for a `Toggle` would race a second client doing
+    // the same — see `desk/executorbar.tsx`.
+    const onButton = useCallback(
+        (executorId: number, index: number, pressed: boolean) => {
+            send({
+                t: "ExecutorButton",
+                executorId,
+                button: { t: "Slot", index },
+                pressed,
+            });
         },
         [send],
     );
@@ -310,8 +313,7 @@ function Desk() {
                     onPage={onPage}
                     onSelect={onSelect}
                     onMaster={onMaster}
-                    onGo={onGo}
-                    onOff={onOff}
+                    onButton={onButton}
                 />
             </div>
             <footer className="desk-footer">

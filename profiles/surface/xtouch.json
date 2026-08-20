@@ -76,20 +76,20 @@
 
   "bindings": [
     { "control": "Strip[*].Fader", "action": { "t": "ExecutorMaster", "target": "Strip" } },
-    { "control": "Strip[*].Button.Rec", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
-    { "control": "Strip[*].Button.Solo", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
-    { "control": "Strip[*].Button.Mute", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
-    { "control": "Strip[*].Button.Select", "action": { "t": "ExecutorGo", "target": "Strip", "direction": "Next" } },
+    { "control": "Strip[*].Button.Rec", "action": { "t": "ExecutorButton", "target": "Strip", "button": { "t": "Slot", "index": 0 } } },
+    { "control": "Strip[*].Button.Solo", "action": { "t": "ExecutorButton", "target": "Strip", "button": { "t": "Slot", "index": 1 } } },
+    { "control": "Strip[*].Button.Mute", "action": { "t": "ExecutorButton", "target": "Strip", "button": { "t": "Slot", "index": 2 } } },
+    { "control": "Strip[*].Button.Select", "action": { "t": "ExecutorButton", "target": "Strip", "button": { "t": "Slot", "index": 3 } } },
     { "control": "Strip[*].Button.VPotPush", "action": { "t": "SelectExecutor", "target": "Strip" } },
     { "control": "Strip[*].Encoder", "action": null },
 
     { "control": "Main.Fader", "action": { "t": "ExecutorMaster", "target": "Selected" } },
-    { "control": "Global.Flip", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Next" } },
+    { "control": "Global.Flip", "action": { "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "Go+" } } },
 
-    { "control": "Global.Play", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Next" } },
-    { "control": "Global.Stop", "action": { "t": "ExecutorOff", "target": "Selected" } },
-    { "control": "Global.FastForward", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Next" } },
-    { "control": "Global.Rewind", "action": { "t": "ExecutorGo", "target": "Selected", "direction": "Prev" } },
+    { "control": "Global.Play", "action": { "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "On" } } },
+    { "control": "Global.Stop", "action": { "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "Off" } } },
+    { "control": "Global.FastForward", "action": { "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "Go+" } } },
+    { "control": "Global.Rewind", "action": { "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "Go-" } } },
     { "control": "Global.Record", "action": { "t": "ClearProgrammer" } },
 
     { "control": "Global.BankLeft", "action": { "t": "ExecutorPage", "delta": -1 } },
@@ -127,16 +127,21 @@
     { "control": "Global.SmpteBeats", "action": null }
   ],
 
-  "deviationsFromSection41": [
-    "Main fader: section 4.1 calls it XFade of the selected executor. XFade is an ExecutorFaderFunction - show data on the executor (ARCHITECTURE_SPEC.md section 6) - and the protocol has one fader command, SetExecutorMaster, for all four functions. So the binding is ExecutorMaster on the selected executor and what the fader DOES is the executor's own setting.",
-    "Play: section 4.1 gives it On. There is no ExecutorOn command; On is an ExecutorButtonFunction. ExecutorGo/Next is what starts a sequence, so Play and Forward resolve to the same command until an executor-button command exists. Recorded rather than invented - see PROGRESS.md's decision log for S22.",
-    "Strip Rec/Solo/Mute/Select: section 4.1's configurable list (Empty/Go+/Go-/LearnSpeed/Off/On/Flash/Toggle) is the ExecutorButtonFunction list, not a command list. A binding table can only send commands, so the two functions with commands (Go+, Go-) and Off are bindable here and the rest belong to the executor.",
+  "deviationsFromSection41": [],
+
+  "additionsToSection41": [
     "Strip[*].Button.VPotPush is not a section 4.1 row. It selects that strip's executor, because the transport section, the Flip button and the main fader all act on the SELECTED executor and the selection has to be reachable from the surface.",
     "Global.Enter -> Redo is not a section 4.1 row either. Undo without a redo beside it is a desk with half an Oops."
   ],
 
+  "deviationsClosedInS34": [
+    "Main fader: section 4.1 calls it XFade of the selected executor. The binding is still ExecutorMaster on the selected executor - there is one fader command for all four ExecutorFaderFunctions - but prism-core now routes it through the executor's own faderFunction, so a fader set to XFade crossfades and the row means what it says.",
+    "Play: section 4.1 gives it On. Command::ExecutorButton now carries a function, so Play sends On and Stop sends Off rather than both resolving to the nearest command that existed.",
+    "Strip Rec/Solo/Mute/Select: the binding is now the button POSITION (Slot 0-3) and the executor's own buttonFunctions decide what it does - which is what section 4.1's configurable column always meant. All eight functions are reachable, including Flash, Toggle and LearnSpeed."
+  ],
+
   "carriedForward": [
-    "A tap for speed has no target yet. LearnSpeed exists only as an ExecutorButtonFunction, and speed masters are named in docs/DMX_MERGE.md section 4 item 3 with nothing implementing them and no domain type carrying one. S22 deliberately did not invent the command; the session that builds speed masters owes the type, the command and the function-list entry.",
+    "A tap for speed has a target now: ExecutorButtonFunction::LearnSpeed on a strip button, or bound outright on a transport key as { t: Function, function: LearnSpeed }. Two taps inside four seconds mean the running cue's transition should take that long. What it does NOT have yet is a speed master separate from the executor - Executor::speed is per executor, which is what the domain carries.",
     "The transport section and the jog wheel are the controls that reach PrismDMX without a mode switch (see sharedMode). Their bindings above are a reasonable starting point, not a layout: they are the five keys worth spending on live-show work.",
     "D7 (executor paging on Faderbank) and D8 (SelectView on Channel) sit outside the permanent set, so in shared operation they cost a switch to the full surface. Acceptable for setup-shaped work, and a reason not to put anything time-critical there.",
     "The Encoder Assign section has six buttons and docs/MCU_MAPPING.md section 4.1 names five feature groups. AssignInstrument is left unbound rather than doubled up: a button that repeats its neighbour teaches an operator that it is broken."

@@ -188,6 +188,14 @@ fn a_renumber_to_the_same_number_is_not_a_step() {
 /// what an arbitrary `PatchFixture` naming a profile the show has never heard
 /// of looks like — but on its own it would journal almost nothing: a fixture
 /// type key drawn from arbitrary text is never one of this show's two.
+///
+/// **The broad net is boxed, and it has to be** (S34). `proptest_derive` builds
+/// one value tree holding every variant's value tree at once; the thirty-sixth
+/// command tipped that aggregate past a test thread's default stack on Windows,
+/// and the symptom was a `STATUS_STACK_OVERFLOW` with no failing case to read.
+/// Boxing puts the tree on the heap and costs one indirection per generated
+/// value. A later session adding a command with a large payload should reach for
+/// this rather than for `RUST_MIN_STACK`.
 fn undoable_command() -> impl Strategy<Value = Command> {
     let plausible = prop_oneof![
         (
@@ -217,8 +225,10 @@ fn undoable_command() -> impl Strategy<Value = Command> {
             .prop_map(|(id, universe, address)| patch_command(id, universe, address)),
     ];
     prop_oneof![
-        4 => plausible,
-        1 => any::<Command>().prop_filter("only undoable commands", Command::is_undoable),
+        4 => plausible.boxed(),
+        1 => any::<Command>()
+            .prop_filter("only undoable commands", Command::is_undoable)
+            .boxed(),
     ]
 }
 

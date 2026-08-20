@@ -207,15 +207,20 @@ test("a show is written, corrected and fired entirely from the interface", async
     "cue-row-0.5",
   );
 
-  // 4. And it fires. `isActive` is the half of `Delta::ExecutorState` that
-  //    arrives; the cue number is a **dash**, because nothing fills
-  //    `currentCueIndex` until S34 builds the channel back from the tick.
+  // 4. And it fires. Both halves of `Delta::ExecutorState` arrive now: S28 had
+  //    to assert a **dash** here because nothing filled `currentCueIndex`, and
+  //    S34's readback out of the tick fills it. The cue list is ordered `0.5`,
+  //    `1`, so the first Go lands on cue 0.5 — which is the daemon's ordering
+  //    and not this interface's.
   await expect(page.getByTestId("looks-executor-state")).toHaveText("stopped");
+  await expect(page.getByTestId("looks-executor-cue")).toHaveText("cue —");
   await page.getByTestId("looks-go").click();
   await expect(page.getByTestId("looks-executor-state")).toHaveText("running");
-  await expect(page.getByTestId("looks-executor-cue")).toHaveText("cue —");
+  await expect(page.getByTestId("looks-executor-cue")).toHaveText("cue 1");
+  await expect(page.getByTestId("cue-row-0.5")).toHaveAttribute("data-running", "yes");
   await page.getByTestId("looks-off").click();
   await expect(page.getByTestId("looks-executor-state")).toHaveText("stopped");
+  await expect(page.getByTestId("looks-executor-cue")).toHaveText("cue —");
 
   // A cue is deleted, and the numbers that are left do not close up.
   await page.getByTestId("cue-delete-1").click();

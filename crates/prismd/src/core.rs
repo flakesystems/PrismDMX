@@ -40,7 +40,7 @@ use prism_domain::{
     AttributeType, Command, Delta, ExecutorId, FixtureId, GroupId, NoticeLevel, ProgrammerState,
     UniverseId,
 };
-use prism_engine::{FrameLayout, MergeBody, MergePlan, PatchError, TickCommand};
+use prism_engine::{FrameLayout, MergeBody, MergePlan, PatchError, PlaybackReport, TickCommand};
 
 use crate::engine::EngineThread;
 use crate::log;
@@ -99,6 +99,16 @@ pub struct Core {
     /// What the engine has been told the programmer holds.
     engine_programmer: ProgrammerState,
     masters: Masters,
+    /// What the tick says its playbacks are doing — the channel S26 recorded as
+    /// missing and S34 built. Written by the tick, read here; see
+    /// `prism_engine::PlaybackReport` for why it is a table of atomics and not a
+    /// queue.
+    report: Arc<PlaybackReport>,
+    /// What was last broadcast about each executor, so a poll that found nothing
+    /// new says nothing. A `Delta::ExecutorState` per tick would move the show
+    /// document at playback rate, and every view that watches the show would
+    /// re-ask its questions with it.
+    reported: BTreeMap<ExecutorId, (bool, Option<u32>)>,
     autosave: Autosave,
     /// The patch revision the current plan was built from (S11).
     patch_revision: u64,
@@ -121,6 +131,7 @@ impl Core {
         store: ShowStore,
         engine: EngineThread,
         layout: Arc<FrameLayout>,
+        report: Arc<PlaybackReport>,
     ) -> Result<Self, PatchError> {
         let plan = MergePlan::build(
             file.show
@@ -138,6 +149,8 @@ impl Core {
             plan,
             engine_programmer,
             masters: Masters::default(),
+            report,
+            reported: BTreeMap::new(),
             autosave: Autosave::new(),
             patch_revision,
         })
@@ -215,22 +228,44 @@ impl Core {
             match *effect {
                 // Answered by the rebuild below.
                 Effect::Repatch | Effect::ReloadGroups | Effect::ReloadSequence(_) => {}
+                // **Playback state is the tick's to report, and only the
+                // tick's** (S34). Until the readback existed the daemon wrote
+                // `is_active` here on the way past, because nothing else could;
+                // now that would be a second author racing the first, and the
+                // loser is whichever arrives second. What that looked like: the
+                // strip lights on the command, goes dark on the next poll
+                // because the tick had not run yet, and lights again a tick
+                // later. `Core::poll_playback` is the one author.
                 Effect::ExecutorGo {
                     executor,
                     direction,
-                } => {
-                    self.send(TickCommand::Go {
-                        executor,
-                        direction,
-                    });
-                    deltas.extend(self.record_executor(executor, true));
+                } => self.send(TickCommand::Go {
+                    executor,
+                    direction,
+                }),
+                Effect::ExecutorOff { executor } => self.send(TickCommand::SetExecutorActive {
+                    executor,
+                    on: false,
+                }),
+                Effect::ExecutorOn { executor } => {
+                    self.send(TickCommand::SetExecutorActive { executor, on: true });
                 }
-                Effect::ExecutorOff { executor } => {
-                    self.send(TickCommand::SetExecutorActive {
-                        executor,
-                        on: false,
-                    });
-                    deltas.extend(self.record_executor(executor, false));
+                // A flash does **not** touch the stored master and does not
+                // record `is_active` either: it is a momentary gesture, and the
+                // readback is what tells the desk the strip is lit. Writing
+                // playback state here as well would be two authors for one
+                // field, one of them a guess.
+                Effect::ExecutorFlash { executor, on } => {
+                    self.send(TickCommand::SetExecutorFlash { executor, on });
+                }
+                Effect::ExecutorSpeed { executor, speed } => {
+                    self.send(TickCommand::SetExecutorSpeed { executor, speed });
+                }
+                Effect::ExecutorTapSpeed { executor } => {
+                    self.send(TickCommand::TapExecutorSpeed { executor });
+                }
+                Effect::ExecutorXFade { executor, position } => {
+                    self.send(TickCommand::SetExecutorXFade { executor, position });
                 }
                 Effect::SetExecutorMaster { executor, level } => {
                     self.send(TickCommand::SetExecutorLevel { executor, level });
@@ -326,7 +361,7 @@ impl Core {
     /// Everything [`build_body`] does allocates, which is exactly why it is
     /// here: the tick thread may not (`ARCHITECTURE_SPEC.md` §3.1).
     fn rebuild(&mut self) -> Result<(), CoreError> {
-        let mut body = match build_body(&self.layout, &self.file) {
+        let mut body = match build_body(&self.layout, &self.file, &self.report) {
             Ok(body) => body,
             Err(error) => {
                 // The show model and the engine agree about what a legal patch
@@ -413,32 +448,50 @@ impl Core {
         changes
     }
 
-    /// Records that an executor started or stopped, and answers with the delta.
+    /// Reads what the tick says its playbacks are doing and answers with what
+    /// has changed since the last poll.
     ///
-    /// The cue index is left as the show has it: what cue a playback is on is
-    /// the tick thread's, and reading it back is the feedback channel S18 and
-    /// S26 need rather than something to invent here.
-    fn record_executor(&mut self, executor: ExecutorId, is_active: bool) -> Vec<Delta> {
-        let cue_index = self
-            .file
-            .show
-            .executor(executor)
-            .and_then(|executor| executor.current_cue_index);
-        match self
-            .file
-            .show
-            .record_executor_state(executor, is_active, cue_index)
-        {
-            Ok(true) => vec![Delta::ExecutorState {
-                executor_id: executor,
-                is_active,
-                cue_index,
-            }],
-            // Nothing changed, or the executor has gone — either way there is
-            // nothing to tell anybody, and the command that produced this was
-            // already validated against the show.
-            Ok(false) | Err(_) => Vec::new(),
+    /// **The channel S26 recorded as missing.** `Executor::current_cue_index`
+    /// has been in the domain since S1 and on the wire since S11 with nothing
+    /// filling it, because what cue a playback is on lives on the tick thread.
+    /// It is polled rather than pushed for the reason
+    /// `prism_engine::PlaybackReport` gives: the tick may not allocate, lock or
+    /// block, so it publishes the current state and whoever cares samples it.
+    ///
+    /// **Only differences are broadcast**, and that is what keeps the show
+    /// document still during a fade: a cue index moves when a cue changes, not
+    /// when a level does. S28 left the warning — `Query::StorePreview` is asked
+    /// once per delta — and a delta per tick would have turned it into a
+    /// question per frame.
+    pub fn poll_playback(&mut self) -> Vec<Delta> {
+        let mut deltas = Vec::new();
+        let mut seen: BTreeMap<ExecutorId, (bool, Option<u32>)> = BTreeMap::new();
+        for state in self.report.states() {
+            seen.insert(state.executor, (state.is_active, state.cue_index));
+            if self.reported.get(&state.executor) == Some(&(state.is_active, state.cue_index)) {
+                continue;
+            }
+            // The show is asked as well, because the desk's own record is what a
+            // fresh client's snapshot carries and it may already agree — a Go
+            // wrote `is_active` on the way past, and the cue index is what
+            // arrives late.
+            // Nothing to broadcast when the show already agreed, and nothing at
+            // all for an executor the show no longer has — the tick is one body
+            // behind after a rebuild, and that is ordinary.
+            if let Ok(true) = self.file.show.record_executor_state(
+                state.executor,
+                state.is_active,
+                state.cue_index,
+            ) {
+                deltas.push(Delta::ExecutorState {
+                    executor_id: state.executor,
+                    is_active: state.is_active,
+                    cue_index: state.cue_index,
+                });
+            }
         }
+        self.reported = seen;
+        deltas
     }
 
     /// Writes the recovery copy now, whatever the interval says.
@@ -497,13 +550,10 @@ impl Masters {
         for (&group, &level) in &self.groups {
             body.masters_mut().set_group_level(group, level);
         }
-        // An executor's master is show state (S14 relied on it being so), which
-        // means the show is where a rebuild reads it from rather than a second
-        // copy that could disagree.
-        for executor in file.show.executors() {
-            body.layer_mut()
-                .set_master(executor.id, executor.master_level);
-        }
+        // The executors' own masters and speeds are put on by `build_body`,
+        // which is where show state belongs: this type holds only what the
+        // *daemon* has moved and the show does not carry.
+        let _ = file;
         body.resolve();
     }
 }
@@ -524,12 +574,30 @@ impl Masters {
 /// [`PatchError`] if the patch cannot be merged or encoded. A show the model
 /// accepted is one the engine accepts, so this is a defect rather than an
 /// operator's mistake.
-pub fn build_body(layout: &FrameLayout, file: &ShowFile) -> Result<MergeBody, PatchError> {
+pub fn build_body(
+    layout: &FrameLayout,
+    file: &ShowFile,
+    report: &Arc<PlaybackReport>,
+) -> Result<MergeBody, PatchError> {
     let executors: Vec<ExecutorId> = file.show.executors().map(|executor| executor.id).collect();
     let mut body = MergeBody::for_patch(layout, file.show.patched(), executors)?;
+    body.report_into(Arc::clone(report));
 
     let groups: Vec<prism_domain::Group> = file.show.groups().cloned().collect();
     body.load_groups(&groups);
+    // An executor's master and its speed are **show** state (S14 relied on the
+    // first being so, S34 made the second), so a freshly built body reads them
+    // out of the show rather than starting at its constructor's defaults. Doing
+    // it here rather than in `Masters::apply_to` is what gives the *first* body
+    // — the one `daemon` builds before the tick starts — the levels a saved show
+    // was saved with.
+    for executor in file.show.executors() {
+        body.layer_mut()
+            .set_master(executor.id, executor.master_level);
+        if let Some(player) = body.cues_mut().player_mut(executor.id) {
+            player.set_speed(executor.speed);
+        }
+    }
     for executor in file.show.executors() {
         let Some(sequence_id) = executor.sequence_id else {
             continue;
@@ -575,10 +643,18 @@ mod tests {
     /// A daemon core with one mock output on universe 1, and the handle that
     /// says what reached the wire.
     fn desk(dir: &std::path::Path) -> (Core, MockOutputHandle, OutputThread) {
-        let file = show_file();
+        desk_with(dir, show_file())
+    }
+
+    /// The same, over a show a test built for itself.
+    fn desk_with(
+        dir: &std::path::Path,
+        file: prism_core::ShowFile,
+    ) -> (Core, MockOutputHandle, OutputThread) {
         let store = ShowStore::open(dir.join("test.prism")).unwrap();
         let layout = Arc::new(crate::engine::frame_layout(4).unwrap());
-        let body = super::build_body(&layout, &file).unwrap();
+        let report = Arc::new(prism_engine::PlaybackReport::new(prism_engine::MAX_SOURCES));
+        let body = super::build_body(&layout, &file, &report).unwrap();
 
         let mut publisher = FramePublisher::new(Arc::clone(&layout));
         let subscriber = publisher.subscribe();
@@ -587,7 +663,7 @@ mod tests {
         let driver = spawn("out-mock", output, subscriber, RunnerConfig::default()).unwrap();
         let engine = EngineThread::start(body, publisher).unwrap();
 
-        let core = Core::new(file, store, engine, layout).unwrap();
+        let core = Core::new(file, store, engine, layout, report).unwrap();
         (core, frames, driver)
     }
 
@@ -751,42 +827,52 @@ mod tests {
         let (mut core, frames, driver) = desk(dir.path());
         until("the rig at home", || channel(&frames, 1) == Some(255));
 
+        // The command itself says nothing about the playback: since S34 what an
+        // executor is doing comes back from the **tick**, which is the only
+        // thing that knows. A daemon that also wrote it here would be a second
+        // author racing the first.
         let deltas = core
             .apply(&Command::ExecutorGo {
                 executor_id: ExecutorId::new(0),
                 direction: GoDirection::Next,
             })
             .unwrap();
-        assert!(
-            deltas.contains(&Delta::ExecutorState {
-                executor_id: ExecutorId::new(0),
-                is_active: true,
-                cue_index: None,
-            }),
-            "{deltas:?}"
-        );
+        assert!(deltas.is_empty(), "{deltas:?}");
+
         // The cue raises the dark dimmer on channel 5. Not channel 1: the
         // playbacks merge HTP against the home layer, so a cue can only ever be
         // seen where home is below it.
         until("the cue", || {
             channel(&frames, 5).is_some_and(|level| level > 0)
         });
-
-        let deltas = core
-            .apply(&Command::ExecutorOff {
+        let mut told = Vec::new();
+        until("the client to be told", || {
+            told.extend(core.poll_playback());
+            told.contains(&Delta::ExecutorState {
                 executor_id: ExecutorId::new(0),
+                is_active: true,
+                cue_index: Some(0),
             })
-            .unwrap();
-        assert!(
-            deltas.iter().any(|delta| matches!(
-                delta,
-                Delta::ExecutorState {
-                    is_active: false,
-                    ..
-                }
-            )),
-            "{deltas:?}"
-        );
+        });
+
+        core.apply(&Command::ExecutorOff {
+            executor_id: ExecutorId::new(0),
+        })
+        .unwrap();
+        let mut stopped = Vec::new();
+        until("the client to be told it stopped", || {
+            stopped.extend(core.poll_playback());
+            stopped.iter().any(|delta| {
+                matches!(
+                    delta,
+                    Delta::ExecutorState {
+                        is_active: false,
+                        cue_index: None,
+                        ..
+                    }
+                )
+            })
+        });
 
         driver.stop();
     }
@@ -1018,32 +1104,38 @@ mod tests {
     fn a_go_that_changes_nothing_tells_nobody() {
         let dir = tempfile::tempdir().unwrap();
         let (mut core, _frames, driver) = desk(dir.path());
-        let first = core
-            .apply(&Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
-                direction: GoDirection::Next,
-            })
-            .unwrap();
+        core.apply(&Command::ExecutorGo {
+            executor_id: ExecutorId::new(0),
+            direction: GoDirection::Next,
+        })
+        .unwrap();
+        let mut first = Vec::new();
+        until("the first Go to be reported", || {
+            first.extend(core.poll_playback());
+            !first.is_empty()
+        });
         assert!(
             first
                 .iter()
                 .any(|delta| matches!(delta, Delta::ExecutorState { .. }))
         );
-        // Already running: the executor moves to the next cue, which is show
-        // state the daemon does not know, so there is nothing to report about
-        // it being active — an LED cannot be lit twice (S11).
-        let again = core
-            .apply(&Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
-                direction: GoDirection::Next,
-            })
-            .unwrap();
-        assert!(
-            !again
-                .iter()
-                .any(|delta| matches!(delta, Delta::ExecutorState { .. })),
-            "{again:?}"
-        );
+
+        // Already running, and this sequence has one cue: the Go steps to the
+        // cue it is already on, so nothing about the executor moved and the
+        // readback has nothing to say. An LED cannot be lit twice (S11), and
+        // since S34 the *readback* is what would say so.
+        core.apply(&Command::ExecutorGo {
+            executor_id: ExecutorId::new(0),
+            direction: GoDirection::Next,
+        })
+        .unwrap();
+        let started = Instant::now();
+        let mut again = Vec::new();
+        while started.elapsed() < Duration::from_millis(200) {
+            again.extend(core.poll_playback());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(again.is_empty(), "{again:?}");
         driver.stop();
     }
 
@@ -1119,5 +1211,440 @@ mod tests {
         );
 
         driver.stop();
+    }
+
+    // -- S34: the eight button functions, asserted on frames ----------------
+
+    /// A rig with **one** executor whose four buttons and fader are set by the
+    /// test, playing a two-cue list on the dark dimmer at channel 5.
+    ///
+    /// Channel 5 is dark at home, so a cue raising it is visible; channel 1 sits
+    /// at full whatever happens, which is what says the rig is alive.
+    fn desk_for_buttons(
+        dir: &std::path::Path,
+        buttons: Vec<prism_domain::ExecutorButtonFunction>,
+        fader: prism_domain::ExecutorFaderFunction,
+    ) -> (Core, MockOutputHandle, OutputThread) {
+        use crate::testkit::{cue, executor, sequence};
+        let mut file = show_file();
+        file.show
+            .store_sequence(sequence(
+                7,
+                vec![
+                    cue("1", 4, AttributeType::Dimmer, 65_535),
+                    cue("2", 4, AttributeType::Dimmer, 20_000),
+                ],
+            ))
+            .unwrap();
+        let mut slot = executor(3, Some(7));
+        slot.button_functions = buttons;
+        slot.fader_function = fader;
+        slot.master_level = u16::MAX;
+        file.show.store_executor(slot).unwrap();
+        file.show.mark_saved();
+        desk_with(dir, file)
+    }
+
+    fn press(core: &mut Core, index: u8, pressed: bool) -> Vec<Delta> {
+        core.apply(&Command::ExecutorButton {
+            executor_id: ExecutorId::new(3),
+            button: prism_domain::ExecutorButtonRef::Slot { index },
+            pressed,
+        })
+        .expect("the executor plays a sequence")
+    }
+
+    /// **Exit criterion.** Every one of the eight `ExecutorButtonFunction`
+    /// values does what its name says — checked on the **frames** the mock
+    /// output receives rather than on `isActive`, because a test that read the
+    /// flag the command sets would be asking the code under test what it did.
+    #[test]
+    fn each_of_the_eight_button_functions_does_what_its_name_says_on_the_wire() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let dir = tempfile::tempdir().unwrap();
+        // Rec = On, Solo = Off, Mute = Go+, Select = Go-.
+        let (mut core, frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![Fn::On, Fn::Off, Fn::GoForward, Fn::GoBack],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+        assert_eq!(channel(&frames, 5), Some(0), "channel 5 is dark at home");
+
+        // `On` — the sequence starts at its first cue, which is full.
+        press(&mut core, 0, true);
+        until("On to start the list", || channel(&frames, 5) == Some(255));
+
+        // `On` again does **not** restart the list under the operator. Step to
+        // cue 2 first, then press On and watch cue 2 stay.
+        press(&mut core, 2, true);
+        until("Go+ to reach cue 2", || channel(&frames, 5) == Some(78));
+        press(&mut core, 0, true);
+        std::thread::sleep(Duration::from_millis(80));
+        assert_eq!(
+            channel(&frames, 5),
+            Some(78),
+            "a second On restarted the list"
+        );
+
+        // `Go-` — back to cue 1.
+        press(&mut core, 3, true);
+        until("Go- to reach cue 1", || channel(&frames, 5) == Some(255));
+
+        // `Off` — the list stops and the light goes with it.
+        press(&mut core, 1, true);
+        until("Off to stop the list", || channel(&frames, 5) == Some(0));
+
+        // A release of any of these four is not a second press.
+        press(&mut core, 0, true);
+        until("On again", || channel(&frames, 5) == Some(255));
+        let quiet = press(&mut core, 0, false);
+        assert!(quiet.is_empty(), "a release said something: {quiet:?}");
+        std::thread::sleep(Duration::from_millis(80));
+        assert_eq!(channel(&frames, 5), Some(255));
+
+        driver.stop();
+    }
+
+    /// The other four functions, on the same rig and the same frames.
+    #[test]
+    fn flash_toggle_learn_speed_and_empty_do_what_their_names_say_on_the_wire() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let dir = tempfile::tempdir().unwrap();
+        // Rec = Flash, Solo = Toggle, Mute = LearnSpeed, Select = Empty.
+        let (mut core, frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![Fn::Flash, Fn::Toggle, Fn::LearnSpeed, Fn::Empty],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+
+        // `Flash` — held, the list runs at full; released, it stops.
+        press(&mut core, 0, true);
+        until("the flash", || channel(&frames, 5) == Some(255));
+        press(&mut core, 0, false);
+        until("the release", || channel(&frames, 5) == Some(0));
+
+        // `Toggle` — on, then off, from the same button.
+        press(&mut core, 1, true);
+        until("the toggle on", || channel(&frames, 5) == Some(255));
+        core.poll_playback();
+        press(&mut core, 1, true);
+        until("the toggle off", || channel(&frames, 5) == Some(0));
+
+        // `LearnSpeed` — a tap is accepted and changes no value. Two of them
+        // change the rate, which `prism_engine`'s own tests measure; here the
+        // claim is that it reaches the engine and moves nothing.
+        press(&mut core, 2, true);
+        press(&mut core, 2, true);
+        std::thread::sleep(Duration::from_millis(80));
+        assert_eq!(channel(&frames, 5), Some(0));
+        assert_eq!(channel(&frames, 1), Some(255));
+
+        // `Empty` — a key with nothing on it. Not a refusal: the executor says
+        // so, and nothing is broadcast.
+        let nothing = press(&mut core, 3, true);
+        assert!(nothing.is_empty(), "{nothing:?}");
+        // And a position the executor has no button for at all is the same.
+        let beyond = press(&mut core, 9, true);
+        assert!(beyond.is_empty(), "{beyond:?}");
+
+        driver.stop();
+    }
+
+    /// **Exit criterion.** A `Flash` pressed and released leaves the stored
+    /// master byte-identical, and one held across a `SetExecutorMaster` does not
+    /// lose the new value.
+    ///
+    /// The stored master is read out of the **show**, which is what a client's
+    /// snapshot carries and what a reload would restore; the light is read off
+    /// the frames. Two claims, because a flash that wrote into the master would
+    /// satisfy the second and fail the first.
+    #[test]
+    fn a_flash_leaves_the_stored_master_alone_and_does_not_swallow_a_fader_move() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![Fn::Flash, Fn::On, Fn::Off, Fn::Empty],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(3),
+            level: 16_383,
+        })
+        .unwrap();
+        press(&mut core, 1, true);
+        until("a quarter of the cue", || channel(&frames, 5) == Some(63));
+        let stored = core.file.show.executor(ExecutorId::new(3)).unwrap().clone();
+
+        press(&mut core, 0, true);
+        until("the flash", || channel(&frames, 5) == Some(255));
+        assert_eq!(
+            core.file.show.executor(ExecutorId::new(3)),
+            Some(&stored),
+            "the flash changed the executor the show holds"
+        );
+
+        // The fader moves while the flash is held. The light does not — the
+        // flash is on top — and the new level is what the release restores.
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(3),
+            level: 49_151,
+        })
+        .unwrap();
+        std::thread::sleep(Duration::from_millis(80));
+        assert_eq!(channel(&frames, 5), Some(255), "the flash lost its grip");
+
+        press(&mut core, 0, false);
+        until("the level that arrived during the flash", || {
+            channel(&frames, 5) == Some(191)
+        });
+        assert_eq!(
+            core.file
+                .show
+                .executor(ExecutorId::new(3))
+                .unwrap()
+                .master_level,
+            49_151
+        );
+
+        driver.stop();
+    }
+
+    /// **Exit criterion.** `Toggle` on an executor a *second client* has just
+    /// started stops it — one desk, one answer.
+    ///
+    /// The second client is modelled the way the protocol makes it real: a
+    /// separate `Command::ExecutorGo`, applied through the same `Core`, which is
+    /// exactly what a second WebSocket connection produces. What is being
+    /// checked is that the toggle consults `is_active` **on the daemon** rather
+    /// than a client's own idea of it.
+    #[test]
+    fn a_toggle_stops_an_executor_a_second_client_started() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![Fn::Toggle, Fn::Empty, Fn::Empty, Fn::Empty],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+
+        // The other client starts it. Nobody pressed the toggle.
+        core.apply(&Command::ExecutorGo {
+            executor_id: ExecutorId::new(3),
+            direction: GoDirection::Next,
+        })
+        .unwrap();
+        until("the other client's Go", || channel(&frames, 5) == Some(255));
+        // The readback is what tells the desk it is running, and a toggle is
+        // resolved against that. In the daemon this poll runs every 25 ms; here
+        // it is called by hand, and the wait is the honest statement of what a
+        // toggle depends on.
+        until("the desk to hear that it is running", || {
+            core.poll_playback();
+            core.file
+                .show
+                .executor(ExecutorId::new(3))
+                .is_some_and(|executor| executor.is_active)
+        });
+
+        // The first press of the toggle therefore **stops** it. A client that
+        // resolved `Toggle` for itself would have sent a start, because it had
+        // never pressed anything.
+        press(&mut core, 0, true);
+        until("the toggle to stop it", || channel(&frames, 5) == Some(0));
+
+        driver.stop();
+    }
+
+    /// **Exit criterion.** `currentCueIndex` is filled while a sequence runs,
+    /// and it comes back from the tick rather than from a guess.
+    #[test]
+    fn the_cue_index_comes_back_from_the_tick_and_goes_away_again() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![Fn::On, Fn::Off, Fn::GoForward, Fn::Empty],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+        assert_eq!(
+            core.file
+                .show
+                .executor(ExecutorId::new(3))
+                .unwrap()
+                .current_cue_index,
+            None,
+            "a stopped executor is on no cue"
+        );
+
+        press(&mut core, 0, true);
+        until("the cue index", || {
+            !core.poll_playback().is_empty()
+                || core
+                    .file
+                    .show
+                    .executor(ExecutorId::new(3))
+                    .is_some_and(|executor| executor.current_cue_index == Some(0))
+        });
+        assert_eq!(
+            core.file
+                .show
+                .executor(ExecutorId::new(3))
+                .unwrap()
+                .current_cue_index,
+            Some(0)
+        );
+
+        press(&mut core, 2, true);
+        until("the second cue", || {
+            core.poll_playback();
+            core.file
+                .show
+                .executor(ExecutorId::new(3))
+                .is_some_and(|executor| executor.current_cue_index == Some(1))
+        });
+
+        press(&mut core, 1, true);
+        until("the cue index to go away", || {
+            core.poll_playback();
+            core.file
+                .show
+                .executor(ExecutorId::new(3))
+                .is_some_and(|executor| executor.current_cue_index.is_none())
+        });
+
+        driver.stop();
+    }
+
+    /// The readback is **silent when nothing moved**, which is what keeps the
+    /// show document still during a fade.
+    ///
+    /// S28 left the warning: `Query::StorePreview` is asked once per delta, so a
+    /// `Delta::ExecutorState` per tick would have become a question per frame.
+    #[test]
+    fn the_readback_says_nothing_while_a_fade_runs() {
+        use crate::testkit::{cue, executor, sequence};
+        let dir = tempfile::tempdir().unwrap();
+        let mut file = show_file();
+        // A twenty-second fade, so the whole of this test happens inside one
+        // cue and the *only* thing that could produce a delta is a value moving.
+        let mut slow = cue("1", 4, AttributeType::Dimmer, 65_535);
+        slow.fade_in = 20.0;
+        file.show.store_sequence(sequence(7, vec![slow])).unwrap();
+        file.show.store_executor(executor(3, Some(7))).unwrap();
+        file.show.mark_saved();
+        let (mut core, frames, driver) = desk_with(dir.path(), file);
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+
+        core.apply(&Command::ExecutorGo {
+            executor_id: ExecutorId::new(3),
+            direction: GoDirection::Next,
+        })
+        .unwrap();
+        until("the cue index to arrive", || {
+            !core.poll_playback().is_empty()
+                || core
+                    .file
+                    .show
+                    .executor(ExecutorId::new(3))
+                    .is_some_and(|executor| executor.current_cue_index == Some(0))
+        });
+
+        // Now the fade runs for a while, and the readback has nothing to say
+        // about it at all.
+        let started = Instant::now();
+        let mut said = Vec::new();
+        while started.elapsed() < Duration::from_millis(300) {
+            said.extend(core.poll_playback());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            said.is_empty(),
+            "the readback spoke {} times during one fade: {said:?}",
+            said.len()
+        );
+        // And the fade really was running, so this is not a measurement of a
+        // rig at rest.
+        let level = channel(&frames, 5).unwrap_or(0);
+        assert!(level > 0 && level < 255, "the fade was not moving: {level}");
+
+        driver.stop();
+    }
+
+    /// **The fader is the executor's, not the protocol's.** One
+    /// `SetExecutorMaster` and four meanings, chosen by `faderFunction`.
+    #[test]
+    fn what_the_fader_does_is_the_executors_own_setting() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        use prism_domain::ExecutorFaderFunction as Fader;
+        let dir = tempfile::tempdir().unwrap();
+
+        // `Speed`: the show's `speed` moves and the master does not.
+        {
+            let (mut core, _frames, driver) = desk_for_buttons(
+                dir.path(),
+                vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
+                Fader::Speed,
+            );
+            core.apply(&Command::SetExecutorMaster {
+                executor_id: ExecutorId::new(3),
+                level: 2_048,
+            })
+            .unwrap();
+            let executor = core.file.show.executor(ExecutorId::new(3)).unwrap();
+            assert_eq!(executor.speed, 2_048);
+            assert_eq!(executor.master_level, u16::MAX, "the master moved");
+            driver.stop();
+        }
+
+        // `XFade`: no show state at all — a crossfade in progress is a gesture,
+        // and a show file that remembered one would reload holding half a cue.
+        {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk_for_buttons(
+                dir.path(),
+                vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
+                Fader::XFade,
+            );
+            let before = core.file.show.executor(ExecutorId::new(3)).unwrap().clone();
+            let deltas = core
+                .apply(&Command::SetExecutorMaster {
+                    executor_id: ExecutorId::new(3),
+                    level: 30_000,
+                })
+                .unwrap();
+            assert!(deltas.is_empty(), "{deltas:?}");
+            assert_eq!(core.file.show.executor(ExecutorId::new(3)), Some(&before));
+            driver.stop();
+        }
+
+        // `Empty`: a fader with nothing on it. Accepted and ignored, because the
+        // executor says so — not refused, which would put a message on a screen
+        // for a fader an operator can see is dead.
+        {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk_for_buttons(
+                dir.path(),
+                vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
+                Fader::Empty,
+            );
+            let before = core.file.show.executor(ExecutorId::new(3)).unwrap().clone();
+            assert!(
+                core.apply(&Command::SetExecutorMaster {
+                    executor_id: ExecutorId::new(3),
+                    level: 1,
+                })
+                .unwrap()
+                .is_empty()
+            );
+            assert_eq!(core.file.show.executor(ExecutorId::new(3)), Some(&before));
+            driver.stop();
+        }
     }
 }

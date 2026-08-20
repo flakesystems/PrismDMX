@@ -486,12 +486,12 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 | Control | Default | Acts on | Configurable |
 |---|---|---|---|
 | Strip fader 1–8 | `Master` of the executor on that strip | Engine | yes — Empty / Master / Speed / XFade |
-| Strip Rec / Solo / Mute / Select | `Go+` | Engine | yes — Empty / Go+ / Go− / LearnSpeed / Off / On / Flash / Toggle |
+| Strip Rec / Solo / Mute / Select | `Go+` | Engine | yes — Empty / Go+ / Go− / LearnSpeed / Off / On / Flash / Toggle · **the binding is the button's *position* and the list above is the executor's own `buttonFunctions` (S34)**: `Command::ExecutorButton` carries which key was pressed, and `prism_core::Show::apply` resolves it. All eight are reachable |
 | Strip encoder | `Empty` | Engine | yes — Empty / Master / Speed |
 | Strip display | colour, name and value of the executor | — | — |
-| Main fader | `XFade` of the selected executor | Engine | yes — Empty / Master / XFade |
+| Main fader | `XFade` of the selected executor | Engine | yes — Empty / Master / XFade · **one command, `SetExecutorMaster`, routed through the executor's own `faderFunction` (S34)** — so a fader set to `XFade` crossfades, one set to `Speed` moves the speed master, and one set to `Empty` does nothing |
 | Flip button | `Go+` of the selected executor | Engine | yes |
-| **Play / Stop / Forward / Backward** | On / Off / Go+ / Go− on the selected executor | Engine | yes — **and this row is the one to spend carefully: it is the part of the panel that stays PrismDMX's in shared operation (§4.3), so it wants live-show functions, free assignments included** |
+| **Play / Stop / Forward / Backward** | On / Off / Go+ / Go− on the selected executor | Engine | yes — bound as written since **S34**, as `ExecutorButton` carrying the *function*, which is what a profile is allowed to name. **And this row is the one to spend carefully: it is the part of the panel that stays PrismDMX's in shared operation (§4.3), so it wants live-show functions, free assignments included** |
 | **Record** | `Clear` (three-stage) | Programmer | yes — same section, same reasoning |
 | **Faderbank ◀▶** | executor **page** down / up — 8 per page (D7) | **Session** | — |
 | **Channel ◀▶** | **switch UI view** — `SelectView` (D8) | **Session** | — · **steps the order the View Selector Bar draws (S35)**: `MoveView` exchanges two views' numbers, so there is one order and the console cannot reach a view other than the one drawn next |
@@ -520,7 +520,7 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 
 `Strip[*]` expands per strip with the strip index bound to the executor at `executorPage * 8 + index`.
 
-### 4.2.1 As built (S22)
+### 4.2.1 As built (S22), and the three rows closed in S34
 
 `prism_surface::Bindings` is layer 3 whole, and it is a table lookup with no
 arithmetic in it: a fader arrives as a level and a detent as a parameter step,
@@ -554,44 +554,58 @@ say:
   `profiles/surface/xtouch.json` is how the defaults are changed, and deleting it
   changes nothing.
 
-**Three rows of §4.1 name something the command vocabulary has not got**, and
-none of them was invented into existence:
+#### The three rows that could not be bound, and how they were closed (S22 → S26 → S34)
 
-| §4.1 says | What is bound | Why |
+**This is history now.** It is kept because it is the clearest statement in the
+project of *why* a binding table may not decide what a press means, and because
+the shape it arrived at is the shape the settings editor (S38) will offer.
+
+S22 found that three rows of §4.1 named something the command vocabulary had not
+got, and refused to invent it:
+
+| §4.1 says | What S22 bound | Why it could not be bound as written |
 |---|---|---|
-| Main fader = `XFade` of the selected executor | `SetExecutorMaster` on the selected executor | `XFade` is an `ExecutorFaderFunction` — show data on the executor (`ARCHITECTURE_SPEC.md` §6). There is one fader command for all four functions, and what the fader *does* is the executor's own setting |
-| Play = `On` | `ExecutorGo`/`Next` on the selected executor | There is no `ExecutorOn` command; `On` is an `ExecutorButtonFunction`. `ExecutorGo` is what starts a sequence, so Play and Forward resolve to the same command until an executor-button command exists |
+| Main fader = `XFade` of the selected executor | `SetExecutorMaster` on the selected executor | `XFade` is an `ExecutorFaderFunction` — show data on the executor (`ARCHITECTURE_SPEC.md` §6). There is one fader command for all four functions, and nothing read the setting |
+| Play = `On` | `ExecutorGo`/`Next` on the selected executor | There was no command that could carry `On`; it is an `ExecutorButtonFunction`, and `ExecutorGo` was the nearest thing that started a sequence |
 | Strip buttons configurable to `LearnSpeed`, `Flash`, `Toggle`… | `ExecutorGo`, `ExecutorOff` | Same list, same reason. A binding table can only send commands; those names are the executor's own button functions |
 
-The gap is real and it is one gap, not three: **the protocol has no command that
-presses an executor's button and lets the executor decide what that means.** The
-session that adds one closes all three rows at once, and it is also where a
-tap for speed lands (§4.3).
+S22 named it as **one** gap rather than three: *the protocol had no command that
+pressed an executor's button and let the executor decide what that meant.*
 
-#### The same gap, met from the interface (S26)
+S26 met the same gap from the interface and resolved it the same way — a strip
+drew the four buttons the show assigned it, pressed the three that had commands,
+and drew the other four **disabled with the reason on the button**. Resolving
+`Toggle` against `isActive` in a client would have been a client deciding what a
+show's own setting means: two clients would race, and the daemon would be told to
+do something nobody pressed. S26 kept that as a mutation check, and it is still
+there.
 
-The executor bar reached it from the other end and resolved it the same way. A
-strip draws the four buttons the show assigns it, presses `Go+`, `Go-` and `Off`
-— the three that have commands — and draws the other four **disabled, with the
-reason on the button**. Resolving `Toggle` against `isActive` in a client would
-be a client deciding what a show's own setting means: two clients would race,
-and the daemon would be told to do something nobody pressed.
+**S34 built the command, and all three rows are bound as written.** What each
+function needed, and what it got:
 
-S26 also worked out what closing it would actually take, which S22 could not see
-from the binding table:
+| Function | What it needed | Where it lives |
+|---|---|---|
+| `On`, `Off` | `prism_engine::TickCommand::SetExecutorActive`, which already existed — "on a loaded executor this is *start the sequence* and *stop it*, not a raw activation" (S5) | `Effect::ExecutorOn` / `Effect::ExecutorOff` |
+| `Toggle` | The same command, with the **daemon** reading `isActive` — which the daemon may do and a client may not | `prism_core::Show::apply`, one line, and S26's mutation check still guards it |
+| `Flash` | A **temporary** master override that does not disturb the stored master: press raises, release restores | `PlaybackSource::set_flash` — a layer applied where `docs/DMX_MERGE.md` §2.1 applies the master, so the stored one is never written to |
+| `LearnSpeed` | Speed masters, named in `docs/DMX_MERGE.md` §4 item 3 with nothing implementing them | `Executor::speed`, `prism_domain::SPEED_UNITY`, and `CuePlayer`'s accumulated clock |
+| `XFade` on the fader | Something to read `faderFunction` | `prism_core::Show::apply` routes `SetExecutorMaster` through it; the crossfade replaces the transition's *clock* and nothing else |
 
-| Function | What it needs |
-|---|---|
-| `On`, `Off` | `prism_engine::TickCommand::SetExecutorActive`, which **exists** — "on a loaded executor this is *start the sequence* and *stop it*, not a raw activation" (S5). Reachable today |
-| `Toggle` | The same command, with the daemon reading `isActive` — which the daemon may do and a client may not. Reachable today |
-| `Flash` | A **temporary** master override that does not disturb the stored master: press raises, release restores. Neither the engine nor the command vocabulary has one, and `SetExecutorMaster` is the wrong tool because it *is* the stored master |
-| `LearnSpeed` | Speed masters, which are named in `docs/DMX_MERGE.md` §4 item 3 with nothing implementing them (§4.3) |
+The command is `Command::ExecutorButton { executorId, button, pressed }`. The
+`pressed` flag is what `Flash` needs, and `button` is a
+`prism_domain::ExecutorButtonRef`, which is either:
 
-So the command is `ExecutorButton { executorId, button, pressed }` — the
-`pressed` flag is what `Flash` needs — and the session that adds it owes
-`prism-domain`, `prism-core`'s routing, an `Effect`, and engine work for two of
-the eight functions. It is an engine session and not an interface one, which is
-why S26 recorded it rather than half-building it.
+- **a `Slot`** — a hardware position on a strip. What it does is the executor's
+  `buttonFunctions`, and nothing but the executor may decide that. This is what
+  the four strip buttons bind to, and it is the whole of D3 for playback.
+- **a `Function`** — a function named outright by *this file*. That is the desk's
+  own configuration, written by a person, and it is what the transport row has
+  always been: §4.1 assigns Play `On` in prose, and the profile says the same
+  thing in JSON. It is not a client inferring anything at run time — `Toggle`
+  bound this way is still resolved against `isActive` by the daemon.
+
+`deviationsFromSection41` in the shipped profile is therefore **empty**, and
+`deviationsClosedInS34` records what it used to say.
 
 ### 4.3 Sharing the surface with a sound console (Xctl+MC)
 
@@ -660,17 +674,25 @@ show*, without taking the sound desk away from whoever is using it.
    "which controls are ours" is one edit rather than a condition scattered
    through the diffing.
 
-**What "tap for speed" needs, and does not have yet.** `LearnSpeed` exists today
-only as an *executor button* function (`ExecutorButtonFunction` in
-`ARCHITECTURE_SPEC.md` §6, and `XTouch.txt`, which offers it on a strip's buttons
-but not on the selected executor's). A tap against a **speed master** is a
-different target, and speed masters are named in `docs/DMX_MERGE.md` §4 item 3 —
-playback rate, applied in step 2 of the tick — but **nothing implements them and
-no domain type carries one**. So this is a forward dependency rather than
-something S22 can bind: the session that builds speed masters owes a command to
-tap one, and the transport row's function list should grow `LearnSpeed` when it
-exists. Recorded here so that the requirement is not rediscovered from the
-operator a second time.
+**What "tap for speed" needs — built in S34.** `LearnSpeed` existed only as an
+*executor button* function (`ExecutorButtonFunction` in `ARCHITECTURE_SPEC.md`
+§6, and `XTouch.txt`, which offers it on a strip's buttons but not on the
+selected executor's), and the speed masters it taps were named in
+`docs/DMX_MERGE.md` §4 item 3 with nothing implementing them and no domain type
+carrying one. S34 built both: `Executor::speed` is the rate, in units of
+`prism_domain::SPEED_UNITY`, and two taps inside four seconds mean *the running
+cue's transition should take that long*.
+
+It is therefore bindable on a transport key today —
+`{ "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "LearnSpeed" } }`
+— which is what this section asked for. The default profile does **not** do it,
+because §4.1's five transport defaults are what the operator has seen so far and
+choosing their layout is theirs; the point is that the row can now be spent.
+
+What is still *not* here: a speed master that is not an executor's. `Executor::speed`
+is per executor, which is what the domain carries and what an X-Touch strip
+addresses. A named speed master shared by several executors is a bigger idea and
+nothing has asked for one.
 
 **SMPTE/Beats (note 53) is reserved and must never be bound.** In the combined
 mode **it is the button that switches the surface between the two hosts** — it is

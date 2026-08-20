@@ -1177,6 +1177,32 @@ impl Show {
         }])
     }
 
+    /// Moves an executor's speed master — `docs/DMX_MERGE.md` §4 item 3.
+    ///
+    /// In units of `prism_domain::SPEED_UNITY`, and show state for the same
+    /// reason [`Self::set_executor_master`] is: a rate an operator set is part
+    /// of the show, and a reload that put every sequence back to 1x would be a
+    /// show that played differently the second time.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownExecutor`] if there is no such executor.
+    pub fn set_executor_speed(
+        &mut self,
+        id: ExecutorId,
+        speed: u16,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(executor) = self.executors.get_mut(&id) else {
+            return Err(ShowError::UnknownExecutor(id));
+        };
+        executor.speed = speed;
+        self.touch();
+        Ok(vec![JsonPatchOp::Replace {
+            path: format!("{}/speed", pointer(EXECUTORS, &id.to_string())),
+            value: JsonValue::Int(i64::from(speed)),
+        }])
+    }
+
     /// Records what the engine reports about a running executor.
     ///
     /// This travels as `Delta::ExecutorState` rather than as a show patch: it
@@ -1388,6 +1414,7 @@ fn default_executor(id: ExecutorId, sequence_id: Option<SequenceId>) -> Executor
         ],
         encoder_function: ExecutorEncoderFunction::Empty,
         master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }

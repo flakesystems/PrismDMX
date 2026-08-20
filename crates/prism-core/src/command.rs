@@ -39,8 +39,8 @@
 //! anyway, and it changes nothing.
 
 use prism_domain::{
-    Command, Delta, ExecutorId, Fixture, FixtureId, GoDirection, JsonPatchOp, NoticeLevel,
-    SequenceId, Vec3,
+    Command, Delta, ExecutorButtonFunction, ExecutorButtonRef, ExecutorFaderFunction, ExecutorId,
+    Fixture, FixtureId, GoDirection, JsonPatchOp, NoticeLevel, SequenceId, Vec3,
 };
 
 use crate::show::{Show, ShowError};
@@ -89,6 +89,55 @@ pub enum Effect {
     ExecutorOff {
         /// The executor.
         executor: ExecutorId,
+    },
+    /// Start an executor at the first cue of its list.
+    ///
+    /// `ExecutorButtonFunction::On` (S34). Distinct from [`Self::ExecutorGo`]
+    /// because a second press must not step a list that is already running —
+    /// `prism_engine::CuePlayer::on` is where that rule lives, and it is the
+    /// same rule `PlaybackLayer::activate` follows for the LTP order.
+    ExecutorOn {
+        /// The executor.
+        executor: ExecutorId,
+    },
+    /// Hold or release a flash over an executor's master.
+    ///
+    /// `ExecutorButtonFunction::Flash` (S34). **Not a master move**: the stored
+    /// master is untouched, so a release restores it byte for byte, and one that
+    /// arrived while the flash was held is the one that stands.
+    ExecutorFlash {
+        /// The executor.
+        executor: ExecutorId,
+        /// Held or released.
+        on: bool,
+    },
+    /// Move an executor's speed master — `docs/DMX_MERGE.md` §4 item 3.
+    ExecutorSpeed {
+        /// The executor.
+        executor: ExecutorId,
+        /// The new rate, in units of `prism_domain::SPEED_UNITY`.
+        speed: u16,
+    },
+    /// Tap an executor's speed — `ExecutorButtonFunction::LearnSpeed`, and the
+    /// *tap for speed* `docs/MCU_MAPPING.md` §4.3 recorded as having no target.
+    ///
+    /// The rate this learns is the engine's answer rather than the show's: two
+    /// taps mean a duration, and what that means as a rate depends on the cue
+    /// that is running.
+    ExecutorTapSpeed {
+        /// The executor.
+        executor: ExecutorId,
+    },
+    /// Move an executor's manual crossfade — `ExecutorFaderFunction::XFade`.
+    ///
+    /// Carries no show state at all: where a crossfade fader stands is a
+    /// gesture in progress, like a flash, and a show file that remembered one
+    /// would reload holding half a cue.
+    ExecutorXFade {
+        /// The executor.
+        executor: ExecutorId,
+        /// Where the fader is, `0..=65535`.
+        position: u16,
     },
     /// Move an executor's master.
     SetExecutorMaster {
@@ -291,15 +340,13 @@ impl Show {
                     executor: *executor_id,
                 }))
             }
+            Command::ExecutorButton {
+                executor_id,
+                button,
+                pressed,
+            } => self.apply_executor_button(*executor_id, *button, *pressed),
             Command::SetExecutorMaster { executor_id, level } => {
-                let ops = self.set_executor_master(*executor_id, *level)?;
-                Ok(Applied {
-                    deltas: vec![Delta::ShowPatch { ops }],
-                    effects: vec![Effect::SetExecutorMaster {
-                        executor: *executor_id,
-                        level: *level,
-                    }],
-                })
+                self.apply_executor_fader(*executor_id, *level)
             }
             Command::PatchFixture {
                 id,
@@ -422,6 +469,115 @@ impl Show {
     /// An executor with no sequence is a fader that does nothing, and silence
     /// is the wrong answer: "the Go did nothing" is a complaint an operator
     /// cannot diagnose, where "executor 3 has no sequence" is one they can.
+    /// Resolves a button press against the executor's own `button_functions`.
+    ///
+    /// **This is the whole of D3 for playback.** A client says *the third key of
+    /// executor nine went down*; what that key does is show data, and what
+    /// `Toggle` comes out as is `is_active`, which this model owns. A client
+    /// that read `is_active` itself would race a second client doing the same,
+    /// and the daemon would be told to do something nobody pressed —
+    /// `docs/MCU_MAPPING.md` §4.2.1 and S26's mutation check.
+    ///
+    /// A key with nothing on it, and the release of a function that is not
+    /// momentary, both change nothing and say so: they are ordinary, not
+    /// refusals.
+    fn apply_executor_button(
+        &mut self,
+        id: ExecutorId,
+        button: ExecutorButtonRef,
+        pressed: bool,
+    ) -> Result<Applied, ShowError> {
+        let Some(executor) = self.executor(id) else {
+            return Err(ShowError::UnknownExecutor(id));
+        };
+        let function = match button {
+            // A position the executor has no function for is a key with nothing
+            // on it. Out of range is the same thing: a surface with more keys
+            // per strip than this executor has assignments.
+            ExecutorButtonRef::Slot { index } => executor
+                .button_functions
+                .get(usize::from(index))
+                .copied()
+                .unwrap_or_default(),
+            ExecutorButtonRef::Function { function } => function,
+        };
+        let is_active = executor.is_active;
+        let effect = match (function, pressed) {
+            // A key with nothing on it, and the release of everything that is
+            // not momentary. Neither is a refusal: **the executor said so**, and
+            // that answer does not depend on whether it has a sequence — which
+            // is why this arm comes before the check below rather than after it.
+            (ExecutorButtonFunction::Empty, _) => return Ok(Applied::default()),
+            // Momentary: the release is half of the gesture rather than a
+            // second press.
+            (ExecutorButtonFunction::Flash, on) => Effect::ExecutorFlash { executor: id, on },
+            (_, false) => return Ok(Applied::default()),
+            (ExecutorButtonFunction::GoForward, _) => Effect::ExecutorGo {
+                executor: id,
+                direction: GoDirection::Next,
+            },
+            (ExecutorButtonFunction::GoBack, _) => Effect::ExecutorGo {
+                executor: id,
+                direction: GoDirection::Prev,
+            },
+            (ExecutorButtonFunction::On, _) => Effect::ExecutorOn { executor: id },
+            (ExecutorButtonFunction::Off, _) => Effect::ExecutorOff { executor: id },
+            // The one line this session exists for: the desk reads `is_active`,
+            // and no client may.
+            (ExecutorButtonFunction::Toggle, _) if is_active => {
+                Effect::ExecutorOff { executor: id }
+            }
+            (ExecutorButtonFunction::Toggle, _) => Effect::ExecutorOn { executor: id },
+            (ExecutorButtonFunction::LearnSpeed, _) => Effect::ExecutorTapSpeed { executor: id },
+        };
+        // Everything that got this far plays back a sequence, so the executor
+        // must have one — the same check `ExecutorGo` and `ExecutorOff` make,
+        // and the same refusal.
+        self.require_playable(id)?;
+        Ok(Applied::effect(effect))
+    }
+
+    /// Resolves a fader move against the executor's own `fader_function`.
+    ///
+    /// One command for all four functions, because a surface and a screen both
+    /// move *the fader* and which of the four it is belongs to the show
+    /// (`docs/MCU_MAPPING.md` §4.1's main-fader row, and `ARCHITECTURE_SPEC.md`
+    /// §6). `Master` and `Speed` are show state and travel as a patch; `XFade`
+    /// is a gesture in progress and carries none.
+    fn apply_executor_fader(&mut self, id: ExecutorId, level: u16) -> Result<Applied, ShowError> {
+        let Some(executor) = self.executor(id) else {
+            return Err(ShowError::UnknownExecutor(id));
+        };
+        match executor.fader_function {
+            ExecutorFaderFunction::Master => {
+                let ops = self.set_executor_master(id, level)?;
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::SetExecutorMaster {
+                        executor: id,
+                        level,
+                    }],
+                })
+            }
+            ExecutorFaderFunction::Speed => {
+                let ops = self.set_executor_speed(id, level)?;
+                Ok(Applied {
+                    deltas: vec![Delta::ShowPatch { ops }],
+                    effects: vec![Effect::ExecutorSpeed {
+                        executor: id,
+                        speed: level,
+                    }],
+                })
+            }
+            ExecutorFaderFunction::XFade => Ok(Applied::effect(Effect::ExecutorXFade {
+                executor: id,
+                position: level,
+            })),
+            // A fader with nothing on it. Not a refusal: the executor says so.
+            ExecutorFaderFunction::Empty => Ok(Applied::default()),
+        }
+    }
+
     fn require_playable(&self, id: ExecutorId) -> Result<(), ShowError> {
         let Some(executor) = self.executor(id) else {
             return Err(ShowError::UnknownExecutor(id));

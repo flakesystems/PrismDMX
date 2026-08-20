@@ -36,7 +36,7 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
 #[test]
 fn the_two_groups_together_are_the_whole_protocol() {
     // A new command variant has to be given a home here, or this fails.
-    assert_eq!(show_commands().len() + session_commands().len(), 35);
+    assert_eq!(show_commands().len() + session_commands().len(), 36);
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
     }
@@ -331,4 +331,302 @@ proptest! {
             }
         }
     }
+}
+
+// -------------------------------------------------- S34: the executor decides
+
+/// A show with one executor whose four buttons and fader are set by the caller.
+fn desk_with(
+    buttons: Vec<prism_domain::ExecutorButtonFunction>,
+    fader: prism_domain::ExecutorFaderFunction,
+) -> Show {
+    let mut show = populated_show();
+    let mut slot = executor(0, Some(1));
+    slot.button_functions = buttons;
+    slot.fader_function = fader;
+    show.store_executor(slot).unwrap();
+    show.mark_saved();
+    show
+}
+
+fn press(show: &mut Show, index: u8, pressed: bool) -> Vec<Effect> {
+    show.apply(&Command::ExecutorButton {
+        executor_id: ExecutorId::new(0),
+        button: prism_domain::ExecutorButtonRef::Slot { index },
+        pressed,
+    })
+    .expect("the executor plays a sequence")
+    .effects
+}
+
+/// **The executor decides what a press means, and the eight functions are the
+/// eight answers.**
+///
+/// The expectations are written out by hand rather than derived from the enum,
+/// for `prism-surface`'s reason (S19): a table that read the mapping it is
+/// checking would pass for any mapping, including one where Off and On had been
+/// swapped.
+#[test]
+fn every_button_function_resolves_to_the_effect_its_name_says() {
+    use prism_domain::ExecutorButtonFunction as Fn;
+    let executor = ExecutorId::new(0);
+    for (function, expected) in [
+        (Fn::Empty, Vec::new()),
+        (
+            Fn::GoForward,
+            vec![Effect::ExecutorGo {
+                executor,
+                direction: GoDirection::Next,
+            }],
+        ),
+        (
+            Fn::GoBack,
+            vec![Effect::ExecutorGo {
+                executor,
+                direction: GoDirection::Prev,
+            }],
+        ),
+        (Fn::On, vec![Effect::ExecutorOn { executor }]),
+        (Fn::Off, vec![Effect::ExecutorOff { executor }]),
+        (
+            Fn::Flash,
+            vec![Effect::ExecutorFlash { executor, on: true }],
+        ),
+        (Fn::LearnSpeed, vec![Effect::ExecutorTapSpeed { executor }]),
+        // Not running, so a toggle starts it. The other half is below.
+        (Fn::Toggle, vec![Effect::ExecutorOn { executor }]),
+    ] {
+        let mut show = desk_with(vec![function], prism_domain::ExecutorFaderFunction::Master);
+        assert_eq!(press(&mut show, 0, true), expected, "{function:?}");
+    }
+}
+
+/// **`Toggle` is resolved against `is_active`, here and nowhere else.**
+///
+/// The state a toggle reads is the one the *engine* reported through
+/// `Show::record_executor_state`, so a second client that started the executor
+/// is a second client this one has already been told about. A client resolving
+/// the toggle for itself would send a start, because it had never pressed
+/// anything.
+#[test]
+fn a_toggle_reads_the_state_the_daemon_holds() {
+    use prism_domain::ExecutorButtonFunction as Fn;
+    let executor = ExecutorId::new(0);
+    let mut show = desk_with(
+        vec![Fn::Toggle],
+        prism_domain::ExecutorFaderFunction::Master,
+    );
+    assert_eq!(
+        press(&mut show, 0, true),
+        vec![Effect::ExecutorOn { executor }]
+    );
+
+    // Somebody — a tick readback, which is the only author — says it is running.
+    show.record_executor_state(executor, true, Some(0)).unwrap();
+    assert_eq!(
+        press(&mut show, 0, true),
+        vec![Effect::ExecutorOff { executor }]
+    );
+
+    show.record_executor_state(executor, false, None).unwrap();
+    assert_eq!(
+        press(&mut show, 0, true),
+        vec![Effect::ExecutorOn { executor }]
+    );
+}
+
+/// Only `Flash` hears a release, and a key with nothing on it hears neither.
+#[test]
+fn a_release_is_half_a_flash_and_nothing_at_all_to_anything_else() {
+    use prism_domain::ExecutorButtonFunction as Fn;
+    let executor = ExecutorId::new(0);
+    let mut show = desk_with(
+        vec![Fn::Flash, Fn::GoForward, Fn::Toggle, Fn::Empty],
+        prism_domain::ExecutorFaderFunction::Master,
+    );
+    assert_eq!(
+        press(&mut show, 0, false),
+        vec![Effect::ExecutorFlash {
+            executor,
+            on: false,
+        }]
+    );
+    for index in 1..=3 {
+        assert!(press(&mut show, index, false).is_empty(), "button {index}");
+    }
+    // A position this executor has no button for is a key with nothing on it,
+    // which is an ordinary answer rather than a refusal.
+    assert!(press(&mut show, 0, true).len() == 1);
+    assert!(press(&mut show, 7, true).is_empty());
+    assert!(press(&mut show, u8::MAX, true).is_empty());
+}
+
+/// A profile may name the function outright; the daemon still decides what it
+/// comes out as.
+#[test]
+fn a_named_function_is_resolved_here_as_well() {
+    use prism_domain::ExecutorButtonFunction as Fn;
+    let executor = ExecutorId::new(0);
+    let mut show = desk_with(Vec::new(), prism_domain::ExecutorFaderFunction::Master);
+    let effects = |show: &mut Show, function| {
+        show.apply(&Command::ExecutorButton {
+            executor_id: executor,
+            button: prism_domain::ExecutorButtonRef::Function { function },
+            pressed: true,
+        })
+        .expect("the executor plays a sequence")
+        .effects
+    };
+    // The executor has *no* buttons assigned, so this cannot be coming from the
+    // slot table: it is the profile's own row.
+    assert_eq!(
+        effects(&mut show, Fn::On),
+        vec![Effect::ExecutorOn { executor }]
+    );
+    show.record_executor_state(executor, true, Some(0)).unwrap();
+    assert_eq!(
+        effects(&mut show, Fn::Toggle),
+        vec![Effect::ExecutorOff { executor }],
+        "a named Toggle was not resolved against is_active"
+    );
+}
+
+/// A press on an executor that has no sequence, or none at all, is refused —
+/// the same refusal `ExecutorGo` gives, for the same reason.
+#[test]
+fn a_button_on_an_executor_with_nothing_to_play_is_refused() {
+    use prism_domain::ExecutorButtonFunction as Fn;
+    let mut show = desk_with(
+        vec![Fn::GoForward],
+        prism_domain::ExecutorFaderFunction::Master,
+    );
+    let before = snapshot(&show);
+    // Executor 1 exists and has no sequence. Its buttons are unassigned, so a
+    // *slot* press there is a key with nothing on it; the refusal is reached
+    // with a named function, which is what a transport key sends.
+    assert_eq!(
+        show.apply(&Command::ExecutorButton {
+            executor_id: ExecutorId::new(1),
+            button: prism_domain::ExecutorButtonRef::Function {
+                function: Fn::GoForward,
+            },
+            pressed: true,
+        }),
+        Err(ShowError::ExecutorHasNoSequence(ExecutorId::new(1)))
+    );
+    assert_eq!(
+        show.apply(&Command::ExecutorButton {
+            executor_id: ExecutorId::new(1),
+            button: prism_domain::ExecutorButtonRef::Slot { index: 0 },
+            pressed: true,
+        })
+        .unwrap(),
+        prism_core::Applied::default(),
+        "a key with nothing on it is not a refusal"
+    );
+    // And neither is the *release* of a function that is not momentary, on the
+    // same executor: a key coming up is not an instruction, so refusing it would
+    // put a message on a screen for a gesture that had already ended.
+    assert_eq!(
+        show.apply(&Command::ExecutorButton {
+            executor_id: ExecutorId::new(1),
+            button: prism_domain::ExecutorButtonRef::Function {
+                function: Fn::GoForward,
+            },
+            pressed: false,
+        })
+        .unwrap(),
+        prism_core::Applied::default()
+    );
+    assert_eq!(
+        show.apply(&Command::ExecutorButton {
+            executor_id: ExecutorId::new(77),
+            button: prism_domain::ExecutorButtonRef::Slot { index: 0 },
+            pressed: true,
+        }),
+        Err(ShowError::UnknownExecutor(ExecutorId::new(77)))
+    );
+    assert_eq!(snapshot(&show), before);
+}
+
+/// **One fader command, four meanings, and the executor picks.**
+#[test]
+fn what_a_fader_does_is_the_executors_own_setting() {
+    use prism_domain::ExecutorFaderFunction as Fader;
+    let executor = ExecutorId::new(0);
+
+    let mut master = desk_with(Vec::new(), Fader::Master);
+    let applied = master
+        .apply(&Command::SetExecutorMaster {
+            executor_id: executor,
+            level: 30_000,
+        })
+        .unwrap();
+    assert_eq!(
+        applied.effects,
+        vec![Effect::SetExecutorMaster {
+            executor,
+            level: 30_000
+        }]
+    );
+    assert_eq!(master.executor(executor).unwrap().master_level, 30_000);
+    assert_eq!(
+        master.executor(executor).unwrap().speed,
+        prism_domain::SPEED_UNITY
+    );
+
+    let mut speed = desk_with(Vec::new(), Fader::Speed);
+    let applied = speed
+        .apply(&Command::SetExecutorMaster {
+            executor_id: executor,
+            level: 30_000,
+        })
+        .unwrap();
+    assert_eq!(
+        applied.effects,
+        vec![Effect::ExecutorSpeed {
+            executor,
+            speed: 30_000
+        }]
+    );
+    assert_eq!(speed.executor(executor).unwrap().speed, 30_000);
+    assert_eq!(
+        speed.executor(executor).unwrap().master_level,
+        65_535,
+        "the master moved"
+    );
+
+    // A crossfade in progress is a gesture rather than show state — a show file
+    // that remembered one would reload holding half a cue — so it produces an
+    // effect and no patch at all.
+    let mut crossfade = desk_with(Vec::new(), Fader::XFade);
+    let before = snapshot(&crossfade);
+    let applied = crossfade
+        .apply(&Command::SetExecutorMaster {
+            executor_id: executor,
+            level: 30_000,
+        })
+        .unwrap();
+    assert_eq!(
+        applied.effects,
+        vec![Effect::ExecutorXFade {
+            executor,
+            position: 30_000
+        }]
+    );
+    assert!(applied.deltas.is_empty(), "{applied:?}");
+    assert_eq!(snapshot(&crossfade), before);
+
+    // A fader with nothing on it: accepted, and it does nothing. Refusing would
+    // put a message on a screen for a fader the operator can see is dead.
+    let mut empty = desk_with(Vec::new(), Fader::Empty);
+    let before = snapshot(&empty);
+    let applied = empty
+        .apply(&Command::SetExecutorMaster {
+            executor_id: executor,
+            level: 30_000,
+        })
+        .unwrap();
+    assert_eq!(applied, prism_core::Applied::default());
+    assert_eq!(snapshot(&empty), before);
 }

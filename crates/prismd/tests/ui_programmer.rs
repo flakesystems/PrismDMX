@@ -227,6 +227,7 @@ fn desk_show() -> ShowFile {
             button_functions: buttons,
             encoder_function: encoder,
             master_level: level,
+            speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
         })
@@ -583,6 +584,46 @@ fn decode(payload: &[u8]) -> ServerMessage {
     prism_ipc::decode(payload).expect("the daemon sends messages this build can read")
 }
 
+/// How long the daemon has to be quiet before a step is over.
+///
+/// **The playback readback is asynchronous** (S34): what cue an executor is on
+/// comes back from the tick, so a `Delta::ExecutorState` arrives a poll after
+/// the command that caused it rather than with its receipt. A recorder that
+/// stopped at the `Ack` would file that delta under the *next* step, and the
+/// per-step snapshot beside it would already contain it — the recording would
+/// disagree with itself.
+///
+/// Six poll periods and a few ticks. Long enough that a settled desk is really
+/// settled; short enough that a forty-step script does not take a minute.
+const SETTLE: Duration = Duration::from_millis(150);
+
+/// Collects everything the daemon says after the receipt, until it has gone
+/// [`SETTLE`] without a **delta**.
+///
+/// Only a delta resets the window. The daemon also publishes a telemetry frame
+/// thirty times a second to anybody listening, so a drain that waited for
+/// silence on the socket would wait for ever.
+async fn settle(wire: &mut Wire, deltas: &mut Vec<String>) {
+    let mut deadline = std::time::Instant::now() + SETTLE;
+    loop {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return;
+        }
+        match tokio::time::timeout(deadline - now, wire.recv()).await {
+            Ok(Some(Ok(payload))) => {
+                if matches!(decode(&payload), ServerMessage::Delta { .. }) {
+                    deltas.push(common::encode_base64(&payload));
+                    deadline = std::time::Instant::now() + SETTLE;
+                }
+            }
+            // The window closed, or the connection has gone: either way this
+            // step is over.
+            Ok(_) | Err(_) => return,
+        }
+    }
+}
+
 /// **The regenerator.** Runs a daemon and writes the rig and the recording.
 ///
 /// ```text
@@ -646,6 +687,10 @@ async fn record_the_desk_script_for_the_interface() {
                 _ => {}
             }
         };
+
+        // Everything the readback has to say about this step, before the
+        // snapshot below is taken — see [`SETTLE`].
+        settle(&mut wire, &mut deltas).await;
 
         // And the answers, out of a **fresh** snapshot: what the daemon would
         // tell a client that had never seen a delta.
@@ -1060,22 +1105,32 @@ fn the_recording_is_of_a_desk_being_used() {
             .any(|step| step.strips.iter().any(|strip| strip.is_active)),
         "nothing was ever started"
     );
-    // **And a finding, asserted so that fixing it is noticed.** `cueIndex` is
-    // never filled: `prismd::core::record_executor` reads it back out of the
-    // show, and nothing writes it there, because what cue a playback is on
-    // lives on the tick thread and there is no channel from the tick to the
-    // core. The wire has the field (`Delta::ExecutorState`) and so does the
-    // domain (`Executor::currentCueIndex`); what is missing is the feedback
-    // path. The executor bar therefore shows a dash rather than a cue number,
-    // and the session that builds that channel will find this test red and the
-    // recording in need of regenerating — which is the point of asserting it.
+    // **The finding S26 recorded, closed in S34 and asserted the other way
+    // round.** Until this session `cueIndex` was never filled — what cue a
+    // playback is on lives on the tick thread and there was no channel from the
+    // tick to the core — so this assertion demanded that every recorded strip
+    // showed a dash, with a message telling whoever built the channel to turn it
+    // round. `prism_engine::PlaybackReport` is that channel, and here is the
+    // other side of the claim: a strip that is running is on a cue, a strip that
+    // is not is on none, and the number moves.
     assert!(
         steps.iter().all(|step| step
             .strips
             .iter()
-            .all(|strip| strip.current_cue_index.is_none())),
-        "an executor reported a cue index: the engine now feeds one back, so \
-         regenerate this recording and give the executor bar a cue number"
+            .all(|strip| strip.current_cue_index.is_some() == strip.is_active)),
+        "a strip's cue index disagrees with whether it is running"
+    );
+    let indexes: std::collections::BTreeSet<u32> = steps
+        .iter()
+        .flat_map(|step| {
+            step.strips
+                .iter()
+                .filter_map(|strip| strip.current_cue_index)
+        })
+        .collect();
+    assert!(
+        !indexes.is_empty(),
+        "no strip ever reported a cue index, so the readback was never exercised"
     );
     // The four button functions the protocol has no command for are on the bar,
     // because an interface that never met one could not be checked for being

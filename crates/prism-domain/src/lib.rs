@@ -48,8 +48,8 @@ pub use attribute::{AttributeDef, AttributeType, FeatureGroup, FixtureType, Merg
 pub use command::{Command, GoDirection, ParamDirection, SelectionMode};
 pub use delta::{Delta, NoticeLevel};
 pub use executor::{
-    EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction, ExecutorEncoderFunction,
-    ExecutorFaderFunction,
+    EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction, ExecutorButtonRef,
+    ExecutorEncoderFunction, ExecutorFaderFunction, SPEED_UNITY,
 };
 pub use export::{BINDINGS_DIR, export_bindings};
 pub use ids::{

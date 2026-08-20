@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AttributeType, CueProperty, ExecutorId, FeatureGroup, FixtureId, JsonValue, PresetId, RgbColor,
-    SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
+    AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, JsonValue,
+    PresetId, RgbColor, SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -206,11 +206,40 @@ pub enum Command {
         /// Target executor.
         executor_id: ExecutorId,
     },
-    /// Move an executor's master.
+    /// Press or release one of an executor's buttons.
+    ///
+    /// **The command that lets the executor decide what a press means** — the
+    /// gap `docs/MCU_MAPPING.md` §4.2.1 recorded from the binding table and S26
+    /// met again from the interface, closed in S34. `ExecutorGo` and
+    /// `ExecutorOff` say *what to do*; this says *what was pressed*, and
+    /// `prism_core::Show::apply` resolves it against that executor's own
+    /// `button_functions`. That is the whole of the difference: `Toggle` is
+    /// resolved against `is_active` by the daemon, which owns it, and never by a
+    /// client, which would race a second client doing the same.
+    ///
+    /// `pressed` is what `Flash` needs: a momentary function has a down and an
+    /// up, and the up is not a second press. Functions that are not momentary
+    /// act on the down and ignore the up.
+    ExecutorButton {
+        /// Target executor.
+        executor_id: ExecutorId,
+        /// Which button.
+        button: ExecutorButtonRef,
+        /// Whether the button went down (`true`) or came up (`false`).
+        pressed: bool,
+    },
+    /// Move an executor's fader.
+    ///
+    /// **What the fader does is the executor's own setting** — `Master`,
+    /// `Speed`, `XFade` or nothing (`ExecutorFaderFunction`). One command for
+    /// all four, for the reason `docs/MCU_MAPPING.md` §4.1 gives the main fader
+    /// a single row: a surface and a screen both move *the fader*, and which of
+    /// the four it is belongs to the show. The name is the one it has had since
+    /// S1 and is kept so a saved profile and a recorded script still parse.
     SetExecutorMaster {
         /// Target executor.
         executor_id: ExecutorId,
-        /// New level, `0..=65535`.
+        /// New position, `0..=65535`.
         level: u16,
     },
     /// Patch a fixture into a universe.
@@ -506,6 +535,7 @@ impl Command {
             self,
             Self::ExecutorGo { .. }
                 | Self::ExecutorOff { .. }
+                | Self::ExecutorButton { .. }
                 | Self::SetExecutorMaster { .. }
                 | Self::Oops
                 | Self::Redo
@@ -517,9 +547,9 @@ impl Command {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AttributeType, Command, CueProperty, ExecutorId, FeatureGroup, FixtureId, GoDirection,
-        JsonValue, ParamDirection, PresetId, RgbColor, SelectionMode, SequenceId, UniverseId,
-        ViewId, WindowInstanceId, WindowType,
+        AttributeType, Command, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup,
+        FixtureId, GoDirection, JsonValue, ParamDirection, PresetId, RgbColor, SelectionMode,
+        SequenceId, UniverseId, ViewId, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -624,6 +654,11 @@ mod tests {
             Command::ExecutorOff {
                 executor_id: ExecutorId::new(0),
             },
+            Command::ExecutorButton {
+                executor_id: ExecutorId::new(0),
+                button: ExecutorButtonRef::Slot { index: 3 },
+                pressed: true,
+            },
             Command::SetExecutorMaster {
                 executor_id: ExecutorId::new(0),
                 level: 0,
@@ -723,7 +758,7 @@ mod tests {
                 text: "1 thru 4 at full".to_owned(),
             },
         ];
-        assert_eq!(commands.len(), 35);
+        assert_eq!(commands.len(), 36);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -845,6 +880,13 @@ mod tests {
             Command::SetExecutorMaster {
                 executor_id: ExecutorId::new(0),
                 level: 0,
+            },
+            // S34's, and it is the *most* playback-shaped of them: a button on
+            // a strip during a show.
+            Command::ExecutorButton {
+                executor_id: ExecutorId::new(0),
+                button: ExecutorButtonRef::Slot { index: 0 },
+                pressed: true,
             },
             Command::SelectView {
                 view_id: ViewId::new(1),

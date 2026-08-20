@@ -15,20 +15,28 @@
  * X-Touch's `Faderbank ◀▶` and paging here are the same act rather than two
  * things kept in step.
  *
- * # The four button functions, and the three that have no command
+ * # The eight button functions, and the one command that presses them
  *
  * An executor's buttons are **show data**: `Go+`, `Go-`, `Off`, `On`, `Flash`,
- * `Toggle`, `LearnSpeed`. The protocol has commands for the first three and no
- * command that *presses an executor's button and lets the executor decide what
- * that means* — S22 found this, `docs/MCU_MAPPING.md` §4.2.1 records it, and it
- * is still true.
+ * `Toggle`, `LearnSpeed`, `Empty`. Until S34 the protocol had commands for only
+ * three of them, so this bar drew the other four disabled with the reason on the
+ * button — S22 found the gap from the binding table, S26 met it from here, and
+ * `docs/MCU_MAPPING.md` §4.2.1 records both.
  *
- * So the bar draws every button the show says is there and **says which ones it
- * cannot press**, with the reason on the button. The alternative — resolving
- * `Toggle` to a Go or an Off by looking at `isActive` — is a client deciding
- * what a show's own setting means, which is D3 with the label filed off: two
- * clients would race, and the daemon would be told to do something nobody
- * pressed.
+ * `Command::ExecutorButton` closed it, and the shape of the fix is what matters:
+ * a press says **which button**, never what it means. The bar sends
+ * `{ t: "Slot", index }` — the third key of executor nine went down — and the
+ * daemon resolves it against that executor's own `buttonFunctions`. Resolving
+ * `Toggle` to a Go or an Off by looking at `isActive` here would be a client
+ * deciding what a show's own setting means, which is D3 with the label filed
+ * off: two clients would race, and the daemon would be told to do something
+ * nobody pressed. S26 kept that as a mutation check and it is still there.
+ *
+ * **`Flash` is why a press has two edges.** It is momentary — held, the executor
+ * runs at full; released, the stored master comes back untouched — so the bar
+ * sends the release as well, and the daemon drops the release of every function
+ * that is not momentary. The bar does not know which is which, and does not need
+ * to.
  */
 
 import { useEffect, useState } from "react";
@@ -52,10 +60,11 @@ export interface ExecutorBarProps {
     readonly onSelect: (executorId: number) => void;
     /** Sends a `SetExecutorMaster`. */
     readonly onMaster: (executorId: number, level: number) => void;
-    /** Sends an `ExecutorGo`. */
-    readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
-    /** Sends an `ExecutorOff`. */
-    readonly onOff: (executorId: number) => void;
+    /**
+     * Sends an `ExecutorButton` — which button went down or came up, never what
+     * it means. See the module documentation.
+     */
+    readonly onButton: (executorId: number, index: number, pressed: boolean) => void;
 }
 
 /** The bar. */
@@ -65,8 +74,7 @@ export function ExecutorBar({
     onPage,
     onSelect,
     onMaster,
-    onGo,
-    onOff,
+    onButton,
 }: ExecutorBarProps) {
     const page = executorPage(session);
     const selected = selectedExecutor(session);
@@ -109,8 +117,7 @@ export function ExecutorBar({
                     selected={strip.executorId === selected}
                     onSelect={onSelect}
                     onMaster={onMaster}
-                    onGo={onGo}
-                    onOff={onOff}
+                    onButton={onButton}
                 />
             ))}
         </section>
@@ -123,15 +130,13 @@ function Strip({
     selected,
     onSelect,
     onMaster,
-    onGo,
-    onOff,
+    onButton,
 }: {
     readonly strip: ExecutorStrip;
     readonly selected: boolean;
     readonly onSelect: (executorId: number) => void;
     readonly onMaster: (executorId: number, level: number) => void;
-    readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
-    readonly onOff: (executorId: number) => void;
+    readonly onButton: (executorId: number, index: number, pressed: boolean) => void;
 }) {
     const shown = useFader(strip, onMaster);
     const percent = wholePercent(shown.level);
@@ -192,8 +197,7 @@ function Strip({
                         index={index}
                         fn={fn}
                         executorId={strip.executorId}
-                        onGo={onGo}
-                        onOff={onOff}
+                        onButton={onButton}
                     />
                 ))}
             </div>
@@ -208,51 +212,49 @@ function Strip({
  * One of an executor's four buttons, drawn from what the show says it does.
  *
  * `Empty` draws nothing at all: a button with no function is a gap on the
- * console, and drawing a dead key there would be four dead keys per strip.
+ * console, and drawing a dead key there would be four dead keys per strip. The
+ * daemon would answer an `Empty` press with nothing anyway — this is the same
+ * decision, made where the operator can see it.
+ *
+ * **Pointer down and pointer up, not click.** A click is one event and `Flash`
+ * needs two; and a pointer that left the button before it came up still has to
+ * release the flash, which is what the capture is for. Everything else ignores
+ * the release at the daemon, so the two edges cost nothing.
  */
 function FunctionButton({
     slot,
     index,
     fn,
     executorId,
-    onGo,
-    onOff,
+    onButton,
 }: {
     readonly slot: number;
     readonly index: number;
     readonly fn: ExecutorButtonFunction;
     readonly executorId: number;
-    readonly onGo: (executorId: number, direction: "Next" | "Prev") => void;
-    readonly onOff: (executorId: number) => void;
+    readonly onButton: (executorId: number, index: number, pressed: boolean) => void;
 }) {
     if (fn === "Empty") {
         return null;
-    }
-    const testId = `button-${String(slot)}-${String(index)}`;
-    const press = pressFor(fn);
-    if (press === null) {
-        return (
-            <button
-                type="button"
-                className="strip-button strip-button-unbound"
-                data-testid={testId}
-                data-function={fn}
-                disabled
-                title={UNPRESSABLE}
-            >
-                {LABELS[fn]}
-            </button>
-        );
     }
     return (
         <button
             type="button"
             className="strip-button"
-            data-testid={testId}
+            data-testid={`button-${String(slot)}-${String(index)}`}
             data-function={fn}
             title={`${LABELS[fn]} on executor ${String(executorId)}`}
-            onClick={() => {
-                press(executorId, onGo, onOff);
+            onPointerDown={(event) => {
+                // The capture is what makes the release reliable: a finger that
+                // slides off a flash key must still put the master back.
+                event.currentTarget.setPointerCapture(event.pointerId);
+                onButton(executorId, index, true);
+            }}
+            onPointerUp={() => {
+                onButton(executorId, index, false);
+            }}
+            onPointerCancel={() => {
+                onButton(executorId, index, false);
             }}
         >
             {LABELS[fn]}
@@ -271,50 +273,6 @@ const LABELS: Readonly<Record<ExecutorButtonFunction, string>> = {
     Flash: "Fl",
     Toggle: "Tog",
 };
-
-/** Why four of the eight functions are drawn but cannot be pressed. */
-export const UNPRESSABLE =
-    "The protocol has no command that presses an executor's button: On, Flash, " +
-    "Toggle and Learn Speed are functions the executor decides, and no client may " +
-    "decide them for it. See docs/MCU_MAPPING.md §4.2.1.";
-
-/**
- * What pressing a button does, or `null` when the protocol cannot say.
- *
- * The three that resolve are the three that have a command of their own. The
- * rest are not guessed at — see the module documentation, and note that
- * `prism-surface`'s binding table reached exactly the same three (S22), from
- * the other end of the desk and for the same reason.
- */
-function pressFor(
-    fn: ExecutorButtonFunction,
-): | ((
-    executorId: number,
-    onGo: (executorId: number, direction: "Next" | "Prev") => void,
-    onOff: (executorId: number) => void,
-) => void)
-    | null {
-    switch (fn) {
-        case "Go+":
-            return (executorId, onGo) => {
-                onGo(executorId, "Next");
-            };
-        case "Go-":
-            return (executorId, onGo) => {
-                onGo(executorId, "Prev");
-            };
-        case "Off":
-            return (executorId, _onGo, onOff) => {
-                onOff(executorId);
-            };
-        case "Empty":
-        case "On":
-        case "Flash":
-        case "Toggle":
-        case "LearnSpeed":
-            return null;
-    }
-}
 
 /**
  * The fader: the daemon's level, and the pointer's while the button is down.

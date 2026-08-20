@@ -392,18 +392,55 @@ describe("the sequence sheet", () => {
     expect(commands()).toEqual([]);
   });
 
-  it("shows what is running and draws the cue number as a dash", async () => {
+  it("shows what is running and which cue it is standing on", async () => {
     const { applyStep } = await desk();
-    await applyStep(...A_CUE_LIST, "fire the list");
-    expect(screen.getByTestId("looks-executor-state").textContent).toBe("running");
-    // **The dash, and it is deliberate**: nothing fills `currentCueIndex` until
-    // S34 builds the channel back from the tick, so the sheet says which
-    // executor is running and not where it is.
+    // Before anything runs: a dash, because a stopped playback is on no cue.
+    await applyStep(...A_CUE_LIST);
+    expect(screen.getByTestId("looks-executor-state").textContent).toBe("stopped");
     expect(screen.getByTestId("looks-executor-cue").textContent).toBe("cue —");
+    expect(screen.getByTestId("cue-row-1").dataset["running"]).toBe("no");
+
+    // **S26 and S28 both had to draw a dash here.** S34's readback out of the
+    // tick fills it, and this number is the daemon's own answer replayed from a
+    // recorded script — not a count of the Gos this interface sent, which would
+    // be right until a follow cue fired.
+    await applyStep("fire the list");
+    expect(screen.getByTestId("looks-executor-state").textContent).toBe("running");
+    expect(screen.getByTestId("looks-executor-cue").textContent).toBe("cue 1");
+    // And the row the playback is standing on says so.
+    expect(screen.getByTestId("cue-row-1").dataset["running"]).toBe("yes");
+
+    await applyStep("step it again");
+    expect(screen.getByTestId("looks-executor-cue").textContent).toBe("cue 2");
+    expect(screen.getByTestId("cue-row-1").dataset["running"]).toBe("no");
+    expect(screen.getByTestId("cue-row-2").dataset["running"]).toBe("yes");
   });
 });
 
 describe("the store bar", () => {
+  /**
+   * **The question is asked when the answer can have changed, and not per
+   * frame.**
+   *
+   * S28 left the warning and named S34 as the session that would test it:
+   * `Query::StorePreview` is asked once per delta, which is fine at the rate a
+   * cue sheet changes and is *not* fine at playback rates — and S34's readback
+   * is what makes the show document move while a playback runs. Firing the list
+   * and stepping it produce two `ExecutorState` deltas and no new question; a
+   * chase of instantaneous cues would otherwise ask forty-four times a second.
+   */
+  it("does not ask again when a playback advances a cue", async () => {
+    const { queries, applyStep } = await desk();
+    await applyStep(...A_CUE_LIST);
+    const before = queries().filter((query) => query.t === "StorePreview").length;
+    expect(before).toBeGreaterThan(0);
+
+    await applyStep("fire the list", "step it again");
+    expect(screen.getByTestId("looks-executor-cue").textContent).toBe("cue 2");
+    expect(queries().filter((query) => query.t === "StorePreview").length).toBe(before);
+  });
+
+
   it("asks the daemon what the store would do, and puts the answer on the button", async () => {
     const { queries, answerQuery, applyStep } = await desk();
     await applyStep(...A_CUE_LIST);

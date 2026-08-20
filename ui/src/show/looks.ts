@@ -22,11 +22,14 @@
  * a second answer to a question the show has already answered, and the two would
  * disagree for exactly as long as a round trip.
  *
- * **Which cue an executor is on.** `Executor::currentCueIndex` is in the domain
- * and on the wire and **nothing ever fills it** — what cue a playback is on
- * lives on the tick thread with no channel back (S26's finding, S34's to close).
- * So {@link executorInForce} reports `null` and the sheet draws a dash rather
- * than a number it invented.
+ * **Which cue an executor is on** is the daemon's answer and not a reading.
+ * `Executor::currentCueIndex` was in the domain and on the wire from S1 with
+ * nothing filling it — what cue a playback is on lives on the tick thread, and
+ * until S34 there was no channel back — so S26 and S28 both drew a dash. S34's
+ * `prism_engine::PlaybackReport` fills it, and {@link executorInForce} passes it
+ * through unchanged. **It is still not something a view may work out**: a sheet
+ * that counted Gos would be right until a follow cue fired, and wrong in a way
+ * nobody would notice until a show.
  */
 
 import type { AttributeType, CueTrigger, FeatureGroup, JsonValue, RgbColor } from "../bindings";
@@ -212,6 +215,25 @@ function partRowsOf(cue: JsonValue): readonly CuePartRow[] {
     });
   }
   return rows;
+}
+
+/**
+ * The `/sequences` subtree of the show, as it stands.
+ *
+ * **A dependency, not a reading.** `mirror/patch.ts` shares every container a
+ * patch did not touch, so this node keeps its identity while anything else in
+ * the show moves — and since S34 something else in the show moves whenever a
+ * playback changes cue. A store preview asked on every show change would then be
+ * asked on every cue of a chase, which is the warning S28 left in
+ * `PROGRESS.md` §7 and S27 left before it about `PatchConflicts`.
+ */
+export function sequencesDocument(show: JsonValue | null): JsonValue | null {
+  return valueAt(show, SEQUENCES);
+}
+
+/** The `/presets` subtree of the show. The same, for the pools. */
+export function presetsDocument(show: JsonValue | null): JsonValue | null {
+  return valueAt(show, PRESETS);
 }
 
 /** The preset pools, in number order. */

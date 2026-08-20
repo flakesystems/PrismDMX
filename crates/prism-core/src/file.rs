@@ -546,6 +546,7 @@ impl ShowFile {
             // here as well as in the three appliers.
             Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
+            | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
             | Command::Oops
             | Command::Redo

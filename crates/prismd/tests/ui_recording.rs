@@ -265,6 +265,40 @@ fn decode(payload: &[u8]) -> ServerMessage {
     prism_ipc::decode(payload).expect("the daemon sends messages this build can read")
 }
 
+/// How long the daemon has to go without a delta before a case is over.
+///
+/// **The playback readback is asynchronous** (S34): what cue an executor is on
+/// comes back from the tick, so a `Delta::ExecutorState` arrives a poll after
+/// the command that caused it rather than with its receipt. A recording that
+/// stopped at the last `Ack` would lose it, and the replay would then disagree
+/// with the fresh snapshot beside it.
+///
+/// Only a delta resets the window: the daemon also publishes a telemetry frame
+/// thirty times a second, so a drain that waited for silence on the socket would
+/// wait for ever.
+const SETTLE: Duration = Duration::from_millis(150);
+
+/// Collects everything the daemon says after the last receipt, until it has
+/// gone [`SETTLE`] without a delta.
+async fn settle(wire: &mut Wire, deltas: &mut Vec<String>) {
+    let mut deadline = std::time::Instant::now() + SETTLE;
+    loop {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return;
+        }
+        match tokio::time::timeout(deadline - now, wire.recv()).await {
+            Ok(Some(Ok(payload))) => {
+                if matches!(decode(&payload), ServerMessage::Delta { .. }) {
+                    deltas.push(common::encode_base64(&payload));
+                    deadline = std::time::Instant::now() + SETTLE;
+                }
+            }
+            Ok(_) | Err(_) => return,
+        }
+    }
+}
+
 /// **The regenerator.** Runs a daemon and writes the recording.
 ///
 /// ```text
@@ -339,6 +373,13 @@ async fn record_the_delta_stream_for_the_interface() {
                 }
             }
         }
+
+        // Everything the readback still has to say, before the fresh client
+        // below is served — see [`SETTLE`]. A recording that stopped at the last
+        // `Ack` would lose the `Delta::ExecutorState` that follows a playback
+        // command by a poll, and the replay would then disagree with the
+        // snapshot beside it.
+        settle(&mut wire, &mut deltas).await;
 
         // And a fresh client, which is the whole point: what it is served is
         // the daemon's own state, arrived at without a single delta.

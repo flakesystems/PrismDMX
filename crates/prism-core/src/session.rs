@@ -353,6 +353,7 @@ impl SessionState {
             | Command::StoreCue { .. }
             | Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
+            | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
             | Command::PatchFixture { .. }
             | Command::UnpatchFixture { .. }

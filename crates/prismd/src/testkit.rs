@@ -150,6 +150,7 @@ pub fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
         master_level: 40000,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }

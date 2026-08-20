@@ -293,6 +293,19 @@
 }
 
 /*
+ * The cue the playback is standing on (S34).
+ *
+ * A left edge and a lit number rather than a filled row: an operator reads this
+ * sheet while editing it, and a highlight that covered the cells would fight the
+ * open editor for the eye. The colour is the same `--ok` the executor line uses
+ * for *running*, because it is the same fact.
+ */
+.sheet tr.cue-running td {
+    box-shadow: inset 2px 0 0 var(--ok);
+    color: var(--ok);
+}
+
+/*
  * The patch and the fixture sheet, S27.
  *
  * Both are windows with more rows than they have room for, and both scroll

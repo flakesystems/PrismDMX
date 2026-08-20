@@ -117,11 +117,19 @@ fn any_client_message() -> BoxedStrategy<ClientMessage> {
     // layer per arm, and with `Command`'s derived tree inside it the
     // two-message property below ran a debug build out of stack when S27 added
     // the third arm. Erasing the type puts that recursion behind a vtable.
+    //
+    // **`Command` itself is boxed too, for the same reason** (S34). Boxing the
+    // outer union leaves the derived tree — one variant's worth of value tree
+    // per variant, all in one value — on the stack of whatever holds it, and
+    // the thirty-sixth command was what tipped the two-message property over
+    // again. A session adding a command with a large payload should reach for
+    // `.boxed()` rather than for `RUST_MIN_STACK`; `prism-core`'s
+    // `tests/oops.rs` carries the same note.
     prop_oneof![
         any_hello().prop_map(|hello| ClientMessage::Hello { hello }),
         (any::<u64>(), any::<prism_domain::Query>())
             .prop_map(|(seq, query)| ClientMessage::Query { seq, query }),
-        (any::<u64>(), any::<Command>())
+        (any::<u64>(), any::<Command>().boxed())
             .prop_map(|(seq, command)| ClientMessage::Command { seq, command }),
     ]
     .boxed()

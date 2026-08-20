@@ -43,11 +43,121 @@
 //! **At most one cue starts per tick.** A chain of follow cues with no times in
 //! it advances one cue per tick rather than spinning inside one. It is a fuse:
 //! the tick has a 22.7 ms budget and a cue list is show data.
+//!
+//! # Speed, and why time is accumulated rather than subtracted (S34)
+//!
+//! Until S34 a player read its position as `tick - started`, which is exact and
+//! has no rate in it. A *speed master* — `docs/DMX_MERGE.md` §4 item 3, named
+//! there since S3 with nothing implementing it — is a rate, so the position is
+//! now **accumulated**: every tick adds `speed` sixty-fourths… precisely,
+//! `prism_domain::SPEED_UNITY`ths of a tick, and the remainder is carried. At
+//! [`prism_domain::SPEED_UNITY`] that adds exactly one per tick and every fade
+//! in the project is the number it was before, which is what the existing tests
+//! assert; the accumulator is what makes any other rate possible at all.
+//!
+//! It advances by the number of tick *slots* that have passed rather than by
+//! one, so a tick the scheduler missed still moves the fade forward by the time
+//! it really took. A cue list that fell behind wall-clock time after a stall
+//! would be a show drifting away from its own timing.
+//!
+//! **A tap learns the speed against the running cue.** Two taps within
+//! [`TAP_WINDOW`] mean *this transition should take that long*, so the rate is
+//! the cue's own transition time divided by the tapped interval. A cue with no
+//! transition time has no rate to learn and a tap against one changes nothing.
+//!
+//! # The crossfade is the same transition with the fader for a clock
+//!
+//! `ExecutorFaderFunction::XFade` (`ARCHITECTURE_SPEC.md` §6) is the third of
+//! `docs/MCU_MAPPING.md` §4.1's unresolved rows. A crossfade does not replace
+//! the transition — the same `from`, `to` and cue traversal are used — it
+//! replaces the *clock*: progress is how far the fader has travelled from where
+//! it stood when the cue was taken, towards whichever end it started from.
+//! Reaching that end completes the cue and the fader is then inert until the
+//! next Go, which takes its current position as the new origin. That is what
+//! makes the next crossfade run in the other direction, which is how a console
+//! with one crossfade fader is operated.
 
-use prism_domain::{CueTrigger, ExecutorId, GoDirection};
+use prism_domain::{CueTrigger, ExecutorId, GoDirection, SPEED_UNITY};
 
 use crate::cue::{CuePlan, SequencePlan, interpolate};
 use crate::playback::{PlaybackLayer, PlaybackSource};
+
+/// Full travel of a crossfade fader, and the denominator its progress is
+/// expressed over. The same `65535` every level in this project is measured in.
+const FULL: u16 = u16::MAX;
+
+/// The middle of a crossfade fader's travel, which is what decides which end it
+/// is heading for. Written out rather than divided, because the tick path denies
+/// `clippy::integer_division` — and because half of an odd number is a decision
+/// rather than an arithmetic result.
+const HALF: u16 = 32_767;
+
+/// How long two taps may be apart and still be one measurement.
+///
+/// Four seconds is fifteen beats a minute — slower than any tempo anybody taps
+/// — so a tap after this is the *first* tap of a new measurement rather than an
+/// absurd rate learned from an operator who walked away. In ticks, because that
+/// is the only clock this module has.
+pub const TAP_WINDOW: u64 = 4 * crate::tick::TICK_HZ;
+
+/// A manual crossfade in progress: where the fader stood when the cue was taken,
+/// and where it stands now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Crossfade {
+    /// The fader position the current transition started from.
+    origin: u16,
+    /// Where the fader is now.
+    position: u16,
+    /// Whether the travel has been completed — after which the fader does
+    /// nothing until the next Go re-bases it.
+    done: bool,
+}
+
+impl Crossfade {
+    /// A crossfade engaged with the fader where it is, so engaging one never
+    /// moves any light by itself.
+    const fn new(position: u16) -> Self {
+        Self {
+            origin: position,
+            position,
+            done: false,
+        }
+    }
+
+    /// The end this travel is heading for: whichever is further from the origin,
+    /// so the span is never shorter than half the fader and a division by a
+    /// vanishing number cannot happen.
+    const fn target(self) -> u16 {
+        if self.origin > HALF { 0 } else { FULL }
+    }
+
+    /// How far through the transition the fader has been pushed, `0..=FULL`.
+    fn progress(self) -> u16 {
+        if self.done {
+            return FULL;
+        }
+        let target = self.target();
+        let span = self.origin.abs_diff(target);
+        if span == 0 {
+            return FULL;
+        }
+        // Travel *towards* the target only: a fader pushed back the way it came
+        // un-does the crossfade, which is what an operator who changed their
+        // mind means by it.
+        let travelled = if target > self.origin {
+            self.position.saturating_sub(self.origin)
+        } else {
+            self.origin.saturating_sub(self.position)
+        };
+        let scaled = (u32::from(travelled) * u32::from(FULL)).div_euclid(u32::from(span));
+        u16::try_from(scaled).unwrap_or(FULL)
+    }
+
+    /// Whether the fader has reached the end it was heading for.
+    fn arrived(self) -> bool {
+        self.progress() == FULL
+    }
+}
 
 /// One attribute a playback is holding, and the fade it is part way through.
 ///
@@ -88,13 +198,33 @@ pub struct CuePlayer {
     entries: Box<[Entry]>,
     /// The cue being played, or `None` when the playback is stopped or releasing.
     current: Option<usize>,
-    /// Tick the current transition started on.
-    started: u64,
+    /// Scaled ticks since the current transition started — the player's own
+    /// clock, which runs at [`Self::speed`] rather than at the tick's rate.
+    elapsed: u64,
+    /// The part of a scaled tick that has not added up to a whole one yet,
+    /// `0..SPEED_UNITY`. Carrying it is what makes a rate exact over a long fade
+    /// instead of losing a fraction every tick.
+    remainder: u32,
+    /// The tick index the last [`Self::advance`] was given, so a missed tick
+    /// still moves the fade forward by the time it really took.
+    last_tick: Option<u64>,
+    /// Playback rate in units of [`SPEED_UNITY`] — the speed master.
+    speed: u16,
     /// Ticks of delay before the current transition moves anything.
     delay: u64,
     /// Set by a command, consumed by the next [`Self::advance`]: commands are
     /// applied before the tick that renders them and do not know its index.
     restart: bool,
+    /// Set by [`Self::tap`], consumed by the next [`Self::advance`] — for the
+    /// same reason: a tap is a moment and a command does not know which one.
+    tap: bool,
+    /// When the previous tap landed, for the interval the next one measures.
+    last_tap: Option<u64>,
+    /// The manual crossfade, while the executor's fader is driving one.
+    crossfade: Option<Crossfade>,
+    /// Whether a held `Flash` is what started this playback, so releasing it
+    /// stops what it started and leaves alone what it did not.
+    flashed: bool,
     /// Whether this player has told the layer its source is active.
     active: bool,
     /// Set by [`Self::unload`], so the source it was driving is cleaned up once.
@@ -110,9 +240,16 @@ impl CuePlayer {
             sequence: None,
             entries: Box::default(),
             current: None,
-            started: 0,
+            elapsed: 0,
+            remainder: 0,
+            last_tick: None,
+            speed: SPEED_UNITY,
             delay: 0,
             restart: false,
+            tap: false,
+            last_tap: None,
+            crossfade: None,
+            flashed: false,
             active: false,
             flush: false,
         }
@@ -167,9 +304,14 @@ impl CuePlayer {
         self.entries = vec![Entry::default(); sequence.slot_count()].into_boxed_slice();
         self.sequence = Some(sequence);
         self.current = None;
-        self.started = 0;
+        self.elapsed = 0;
+        self.remainder = 0;
         self.delay = 0;
         self.restart = false;
+        self.flashed = false;
+        // `speed`, `crossfade` and `last_tap` deliberately survive: they are the
+        // *executor's* settings, not the sequence's, and a cue list swapped
+        // under a fader that is holding a rate must not silently return to 1x.
         self.flush = false;
         // `active` deliberately survives: it records what the *layer* was last
         // told, and the next tick has to take the old source back out of the
@@ -202,6 +344,7 @@ impl CuePlayer {
             current,
             delay,
             restart,
+            crossfade,
             ..
         } = self;
         let Some(plan) = sequence.as_ref() else {
@@ -213,6 +356,12 @@ impl CuePlayer {
         *delay = begin(plan, entries, next);
         *current = Some(next);
         *restart = true;
+        // A crossfade takes the fader's *present* position as the start of the
+        // new travel, which is what makes the second Go run the fader back the
+        // way it came.
+        if let Some(fade) = crossfade.as_mut() {
+            *fade = Crossfade::new(fade.position);
+        }
         true
     }
 
@@ -255,43 +404,176 @@ impl CuePlayer {
         true
     }
 
+    /// The playback rate, in units of [`SPEED_UNITY`].
+    #[must_use]
+    pub const fn speed(&self) -> u16 {
+        self.speed
+    }
+
+    /// Sets the playback rate. `0` freezes the playback where it is.
+    ///
+    /// Takes effect on the next tick and does not disturb the transition in
+    /// progress: the position already reached is kept and only the rate it goes
+    /// on advancing at changes, so a speed master moved mid-fade slows the fade
+    /// rather than jumping it.
+    pub const fn set_speed(&mut self, speed: u16) {
+        self.speed = speed;
+    }
+
+    /// Records a tap of `ExecutorButtonFunction::LearnSpeed`.
+    ///
+    /// The moment is taken on the next [`Self::advance`], for the same reason a
+    /// Go is: a command is applied before the tick that renders it and does not
+    /// know its index.
+    pub const fn tap(&mut self) {
+        self.tap = true;
+    }
+
+    /// Where a manual crossfade is, if the executor's fader is driving one.
+    #[must_use]
+    pub const fn crossfade(&self) -> Option<u16> {
+        match self.crossfade {
+            Some(fade) => Some(fade.position),
+            None => None,
+        }
+    }
+
+    /// How far through the current transition a manual crossfade has been
+    /// pushed, `0..=65535`, or nothing when no crossfade is engaged.
+    #[must_use]
+    pub fn crossfade_progress(&self) -> Option<u16> {
+        self.crossfade.map(Crossfade::progress)
+    }
+
+    /// Moves the manual crossfade fader.
+    ///
+    /// Engaging one takes the fader where it stands as the origin, so switching
+    /// a fader to `XFade` never moves any light by itself.
+    pub fn set_crossfade(&mut self, position: u16) {
+        match self.crossfade.as_mut() {
+            Some(fade) => {
+                fade.position = position;
+                if fade.arrived() {
+                    fade.done = true;
+                }
+            }
+            None => self.crossfade = Some(Crossfade::new(position)),
+        }
+    }
+
+    /// Takes the manual crossfade off, so the transition runs on time again.
+    pub const fn clear_crossfade(&mut self) {
+        self.crossfade = None;
+    }
+
+    /// Whether a held flash is what started this playback.
+    #[must_use]
+    pub const fn is_flashed(&self) -> bool {
+        self.flashed
+    }
+
+    /// Records that a flash did or did not start this playback.
+    ///
+    /// For an executor with **no** cue list, where starting it is the layer's
+    /// business rather than the player's: the flag still lives here so there is
+    /// one place that remembers, and one rule — a release stops what the flash
+    /// started and leaves alone what it did not.
+    pub const fn mark_flashed(&mut self, flashed: bool) {
+        self.flashed = flashed;
+    }
+
+    /// Starts the playback for a held flash, remembering that the flash is what
+    /// started it. Returns `false` if it was already running — in which case the
+    /// release must leave it running.
+    pub fn flash_on(&mut self) -> bool {
+        if !self.on() {
+            return false;
+        }
+        self.flashed = true;
+        true
+    }
+
+    /// Releases a held flash: stops the playback if — and only if — the flash is
+    /// what started it.
+    pub fn flash_off(&mut self) -> bool {
+        if !self.flashed {
+            return false;
+        }
+        self.flashed = false;
+        self.off()
+    }
+
     /// Moves the playback on to tick `tick` and works out what it is holding.
     ///
     /// Allocation-free, lock-free and clock-free: this runs on the tick.
     fn advance(&mut self, tick: u64) -> Change {
+        // The tap is resolved first, because it is a statement about *this*
+        // moment and the rate it produces applies from this tick on.
+        self.resolve_tap(tick);
         let Self {
             sequence,
             entries,
             current,
-            started,
+            elapsed: clock,
+            remainder,
+            last_tick,
+            speed,
             delay,
             restart,
+            crossfade,
             active,
             ..
         } = self;
+        let slots = last_tick.map_or(0, |last| tick.saturating_sub(last));
+        *last_tick = Some(tick);
         let Some(plan) = sequence.as_ref() else {
             return Change::None;
         };
         if *restart {
-            *started = tick;
+            *clock = 0;
+            *remainder = 0;
             *restart = false;
+        } else {
+            // The player's own clock: `speed` SPEED_UNITYths of a tick per tick
+            // slot, with the fraction carried rather than dropped. At unity this
+            // is exactly `+1` and every fade in the project is the number it was
+            // before the rate existed.
+            let scaled = u64::from(*speed)
+                .saturating_mul(slots)
+                .saturating_add(u64::from(*remainder));
+            let unity = u64::from(SPEED_UNITY);
+            *clock = clock.saturating_add(scaled.div_euclid(unity));
+            *remainder = u32::try_from(scaled.rem_euclid(unity)).unwrap_or(0);
         }
-        let elapsed = tick.saturating_sub(*started);
+        let elapsed = *clock;
 
         // Where every held attribute has got to. Evaluated *before* the trigger
         // check below, so a cue that ends on this tick reaches its target and
         // the cue that follows it starts from there rather than from one step
         // short of it.
+        //
+        // A manual crossfade replaces the clock and nothing else: the same
+        // `from` and `to`, driven by how far the fader has travelled. It governs
+        // the *cue transition* only, so a release still fades out on time.
+        let manual = match crossfade {
+            Some(fade) if current.is_some() => Some(fade.progress()),
+            _ => None,
+        };
         for entry in entries.iter_mut().filter(|entry| entry.live) {
-            entry.value = if elapsed < *delay {
-                entry.from
-            } else {
-                interpolate(
+            entry.value = match manual {
+                Some(progress) => interpolate(
+                    entry.from,
+                    entry.to,
+                    u64::from(progress),
+                    u64::from(u16::MAX),
+                ),
+                None if elapsed < *delay => entry.from,
+                None => interpolate(
                     entry.from,
                     entry.to,
                     elapsed.saturating_sub(*delay),
                     entry.duration,
-                )
+                ),
             };
         }
 
@@ -303,7 +585,11 @@ impl CuePlayer {
         {
             *delay = begin(plan, entries, next);
             *current = Some(next);
-            *started = tick;
+            *clock = 0;
+            *remainder = 0;
+            if let Some(fade) = crossfade.as_mut() {
+                *fade = Crossfade::new(fade.position);
+            }
         }
 
         // A release that has run its course drops everything at once, so the
@@ -329,6 +615,43 @@ impl CuePlayer {
         } else {
             Change::Deactivate
         }
+    }
+
+    /// Turns a pending tap into a rate, if a second tap has landed close enough
+    /// to the first for the pair to mean anything.
+    ///
+    /// *This transition should take that long*: the rate is the cue's own
+    /// transition time over the tapped interval, so tapping at the speed a cue
+    /// list already runs at leaves it exactly where it was.
+    fn resolve_tap(&mut self, tick: u64) {
+        if !core::mem::take(&mut self.tap) {
+            return;
+        }
+        let previous = self.last_tap.replace(tick);
+        let Some(previous) = previous else {
+            return;
+        };
+        let interval = tick.saturating_sub(previous);
+        if interval == 0 || interval > TAP_WINDOW {
+            // Too fast to be two taps, or too slow to be one rhythm. Either way
+            // this tap is the *first* of the next measurement, which
+            // `last_tap` now holds.
+            return;
+        }
+        // The reference is the running cue's transition. A cue with no time in
+        // it has no rate to learn, and inventing one would make a tap against a
+        // snap cue change every fade in the list.
+        let Some(base) = self
+            .sequence
+            .as_ref()
+            .and_then(|plan| plan.cue(self.current?))
+            .map(CuePlan::transition_ticks)
+            .filter(|ticks| *ticks > 0)
+        else {
+            return;
+        };
+        let learned = (u128::from(base) * u128::from(SPEED_UNITY)).div_euclid(u128::from(interval));
+        self.speed = u16::try_from(learned).unwrap_or(u16::MAX);
     }
 
     /// Writes what the playback is holding into its source.
@@ -511,6 +834,7 @@ mod tests {
     use crate::plan::MergePlan;
     use crate::playback::{MergeScratch, PlaybackLayer};
     use crate::player::{Change, CueLayer, Entry, begin, release, triggers};
+    use crate::player::{SPEED_UNITY, TAP_WINDOW};
     use crate::testkit::{cue, cue_part, moving_head, sequence};
     use prism_domain::{
         AttributeType, Cue, CueTrigger, ExecutorId, FixtureId, GoDirection, Sequence,
@@ -593,6 +917,10 @@ mod tests {
 
         fn activation(&self, executor: u32) -> Option<u64> {
             self.layer.source(ExecutorId::new(executor))?.activation()
+        }
+
+        fn player(&mut self, executor: u32) -> &mut crate::player::CuePlayer {
+            self.cues.player_mut(ExecutorId::new(executor)).unwrap()
         }
     }
 
@@ -1302,5 +1630,339 @@ mod tests {
         // Fixture 2's pan homes at 32768 and fades to full, so half way up it is
         // three quarters of the way across.
         assert_eq!(rig.value(2, AttributeType::Pan), 49_151);
+    }
+
+    // -- S34: the speed master, the tap and the manual crossfade ------------
+
+    /// A fade at half speed reaches the same values, twice as late — and the
+    /// two curves are the *same* curve sampled at half the rate rather than a
+    /// second implementation that happens to end in the same place.
+    #[test]
+    fn a_speed_master_stretches_a_fade_and_changes_nothing_else() {
+        let mut unity = Rig::new(1);
+        // Two seconds is 88 ticks at unity and 176 at half, so both runs finish
+        // inside the window below.
+        unity.load(1, &sequence(vec![dimmer_cue("1", 60_000, 2.0)], false));
+        unity.go(1, GoDirection::Next);
+
+        let mut halved = Rig::new(1);
+        halved.load(1, &sequence(vec![dimmer_cue("1", 60_000, 2.0)], false));
+        halved.player(1).set_speed(SPEED_UNITY / 2);
+        halved.go(1, GoDirection::Next);
+
+        // Two hundred ticks at half speed are a hundred at unity, exactly: the
+        // remainder is carried rather than dropped, so the halves add up. Note
+        // that this is a *sampling* claim, not an averaging one — the value at
+        // halved tick 2n is the value at unity tick n, to the number.
+        let mut slow = Vec::new();
+        for tick in 0..=200u64 {
+            halved.tick(tick);
+            slow.push(halved.value(1, AttributeType::Dimmer));
+        }
+        for tick in 0..=100usize {
+            unity.tick(tick as u64);
+            assert_eq!(
+                slow[tick * 2],
+                unity.value(1, AttributeType::Dimmer),
+                "tick {tick}"
+            );
+        }
+        // And it really moved, so this is not two rigs sitting still together.
+        assert_eq!(unity.value(1, AttributeType::Dimmer), 60_000);
+        assert!(slow.iter().collect::<std::collections::BTreeSet<_>>().len() > 50);
+    }
+
+    /// A speed of zero freezes the playback where it is, and does not stop it.
+    #[test]
+    fn a_speed_of_zero_holds_a_fade_and_lets_it_go_on_afterwards() {
+        let mut rig = Rig::new(1);
+        // Five seconds is 220 ticks, so tick 110 is exactly halfway.
+        rig.load(1, &sequence(vec![dimmer_cue("1", 65_535, 5.0)], false));
+        rig.go(1, GoDirection::Next);
+        rig.run(0, 110);
+        let halfway = rig.value(1, AttributeType::Dimmer);
+        assert!(
+            (32_000..34_000).contains(&halfway),
+            "expected about half, got {halfway}"
+        );
+
+        rig.player(1).set_speed(0);
+        rig.run(111, 400);
+        assert_eq!(
+            rig.value(1, AttributeType::Dimmer),
+            halfway,
+            "a frozen playback moved"
+        );
+        assert_eq!(rig.current(1), Some(0), "a frozen playback also stopped");
+
+        rig.player(1).set_speed(SPEED_UNITY);
+        rig.run(401, 520);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+    }
+
+    /// A tick the scheduler missed still moves the fade by the time it took.
+    ///
+    /// The accumulator advances by tick *slots*, not by one per call. A cue list
+    /// that fell behind wall-clock time after a stall would be a show drifting
+    /// away from its own timing.
+    #[test]
+    fn a_missed_tick_moves_the_fade_by_the_time_it_really_took() {
+        let mut steady = Rig::new(1);
+        steady.load(1, &sequence(vec![dimmer_cue("1", 65_535, 4.0)], false));
+        steady.go(1, GoDirection::Next);
+        steady.run(0, 88);
+
+        let mut stalled = Rig::new(1);
+        stalled.load(1, &sequence(vec![dimmer_cue("1", 65_535, 4.0)], false));
+        stalled.go(1, GoDirection::Next);
+        stalled.tick(0);
+        // Forty tick slots went by with no tick at all, and then one tick.
+        stalled.tick(40);
+        stalled.run(41, 88);
+
+        assert_eq!(
+            stalled.value(1, AttributeType::Dimmer),
+            steady.value(1, AttributeType::Dimmer)
+        );
+    }
+
+    /// Two taps mean *this transition should take that long*, and tapping at the
+    /// speed a list already runs at leaves it exactly where it was.
+    #[test]
+    fn two_taps_set_the_rate_from_the_running_cues_own_transition() {
+        let mut rig = Rig::new(1);
+        // A two-second fade: 88 ticks at unity.
+        rig.load(1, &sequence(vec![dimmer_cue("1", 65_535, 2.0)], false));
+        rig.go(1, GoDirection::Next);
+        rig.tick(0);
+        assert_eq!(rig.player(1).speed(), SPEED_UNITY);
+
+        // Tapped at 44 ticks — one second — so the transition should run twice
+        // as fast.
+        rig.player(1).tap();
+        rig.tick(1);
+        rig.player(1).tap();
+        rig.tick(45);
+        assert_eq!(rig.player(1).speed(), SPEED_UNITY * 2);
+
+        // Tapped at the rhythm it is already keeping: the *scaled* transition is
+        // 44 ticks now, so tapping 44 apart asks for no change at all.
+        rig.player(1).tap();
+        rig.tick(46);
+        rig.player(1).tap();
+        rig.tick(90);
+        assert_eq!(rig.player(1).speed(), SPEED_UNITY * 2);
+    }
+
+    /// One tap on its own is not a rhythm, and neither is a pair four seconds
+    /// apart.
+    #[test]
+    fn a_single_tap_and_a_pair_too_far_apart_change_nothing() {
+        let mut rig = Rig::new(1);
+        rig.load(1, &sequence(vec![dimmer_cue("1", 65_535, 2.0)], false));
+        rig.go(1, GoDirection::Next);
+        rig.player(1).tap();
+        rig.run(0, 10);
+        assert_eq!(rig.player(1).speed(), SPEED_UNITY, "one tap set a rate");
+
+        rig.player(1).tap();
+        rig.tick(11 + TAP_WINDOW);
+        assert_eq!(
+            rig.player(1).speed(),
+            SPEED_UNITY,
+            "two taps a window apart set a rate"
+        );
+        // And that far-apart tap is the *first* of the next measurement, so a
+        // pair after it does work.
+        rig.player(1).tap();
+        rig.tick(11 + TAP_WINDOW + 44);
+        assert_eq!(rig.player(1).speed(), SPEED_UNITY * 2);
+    }
+
+    /// A tap against a cue with no time in it has no rate to learn.
+    #[test]
+    fn a_tap_against_a_snap_cue_leaves_the_rate_alone() {
+        let mut rig = Rig::new(1);
+        rig.load(1, &sequence(vec![dimmer_cue("1", 65_535, 0.0)], false));
+        rig.go(1, GoDirection::Next);
+        rig.player(1).tap();
+        rig.tick(0);
+        rig.player(1).tap();
+        rig.tick(44);
+        assert_eq!(rig.player(1).speed(), SPEED_UNITY);
+    }
+
+    /// The crossfade drives the transition from the fader instead of from time,
+    /// and engaging one moves nothing by itself.
+    #[test]
+    fn a_manual_crossfade_is_driven_by_the_fader_and_not_by_the_clock() {
+        let mut rig = Rig::new(1);
+        rig.load(
+            1,
+            &sequence(
+                vec![
+                    dimmer_cue("1", 0, 0.0),
+                    // A ten-second fade, so *time* could not have got there.
+                    dimmer_cue("2", 65_535, 10.0),
+                ],
+                false,
+            ),
+        );
+        // The fader is at the bottom and the crossfade is engaged there.
+        rig.player(1).set_crossfade(0);
+        rig.go(1, GoDirection::Next);
+        rig.run(0, 5);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
+
+        rig.go(1, GoDirection::Next);
+        rig.tick(6);
+        assert_eq!(
+            rig.value(1, AttributeType::Dimmer),
+            0,
+            "a Go moved it alone"
+        );
+
+        rig.player(1).set_crossfade(32_768);
+        rig.tick(7);
+        let half = rig.value(1, AttributeType::Dimmer);
+        assert!(
+            (32_000..34_000).contains(&half),
+            "half a fader is half a fade, got {half}"
+        );
+
+        // Pushed back down: the operator changed their mind and the crossfade
+        // goes back with them.
+        rig.player(1).set_crossfade(0);
+        rig.tick(8);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
+
+        rig.player(1).set_crossfade(65_535);
+        rig.tick(9);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+    }
+
+    /// Arriving completes the cue, and the next Go runs the fader back the way
+    /// it came — which is how a desk with one crossfade fader is operated.
+    #[test]
+    fn a_completed_crossfade_is_inert_until_the_next_go_re_bases_it() {
+        let mut rig = Rig::new(1);
+        rig.load(
+            1,
+            &sequence(
+                vec![
+                    dimmer_cue("1", 0, 0.0),
+                    dimmer_cue("2", 65_535, 10.0),
+                    dimmer_cue("3", 20_000, 10.0),
+                ],
+                false,
+            ),
+        );
+        rig.player(1).set_crossfade(0);
+        rig.go(1, GoDirection::Next);
+        rig.tick(0);
+        rig.go(1, GoDirection::Next);
+        rig.player(1).set_crossfade(65_535);
+        rig.tick(1);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+
+        // Moving the fader after it has arrived does nothing: the travel is
+        // finished and the cue is complete.
+        rig.player(1).set_crossfade(60_000);
+        rig.tick(2);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+
+        // The next Go takes the fader where it stands as the new origin, so the
+        // travel is now downwards — which is how a desk with one crossfade
+        // fader is operated: up for one cue, down for the next.
+        rig.go(1, GoDirection::Next);
+        rig.tick(3);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+        rig.player(1).set_crossfade(30_000);
+        rig.tick(4);
+        let part = rig.value(1, AttributeType::Dimmer);
+        assert!(
+            (40_000..60_000).contains(&part),
+            "half a travel is half a fade, got {part}"
+        );
+        rig.player(1).set_crossfade(0);
+        rig.tick(5);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 20_000);
+    }
+
+    /// Taking the crossfade off gives the transition its clock back.
+    #[test]
+    fn clearing_the_crossfade_returns_the_transition_to_time() {
+        let mut rig = Rig::new(1);
+        rig.load(
+            1,
+            &sequence(
+                vec![dimmer_cue("1", 0, 0.0), dimmer_cue("2", 65_535, 1.0)],
+                false,
+            ),
+        );
+        rig.player(1).set_crossfade(0);
+        rig.go(1, GoDirection::Next);
+        rig.tick(0);
+        rig.go(1, GoDirection::Next);
+        rig.run(1, 60);
+        assert_eq!(
+            rig.value(1, AttributeType::Dimmer),
+            0,
+            "time drove a manual crossfade"
+        );
+        assert_eq!(rig.player(1).crossfade(), Some(0));
+
+        rig.player(1).clear_crossfade();
+        assert_eq!(rig.player(1).crossfade(), None);
+        rig.run(61, 120);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+    }
+
+    /// A flash starts a stopped playback and the release stops what it started —
+    /// and only what it started.
+    #[test]
+    fn a_flash_starts_what_was_stopped_and_leaves_what_was_running() {
+        let mut rig = Rig::new(2);
+        rig.load(1, &sequence(vec![dimmer_cue("1", 65_535, 0.0)], false));
+        rig.load(2, &sequence(vec![dimmer_cue("1", 65_535, 0.0)], false));
+
+        // Executor 1 is stopped: the flash starts it, and the release stops it.
+        assert!(rig.player(1).flash_on());
+        rig.tick(0);
+        assert_eq!(rig.current(1), Some(0));
+        assert!(rig.player(1).is_flashed());
+        assert!(rig.player(1).flash_off());
+        rig.tick(1);
+        assert_eq!(rig.current(1), None);
+
+        // Executor 2 is already running: the flash does not restart it, and the
+        // release must not stop it.
+        rig.go(2, GoDirection::Next);
+        rig.tick(2);
+        assert!(!rig.player(2).flash_on());
+        assert!(!rig.player(2).is_flashed());
+        assert!(!rig.player(2).flash_off());
+        rig.tick(3);
+        assert_eq!(
+            rig.current(2),
+            Some(0),
+            "a flash release stopped a playback"
+        );
+    }
+
+    /// A cue list swapped under a fader that is holding a rate keeps the rate.
+    ///
+    /// The speed and the crossfade are the *executor's* settings and not the
+    /// sequence's, so a rebuild — which is how every show edit reaches the tick
+    /// (S17) — must not silently return them to their defaults.
+    #[test]
+    fn loading_a_sequence_keeps_the_executors_own_rate_and_fader() {
+        let mut rig = Rig::new(1);
+        rig.load(1, &sequence(vec![dimmer_cue("1", 65_535, 1.0)], false));
+        rig.player(1).set_speed(SPEED_UNITY * 3);
+        rig.player(1).set_crossfade(12_345);
+        rig.load(1, &sequence(vec![dimmer_cue("1", 30_000, 1.0)], false));
+        assert_eq!(rig.player(1).speed(), SPEED_UNITY * 3);
+        assert_eq!(rig.player(1).crossfade(), Some(12_345));
     }
 }

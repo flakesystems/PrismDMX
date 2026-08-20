@@ -122,6 +122,7 @@ pub fn show_file() -> ShowFile {
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
         master_level: 65535,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     })

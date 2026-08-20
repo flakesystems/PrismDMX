@@ -114,6 +114,15 @@ Enforced by lint (`#![deny(clippy::unwrap_used, clippy::expect_used, clippy::pan
 - **Absolute deadlines** via `Instant` so error does not accumulate; `sleep(deadline − 1 ms)` followed by a spin for the remainder.
 - **`panic = "unwind"`** in the release profile. The panic hook marks the module *degraded* rather than terminating the process.
 
+### 3.1.1 What comes back out (S34)
+
+The rules above are about what may go *into* the tick. What comes out of it is the frame, through the triple buffer — and, since S34, one thing more: **what each playback is doing**. `prism_engine::PlaybackReport` is a fixed table of atomic words, one per executor, published at the end of every tick with a relaxed store and sampled by `prismd`'s own loop at 25 ms. It obeys §3.1 by construction: sized when it is built, never resized, never locked, never waited on.
+
+Two consequences worth stating, because both are deliberate:
+
+- **A reader may be one tick out of date, and may never be wrong about a tick that happened.** One entry is written atomically, so an executor number, its cue index and whether it is running arrive together; two entries are not guaranteed to be from the same tick, and neither is the length. Making them so would need a seqlock, which would make the reader spin and buy nothing for feedback that drives a screen.
+- **The tick is the only author of `Executor.isActive` and `Executor.currentCueIndex`.** The daemon used to write `isActive` on its way past a Go, because nothing else could; with a readback that would be a second author racing the first, and the symptom was a strip that lit, went dark on the next poll and lit again. The cost is that a `Toggle` pressed within a poll of somebody else's Go reads the state from just before it — which is the same latency any desk with two operators has, and much shorter than a person's reaction.
+
 ### 3.2 Frame rate, stated precisely
 
 The engine tick always runs at 44 Hz — it is the time base for fades, phasers and cue timing. Output drivers consume the most recent frame from the triple buffer **at whatever rate they can achieve**. ArtNet and sACN reach 44 Hz; Open DMX USB is limited to roughly 30–40 Hz by its hardware (§7.1). The `CLAUDE.md` invariant therefore holds at the engine level without misrepresenting what budget hardware can do.
@@ -302,9 +311,22 @@ interface Executor {
   buttonFunctions: ExecutorButtonFunction[];  // Rec / Solo / Mute / Select
   encoderFunction: ExecutorEncoderFunction;
   masterLevel: number;         // 0..65535
-  isActive: boolean;
-  currentCueIndex: number | null;
+  speed: number;               // the speed master, in SPEED_UNITY (1024) units
+                               // (S34; docs/DMX_MERGE.md §4.1)
+  isActive: boolean;           // written only by the tick's readback (S34)
+  currentCueIndex: number | null;   // the same
 }
+
+// Which of an executor's buttons a press names (S34). A `Slot` is a hardware
+// position and what it does is `buttonFunctions`, resolved by prism-core and by
+// nothing else; a `Function` is a row of the surface profile naming one
+// outright, which is the desk's own configuration rather than a client's
+// inference. Either way the daemon decides what it comes out as — `Toggle` is
+// resolved against `isActive` where `isActive` is owned.
+// See docs/MCU_MAPPING.md §4.2.1.
+type ExecutorButtonRef =
+  | { t: "Slot"; index: number }
+  | { t: "Function"; function: ExecutorButtonFunction };
 
 interface ProgrammerState {
   selection: FixtureId[];
@@ -354,7 +376,7 @@ The `Command` and `Delta` wire types are specified in [`docs/IPC_PROTOCOL.md`](d
 
 Applying a command produces a compact `UndoRecord` holding the inverse and the affected scope, kept in a 200-entry ring buffer.
 
-**Deliberately not undoable:** playback actions (`ExecutorGo`, `ExecutorOff`, master moves) and every session command from §4.4. The show edits S28 added — `StorePreset`, `CreateSequence`, `SetCueProperty`, `DeleteCue`, `AssignExecutor` — **are** undoable, and a `StorePreset` images the sequences its preset reaches as well as the preset itself: storing a preset rewrites the cue parts linked to it, so restoring the pool alone would take the edit back in one place and leave it standing in every cue. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
+**Deliberately not undoable:** playback actions (`ExecutorGo`, `ExecutorOff`, `ExecutorButton`, master moves) and every session command from §4.4. The show edits S28 added — `StorePreset`, `CreateSequence`, `SetCueProperty`, `DeleteCue`, `AssignExecutor` — **are** undoable, and a `StorePreset` images the sequences its preset reaches as well as the preset itself: storing a preset rewrites the cue parts linked to it, so restoring the pool alone would take the edit back in one place and leave it standing in every cue. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
 
 ---
 

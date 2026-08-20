@@ -36,7 +36,7 @@ fn the_fifteen_session_commands_are_the_session_group() {
         assert!(command.is_session_command(), "{command:?}");
     }
     // And the two groups together are still the whole protocol.
-    assert_eq!(show_commands().len() + session_commands().len(), 35);
+    assert_eq!(show_commands().len() + session_commands().len(), 36);
 }
 
 #[test]

@@ -29,6 +29,8 @@ Two properties of this stack matter operationally:
 - **The bottom layer is never empty.** Every patched attribute has a home value, so an attribute with no active source resolves to a defined state rather than to zero. A moving head with no active cue sits at its home position, not slammed to pan 0.
 - **The programmer always wins.** If the operator has touched an attribute, that is what the fixture does. This is what makes live programming predictable: what you grab is what you see, regardless of what any playback is doing.
 
+**A flash is not a fourth layer** (S34). `ExecutorButtonFunction::Flash` raises an executor's *master* for as long as the key is held, and the master is applied inside the playback layer (§2.1) rather than above it — so a flashed executor still merges HTP against everything else, and a flash cannot take light away that another playback is providing. What makes it a flash rather than a fader move is that the **stored** master is never written to: `prism_engine::PlaybackSource` carries the held level beside the stored one, and releasing simply stops using it. A `SetExecutorMaster` that arrives *during* a flash therefore lands on the stored master and is what stands when the key comes up.
+
 ---
 
 ## 2. Merge modes per attribute
@@ -52,6 +54,8 @@ value(f, a) = max( source_i.value * source_i.masterLevel )
 ```
 
 The executor's master level is applied **before** the maximum, not after. A cue at 100 % on an executor faded to 50 % contributes 50 %, and a second executor at 60 % with its master fully up wins.
+
+`source_i.masterLevel` is the level **in force**, which is the stored master unless a `Flash` is held over it (§1). That is the whole of the flash's place in this document: one substitution, in one term, of one factor that was already here.
 
 ### 2.2 LTP in detail
 
@@ -102,6 +106,19 @@ Applied to the merged result, in this order:
 3. **Speed masters** — affect playback rate, not values; applied during step 2 of the tick, not here
 
 Masters scale **intensity attributes only**. This is a deliberate constraint: a grand master that dimmed colour values would desaturate the rig on the way down instead of dimming it.
+
+### 4.1 Speed masters, as built (S34)
+
+Item 3 above was a sentence with nothing behind it from S3 until S34; `docs/MCU_MAPPING.md` §4.3 recorded twice that no domain type carried one. What it is now:
+
+- **A speed master is an executor's**, and it is `prism_domain::Executor::speed`, in units of `prism_domain::SPEED_UNITY` (1 024 = 1×, 0 = frozen, `u16::MAX` = just under 64×). That is the granularity the desk addresses: `ExecutorFaderFunction::Speed` and `ExecutorEncoderFunction::Speed` have named it since S1, and an X-Touch strip addresses one executor. A *named* speed master shared between executors is a bigger idea and nothing has asked for one.
+- **It is a rate on the playback's own clock, not on the tick.** `prism_engine::CuePlayer` accumulates `speed`/`SPEED_UNITY` of a tick per tick slot and carries the remainder, so at unity the arithmetic is exactly what it was before rates existed — every fade in this project is the number it was — and at any other rate a fade is the same curve sampled at a different rate. It advances by the number of tick *slots* that have passed rather than by one, so a tick the scheduler missed still moves the show forward by the time it really took.
+- **It changes no value.** A speed of zero freezes a fade where it stands; it does not stop the playback, black it out, or take it out of the merge. Nothing in §1's stack is aware of it.
+- **`LearnSpeed` is a tap against it.** Two taps inside `prism_engine::TAP_WINDOW` (four seconds) mean *the running cue's transition should take that long*, so the rate is that transition's own length over the tapped interval. Tapping at the rhythm a list is already keeping therefore changes nothing, a single tap changes nothing, and a tap against a cue with no time in it has no rate to learn.
+
+### 4.2 The crossfade is a clock, not a master
+
+`ExecutorFaderFunction::XFade` (`ARCHITECTURE_SPEC.md` §6) belongs here only to say that it does **not**. A manual crossfade replaces the *clock* of the transition a cue list is already in — the same `from`, the same `to`, the same traversal — with how far the fader has travelled from where it stood when the cue was taken, towards whichever end it started from. Reaching that end completes the cue; the next Go takes the fader's current position as the new origin, which is what makes the following crossfade run the other way. It scales nothing and merges nothing.
 
 ---
 

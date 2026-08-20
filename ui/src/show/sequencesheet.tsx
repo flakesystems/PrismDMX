@@ -59,6 +59,7 @@ import {
   secondsText,
   sequenceRow,
   sequenceRows,
+  sequencesDocument,
 } from "./looks";
 import { StoreRequester, isStorable, storeText } from "./store";
 
@@ -155,8 +156,18 @@ export function SequenceSheet({
         </p>
       ) : (
         <>
-          <CueTable sequence={sequence} onSend={send} />
-          <StoreBar sequence={sequence} programmer={programmer} ask={ask} onSend={send} />
+          <CueTable
+            sequence={sequence}
+            currentCueIndex={inForce.isActive ? inForce.currentCueIndex : null}
+            onSend={send}
+          />
+          <StoreBar
+            sequence={sequence}
+            sequencesDoc={sequencesDocument(show)}
+            programmer={programmer}
+            ask={ask}
+            onSend={send}
+          />
         </>
       )}
     </div>
@@ -214,16 +225,17 @@ function SequenceBar({
 /**
  * Which executor the sheet is following, and the three keys that fire it.
  *
- * **The cue number is a dash and that is deliberate.**
- * `Executor::currentCueIndex` is on the wire and nothing ever fills it: what cue
- * a playback is on lives on the tick thread with no channel back (S26's finding,
- * **S34**'s to close). `isActive` *does* arrive, so this line can say that the
- * list is running and cannot say where it is — which is what it says, rather
- * than a number it invented.
+ * **The cue number is the daemon's, at last.** `Executor::currentCueIndex` was
+ * on the wire from S1 with nothing filling it, so S26 and S28 both drew a dash
+ * here; S34's readback out of the tick fills it, and this line shows it. It is
+ * still not a number this sheet may work out for itself — a follow cue advances
+ * without anybody pressing anything.
  *
- * Only three of the eight `ExecutorButtonFunction` values have a command
- * (`Go+`, `Go-`, `Off`) and those are the three offered here, for the reason
- * `desk/executorbar.tsx` writes out at length.
+ * The three keys stay `ExecutorGo` and `ExecutorOff` rather than
+ * `ExecutorButton`: this line is not a strip and has no button *positions* to
+ * press. What it offers is *go*, *back* and *off* as themselves, which is what a
+ * cue sheet's transport is, and `desk/executorbar.tsx` is where an executor's
+ * own four keys live.
  */
 function ExecutorLine({
   executorId,
@@ -253,7 +265,7 @@ function ExecutorLine({
       <span
         className="looks-exec-cue"
         data-testid="looks-executor-cue"
-        title="The daemon does not report which cue a playback is on yet — the tick has no channel back (S34)."
+        title="Which cue the tick says this playback is on."
       >
         {currentCueIndex === null ? "cue —" : `cue ${String(currentCueIndex + 1)}`}
       </span>
@@ -294,9 +306,18 @@ function ExecutorLine({
 /** The cue list, with every field editable in its own cell. */
 function CueTable({
   sequence,
+  currentCueIndex,
   onSend,
 }: {
   readonly sequence: SequenceRow;
+  /**
+   * Which row the playback is standing on, or nothing when it is stopped.
+   *
+   * An **index** rather than a number, because that is what the tick reports and
+   * what the show carries; the row it names is `cues[index]` in the order the
+   * daemon compiled them, which is the order this table draws.
+   */
+  readonly currentCueIndex: number | null;
   readonly onSend: ReturnType<typeof useSend>;
 }) {
   const [draft, setDraft] = useState<CellDraft | null>(null);
@@ -355,8 +376,13 @@ function CueTable({
           </tr>
         </thead>
         <tbody>
-          {sequence.cues.map((cue) => (
-            <tr key={cue.number} data-testid={`cue-row-${cue.number}`}>
+          {sequence.cues.map((cue, index) => (
+            <tr
+              key={cue.number}
+              data-testid={`cue-row-${cue.number}`}
+              className={index === currentCueIndex ? "cue-running" : undefined}
+              data-running={index === currentCueIndex ? "yes" : "no"}
+            >
               <Cell
                 cue={cue}
                 field="number"
@@ -555,11 +581,22 @@ function TriggerCell({
 /** The Store button, which says what it will do before it is pressed. */
 function StoreBar({
   sequence,
+  sequencesDoc,
   programmer,
   ask,
   onSend,
 }: {
   readonly sequence: SequenceRow;
+  /**
+   * The `/sequences` subtree, as the dependency of the question below.
+   *
+   * Not `sequence`, which is a fresh object every render: since S34 the show
+   * document moves whenever a playback changes cue, so an effect keyed on it
+   * would ask the daemon what a store would do **once per cue of a chase**.
+   * This node's identity only changes when a sequence really does. See
+   * `looks.ts::sequencesDocument`.
+   */
+  readonly sequencesDoc: JsonValue | null;
   readonly programmer: ProgrammerState | null;
   readonly ask: ReturnType<typeof useAsk>;
   readonly onSend: ReturnType<typeof useSend>;
@@ -577,17 +614,21 @@ function StoreBar({
       requester.current = null;
     };
   }, [ask]);
-  // Asked again whenever the cue number, the sequence **or the programmer**
-  // moves, which is exactly when the answer can have changed: a store into cue 3
+  // Asked again whenever the cue number, the cue **lists** or the programmer
+  // move, which is exactly when the answer can have changed: a store into cue 3
   // means something different once somebody has stored cue 3, and something
-  // different again once they have touched another encoder.
+  // different again once they have touched another encoder. **Not** whenever
+  // the show moves — see `sequencesDoc`.
   useEffect(() => {
     requester.current?.request({
       t: "Cue",
       sequenceId: sequence.id,
       cueNumber: wanted,
     });
-  }, [programmer, sequence, wanted]);
+    // `sequence` is deliberately absent: `sequence.id` and `sequencesDoc`
+    // between them say everything a preview depends on, and the row object is
+    // rebuilt on every render.
+  }, [programmer, sequence.id, sequencesDoc, wanted]);
 
   return (
     <form

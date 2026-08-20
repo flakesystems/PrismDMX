@@ -266,21 +266,28 @@ describe("the looks, read out of the show document", () => {
     expect(executorsPlaying(show, 5)).toEqual([0, 1]);
   });
 
-  it("draws the cue index as absent, because the daemon never fills it", () => {
-    // S26's finding and S34's to close: what cue a playback is on lives on the
-    // tick thread with no channel back. The recording asserts the same thing in
-    // Rust (`the_cue_index_is_still_a_dash`), and when S34 builds the channel
-    // both go red together.
-    const indexes = recording.steps.flatMap((step) =>
-      step.executors.map((executor) => executor.currentCueIndex),
-    );
-    expect(indexes.length).toBeGreaterThan(0);
-    expect(indexes.every((index) => index === null)).toBe(true);
-    // And the half that does arrive is in the recording, so this is not a test
-    // over a script in which nothing ever ran.
+  it("draws the cue index the daemon reports, and a dash when there is none", () => {
+    // **The inverse of what this test said until S34.** S26 recorded the gap —
+    // what cue a playback is on lived on the tick thread with no channel back —
+    // and S28 wrote this assertion so that closing it would be noticed. The
+    // recording asserts the same thing in Rust
+    // (`ui_show.rs::the_cue_index_is_a_number_now`), and both turned round
+    // together.
+    const executors = recording.steps.flatMap((step) => step.executors);
+    expect(executors.length).toBeGreaterThan(0);
+    // A running executor is on a cue and a stopped one is on none. Both halves
+    // are in the script, so neither claim is vacuous.
     expect(
-      recording.steps.some((step) => step.executors.some((executor) => executor.isActive)),
+      executors.every((executor) => (executor.currentCueIndex !== null) === executor.isActive),
     ).toBe(true);
+    expect(executors.some((executor) => executor.isActive)).toBe(true);
+    expect(executors.some((executor) => !executor.isActive)).toBe(true);
+    // And the number **moved**: a readback that reported a constant zero would
+    // pass everything above.
+    const seen = new Set(
+      executors.map((executor) => executor.currentCueIndex).filter((index) => index !== null),
+    );
+    expect(seen.size).toBeGreaterThanOrEqual(2);
   });
 
   it("offers the next cue number without deciding whether it is free", () => {

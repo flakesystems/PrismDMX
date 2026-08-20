@@ -17,7 +17,8 @@
 //!    property over deliberately broken texts rather than on one example.
 
 use prism_domain::{
-    Command, ExecutorId, FeatureGroup, GoDirection, ParamDirection, ViewId, WindowType,
+    Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId, FeatureGroup, ParamDirection,
+    ViewId, WindowType,
 };
 use prism_surface::{
     Bindings, BoundControl, ButtonId, ExecutorTarget, Fader, GlobalButton, ProfileError, Step,
@@ -95,27 +96,82 @@ fn strip_faders_are_the_master_of_the_executor_on_that_strip() {
 }
 
 #[test]
-fn the_four_strip_buttons_are_go_forward_on_that_strips_executor() {
-    // §4.1 row 2: "Strip Rec / Solo / Mute / Select | Go+ | Engine".
+fn the_four_strip_buttons_press_that_strips_executors_own_buttons() {
+    // §4.1 row 2: "Strip Rec / Solo / Mute / Select | Go+ | Engine |
+    // **yes — Empty / Go+ / Go- / LearnSpeed / Off / On / Flash / Toggle**".
+    //
+    // That list is `ExecutorButtonFunction`, which is *show* data on the
+    // executor. Until S34 the protocol had no command that could carry a press
+    // without also deciding what it meant, so the row was bound to `Go+` and the
+    // deviation recorded. It now sends the **position**, and the executor's own
+    // `buttonFunctions` decide — which is what the row says, and the reason the
+    // configurable column can finally be honoured for all eight functions rather
+    // than the three that happened to have commands of their own.
     let table = Bindings::defaults();
     let context = context();
-    for button in [
+    for (index, button) in [
         StripButton::Rec,
         StripButton::Solo,
         StripButton::Mute,
         StripButton::Select,
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         for strip in 0..8u8 {
             assert_eq!(
                 table.command(strip_press(strip, button), &context),
-                Some(Command::ExecutorGo {
+                Some(Command::ExecutorButton {
                     executor_id: on_strip(u32::from(strip)),
-                    direction: GoDirection::Next,
+                    button: ExecutorButtonRef::Slot {
+                        index: u8::try_from(index).unwrap(),
+                    },
+                    pressed: true,
                 }),
                 "strip {strip} {button}"
             );
         }
     }
+}
+
+/// The release of a strip button reaches the daemon too, and nothing else's
+/// does.
+///
+/// A `Flash` is momentary and its release is the half that puts the master
+/// back. Layer 3 cannot know whether the executor has a `Flash` on that key, so
+/// it forwards both edges; `prism_core::Show::apply` drops the release of every
+/// function that is not momentary.
+#[test]
+fn a_strip_button_release_is_forwarded_and_a_panel_instruction_release_is_not() {
+    let table = Bindings::defaults();
+    let context = context();
+    assert_eq!(
+        table.command(
+            SurfaceEvent::Button {
+                button: ButtonId::Strip {
+                    strip: 0,
+                    button: StripButton::Rec,
+                },
+                pressed: false,
+            },
+            &context
+        ),
+        Some(Command::ExecutorButton {
+            executor_id: on_strip(0),
+            button: ExecutorButtonRef::Slot { index: 0 },
+            pressed: false,
+        })
+    );
+    assert_eq!(
+        table.command(
+            SurfaceEvent::Button {
+                button: ButtonId::Global(GlobalButton::Save),
+                pressed: false,
+            },
+            &context
+        ),
+        None
+    );
 }
 
 #[test]
@@ -137,8 +193,11 @@ fn the_main_fader_and_the_flip_button_act_on_the_selected_executor() {
     //
     // XFade is an `ExecutorFaderFunction` rather than a command — the protocol
     // has one fader command for all four functions and what the fader does is
-    // the executor's own setting (`ARCHITECTURE_SPEC.md` §6). So the row is kept
-    // as *the selected executor's fader*, which is what this asserts.
+    // the executor's own setting (`ARCHITECTURE_SPEC.md` §6). Since S34 the
+    // daemon routes `SetExecutorMaster` through that setting, so a fader whose
+    // executor says `XFade` crossfades and one that says `Master` moves a
+    // master — the row means what it says, and this asserts the binding half of
+    // it: *the selected executor's fader*.
     let table = Bindings::defaults();
     let context = context();
     assert_eq!(
@@ -156,9 +215,12 @@ fn the_main_fader_and_the_flip_button_act_on_the_selected_executor() {
     );
     assert_eq!(
         table.command(press(GlobalButton::Flip), &context),
-        Some(Command::ExecutorGo {
+        Some(Command::ExecutorButton {
             executor_id: ExecutorId::new(19),
-            direction: GoDirection::Next,
+            button: ExecutorButtonRef::Function {
+                function: ExecutorButtonFunction::GoForward,
+            },
+            pressed: true,
         })
     );
 }
@@ -168,40 +230,33 @@ fn the_transport_section_is_on_off_forward_and_back_on_the_selected_executor() {
     // §4.1 row 7: "Play / Stop / Forward / Backward | On / Off / Go+ / Go- on
     // the selected executor | Engine".
     //
-    // There is no `ExecutorOn` command — `On` is an `ExecutorButtonFunction` —
-    // and `ExecutorGo` is what starts a sequence, so Play and Forward resolve to
-    // the same command. That is recorded rather than invented around; see
-    // `PROGRESS.md`'s decision log.
+    // The four functions are named outright, which is what a *profile* is
+    // allowed to do: the desk's own configuration, written by a person,
+    // choosing which function a key sends. What it may not do — and does not —
+    // is decide what that function comes out as. `Toggle` bound here would
+    // still be resolved against `is_active` by the daemon.
+    //
+    // Until S34 there was no command that could carry `On`, so Play resolved to
+    // a Go and the deviation was recorded. It no longer does.
     let table = Bindings::defaults();
     let context = context();
     let selected = ExecutorId::new(19);
-    assert_eq!(
-        table.command(press(GlobalButton::Play), &context),
-        Some(Command::ExecutorGo {
-            executor_id: selected,
-            direction: GoDirection::Next,
-        })
-    );
-    assert_eq!(
-        table.command(press(GlobalButton::Stop), &context),
-        Some(Command::ExecutorOff {
-            executor_id: selected
-        })
-    );
-    assert_eq!(
-        table.command(press(GlobalButton::FastForward), &context),
-        Some(Command::ExecutorGo {
-            executor_id: selected,
-            direction: GoDirection::Next,
-        })
-    );
-    assert_eq!(
-        table.command(press(GlobalButton::Rewind), &context),
-        Some(Command::ExecutorGo {
-            executor_id: selected,
-            direction: GoDirection::Prev,
-        })
-    );
+    for (button, function) in [
+        (GlobalButton::Play, ExecutorButtonFunction::On),
+        (GlobalButton::Stop, ExecutorButtonFunction::Off),
+        (GlobalButton::FastForward, ExecutorButtonFunction::GoForward),
+        (GlobalButton::Rewind, ExecutorButtonFunction::GoBack),
+    ] {
+        assert_eq!(
+            table.command(press(button), &context),
+            Some(Command::ExecutorButton {
+                executor_id: selected,
+                button: ExecutorButtonRef::Function { function },
+                pressed: true,
+            }),
+            "{button}"
+        );
+    }
 }
 
 #[test]

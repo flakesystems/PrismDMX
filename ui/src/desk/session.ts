@@ -82,12 +82,14 @@ export interface ExecutorStrip {
   /** Whether it is running. */
   readonly isActive: boolean;
   /**
-   * Which cue it is in, or `null`.
+   * Which cue it is in, or `null` when the playback is stopped.
    *
-   * **Always `null` today**, and that is the daemon's gap rather than this
-   * reader's: what cue a playback is on lives on the tick thread and nothing
-   * feeds it back into the show. See `PROGRESS.md`'s decision log; the bar
-   * shows a dash rather than inventing a number.
+   * **The tick's answer**, arriving through `Delta::ExecutorState` a fraction of
+   * a second after whatever started the playback (S34) — not with the command,
+   * because the command has only been queued when it is acknowledged. It was
+   * `null` for ever before that, and the bar drew a dash; it still draws one
+   * when the daemon reports none, and it still never invents a number. A bar
+   * that counted the Gos it had sent would be right until a follow cue fired.
    */
   readonly currentCueIndex: number | null;
   /** What its fader does, or `null` for an unassigned slot. */

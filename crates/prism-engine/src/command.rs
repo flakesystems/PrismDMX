@@ -45,6 +45,50 @@ pub enum TickCommand {
         /// On or off.
         on: bool,
     },
+    /// Hold or release a flash over an executor's master.
+    ///
+    /// **A layer, not a write.** `docs/DMX_MERGE.md` §2.1 applies an executor's
+    /// master before the maximum; a flash replaces the master that is applied
+    /// and leaves the stored one alone, so releasing it restores exactly what
+    /// was there — including a level that arrived *while* the flash was held,
+    /// which a save-and-restore would throw away. On a loaded executor a flash
+    /// also starts the sequence, and the release stops what the flash started
+    /// and nothing else.
+    SetExecutorFlash {
+        /// Which executor.
+        executor: ExecutorId,
+        /// Held or released.
+        on: bool,
+    },
+    /// An executor's playback rate, in units of `prism_domain::SPEED_UNITY`.
+    ///
+    /// The speed master of `docs/DMX_MERGE.md` §4 item 3: it is applied in step
+    /// 2 of the tick, to the playback's own clock, and changes no value at all.
+    SetExecutorSpeed {
+        /// Which executor.
+        executor: ExecutorId,
+        /// The new rate. `0` freezes the playback where it is.
+        speed: u16,
+    },
+    /// A tap of `ExecutorButtonFunction::LearnSpeed` against an executor.
+    ///
+    /// Two taps inside `crate::TAP_WINDOW` mean *the running cue's transition
+    /// should take that long*, and the rate follows from that. One tap on its
+    /// own changes nothing.
+    TapExecutorSpeed {
+        /// Which executor.
+        executor: ExecutorId,
+    },
+    /// Move an executor's manual crossfade fader — `ExecutorFaderFunction::XFade`.
+    ///
+    /// The transition is the one the cue list already has; what this replaces is
+    /// its *clock*. See `crate::player`'s module documentation.
+    SetExecutorXFade {
+        /// Which executor.
+        executor: ExecutorId,
+        /// Where the fader is, `0..=65535`.
+        position: u16,
+    },
     /// Step an executor to its next or previous cue.
     Go {
         /// Which executor.
@@ -100,6 +144,10 @@ impl TickCommand {
     const TAG_PROGRAMMER_VALUE: u8 = 7;
     const TAG_PROGRAMMER_CLEAR_VALUE: u8 = 8;
     const TAG_PROGRAMMER_CLEAR: u8 = 9;
+    const TAG_EXECUTOR_FLASH: u8 = 10;
+    const TAG_EXECUTOR_SPEED: u8 = 11;
+    const TAG_EXECUTOR_TAP: u8 = 12;
+    const TAG_EXECUTOR_XFADE: u8 = 13;
 }
 
 /// A variant added in a later session that outgrows a queue slot must fail to
@@ -132,6 +180,16 @@ impl TickPayload for TickCommand {
                     GoDirection::Prev => 1,
                 };
                 (Self::TAG_GO, executor.get(), direction)
+            }
+            Self::SetExecutorFlash { executor, on } => {
+                (Self::TAG_EXECUTOR_FLASH, executor.get(), u16::from(on))
+            }
+            Self::SetExecutorSpeed { executor, speed } => {
+                (Self::TAG_EXECUTOR_SPEED, executor.get(), speed)
+            }
+            Self::TapExecutorSpeed { executor } => (Self::TAG_EXECUTOR_TAP, executor.get(), 0),
+            Self::SetExecutorXFade { executor, position } => {
+                (Self::TAG_EXECUTOR_XFADE, executor.get(), position)
             }
             Self::SetBlackout(on) => (Self::TAG_BLACKOUT, 0, u16::from(on)),
             Self::SetGroupMaster { group, level } => (Self::TAG_GROUP_MASTER, group.get(), level),
@@ -182,6 +240,23 @@ impl TickPayload for TickCommand {
                 1 => Some(Self::SetExecutorActive { executor, on: true }),
                 _ => None,
             },
+            Self::TAG_EXECUTOR_FLASH => match value {
+                0 => Some(Self::SetExecutorFlash {
+                    executor,
+                    on: false,
+                }),
+                1 => Some(Self::SetExecutorFlash { executor, on: true }),
+                _ => None,
+            },
+            Self::TAG_EXECUTOR_SPEED => Some(Self::SetExecutorSpeed {
+                executor,
+                speed: value,
+            }),
+            Self::TAG_EXECUTOR_TAP => Some(Self::TapExecutorSpeed { executor }),
+            Self::TAG_EXECUTOR_XFADE => Some(Self::SetExecutorXFade {
+                executor,
+                position: value,
+            }),
             Self::TAG_BLACKOUT => match value {
                 0 => Some(Self::SetBlackout(false)),
                 1 => Some(Self::SetBlackout(true)),
@@ -241,6 +316,25 @@ mod tests {
             TickCommand::SetExecutorActive {
                 executor: ExecutorId::new(u32::MAX),
                 on: false,
+            },
+            TickCommand::SetExecutorFlash {
+                executor: ExecutorId::new(3),
+                on: true,
+            },
+            TickCommand::SetExecutorFlash {
+                executor: ExecutorId::new(u32::MAX),
+                on: false,
+            },
+            TickCommand::SetExecutorSpeed {
+                executor: ExecutorId::new(4),
+                speed: prism_domain::SPEED_UNITY,
+            },
+            TickCommand::TapExecutorSpeed {
+                executor: ExecutorId::new(5),
+            },
+            TickCommand::SetExecutorXFade {
+                executor: ExecutorId::new(6),
+                position: u16::MAX,
             },
             TickCommand::SetGroupMaster {
                 group: GroupId::new(12),

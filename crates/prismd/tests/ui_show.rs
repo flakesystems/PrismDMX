@@ -183,7 +183,7 @@ struct RecordedExecutor {
     sequence_id: Option<u32>,
     is_active: bool,
     /// **Always `null`** until S34 builds the channel back from the tick — see
-    /// [`the_cue_index_is_still_a_dash`].
+    /// [`the_cue_index_is_a_number_now`].
     current_cue_index: Option<u32>,
 }
 
@@ -547,6 +547,46 @@ fn decode(payload: &[u8]) -> ServerMessage {
     prism_ipc::decode(payload).expect("the daemon sends messages this build can read")
 }
 
+/// How long the daemon has to be quiet before a step is over.
+///
+/// **The playback readback is asynchronous** (S34): what cue an executor is on
+/// comes back from the tick, so a `Delta::ExecutorState` arrives a poll after
+/// the command that caused it rather than with its receipt. A recorder that
+/// stopped at the `Ack` would file that delta under the *next* step, and the
+/// per-step snapshot beside it would already contain it — the recording would
+/// disagree with itself.
+///
+/// Six poll periods and a few ticks. Long enough that a settled desk is really
+/// settled; short enough that a forty-step script does not take a minute.
+const SETTLE: Duration = Duration::from_millis(150);
+
+/// Collects everything the daemon says after the receipt, until it has gone
+/// [`SETTLE`] without a **delta**.
+///
+/// Only a delta resets the window. The daemon also publishes a telemetry frame
+/// thirty times a second to anybody listening, so a drain that waited for
+/// silence on the socket would wait for ever.
+async fn settle(wire: &mut Wire, deltas: &mut Vec<String>) {
+    let mut deadline = std::time::Instant::now() + SETTLE;
+    loop {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            return;
+        }
+        match tokio::time::timeout(deadline - now, wire.recv()).await {
+            Ok(Some(Ok(payload))) => {
+                if matches!(decode(&payload), ServerMessage::Delta { .. }) {
+                    deltas.push(common::encode_base64(&payload));
+                    deadline = std::time::Instant::now() + SETTLE;
+                }
+            }
+            // The window closed, or the connection has gone: either way this
+            // step is over.
+            Ok(_) | Err(_) => return,
+        }
+    }
+}
+
 /// **The regenerator.** Runs a daemon and writes the rig and the recording.
 ///
 /// ```text
@@ -618,6 +658,10 @@ async fn record_the_show_script_for_the_interface() {
                 _ => {}
             }
         };
+
+        // Everything the readback has to say about this step, before the
+        // snapshot below is taken — see [`SETTLE`].
+        settle(&mut wire, &mut deltas).await;
 
         // And the answers, out of a **fresh** snapshot: what the daemon would
         // tell a client that had never seen a delta.
@@ -1214,33 +1258,42 @@ fn a_preset_holds_what_the_daemon_put_in_it() {
     );
 }
 
-/// **The cue index is still a dash**, and this test is the note that cannot be
-/// forgotten.
+/// **The cue index is a number**, and this test is what a note that cannot be
+/// forgotten turns into once it has been read.
 ///
-/// `Executor::currentCueIndex` is in the domain and on the wire and nothing ever
-/// fills it: what cue a playback is on lives on the tick thread with no channel
-/// back (S26's finding). So a cue sheet shows *which* executor is running and
-/// not *where* it is.
+/// Until S34 it said the opposite: `Executor::currentCueIndex` was in the domain
+/// and on the wire with nothing filling it — what cue a playback is on lives on
+/// the tick thread and there was no channel back (S26's finding) — so this
+/// demanded that every recorded index was `null`, and said in its own message
+/// that whoever built the channel would find it red and should regenerate the
+/// recording. `prism_engine::PlaybackReport` is that channel.
 ///
-/// **S34 builds that channel. When it does, this test goes red** — regenerate
-/// the recording (`cargo test -p prismd --test ui_show -- --ignored`) and give
-/// the sheet a cue number. A test that fails when a gap is *closed* is the only
-/// kind of note nobody can overlook.
+/// What it demands now is the claim in both directions, which is stronger than
+/// *some index is filled in*: a strip that is running is on a cue, one that is
+/// not is on none, and the number **moves**.
 #[test]
-fn the_cue_index_is_still_a_dash() {
+fn the_cue_index_is_a_number_now() {
     let recording = recording();
+
+    // **The inverse of what this test said until S34**, which is why it is here
+    // at all: S28 wrote it to demand that every recorded `currentCueIndex` was
+    // `null`, with a message telling whoever built the readback to regenerate
+    // the recording and turn it round. This is that.
     for (index, step) in recording.steps.iter().enumerate() {
         for executor in &step.executors {
             assert_eq!(
-                executor.current_cue_index, None,
-                "step {index} recorded a cue index for executor {}: the tick readback \
-                 exists now, so regenerate this recording and let the cue sheet show it",
-                executor.id
+                executor.current_cue_index.is_some(),
+                executor.is_active,
+                "step {index}: executor {} is active={} and its cue index is {:?}",
+                executor.id,
+                executor.is_active,
+                executor.current_cue_index
             );
         }
     }
-    // And the half that *does* arrive, so this is not a test that would pass
-    // over a recording in which nothing ever ran.
+
+    // A running executor is on a cue, a stopped one is on none, and the script
+    // contains both — so neither half of the claim above is vacuous.
     assert!(
         recording
             .steps
@@ -1254,6 +1307,22 @@ fn the_cue_index_is_still_a_dash() {
             .iter()
             .any(|step| step.executors.iter().all(|executor| !executor.is_active)),
         "nothing was ever stopped"
+    );
+
+    // And the index **moved**, which is the part a readback that reported a
+    // constant zero would fail.
+    let seen: std::collections::BTreeSet<u32> = recording
+        .steps
+        .iter()
+        .flat_map(|step| {
+            step.executors
+                .iter()
+                .filter_map(|executor| executor.current_cue_index)
+        })
+        .collect();
+    assert!(
+        seen.len() >= 2,
+        "every recorded cue index was the same: {seen:?}"
     );
 }
 

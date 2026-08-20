@@ -55,8 +55,8 @@
 use core::fmt;
 
 use prism_domain::{
-    AttributeType, Command, ExecutorId, FeatureGroup, GoDirection, ParamDirection, ViewId,
-    WindowType,
+    AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId, FeatureGroup,
+    GoDirection, ParamDirection, ViewId, WindowType,
 };
 use serde::{Deserialize, Serialize};
 
@@ -101,12 +101,12 @@ pub enum Step {
 /// answers only an event and a session have. The variants that need nothing are
 /// still their own variant rather than a `Command`, so the table has one shape.
 ///
-/// **Every one of these resolves to a command that already exists.** Where
-/// §4.1 names something the protocol has no command for — a tap against a speed
-/// master, an executor button's `Flash` — this enum has no variant, because
-/// inventing one would put a name in a user-editable file that nothing answers.
-/// See the module documentation of `crate::profile` and
-/// `docs/MCU_MAPPING.md` §4.3.
+/// **Every one of these resolves to a command that already exists.** S22 wrote
+/// that down as a constraint and recorded the three rows of §4.1 it could not
+/// then satisfy; S34 gave the protocol the command they were waiting for, and
+/// [`Self::ExecutorButton`] is how they are satisfied now. The constraint is
+/// unchanged: a name in a user-editable file that nothing answers is worse than
+/// a row this table cannot express.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "t")]
 pub enum SurfaceAction {
@@ -126,6 +126,21 @@ pub enum SurfaceAction {
     ExecutorOff {
         /// Which executor.
         target: ExecutorTarget,
+    },
+    /// Press one of an executor's buttons, and let the executor decide what that
+    /// means — `docs/MCU_MAPPING.md` §4.1's strip-button and transport rows.
+    ///
+    /// The **only** action here that forwards a release as well as a press: a
+    /// `Flash` is momentary and its release is half the gesture. Layer 3 does
+    /// not know which function it is sending to, which is the point — the
+    /// executor knows, and `prism_core::Show::apply` is where a release that
+    /// means nothing is dropped.
+    ExecutorButton {
+        /// Which executor.
+        target: ExecutorTarget,
+        /// Which of its buttons — a hardware position for a strip key, a named
+        /// function for a panel key this profile has assigned outright.
+        button: ExecutorButtonRef,
     },
     /// Make an executor the selected one, which is what the transport section
     /// and the main fader then act on.
@@ -211,8 +226,8 @@ pub struct SurfaceContext {
 /// What a control carried with it, for the actions that need it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Input {
-    /// A button went down.
-    Press,
+    /// A button went down (`true`) or came up (`false`).
+    Button(bool),
     /// A fader was moved, as a level.
     Level(u16),
     /// A relative control was turned, in parameter steps.
@@ -224,7 +239,7 @@ impl Input {
     const fn level(self) -> Option<u16> {
         match self {
             Self::Level(level) => Some(level),
-            Self::Press | Self::Steps(_) => None,
+            Self::Button(_) | Self::Steps(_) => None,
         }
     }
 
@@ -232,7 +247,15 @@ impl Input {
     const fn steps(self) -> Option<i32> {
         match self {
             Self::Steps(steps) => Some(steps),
-            Self::Press | Self::Level(_) => None,
+            Self::Button(_) | Self::Level(_) => None,
+        }
+    }
+
+    /// Which edge of a button this was, for the one action that cares.
+    const fn pressed(self) -> Option<bool> {
+        match self {
+            Self::Button(pressed) => Some(pressed),
+            Self::Level(_) | Self::Steps(_) => None,
         }
     }
 }
@@ -275,6 +298,17 @@ const fn step_page(page: u32, delta: i32) -> u32 {
 }
 
 impl SurfaceAction {
+    /// Whether this action wants the release of a button as well as the press.
+    ///
+    /// Only [`Self::ExecutorButton`], and it always does: layer 3 cannot know
+    /// whether the executor has a `Flash` on that key, so it forwards both
+    /// edges and lets the executor decide. Everything else is an instruction
+    /// rather than a gesture, and an instruction has one edge.
+    #[must_use]
+    pub const fn is_momentary(self) -> bool {
+        matches!(self, Self::ExecutorButton { .. })
+    }
+
     /// The command this action means, or nothing.
     ///
     /// Nothing when the action needs an answer the context has not got — no
@@ -296,6 +330,11 @@ impl SurfaceAction {
             },
             Self::ExecutorOff { target } => Command::ExecutorOff {
                 executor_id: target.resolve(origin, context)?,
+            },
+            Self::ExecutorButton { target, button } => Command::ExecutorButton {
+                executor_id: target.resolve(origin, context)?,
+                button,
+                pressed: input.pressed()?,
             },
             Self::SelectExecutor { target } => Command::SelectExecutor {
                 executor_id: target.resolve(origin, context)?,
@@ -531,9 +570,11 @@ const DEFAULT_GLOBAL: [(GlobalButton, SurfaceAction); 25] = [
     // Flip — Go+ on the selected executor.
     (
         GlobalButton::Flip,
-        SurfaceAction::ExecutorGo {
+        SurfaceAction::ExecutorButton {
             target: ExecutorTarget::Selected,
-            direction: GoDirection::Next,
+            button: ExecutorButtonRef::Function {
+                function: ExecutorButtonFunction::GoForward,
+            },
         },
     ),
     // F1–F8: free. Four windows and four spare, which is what "free" means in a
@@ -568,31 +609,44 @@ const DEFAULT_GLOBAL: [(GlobalButton, SurfaceAction); 25] = [
     (GlobalButton::Enter, SurfaceAction::Redo),
     // Transport — the part of the panel that stays PrismDMX's in shared
     // operation (§4.3), and therefore the part to spend on live-show work.
+    // §4.1 gives these four `Go-`, `Go+`, `Off` and `On` on the selected
+    // executor. Until S34 the protocol had no `On` and Play resolved to a Go,
+    // which is the second row of the deviation table §4.2.1 carried; now the
+    // row is bound as it is written.
     (
         GlobalButton::Rewind,
-        SurfaceAction::ExecutorGo {
+        SurfaceAction::ExecutorButton {
             target: ExecutorTarget::Selected,
-            direction: GoDirection::Prev,
+            button: ExecutorButtonRef::Function {
+                function: ExecutorButtonFunction::GoBack,
+            },
         },
     ),
     (
         GlobalButton::FastForward,
-        SurfaceAction::ExecutorGo {
+        SurfaceAction::ExecutorButton {
             target: ExecutorTarget::Selected,
-            direction: GoDirection::Next,
+            button: ExecutorButtonRef::Function {
+                function: ExecutorButtonFunction::GoForward,
+            },
         },
     ),
     (
         GlobalButton::Stop,
-        SurfaceAction::ExecutorOff {
+        SurfaceAction::ExecutorButton {
             target: ExecutorTarget::Selected,
+            button: ExecutorButtonRef::Function {
+                function: ExecutorButtonFunction::Off,
+            },
         },
     ),
     (
         GlobalButton::Play,
-        SurfaceAction::ExecutorGo {
+        SurfaceAction::ExecutorButton {
             target: ExecutorTarget::Selected,
-            direction: GoDirection::Next,
+            button: ExecutorButtonRef::Function {
+                function: ExecutorButtonFunction::On,
+            },
         },
     ),
     (GlobalButton::Record, SurfaceAction::ClearProgrammer),
@@ -653,7 +707,12 @@ impl Bindings {
             target: ExecutorTarget::Strip,
         });
         // Strip encoder: Empty, per §4.1. Left as `None`.
-        // Rec / Solo / Mute / Select: Go+ on that strip's executor.
+        // Rec / Solo / Mute / Select: **that strip executor's own** first,
+        // second, third and fourth button. §4.1 calls this row configurable and
+        // lists the eight `ExecutorButtonFunction`s; that list is the executor's
+        // and not this table's, so what the table binds is the *position* and
+        // the show says what it does (S34). `prism_core::default_executor` is
+        // where the desk's own answer to that lives — Go+, Go-, Off, Empty.
         for button in [
             StripButton::Rec,
             StripButton::Solo,
@@ -662,9 +721,11 @@ impl Bindings {
         ] {
             table.set_strip_button(
                 button,
-                Some(SurfaceAction::ExecutorGo {
+                Some(SurfaceAction::ExecutorButton {
                     target: ExecutorTarget::Strip,
-                    direction: GoDirection::Next,
+                    button: ExecutorButtonRef::Slot {
+                        index: u8::try_from(button.index()).unwrap_or(u8::MAX),
+                    },
                 }),
             );
         }
@@ -681,7 +742,9 @@ impl Bindings {
         // Main fader: the selected executor's fader. §4.1 calls it `XFade`,
         // which is an `ExecutorFaderFunction` — what the executor does with its
         // fader is show data (`ARCHITECTURE_SPEC.md` §6) and there is one fader
-        // command for all four functions.
+        // command for all four functions. Since S34 the daemon routes that one
+        // command through the executor's own `fader_function`, so a fader set to
+        // `XFade` crossfades and this row means what §4.1 says it means.
         table.main_fader = Some(SurfaceAction::ExecutorMaster {
             target: ExecutorTarget::Selected,
         });
@@ -802,23 +865,24 @@ impl Bindings {
     pub fn command(&self, event: SurfaceEvent, context: &SurfaceContext) -> Option<Command> {
         match event {
             SurfaceEvent::Button { button, pressed } => {
-                // A press is the event; the release is what ends it. Nothing in
-                // the command vocabulary is momentary — `Flash` is an
-                // `ExecutorButtonFunction`, applied by the engine to a button
-                // the executor owns — so a release has nothing to say.
-                if !pressed {
+                let (action, origin) = match button {
+                    ButtonId::Strip { strip, button } => (
+                        self.action(BoundControl::StripButton(button))?,
+                        Origin::Strip(strip),
+                    ),
+                    ButtonId::Global(button) => {
+                        (self.action(BoundControl::Global(button))?, Origin::Panel)
+                    }
+                };
+                // A press is the event and the release ends it, so a release
+                // says nothing — **except** for the one action that is a
+                // gesture rather than an instruction. `Flash` is an
+                // `ExecutorButtonFunction`, and its release is what puts the
+                // master back.
+                if !pressed && !action.is_momentary() {
                     return None;
                 }
-                match button {
-                    ButtonId::Strip { strip, button } => self
-                        .action(BoundControl::StripButton(button))?
-                        .resolve(Origin::Strip(strip), Input::Press, context),
-                    ButtonId::Global(button) => self.action(BoundControl::Global(button))?.resolve(
-                        Origin::Panel,
-                        Input::Press,
-                        context,
-                    ),
-                }
+                action.resolve(origin, Input::Button(pressed), context)
             }
             SurfaceEvent::Touch { .. } => None,
             SurfaceEvent::Moved { fader, level } => match fader {
@@ -895,8 +959,8 @@ mod tests {
     use crate::model::SurfaceEvent;
     use crate::profile::{Fader, GlobalButton, McuProfile, StripButton, X_TOUCH};
     use prism_domain::{
-        AttributeType, Command, ExecutorId, FeatureGroup, GoDirection, ParamDirection, ViewId,
-        WindowType,
+        AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId,
+        FeatureGroup, GoDirection, ParamDirection, ViewId, WindowType,
     };
 
     fn context() -> SurfaceContext {
@@ -957,10 +1021,28 @@ mod tests {
                 level: 100,
             })
         );
+        // §4.1 gives Stop the executor's `Off` **function**, which since S34
+        // is a command the protocol can express — so the transport row is bound
+        // as it is written rather than translated into the nearest thing that
+        // existed.
         assert_eq!(
             table.command(press(GlobalButton::Stop), &context),
-            Some(Command::ExecutorOff {
+            Some(Command::ExecutorButton {
                 executor_id: ExecutorId::new(19),
+                button: ExecutorButtonRef::Function {
+                    function: ExecutorButtonFunction::Off,
+                },
+                pressed: true,
+            })
+        );
+        assert_eq!(
+            table.command(press(GlobalButton::Play), &context),
+            Some(Command::ExecutorButton {
+                executor_id: ExecutorId::new(19),
+                button: ExecutorButtonRef::Function {
+                    function: ExecutorButtonFunction::On,
+                },
+                pressed: true,
             })
         );
     }
@@ -997,10 +1079,14 @@ mod tests {
     fn a_release_and_a_touch_say_nothing() {
         let table = Bindings::defaults();
         let context = context();
+        // Save is an instruction rather than a gesture, so its release has
+        // nothing to say. **`ExecutorButton` is the exception and the next test
+        // is about it**: a `Flash` release is half the gesture, and layer 3
+        // cannot know which function the executor has on that key.
         assert_eq!(
             table.command(
                 SurfaceEvent::Button {
-                    button: ButtonId::Global(GlobalButton::Play),
+                    button: ButtonId::Global(GlobalButton::Save),
                     pressed: false,
                 },
                 &context
@@ -1126,9 +1212,9 @@ mod tests {
         assert_eq!(table.action(BoundControl::StripEncoder), None);
         assert_eq!(
             table.action(BoundControl::StripButton(StripButton::Select)),
-            Some(SurfaceAction::ExecutorGo {
+            Some(SurfaceAction::ExecutorButton {
                 target: ExecutorTarget::Strip,
-                direction: GoDirection::Next
+                button: ExecutorButtonRef::Slot { index: 3 },
             })
         );
         assert_eq!(

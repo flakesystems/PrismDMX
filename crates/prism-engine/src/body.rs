@@ -37,9 +37,11 @@ use crate::encode::{ChannelPlan, PatchError};
 use crate::frame::{DmxFrame, FrameLayout};
 use crate::master::MasterLayer;
 use crate::plan::MergePlan;
-use crate::playback::{MergeScratch, PlaybackLayer};
+use crate::playback::{MergeScratch, PlaybackLayer, PlaybackSource};
 use crate::player::CueLayer;
 use crate::programmer::ProgrammerLayer;
+use crate::readback::{PlaybackReport, PlaybackState};
+use crate::sync::Arc;
 use crate::tick::{TickBody, TickInfo};
 
 /// The whole pipeline — playbacks, merge, programmer, masters and the DMX
@@ -47,6 +49,9 @@ use crate::tick::{TickBody, TickInfo};
 #[derive(Debug, Clone)]
 pub struct MergeBody {
     plan: MergePlan,
+    /// Where the tick publishes what its playbacks are doing, if anybody asked
+    /// for it. `None` costs one branch a tick and nothing else.
+    report: Option<Arc<PlaybackReport>>,
     channels: ChannelPlan,
     layer: PlaybackLayer,
     cues: CueLayer,
@@ -88,6 +93,7 @@ impl MergeBody {
         let values = vec![0; plan.slot_count()].into_boxed_slice();
         let mut body = Self {
             plan,
+            report: None,
             channels,
             layer,
             cues,
@@ -184,6 +190,55 @@ impl MergeBody {
     /// The masters, mutably.
     pub const fn masters_mut(&mut self) -> &mut MasterLayer {
         &mut self.masters
+    }
+
+    /// Publishes what the playbacks are doing into `report`, every tick.
+    ///
+    /// The channel back out of the tick (S34). Set it up before the body is
+    /// installed: sharing the handle is what the `Arc` is for, and nothing about
+    /// it allocates once it is in place. Passing a second report replaces the
+    /// first, which is what a rebuilt body inherits.
+    ///
+    /// See [`PlaybackReport`] for what a reader may conclude from a sample —
+    /// the short version is *one entry is consistent, two entries are not
+    /// necessarily from the same tick*, which is the price of never making the
+    /// tick wait.
+    pub fn report_into(&mut self, report: Arc<PlaybackReport>) {
+        self.report = Some(report);
+        self.publish_playbacks();
+    }
+
+    /// The report this body publishes into, if it has one.
+    #[must_use]
+    pub fn report(&self) -> Option<&Arc<PlaybackReport>> {
+        self.report.as_ref()
+    }
+
+    /// What one executor's playback is doing, as the report describes it.
+    ///
+    /// The same answer the tick publishes, computed the same way in one place so
+    /// a reader and the readback cannot disagree.
+    #[must_use]
+    pub fn playback_state(&self, executor: ExecutorId) -> Option<PlaybackState> {
+        let player = self.cues.player(executor)?;
+        Some(state_of(player, &self.layer))
+    }
+
+    /// Writes every playback into the report. Called at the end of every tick,
+    /// and allocation-free: the table was sized when the report was built.
+    fn publish_playbacks(&self) {
+        let Some(report) = self.report.as_ref() else {
+            return;
+        };
+        let mut published = 0;
+        for player in self.cues.players() {
+            report.publish(published, state_of(player, &self.layer));
+            published += 1;
+        }
+        // After the entries, never before: a length that reached past what has
+        // been written this tick would let a reader see last tick's executor
+        // under this tick's number.
+        report.publish_len(published);
     }
 
     /// Puts the show's groups onto the group masters.
@@ -290,6 +345,31 @@ fn plans(
     Ok((plan, channels))
 }
 
+/// What one player is doing, in the form the readback publishes.
+///
+/// **`is_active` is the playback rather than the merge.** A player that is
+/// releasing has no cue in force and is still contributing light for the length
+/// of its fade-out; the desk's *running* lamp is about the cue list, so a
+/// release reads as stopped and the light goes on fading. An executor with no
+/// cue list has no cue to be on and answers with whether the merge holds it,
+/// which is the only sense *active* has for one.
+fn state_of(player: &crate::player::CuePlayer, layer: &PlaybackLayer) -> PlaybackState {
+    let cue_index = player
+        .current_cue()
+        .and_then(|index| u32::try_from(index).ok());
+    PlaybackState {
+        executor: player.executor(),
+        is_active: if player.is_loaded() {
+            cue_index.is_some()
+        } else {
+            layer
+                .source(player.executor())
+                .is_some_and(PlaybackSource::is_active)
+        },
+        cue_index,
+    }
+}
+
 impl TickBody for MergeBody {
     fn apply(&mut self, command: TickCommand) {
         match command {
@@ -316,6 +396,55 @@ impl TickBody for MergeBody {
                             self.layer.deactivate(executor);
                         }
                     }
+                }
+            }
+            // A flash is a *layer* over the master and a temporary start, never
+            // a `SetExecutorLevel`: `docs/DMX_MERGE.md` §2.1 applies the master
+            // before the maximum, and this replaces the master that is applied
+            // while leaving the stored one where it was. Releasing therefore
+            // restores it byte for byte, including one that arrived while the
+            // flash was held.
+            TickCommand::SetExecutorFlash { executor, on } => {
+                self.layer
+                    .set_flash(executor, on.then_some(crate::merge::FULL));
+                match self.cues.player_mut(executor) {
+                    Some(player) if player.is_loaded() => {
+                        if on {
+                            player.flash_on();
+                        } else {
+                            player.flash_off();
+                        }
+                    }
+                    // An executor with no cue list is one a host is holding
+                    // values in by hand, so a flash puts it into the merge for
+                    // as long as it is held — and takes back out only what it
+                    // put in.
+                    Some(player) => {
+                        if on {
+                            if self.layer.activate(executor) {
+                                player.mark_flashed(true);
+                            }
+                        } else if player.is_flashed() {
+                            player.mark_flashed(false);
+                            self.layer.deactivate(executor);
+                        }
+                    }
+                    None => {}
+                }
+            }
+            TickCommand::SetExecutorSpeed { executor, speed } => {
+                if let Some(player) = self.cues.player_mut(executor) {
+                    player.set_speed(speed);
+                }
+            }
+            TickCommand::TapExecutorSpeed { executor } => {
+                if let Some(player) = self.cues.player_mut(executor) {
+                    player.tap();
+                }
+            }
+            TickCommand::SetExecutorXFade { executor, position } => {
+                if let Some(player) = self.cues.player_mut(executor) {
+                    player.set_crossfade(position);
                 }
             }
             TickCommand::Go {
@@ -353,6 +482,9 @@ impl TickBody for MergeBody {
         self.cues.advance(tick.index, &mut self.layer);
         self.resolve();
         self.channels.encode(&self.values, frame);
+        // And say what the playbacks did — after the frame, because the frame is
+        // what has a deadline and this is feedback for a screen.
+        self.publish_playbacks();
     }
 }
 
@@ -1315,5 +1447,380 @@ mod tests {
             body.resolve();
             prop_assert_eq!(body.values(), once.as_slice());
         }
+    }
+
+    // -- S34: the flash layer and the channel back out of the tick -----------
+
+    /// **Exit criterion, on the wire.** A flash raises what reaches the fixture
+    /// and leaves the stored master byte-identical; a `SetExecutorLevel` that
+    /// arrives *while* the flash is held is the level that stands when it is
+    /// released.
+    ///
+    /// The stored master is compared as the number the show holds and the light
+    /// as the byte the fixture gets, because those are two different claims and
+    /// a flash that wrote into the master would pass one of them.
+    #[test]
+    fn a_flash_raises_the_light_and_leaves_the_stored_master_untouched() {
+        let head = moving_head_16();
+        let patched = fixture(1, "test.movinghead16", 1, 1);
+        let mut body =
+            MergeBody::for_patch(&layout(), [(&patched, &head)], [ExecutorId::new(1)]).unwrap();
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        body.layer_mut()
+            .source_mut(ExecutorId::new(1))
+            .unwrap()
+            .set(dimmer, FULL);
+
+        let layout = Arc::new(FrameLayout::new([UniverseId::MIN]).unwrap());
+        let mut publisher = crate::FramePublisher::new(layout);
+        let mut subscriber = publisher.subscribe();
+        let (mut producer, consumer) = command_queue(16);
+        let mut engine = Engine::new(body, consumer, publisher);
+        let clock = ManualClock::new();
+
+        // A quarter master on a running executor: a quarter of the light.
+        for command in [
+            TickCommand::SetExecutorActive {
+                executor: ExecutorId::new(1),
+                on: true,
+            },
+            TickCommand::SetExecutorLevel {
+                executor: ExecutorId::new(1),
+                level: 16_383,
+            },
+        ] {
+            producer.push(command).unwrap();
+        }
+        engine.run_ticks(&clock, 1);
+        subscriber.refresh();
+        let quarter = subscriber.frame().channels()[0];
+        assert_eq!(quarter, 63, "a quarter master is a quarter of the light");
+        assert_eq!(
+            engine
+                .body()
+                .layer()
+                .source(ExecutorId::new(1))
+                .unwrap()
+                .master(),
+            16_383
+        );
+
+        // Held: full light, and the stored master has not moved.
+        producer
+            .push(TickCommand::SetExecutorFlash {
+                executor: ExecutorId::new(1),
+                on: true,
+            })
+            .unwrap();
+        engine.run_ticks(&clock, 1);
+        subscriber.refresh();
+        assert_eq!(subscriber.frame().channels()[0], 255);
+        assert_eq!(
+            engine
+                .body()
+                .layer()
+                .source(ExecutorId::new(1))
+                .unwrap()
+                .master(),
+            16_383,
+            "the flash wrote into the stored master"
+        );
+
+        // A fader move *during* the flash: the light does not change, because
+        // the flash is on top — and the new level is what the release restores.
+        producer
+            .push(TickCommand::SetExecutorLevel {
+                executor: ExecutorId::new(1),
+                level: 49_151,
+            })
+            .unwrap();
+        engine.run_ticks(&clock, 1);
+        subscriber.refresh();
+        assert_eq!(subscriber.frame().channels()[0], 255);
+
+        producer
+            .push(TickCommand::SetExecutorFlash {
+                executor: ExecutorId::new(1),
+                on: false,
+            })
+            .unwrap();
+        engine.run_ticks(&clock, 1);
+        subscriber.refresh();
+        assert_eq!(
+            subscriber.frame().channels()[0],
+            191,
+            "the release lost the level that arrived while it was held"
+        );
+        assert_eq!(
+            engine
+                .body()
+                .layer()
+                .source(ExecutorId::new(1))
+                .unwrap()
+                .master(),
+            49_151
+        );
+        assert_eq!(engine.stats().panics, 0);
+    }
+
+    /// A flash on an executor with no cue list puts it into the merge for as
+    /// long as it is held, and takes back out only what it put in.
+    #[test]
+    fn a_flash_activates_an_executor_that_has_no_cue_list() {
+        let mut body = body(1, 2);
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        body.layer_mut()
+            .source_mut(ExecutorId::new(1))
+            .unwrap()
+            .set(dimmer, FULL);
+        assert!(!body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+
+        body.apply(TickCommand::SetExecutorFlash {
+            executor: ExecutorId::new(1),
+            on: true,
+        });
+        body.resolve();
+        assert!(body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+        assert_eq!(body.values()[dimmer], FULL);
+
+        body.apply(TickCommand::SetExecutorFlash {
+            executor: ExecutorId::new(1),
+            on: false,
+        });
+        body.resolve();
+        assert!(!body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+        assert_eq!(body.values()[dimmer], 0, "home is dark for this rig");
+
+        // And an executor that was already on stays on: the release stops what
+        // the flash started and nothing else.
+        body.layer_mut().activate(ExecutorId::new(2));
+        body.apply(TickCommand::SetExecutorFlash {
+            executor: ExecutorId::new(2),
+            on: true,
+        });
+        body.apply(TickCommand::SetExecutorFlash {
+            executor: ExecutorId::new(2),
+            on: false,
+        });
+        assert!(body.layer().source(ExecutorId::new(2)).unwrap().is_active());
+    }
+
+    /// **The channel S26 recorded as missing.** The tick publishes which cue
+    /// each playback is on, and a reader that never touches the engine can read
+    /// it.
+    #[test]
+    fn the_tick_publishes_which_cue_each_playback_is_on() {
+        let head = moving_head();
+        let patched = patch(1);
+        let mut body = MergeBody::for_patch(
+            &layout(),
+            patched.iter().map(|fixture| (fixture, &head)),
+            [ExecutorId::new(1), ExecutorId::new(2)],
+        )
+        .unwrap();
+        body.load_sequence(
+            ExecutorId::new(1),
+            &sequence(
+                vec![
+                    cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 40_000)]),
+                    cue("2", 0.0, vec![cue_part(1, AttributeType::Dimmer, 20_000)]),
+                ],
+                false,
+            ),
+        )
+        .unwrap();
+        let report = Arc::new(crate::PlaybackReport::new(crate::MAX_SOURCES));
+        body.report_into(Arc::clone(&report));
+
+        // Before anything runs: two executors, both stopped, no cue on either.
+        assert_eq!(report.len(), 2);
+        let stopped: Vec<_> = report.states().collect();
+        assert!(stopped.iter().all(|state| !state.is_active));
+        assert!(stopped.iter().all(|state| state.cue_index.is_none()));
+
+        let mut frame = DmxFrame::new(&layout());
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(1),
+            on: true,
+        });
+        body.render(&tick(1), &mut frame);
+        assert_eq!(report.get(0).unwrap().cue_index, Some(0));
+        assert!(report.get(0).unwrap().is_active);
+        assert_eq!(report.get(1).unwrap().cue_index, None);
+
+        body.apply(TickCommand::Go {
+            executor: ExecutorId::new(1),
+            direction: GoDirection::Next,
+        });
+        body.render(&tick(2), &mut frame);
+        assert_eq!(report.get(0).unwrap().cue_index, Some(1));
+
+        // Stopped: the cue index goes away with it, rather than being left
+        // pointing at the cue that used to be running.
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(1),
+            on: false,
+        });
+        body.render(&tick(3), &mut frame);
+        assert_eq!(report.get(0).unwrap().cue_index, None);
+        assert!(!report.get(0).unwrap().is_active);
+
+        // The reader sees an executor number with each one, so a rebuilt body
+        // with a different grid cannot be read as the old one.
+        assert_eq!(
+            report
+                .states()
+                .map(|state| state.executor)
+                .collect::<Vec<_>>(),
+            vec![ExecutorId::new(1), ExecutorId::new(2)]
+        );
+    }
+
+    /// A body built without a report ticks exactly as it did, and one given a
+    /// report answers the same thing its own reader does.
+    #[test]
+    fn the_report_and_the_bodys_own_reader_cannot_disagree() {
+        let mut body = body(1, 2);
+        assert!(body.report().is_none());
+        assert_eq!(body.playback_state(ExecutorId::new(9)), None);
+
+        let report = Arc::new(crate::PlaybackReport::new(4));
+        body.report_into(Arc::clone(&report));
+        assert!(body.report().is_some());
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(2),
+            on: true,
+        });
+        let mut frame = DmxFrame::new(&layout());
+        body.render(&tick(1), &mut frame);
+        for state in report.states() {
+            assert_eq!(body.playback_state(state.executor), Some(state));
+        }
+        assert!(
+            report
+                .states()
+                .any(|state| state.executor == ExecutorId::new(2) && state.is_active)
+        );
+    }
+
+    /// A speed of zero freezes a playback and the frame stops moving with it.
+    #[test]
+    fn an_executor_speed_command_changes_the_rate_and_no_value() {
+        let head = moving_head();
+        let patched = patch(1);
+        let mut body = MergeBody::for_patch(
+            &layout(),
+            patched.iter().map(|fixture| (fixture, &head)),
+            [ExecutorId::new(1)],
+        )
+        .unwrap();
+        body.load_sequence(
+            ExecutorId::new(1),
+            &sequence(
+                vec![cue(
+                    "1",
+                    4.0,
+                    vec![cue_part(1, AttributeType::Dimmer, 65_535)],
+                )],
+                false,
+            ),
+        )
+        .unwrap();
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        let mut frame = DmxFrame::new(&layout());
+
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(1),
+            on: true,
+        });
+        for index in 1..=40 {
+            body.render(&tick(index), &mut frame);
+        }
+        let moving = body.values()[dimmer];
+        assert!(moving > 0 && moving < 65_535, "{moving}");
+
+        body.apply(TickCommand::SetExecutorSpeed {
+            executor: ExecutorId::new(1),
+            speed: 0,
+        });
+        for index in 41..=200 {
+            body.render(&tick(index), &mut frame);
+        }
+        assert_eq!(body.values()[dimmer], moving, "a frozen fade moved");
+        // And it is frozen rather than finished: the cue is still the one that
+        // was running.
+        assert_eq!(
+            body.playback_state(ExecutorId::new(1)).unwrap().cue_index,
+            Some(0)
+        );
+
+        // A tap and a crossfade on an executor that has neither loaded change
+        // nothing and do not panic — the tick's answer to an impossible command
+        // is to ignore it.
+        body.apply(TickCommand::TapExecutorSpeed {
+            executor: ExecutorId::new(99),
+        });
+        body.apply(TickCommand::SetExecutorXFade {
+            executor: ExecutorId::new(99),
+            position: 4,
+        });
+        body.apply(TickCommand::SetExecutorFlash {
+            executor: ExecutorId::new(99),
+            on: true,
+        });
+        body.render(&tick(201), &mut frame);
+        assert_eq!(body.values()[dimmer], moving);
+    }
+
+    /// The crossfade reaches the frame through the queue, which is the path the
+    /// daemon uses.
+    #[test]
+    fn a_crossfade_command_drives_the_transition_from_the_fader() {
+        let head = moving_head();
+        let patched = patch(1);
+        let mut body = MergeBody::for_patch(
+            &layout(),
+            patched.iter().map(|fixture| (fixture, &head)),
+            [ExecutorId::new(1)],
+        )
+        .unwrap();
+        body.load_sequence(
+            ExecutorId::new(1),
+            &sequence(
+                vec![
+                    cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 0)]),
+                    cue("2", 600.0, vec![cue_part(1, AttributeType::Dimmer, 65_535)]),
+                ],
+                false,
+            ),
+        )
+        .unwrap();
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        let mut frame = DmxFrame::new(&layout());
+
+        body.apply(TickCommand::SetExecutorXFade {
+            executor: ExecutorId::new(1),
+            position: 0,
+        });
+        body.apply(TickCommand::SetExecutorActive {
+            executor: ExecutorId::new(1),
+            on: true,
+        });
+        body.render(&tick(1), &mut frame);
+        body.apply(TickCommand::Go {
+            executor: ExecutorId::new(1),
+            direction: GoDirection::Next,
+        });
+        body.render(&tick(2), &mut frame);
+        assert_eq!(body.values()[dimmer], 0);
+
+        body.apply(TickCommand::SetExecutorXFade {
+            executor: ExecutorId::new(1),
+            position: 65_535,
+        });
+        body.render(&tick(3), &mut frame);
+        // A ten-minute fade, arrived at in one tick, because the fader is the
+        // clock.
+        assert_eq!(body.values()[dimmer], 65_535);
     }
 }

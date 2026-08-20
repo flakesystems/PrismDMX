@@ -35,7 +35,7 @@ import type { FeatureGroup, JsonValue, ProgrammerState, StorePreview } from "../
 import { FEATURE_GROUP_VARIANTS } from "../bindings/variants";
 import { useAsk, useSend } from "../store/hooks";
 import type { PresetRow } from "./looks";
-import { colorStyle, nextFreeNumber, poolRows, presetRows } from "./looks";
+import { colorStyle, nextFreeNumber, poolRows, presetRows, presetsDocument } from "./looks";
 import { StoreRequester, isStorable, storeText } from "./store";
 
 /** The whole window. */
@@ -101,6 +101,7 @@ export function PresetPool({
       <PresetStoreBar
         pool={pool}
         presets={all}
+        presetsDoc={presetsDocument(show)}
         programmer={programmer}
         ask={ask}
         onSend={send}
@@ -156,12 +157,15 @@ function PresetBox({
 function PresetStoreBar({
   pool,
   presets,
+  presetsDoc,
   programmer,
   ask,
   onSend,
 }: {
   readonly pool: FeatureGroup;
   readonly presets: readonly PresetRow[];
+  /** The `/presets` subtree, as the dependency of the question below. */
+  readonly presetsDoc: JsonValue | null;
   readonly programmer: ProgrammerState | null;
   readonly ask: ReturnType<typeof useAsk>;
   readonly onSend: ReturnType<typeof useSend>;
@@ -182,11 +186,16 @@ function PresetStoreBar({
       requester.current = null;
     };
   }, [ask]);
-  // Asked again whenever the number, the pool, the show **or the programmer**
-  // moves — which is exactly when the answer can have changed.
+  // Asked again whenever the number, the pool, the **pools** or the programmer
+  // move — which is exactly when the answer can have changed. Deliberately
+  // *not* whenever the show moves: since S34 the show document changes whenever
+  // a playback advances a cue, and an effect keyed on it would ask the daemon
+  // what a store would do once per cue of a chase. `presetsDoc` is the subtree
+  // a preview actually depends on, and structural sharing keeps its identity
+  // still while executors run (`looks.ts::presetsDocument`).
   useEffect(() => {
     requester.current?.request({ t: "Preset", presetId, pool });
-  }, [pool, presetId, presets, programmer]);
+  }, [pool, presetId, presetsDoc, programmer]);
 
   return (
     <form

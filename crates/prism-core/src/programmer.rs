@@ -438,6 +438,7 @@ impl Programmer {
             | Command::AssignExecutor { .. }
             | Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
+            | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
             | Command::PatchFixture { .. }
             | Command::UnpatchFixture { .. }

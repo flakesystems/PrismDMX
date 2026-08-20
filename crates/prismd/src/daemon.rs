@@ -31,7 +31,7 @@ use std::time::Duration;
 
 use prism_core::{ShowFile, ShowStore};
 use prism_domain::{Delta, OutputHealth, OutputId, UniverseId};
-use prism_engine::{FrameLayout, FramePublisher, FrameSubscriber};
+use prism_engine::{FrameLayout, FramePublisher, FrameSubscriber, PlaybackReport};
 use prism_ipc::{
     Server, ServerConfig, TelemetryFrame, local::LocalListener, websocket::WebSocketListener,
 };
@@ -57,6 +57,15 @@ const HOUSEKEEPING: Duration = Duration::from_millis(500);
 
 /// `docs/IPC_PROTOCOL.md` §7: 25 to 30 Hz, independent of the 44 Hz tick.
 const TELEMETRY_PERIOD: Duration = Duration::from_millis(33);
+
+/// How often the daemon reads what the tick says its playbacks are doing (S34).
+///
+/// One engine tick and a bit, so a cue that changes is on the screen within a
+/// frame or two of changing — a cue number that lagged a Go by half a second
+/// would be worse than no number. It costs a walk over the executor grid and
+/// **nothing is broadcast unless something moved**, which is what keeps the
+/// show document still during a fade: a cue index changes when a cue changes.
+const PLAYBACK_PERIOD: Duration = Duration::from_millis(25);
 
 /// How long the daemon gives a blackout frame to reach the fixtures before it
 /// stops the outputs.
@@ -215,7 +224,14 @@ impl Daemon {
         let loading = spawn_library_load(&data_dir, options.fixtures.clone());
         let layout =
             Arc::new(crate::engine::frame_layout(options.universes).map_err(StartError::Layout)?);
-        let body = build_body(&layout, &file).map_err(StartError::Patch)?;
+        // The channel back out of the tick (S34), built once and shared: a
+        // rebuilt body inherits it, so the desk never loses sight of what its
+        // playbacks are doing. Sized at `MAX_SOURCES`, which is the limit
+        // `PlaybackLayer::new` already refuses a show for exceeding, so it can
+        // never be too small — and nothing may resize it, because that would
+        // allocate inside the tick.
+        let report = Arc::new(PlaybackReport::new(prism_engine::MAX_SOURCES));
+        let body = build_body(&layout, &file, &report).map_err(StartError::Patch)?;
 
         let mut publisher = FramePublisher::new(Arc::clone(&layout));
         let source_name = source_name(&show_path);
@@ -242,8 +258,8 @@ impl Daemon {
         // engine and output start-up to run in.
         let mut file = file;
         file.library = join_library_load(loading);
-        let core =
-            Core::new(file, store, engine, Arc::clone(&layout)).map_err(StartError::Patch)?;
+        let core = Core::new(file, store, engine, Arc::clone(&layout), report)
+            .map_err(StartError::Patch)?;
         let desk = Arc::new(Desk::new(core, entries));
 
         // 4. The listeners, and only then their addresses.
@@ -420,6 +436,7 @@ impl Daemon {
         // less often would send less rather than the same amount later
         // (`docs/MCU_MAPPING.md` §5.2 and §2.7).
         let mut surface = tokio::time::interval(SURFACE_PERIOD);
+        let mut playback = tokio::time::interval(PLAYBACK_PERIOD);
         let mut sequence = 0u64;
         let mut buffer = Vec::new();
         let mut health: Vec<OutputHealth> = self
@@ -465,6 +482,17 @@ impl Daemon {
                         .as_mut()
                         .map(|surface| surface.poll(&self.desk))
                         .unwrap_or_default();
+                    for delta in deltas {
+                        self.server.broadcast(delta).await;
+                    }
+                }
+                _ = playback.tick() => {
+                    // The tick's own answer about what is running and which cue
+                    // it is on — the channel S26 recorded as missing. Polled
+                    // rather than pushed because the tick may not allocate,
+                    // lock or block (`ARCHITECTURE_SPEC.md` §3.1), and silent
+                    // unless something changed.
+                    let deltas = self.desk.core().poll_playback();
                     for delta in deltas {
                         self.server.broadcast(delta).await;
                     }

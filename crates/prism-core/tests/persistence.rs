@@ -209,6 +209,9 @@ fn saveable_file() -> ShowFile {
             ],
             encoder_function: ExecutorEncoderFunction::Speed,
             master_level: 40000,
+            // Not unity, so a saved and reloaded show has to carry the rate an
+            // operator set rather than the one the type defaults to.
+            speed: prism_domain::SPEED_UNITY * 2,
             is_active: true,
             current_cue_index: Some(1),
         })

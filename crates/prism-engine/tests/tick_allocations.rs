@@ -110,6 +110,10 @@ impl TickBody for RampBody {
             TickCommand::SetBlackout(on) => self.blackout = on,
             TickCommand::SetExecutorLevel { .. }
             | TickCommand::SetExecutorActive { .. }
+            | TickCommand::SetExecutorFlash { .. }
+            | TickCommand::SetExecutorSpeed { .. }
+            | TickCommand::TapExecutorSpeed { .. }
+            | TickCommand::SetExecutorXFade { .. }
             | TickCommand::Go { .. }
             | TickCommand::SetGroupMaster { .. }
             | TickCommand::SetProgrammerValue { .. }
@@ -681,4 +685,113 @@ fn the_probe_notices_an_allocation_when_there_is_one() {
         clock.sleep_until(Duration::from_millis(1));
     });
     assert_eq!(quiet, 0);
+}
+
+/// **S34's criterion.** The channel back out of the tick, the flash layer, the
+/// speed master, the tap and the manual crossfade — all of it inside the same
+/// measured window, on top of everything the four measurements above already
+/// carry.
+///
+/// The readback is the one that had to be counted rather than argued: a channel
+/// that pushed a message per transition would allocate on a queue, and one that
+/// answered with a `Vec` of running executors would allocate per tick. This is a
+/// table of atomics written in place, and the number below is what says so.
+#[test]
+fn a_tick_publishing_its_playbacks_makes_no_allocator_call_either() {
+    let head = fixture_type(6, false);
+    let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
+    let patched = patch(&layout, &head, 128);
+    let mut body = MergeBody::for_patch(
+        &layout,
+        patched.iter().map(|fixture| (fixture, &head)),
+        (1..=8).map(ExecutorId::new),
+    )
+    .unwrap();
+    for executor in 1..=8u32 {
+        body.load_sequence(
+            ExecutorId::new(executor),
+            &loaded_sequence(&head, 128, executor as u16),
+        )
+        .unwrap();
+    }
+    // The report is built at the size the daemon builds it, because a report
+    // that had to grow would allocate on the thread that grew it — and that
+    // thread is this one.
+    let report = Arc::new(prism_engine::PlaybackReport::new(prism_engine::MAX_SOURCES));
+    body.report_into(Arc::clone(&report));
+
+    let mut publisher = FramePublisher::new(Arc::new(layout));
+    let mut subscriber = publisher.subscribe();
+    let (mut producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle =
+        |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
+            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let _ = producer.push(TickCommand::Go {
+                executor,
+                direction: GoDirection::Next,
+            });
+            // Every S34 command, in rotation, so none of them is measured only
+            // in the tick that happened to be quiet.
+            let _ = producer.push(match index % 4 {
+                0 => TickCommand::SetExecutorFlash {
+                    executor,
+                    on: index.is_multiple_of(8),
+                },
+                1 => TickCommand::SetExecutorSpeed {
+                    executor,
+                    speed: 512 + index % 2_048,
+                },
+                2 => TickCommand::TapExecutorSpeed { executor },
+                _ => TickCommand::SetExecutorXFade {
+                    executor,
+                    position: index.wrapping_mul(577),
+                },
+            });
+            let _ = producer.push(TickCommand::SetProgrammerValue {
+                slot: u32::from(index) % 768,
+                value: index,
+            });
+            let _ = producer.push(TickCommand::SetGrandMaster(index | 0x8000));
+            engine.run_ticks(&clock, 1);
+            subscriber.refresh();
+        };
+
+    for index in 0..200 {
+        cycle(&mut engine, &mut producer, index);
+    }
+    engine.reset_stats();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, &mut producer, index);
+        }
+    });
+
+    println!("allocator calls in 1000 ticks with the readback and S34's commands: {calls}");
+    assert_eq!(
+        calls, 0,
+        "the readback or one of S34's commands called the allocator {calls} times"
+    );
+    assert_eq!(engine.stats().ticks, 1_000);
+    assert_eq!(engine.stats().commands, 4_000);
+    assert_eq!(engine.stats().panics, 0);
+
+    // And the measurement was of something happening: eight playbacks reported,
+    // every one of them on a cue, and the frame is not the home layer.
+    assert_eq!(report.len(), 8);
+    assert!(
+        report.states().all(|state| state.cue_index.is_some()),
+        "nothing was running, so the readback was never exercised"
+    );
+    assert!(
+        report.states().any(|state| state.is_active),
+        "the report says nothing is active"
+    );
+    assert!(
+        subscriber.frame().channels().iter().any(|&byte| byte != 0),
+        "nothing reached the frame, so the measurement is meaningless"
+    );
 }

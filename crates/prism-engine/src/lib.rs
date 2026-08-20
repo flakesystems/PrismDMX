@@ -150,6 +150,7 @@ mod plan;
 mod playback;
 mod player;
 mod programmer;
+mod readback;
 mod spsc;
 mod stats;
 mod sync;
@@ -173,8 +174,9 @@ pub use merge::{
 };
 pub use plan::{AttributeSlot, MAX_SLOTS, MergeError, MergePlan};
 pub use playback::{MAX_SOURCES, MergeScratch, PlaybackLayer, PlaybackSource};
-pub use player::{CueLayer, CuePlayer};
+pub use player::{CueLayer, CuePlayer, TAP_WINDOW};
 pub use programmer::ProgrammerLayer;
+pub use readback::{PlaybackReport, PlaybackState};
 pub use spsc::{Consumer, PAYLOAD_BYTES, Producer, TickPayload, command_queue};
 pub use stats::{Histogram, TickStats};
 pub use tick::{

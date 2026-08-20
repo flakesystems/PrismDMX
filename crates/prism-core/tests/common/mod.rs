@@ -136,6 +136,7 @@ pub fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
         master_level: 65535,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }
@@ -179,6 +180,18 @@ pub fn show_commands() -> Vec<Command> {
         },
         Command::ExecutorOff {
             executor_id: ExecutorId::new(0),
+        },
+        // S34's. Executor 0 plays sequence 1, so this resolves to something
+        // rather than being refused. The `Function` form, because
+        // `common::executor` assigns its buttons nothing at all and a `Slot`
+        // would be a key with nothing on it — which is a legitimate answer and a
+        // poor thing for the *has a home in an applier* list to assert over.
+        Command::ExecutorButton {
+            executor_id: ExecutorId::new(0),
+            button: prism_domain::ExecutorButtonRef::Function {
+                function: prism_domain::ExecutorButtonFunction::On,
+            },
+            pressed: true,
         },
         Command::SetExecutorMaster {
             executor_id: ExecutorId::new(0),

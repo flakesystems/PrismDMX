@@ -77,6 +77,7 @@ round_trip! {
     sequence => crate::Sequence,
 
     executor_button_function => crate::ExecutorButtonFunction,
+    executor_button_ref => crate::ExecutorButtonRef,
     executor_fader_function => crate::ExecutorFaderFunction,
     executor_encoder_function => crate::ExecutorEncoderFunction,
     executor => crate::Executor,
