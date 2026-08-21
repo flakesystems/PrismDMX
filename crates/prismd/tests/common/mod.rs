@@ -113,6 +113,8 @@ pub fn show_file() -> ShowFile {
             }],
         }],
         looping: false,
+        is_active: false,
+        current_cue_index: None,
     })
     .unwrap();
     show.store_executor(Executor {

@@ -12,7 +12,7 @@
 //! [`merge_htp`]; non-commutativity is a property of [`merge_ltp`]. Testing them
 //! against a struct with an activation counter would test the counter instead.
 
-use prism_domain::{ExecutorId, MergeMode};
+use prism_domain::{MergeMode, PlaybackId};
 
 /// Full scale for every internal value: attribute values, master levels and the
 /// grand master are all `0..=65535`, per `ARCHITECTURE_SPEC.md` §6.
@@ -69,9 +69,9 @@ pub const fn apply_master(value: u16, master: u16) -> u16 {
 pub struct SourceValue {
     /// When this source was activated. Higher is more recent.
     pub activation: u64,
-    /// Which executor this source is. Only ever a tie-break — see [`Self::order`].
-    pub executor: ExecutorId,
-    /// The executor's master level, `0..=65535`. HTP only.
+    /// Which playback this source is. Only ever a tie-break — see [`Self::order`].
+    pub executor: PlaybackId,
+    /// The playback's master level, `0..=65535`. HTP only.
     pub master: u16,
     /// The value the source provides, `0..=65535`.
     pub value: u16,
@@ -86,8 +86,8 @@ impl SourceValue {
     /// somebody hands in, which is what makes the result independent of the
     /// order of the slice rather than merely usually independent of it.
     #[must_use]
-    pub const fn order(&self) -> (u64, u32) {
-        (self.activation, self.executor.get())
+    pub const fn order(&self) -> (u64, u64) {
+        (self.activation, self.executor.key())
     }
 
     /// The contribution this source makes to an HTP maximum: its value with its
@@ -145,13 +145,13 @@ mod tests {
     use super::{
         FULL, SourceValue, apply_master, merge_htp, merge_ltp, merge_playbacks, merge_programmer,
     };
-    use prism_domain::{ExecutorId, MergeMode};
+    use prism_domain::{ExecutorId, MergeMode, PlaybackId};
     use proptest::prelude::*;
 
     fn source(activation: u64, value: u16, master: u16) -> SourceValue {
         SourceValue {
             activation,
-            executor: ExecutorId::new(activation as u32),
+            executor: PlaybackId::of_executor(ExecutorId::new(activation as u32)),
             master,
             value,
         }
@@ -234,13 +234,13 @@ mod tests {
         let sources = [
             SourceValue {
                 activation: 3,
-                executor: ExecutorId::new(99),
+                executor: PlaybackId::of_executor(ExecutorId::new(99)),
                 master: FULL,
                 value: 20_000,
             },
             SourceValue {
                 activation: 9,
-                executor: ExecutorId::new(1),
+                executor: PlaybackId::of_executor(ExecutorId::new(1)),
                 master: FULL,
                 value: 45_000,
             },

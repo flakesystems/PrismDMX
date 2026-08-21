@@ -1,3 +1,4 @@
+
 /**
  * The Fixture Sheet: two live columns, and only one of them in React.
  *
@@ -21,7 +22,9 @@ import { TelemetrySink } from "../ipc/telemetry";
 import { readServerMessage } from "../ipc/protocol";
 import { nullSink, setLogSink } from "../log/logger";
 import { RecordingSurface } from "../testing/recording-surface";
+import { Shell } from "../testing/shell";
 import { narrowFrame } from "../testing/telemetry-frames";
+import { DeskStore } from "../store/desk";
 import type { Scheduler } from "../telemetry/driver";
 import { TelemetryProvider } from "../telemetry/panel";
 import { FixtureSheet } from "./sheet";
@@ -93,15 +96,17 @@ function sheet(options: {
   const frames = manualFrames();
   const surface = options.surface === undefined ? new RecordingSurface(120, 200) : options.surface;
   const view = render(
-    <TelemetryProvider
-      channel={{ sink, surface: () => surface, scheduler: frames.scheduler }}
-    >
-      <FixtureSheet
-        show={options.show ?? show}
-        session={sessionOn(options.bank ?? "Dimmer")}
-        programmer={options.programmer ?? null}
-      />
-    </TelemetryProvider>,
+    <Shell store={new DeskStore()} session={sessionOn(options.bank ?? "Dimmer")}>
+      <TelemetryProvider
+        channel={{ sink, surface: () => surface, scheduler: frames.scheduler }}
+      >
+        <FixtureSheet
+          show={options.show ?? show}
+          session={sessionOn(options.bank ?? "Dimmer")}
+          programmer={options.programmer ?? null}
+        />
+      </TelemetryProvider>
+    </Shell>,
   );
   return { view, sink, frames, surface };
 }

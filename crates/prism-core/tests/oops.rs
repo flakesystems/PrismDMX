@@ -18,8 +18,8 @@ use common::{
 };
 use prism_core::{Effect, Journal, JournalError, ShowFile, ShowFileError, UndoScope};
 use prism_domain::{
-    AttributeType, ClearStage, Command, Delta, ExecutorId, FixtureId, GoDirection, PresetId,
-    ProgrammerState, SelectionMode, SequenceId, StoreMode, UniverseId,
+    AttributeType, ClearStage, Command, Delta, ExecutorId, FixtureId, GoDirection, PlaybackTarget,
+    PresetId, ProgrammerState, SelectionMode, SequenceId, StoreMode, UniverseId,
 };
 use proptest::prelude::*;
 
@@ -196,6 +196,24 @@ fn a_renumber_to_the_same_number_is_not_a_step() {
 /// Boxing puts the tree on the heap and costs one indirection per generated
 /// value. A later session adding a command with a large payload should reach for
 /// this rather than for `RUST_MIN_STACK`.
+/// Every command there is, filtered to the undoable ones, **built lazily**.
+///
+/// `any::<Command>()` returns one strategy value holding every variant's
+/// strategy at once, and in a debug build on Windows that value is now large
+/// enough to overflow a test thread's stack while it is still being
+/// constructed - S34's finding at the thirty-sixth variant, met again at S40's
+/// forty-second. `LazyJust` moves the construction inside the boxed strategy,
+/// so the big value is never a local of this function.
+///
+/// **A session adding a command reaches for this and not for `RUST_MIN_STACK`**,
+/// which only moves the cliff a few variants further along.
+fn prop_lazy_command() -> BoxedStrategy<Command> {
+    proptest::strategy::LazyJust::new(|| ())
+        .prop_flat_map(|()| any::<Command>())
+        .prop_filter("only undoable commands", Command::is_undoable)
+        .boxed()
+}
+
 fn undoable_command() -> impl Strategy<Value = Command> {
     let plausible = prop_oneof![
         (
@@ -218,7 +236,7 @@ fn undoable_command() -> impl Strategy<Value = Command> {
         }),
         Just(Command::ClearProgrammer),
         (1u32..=3).prop_map(|number| Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: number.to_string(),
             mode: StoreMode::Merge,
         }),
@@ -227,9 +245,7 @@ fn undoable_command() -> impl Strategy<Value = Command> {
     ];
     prop_oneof![
         4 => plausible.boxed(),
-        1 => any::<Command>()
-            .prop_filter("only undoable commands", Command::is_undoable)
-            .boxed(),
+        1 => prop_lazy_command(),
     ]
 }
 
@@ -288,7 +304,7 @@ fn a_redo_puts_back_exactly_what_the_oops_took_away() {
     let mut file = file();
     program(&mut file);
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -335,20 +351,20 @@ fn a_running_executor_survives_an_oops() {
     .unwrap();
     let applied = file
         .apply(&Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: GoDirection::Next,
         })
         .unwrap();
     assert_eq!(
         applied.effects,
         vec![Effect::ExecutorGo {
-            executor: ExecutorId::new(0),
+            executor: ExecutorId::new(0).into(),
             direction: GoDirection::Next,
         }]
     );
     // The engine has answered: the executor is running on cue 0.
     file.show
-        .record_executor_state(ExecutorId::new(0), true, Some(0))
+        .record_playback_state(ExecutorId::new(0).into(), true, Some(0))
         .unwrap();
 
     // Two playback commands and a Go, and the journal has one entry: the patch.
@@ -492,7 +508,7 @@ fn undoing_a_store_reloads_the_sequence() {
     let mut file = file();
     program(&mut file);
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -583,7 +599,7 @@ fn a_record_covers_the_scope_of_its_command_and_no_more() {
     );
 
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -638,7 +654,7 @@ fn a_redo_that_is_refused_leaves_everything_where_it_was() {
     let mut file = file();
     program(&mut file);
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -685,7 +701,7 @@ fn an_undo_that_is_refused_leaves_everything_where_it_was() {
     let mut file = file();
     program(&mut file);
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -869,7 +885,7 @@ fn an_undo_can_take_something_away_as_well_as_put_it_back() {
     })
     .unwrap();
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
         mode: StoreMode::Merge,
     })

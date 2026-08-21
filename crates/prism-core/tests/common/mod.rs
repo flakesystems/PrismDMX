@@ -10,9 +10,9 @@ use prism_core::{SessionState, Show};
 use prism_domain::{
     AttributeDef, AttributeType, Command, Cue, CuePart, CueTrigger, Executor,
     ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FeatureGroup, Fixture, FixtureId,
-    FixtureType, Group, GroupId, ParamDirection, Preset, PresetId, PresetValue, SelectionMode,
-    Sequence, SequenceId, SequenceStoreMode, StoreMode, UniverseId, Vec3, ViewId, WindowInstanceId,
-    WindowType,
+    FixtureType, Group, GroupId, ObjectRef, OverwriteMode, ParamDirection, PlaybackTarget, Preset,
+    PresetId, PresetValue, SelectionMode, Sequence, SequenceId, SequenceStoreMode, StoreMode,
+    UniverseId, Vec3, ViewId, WindowInstanceId, WindowType,
 };
 
 /// An 8-bit attribute at a given offset, with everything else neutral.
@@ -101,6 +101,8 @@ pub fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
         name: format!("Sequence {id}"),
         cues,
         looping: false,
+        is_active: false,
+        current_cue_index: None,
     }
 }
 
@@ -170,18 +172,24 @@ pub fn show_commands() -> Vec<Command> {
         Command::ApplyPreset {
             preset_id: PresetId::new(4),
         },
+        // S40's `Group 3`: the show expands it, so the show is what refuses a
+        // group that is not there. Group 1 exists in a populated show.
+        Command::SelectGroup {
+            group_id: GroupId::new(1),
+            mode: SelectionMode::Set,
+        },
         Command::ClearProgrammer,
         Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "3".to_owned(),
             mode: StoreMode::Merge,
         },
         Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: prism_domain::GoDirection::Next,
         },
         Command::ExecutorOff {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
         },
         // S34's. Executor 0 plays sequence 1, so this resolves to something
         // rather than being refused. The `Function` form, because
@@ -218,7 +226,7 @@ pub fn show_commands() -> Vec<Command> {
         // cue 1, sequence 9 is free, and executor 2 is an empty slot.
         Command::StorePreset {
             preset_id: PresetId::new(4),
-            pool: FeatureGroup::Color,
+            pool: Some(FeatureGroup::Color),
             name: "Deep blue".to_owned(),
             color: None,
             mode: StoreMode::Merge,
@@ -233,31 +241,74 @@ pub fn show_commands() -> Vec<Command> {
         // refusal, so the list is applied in order where it is applied at all.
         Command::StoreSequence {
             sequence_id: SequenceId::new(1),
+            name: String::new(),
             mode: SequenceStoreMode::Append,
         },
         Command::EditCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "1".to_owned(),
         },
         Command::Update,
-        Command::CreateSequence {
+        Command::StoreSequence {
             sequence_id: SequenceId::new(9),
             name: "Act 2".to_owned(),
+            mode: SequenceStoreMode::Append,
         },
-        Command::SetCueProperty {
-            sequence_id: SequenceId::new(1),
-            cue_number: "1".to_owned(),
-            property: prism_domain::CueProperty::Name {
-                name: "Blackout".to_owned(),
+        Command::Label {
+            target: ObjectRef::Cue {
+                sequence_id: Some(SequenceId::new(1)),
+                cue_number: "1".to_owned(),
             },
+            name: "Blackout".to_owned(),
         },
-        Command::DeleteCue {
-            sequence_id: SequenceId::new(1),
-            cue_number: "2".to_owned(),
+        Command::Delete {
+            target: ObjectRef::Cue {
+                sequence_id: Some(SequenceId::new(1)),
+                cue_number: "2".to_owned(),
+            },
         },
         Command::AssignExecutor {
             executor_id: ExecutorId::new(2),
             sequence_id: Some(SequenceId::new(1)),
+        },
+        // S40's, each in a form the populated show accepts. `StoreGroup` is the
+        // programmer's half like every other store, so the show accepts it and
+        // names who finishes; the rest reach a pool that is there — preset 4
+        // exists, executor 0 plays sequence 1, and that sequence has a cue 1.
+        Command::StoreGroup {
+            group_id: GroupId::new(7),
+            name: "Front wash".to_owned(),
+            mode: OverwriteMode::Merge,
+        },
+        Command::SetCueProperty {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
+            property: prism_domain::CueProperty::FadeIn { seconds: 7.5 },
+        },
+        Command::Copy {
+            from: ObjectRef::Preset {
+                preset_id: PresetId::new(4),
+            },
+            to: ObjectRef::Preset {
+                preset_id: PresetId::new(6),
+            },
+            mode: OverwriteMode::Merge,
+        },
+        Command::Move {
+            from: ObjectRef::Preset {
+                preset_id: PresetId::new(4),
+            },
+            to: ObjectRef::Preset {
+                preset_id: PresetId::new(5),
+            },
+            mode: OverwriteMode::Merge,
+        },
+        Command::ExecutorOn {
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
+        },
+        Command::Goto {
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
+            cue_number: "1".to_owned(),
         },
         Command::Oops,
         Command::Redo,
@@ -269,13 +320,18 @@ pub fn show_commands() -> Vec<Command> {
 /// something in a [`populated_session`].
 ///
 /// `ARCHITECTURE_SPEC.md` §4.4's twelve — the eleven plus S39's `SelectSequence`
-/// — and the four that are session commands without being on that list because
-/// §4.4 says what a *console* issues: `PlaceWindow` (S25) and `RenameView` /
-/// `DeleteView` / `MoveView` (S35). They are here rather than in a second list
-/// because every property in `session_commands.rs` is true of all sixteen —
-/// being refused by the show applier, emitting a `SessionPatch`, asking nothing
-/// of anyone else — and a list that held only some of them would silently stop
-/// covering the rest.
+/// — plus `PlaceWindow` (S25), which is a session command without being on that
+/// list because §4.4 says what a *console* issues and an X-Touch never drags a
+/// window. They are here rather than in a second list because every property in
+/// `session_commands.rs` is true of all of them — being refused by the show
+/// applier, emitting a `SessionPatch`, asking nothing of anyone else — and a
+/// list that held only some of them would silently stop covering the rest.
+///
+/// **S40's four generic verbs appear in both lists**, and that is the shape of
+/// the decision rather than a duplicate: `Delete`, `Copy`, `Move` and `Label`
+/// are session commands when they name a **view** and show commands when they
+/// name anything else, because §4.1 puts the view library in the session. See
+/// `prism_domain::ObjectRef`.
 pub fn session_commands() -> Vec<Command> {
     vec![
         Command::SelectView {
@@ -285,16 +341,34 @@ pub fn session_commands() -> Vec<Command> {
             view_id: ViewId::new(3),
             name: "Playback".to_owned(),
         },
-        Command::RenameView {
-            view_id: ViewId::new(2),
+        Command::Label {
+            target: ObjectRef::View {
+                view_id: ViewId::new(2),
+            },
             name: "Busking".to_owned(),
         },
-        Command::DeleteView {
-            view_id: ViewId::new(2),
+        Command::Delete {
+            target: ObjectRef::View {
+                view_id: ViewId::new(2),
+            },
         },
-        Command::MoveView {
-            view_id: ViewId::new(2),
-            direction: ParamDirection::Prev,
+        Command::Move {
+            from: ObjectRef::View {
+                view_id: ViewId::new(2),
+            },
+            to: ObjectRef::View {
+                view_id: ViewId::new(1),
+            },
+            mode: OverwriteMode::Merge,
+        },
+        Command::Copy {
+            from: ObjectRef::View {
+                view_id: ViewId::new(1),
+            },
+            to: ObjectRef::View {
+                view_id: ViewId::new(4),
+            },
+            mode: OverwriteMode::Merge,
         },
         Command::PlaceWindow {
             instance_id: WindowInstanceId::new(1),

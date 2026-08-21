@@ -18,7 +18,8 @@
  *   fixtures in it at all. It is the reason `WindowType` grew a variant in S25:
  *   none of `ARCHITECTURE_SPEC.md` §6's ten named the DMX output itself.
  *
- * Three are about **looks**, and S28 settled the difference between those:
+ * Four are about **looks** — three from S28 and the group pool from S40, which
+ * is the window `Command::StoreGroup` needed:
  *
  * - **Sequence Sheet** is the *cue list* — which sequences there are, which is in
  *   force, and its cues with their numbers, names, times and triggers. It is the
@@ -27,6 +28,9 @@
  *   the preset links visible. Watched, not edited.
  * - **Preset Pool** is the *pools* — named looks per feature group, applied and
  *   stored, with the colour the scribble strips use.
+ * - **Group Pool** is the *groups* — lists of fixtures rather than looks, which
+ *   is what makes `Group 3` a selection. It replaced a plain list of names in
+ *   **S40**, when the pool finally had commands behind it.
  *
  * # Scrolling
  *
@@ -37,11 +41,10 @@
  */
 
 import type { JsonValue, ProgrammerState } from "../bindings";
-import { isObject } from "../mirror/patch";
-import { stringAt, valueAt } from "../mirror/select";
 import { PatchWindow } from "../patch/patchwindow";
 import { FixtureSheet } from "../patch/sheet";
 import { CueViewer } from "../show/cueviewer";
+import { GroupPool } from "../show/grouppool";
 import { PresetPool } from "../show/presetpool";
 import { SequenceSheet } from "../show/sequencesheet";
 import { TelemetryPanel } from "../telemetry/panel";
@@ -68,7 +71,7 @@ export function WindowContent({
     case "FixtureSheet":
       return <FixtureSheet show={show} session={session} programmer={programmer} />;
     case "Groups":
-      return <NameList show={show} collection="groups" empty="No groups yet" />;
+      return <GroupPool show={show} />;
     case "SequenceSheet":
       return <SequenceSheet show={show} session={session} programmer={programmer} />;
     case "CueViewer":
@@ -81,33 +84,6 @@ export function WindowContent({
     case "Settings":
       return <NotBuiltYet window={instance} />;
   }
-}
-
-/** Whatever a collection of the show holds, by number and name. */
-function NameList({
-  show,
-  collection,
-  empty,
-}: {
-  readonly show: JsonValue;
-  readonly collection: string;
-  readonly empty: string;
-}) {
-  const value = valueAt(show, `/${collection}`);
-  const rows = isObject(value) ? Object.entries(value) : [];
-  if (rows.length === 0) {
-    return <p className="window-note">{empty}</p>;
-  }
-  return (
-    <ul className="pool">
-      {rows.map(([id, entry]) => (
-        <li key={id}>
-          <span className="pool-number">{id}</span>
-          <span className="pool-name">{stringAt(entry, "/name") ?? "—"}</span>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 /**

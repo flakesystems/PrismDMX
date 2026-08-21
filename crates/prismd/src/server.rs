@@ -269,7 +269,7 @@ mod tests {
     use prism_core::{JsonMirror, ShowStore};
     use prism_domain::{
         Answer, AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, OutputHealth,
-        OutputId, Query, SelectionMode,
+        OutputId, PlaybackTarget, Query, SelectionMode,
     };
     use prism_engine::FramePublisher;
     use prism_ipc::CommandOutcome;
@@ -374,7 +374,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (desk, driver) = desk(dir.path());
         let outcome = desk.command(Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: GoDirection::Next,
         });
         let CommandOutcome::Applied { deltas } = outcome else {
@@ -394,12 +394,12 @@ mod tests {
         assert!(
             reported
                 .iter()
-                .any(|delta| matches!(delta, Delta::ExecutorState { .. })),
+                .any(|delta| matches!(delta, Delta::PlaybackState { .. })),
             "{reported:?}"
         );
 
         let outcome = desk.command(Command::ExecutorGo {
-            executor_id: ExecutorId::new(9),
+            target: PlaybackTarget::of_executor(ExecutorId::new(9)),
             direction: GoDirection::Next,
         });
         let CommandOutcome::Refused { message } = outcome else {

@@ -1,0 +1,183 @@
+# COMMAND_LINE.md — the console line
+
+**Status:** reference for operators and for the people who extend it.
+**Parent documents:** [`ARCHITECTURE_SPEC.md`](../ARCHITECTURE_SPEC.md) §4.5 (the
+decision), [`docs/IPC_PROTOCOL.md`](IPC_PROTOCOL.md) §5 (the commands).
+**Implemented by:** `ui/src/desk/console.ts` (the parser),
+`ui/src/desk/shell.tsx` (the keys), `ui/src/desk/commandline.tsx` (the screen).
+
+---
+
+## 1. A key writes a word into the line. It does not act.
+
+This is the whole design and it is worth reading before the table of words.
+`Session::commandLine` is session state (`ARCHITECTURE_SPEC.md` §4.1), so what
+you are part-way through typing is already on every screen attached to this
+desk — the browser, a second browser, the X-Touch's display. The buttons on the
+screen do not send commands of their own: they **write into that line**, and the
+line is what is sent.
+
+Three shapes, and every control on the screen is one of them:
+
+| Shape | Words | What pressing it does |
+|---|---|---|
+| a whole command with no argument | `Clear` `Full` `Oops` `Update` | writes the word and runs it at once |
+| a command that needs arguments | `Store` `Edit` `Goto` `Move` `Copy` `Delete` `Label` `Assign` | writes the word and **waits** for you to finish the line |
+| an argument keyword | `Fixture` `Group` `Sequence` `Cue` `Preset` `View` `Executor` | appends the word to the line as it stands |
+
+So `Fixture` `1` `Enter` is three presses that build `Fixture 1`, and it is the
+same line you could have typed. Picking an item out of a **list** — a group in
+the pool, a cue in the sheet, a fixture in the fixture sheet — writes the line
+that names it *and* submits it, because the pointer has supplied the argument
+the line was waiting for.
+
+**What is not a line**, deliberately and in full:
+
+- the **executor keys and faders** on the bar above the command line: a Go is a
+  gesture with timing in it (§4.3) and a fader is a stream of positions;
+- the **encoders**, the five bank keys and the two parameter arrows: the
+  vocabulary has no word for a bank, and the encoders are what one selects;
+- **dragging and resizing a window** on the canvas (§4.2);
+- **Add window**, which names a window *type* rather than a number;
+- the three **times** and the trigger of a cue, and the fields of the patch form:
+  they carry a value rather than naming a place, and inventing `fade 2.5` would
+  be a second grammar for something no console types.
+
+---
+
+## 2. The words
+
+Case does not matter. Spacing mostly does not either — `1thru4` is a range,
+because a console's keypad has no space bar worth reaching for. A name may be
+quoted and need not be.
+
+### 2.1 Selecting
+
+| Line | What it does |
+|---|---|
+| `1` · `12` | selects that fixture |
+| `1 thru 4` · `1thru4` | selects a range, in the direction it is written |
+| `1 + 3` · `1, 3` | selects both. `+` and `,` mean the same thing |
+| `Fixture 12 thru 16` | the same, with the keyword an operator may type out of habit |
+| `Group 3` | selects the fixtures of group 3 |
+| `Preset 4` | applies preset 4 to the selection |
+| `Sequence 5` | makes 5 the cue list a store goes into |
+| `View 2` | switches the canvas to view 2 |
+| `Executor 3` | selects the executor the transport acts on |
+
+A **cue on its own is not a line**: `Cue 5` could be a Goto or an Edit, and the
+desk says so rather than guessing.
+
+### 2.2 Levels
+
+| Line | What it does |
+|---|---|
+| `at 50` | the selection to 50 % |
+| `1 thru 4 at 50` | selects and sets, which is two commands |
+| `5 pan at 25` · `5 at pan 25` | an attribute other than the dimmer, on either side of `at` |
+| `at full` · `at out` · `at zero` | the words for the two ends |
+| `Full` | the selection to full, with nothing else on the line |
+
+### 2.3 Storing
+
+| Line | What it does |
+|---|---|
+| `Store Cue 5` | stores the programmer into cue 5 of the **selected** sequence |
+| `Store Sequence 5 Cue 3` | into a cue of a named sequence |
+| `Store Sequence 4` | stores into cue list 4, and makes it if the number is free |
+| `Store Preset 1` | stores into preset 1, in the bank the encoders are showing |
+| `Store Group 3` | stores the **selection** as group 3 |
+| `Store View 2 "Programmer"` | stores the canvas as view 2 |
+
+**When the destination already holds something, the line asks** — *merge,
+override or cancel*, in the command line itself. The show carries on while the
+question stands: no other client is blocked, and a Go from the X-Touch does not
+wait on it. Escape cancels, and a cancelled question changes nothing at all.
+
+A cue list is asked with **append, override or merge** instead, because a
+sequence store is about *cues* where a cue store is about *values*.
+
+**A cue list made on a free number becomes the selected one.** `Store Cue 1`
+names no cue list and means the selected one, so a desk that made list 4 and
+went on pointing at list 1 would send the next store into the wrong place. A
+store into a cue list that already exists leaves the selection alone: choosing
+what to edit is `Sequence 4`'s job, and an operator storing into a second list
+has not said they want to move there.
+
+### 2.4 Editing
+
+| Line | What it does |
+|---|---|
+| `Edit Cue 3` | loads cue 3 of the selected sequence into the programmer |
+| `Edit Sequence 5 Cue 3` | the same, naming the cue list |
+| `Update` | stores the programmer back into the cue it came from, in Override mode |
+| `Label View 1 "Programmer"` | names a view. The same for cues, sequences, groups, presets and executors |
+| `Delete Cue 3` | takes it out. The same for the other five |
+| `Move Cue 3 Cue 8` | renumbers. Asks when 8 is taken |
+| `Move Executor 1 Executor 5` | moves the content, and **swaps** when 5 holds something |
+| `Move View 1 View 3` | swaps the two layouts; the numbers stay where they are |
+| `Copy Sequence 2 Sequence 6` | copies. The same for cues, groups, presets and views |
+| `Assign Sequence 5 Executor 1` | puts a cue list on a fader |
+| `Oops` | takes the last edit back |
+
+**Update blinks** when there is an edit to put back. That is
+`Session::editingCue`, which is session state — so every screen blinks together.
+
+### 2.5 Playback
+
+| Line | What it does |
+|---|---|
+| `Go+` · `Go-` · `On` · `Off` | on the **selected** cue list |
+| `Go+ Executor 1` | on one executor |
+| `Go+ Sequence 2` | on one cue list, wherever it is playing |
+| `Goto Cue 5` | jumps the selected cue list straight to cue 5 |
+| `Goto Executor 1 Cue 5` · `Goto Sequence 2 Cue 5` | the same, named |
+| `Page 2` | pages the fader bank |
+
+**A cue list that is on no fader still plays.** `On Sequence 1` starts it with
+its master at full; put it on an executor and the executor's own playback is the
+one that runs. See `prism_domain::PlaybackId` for why the two are never both
+live at once.
+
+### 2.6 S26's lines, kept and unbroken
+
+`go 3`, `off 3`, `page 2`, `clear` and every form of `at` mean exactly what they
+meant before S40. A bare number after `go`, `go-`, `on` or `off` is an
+**executor**, which is what it meant when there was nothing else it could be.
+
+---
+
+## 3. Completion and history
+
+Under the input is what is legal **at this point in the line** — the words, never
+the numbers. Tab takes the first, or click one. It is a *grammar* answer and not
+a *show* answer: it offers the word `sequence`, never the sequences there are,
+for the same reason the parser does not read the show (§4). A list of what
+exists is what the pools on the canvas are for.
+
+The **up and down arrows** walk back through the lines you have typed. Both are
+client-local (`ARCHITECTURE_SPEC.md` §4.2): the line you are typing is shared,
+and what you typed *before* is not — two operators on two screens each have
+their own train of thought.
+
+---
+
+## 4. Two rules for whoever extends this
+
+**The parser does not read the show.** `Copy Sequence 2 Sequence 6` means the
+same thing whether or not sequence 2 exists. What a line *means* depends only on
+the line; what there *is* is the daemon's, and a refusal is a message rather
+than an exception. A parser that consulted the patch would be a parser that can
+be wrong about the daemon's state — which is decision **D3**, and S26 wrote it
+down first.
+
+The one thing the interface does read is whether a destination is already
+occupied, and only to decide whether to *ask*. That is `ui/src/desk/exists.ts`,
+which carries the argument for why reading it from the mirror is honest and
+reading what a store would **cost** would not be.
+
+**The parser never throws.** Every string there is answers with commands or with
+a sentence somebody can be shown. `console.test.ts` runs ten thousand generated
+lines through it and asserts that none of them throws; that is an exit criterion
+rather than a precaution, because a console that threw would take the interface
+down over a typo in the middle of a show.

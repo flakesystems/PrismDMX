@@ -170,29 +170,27 @@ impl Cue {
 /// different columns of one cue would then each undo the other's edit, and
 /// neither would have done anything wrong. So the command names the field.
 ///
-/// [`Self::Parts`] is deliberately **not** here. What a cue *does* comes from
-/// the programmer through `Command::StoreCue`; a client that sent values would
-/// be authoring show content, which is the same rule that keeps channels out of
+/// `Parts` is deliberately **not** here. What a cue *does* comes from the
+/// programmer through `Command::StoreCue`; a client that sent values would be
+/// authoring show content, which is the same rule that keeps channels out of
 /// `Command::PatchFixture` and profiles out of `Command::EmbedFixtureType`.
+///
+/// # The number and the name went out in S40, and that is not a loss
+///
+/// This enum had a `Number` and a `Name` until S40, and both are now said by a
+/// verb of their own: renumbering a cue is `Command::Move` and naming one is
+/// `Command::Label`, because renumbering and naming are the same act on a cue
+/// as on a sequence, a group, a preset, a view and an executor — and S40's
+/// command line is where that stops being an observation and becomes the
+/// grammar (`ARCHITECTURE_SPEC.md` §4.5). Two ways to rename a cue would have
+/// been two grammars for one line.
+///
+/// What is left is what a *cue* has and nothing else does: three times and a
+/// trigger.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(tag = "t", rename_all_fields = "camelCase")]
 pub enum CueProperty {
-    /// The number an operator types to reach the cue.
-    ///
-    /// The number is the key a cue is filed under inside its sequence, so this
-    /// is a rename of the key — refused when the sequence already has a cue with
-    /// that number, for `Command::RenumberFixture`'s reason: replacing the other
-    /// one would delete a look nobody asked to delete.
-    Number {
-        /// The new number, as typed.
-        number: String,
-    },
-    /// What the cue is called.
-    Name {
-        /// The new name. May be empty: a cue is reached by its number.
-        name: String,
-    },
     /// Fade-in time in seconds.
     FadeIn {
         /// Seconds, never negative.
@@ -267,6 +265,27 @@ pub struct Sequence {
     /// `loop`, as specified.
     #[serde(rename = "loop")]
     pub looping: bool,
+    /// Whether this cue list is running **on no executor** (S40).
+    ///
+    /// The mirror of [`crate::Executor::is_active`] for the playback a sequence
+    /// has when nothing holds it — see [`crate::PlaybackId`]. Written only by
+    /// the tick's readback, exactly as the executor's is, and only ever true
+    /// while no executor plays this list: put it on a fader and the executor's
+    /// own state is the one that moves.
+    ///
+    /// `#[serde(default)]` because a `.prism` file keeps each sequence as a
+    /// MessagePack document (S15) and one written before S40 does not carry it.
+    /// It is not really persisted state either — a show reopens with nothing
+    /// running — which is why `false` is the right default rather than a
+    /// migration.
+    #[serde(default)]
+    pub is_active: bool,
+    /// Which cue that playback is standing on, as an index into [`Self::cues`].
+    ///
+    /// The mirror of [`crate::Executor::current_cue_index`], with the same
+    /// author and the same reason for existing.
+    #[serde(default)]
+    pub current_cue_index: Option<u32>,
 }
 
 #[cfg(test)]
@@ -369,22 +388,30 @@ mod tests {
             name: "Main".to_owned(),
             cues: vec![cue("1"), cue("2")],
             looping: true,
+            is_active: false,
+            current_cue_index: None,
         };
         let json = serde_json::to_value(&sequence).unwrap();
         assert_eq!(json["loop"], true);
         assert_eq!(json["cues"].as_array().unwrap().len(), 2);
     }
 
+    /// **A sequence written before S40 does not carry its playback state**, and
+    /// a `.prism` file keeps each sequence as a MessagePack document (S15), so
+    /// the two fields are `#[serde(default)]` and a file from S39 opens with
+    /// nothing running - which is also the right answer for a show that has just
+    /// been loaded.
+    #[test]
+    fn a_sequence_written_before_the_playback_state_reads_as_stopped() {
+        let sequence: Sequence =
+            serde_json::from_str(r#"{"id":1,"name":"Main","cues":[],"loop":false}"#).unwrap();
+        assert!(!sequence.is_active);
+        assert_eq!(sequence.current_cue_index, None);
+    }
+
     /// A cue property is one field, tagged like every other message.
     #[test]
     fn a_cue_property_names_the_field_it_changes() {
-        assert_eq!(
-            serde_json::to_string(&CueProperty::Name {
-                name: "Blackout".to_owned()
-            })
-            .unwrap(),
-            r#"{"t":"Name","name":"Blackout"}"#
-        );
         assert_eq!(
             serde_json::to_string(&CueProperty::FadeIn { seconds: 2.5 }).unwrap(),
             r#"{"t":"FadeIn","seconds":2.5}"#

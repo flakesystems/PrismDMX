@@ -346,8 +346,9 @@ mod tests {
     };
     use crate::{decode, encode};
     use prism_domain::{
-        Answer, Command, Delta, FixtureId, JsonValue, NoticeLevel, OutputHealth, OutputId,
-        ParamDirection, PatchConflict, PatchPreview, ProgrammerState, Query, UniverseId, ViewId,
+        Answer, Command, Delta, FixtureId, JsonValue, NoticeLevel, ObjectRef, OutputHealth,
+        OutputId, OverwriteMode, PatchConflict, PatchPreview, ProgrammerState, Query, UniverseId,
+        ViewId,
     };
 
     fn snapshot() -> Snapshot {
@@ -409,22 +410,31 @@ mod tests {
             // survive `serde_json` and not MessagePack if the tag were wrong.
             ClientMessage::Command {
                 seq: 5,
-                command: Command::RenameView {
-                    view_id: ViewId::new(2),
+                command: Command::Label {
+                    target: ObjectRef::View {
+                        view_id: ViewId::new(2),
+                    },
                     name: "Busking — front of house".to_owned(),
                 },
             },
             ClientMessage::Command {
                 seq: 6,
-                command: Command::DeleteView {
-                    view_id: ViewId::new(2),
+                command: Command::Delete {
+                    target: ObjectRef::View {
+                        view_id: ViewId::new(2),
+                    },
                 },
             },
             ClientMessage::Command {
                 seq: 7,
-                command: Command::MoveView {
-                    view_id: ViewId::new(2),
-                    direction: ParamDirection::Prev,
+                command: Command::Move {
+                    from: ObjectRef::View {
+                        view_id: ViewId::new(2),
+                    },
+                    to: ObjectRef::View {
+                        view_id: ViewId::new(1),
+                    },
+                    mode: OverwriteMode::Merge,
                 },
             },
             ClientMessage::Query {

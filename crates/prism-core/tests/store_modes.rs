@@ -20,8 +20,9 @@ mod common;
 use common::{cue, populated_show, preset, sequence};
 use prism_core::{ProgrammerError, ShowFile, ShowFileError};
 use prism_domain::{
-    AttributeType, Command, CueEdit, CuePart, CueProperty, FeatureGroup, FixtureId, PresetId,
-    ProgrammerValueSource, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, StoreTarget,
+    AttributeType, Command, CueEdit, CuePart, CueProperty, FeatureGroup, FixtureId, ObjectRef,
+    OverwriteMode, PresetId, ProgrammerValueSource, SelectionMode, SequenceId, SequenceStoreMode,
+    StoreMode, StoreTarget,
 };
 
 /// A file with the populated show and an empty programmer.
@@ -50,7 +51,7 @@ fn dial(file: &mut ShowFile, fixtures: &[u32], attribute: AttributeType, value: 
 /// A store into cue `number` of sequence 1.
 fn store(number: &str, mode: StoreMode) -> Command {
     Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: number.to_owned(),
         mode,
     }
@@ -297,7 +298,7 @@ fn the_modes_reach_a_preset_pool_as_well() {
     merged
         .apply(&Command::StorePreset {
             preset_id: PresetId::new(7),
-            pool: FeatureGroup::Color,
+            pool: Some(FeatureGroup::Color),
             name: "Warm".to_owned(),
             color: None,
             mode: StoreMode::Merge,
@@ -313,7 +314,7 @@ fn the_modes_reach_a_preset_pool_as_well() {
     overridden
         .apply(&Command::StorePreset {
             preset_id: PresetId::new(7),
-            pool: FeatureGroup::Color,
+            pool: Some(FeatureGroup::Color),
             name: "Warm".to_owned(),
             color: None,
             mode: StoreMode::Override,
@@ -351,7 +352,7 @@ fn the_modes_reach_a_preset_pool_as_well() {
     dial(&mut file, &[1], AttributeType::Red, 5);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(7),
-        pool: FeatureGroup::Color,
+        pool: Some(FeatureGroup::Color),
         name: "Warm".to_owned(),
         color: None,
         mode: StoreMode::Remove,
@@ -370,18 +371,23 @@ fn appending_puts_a_new_cue_at_the_highest_number() {
     let mut file = two_part_cue();
     // The list reads 1, 2. A cue at 1.5 makes the point that the next number is
     // one past the highest **whole** number rather than one past the highest.
-    file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
-        cue_number: "2".to_owned(),
-        property: CueProperty::Number {
-            number: "1.5".to_owned(),
+    file.apply(&Command::Move {
+        from: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "2".to_owned(),
         },
+        to: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1.5".to_owned(),
+        },
+        mode: OverwriteMode::Override,
     })
     .expect("a renumber");
     dial(&mut file, &[3], AttributeType::Blue, 900);
 
     file.apply(&Command::StoreSequence {
         sequence_id: SequenceId::new(1),
+        name: String::new(),
         mode: SequenceStoreMode::Append,
     })
     .expect("an append");
@@ -414,6 +420,7 @@ fn appending_into_an_empty_list_starts_at_one() {
 
     file.apply(&Command::StoreSequence {
         sequence_id: SequenceId::new(9),
+        name: String::new(),
         mode: SequenceStoreMode::Append,
     })
     .expect("an append");
@@ -435,6 +442,7 @@ fn overriding_a_sequence_leaves_one_cue() {
 
     file.apply(&Command::StoreSequence {
         sequence_id: SequenceId::new(1),
+        name: String::new(),
         mode: SequenceStoreMode::Override,
     })
     .expect("an override");
@@ -457,6 +465,7 @@ fn merging_into_a_sequence_reaches_every_cue() {
 
     file.apply(&Command::StoreSequence {
         sequence_id: SequenceId::new(1),
+        name: String::new(),
         mode: SequenceStoreMode::Merge,
     })
     .expect("a merge");
@@ -497,6 +506,7 @@ fn merging_into_a_cue_list_with_no_cues_is_refused() {
     let refusal = file
         .apply(&Command::StoreSequence {
             sequence_id: SequenceId::new(9),
+            name: String::new(),
             mode: SequenceStoreMode::Merge,
         })
         .unwrap_err();
@@ -542,7 +552,7 @@ fn editing_a_cue_loads_every_attribute_and_keeps_every_link() {
     assert!(file.programmer.state().values.is_empty());
 
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "7".to_owned(),
     })
     .expect("cue 7 is there");
@@ -584,16 +594,16 @@ fn a_cue_loaded_and_updated_unchanged_is_byte_identical() {
     file.apply(&store("7", StoreMode::Merge)).expect("a store");
     // A name and a fade on it, so the round trip has something to lose besides
     // the values: a store is about the look, and these are not it.
-    file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
-        cue_number: "7".to_owned(),
-        property: CueProperty::Name {
-            name: "Opening".to_owned(),
+    file.apply(&Command::Label {
+        target: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "7".to_owned(),
         },
+        name: "Opening".to_owned(),
     })
     .expect("a name");
     file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "7".to_owned(),
         property: CueProperty::FadeIn { seconds: 6.25 },
     })
@@ -601,7 +611,7 @@ fn a_cue_loaded_and_updated_unchanged_is_byte_identical() {
     file.apply(&Command::ClearProgrammer).expect("a clear");
 
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "7".to_owned(),
     })
     .expect("cue 7 is there");
@@ -625,7 +635,7 @@ fn editing_a_cue_that_is_not_there_is_refused_and_leaves_the_programmer_alone() 
 
     let refusal = file
         .apply(&Command::EditCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "404".to_owned(),
         })
         .unwrap_err();
@@ -645,7 +655,7 @@ fn the_update_state_is_set_by_a_load_and_moved_by_an_edit() {
     assert_eq!(file.session.session().editing_cue, None);
 
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("cue 1 is there");
@@ -699,7 +709,7 @@ fn part_value(file: &ShowFile, number: &str, fixture: u32, attribute: AttributeT
 fn an_update_overrides_rather_than_merging() {
     let mut file = two_part_cue();
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("cue 1 is there");
@@ -707,7 +717,7 @@ fn an_update_overrides_rather_than_merging() {
     // which is how an operator drops a fixture from a look.
     file.apply(&Command::ClearProgrammer).expect("a clear");
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("load it again");
@@ -752,7 +762,7 @@ fn an_update_with_no_cue_loaded_is_refused() {
 fn the_update_state_clears_on_a_clear_a_delete_and_another_load() {
     let load = |file: &mut ShowFile, number: &str| {
         file.apply(&Command::EditCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: number.to_owned(),
         })
         .expect("that cue is there");
@@ -768,18 +778,22 @@ fn the_update_state_clears_on_a_clear_a_delete_and_another_load() {
     // 2. The cue is deleted.
     let mut file = two_part_cue();
     load(&mut file, "1");
-    file.apply(&Command::DeleteCue {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
+    file.apply(&Command::Delete {
+        target: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
+        },
     })
     .expect("a delete");
     assert_eq!(file.session.session().editing_cue, None);
     // ...and deleting a *different* cue leaves it standing.
     let mut file = two_part_cue();
     load(&mut file, "1");
-    file.apply(&Command::DeleteCue {
-        sequence_id: SequenceId::new(1),
-        cue_number: "2".to_owned(),
+    file.apply(&Command::Delete {
+        target: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "2".to_owned(),
+        },
     })
     .expect("a delete");
     assert!(file.session.session().editing_cue.is_some());
@@ -810,16 +824,20 @@ fn the_update_state_clears_on_a_clear_a_delete_and_another_load() {
 fn renumbering_the_cue_being_edited_follows_it() {
     let mut file = two_part_cue();
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("cue 1 is there");
-    file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
-        property: CueProperty::Number {
-            number: "0.5".to_owned(),
+    file.apply(&Command::Move {
+        from: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
         },
+        to: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "0.5".to_owned(),
+        },
+        mode: OverwriteMode::Override,
     })
     .expect("a renumber");
     assert_eq!(
@@ -863,7 +881,7 @@ fn renumbering_the_cue_being_edited_follows_it() {
 fn an_override_into_the_cue_being_edited_is_an_update_by_another_name() {
     let mut file = two_part_cue();
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("cue 1 is there");
@@ -899,30 +917,34 @@ fn an_override_into_the_cue_being_edited_is_an_update_by_another_name() {
 fn renumbering_another_cue_does_not_move_the_update_state() {
     let mut file = two_part_cue();
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("cue 1 is there");
     let before = file.session.session().editing_cue.clone();
 
-    file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
-        cue_number: "2".to_owned(),
-        property: CueProperty::Number {
-            number: "9".to_owned(),
+    file.apply(&Command::Move {
+        from: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "2".to_owned(),
         },
+        to: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "9".to_owned(),
+        },
+        mode: OverwriteMode::Override,
     })
     .expect("a renumber");
     assert_eq!(file.session.session().editing_cue, before);
 
     // And neither does a rename of the cue that *is* being edited: its number
     // is what the update state is filed under, and a name is not a number.
-    file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
-        property: CueProperty::Name {
-            name: "Opening again".to_owned(),
+    file.apply(&Command::Label {
+        target: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
         },
+        name: "Opening again".to_owned(),
     })
     .expect("a rename");
     assert_eq!(file.session.session().editing_cue, before);
@@ -954,7 +976,7 @@ fn oops_takes_back_a_store_an_update_and_the_edit_that_started_it() {
     // And an `EditCue` followed by an `Update`, taken back one at a time.
     let mut file = two_part_cue();
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("cue 1 is there");
@@ -985,13 +1007,15 @@ fn oops_takes_back_a_store_an_update_and_the_edit_that_started_it() {
 fn undoing_a_delete_puts_the_update_state_back() {
     let mut file = two_part_cue();
     file.apply(&Command::EditCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
     })
     .expect("cue 1 is there");
-    file.apply(&Command::DeleteCue {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
+    file.apply(&Command::Delete {
+        target: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
+        },
     })
     .expect("a delete");
     assert_eq!(file.session.session().editing_cue, None);

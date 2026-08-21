@@ -99,6 +99,8 @@ pub(crate) fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
         name: format!("Sequence {id}"),
         cues,
         looping: false,
+        is_active: false,
+        current_cue_index: None,
     }
 }
 

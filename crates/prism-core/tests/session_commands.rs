@@ -27,16 +27,19 @@ fn snapshot(session: &SessionState) -> (Vec<u8>, bool) {
 }
 
 #[test]
-fn the_fifteen_session_commands_are_the_session_group() {
-    // §4.4's eleven, plus the four a screen needs and a console cannot issue —
-    // `PlaceWindow` and S35's three view-management commands. See
-    // `common::session_commands`.
-    assert_eq!(session_commands().len(), 16);
+fn the_session_commands_are_the_session_group() {
+    // §4.4's twelve, plus `PlaceWindow` — which a screen needs and a console
+    // cannot issue — plus S40's four generic verbs **with a view as their
+    // target**, which is the one of their six targets that is session state.
+    // See `common::session_commands`.
+    assert_eq!(session_commands().len(), 17);
     for command in session_commands() {
         assert!(command.is_session_command(), "{command:?}");
     }
-    // And the two groups together are still the whole protocol.
-    assert_eq!(show_commands().len() + session_commands().len(), 40);
+    // And the two groups together are still the whole protocol —
+    // `command_application.rs` carries why the sum is larger than the number of
+    // variants there are.
+    assert_eq!(show_commands().len() + session_commands().len(), 48);
 }
 
 #[test]

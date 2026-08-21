@@ -47,8 +47,9 @@ use prism_core::{SessionMirror, Show, ShowFile, ShowMirror, ShowStore};
 use prism_domain::{
     AttributeDef, AttributeType, Command, Executor, ExecutorButtonFunction,
     ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FeatureGroup, Fixture, FixtureId,
-    FixtureType, GoDirection, JsonValue, MergeMode, ProgrammerState, SelectionMode, Sequence,
-    SequenceId, UniverseId, Vec3,
+    FixtureType, GoDirection, GroupId, JsonValue, MergeMode, ObjectRef, OverwriteMode,
+    PlaybackTarget, PresetId, ProgrammerState, SelectionMode, Sequence, SequenceId,
+    SequenceStoreMode, StoreMode, UniverseId, Vec3,
 };
 use prism_domain::{Cue, CuePart, CueTrigger};
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
@@ -177,6 +178,8 @@ fn desk_show() -> ShowFile {
                 }],
             }],
             looping: false,
+            is_active: false,
+            current_cue_index: None,
         })
         .expect("a sequence with one cue");
     }
@@ -413,7 +416,7 @@ fn script() -> Vec<Scripted> {
             "Go on executor 0: it runs and takes its first cue",
             Some((3, "go 0")),
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             },
         ),
@@ -421,14 +424,14 @@ fn script() -> Vec<Scripted> {
             "Off again: it stops and the cue index goes",
             Some((4, "off 0")),
             Command::ExecutorOff {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             },
         ),
         (
             "Go on an executor that has no sequence: refused, nothing moves",
             None,
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(9),
+                target: PlaybackTarget::of_executor(ExecutorId::new(9)),
                 direction: GoDirection::Next,
             },
         ),
@@ -545,6 +548,297 @@ fn script() -> Vec<Scripted> {
             Some((13, "clear")),
             Command::ClearProgrammer,
         ),
+        /* ------------------------------------------------------------------ */
+        /* S40: the vocabulary, typed                                         */
+        /* ------------------------------------------------------------------ */
+        //
+        // Every line below is one an operator could have typed, and every one of
+        // them is here so `ui/src/desk/console.test.ts` can hold the parser to
+        // the command a **running daemon** was sent for it. Nothing in
+        // TypeScript decides what a line ought to mean.
+        (
+            "an argument keyword and a number: the cue list a store goes into",
+            Some((14, "sequence 2")),
+            Command::SelectSequence {
+                sequence_id: SequenceId::new(2),
+            },
+        ),
+        (
+            "a selection, so there is something to store as a group",
+            Some((15, "1 thru 3")),
+            Command::SelectFixtures {
+                ids: vec![FixtureId::new(1), FixtureId::new(2), FixtureId::new(3)],
+                mode: SelectionMode::Set,
+            },
+        ),
+        (
+            "store the selection as a group: the command `Show::store_group` \
+             waited for since S11",
+            Some((16, "store group 1 \"Front wash\"")),
+            Command::StoreGroup {
+                group_id: GroupId::new(1),
+                name: "Front wash".to_owned(),
+                mode: OverwriteMode::Merge,
+            },
+        ),
+        (
+            "and select it back: the daemon expands the group, never a client",
+            Some((17, "group 1")),
+            Command::SelectGroup {
+                group_id: GroupId::new(1),
+                mode: SelectionMode::Set,
+            },
+        ),
+        (
+            "name it: one verb for all six pools",
+            Some((18, "label group 1 \"Front\"")),
+            Command::Label {
+                target: ObjectRef::Group {
+                    group_id: GroupId::new(1),
+                },
+                name: "Front".to_owned(),
+            },
+        ),
+        (
+            "copy it onto a free number",
+            Some((19, "copy group 1 group 2")),
+            Command::Copy {
+                from: ObjectRef::Group {
+                    group_id: GroupId::new(1),
+                },
+                to: ObjectRef::Group {
+                    group_id: GroupId::new(2),
+                },
+                mode: OverwriteMode::Merge,
+            },
+        ),
+        (
+            "and take it away again",
+            Some((20, "delete group 2")),
+            Command::Delete {
+                target: ObjectRef::Group {
+                    group_id: GroupId::new(2),
+                },
+            },
+        ),
+        (
+            "a level, so the programmer holds something to store",
+            Some((21, "1 thru 3 at 60")),
+            Command::SelectFixtures {
+                ids: vec![FixtureId::new(1), FixtureId::new(2), FixtureId::new(3)],
+                mode: SelectionMode::Set,
+            },
+        ),
+        (
+            "the second half of that line, which is why a line is not a command",
+            Some((21, "1 thru 3 at 60")),
+            Command::SetAttribute {
+                attribute: AttributeType::Dimmer,
+                value: 39321,
+                relative: false,
+            },
+        ),
+        (
+            "store into a cue of the **selected** sequence, which the line does \
+             not name",
+            Some((22, "store cue 2")),
+            Command::StoreCue {
+                sequence_id: None,
+                cue_number: "2".to_owned(),
+                mode: StoreMode::Merge,
+            },
+        ),
+        (
+            "load it back into the programmer",
+            Some((23, "edit cue 2")),
+            Command::EditCue {
+                sequence_id: None,
+                cue_number: "2".to_owned(),
+            },
+        ),
+        (
+            "and put it down again, which is what the Update key does",
+            Some((24, "update")),
+            Command::Update,
+        ),
+        (
+            "name the cue: `CueProperty` lost its name in S40 and this is where \
+             it went",
+            Some((25, "label cue 2 \"Blue wash\"")),
+            Command::Label {
+                target: ObjectRef::Cue {
+                    sequence_id: None,
+                    cue_number: "2".to_owned(),
+                },
+                name: "Blue wash".to_owned(),
+            },
+        ),
+        (
+            "renumber it, which is a move onto a free number",
+            Some((26, "move cue 2 cue 3")),
+            Command::Move {
+                from: ObjectRef::Cue {
+                    sequence_id: None,
+                    cue_number: "2".to_owned(),
+                },
+                to: ObjectRef::Cue {
+                    sequence_id: None,
+                    cue_number: "3".to_owned(),
+                },
+                mode: OverwriteMode::Merge,
+            },
+        ),
+        (
+            "jump the selected cue list straight to a cue: the command that had \
+             no message at any layer before S40",
+            Some((27, "goto cue 1")),
+            Command::Goto {
+                target: PlaybackTarget::Selected,
+                cue_number: "1".to_owned(),
+            },
+        ),
+        (
+            "start a cue list by name rather than by fader",
+            Some((28, "on sequence 1")),
+            Command::ExecutorOn {
+                target: PlaybackTarget::of_sequence(SequenceId::new(1)),
+            },
+        ),
+        (
+            "and stop it the same way",
+            Some((29, "off sequence 1")),
+            Command::ExecutorOff {
+                target: PlaybackTarget::of_sequence(SequenceId::new(1)),
+            },
+        ),
+        (
+            "a Go addressed to an executor, which is S26's form with S40's words",
+            Some((30, "go+ executor 0")),
+            Command::ExecutorGo {
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
+                direction: GoDirection::Next,
+            },
+        ),
+        (
+            "store into a cue list nobody has made: `Store Sequence 4` is both \
+             acts since S40",
+            Some((31, "store sequence 4")),
+            Command::StoreSequence {
+                sequence_id: SequenceId::new(4),
+                name: "Sequence 4".to_owned(),
+                mode: SequenceStoreMode::Append,
+            },
+        ),
+        (
+            "**and play it, on no fader at all** — the hole S40 found in the \
+             playback model and filled",
+            Some((32, "on sequence 4")),
+            Command::ExecutorOn {
+                target: PlaybackTarget::of_sequence(SequenceId::new(4)),
+            },
+        ),
+        (
+            "put it on a fader, and the executor's playback is the one that runs",
+            Some((33, "assign sequence 4 executor 9")),
+            Command::AssignExecutor {
+                executor_id: ExecutorId::new(9),
+                sequence_id: Some(SequenceId::new(4)),
+            },
+        ),
+        (
+            "empty the slot: the row goes and the *place* stays, because a place \
+             is arithmetic (D7)",
+            Some((34, "delete executor 9")),
+            Command::Delete {
+                target: ObjectRef::Executor {
+                    executor_id: ExecutorId::new(9),
+                },
+            },
+        ),
+        (
+            "the bank a preset store goes into, set before the store so the \
+             recording says which one it was",
+            None,
+            Command::SetEncoderBank {
+                group: FeatureGroup::Dimmer,
+            },
+        ),
+        (
+            "store a preset with no pool in the line: the bank in force is the \
+             desk's answer",
+            Some((35, "store preset 1 \"Warm\"")),
+            Command::StorePreset {
+                preset_id: PresetId::new(1),
+                pool: None,
+                name: "Warm".to_owned(),
+                color: None,
+                mode: StoreMode::Merge,
+            },
+        ),
+        (
+            "apply it back to the selection",
+            Some((36, "preset 1")),
+            Command::ApplyPreset {
+                preset_id: PresetId::new(1),
+            },
+        ),
+        (
+            "copy a whole cue list onto a free number",
+            Some((37, "copy sequence 1 sequence 5")),
+            Command::Copy {
+                from: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(1),
+                },
+                to: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(5),
+                },
+                mode: OverwriteMode::Merge,
+            },
+        ),
+        (
+            "and move it, which brings every executor that played it along",
+            Some((38, "move sequence 5 sequence 6")),
+            Command::Move {
+                from: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(5),
+                },
+                to: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(6),
+                },
+                mode: OverwriteMode::Merge,
+            },
+        ),
+        (
+            "a view is the same four verbs one model along, and this one is \
+             session state",
+            Some((39, "label view 1 \"Programmer\"")),
+            Command::Label {
+                target: ObjectRef::View {
+                    view_id: prism_domain::ViewId::new(1),
+                },
+                name: "Programmer".to_owned(),
+            },
+        ),
+        (
+            "the selection to full, which is a whole command with no argument",
+            Some((40, "full")),
+            Command::SetAttribute {
+                attribute: AttributeType::Dimmer,
+                value: 65535,
+                relative: false,
+            },
+        ),
+        (
+            "**a line the daemon refuses**: there is no sequence 404, and the \
+             parser was right to send it — D3",
+            Some((41, "delete sequence 404")),
+            Command::Delete {
+                target: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(404),
+                },
+            },
+        ),
+        ("take the last edit back", Some((42, "oops")), Command::Oops),
     ]
 }
 

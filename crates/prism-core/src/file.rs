@@ -62,8 +62,9 @@
 //! table for one either, nor for the programmer or the journal.
 
 use prism_domain::{
-    AttributeType, ClearStage, Command, CueEdit, CueProperty, Delta, FeatureGroup, FixtureId,
-    JsonPatchOp, NoticeLevel, PresetId, SequenceId, StoreMode, StorePreview, StoreTarget,
+    AttributeType, ClearStage, Command, CueEdit, Delta, FeatureGroup, FixtureId, JsonPatchOp,
+    NoticeLevel, ObjectRef, PlaybackTarget, PresetId, Sequence, SequenceId, StoreMode,
+    StorePreview, StoreTarget,
 };
 use serde::{Deserialize, Serialize};
 
@@ -336,6 +337,16 @@ impl ShowFile {
     /// [`ShowFileError`] if the command was refused. No half is changed after
     /// an error, and nothing is journaled.
     pub fn apply(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
+        // **Everything the session has to fill in, filled in first** (S40). A
+        // line that names no cue list means the selected one and a playback
+        // target of `Selected` means the same cue list; both are session state,
+        // so the daemon resolves them and a client never does. Done here rather
+        // than in either applier because this is the only type that holds the
+        // session and the show at once - the same reason `follow_cue_edit` is a
+        // method on this type - and done *before* the image is taken, so the
+        // journal records the command that was actually carried out.
+        let resolved = self.resolve(command)?;
+        let command = &resolved;
         let was_dirty = self.is_dirty();
         // Before anything is written: the state a later Oops has to put back.
         // Empty unless the command is undoable — see [`Self::image`].
@@ -389,6 +400,134 @@ impl ShowFile {
         Ok(applied)
     }
 
+    /// Fills in what the **session** knows and the line did not say — S40.
+    ///
+    /// Two things, and both are `Session::selectedSequence` (`ARCHITECTURE_SPEC.md`
+    /// §4.1, S39's field):
+    ///
+    /// - a cue named with no cue list — `Store Cue 5`, `Delete Cue 3`,
+    ///   `Label Cue 3 "Blackout"`, `Copy Cue 2 Cue 6`;
+    /// - `PlaybackTarget::Selected` — a bare `Go+`, `On`, `Off` or `Goto Cue 5`.
+    ///
+    /// A command that named everything it needs is returned unchanged, which is
+    /// every command a surface sends and most of what a screen sends.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::NoSelectedSequence`] when a line needs the selection and
+    /// there is none. A message rather than a silence: *no cue list is selected*
+    /// is a complaint an operator can act on.
+    fn resolve(&self, command: &Command) -> Result<Command, ShowFileError> {
+        let selected = || {
+            self.session
+                .session()
+                .selected_sequence
+                .ok_or(ShowFileError::Show(ShowError::NoSelectedSequence))
+        };
+        let cue_list = |sequence_id: Option<SequenceId>| match sequence_id {
+            Some(id) => Ok(Some(id)),
+            None => selected().map(Some),
+        };
+        let object = |target: &ObjectRef| -> Result<ObjectRef, ShowFileError> {
+            match target {
+                ObjectRef::Cue {
+                    sequence_id,
+                    cue_number,
+                } => Ok(ObjectRef::Cue {
+                    sequence_id: cue_list(*sequence_id)?,
+                    cue_number: cue_number.clone(),
+                }),
+                other => Ok(other.clone()),
+            }
+        };
+        let playback = |target: &PlaybackTarget| -> Result<PlaybackTarget, ShowFileError> {
+            match target {
+                PlaybackTarget::Selected => Ok(PlaybackTarget::Sequence {
+                    sequence_id: selected()?,
+                }),
+                other => Ok(*other),
+            }
+        };
+        Ok(match command {
+            Command::StoreCue {
+                sequence_id,
+                cue_number,
+                mode,
+            } => Command::StoreCue {
+                sequence_id: cue_list(*sequence_id)?,
+                cue_number: cue_number.clone(),
+                mode: *mode,
+            },
+            Command::EditCue {
+                sequence_id,
+                cue_number,
+            } => Command::EditCue {
+                sequence_id: cue_list(*sequence_id)?,
+                cue_number: cue_number.clone(),
+            },
+            Command::SetCueProperty {
+                sequence_id,
+                cue_number,
+                property,
+            } => Command::SetCueProperty {
+                sequence_id: cue_list(*sequence_id)?,
+                cue_number: cue_number.clone(),
+                property: property.clone(),
+            },
+            Command::Delete { target } => Command::Delete {
+                target: object(target)?,
+            },
+            Command::Label { target, name } => Command::Label {
+                target: object(target)?,
+                name: name.clone(),
+            },
+            Command::Copy { from, to, mode } => Command::Copy {
+                from: object(from)?,
+                to: object(to)?,
+                mode: *mode,
+            },
+            Command::Move { from, to, mode } => Command::Move {
+                from: object(from)?,
+                to: object(to)?,
+                mode: *mode,
+            },
+            Command::ExecutorGo { target, direction } => Command::ExecutorGo {
+                target: playback(target)?,
+                direction: *direction,
+            },
+            Command::ExecutorOff { target } => Command::ExecutorOff {
+                target: playback(target)?,
+            },
+            Command::ExecutorOn { target } => Command::ExecutorOn {
+                target: playback(target)?,
+            },
+            Command::Goto { target, cue_number } => Command::Goto {
+                target: playback(target)?,
+                cue_number: cue_number.clone(),
+            },
+            // Storing a preset with no pool named means the bank the operator
+            // has under their hands - `Session::encoderBank`, and
+            // `Command::StorePreset` has the argument for it. A preset that
+            // already exists keeps its own pool instead, which
+            // `Programmer::preset` decides, because a store into preset 1 is a
+            // store into preset 1 rather than a way of moving it between pools.
+            Command::StorePreset {
+                preset_id,
+                pool,
+                name,
+                color,
+                mode,
+            } => Command::StorePreset {
+                preset_id: *preset_id,
+                pool: Some(pool.unwrap_or_else(|| self.session.session().encoder_bank)),
+                name: name.clone(),
+                color: *color,
+                mode: *mode,
+            },
+            other => other.clone(),
+        })
+    }
+
     /// The half of `EmbedFixtureType` the show could not finish.
     ///
     /// # Errors
@@ -432,7 +571,11 @@ impl ShowFile {
                 sequence_id,
                 cue_number,
                 mode,
-            } => Some((*sequence_id, cue_number.clone(), *mode)),
+            } => Some((
+                sequence_id.ok_or(ShowFileError::Show(ShowError::NoSelectedSequence))?,
+                cue_number.clone(),
+                *mode,
+            )),
             Command::Update => {
                 let Some(editing) = self.session.session().editing_cue.clone() else {
                     return Err(ShowFileError::Programmer(
@@ -470,12 +613,72 @@ impl ShowFile {
             }
         }
 
-        if let Command::StoreSequence { sequence_id, mode } = command {
-            // The same order again: the fallible, *writing* step first.
-            let sequence = self.programmer.sequence(&self.show, *sequence_id, *mode)?;
-            let ops = self.show.store_sequence(sequence)?;
+        if let Command::StoreSequence {
+            sequence_id,
+            name,
+            mode,
+        } = command
+        {
+            // **The cue list is made when the number is free** (S40): the
+            // command line cannot know whether sequence 4 exists, because the
+            // parser does not read the show (S26), so `Store Sequence 4` is both
+            // acts. It is built *beside* the show and written once, so a store
+            // that is refused does not leave a half-made cue list behind — S11's
+            // rule, and the one this nearly broke.
+            let existing = self.show.sequence(*sequence_id).cloned();
+            let base = existing.clone().unwrap_or_else(|| Sequence {
+                id: *sequence_id,
+                name: name.clone(),
+                cues: Vec::new(),
+                looping: false,
+                is_active: false,
+                current_cue_index: None,
+            });
+            let stored = match self.programmer.sequence(&self.show, &base, *mode) {
+                Ok(sequence) => sequence,
+                // **An empty programmer on a number nobody has used is the
+                // whole act**, and it is what `Command::CreateSequence` used to
+                // be: the cue list is made and nothing is stored into it. On a
+                // list that is already there it is an ordinary refusal.
+                Err(ProgrammerError::NothingToStore) if existing.is_none() => base,
+                Err(error) => return Err(error.into()),
+            };
+            let created = existing.is_none();
+            let ops = self.show.store_sequence(stored)?;
             applied.deltas.push(Delta::ShowPatch { ops });
             applied.effects.push(Effect::ReloadSequence(*sequence_id));
+            // **A cue list that was just made is the one being edited.**
+            //
+            // Not tidiness: `Store Cue 5` names no cue list and means the
+            // selected one (§4.1), so the very next line an operator types
+            // after `Store Sequence 4` would otherwise go into whatever was
+            // selected before — or be refused for naming nothing. A store
+            // *into* a list that already existed leaves the selection alone,
+            // because choosing what to edit is `Sequence 4`'s job and an
+            // operator storing into a second list has not said they want to
+            // move there.
+            if created {
+                let ops = self.session.select_sequence(Some(*sequence_id))?;
+                if !ops.is_empty() {
+                    applied.deltas.push(Delta::SessionPatch { ops });
+                }
+            }
+        }
+
+        // S40's group store: the *selection*, not the values. A group is a list
+        // of fixtures (`prism_domain::Group`), which is what makes `Group 3` a
+        // selection rather than a look, and it is the programmer's half in the
+        // same way a cue's values are.
+        if let Command::StoreGroup {
+            group_id,
+            name,
+            mode,
+        } = command
+        {
+            let group = self.programmer.group(&self.show, *group_id, name, *mode)?;
+            let ops = self.show.store_group(group)?;
+            applied.deltas.push(Delta::ShowPatch { ops });
+            applied.effects.push(Effect::ReloadGroups);
         }
 
         if let Command::StorePreset {
@@ -488,9 +691,17 @@ impl ShowFile {
         {
             // The same order as `StoreCue`: the fallible, *writing* step first,
             // so a refusal leaves the programmer exactly as it was.
-            let preset = self
-                .programmer
-                .preset(&self.show, *preset_id, *pool, name, *color, *mode)?;
+            let preset = self.programmer.preset(
+                &self.show,
+                *preset_id,
+                // `Self::resolve` has filled this in from the session's
+                // encoder bank, so a `None` here is a caller who applied the
+                // command to something that is not a `ShowFile`.
+                pool.ok_or(ShowFileError::Show(ShowError::NoSelectedSequence))?,
+                name,
+                *color,
+                *mode,
+            )?;
             // Read **before** the store, because a store that changes a linked
             // value has to reload the sequence it changed — and afterwards the
             // question would be asked of a show that had already moved.
@@ -514,6 +725,7 @@ impl ShowFile {
             Command::StoreCue { .. }
             | Command::StorePreset { .. }
             | Command::StoreSequence { .. }
+            | Command::StoreGroup { .. }
             | Command::Update => self.programmer.stored(),
             other => self.programmer.apply(other, &self.show)?,
         };
@@ -556,9 +768,13 @@ impl ShowFile {
     /// | `EditCue` | it *is* the update state: that cue, unmodified |
     /// | `Update`, and a `StoreCue` in Override mode into the cue being edited | unmodified again — the cue and the programmer now agree |
     /// | `ClearProgrammer` | **cleared**: the values it was holding are gone, whatever stage the button was in |
-    /// | `DeleteCue` of the cue being edited | **cleared**: there is nothing to put back |
-    /// | a renumber of the cue being edited | it **follows** — see below |
+    /// | `Delete` of the cue being edited | **cleared**: there is nothing to put back |
+    /// | `Move` of the cue being edited — a renumber | it **follows** — see below |
     /// | any other programmer edit | modified, which is what blinks the key |
+    ///
+    /// The last two were `DeleteCue` and `CueProperty::Number` until S40, which
+    /// replaced both with the verbs every pool shares. The rules did not move
+    /// with them.
     ///
     /// A renumber follows rather than clearing, and that is the one decision in
     /// here. The alternative is to clear, and the reason not to is what an
@@ -576,7 +792,7 @@ impl ShowFile {
         let editing = self.session.session().editing_cue.clone();
         let next = match command {
             Command::EditCue {
-                sequence_id,
+                sequence_id: Some(sequence_id),
                 cue_number,
             } => Some(CueEdit {
                 sequence_id: *sequence_id,
@@ -589,7 +805,7 @@ impl ShowFile {
                 ..edit
             }),
             Command::StoreCue {
-                sequence_id,
+                sequence_id: Some(sequence_id),
                 cue_number,
                 mode,
             } => match editing.clone() {
@@ -605,19 +821,36 @@ impl ShowFile {
                 }
                 other => other.map(touched),
             },
-            Command::DeleteCue {
-                sequence_id,
-                cue_number,
+            Command::Delete {
+                target:
+                    ObjectRef::Cue {
+                        sequence_id: Some(sequence_id),
+                        cue_number,
+                    },
             } => editing
                 .clone()
                 .filter(|edit| !edit.is_of(*sequence_id, cue_number)),
-            Command::SetCueProperty {
-                sequence_id,
-                cue_number,
-                property: CueProperty::Number { number },
+            // A `Move` of a cue is a renumber, and a renumber of the cue being
+            // edited **carries the edit with it** — see below. A move *onto* the
+            // cue being edited replaces it, and the edit is of a cue that is
+            // still there, so it stands and is marked modified by neither: it
+            // was the destination rather than the programmer that changed.
+            Command::Move {
+                from:
+                    ObjectRef::Cue {
+                        sequence_id: Some(sequence_id),
+                        cue_number,
+                    },
+                to:
+                    ObjectRef::Cue {
+                        sequence_id: Some(target_list),
+                        cue_number: number,
+                    },
+                ..
             } => editing.clone().map(|edit| {
                 if edit.is_of(*sequence_id, cue_number) {
                     CueEdit {
+                        sequence_id: *target_list,
                         cue_number: number.trim().to_owned(),
                         ..edit
                     }
@@ -631,9 +864,11 @@ impl ShowFile {
             // command rather than the delta would mark an encoder turned with
             // nothing selected as an edit.
             Command::SelectFixtures { .. }
+            | Command::SelectGroup { .. }
             | Command::SetAttribute { .. }
             | Command::ApplyPreset { .. }
             | Command::StoreSequence { .. }
+            | Command::StoreGroup { .. }
             | Command::StorePreset { .. } => editing.clone().map(touched),
             _ => editing.clone(),
         };
@@ -673,13 +908,38 @@ impl ShowFile {
                 self.show.fixture_type(type_id).cloned(),
             )],
             Command::SelectFixtures { .. }
+            | Command::SelectGroup { .. }
             | Command::SetAttribute { .. }
             | Command::ApplyPreset { .. }
             | Command::ClearProgrammer => self.programmer_image(),
-            Command::StoreCue { sequence_id, .. }
-            | Command::StoreSequence { sequence_id, .. }
-            | Command::EditCue { sequence_id, .. } => {
-                let mut images = vec![self.sequence_image(*sequence_id)];
+            Command::StoreCue { sequence_id, .. } | Command::EditCue { sequence_id, .. } => {
+                let mut images = match sequence_id {
+                    Some(id) => vec![self.sequence_image(*id)],
+                    // Unresolved, so this is a caller who did not go through
+                    // `Self::apply` - the command is about to be refused and the
+                    // record will not be filed.
+                    None => Vec::new(),
+                };
+                images.extend(self.programmer_image());
+                images
+            }
+            // The cue list, the programmer, **and** which cue list is in force:
+            // a store onto a free number makes the list and selects it, so an
+            // undo that put the show back and left the selection pointing at a
+            // sequence that no longer exists would restore half a state — the
+            // same fault S39's `CueEdit` image exists to prevent.
+            Command::StoreSequence { sequence_id, .. } => {
+                let mut images = vec![
+                    self.sequence_image(*sequence_id),
+                    Image::SelectedSequence(self.session.session().selected_sequence),
+                ];
+                images.extend(self.programmer_image());
+                images
+            }
+            // S40's group store: the group as it stood, and the programmer,
+            // because a store advances the Clear stage.
+            Command::StoreGroup { group_id, .. } => {
+                let mut images = vec![Image::Group(*group_id, self.show.group(*group_id).cloned())];
                 images.extend(self.programmer_image());
                 images
             }
@@ -718,11 +978,30 @@ impl ShowFile {
             // The update state is in the scope of the two that can move it: a
             // deleted cue clears it and a renumbered cue carries it, so an Oops
             // over either has to put it back where it was (S39).
-            Command::SetCueProperty { sequence_id, .. }
-            | Command::DeleteCue { sequence_id, .. } => {
-                vec![self.sequence_image(*sequence_id), self.cue_edit_image()]
+            Command::SetCueProperty { sequence_id, .. } => match sequence_id {
+                Some(id) => vec![self.sequence_image(*id), self.cue_edit_image()],
+                None => Vec::new(),
+            },
+            // **S40's four generic verbs, and their scope is their targets'.**
+            // The update state travels with all four for the reason above: a
+            // deleted cue clears it and a moved cue carries it, so an Oops over
+            // either has to put it back where it was.
+            Command::Delete { target } | Command::Label { target, .. } => {
+                let mut images = self.object_image(target);
+                images.push(self.cue_edit_image());
+                images
             }
-            Command::CreateSequence { sequence_id, .. } => vec![self.sequence_image(*sequence_id)],
+            Command::Copy { from, to, .. } | Command::Move { from, to, .. } => {
+                let mut images = self.object_image(from);
+                images.extend(self.object_image(to));
+                // A move of a sequence repoints every executor that played it,
+                // and a move of a preset rewrites every cue that linked to it -
+                // so the scope is wider than the two things named. See
+                // `crate::objects`.
+                images.extend(self.referrer_images(from));
+                images.push(self.cue_edit_image());
+                images
+            }
             Command::AssignExecutor { executor_id, .. } => vec![Image::Executor(
                 *executor_id,
                 self.show.executor(*executor_id).cloned(),
@@ -733,6 +1012,8 @@ impl ShowFile {
             // here as well as in the three appliers.
             Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
+            | Command::ExecutorOn { .. }
+            | Command::Goto { .. }
             | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
             | Command::SelectSequence { .. }
@@ -741,9 +1022,6 @@ impl ShowFile {
             | Command::SaveShow
             | Command::SelectView { .. }
             | Command::StoreView { .. }
-            | Command::RenameView { .. }
-            | Command::DeleteView { .. }
-            | Command::MoveView { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
@@ -760,6 +1038,60 @@ impl ShowFile {
     /// One sequence as it stands, or its absence.
     fn sequence_image(&self, id: SequenceId) -> Image {
         Image::Sequence(id, self.show.sequence(id).cloned())
+    }
+
+    /// One of S40's six objects as it stands, or its absence.
+    ///
+    /// A **cue** images the sequence it is in, because a cue is not a thing the
+    /// journal restores on its own — the cue list is. A **view** images nothing
+    /// at all: it is session state, and session commands are not journalled
+    /// (`ARCHITECTURE_SPEC.md` §6.1).
+    fn object_image(&self, target: &ObjectRef) -> Vec<Image> {
+        match target {
+            ObjectRef::Sequence { sequence_id } => vec![self.sequence_image(*sequence_id)],
+            ObjectRef::Cue { sequence_id, .. } => match sequence_id {
+                Some(id) => vec![self.sequence_image(*id)],
+                None => Vec::new(),
+            },
+            ObjectRef::Group { group_id } => {
+                vec![Image::Group(*group_id, self.show.group(*group_id).cloned())]
+            }
+            ObjectRef::Preset { preset_id } => vec![Image::Preset(
+                *preset_id,
+                self.show.preset(*preset_id).cloned(),
+            )],
+            ObjectRef::Executor { executor_id } => vec![Image::Executor(
+                *executor_id,
+                self.show.executor(*executor_id).cloned(),
+            )],
+            ObjectRef::View { .. } => Vec::new(),
+        }
+    }
+
+    /// The images of everything that **refers** to an object a move is about to
+    /// take away — `crate::objects::repoint`'s other half.
+    ///
+    /// Two of them exist and both would be a half-restored Oops if they were
+    /// forgotten: moving a sequence repoints every executor that played it, and
+    /// moving a preset rewrites every cue part that linked to it. An undo that
+    /// put the sequence back and left the fader pointing at the number it moved
+    /// to would restore the show and not the desk.
+    fn referrer_images(&self, from: &ObjectRef) -> Vec<Image> {
+        match from {
+            ObjectRef::Sequence { sequence_id } => self
+                .show
+                .executors()
+                .filter(|executor| executor.sequence_id == Some(*sequence_id))
+                .map(|executor| Image::Executor(executor.id, Some(executor.clone())))
+                .collect(),
+            ObjectRef::Preset { preset_id } => self
+                .show
+                .sequences_using_preset(*preset_id)
+                .into_iter()
+                .map(|id| self.sequence_image(id))
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// The programmer and the session's page state, which is the pair every
@@ -905,15 +1237,28 @@ impl ShowFile {
                     };
                     applied.deltas.push(Delta::ShowPatch { ops });
                 }
+                Image::Group(id, group) => {
+                    let ops = match group {
+                        Some(group) => self.show.store_group(group.clone())?,
+                        None => self.show.remove_group(*id)?,
+                    };
+                    applied.deltas.push(Delta::ShowPatch { ops });
+                    applied.effects.push(Effect::ReloadGroups);
+                }
                 Image::Executor(id, executor) => {
                     let ops = match executor {
                         Some(executor) => self.show.store_executor(executor.clone())?,
                         None => self.show.remove_executor(*id)?,
                     };
                     applied.deltas.push(Delta::ShowPatch { ops });
-                    applied.effects.push(Effect::ExecutorOff { executor: *id });
+                    applied.effects.push(Effect::ExecutorOff {
+                        executor: prism_domain::PlaybackId::of_executor(*id),
+                    });
                 }
-                Image::Programmer(_) | Image::ProgrammerPage { .. } | Image::CueEdit(_) => {}
+                Image::Programmer(_)
+                | Image::ProgrammerPage { .. }
+                | Image::CueEdit(_)
+                | Image::SelectedSequence(_) => {}
             }
         }
         // A show image is written unconditionally, and does not need to ask
@@ -944,10 +1289,17 @@ impl ShowFile {
                         applied.deltas.push(Delta::SessionPatch { ops });
                     }
                 }
+                Image::SelectedSequence(sequence_id) => {
+                    let ops = self.session.select_sequence(*sequence_id)?;
+                    if !ops.is_empty() {
+                        applied.deltas.push(Delta::SessionPatch { ops });
+                    }
+                }
                 Image::Fixture(..)
                 | Image::FixtureType(..)
                 | Image::Sequence(..)
                 | Image::Preset(..)
+                | Image::Group(..)
                 | Image::Executor(..) => {}
             }
         }
@@ -1153,7 +1505,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             file.apply(&Command::StoreCue {
-                sequence_id: prism_domain::SequenceId::new(1),
+                sequence_id: Some(prism_domain::SequenceId::new(1)),
                 cue_number: "1".to_owned(),
                 mode: StoreMode::Merge,
             }),
@@ -1256,8 +1608,9 @@ mod tests {
     #[test]
     fn a_command_has_a_scope_exactly_when_it_is_undoable() {
         use prism_domain::{
-            AttributeType, ExecutorId, FeatureGroup, FixtureId, GoDirection, ParamDirection,
-            PresetId, SelectionMode, SequenceId, StoreMode,
+            AttributeType, ExecutorId, FeatureGroup, FixtureId, GoDirection, ObjectRef,
+            OverwriteMode, ParamDirection, PlaybackTarget, PresetId, SelectionMode, SequenceId,
+            SequenceStoreMode, StoreMode,
         };
 
         let file = file();
@@ -1271,6 +1624,10 @@ mod tests {
                 ids: vec![FixtureId::new(1)],
                 mode: SelectionMode::Set,
             },
+            Command::SelectGroup {
+                group_id: prism_domain::GroupId::new(1),
+                mode: SelectionMode::Set,
+            },
             Command::SetAttribute {
                 attribute: AttributeType::Red,
                 value: 0,
@@ -1281,16 +1638,16 @@ mod tests {
             },
             Command::ClearProgrammer,
             Command::StoreCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
                 mode: StoreMode::Merge,
             },
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             },
             Command::ExecutorOff {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             },
             Command::SetExecutorMaster {
                 executor_id: ExecutorId::new(0),
@@ -1347,25 +1704,58 @@ mod tests {
             // The four S28 added that write show content, and S39's four.
             Command::StorePreset {
                 preset_id: PresetId::new(1),
-                pool: FeatureGroup::Color,
+                pool: Some(FeatureGroup::Color),
                 name: String::new(),
                 color: None,
                 mode: StoreMode::Merge,
             },
-            Command::CreateSequence {
+            Command::StoreSequence {
                 sequence_id: SequenceId::new(9),
                 name: String::new(),
+                mode: SequenceStoreMode::Append,
             },
             Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
-                property: prism_domain::CueProperty::Name {
-                    name: String::new(),
-                },
+                property: prism_domain::CueProperty::FadeIn { seconds: 0.0 },
             },
-            Command::DeleteCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "1".to_owned(),
+            // S40's four generic verbs, each of which is a show edit here and
+            // would be a session edit with a view as its target.
+            Command::Label {
+                target: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "1".to_owned(),
+                },
+                name: String::new(),
+            },
+            Command::Copy {
+                from: ObjectRef::Group {
+                    group_id: prism_domain::GroupId::new(1),
+                },
+                to: ObjectRef::Group {
+                    group_id: prism_domain::GroupId::new(2),
+                },
+                mode: OverwriteMode::Merge,
+            },
+            Command::Move {
+                from: ObjectRef::Preset {
+                    preset_id: PresetId::new(1),
+                },
+                to: ObjectRef::Preset {
+                    preset_id: PresetId::new(2),
+                },
+                mode: OverwriteMode::Merge,
+            },
+            Command::StoreGroup {
+                group_id: prism_domain::GroupId::new(1),
+                name: String::new(),
+                mode: OverwriteMode::Merge,
+            },
+            Command::Delete {
+                target: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "1".to_owned(),
+                },
             },
             Command::AssignExecutor {
                 executor_id: ExecutorId::new(0),
@@ -1373,10 +1763,11 @@ mod tests {
             },
             Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
-                mode: prism_domain::SequenceStoreMode::Append,
+                name: String::new(),
+                mode: SequenceStoreMode::Append,
             },
             Command::EditCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
             },
             Command::Update,
@@ -1386,7 +1777,7 @@ mod tests {
                 sequence_id: SequenceId::new(1),
             },
         ];
-        assert_eq!(commands.len(), 33);
+        assert_eq!(commands.len(), 38);
         let mut undoable = 0;
         for command in &commands {
             assert_eq!(
@@ -1396,9 +1787,10 @@ mod tests {
             );
             undoable += usize::from(command.is_undoable());
         }
-        // What is left after the four playback actions, `Oops`, `Redo`,
-        // `SaveShow` and the §4.4 session commands: the five programmer
-        // commands, the patch, S28's five show edits and S39's three.
-        assert_eq!(undoable, 14);
+        // What is left after the playback actions, `Oops`, `Redo`, `SaveShow`
+        // and the §4.4 session commands: the five programmer commands, the
+        // patch, S28's show edits, S39's three and S40's five — the four
+        // generic verbs and the group store.
+        assert_eq!(undoable, 19);
     }
 }

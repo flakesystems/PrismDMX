@@ -21,12 +21,19 @@
  *
  * # Nothing here is state this interface holds
  *
- * The boxes are `poolRows(show, pool)`. Applying is an `ApplyPreset` out and a
- * `ProgrammerChanged` back. What is local is the pool tab, the number and the
- * name being typed — which is `ARCHITECTURE_SPEC.md` §4.2's category: which of
- * five tabs one screen is looking at is not something a second screen should
- * follow, and the console reaches presets through the command line rather than
- * through this window.
+ * The boxes are `poolRows(show, pool)`. Applying a preset is a line — `Preset 3`
+ * — written and submitted, because the pointer has supplied the argument
+ * (`ARCHITECTURE_SPEC.md` §4.5). What is local is the number and the name being
+ * typed, which is §4.2's category: a half-finished edit is not something a
+ * second operator's screen should follow.
+ *
+ * **The pool tab stays client-local, and the line names the pool** (S40). Which
+ * of five tabs one screen is looking at is `ARCHITECTURE_SPEC.md` §4.2's own
+ * category — two operators on two screens legitimately want different ones —
+ * and the risk that a typed `Store Preset 1` would go somewhere else is met the
+ * other way round: the window writes the pool into the line it submits
+ * (`Store Preset 2 Beam "Tight"`), and only a line that names none falls back to
+ * `Session::encoderBank`.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -39,7 +46,8 @@ import type {
   StorePreview,
 } from "../bindings";
 import { FEATURE_GROUP_VARIANTS } from "../bindings/variants";
-import { useAsk, useSend } from "../store/hooks";
+import { useConsole } from "../desk/consoleshell";
+import { useAsk } from "../store/hooks";
 import type { PresetRow } from "./looks";
 import { colorStyle, nextFreeNumber, poolRows, presetRows, presetsDocument } from "./looks";
 import { StoreRequester, isStorable, storeText } from "./store";
@@ -57,17 +65,19 @@ export function PresetPool({
    */
   readonly programmer: ProgrammerState | null;
 }) {
-  const send = useSend();
   const ask = useAsk();
+  const { run } = useConsole();
   const [pool, setPool] = useState<FeatureGroup>("Color");
   const all = useMemo(() => presetRows(show), [show]);
   const rows = useMemo(() => poolRows(show, pool), [show, pool]);
 
+  // A box in a pool is a list pick: the line is written and submitted at once,
+  // because the pointer has supplied the argument it was waiting for (§4.5).
   const apply = useCallback(
     (presetId: number) => {
-      send({ t: "ApplyPreset", presetId });
+      run(`Preset ${String(presetId)}`);
     },
-    [send],
+    [run],
   );
 
   return (
@@ -83,6 +93,8 @@ export function PresetPool({
             className={`pool-tab${group === pool ? " pool-tab-current" : ""}`}
             data-testid={`pool-${group}`}
             data-current={group === pool ? "yes" : "no"}
+            // Client-local, and §4.2's category: which of five tabs one screen
+            // is looking at is not something a second screen should follow.
             onClick={() => {
               setPool(group);
             }}
@@ -111,7 +123,6 @@ export function PresetPool({
         presetsDoc={presetsDocument(show)}
         programmer={programmer}
         ask={ask}
-        onSend={send}
       />
     </div>
   );
@@ -167,7 +178,6 @@ function PresetStoreBar({
   presetsDoc,
   programmer,
   ask,
-  onSend,
 }: {
   readonly pool: FeatureGroup;
   readonly presets: readonly PresetRow[];
@@ -175,8 +185,8 @@ function PresetStoreBar({
   readonly presetsDoc: JsonValue | null;
   readonly programmer: ProgrammerState | null;
   readonly ask: ReturnType<typeof useAsk>;
-  readonly onSend: ReturnType<typeof useSend>;
 }) {
+  const { runWithMode } = useConsole();
   const [number, setNumber] = useState<number | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [mode, setMode] = useState<StoreMode>("Merge");
@@ -214,19 +224,22 @@ function PresetStoreBar({
       data-testid="preset-store"
       onSubmit={(event) => {
         event.preventDefault();
-        onSend({
-          t: "StorePreset",
-          presetId,
-          pool,
-          name: wantedName,
-          // A colour is a later gesture: `Preset::color` is what the scribble
-          // strips show and there is nothing on this screen that picks one yet.
-          // Carrying the one that is already there is what stops a relabel
-          // throwing an operator's colour away.
-          color: existing?.color ?? null,
-          // The operator's choice, carried rather than assumed — S39.
+        // **The line names the pool**, because this window has a tab of its own
+        // and the command line does not: `Store Preset 1` on its own means the
+        // encoder bank in force (`Command::StorePreset`), and a window that let
+        // it fall back would store into a pool other than the tab an operator
+        // was looking at. The mode is the chooser's, so there is nothing to
+        // prompt about — see `ConsoleShell::runWithMode`.
+        //
+        // A colour is a later gesture: `Preset::color` is what the scribble
+        // strips show and there is nothing on this screen that picks one yet.
+        // The line carries none, and the daemon **keeps** the one that is
+        // already there rather than this window reading it back and sending it
+        // — which would be the read-modify-write S28 refused for a cue.
+        runWithMode(
+          `Store Preset ${String(presetId)} ${pool} ${JSON.stringify(wantedName)}`,
           mode,
-        });
+        );
         setNumber(null);
         setName(null);
       }}

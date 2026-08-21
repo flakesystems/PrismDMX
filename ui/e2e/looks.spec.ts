@@ -162,10 +162,16 @@ test("a show is written, corrected and fired entirely from the interface", async
 
   // A cue list, made from the browser: two commands, and the second is what
   // makes it playable at all.
+  // A cue list, made from the browser. **One key, one line** since S40
+  // (`ARCHITECTURE_SPEC.md` §4.5): `Store Sequence 1` makes the list on a free
+  // number and the daemon puts it in force, because the next `Store Cue 1`
+  // names no list and means the selected one. Giving it a fader is a second
+  // act, and it has a line of its own.
   await page.getByTestId("new-sequence").click();
   await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
-  await expect(page.getByTestId("looks-executor-name")).toHaveText("Executor 3 · Sequence 1");
   await expect(page.getByTestId("no-cues")).toBeVisible();
+  await command(page, "Assign Sequence 1 Executor 3");
+  await expect(page.getByTestId("looks-executor-name")).toHaveText("Executor 3 · Sequence 1");
 
   // 2. A look in the programmer, and the Store button says what it will do
   //    **before** it is pressed: nothing is there yet, so this is a create.
@@ -341,6 +347,8 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await page.getByTestId("open-window").selectOption("SequenceSheet");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
+  // The fader is its own line since S40 — see the note in the first test.
+  await command(page, "Assign Sequence 1 Executor 3");
   await page.getByTestId("store-cue").click();
   await expect(page.getByTestId("cue-row-1")).toBeVisible();
   await closeWindows(page);

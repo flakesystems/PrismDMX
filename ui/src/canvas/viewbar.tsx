@@ -50,9 +50,6 @@ import { WINDOW_TYPE_VARIANTS } from "../bindings/variants";
 import { activeViewId, storedViews, windowTitle } from "./windows";
 import type { StoredView } from "./windows";
 
-/** Which way a view moves along the bar. */
-export type MoveDirection = "Prev" | "Next";
-
 /** What the bar needs. */
 export interface ViewBarProps {
   /** The session document. */
@@ -66,7 +63,7 @@ export interface ViewBarProps {
   /** Sends a `DeleteView`. */
   readonly onDeleteView: (viewId: number) => void;
   /** Sends a `MoveView`. */
-  readonly onMoveView: (viewId: number, direction: MoveDirection) => void;
+  readonly onMoveView: (viewId: number, toViewId: number) => void;
   /** Sends an `OpenWindow`. */
   readonly onOpenWindow: (type: WindowType) => void;
 }
@@ -224,7 +221,7 @@ function ViewMenu({
   readonly onStoreView: (viewId: number, name: string) => void;
   readonly onRenameView: (viewId: number, name: string) => void;
   readonly onDeleteView: (viewId: number) => void;
-  readonly onMoveView: (viewId: number, direction: MoveDirection) => void;
+  readonly onMoveView: (viewId: number, toViewId: number) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [typed, setTyped] = useState(view.name);
@@ -344,13 +341,24 @@ function ViewMenu({
         Store canvas as new view
       </button>
 
+      {/*
+        **The bar knows its neighbour's number and writes the line** — S40.
+        `MoveView` was relative until then (`Prev`/`Next`); it is now
+        `Move View 1 View 3`, an absolute swap, and one command covers both
+        because the *screen* is what turns a direction into a number. That is
+        `ARCHITECTURE_SPEC.md` §4.5 entire: the key builds a line an operator
+        could have typed.
+      */}
       <button
         type="button"
         role="menuitem"
         data-testid="view-move-prev"
         disabled={at_first}
         onClick={() => {
-          onMoveView(view.id, "Prev");
+          const before = neighbour(views, view.id, -1);
+          if (before !== null) {
+            onMoveView(view.id, before);
+          }
           onClose();
         }}
       >
@@ -362,7 +370,10 @@ function ViewMenu({
         data-testid="view-move-next"
         disabled={at_last}
         onClick={() => {
-          onMoveView(view.id, "Next");
+          const after = neighbour(views, view.id, 1);
+          if (after !== null) {
+            onMoveView(view.id, after);
+          }
           onClose();
         }}
       >
@@ -392,6 +403,25 @@ function ViewMenu({
       </button>
     </div>
   );
+}
+
+/**
+ * The view one place along the bar, by **number**.
+ *
+ * The bar draws in number order (S35: the number *is* the order), so *left* and
+ * *right* are the previous and next numbers that are actually stored — never
+ * `id ± 1`, which would name a place nobody has used.
+ */
+function neighbour(
+  views: readonly { readonly id: number }[],
+  id: number,
+  step: -1 | 1,
+): number | null {
+  const index = views.findIndex((view) => view.id === id);
+  if (index === -1) {
+    return null;
+  }
+  return views[index + step]?.id ?? null;
 }
 
 /**

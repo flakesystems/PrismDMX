@@ -22,7 +22,7 @@ import { decode } from "@msgpack/msgpack";
 import { describe, expect, it } from "vitest";
 
 import type { Command } from "../bindings";
-import { parseCommandLine, readingText, MAX_RANGE } from "./console";
+import { applyMode, parseCommandLine, readingText, MAX_RANGE } from "./console";
 
 import recordingText from "../../tests/fixtures/desk-recording.json?raw";
 
@@ -103,14 +103,69 @@ describe("what a line means", () => {
    */
   it("produces the commands the daemon was sent for that line", () => {
     const lines = typedLines();
-    expect(lines.length).toBeGreaterThanOrEqual(6);
+    // S26 recorded six shapes; S40's script carries the whole vocabulary, so
+    // this is a floor rather than a count.
+    expect(lines.length).toBeGreaterThanOrEqual(30);
     for (const { line, commands } of lines) {
       const reading = parseCommandLine(line);
-      expect(reading, `"${line}" did not parse`).toEqual({ kind: "commands", commands });
+      if (reading.kind !== "commands") {
+        throw new Error(`"${line}" did not parse: ${JSON.stringify(reading)}`);
+      }
+      // The **commands**, not the whole answer: a line that carries a mode also
+      // carries the question the interface may have to ask about it, and the
+      // recording holds what the daemon was sent rather than what was asked.
+      expect(reading.commands, `"${line}" means something else`).toEqual(commands);
     }
     // And one of them is a line that produced two commands, which a parser
     // answering with a single command could never have passed.
     expect(lines.some((entry) => entry.commands.length === 2)).toBe(true);
+  });
+
+  /**
+   * **Every word of the vocabulary is in the recording**, so the test above is
+   * a check on all of it rather than on the six shapes S26 had.
+   *
+   * `IMPLEMENTATION_PLAN.md` S40 lists the lines this session had to make work;
+   * this is that list, held to a script a **real daemon** accepted.
+   */
+  it("covers the whole of S40's vocabulary against a real daemon", () => {
+    const typed = typedLines().map((entry) => entry.line);
+    for (const word of [
+      "sequence 2",
+      "group 1",
+      "store group 1",
+      "store cue 2",
+      "store sequence 4",
+      "store preset 1",
+      "edit cue 2",
+      "update",
+      "label cue 2",
+      "label group 1",
+      "label view 1",
+      "move cue 2 cue 3",
+      "move sequence 5 sequence 6",
+      "copy group 1 group 2",
+      "copy sequence 1 sequence 5",
+      "delete group 2",
+      "delete executor 9",
+      "delete sequence 404",
+      "goto cue 1",
+      "on sequence 1",
+      "on sequence 4",
+      "off sequence 1",
+      "go+ executor 0",
+      "assign sequence 4 executor 9",
+      "preset 1",
+      "full",
+      "oops",
+      "clear",
+      "page 0",
+    ]) {
+      expect(
+        typed.some((line) => line.startsWith(word)),
+        `no recorded line starts with "${word}"`,
+      ).toBe(true);
+    }
   });
 
   it("reads a range in the direction it is written, and does not repeat a fixture", () => {
@@ -195,18 +250,22 @@ describe("what a line means", () => {
   });
 
   it("reads the executor and page words", () => {
+    // **S26's forms, kept and unbroken**: a bare number after one of these
+    // words is an executor, which is what it meant when there was nothing else
+    // it could be.
+    const executor = (executorId: number) => ({ t: "Executor", executorId }) as const;
     expect(parseCommandLine("go 3")).toEqual({
       kind: "commands",
-      commands: [{ t: "ExecutorGo", executorId: 3, direction: "Next" }],
+      commands: [{ t: "ExecutorGo", target: executor(3), direction: "Next" }],
     });
     expect(parseCommandLine("go+ 3")).toEqual(parseCommandLine("go 3"));
     expect(parseCommandLine("go- 3")).toEqual({
       kind: "commands",
-      commands: [{ t: "ExecutorGo", executorId: 3, direction: "Prev" }],
+      commands: [{ t: "ExecutorGo", target: executor(3), direction: "Prev" }],
     });
     expect(parseCommandLine("off 3")).toEqual({
       kind: "commands",
-      commands: [{ t: "ExecutorOff", executorId: 3 }],
+      commands: [{ t: "ExecutorOff", target: executor(3) }],
     });
     expect(parseCommandLine("page 4")).toEqual({
       kind: "commands",
@@ -248,10 +307,22 @@ describe("a line that is not one", () => {
     expect(message("1 +")).toContain("something is missing");
     expect(message("banana")).toContain("not a fixture number");
     expect(message("fixture")).toContain("not a command");
-    expect(message("go")).toContain("which executor");
-    expect(message("go banana")).toContain("not an executor number");
-    expect(message("go 1 2")).toContain("more than go takes");
-    expect(message("go- 1 2")).toContain("more than go- takes");
+    expect(message("go banana")).toContain("not something to name");
+    expect(message("go 1 2")).toContain("more than a playback takes");
+    expect(message("go- 1 2")).toContain("more than a playback takes");
+    expect(message("cue 5")).toContain("ambiguous");
+    expect(message("delete")).toContain("which one");
+    expect(message("delete banana")).toContain("not something to name");
+    expect(message("delete sequence")).toContain("sequence which one");
+    expect(message("delete sequence banana")).toContain("not a sequence number");
+    expect(message("copy sequence 1")).toContain("where");
+    expect(message("copy sequence 1 group 2")).toContain("not the same kind of thing");
+    expect(message("edit sequence 1")).toContain("edit takes a cue");
+    expect(message("goto sequence 1")).toContain("goto takes a cue");
+    expect(message("assign cue 1 executor 1")).toContain("assign takes a sequence");
+    expect(message("assign sequence 1 group 1")).toContain("assigned to an executor");
+    expect(message("store executor 1")).toContain("assigned rather than stored");
+    expect(message("on group 1")).toContain("not something that plays back");
     expect(message("page")).toContain("which page");
     expect(message("page banana")).toContain("not a page number");
     expect(message("page 1 2")).toContain("more than page takes");
@@ -343,17 +414,157 @@ describe("what the line says it will do", () => {
   it("reads a parsed line back in words", () => {
     expect(readingText(parseCommandLine("1 thru 3 at 50"))).toBe("select 1 + 2 + 3 · dimmer → 50%");
     expect(readingText(parseCommandLine("clear"))).toBe("clear");
-    expect(readingText(parseCommandLine("go 2"))).toBe("executor 2 go");
-    expect(readingText(parseCommandLine("go- 2"))).toBe("executor 2 back");
-    expect(readingText(parseCommandLine("off 2"))).toBe("executor 2 off");
+    expect(readingText(parseCommandLine("go 2"))).toBe("go on executor 2");
+    expect(readingText(parseCommandLine("go- 2"))).toBe("back on executor 2");
+    expect(readingText(parseCommandLine("off 2"))).toBe("off on executor 2");
     expect(readingText(parseCommandLine("page 2"))).toBe("page 2");
     expect(readingText(parseCommandLine(""))).toBe("");
     expect(readingText(parseCommandLine("banana"))).toContain("not a fixture number");
+  });
+
+  /** Every one of S40's verbs reads back as something a person can act on. */
+  it("reads S40's verbs back in words too", () => {
+    expect(readingText(parseCommandLine("group 3"))).toBe("select group 3");
+    expect(readingText(parseCommandLine("preset 4"))).toBe("apply preset 4");
+    expect(readingText(parseCommandLine("sequence 5"))).toBe("select sequence 5");
+    expect(readingText(parseCommandLine("view 2"))).toBe("view 2");
+    expect(readingText(parseCommandLine("executor 3"))).toBe("select executor 3");
+    expect(readingText(parseCommandLine("store cue 5"))).toBe("store cue 5");
+    expect(readingText(parseCommandLine("store sequence 5 cue 2"))).toBe(
+      "store cue 2 of sequence 5",
+    );
+    expect(readingText(parseCommandLine("store sequence 4"))).toBe("store sequence 4");
+    expect(readingText(parseCommandLine("store preset 1"))).toBe("store preset 1");
+    expect(readingText(parseCommandLine("store group 3"))).toBe("store group 3");
+    expect(readingText(parseCommandLine("store view 2"))).toBe("store view 2");
+    expect(readingText(parseCommandLine("edit cue 3"))).toBe("edit cue 3");
+    expect(readingText(parseCommandLine("update"))).toBe("update the cue being edited");
+    expect(readingText(parseCommandLine("oops"))).toBe("oops");
+    expect(readingText(parseCommandLine("goto cue 5"))).toBe(
+      "goto cue 5 on the selected sequence",
+    );
+    expect(readingText(parseCommandLine("goto executor 1 cue 5"))).toBe(
+      "goto cue 5 on executor 1",
+    );
+    expect(readingText(parseCommandLine("delete group 3"))).toBe("delete group 3");
+    expect(readingText(parseCommandLine("copy sequence 2 sequence 6"))).toBe(
+      "copy sequence 2 to sequence 6",
+    );
+    expect(readingText(parseCommandLine("move executor 1 executor 5"))).toBe(
+      "move executor 1 to executor 5",
+    );
+    expect(readingText(parseCommandLine('label view 1 "Programmer"'))).toBe(
+      'label view 1 "Programmer"',
+    );
+    expect(readingText(parseCommandLine("assign sequence 5 executor 1"))).toBe(
+      "assign sequence 5 to executor 1",
+    );
+    expect(readingText(parseCommandLine("on"))).toBe("on the selected sequence");
+    expect(readingText(parseCommandLine("on sequence 2"))).toBe("on sequence 2");
+    expect(readingText(parseCommandLine("full"))).toBe("dimmer → 100%");
   });
 
   it("has an arm for a command it was not written for", () => {
     // `Command` is the whole protocol and this readout is not where a new one
     // should become a compile error — but it must still say *something*.
     expect(readingText({ kind: "commands", commands: [{ t: "SaveShow" }] })).toBe("SaveShow");
+  });
+});
+
+describe("a line that cannot be meant is answered rather than sent", () => {
+  /**
+   * **Every refusal here names the word that was wrong and shows a line that
+   * would work.** A desk is operated in the dark by somebody with their hands
+   * full; "syntax error" is not an answer, and neither is a silence.
+   *
+   * The table is written out by hand rather than generated, for `prism-surface`'s
+   * reason (S19): a table derived from the parser would pass for any parser.
+   */
+  const refusals: readonly (readonly [string, string])[] = [
+    // Reading an object: the number, the cue keyword, and the cue number.
+    ["copy sequence x cue 1 cue 2", "sequence number"],
+    ["copy sequence 5 cue", "cue which one"],
+    ["copy sequence 5 cue @ cue 2", "not a cue number"],
+    ["goto cue @", "not a cue number"],
+    // The verbs, each turned away for its own reason.
+    ["edit nonsense 3", "nonsense"],
+    ["edit cue 3 and then some", "says more"],
+    ["edit group 3", "edit takes a cue"],
+    ["goto executor x cue 5", "executor which one"],
+    ["goto executor 1 nonsense 5", "nonsense"],
+    ["goto executor 1 group 3", "goto takes a cue"],
+    ["goto nonsense 5", "nonsense"],
+    ["goto group 3", "goto takes a cue"],
+    ["delete group 3 and then some", "says more"],
+    ["delete nonsense 3", "nonsense"],
+    ["copy nonsense 3 sequence 6", "nonsense"],
+    ["copy sequence 2", "copy sequence 2 where?"],
+    ["copy sequence 2 sequence 6 and then some", "says more"],
+    ["copy sequence 2 group 6", "not the same kind"],
+    ["label nonsense 3 \"x\"", "nonsense"],
+    ["assign nonsense 5 executor 1", "nonsense"],
+    ["assign cue 5 executor 1", "assign takes a sequence"],
+    ["assign sequence 5", "assign it where?"],
+    ["assign sequence 5 group 1", "assigned to an executor"],
+    ["assign sequence 5 executor 1 and then some", "says more"],
+    // A playback, which takes one object and no more.
+    ["on sequence 5 executor 1", "says more than a playback takes"],
+    ["on nonsense 5", "nonsense"],
+    ["on group 3", "group"],
+    // And a bare object, which selects.
+    ["preset @", "not a preset number"],
+    ["group 3 and then some", "says more"],
+    ["cue 5", "ambiguous"],
+  ];
+
+  it.each(refusals)("refuses %j", (line, fragment) => {
+    const reading = parseCommandLine(line);
+    expect(reading?.kind, line).toBe("error");
+    if (reading?.kind !== "error") {
+      throw new Error("checked above");
+    }
+    expect(reading.message.toLowerCase(), line).toContain(fragment.toLowerCase());
+  });
+});
+
+describe("the mode an operator chose travels in the command", () => {
+  /**
+   * Three commands carry three different mode types, and each takes only its
+   * own words. A mode that does not belong to the command is **left alone**
+   * rather than forced in: the prompt is built from the command, so the case
+   * cannot arise from the interface, and the type is what stops it arising from
+   * anywhere else.
+   */
+  it("puts each kind of mode into the command that has one", () => {
+    const store = parseCommandLine("store cue 5");
+    expect(store?.kind).toBe("commands");
+    if (store?.kind !== "commands") {
+      throw new Error("checked above");
+    }
+    expect(applyMode(store.commands, "Remove")).toEqual([
+      { t: "StoreCue", sequenceId: null, cueNumber: "5", mode: "Remove" },
+    ]);
+    // A sequence store takes Append, and not a cue store's Remove.
+    const sequence = parseCommandLine("store sequence 2");
+    if (sequence?.kind !== "commands") {
+      throw new Error("store sequence 2 is a command");
+    }
+    expect(applyMode(sequence.commands, "Append")).toEqual([
+      { ...sequence.commands[0], mode: "Append" },
+    ]);
+    expect(applyMode(sequence.commands, "Remove")).toEqual(sequence.commands);
+
+    // A copy takes Merge and Override, and not Append.
+    const copy = parseCommandLine("copy sequence 2 sequence 6");
+    if (copy?.kind !== "commands") {
+      throw new Error("copy sequence 2 sequence 6 is a command");
+    }
+    expect(applyMode(copy.commands, "Override")).toEqual([
+      { ...copy.commands[0], mode: "Override" },
+    ]);
+    expect(applyMode(copy.commands, "Append")).toEqual(copy.commands);
+
+    // And a command with no mode at all is handed back untouched.
+    expect(applyMode([{ t: "ClearProgrammer" }], "Merge")).toEqual([{ t: "ClearProgrammer" }]);
   });
 });

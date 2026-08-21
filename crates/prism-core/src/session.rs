@@ -56,8 +56,8 @@ use std::collections::BTreeMap;
 
 use prism_domain::{
     Command, CueEdit, Delta, EXECUTORS_PER_PAGE, ExecutorId, FeatureGroup, JsonPatchOp, JsonValue,
-    ParamDirection, SequenceId, Session, SessionId, View, ViewId, WindowInstance, WindowInstanceId,
-    WindowType,
+    ObjectRef, OverwriteMode, ParamDirection, SequenceId, Session, SessionId, View, ViewId,
+    WindowInstance, WindowInstanceId, WindowType,
 };
 use serde::{Deserialize, Serialize};
 
@@ -327,9 +327,28 @@ impl SessionState {
         let ops = match command {
             Command::SelectView { view_id } => self.select_view(*view_id)?,
             Command::StoreView { view_id, name } => self.store_view(*view_id, name)?,
-            Command::RenameView { view_id, name } => self.rename_view(*view_id, name)?,
-            Command::DeleteView { view_id } => self.delete_view(*view_id)?,
-            Command::MoveView { view_id, direction } => self.move_view(*view_id, *direction)?,
+            // S40's four generic verbs, for the one of their six targets that
+            // is session state. `Command::is_session_command` reads the target
+            // and routes them here; anything else in them is the show's, and
+            // reaching this applier with one is the mirror image of a show
+            // command arriving here at all.
+            Command::Delete {
+                target: ObjectRef::View { view_id },
+            } => self.delete_view(*view_id)?,
+            Command::Label {
+                target: ObjectRef::View { view_id },
+                name,
+            } => self.rename_view(*view_id, name)?,
+            Command::Copy {
+                from: ObjectRef::View { view_id: from },
+                to: ObjectRef::View { view_id: to },
+                mode,
+            } => self.copy_view(*from, *to, *mode)?,
+            Command::Move {
+                from: ObjectRef::View { view_id: from },
+                to: ObjectRef::View { view_id: to },
+                ..
+            } => self.move_view(*from, *to)?,
             Command::OpenWindow { window, params } => self.open_window(*window, params.as_ref())?,
             Command::CloseWindow { instance_id } => self.close_window(*instance_id)?,
             Command::FocusWindow { instance_id } => self.focus_window(*instance_id)?,
@@ -353,6 +372,7 @@ impl SessionState {
             // so this match is exhaustive and a command added to the protocol
             // is a compile error here as well as in `Show::apply`.
             Command::SelectFixtures { .. }
+            | Command::SelectGroup { .. }
             | Command::SetAttribute { .. }
             | Command::ApplyPreset { .. }
             | Command::ClearProgrammer
@@ -371,9 +391,14 @@ impl SessionState {
             | Command::Oops
             | Command::Redo
             | Command::StorePreset { .. }
-            | Command::CreateSequence { .. }
+            | Command::StoreGroup { .. }
+            | Command::ExecutorOn { .. }
+            | Command::Goto { .. }
+            | Command::Delete { .. }
+            | Command::Copy { .. }
+            | Command::Move { .. }
+            | Command::Label { .. }
             | Command::SetCueProperty { .. }
-            | Command::DeleteCue { .. }
             | Command::AssignExecutor { .. }
             | Command::SaveShow => return Err(SessionError::NotASessionCommand),
         };
@@ -516,31 +541,115 @@ impl SessionState {
         Ok(ops)
     }
 
-    /// Moves a stored view one place along the bar by exchanging its number.
+    /// Copies one stored view onto another number — S40's `Copy View 1 View 4`.
     ///
-    /// See [`prism_domain::Command::MoveView`] for why the number *is* the
-    /// order. The consequence handled here is that `activeViewId` follows the
-    /// **view**, not the number: an operator who moves the view they are looking
-    /// at is still looking at it afterwards.
+    /// `Merge` adds the source's windows to the destination's and `Override`
+    /// replaces them. A destination that does not exist is created and takes the
+    /// source's name; one that exists keeps its own, because a copy onto a view
+    /// somebody has named is not a rename — that is `Label`'s.
     ///
-    /// A view already at the end of the bar has nowhere to go, and that produces
-    /// no operations at all rather than an error — the same shape as turning the
-    /// jog wheel left at the first parameter.
+    /// **Merging two layouts is a union of windows and nothing cleverer.** Two
+    /// windows of the same type on one canvas is an ordinary thing to want (two
+    /// preset pools, two sheets), so a merge does not try to match them up; what
+    /// it does do is give every incoming window a **fresh instance number**, or
+    /// the two layouts would disagree about which window is which.
     ///
     /// # Errors
     ///
-    /// [`SessionError::UnknownView`] if no such view has been stored.
+    /// [`SessionError::UnknownView`] for a source that is not stored, or
+    /// [`SessionError::NotRepresentable`].
+    pub fn copy_view(
+        &mut self,
+        from: ViewId,
+        to: ViewId,
+        mode: OverwriteMode,
+    ) -> Result<Vec<JsonPatchOp>, SessionError> {
+        let Some(source) = self.views.get(&from).cloned() else {
+            return Err(SessionError::UnknownView(from));
+        };
+        if from == to {
+            return Ok(Vec::new());
+        }
+        let existing = self.views.get(&to).cloned();
+        let windows = match (&existing, mode) {
+            (Some(existing), OverwriteMode::Merge) => {
+                let mut windows = existing.windows.clone();
+                let mut next = windows
+                    .iter()
+                    .map(|window| window.instance_id.get())
+                    .max()
+                    .map_or(1, |highest| highest.saturating_add(1));
+                for window in &source.windows {
+                    windows.push(WindowInstance {
+                        instance_id: WindowInstanceId::new(next),
+                        ..window.clone()
+                    });
+                    next = next.saturating_add(1);
+                }
+                windows
+            }
+            _ => source.windows.clone(),
+        };
+        let view = View {
+            id: to,
+            name: existing
+                .as_ref()
+                .map_or_else(|| source.name.clone(), |view| view.name.clone()),
+            windows,
+        };
+        let op = put(pointer(VIEWS, &to.to_string()), &view, existing.is_some())?;
+        self.views.insert(to, view);
+        self.dirty = true;
+        Ok(vec![op])
+    }
+
+    /// Exchanges two stored views — S40's `Move View 1 View 3`.
+    ///
+    /// **The contents swap and the numbers stay put**, which is S35's decision
+    /// carried forward: a view library's order *is* its numbers, because `views`
+    /// is keyed by number, the View Selector Bar draws in number order and
+    /// `Channel ◀▶` steps from one number to the next. Recording an order beside
+    /// the numbers would give two things that can disagree, and the disagreement
+    /// an operator would meet is the console stepping to a view other than the
+    /// one drawn next.
+    ///
+    /// The price is the one S35 named and accepted: after a move, `SelectView 3`
+    /// names a different layout, and an F-key bound to a view number reaches
+    /// whatever now sits in that place.
+    ///
+    /// > **It was relative until S40** (`Prev`/`Next`), and one absolute form
+    /// > covers both: the bar knows its neighbour's number and writes the line,
+    /// > which is `ARCHITECTURE_SPEC.md` §4.5 entire. Two commands for one act
+    /// > would have been the second grammar S40 exists to remove.
+    ///
+    /// A destination that is not stored is not an error: the source takes that
+    /// number and leaves the one it came from, which is a *move* rather than a
+    /// swap and is what an operator asking for an empty place means.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::UnknownView`] if the source has not been stored.
     pub fn move_view(
         &mut self,
         id: ViewId,
-        direction: ParamDirection,
+        other: ViewId,
     ) -> Result<Vec<JsonPatchOp>, SessionError> {
         if !self.views.contains_key(&id) {
             return Err(SessionError::UnknownView(id));
         }
-        let Some(other) = self.neighbour(id, direction) else {
+        if id == other {
             return Ok(Vec::new());
-        };
+        }
+        if !self.views.contains_key(&other) {
+            let Some(here) = self.views.get(&id).cloned() else {
+                return Err(SessionError::UnknownView(id));
+            };
+            let moved = View { id: other, ..here };
+            let mut ops = vec![put(pointer(VIEWS, &other.to_string()), &moved, false)?];
+            self.views.insert(other, moved);
+            ops.extend(self.delete_view(id)?);
+            return Ok(ops);
+        }
         // Both are known to exist, so the two clones below cannot fail; they are
         // taken before anything is written for `commit`'s reason.
         let (Some(here), Some(there)) = (self.views.get(&id), self.views.get(&other)) else {
@@ -1017,7 +1126,7 @@ mod tests {
     use super::{SessionError, SessionState, session_patch_ops};
     use prism_domain::{
         Command, Delta, EXECUTORS_PER_PAGE, ExecutorId, FeatureGroup, JsonPatchOp, JsonValue,
-        ParamDirection, Session, SessionId, ViewId, WindowInstanceId, WindowType,
+        OverwriteMode, ParamDirection, Session, SessionId, ViewId, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -1211,7 +1320,7 @@ mod tests {
             Err(SessionError::UnknownView(missing))
         );
         assert_eq!(
-            session.move_view(missing, ParamDirection::Next),
+            session.move_view(missing, ViewId::new(2)),
             Err(SessionError::UnknownView(missing))
         );
         assert!(!session.is_dirty());
@@ -1304,9 +1413,7 @@ mod tests {
         );
         let programming = session.view(ViewId::new(2)).unwrap().windows.clone();
 
-        let ops = session
-            .move_view(ViewId::new(2), ParamDirection::Prev)
-            .unwrap();
+        let ops = session.move_view(ViewId::new(2), ViewId::new(1)).unwrap();
 
         assert_eq!(
             session
@@ -1342,9 +1449,7 @@ mod tests {
         session.select_view(ViewId::new(2)).unwrap();
         let windows = session.session().open_windows.clone();
 
-        session
-            .move_view(ViewId::new(2), ParamDirection::Prev)
-            .unwrap();
+        session.move_view(ViewId::new(2), ViewId::new(1)).unwrap();
 
         assert_eq!(session.session().active_view_id, ViewId::new(1));
         assert_eq!(session.view(ViewId::new(1)).unwrap().name, "Programming");
@@ -1361,28 +1466,38 @@ mod tests {
         assert_eq!(session.session().active_view_id, ViewId::new(1));
         let windows = session.session().open_windows.clone();
 
-        session
-            .move_view(ViewId::new(2), ParamDirection::Prev)
-            .unwrap();
+        session.move_view(ViewId::new(2), ViewId::new(1)).unwrap();
 
         assert_eq!(session.session().active_view_id, ViewId::new(2));
         assert_eq!(session.view(ViewId::new(2)).unwrap().name, "View 1");
         assert_eq!(session.session().open_windows, windows);
     }
 
+    /// **A move onto a number nobody has stored is a move, not a no-op** (S40).
+    /// The relative form this replaced had nowhere to go at the end of the bar;
+    /// the absolute one always has somewhere to go, so what has to be true
+    /// instead is that the view arrives there and leaves nothing behind.
     #[test]
-    fn a_view_at_the_end_of_the_bar_does_not_move() {
+    fn a_view_moved_onto_an_empty_number_takes_that_place_and_leaves_none() {
+        let mut session = session();
+        let name = session.view(ViewId::new(1)).unwrap().name.clone();
+
+        let ops = session.move_view(ViewId::new(1), ViewId::new(9)).unwrap();
+
+        assert!(!ops.is_empty());
+        assert!(session.view(ViewId::new(1)).is_none());
+        assert_eq!(session.view(ViewId::new(9)).unwrap().name, name);
+    }
+
+    /// A move of a view onto itself changes nothing at all, which is the only
+    /// no-op the absolute form has.
+    #[test]
+    fn a_view_moved_onto_itself_does_nothing() {
         let mut session = session();
         let before = rmp_serde::to_vec_named(&session).unwrap();
         assert!(
             session
-                .move_view(ViewId::new(1), ParamDirection::Prev)
-                .unwrap()
-                .is_empty()
-        );
-        assert!(
-            session
-                .move_view(ViewId::new(2), ParamDirection::Next)
+                .move_view(ViewId::new(1), ViewId::new(1))
                 .unwrap()
                 .is_empty()
         );
@@ -1397,9 +1512,7 @@ mod tests {
         let mut session = session();
         session.store_view(ViewId::new(9), "Busking").unwrap();
 
-        session
-            .move_view(ViewId::new(9), ParamDirection::Prev)
-            .unwrap();
+        session.move_view(ViewId::new(9), ViewId::new(2)).unwrap();
 
         assert_eq!(
             session
@@ -1518,6 +1631,109 @@ mod tests {
         );
         assert_eq!(session.window(missing), None);
         assert!(session.window(WindowInstanceId::new(1)).is_some());
+    }
+
+    /// **A copy makes a view that was not there, and leaves the source alone.**
+    ///
+    /// The whole difference between a copy and a move, said on the session
+    /// rather than in a comment (S40).
+    #[test]
+    fn a_view_copied_onto_a_free_number_appears_and_leaves_the_source() {
+        let mut session = session();
+        let windows = session.view(ViewId::new(1)).unwrap().windows.len();
+
+        let ops = session
+            .copy_view(ViewId::new(1), ViewId::new(9), OverwriteMode::Merge)
+            .unwrap();
+
+        assert_eq!(ops.len(), 1);
+        assert_eq!(session.view(ViewId::new(9)).unwrap().windows.len(), windows);
+        // A copy onto a free number takes the source's name, because there is no
+        // name there to keep.
+        assert_eq!(
+            session.view(ViewId::new(9)).unwrap().name,
+            session.view(ViewId::new(1)).unwrap().name
+        );
+        assert_eq!(session.view(ViewId::new(1)).unwrap().windows.len(), windows);
+    }
+
+    /// **Merging two layouts is a union of windows, each with a fresh number.**
+    ///
+    /// Two windows of the same type on one canvas is an ordinary thing to want,
+    /// so a merge does not try to match them up; what it does do is renumber the
+    /// incoming ones, or the two layouts would disagree about which window is
+    /// which.
+    #[test]
+    fn merging_a_view_into_another_unions_the_windows_and_renumbers_them() {
+        let mut session = session();
+        session.store_view(ViewId::new(4), "Busking").unwrap();
+        let first = session.view(ViewId::new(1)).unwrap().windows.len();
+        let second = session.view(ViewId::new(4)).unwrap().windows.len();
+
+        session
+            .copy_view(ViewId::new(1), ViewId::new(4), OverwriteMode::Merge)
+            .unwrap();
+
+        let merged = session.view(ViewId::new(4)).unwrap();
+        assert_eq!(merged.windows.len(), first + second);
+        // Every instance number is its own, which is what a canvas needs to
+        // address a window at all.
+        let mut numbers: Vec<u32> = merged
+            .windows
+            .iter()
+            .map(|window| window.instance_id.get())
+            .collect();
+        numbers.sort_unstable();
+        let unique = numbers.len();
+        numbers.dedup();
+        assert_eq!(
+            numbers.len(),
+            unique,
+            "two windows share an instance number"
+        );
+        // And the destination keeps its own name: a copy is not a rename.
+        assert_eq!(merged.name, "Busking");
+    }
+
+    /// An Override replaces the layout rather than adding to it.
+    #[test]
+    fn overriding_a_view_replaces_its_windows() {
+        let mut session = session();
+        session.store_view(ViewId::new(4), "Busking").unwrap();
+        let first = session.view(ViewId::new(1)).unwrap().windows.len();
+
+        session
+            .copy_view(ViewId::new(1), ViewId::new(4), OverwriteMode::Override)
+            .unwrap();
+
+        assert_eq!(session.view(ViewId::new(4)).unwrap().windows.len(), first);
+    }
+
+    /// A copy of a view that was never stored is refused, and a copy onto
+    /// itself changes nothing at all.
+    #[test]
+    fn copying_a_view_that_is_not_there_is_refused_and_onto_itself_is_nothing() {
+        let mut session = session();
+        assert!(matches!(
+            session.copy_view(ViewId::new(9), ViewId::new(2), OverwriteMode::Merge),
+            Err(SessionError::UnknownView(_))
+        ));
+        assert!(
+            session
+                .copy_view(ViewId::new(1), ViewId::new(1), OverwriteMode::Merge)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    /// A move of a view that was never stored is refused.
+    #[test]
+    fn moving_a_view_that_is_not_there_is_refused() {
+        let mut session = session();
+        assert!(matches!(
+            session.move_view(ViewId::new(9), ViewId::new(1)),
+            Err(SessionError::UnknownView(_))
+        ));
     }
 
     #[test]

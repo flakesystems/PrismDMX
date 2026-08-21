@@ -159,7 +159,7 @@ mod testkit;
 mod tick;
 mod triple_buffer;
 
-pub use body::MergeBody;
+pub use body::{MergeBody, NO_PLAYBACKS};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use command::TickCommand;
 pub use cue::{

@@ -19,7 +19,7 @@ use prism_domain::{
 };
 use prism_engine::{
     DmxFrame, Engine, FrameLayout, FramePublisher, FrameSubscriber, ManualClock, MergeBody,
-    PatchError, TickCommand, command_queue,
+    NO_PLAYBACKS, PatchError, TickCommand, command_queue,
 };
 
 /// A 16-bit moving head: dimmer on footprint channels 1-2, pan on 3-4, tilt on
@@ -226,7 +226,7 @@ fn an_active_executor_changes_exactly_the_channels_it_touches() {
 
     rig.producer
         .push(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         })
         .unwrap();
@@ -270,7 +270,7 @@ fn an_active_executor_changes_exactly_the_channels_it_touches() {
     // which is the determinism `docs/DMX_MERGE.md` §6.4 asks for.
     rig.producer
         .push(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: false,
         })
         .unwrap();
@@ -305,7 +305,7 @@ fn htp_between_two_executors_reaches_the_wire() {
     for executor in [1u32, 2] {
         rig.producer
             .push(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(executor),
+                executor: ExecutorId::new(executor).into(),
                 on: true,
             })
             .unwrap();
@@ -314,7 +314,7 @@ fn htp_between_two_executors_reaches_the_wire() {
     // maximum), which still beats executor 2's 30000.
     rig.producer
         .push(TickCommand::SetExecutorLevel {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             level: 32_767,
         })
         .unwrap();
@@ -339,7 +339,7 @@ fn a_fixture_that_does_not_fit_never_becomes_an_engine() {
     let head = moving_head();
     let overrun = fixture(1, "test.head", 1, 508);
     assert_eq!(
-        MergeBody::for_patch(&layout, [(&overrun, &head)], []).unwrap_err(),
+        MergeBody::for_patch(&layout, [(&overrun, &head)], NO_PLAYBACKS).unwrap_err(),
         PatchError::AddressOutOfRange {
             fixture: FixtureId::new(1),
             address: 508,
@@ -348,14 +348,14 @@ fn a_fixture_that_does_not_fit_never_becomes_an_engine() {
     );
     // One channel lower it fits exactly, ending on 512.
     let fits = fixture(1, "test.head", 1, 507);
-    let body = MergeBody::for_patch(&layout, [(&fits, &head)], []).unwrap();
+    let body = MergeBody::for_patch(&layout, [(&fits, &head)], NO_PLAYBACKS).unwrap();
     assert_eq!(body.channels().target_count(), 3);
 
     // And a fixture in a universe that has no frame to be written into is
     // rejected the same way, rather than being silently dropped.
     let elsewhere = fixture(2, "test.head", 9, 1);
     assert_eq!(
-        MergeBody::for_patch(&layout, [(&elsewhere, &head)], []).unwrap_err(),
+        MergeBody::for_patch(&layout, [(&elsewhere, &head)], NO_PLAYBACKS).unwrap_err(),
         PatchError::UniverseNotPatched {
             fixture: FixtureId::new(2),
             universe: UniverseId::new(9),

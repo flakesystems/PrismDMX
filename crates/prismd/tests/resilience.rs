@@ -62,7 +62,7 @@ use std::time::{Duration, Instant};
 use prism_core::{SessionMirror, ShowMirror};
 use prism_domain::{
     AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, JsonPatchOp, JsonValue,
-    ProgrammerState, SelectionMode, UniverseId,
+    PlaybackTarget, ProgrammerState, SelectionMode, UniverseId,
 };
 use prism_ipc::{Client, ClientError, ClientEvent, ClientKind, Hello, RejectReason};
 use prism_protocols::FrameRecord;
@@ -234,7 +234,7 @@ async fn a_client_killed_mid_show_costs_the_rig_nothing() {
                 .unwrap();
             client
                 .send(Command::ExecutorGo {
-                    executor_id: ExecutorId::new(0),
+                    target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                     direction: GoDirection::Next,
                 })
                 .await
@@ -408,7 +408,7 @@ async fn a_killed_client_comes_back_to_the_state_it_had_accumulated() {
             level: 30000,
         },
         Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: GoDirection::Next,
         },
         Command::PatchFixture {

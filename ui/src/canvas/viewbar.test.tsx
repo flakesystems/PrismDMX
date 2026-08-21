@@ -12,7 +12,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { JsonValue, WindowType } from "../bindings";
 import { nullSink, setLogSink } from "../log/logger";
 import { ViewBar } from "./viewbar";
-import type { MoveDirection } from "./viewbar";
 
 /** A bar over one session document, and what it asked for. */
 function bar(session: JsonValue) {
@@ -20,7 +19,7 @@ function bar(session: JsonValue) {
   const stored: { id: number; name: string }[] = [];
   const renamed: { id: number; name: string }[] = [];
   const deleted: number[] = [];
-  const moved: { id: number; direction: MoveDirection }[] = [];
+  const moved: { id: number; to: number }[] = [];
   const opened: WindowType[] = [];
   render(
     <ViewBar
@@ -29,7 +28,7 @@ function bar(session: JsonValue) {
       onStoreView={(viewId, name) => stored.push({ id: viewId, name })}
       onRenameView={(viewId, name) => renamed.push({ id: viewId, name })}
       onDeleteView={(viewId) => deleted.push(viewId)}
-      onMoveView={(viewId, direction) => moved.push({ id: viewId, direction })}
+      onMoveView={(viewId, toViewId) => moved.push({ id: viewId, to: toViewId })}
       onOpenWindow={(type) => opened.push(type)}
     />,
   );

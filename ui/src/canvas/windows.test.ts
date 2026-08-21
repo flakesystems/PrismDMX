@@ -89,15 +89,34 @@ const SCRIPT: readonly Command[] = [
   { t: "SelectView", viewId: 2 },
   { t: "SelectView", viewId: 9 },
   { t: "SelectView", viewId: 1 },
-  // S35's eight, in the order `crates/prismd/tests/ui_session.rs` sends them.
+  // S35's eight, in the order `crates/prismd/tests/ui_session.rs` sends them —
+  // said in S40's words, which is the whole of what changed: managing a view is
+  // `Label`, `Move`, `Delete` and `Copy` over an `ObjectRef::View`, the same
+  // four verbs every other pool takes.
   { t: "StoreView", viewId: 5, name: "Busking" },
-  { t: "RenameView", viewId: 5, name: "Front of house" },
-  { t: "RenameView", viewId: 9, name: "Nowhere" },
-  { t: "MoveView", viewId: 5, direction: "Prev" },
-  { t: "MoveView", viewId: 1, direction: "Prev" },
+  { t: "Label", target: { t: "View", viewId: 5 }, name: "Front of house" },
+  { t: "Label", target: { t: "View", viewId: 9 }, name: "Nowhere" },
+  {
+    t: "Move",
+    from: { t: "View", viewId: 5 },
+    to: { t: "View", viewId: 2 },
+    mode: "Merge",
+  },
+  {
+    t: "Move",
+    from: { t: "View", viewId: 1 },
+    to: { t: "View", viewId: 1 },
+    mode: "Merge",
+  },
+  {
+    t: "Copy",
+    from: { t: "View", viewId: 2 },
+    to: { t: "View", viewId: 7 },
+    mode: "Merge",
+  },
   { t: "SelectView", viewId: 2 },
-  { t: "DeleteView", viewId: 2 },
-  { t: "DeleteView", viewId: 9 },
+  { t: "Delete", target: { t: "View", viewId: 2 } },
+  { t: "Delete", target: { t: "View", viewId: 9 } },
 ];
 
 /** Bytes out of a base64 payload, the way a browser does it (S23). */

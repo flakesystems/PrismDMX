@@ -19,6 +19,7 @@ import type { Snapshot } from "../ipc/protocol";
 import { TelemetrySink } from "../ipc/telemetry";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
+import { Shell } from "../testing/shell";
 import { DeskStore, deskEvents } from "../store/desk";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { answerAbout, deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
@@ -100,6 +101,17 @@ async function desk() {
       .filter((message) => message.t === "Command")
       .map((message) => message.command);
 
+  /**
+   * The commands a gesture produced, without the line it wrote on the way.
+   *
+   * A key writes into `Session::commandLine` and then runs the line (S40,
+   * `ARCHITECTURE_SPEC.md` §4.5), so every gesture sends a `CommandLineInput`
+   * before the command and another one clearing the line after it. What most of
+   * these tests are about is *which command*, and this is that.
+   */
+  const acted = (): Command[] =>
+    commands().filter((command) => command.t !== "CommandLineInput");
+
   const queries = (): { seq: number; t: string }[] =>
     sent()
       .filter((message) => message.t === "Query")
@@ -129,7 +141,7 @@ async function desk() {
     });
   };
 
-  return { commands, queries, answerQuery, applyStep };
+  return { commands, acted, queries, answerQuery, applyStep };
 }
 
 /** The recorded script up to the point where preset 1 exists. */
@@ -198,12 +210,12 @@ describe("the preset pools", () => {
   });
 
   it("applies a preset by number, and holds nothing about the answer", async () => {
-    const { commands, applyStep } = await desk();
+    const { acted, applyStep } = await desk();
     await applyStep(...A_PRESET);
     fireEvent.click(screen.getByTestId("preset-1"));
     // A number and no pool: `ApplyPreset` is unambiguous because preset numbers
     // are unique across pools.
-    expect(commands()).toEqual([{ t: "ApplyPreset", presetId: 1 }]);
+    expect(acted()).toEqual([{ t: "ApplyPreset", presetId: 1 }]);
   });
 
   it("asks the daemon what a store would do, and puts the answer on the button", async () => {
@@ -218,14 +230,17 @@ describe("the preset pools", () => {
   });
 
   it("stores into the pool that is chosen, with the number and the name in the boxes", async () => {
-    const { commands, applyStep } = await desk();
+    const { acted, applyStep } = await desk();
     await applyStep(...A_PRESET);
     fireEvent.click(screen.getByTestId("pool-Beam"));
     // Preset 1 is taken, so the box offers 2 — the next number free *anywhere*.
     expect(valueIn("preset-number")).toBe("2");
     type("preset-name", "Tight");
     fireEvent.submit(screen.getByTestId("preset-store"));
-    expect(commands()).toEqual([
+    // **The line names the pool** — `Store Preset 2 Beam "Tight"` — because
+    // this window has a tab of its own and the command line falls back to the
+    // encoder bank (S40).
+    expect(acted()).toEqual([
       { t: "StorePreset", presetId: 2, pool: "Beam", name: "Tight", color: null, mode: "Merge" },
     ]);
     // **Dropped, not kept**: the boxes go back to offering what the daemon's
@@ -234,7 +249,7 @@ describe("the preset pools", () => {
   });
 
   it("carries the colour that is already there through a relabel", async () => {
-    const { commands, applyStep } = await desk();
+    const { acted, applyStep } = await desk();
     await applyStep(...A_PRESET);
     type("preset-number", "1");
     // The name follows the number: moving onto a preset that exists offers its
@@ -242,15 +257,19 @@ describe("the preset pools", () => {
     expect(valueIn("preset-name")).toBe("Deep blue");
     type("preset-name", "Darker blue");
     fireEvent.submit(screen.getByTestId("preset-store"));
-    expect(commands()).toEqual([
+    expect(acted()).toEqual([
       {
         t: "StorePreset",
         presetId: 1,
         pool: "Color",
         name: "Darker blue",
-        // A relabel that dropped the colour would throw away something an
-        // operator chose and nothing on this screen can put back.
-        color: { r: 0, g: 0, b: 255 },
+        // **The colour is not sent, and that is the point** (S40). A relabel
+        // that dropped it would throw away something an operator chose and
+        // nothing on this screen can put back; a client that read it back off
+        // its mirror and sent it would be the read-modify-write S28 refused for
+        // a cue. So the command carries none and the *daemon* keeps it —
+        // `prism_core::Programmer::preset`.
+        color: null,
         // The chooser's default, carried rather than assumed by the daemon —
         // S39. A relabel is a Merge, which is the mode that cannot lose a value.
         mode: "Merge",
@@ -263,7 +282,7 @@ describe("the preset pools", () => {
     // `Preset::color` is optional — and painting one black would say that
     // somebody had chosen black.
     const { unmount } = render(
-      <DeskProvider store={new DeskStore()}>
+      <Shell store={new DeskStore()}>
         <PresetPool
           show={{
             presets: {
@@ -272,7 +291,7 @@ describe("the preset pools", () => {
           }}
           programmer={null}
         />
-      </DeskProvider>,
+      </Shell>,
     );
     expect(screen.getByTestId("preset-swatch-3").getAttribute("data-color")).toBe("");
     expect(screen.getByTestId("preset-swatch-3").getAttribute("style")).toBeNull();
@@ -299,14 +318,14 @@ describe("the preset pools", () => {
   });
 
   it("refuses a preset number that is not a number, rather than sending a zero", async () => {
-    const { commands, applyStep } = await desk();
+    const { acted, applyStep } = await desk();
     await applyStep(...A_PRESET);
     type("preset-number", "");
     type("preset-number", "nonsense");
     // The box still offers what it offered: an empty box is *no answer yet*.
     expect(valueIn("preset-number")).toBe("2");
     fireEvent.submit(screen.getByTestId("preset-store"));
-    expect(commands()).toEqual([
+    expect(acted()).toEqual([
       { t: "StorePreset", presetId: 2, pool: "Color", name: "Color 2", color: null, mode: "Merge" },
     ]);
   });

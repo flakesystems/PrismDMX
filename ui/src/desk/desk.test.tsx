@@ -113,6 +113,17 @@ function desk() {
             )
             .map((message) => message.command);
 
+  /**
+   * The commands a gesture produced, without the line it wrote on the way.
+   *
+   * A key writes into `Session::commandLine` and then runs the line (S40,
+   * `ARCHITECTURE_SPEC.md` §4.5), so every gesture sends a `CommandLineInput`
+   * before the command and another one clearing the line after it. What most of
+   * these tests are about is *which command*, and this is that.
+   */
+  const acted = (): Command[] =>
+    commands().filter((command) => command.t !== "CommandLineInput");
+
     /** The daemon answers with the deltas of one recorded step. */
     const answer = (step: number): void => {
         act(() => {
@@ -122,7 +133,7 @@ function desk() {
         });
     };
 
-    return { view, store, commands, answer };
+    return { view, store, commands, acted, answer };
 }
 
 /** What the eight strips are showing, as `id:name` pairs. */
@@ -148,7 +159,7 @@ describe("the executor bar", () => {
      * `ui/e2e/desk.spec.ts`, where a real console presses `Faderbank ▶`.
      */
     it("shows exactly the current page, and pages by command", () => {
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         expect(strips()).toEqual([
             "0:Warm Wash",
             "1:",
@@ -162,7 +173,7 @@ describe("the executor bar", () => {
         expect(screen.getByTestId("page-number").textContent).toBe("0");
 
         fireEvent.click(screen.getByTestId("page-up"));
-        expect(commands()).toEqual([{ t: "SetExecutorPage", page: 1 }]);
+        expect(acted()).toEqual([{ t: "SetExecutorPage", page: 1 }]);
         // Nothing has moved: the page is the session's.
         expect(screen.getByTestId("page-number").textContent).toBe("0");
         expect(strips()[0]).toBe("0:Warm Wash");
@@ -189,24 +200,24 @@ describe("the executor bar", () => {
     });
 
     it("cannot page below zero", () => {
-        const { commands } = desk();
+        const { acted } = desk();
         expect(screen.getByTestId("page-down").hasAttribute("disabled")).toBe(true);
         fireEvent.click(screen.getByTestId("page-down"));
-        expect(commands()).toEqual([]);
+        expect(acted()).toEqual([]);
     });
 
     it("pages back down once there is somewhere to go", () => {
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         answer(0);
         expect(screen.getByTestId("page-down").hasAttribute("disabled")).toBe(false);
         fireEvent.click(screen.getByTestId("page-down"));
-        expect(commands()).toEqual([{ t: "SetExecutorPage", page: 0 }]);
+        expect(acted()).toEqual([{ t: "SetExecutorPage", page: 0 }]);
     });
 
 it("asks for an executor to be selected rather than lighting it", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     fireEvent.click(screen.getByTestId("select-2"));
-    expect(commands()).toEqual([{ t: "SelectExecutor", executorId: 2 }]);
+    expect(acted()).toEqual([{ t: "SelectExecutor", executorId: 2 }]);
     expect(screen.getByTestId("strip-2").dataset["selected"]).toBe("no");
     // Step 3 of the script is that very command.
     for (const step of [0, 1, 2, 3]) {
@@ -223,7 +234,7 @@ function pressButton(testId: string) {
 }
 
 it("sends which button was pressed, and never what it means", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     // Strip 0's four are Go+, Go−, Off, Empty — and Empty draws nothing.
     expect(screen.getByTestId("button-0-0").dataset["function"]).toBe("Go+");
     expect(screen.getByTestId("button-0-1").dataset["function"]).toBe("Go-");
@@ -237,7 +248,7 @@ it("sends which button was pressed, and never what it means", () => {
     // would be this interface deciding what a show setting means (S34,
     // `docs/MCU_MAPPING.md` §4.2.1). Both edges go out, because `Flash` is
     // momentary and this bar cannot know which key has one.
-    expect(commands()).toEqual([
+    expect(acted()).toEqual([
         { t: "ExecutorButton", executorId: 0, button: { t: "Slot", index: 0 }, pressed: true },
         { t: "ExecutorButton", executorId: 0, button: { t: "Slot", index: 0 }, pressed: false },
         { t: "ExecutorButton", executorId: 0, button: { t: "Slot", index: 2 }, pressed: true },
@@ -267,7 +278,7 @@ it("sends which button was pressed, and never what it means", () => {
  * sends the position and nothing else.
  */
     it("presses the four functions it once had to draw disabled", () => {
-        const { commands } = desk();
+        const { acted } = desk();
         for (const [index, fn] of ["Flash", "Toggle", "On", "LearnSpeed"].entries()) {
             const button = screen.getByTestId(`button-2-${String(index)}`);
             expect(button.dataset["function"]).toBe(fn);
@@ -279,7 +290,7 @@ it("sends which button was pressed, and never what it means", () => {
         // what a function means. Not one `SelectExecutor` either — the select
         // target is the strip's head, so pressing a button on a strip does not
         // also select it.
-        expect(commands()).toEqual(
+        expect(acted()).toEqual(
             [0, 1, 2, 3].flatMap((index) => [
                 { t: "ExecutorButton", executorId: 2, button: { t: "Slot", index }, pressed: true },
                 {
@@ -295,11 +306,11 @@ it("sends which button was pressed, and never what it means", () => {
     it("releases a flash even when the pointer slides off the key", () => {
         // The half of `Flash` that puts the stored master back. A press with no
         // release is a strip left at full for the rest of the show.
-        const { commands } = desk();
+        const { acted } = desk();
         const button = screen.getByTestId("button-2-0");
         fireEvent.pointerDown(button, { button: 0, pointerId: 1 });
         fireEvent.pointerCancel(button, { pointerId: 1 });
-        expect(commands()).toEqual([
+        expect(acted()).toEqual([
             { t: "ExecutorButton", executorId: 2, button: { t: "Slot", index: 0 }, pressed: true },
             { t: "ExecutorButton", executorId: 2, button: { t: "Slot", index: 0 }, pressed: false },
         ]);
@@ -321,7 +332,7 @@ it("sends which button was pressed, and never what it means", () => {
     });
 
     it("does not offer a fader on a slot with no executor", () => {
-        const { commands } = desk();
+        const { acted } = desk();
         fireEvent.pointerDown(screen.getByTestId("fader-1"), {
             button: 0,
             clientY: 100,
@@ -329,7 +340,7 @@ it("sends which button was pressed, and never what it means", () => {
         });
         fireEvent.pointerMove(window, { clientY: 0, pointerId: 1 });
         fireEvent.pointerUp(window, { pointerId: 1 });
-        expect(commands()).toEqual([]);
+        expect(acted()).toEqual([]);
     });
 
     /**
@@ -339,7 +350,7 @@ it("sends which button was pressed, and never what it means", () => {
      * that held the value and "synced up" afterwards.
      */
     it("sends where the fader went and holds nothing when it gets there", () => {
-        const { commands } = desk();
+        const { acted } = desk();
         const fader = screen.getByTestId("fader-0");
         // jsdom gives every element a zero-sized box, so a pixel is a level here —
         // which is what `ValueDrag` answers for an element that has not been laid
@@ -350,20 +361,20 @@ it("sends which button was pressed, and never what it means", () => {
         expect(screen.getByTestId("fader-0").dataset["level"]).toBe("65435");
         fireEvent.pointerUp(window, { pointerId: 1 });
 
-        expect(commands()).toEqual([{ t: "SetExecutorMaster", executorId: 0, level: 65435 }]);
+        expect(acted()).toEqual([{ t: "SetExecutorMaster", executorId: 0, level: 65435 }]);
         // And with no delta, the fader is back at the daemon's level.
         expect(screen.getByTestId("fader-0").dataset["level"]).toBe("65535");
     });
 
     it("ignores a right-click on a fader", () => {
-        const { commands } = desk();
+        const { acted } = desk();
         fireEvent.pointerDown(screen.getByTestId("fader-0"), {
             button: 2,
             clientY: 100,
             pointerId: 1,
         });
         fireEvent.pointerMove(window, { clientY: 0, pointerId: 1 });
-        expect(commands()).toEqual([]);
+        expect(acted()).toEqual([]);
     });
 });
 
@@ -427,7 +438,7 @@ describe("paging the encoder bar", () => {
     });
 
     it("draws four at a time and pages by command", () => {
-        const { commands, store } = desk();
+        const { acted, store } = desk();
         session(store, { encoderBank: "Beam" });
         expect(drawn()).toEqual(["Iris", "Zoom", "Gobo", "Prism"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
@@ -436,7 +447,7 @@ describe("paging the encoder bar", () => {
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(false);
 
         fireEvent.click(screen.getByTestId("encoder-page-down"));
-        expect(commands()).toEqual([{ t: "SetProgrammerPage", page: 1 }]);
+        expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 1 }]);
         // D3: the page is the session's, so nothing has moved.
         expect(drawn()).toEqual(["Iris", "Zoom", "Gobo", "Prism"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
@@ -450,15 +461,15 @@ describe("paging the encoder bar", () => {
     });
 
     it("pages back down, and cannot page below the first page", () => {
-        const { commands, store } = desk();
+        const { acted, store } = desk();
         session(store, { encoderBank: "Beam", programmerPage: 1 });
         fireEvent.click(screen.getByTestId("encoder-page-up"));
-        expect(commands()).toEqual([{ t: "SetProgrammerPage", page: 0 }]);
+        expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 0 }]);
 
         session(store, { programmerPage: 0 });
         fireEvent.click(screen.getByTestId("encoder-page-up"));
         // Disabled, so the press sent nothing at all.
-        expect(commands()).toEqual([{ t: "SetProgrammerPage", page: 0 }]);
+        expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 0 }]);
     });
 
     /**
@@ -498,14 +509,14 @@ describe("paging the encoder bar", () => {
 
 describe("the encoder bar", () => {
     it("lights the bank the session names and asks for another", () => {
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         expect(screen.getByTestId("bank-Dimmer").dataset["active"]).toBe("yes");
         expect(screen.getByTestId("bank-Position").dataset["active"]).toBe("no");
         // The Dimmer bank has one encoder; Position has two.
         expect(screen.getByTestId("encoders").children.length).toBe(1);
 
         fireEvent.click(screen.getByTestId("bank-Position"));
-        expect(commands()).toEqual([{ t: "SetEncoderBank", group: "Position" }]);
+        expect(acted()).toEqual([{ t: "SetEncoderBank", group: "Position" }]);
         expect(screen.getByTestId("bank-Position").dataset["active"]).toBe("no");
 
         for (let step = 0; step <= 8; step += 1) {
@@ -554,7 +565,7 @@ describe("the encoder bar", () => {
     });
 
     it("turns an encoder as a relative command, and holds nothing", () => {
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         for (let step = 0; step <= 14; step += 1) {
             answer(step);
         }
@@ -566,7 +577,7 @@ describe("the encoder bar", () => {
         });
         fireEvent.pointerMove(window, { clientX: 4, pointerId: 1 });
         fireEvent.pointerUp(window, { pointerId: 1 });
-        expect(commands()).toEqual([
+        expect(acted()).toEqual([
             { t: "SetAttribute", attribute: "Pan", value: 512, relative: true },
         ]);
         // Nothing local moved: an encoder reads the programmer, and the programmer
@@ -575,13 +586,13 @@ describe("the encoder bar", () => {
     });
 
     it("steps the highlighted parameter, and stops at both ends of the bank", () => {
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         for (let step = 0; step <= 14; step += 1) {
             answer(step);
         }
         expect(screen.getByTestId("param-prev").hasAttribute("disabled")).toBe(true);
         fireEvent.click(screen.getByTestId("param-next"));
-        expect(commands()).toEqual([{ t: "SelectProgrammerParam", direction: "Next" }]);
+        expect(acted()).toEqual([{ t: "SelectProgrammerParam", direction: "Next" }]);
 
         answer(17);
         expect(screen.getByTestId("encoder-Tilt").dataset["selected"]).toBe("yes");
@@ -589,11 +600,11 @@ describe("the encoder bar", () => {
         expect(screen.getByTestId("param-next").hasAttribute("disabled")).toBe(true);
         expect(screen.getByTestId("param-prev").hasAttribute("disabled")).toBe(false);
         fireEvent.click(screen.getByTestId("param-prev"));
-        expect(commands().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
+        expect(acted().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
     });
 
     it("ignores a right-click on an encoder", () => {
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         for (let step = 0; step <= 14; step += 1) {
             answer(step);
         }
@@ -604,29 +615,29 @@ describe("the encoder bar", () => {
         });
         fireEvent.pointerMove(window, { clientX: 400, pointerId: 1 });
         fireEvent.pointerUp(window, { pointerId: 1 });
-        expect(commands()).toEqual([]);
+        expect(acted()).toEqual([]);
     });
 
     it("composes a click on an encoder out of the steps the protocol has", () => {
         // There is no absolute form of `SelectProgrammerParam` — the console has
         // none either, `Zoom ◀▶` steps — so a click is the steps between here and
         // there. A bank has at most six parameters.
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         for (let step = 0; step <= 8; step += 1) {
             answer(step);
         }
         fireEvent.click(screen.getByTestId("encoder-Tilt"));
-        expect(commands()).toEqual([{ t: "SelectProgrammerParam", direction: "Next" }]);
+        expect(acted()).toEqual([{ t: "SelectProgrammerParam", direction: "Next" }]);
         answer(17);
         fireEvent.click(screen.getByTestId("encoder-Pan"));
-        expect(commands().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
+        expect(acted().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
     });
 
     it("asks for a Clear and says which stage the next press is", () => {
-        const { commands, answer } = desk();
+        const { acted, answer } = desk();
         expect(screen.getByTestId("clear").dataset["stage"]).toBe("0");
         fireEvent.click(screen.getByTestId("clear"));
-        expect(commands()).toEqual([{ t: "ClearProgrammer" }]);
+        expect(acted()).toEqual([{ t: "ClearProgrammer" }]);
         expect(screen.getByTestId("clear").dataset["stage"]).toBe("0");
 
         for (let step = 0; step <= 20; step += 1) {

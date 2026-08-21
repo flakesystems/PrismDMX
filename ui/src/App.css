@@ -1074,10 +1074,19 @@
     background: var(--panel);
 }
 
+/*
+ * The command line, since S40: an input, the question it may be holding, what
+ * the line would do, the words that are legal here, and the keypad.
+ *
+ * It is a **column** rather than the row S26 had, because there are five things
+ * in it now and a row of five would push the canvas up. `flex: 0 0 auto` on the
+ * footer keeps the canvas the thing that shrinks (`CLAUDE.md`: no scrolling
+ * outside the canvas), and every row inside it is one line high.
+ */
 .command-line {
     display: flex;
-    align-items: baseline;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.25rem;
     padding: 0.3rem 0.6rem;
     border-bottom: 1px solid var(--edge);
 }
@@ -1087,6 +1096,81 @@
     align-items: baseline;
     gap: 0.5rem;
     flex: 1 1 auto;
+}
+
+/*
+ * The question a line is holding — *merge, override or cancel*.
+ *
+ * **In the footer and not over the canvas.** `CLAUDE.md` asks for a device
+ * screen, and a modal over the canvas would be neither that nor something a
+ * second operator could work around. The show carries on behind it.
+ */
+.command-prompt {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.2rem 0.4rem;
+    border: 1px solid var(--warn, var(--edge-lit));
+    border-radius: 3px;
+    background: var(--ground);
+}
+
+/* The words that are legal at this point in the line. */
+.command-words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+}
+
+/*
+ * The keypad — `ARCHITECTURE_SPEC.md` §4.5's three shapes.
+ *
+ * The three are told apart by weight rather than by colour, because a desk is
+ * operated in the dark by somebody who is not looking closely: a key that
+ * **acts** is the loud one, a key that **waits** is ordinary, and a key that is
+ * only a word is quiet.
+ */
+.command-keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.command-key {
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.command-key-run {
+    border-color: var(--ink-dim);
+    font-weight: 600;
+}
+
+.command-key-append {
+    color: var(--ink-dim);
+}
+
+.command-key:hover {
+    border-color: var(--ink);
+}
+
+/* The two keys beside a box in a pool. */
+.pool-keys {
+    display: flex;
+    gap: 0.4rem;
+    justify-content: flex-end;
+    padding: 0 0.2rem 0.2rem;
 }
 
 .command-line label {

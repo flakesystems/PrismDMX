@@ -26,7 +26,7 @@ import { nullSink, setLogSink } from "../log/logger";
 import { applyDelta } from "../mirror/mirror";
 import type { Documents } from "../mirror/mirror";
 import { TelemetrySink } from "../ipc/telemetry";
-import { DeskProvider } from "../store/context";
+import { Shell } from "../testing/shell";
 import { DeskStore } from "../store/desk";
 import { TelemetryProvider } from "../telemetry/panel";
 import { Canvas } from "./canvas";
@@ -94,7 +94,7 @@ function canvas(documents: Documents) {
     // where the drawing is asserted; what this file needs is the canvas
     // element to be in the window. And a store, because the Patch window
     // sends commands and asks questions like every other part of the desk.
-    <DeskProvider store={new DeskStore()}>
+    <Shell store={new DeskStore()} session={documents.session} show={documents.show}>
       <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
         <Canvas
           session={documents.session}
@@ -105,7 +105,7 @@ function canvas(documents: Documents) {
           onClose={(instanceId) => closed.push(instanceId)}
         />
       </TelemetryProvider>
-    </DeskProvider>,
+    </Shell>,
   );
   return { placed, focused, closed, view, documents };
 }
@@ -237,7 +237,7 @@ describe("dragging a window", () => {
       ],
     });
     view.rerender(
-      <DeskProvider store={new DeskStore()}>
+      <Shell store={new DeskStore()} session={moved.session} show={moved.show}>
         <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
           <Canvas
             session={moved.session}
@@ -248,7 +248,7 @@ describe("dragging a window", () => {
             onClose={() => undefined}
           />
         </TelemetryProvider>
-      </DeskProvider>,
+      </Shell>,
     );
     expect(styleOf(1)).toEqual(asStyle({ x: 340, y: 120, w: 640, h: 480 }));
   });

@@ -242,6 +242,41 @@ export function presetsDocument(show: JsonValue | null): JsonValue | null {
   return valueAt(show, PRESETS);
 }
 
+/** One group, as this window draws it. */
+export interface GroupRow {
+  /** The group number, which is what a line names. */
+  readonly id: number;
+  /** Operator-facing name. */
+  readonly name: string;
+  /** How many fixtures it holds. */
+  readonly fixtures: number;
+}
+
+/**
+ * Every group the show holds, in number order.
+ *
+ * A reader over the document, like every other reader in this interface: nothing
+ * is parsed and kept.
+ */
+export function groupRows(show: JsonValue | null): readonly GroupRow[] {
+  const value = valueAt(show, "/groups");
+  if (!isObject(value)) {
+    return [];
+  }
+  return Object.entries(value)
+    .map(([key, entry]) => {
+      const members = valueAt(entry, "/fixtures");
+      const name = valueAt(entry, "/name");
+      return {
+        id: Number(key),
+        name: typeof name === "string" ? name : "",
+        fixtures: Array.isArray(members) ? members.length : 0,
+      };
+    })
+    .filter((row) => Number.isInteger(row.id))
+    .sort((left, right) => left.id - right.id);
+}
+
 /** The preset pools, in number order. */
 export function presetRows(show: JsonValue | null): readonly PresetRow[] {
   const presets = valueAt(show, PRESETS);

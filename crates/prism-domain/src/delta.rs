@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{ExecutorId, JsonPatchOp, OutputId, ProgrammerState, output::OutputHealth};
+use crate::{JsonPatchOp, OutputId, PlaybackId, ProgrammerState, output::OutputHealth};
 
 /// Severity of a [`Delta::Notice`], matching the logger levels in `CLAUDE.md`.
 #[derive(
@@ -53,10 +53,20 @@ pub enum Delta {
         /// The new programmer state.
         state: ProgrammerState,
     },
-    /// An executor started, stopped or moved to another cue.
-    ExecutorState {
-        /// The executor concerned.
-        executor_id: ExecutorId,
+    /// A playback started, stopped or moved to another cue.
+    ///
+    /// **It was `ExecutorState` until S40**, and the rename is the whole of that
+    /// session's playback change in one line: a cue list on no fader can now
+    /// play, so the thing that reports is a [`crate::PlaybackId`] rather than an
+    /// executor number. A strip still gets exactly what it got before, because
+    /// `PlaybackId::Executor` is what an executor reports as.
+    ///
+    /// The protocol gives running playbacks their own delta rather than folding
+    /// them into a `ShowPatch` so a client does not have to diff the show to
+    /// draw a moving executor bar.
+    PlaybackState {
+        /// Which playback.
+        playback: PlaybackId,
         /// Whether it is now running.
         is_active: bool,
         /// Index of the current cue, if one is active.
@@ -87,8 +97,8 @@ pub enum Delta {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Delta, ExecutorId, JsonPatchOp, JsonValue, NoticeLevel, OutputHealth, OutputId,
-        ProgrammerState,
+        Delta, ExecutorId, JsonPatchOp, JsonValue, NoticeLevel, OutputHealth, OutputId, PlaybackId,
+        ProgrammerState, SequenceId,
     };
 
     #[test]
@@ -107,14 +117,28 @@ mod tests {
 
     #[test]
     fn executor_state_reports_activity_and_cue_position() {
-        let delta = Delta::ExecutorState {
-            executor_id: ExecutorId::new(3),
+        let delta = Delta::PlaybackState {
+            playback: PlaybackId::of_executor(ExecutorId::new(3)),
             is_active: true,
             cue_index: Some(2),
         };
         assert_eq!(
             serde_json::to_string(&delta).unwrap(),
-            r#"{"t":"ExecutorState","executorId":3,"isActive":true,"cueIndex":2}"#
+            r#"{"t":"PlaybackState","playback":{"t":"Executor","executorId":3},"isActive":true,"cueIndex":2}"#
+        );
+    }
+
+    /// S40: a cue list with no fader under it reports as itself.
+    #[test]
+    fn a_sequence_playing_on_no_executor_reports_as_a_sequence() {
+        let delta = Delta::PlaybackState {
+            playback: PlaybackId::of_sequence(SequenceId::new(7)),
+            is_active: true,
+            cue_index: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&delta).unwrap(),
+            r#"{"t":"PlaybackState","playback":{"t":"Sequence","sequenceId":7},"isActive":true,"cueIndex":null}"#
         );
     }
 
@@ -161,8 +185,8 @@ mod tests {
             Delta::ProgrammerChanged {
                 state: ProgrammerState::default(),
             },
-            Delta::ExecutorState {
-                executor_id: ExecutorId::new(0),
+            Delta::PlaybackState {
+                playback: PlaybackId::of_executor(ExecutorId::new(0)),
                 is_active: false,
                 cue_index: None,
             },

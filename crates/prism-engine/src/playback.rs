@@ -24,7 +24,7 @@
 //! state — and `resolving_twice_gives_the_same_answer` in this module's tests
 //! is what holds that claim up.
 
-use prism_domain::{ExecutorId, MergeMode};
+use prism_domain::{MergeMode, PlaybackId};
 
 use crate::merge::{FULL, apply_master};
 use crate::plan::{MergeError, MergePlan};
@@ -36,8 +36,14 @@ use crate::plan::{MergeError, MergePlan};
 /// product into a refusal to start rather than a huge allocation.
 pub const MAX_SOURCES: usize = 1_024;
 
-/// One executor as the merge sees it: a master level, an activation stamp and
+/// One playback as the merge sees it: a master level, an activation stamp and
 /// the attribute values it is currently providing.
+///
+/// **It was one per executor until S40**, and is now one per
+/// [`PlaybackId`] — a cue list playing on no fader is a source like any other,
+/// with its master at full, which is the whole of what S40 needed from this
+/// module. Nothing else about the merge moved: `docs/DMX_MERGE.md` §2 is written
+/// about *sources*, and an executor is still one.
 ///
 /// The values are sparse — a cue touches a handful of fixtures, not the whole
 /// rig — but stored densely with a list of the slots that have been written.
@@ -45,7 +51,7 @@ pub const MAX_SOURCES: usize = 1_024;
 /// iterating costs what the source actually contains.
 #[derive(Debug, Clone)]
 pub struct PlaybackSource {
-    executor: ExecutorId,
+    id: PlaybackId,
     activation: Option<u64>,
     master: u16,
     /// The level a held `Flash` is contributing at, if one is held.
@@ -64,9 +70,9 @@ pub struct PlaybackSource {
 }
 
 impl PlaybackSource {
-    fn new(executor: ExecutorId, slots: usize) -> Self {
+    fn new(id: PlaybackId, slots: usize) -> Self {
         Self {
-            executor,
+            id,
             activation: None,
             // A fader nobody has touched reads full: an executor switched on
             // before its master is moved has to produce light.
@@ -79,10 +85,10 @@ impl PlaybackSource {
         }
     }
 
-    /// Which executor this source is.
+    /// Which playback this source is.
     #[must_use]
-    pub const fn executor(&self) -> ExecutorId {
-        self.executor
+    pub const fn id(&self) -> PlaybackId {
+        self.id
     }
 
     /// Whether this source takes part in the merge at all.
@@ -98,7 +104,7 @@ impl PlaybackSource {
         self.activation
     }
 
-    /// The executor's **stored** master level, `0..=65535`.
+    /// The playback's **stored** master level, `0..=65535`.
     ///
     /// What the show holds and what a rebuild puts back. A held flash does not
     /// appear here — see [`Self::flash`] and [`Self::effective_master`].
@@ -210,8 +216,8 @@ impl MergeScratch {
 /// The winner so far for one slot.
 #[derive(Debug, Clone, Copy)]
 struct Accumulator {
-    /// LTP ordering key of the winning source: `(activation, executor)`.
-    order: (u64, u32),
+    /// LTP ordering key of the winning source: `(activation, playback)`.
+    order: (u64, u64),
     /// The winning value — an LTP source's value, or the running HTP maximum.
     value: u16,
     /// Whether any source has contributed. Distinguishes "the merge resolved to
@@ -246,9 +252,9 @@ impl PlaybackLayer {
     /// [`MergeError::TooManySources`] if there are more than [`MAX_SOURCES`].
     pub fn new(
         plan: &MergePlan,
-        executors: impl IntoIterator<Item = ExecutorId>,
+        playbacks: impl IntoIterator<Item: Into<PlaybackId>>,
     ) -> Result<Self, MergeError> {
-        let mut ids: Vec<ExecutorId> = executors.into_iter().collect();
+        let mut ids: Vec<PlaybackId> = playbacks.into_iter().map(Into::into).collect();
         ids.sort_unstable();
         ids.dedup();
         if ids.len() > MAX_SOURCES {
@@ -256,7 +262,7 @@ impl PlaybackLayer {
         }
         let sources = ids
             .into_iter()
-            .map(|executor| PlaybackSource::new(executor, plan.slot_count()))
+            .map(|id| PlaybackSource::new(id, plan.slot_count()))
             .collect::<Vec<_>>()
             .into_boxed_slice();
         Ok(Self {
@@ -271,39 +277,43 @@ impl PlaybackLayer {
         self.sources.len()
     }
 
-    /// Every source, in executor order.
+    /// Every source, in playback order.
     #[must_use]
     pub const fn sources(&self) -> &[PlaybackSource] {
         &self.sources
     }
 
-    fn index_of(&self, executor: ExecutorId) -> Option<usize> {
+    fn index_of(&self, id: PlaybackId) -> Option<usize> {
         self.sources
-            .binary_search_by_key(&executor, PlaybackSource::executor)
+            .binary_search_by_key(&id, PlaybackSource::id)
             .ok()
     }
 
-    /// One source by executor number.
+    // The five lookups below take `impl Into<PlaybackId>` so that every caller
+    // that names an executor - which is nearly all of them - reads as it did
+    // before S40. See `prism_domain::PlaybackId`'s `From` implementations.
+
+    /// One source by playback.
     #[must_use]
-    pub fn source(&self, executor: ExecutorId) -> Option<&PlaybackSource> {
-        self.sources.get(self.index_of(executor)?)
+    pub fn source(&self, id: impl Into<PlaybackId>) -> Option<&PlaybackSource> {
+        self.sources.get(self.index_of(id.into())?)
     }
 
-    /// One source by executor number, for writing values into.
-    pub fn source_mut(&mut self, executor: ExecutorId) -> Option<&mut PlaybackSource> {
-        let index = self.index_of(executor)?;
+    /// One source by playback, for writing values into.
+    pub fn source_mut(&mut self, id: impl Into<PlaybackId>) -> Option<&mut PlaybackSource> {
+        let index = self.index_of(id.into())?;
         self.sources.get_mut(index)
     }
 
     /// Switches a source on and stamps it with the next activation counter.
     ///
-    /// Returns `false` if the executor is unknown **or already active**: an
-    /// executor that is already on has not been turned on again, so pressing
-    /// its button a second time must not reorder the rig under the operator.
-    /// `docs/DMX_MERGE.md` §2.2 orders by when an executor "goes active".
-    pub fn activate(&mut self, executor: ExecutorId) -> bool {
+    /// Returns `false` if the playback is unknown **or already active**: one
+    /// that is already on has not been turned on again, so pressing its button a
+    /// second time must not reorder the rig under the operator.
+    /// `docs/DMX_MERGE.md` §2.2 orders by when a source "goes active".
+    pub fn activate(&mut self, id: impl Into<PlaybackId>) -> bool {
         let stamp = self.next_activation;
-        let Some(source) = self.source_mut(executor) else {
+        let Some(source) = self.source_mut(id) else {
             return false;
         };
         if source.activation.is_some() {
@@ -318,8 +328,8 @@ impl PlaybackLayer {
     }
 
     /// Switches a source off. Returns `false` if it was unknown or already off.
-    pub fn deactivate(&mut self, executor: ExecutorId) -> bool {
-        match self.source_mut(executor) {
+    pub fn deactivate(&mut self, id: impl Into<PlaybackId>) -> bool {
+        match self.source_mut(id) {
             Some(source) if source.activation.is_some() => {
                 source.activation = None;
                 true
@@ -328,14 +338,14 @@ impl PlaybackLayer {
         }
     }
 
-    /// Sets an executor's stored master level. Returns `false` if it is unknown.
+    /// Sets a playback's stored master level. Returns `false` if it is unknown.
     ///
     /// Writes the stored level even while a flash is held: the flash goes on
     /// overriding it until it is released, and then the level that arrived
     /// meanwhile is the one that stands. A flash that had saved the old value
     /// and put it back would silently throw that command away.
-    pub fn set_master(&mut self, executor: ExecutorId, level: u16) -> bool {
-        match self.source_mut(executor) {
+    pub fn set_master(&mut self, id: impl Into<PlaybackId>, level: u16) -> bool {
+        match self.source_mut(id) {
             Some(source) => {
                 source.master = level;
                 true
@@ -344,13 +354,13 @@ impl PlaybackLayer {
         }
     }
 
-    /// Holds or releases a flash over an executor's master.
+    /// Holds or releases a flash over a playback's master.
     ///
-    /// Returns `false` if the executor is unknown. `Some(level)` holds the
+    /// Returns `false` if the playback is unknown. `Some(level)` holds the
     /// flash at that level, `None` releases it and the stored master takes over
     /// again — byte for byte, because it was never written to.
-    pub fn set_flash(&mut self, executor: ExecutorId, level: Option<u16>) -> bool {
-        match self.source_mut(executor) {
+    pub fn set_flash(&mut self, id: impl Into<PlaybackId>, level: Option<u16>) -> bool {
+        match self.source_mut(id) {
             Some(source) => {
                 source.flash = level;
                 true
@@ -382,7 +392,10 @@ impl PlaybackLayer {
             let Some(activation) = source.activation else {
                 continue;
             };
-            let order = (activation, source.executor.get());
+            // The tie-break when two sources went active on the same tick.
+            // `PlaybackId::key` puts every executor before every sequence
+            // playback, so a desk's own faders win it - see that type.
+            let order = (activation, source.id.key());
             for (slot, value) in source.contributions() {
                 let (Some(definition), Some(accumulator)) =
                     (plan.slot(slot), scratch.accumulators.get_mut(slot))
@@ -688,7 +701,7 @@ mod tests {
         let source = layer.source(ExecutorId::new(1)).unwrap();
         assert_eq!(source.master(), FULL);
         assert!(!source.is_active());
-        assert_eq!(source.executor(), ExecutorId::new(1));
+        assert_eq!(source.id(), ExecutorId::new(1).into());
     }
 
     #[test]
@@ -821,7 +834,7 @@ mod tests {
                     .filter_map(|source| {
                         Some(SourceValue {
                             activation: source.activation()?,
-                            executor: source.executor(),
+                            executor: source.id(),
                             master: source.master(),
                             value: source.get(index)?,
                         })

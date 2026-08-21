@@ -56,10 +56,10 @@ describe("the three documents", () => {
     expect(applyDelta(documents(), { t: "ProgrammerChanged", state }).programmer).toBe(state);
   });
 
-  it("writes the two fields an executor delta carries into the show", () => {
+  it("writes the two fields a playback delta carries into the show", () => {
     const next = applyDelta(documents(), {
-      t: "ExecutorState",
-      executorId: 3,
+      t: "PlaybackState",
+      playback: { t: "Executor", executorId: 3 },
       isActive: true,
       cueIndex: 2,
     });
@@ -69,8 +69,8 @@ describe("the three documents", () => {
     });
 
     const off = applyDelta(next, {
-      t: "ExecutorState",
-      executorId: 3,
+      t: "PlaybackState",
+      playback: { t: "Executor", executorId: 3 },
       isActive: false,
       cueIndex: null,
     });
@@ -80,11 +80,41 @@ describe("the three documents", () => {
     });
   });
 
+  /**
+   * **A cue list on no fader keeps its playback state on the sequence** — S40.
+   *
+   * Which collection the two fields go into is the playback's own answer, and
+   * `prism_core::Show::record_playback_state` writes the same two places from
+   * the same delta. A mirror that wrote both into `/executors` would draw a
+   * sequence running on an executor nobody had assigned.
+   */
+  it("writes a sequence playback into the sequence rather than the grid", () => {
+    const start: Documents = {
+      show: { sequences: { "7": { name: "Act 2", isActive: false, currentCueIndex: null } } },
+      session: {},
+      programmer: emptyProgrammer(),
+    };
+    const next = applyDelta(start, {
+      t: "PlaybackState",
+      playback: { t: "Sequence", sequenceId: 7 },
+      isActive: true,
+      cueIndex: 1,
+    });
+    expect(next.show).toEqual({
+      sequences: { "7": { name: "Act 2", isActive: true, currentCueIndex: 1 } },
+    });
+  });
+
   it("says so when an executor delta names one the show has never heard of", () => {
     // Not silence: it means this client and the daemon disagree about the show,
     // and the answer to that is a fresh snapshot rather than a guess.
     expect(() =>
-      applyDelta(documents(), { t: "ExecutorState", executorId: 9, isActive: true, cueIndex: 0 }),
+      applyDelta(documents(), {
+        t: "PlaybackState",
+        playback: { t: "Executor", executorId: 9 },
+        isActive: true,
+        cueIndex: 0,
+      }),
     ).toThrow(MirrorFault);
   });
 

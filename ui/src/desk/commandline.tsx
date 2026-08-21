@@ -1,62 +1,122 @@
 /**
- * The command line.
+ * The command line: the input, what it would do, and the question it is holding.
  *
- * Three things, and the whole of D3 is the boundary between the first two:
+ * Four things, and `desk/shell.tsx` owns all four — this is the drawing of them:
  *
- * - **what has been typed** — local, in the input element, nobody else's
- *   business until Enter;
- * - **what the daemon's console line says** — `/session/commandLine`, shared
- *   with every other client and with the X-Touch's display, and it moves when a
- *   `SessionPatch` says so and not a moment sooner;
+ * - **what has been typed**, which is the shell's buffer and is mirrored into
+ *   `Session::commandLine` at S25's cadence, so a second screen sees it;
  * - **what the line would mean** — the parser's answer, shown as you type, so a
- *   syntax error is visible *before* Enter rather than as a refusal afterwards.
- *
- * The typed line is mirrored into the session with `CommandLineInput`, paced the
- * way every other stream in this interface is paced (S25's cadence rule) — a
- * keystroke is not a command and thirty a second is plenty for a line somebody
- * is reading off a scribble strip.
+ *   syntax error is visible *before* Enter rather than as a refusal afterwards;
+ * - **the words that are legal here**, which is `completions()` and is
+ *   client-local (§4.2);
+ * - **the question**, when the line would write over something that is already
+ *   there: *merge, override or cancel*, in the line rather than in a window over
+ *   the canvas.
  *
  * # A syntax error is a message, never a throw
  *
  * `parseCommandLine` answers with commands or with a sentence, for every string
  * there is. This component shows the sentence and refuses to send; it does not
  * catch anything, because there is nothing to catch.
+ *
+ * # The keys are here too
+ *
+ * `ARCHITECTURE_SPEC.md` §4.5's three shapes, as a keypad beside the input:
+ * `Clear` runs at once, `Store` writes and waits, `Cue` is appended. They are
+ * the same words an operator can type, which is the whole point — the screen
+ * teaches the vocabulary by building lines in front of them.
  */
 
-import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 
-import type { Command } from "../bindings";
-import { parseCommandLine, readingText } from "./console";
-import { SEND_INTERVAL_MS } from "./valuedrag";
+import { completions } from "./console";
+import { readingText } from "./console";
+import { PROMPT_MODES, useConsole } from "./consoleshell";
 
-/** What the command line needs. */
+/** What the command line needs: the daemon's line, for the readout beside it. */
 export interface CommandLineProps {
   /** The console line **as the daemon holds it**. */
   readonly daemonLine: string;
-  /** Sends the commands a line meant, in order. */
-  readonly onCommands: (commands: readonly Command[]) => void;
-  /** Sends a `CommandLineInput` carrying the whole line. */
-  readonly onText: (text: string) => void;
 }
 
+/** A key of the keypad: the word it writes, and which of the three shapes it is. */
+interface Key {
+  /** The word, spelled as an operator would read it. */
+  readonly word: string;
+  /** Which shape — see `ARCHITECTURE_SPEC.md` §4.5. */
+  readonly shape: "run" | "write" | "append";
+  /** What it is for, on the button's title. */
+  readonly title: string;
+}
+
+/**
+ * The keypad, in the order a console has it.
+ *
+ * Every one of these is a word the parser takes, and the shape decides what
+ * pressing it does — never what it *means*, which is the line's.
+ */
+const CONSOLE_KEYS: readonly Key[] = [
+  { word: "Clear", shape: "run", title: "Clear the programmer" },
+  { word: "Full", shape: "run", title: "The selection to full" },
+  { word: "Update", shape: "run", title: "Store back into the cue being edited" },
+  { word: "Oops", shape: "run", title: "Take the last edit back" },
+  { word: "Store", shape: "write", title: "Store into…" },
+  { word: "Edit", shape: "write", title: "Load a cue into the programmer" },
+  { word: "Goto", shape: "write", title: "Jump a playback to a cue" },
+  { word: "Move", shape: "write", title: "Move something to another number" },
+  { word: "Copy", shape: "write", title: "Copy something onto another number" },
+  { word: "Delete", shape: "write", title: "Empty a place on the desk" },
+  { word: "Label", shape: "write", title: "Name something" },
+  { word: "Assign", shape: "write", title: "Put a sequence on an executor" },
+  { word: "Fixture", shape: "append", title: "…a fixture" },
+  { word: "Group", shape: "append", title: "…a group" },
+  { word: "Sequence", shape: "append", title: "…a sequence" },
+  { word: "Cue", shape: "append", title: "…a cue" },
+  { word: "Preset", shape: "append", title: "…a preset" },
+  { word: "View", shape: "append", title: "…a view" },
+  { word: "Executor", shape: "append", title: "…an executor" },
+];
+
 /** The command line. */
-export function CommandLine({ daemonLine, onCommands, onText }: CommandLineProps) {
-  const [typed, setTyped] = useState("");
-  const mirror = useMirror(onText);
-  const reading = parseCommandLine(typed);
+export function CommandLine({ daemonLine }: CommandLineProps) {
+  const console_ = useConsole();
+  const { line, reading, prompt } = console_;
+  const words = completions(line);
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
-    if (reading.kind !== "commands") {
-      // An empty line does nothing and a bad one says why; neither is sent.
+    console_.submit();
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      console_.recall(-1);
       return;
     }
-    onCommands(reading.commands);
-    setTyped("");
-    // The line has been executed, so the console line is cleared — which is
-    // `CommandLineInput { text: "" }`, per `prism_core::session`.
-    mirror.now("");
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      console_.recall(1);
+      return;
+    }
+    if (event.key === "Escape") {
+      // **Escape cancels the question and leaves the line standing**, so an
+      // operator who meant something else can correct it rather than retype it.
+      event.preventDefault();
+      if (prompt === null) {
+        console_.write("");
+      } else {
+        console_.answer(null);
+      }
+      return;
+    }
+    if (event.key === "Tab" && words.length > 0) {
+      event.preventDefault();
+      const first = words[0];
+      if (first !== undefined) {
+        console_.write(complete(line, first));
+      }
+    }
   };
 
   return (
@@ -66,19 +126,41 @@ export function CommandLine({ daemonLine, onCommands, onText }: CommandLineProps
         <input
           id="command-input"
           data-testid="command-input"
-          value={typed}
+          value={line}
           onChange={(event) => {
-            setTyped(event.target.value);
-            mirror.soon(event.target.value);
+            console_.write(event.target.value);
           }}
+          onKeyDown={onKeyDown}
           autoComplete="off"
           spellCheck={false}
           aria-describedby="command-reading"
         />
+        <button type="submit" data-testid="command-enter" title="Run the line">
+          Enter
+        </button>
       </form>
+      {prompt === null ? null : <PromptBar />}
       <p className={`command-reading command-${reading.kind}`} id="command-reading">
         <output data-testid="command-reading">{readingText(reading)}</output>
       </p>
+      {words.length === 0 ? null : (
+        <p className="command-words" data-testid="command-completions">
+          {words.slice(0, COMPLETION_LIMIT).map((word) => (
+            <button
+              key={word}
+              type="button"
+              className="linkish"
+              data-testid={`complete-${word}`}
+              onClick={() => {
+                console_.write(complete(line, word));
+              }}
+            >
+              {word}
+            </button>
+          ))}
+        </p>
+      )}
+      <Keypad />
       <p className="daemon-line">
         Engine: <output data-testid="command-line">{daemonLine}</output>
       </p>
@@ -86,64 +168,88 @@ export function CommandLine({ daemonLine, onCommands, onText }: CommandLineProps
   );
 }
 
+/** How many completions are offered before the row would wrap. */
+const COMPLETION_LIMIT = 8;
+
 /**
- * Mirroring the typed line into the session, paced.
+ * The question a line is holding, in the line rather than over the canvas.
  *
- * The same rule as every other stream here: at most one command every
- * {@link SEND_INTERVAL_MS}, plus one for whatever is owed. A keystroke is not a
- * command, and a console line is read by people rather than by machines.
+ * `CLAUDE.md` asks for a device screen with no scrolling outside the canvas, and
+ * a modal over it would be neither. What this is instead is a row inside the
+ * footer: the show carries on behind it, every other client is untouched, and a
+ * Go from the X-Touch does not wait on it.
  */
-function useMirror(onText: (text: string) => void): {
-  readonly soon: (text: string) => void;
-  readonly now: (text: string) => void;
-} {
-  const sent = useRef<string | null>(null);
-  const owed = useRef<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timer.current !== null) {
-        clearTimeout(timer.current);
-      }
-    },
-    [],
+function PromptBar() {
+  const { prompt, answer } = useConsole();
+  if (prompt === null) {
+    return null;
+  }
+  return (
+    <p className="command-prompt" data-testid="command-prompt" role="group" aria-label="Overwrite">
+      <span data-testid="command-prompt-what">{prompt.what} is already there.</span>
+      {PROMPT_MODES[prompt.kind].map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          data-testid={`prompt-${mode}`}
+          onClick={() => {
+            answer(mode);
+          }}
+        >
+          {mode}
+        </button>
+      ))}
+      <button
+        type="button"
+        data-testid="prompt-cancel"
+        onClick={() => {
+          answer(null);
+        }}
+      >
+        Cancel
+      </button>
+    </p>
   );
+}
 
-  const flush = (text: string): void => {
-    sent.current = text;
-    owed.current = null;
-    onText(text);
-  };
+/**
+ * The three shapes as buttons — `ARCHITECTURE_SPEC.md` §4.5.
+ *
+ * Nothing here sends a command of its own. A `run` key writes its word and
+ * submits, a `write` key writes it and waits, an `append` key adds it to what is
+ * there; the line decides the rest, exactly as it does for a typed one.
+ */
+function Keypad() {
+  const { write, append, run } = useConsole();
+  return (
+    <div className="command-keys" data-testid="command-keys">
+      {CONSOLE_KEYS.map((key) => (
+        <button
+          key={key.word}
+          type="button"
+          className={`command-key command-key-${key.shape}`}
+          data-testid={`key-${key.word.toLowerCase()}`}
+          data-shape={key.shape}
+          title={key.title}
+          onClick={() => {
+            if (key.shape === "run") {
+              run(key.word);
+            } else if (key.shape === "write") {
+              write(`${key.word} `);
+            } else {
+              append(key.word);
+            }
+          }}
+        >
+          {key.word}
+        </button>
+      ))}
+    </div>
+  );
+}
 
-  const now = (text: string): void => {
-    if (timer.current !== null) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-    flush(text);
-  };
-
-  const soon = (text: string): void => {
-    if (sent.current === text) {
-      return;
-    }
-    owed.current = text;
-    if (timer.current !== null) {
-      return;
-    }
-    // The first keystroke goes at once — a console line that appeared a
-    // thirtieth of a second late would feel like a dropped key — and the rest
-    // of the burst is paced behind it.
-    flush(text);
-    timer.current = setTimeout(() => {
-      timer.current = null;
-      const pending = owed.current;
-      if (pending !== null) {
-        flush(pending);
-      }
-    }, SEND_INTERVAL_MS);
-  };
-
-  return { soon, now };
+/** The line with its last word replaced by the completion that was chosen. */
+function complete(line: string, word: string): string {
+  const head = /\s$/.test(line) ? line : line.replace(/\S*$/, "");
+  return `${head}${word} `;
 }

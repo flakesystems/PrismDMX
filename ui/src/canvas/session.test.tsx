@@ -121,6 +121,17 @@ function desk(served: Snapshot = recordedSnapshot()) {
       )
       .map((message) => message.command);
 
+  /**
+   * The commands a gesture produced, without the line it wrote on the way.
+   *
+   * A key writes into `Session::commandLine` and then runs the line (S40,
+   * `ARCHITECTURE_SPEC.md` §4.5), so every gesture sends a `CommandLineInput`
+   * before the command and another one clearing the line after it. What most of
+   * these tests are about is *which command*, and this is that.
+   */
+  const acted = (): Command[] =>
+    commands().filter((command) => command.t !== "CommandLineInput");
+
   /** The daemon answers with deltas. */
   const answer = (deltas: readonly Delta[]): void => {
     act(() => {
@@ -130,7 +141,7 @@ function desk(served: Snapshot = recordedSnapshot()) {
     });
   };
 
-  return { network, store, view, commands, answer };
+  return { network, store, view, commands, acted, answer };
 }
 
 /**
@@ -160,14 +171,14 @@ beforeEach(() => {
 
 describe("opening and closing a window", () => {
   it("issues a session command and changes nothing until the daemon answers", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     expect(drawn()).toEqual([]);
 
     // The picker is the whole vocabulary, from the generated table.
     fireEvent.change(screen.getByTestId("open-window"), { target: { value: "DmxSheet" } });
 
     // **The first exit criterion.** A command went out.
-    expect(commands()).toEqual([{ t: "OpenWindow", window: "DmxSheet" }]);
+    expect(acted()).toEqual([{ t: "OpenWindow", window: "DmxSheet" }]);
     // And nothing opened: there is nowhere in this interface for a window to
     // be, other than the session (D3).
     expect(drawn()).toEqual([]);
@@ -182,12 +193,12 @@ describe("opening and closing a window", () => {
   });
 
   it("asks for a window to be closed rather than closing one", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     answer(recordedDeltas(0));
     answer(recordedDeltas(1));
 
     fireEvent.click(screen.getByTestId("close-window-2"));
-    expect(commands()).toEqual([{ t: "CloseWindow", instanceId: 2 }]);
+    expect(acted()).toEqual([{ t: "CloseWindow", instanceId: 2 }]);
     expect(drawn()).toEqual(["window-1", "window-2"]);
 
     // Step 7 of the script is `CloseWindow(2)`, so these are the very deltas
@@ -200,13 +211,13 @@ describe("opening and closing a window", () => {
   });
 
   it("asks for the window under the pointer to be brought to the front", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     answer(recordedDeltas(0));
     answer(recordedDeltas(1));
     // Window 2 is the focused one, so pressing window 1 is a `FocusWindow` —
     // and the stacking order does not change until the delta says so.
     fireEvent.pointerDown(screen.getByTestId("window-1"), { button: 0, pointerId: 1 });
-    expect(commands()).toEqual([{ t: "FocusWindow", instanceId: 1 }]);
+    expect(acted()).toEqual([{ t: "FocusWindow", instanceId: 1 }]);
     expect(drawn()).toEqual(["window-1", "window-2"]);
 
     answer(recordedDeltas(4));
@@ -214,7 +225,7 @@ describe("opening and closing a window", () => {
   });
 
   it("sends a drag as a PlaceWindow and leaves the window where the daemon has it", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     answer(recordedDeltas(0));
 
     fireEvent.pointerDown(screen.getByTestId("title-window-1"), {
@@ -229,7 +240,7 @@ describe("opening and closing a window", () => {
     // The command carries whole canvas units, which is what the daemon holds
     // — and there is no `FocusWindow` beside it, because the daemon focuses a
     // window when it opens it and this one is already focused.
-    expect(commands()).toEqual([
+    expect(acted()).toEqual([
       { t: "PlaceWindow", instanceId: 1, x: 240, y: 120, w: 640, h: 480 },
     ]);
     // And with no delta, the window is back at the daemon's rectangle.
@@ -240,7 +251,7 @@ describe("opening and closing a window", () => {
 
 describe("the View Selector Bar", () => {
   it("lights the view the session says is active, and asks for another", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     expect(screen.getByTestId("view-1").dataset["active"]).toBe("yes");
 
     // Store the canvas as view 2 (step 6 of the script), so there are two.
@@ -251,31 +262,31 @@ describe("the View Selector Bar", () => {
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("no");
 
     fireEvent.click(screen.getByTestId("view-2"));
-    expect(commands().at(-1)).toEqual({ t: "SelectView", viewId: 2 });
+    expect(acted().at(-1)).toEqual({ t: "SelectView", viewId: 2 });
     // Not lit yet: `activeViewId` is the daemon's.
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("no");
   });
 
   it("stores the active view under the name it already has", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     for (const step of [0, 1, 2, 3, 4, 5]) {
       answer(recordedDeltas(step));
     }
     fireEvent.click(screen.getByTestId("store-view"));
-    expect(commands().at(-1)).toEqual({ t: "StoreView", viewId: 1, name: "View 1" });
+    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 1, name: "View 1" });
   });
 
   it("stores a new view one past the highest, rather than over somebody's layout", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     fireEvent.click(screen.getByTestId("new-view"));
-    expect(commands().at(-1)).toEqual({ t: "StoreView", viewId: 2, name: "View 2" });
+    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 2, name: "View 2" });
 
     // After view 2 exists — step 5 of the script stores it — the next one is 3.
     for (const step of [0, 1, 2, 3, 4, 5]) {
       answer(recordedDeltas(step));
     }
     fireEvent.click(screen.getByTestId("new-view"));
-    expect(commands().at(-1)).toEqual({ t: "StoreView", viewId: 3, name: "View 3" });
+    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 3, name: "View 3" });
   });
 });
 
@@ -358,7 +369,7 @@ function sessionAfter(steps: number): JsonValue {
 /**
  * **S35's view management, held to the daemon.**
  *
- * Every expectation about what a `RenameView`, a `DeleteView` or a `MoveView`
+ * Every expectation about what a `Label`, a `Delete` or a `Move` over a view
  * *does* comes out of `tests/fixtures/session-recording.json`, which
  * `crates/prismd/tests/ui_session.rs` writes by driving a real `prismd` and
  * which four non-ignored Rust tests read on every commit. Nothing here is a
@@ -415,7 +426,7 @@ describe("managing a view", () => {
   });
 
   it("renames by command, holding no name of its own", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     upTo(answer, "store the canvas as view 5");
     menuOver(5);
     fireEvent.click(screen.getByTestId("view-rename"));
@@ -425,9 +436,11 @@ describe("managing a view", () => {
     fireEvent.change(input, { target: { value: "Front of house" } });
     fireEvent.click(screen.getByTestId("view-rename-apply"));
 
-    expect(commands().at(-1)).toEqual({
-      t: "RenameView",
-      viewId: 5,
+    // **`Label` over an `ObjectRef::View`** since S40: renaming a view is the
+    // same act as renaming a cue, a group or a preset, so it is the same word.
+    expect(acted().at(-1)).toEqual({
+      t: "Label",
+      target: { t: "View", viewId: 5 },
       name: "Front of house",
     });
     // D3: the button still reads the daemon's name, and the typed one is gone.
@@ -440,14 +453,14 @@ describe("managing a view", () => {
   });
 
   it("sends nothing for a rename that is only whitespace", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     upTo(answer, "store the canvas as view 5");
-    const before = commands().length;
+    const before = acted().length;
     menuOver(5);
     fireEvent.click(screen.getByTestId("view-rename"));
     fireEvent.change(screen.getByTestId("view-rename-input"), { target: { value: "   " } });
     fireEvent.click(screen.getByTestId("view-rename-apply"));
-    expect(commands().length).toBe(before);
+    expect(acted().length).toBe(before);
     expect(screen.queryByTestId("view-menu")).toBeNull();
   });
 
@@ -458,17 +471,26 @@ describe("managing a view", () => {
    * wrong about.
    */
   it("moves by command, and draws the order the daemon answers with", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     upTo(answer, "rename view 5");
     expect(bar()).toEqual(["1:View 1", "2:Programming", "5:Front of house"]);
 
     menuOver(5);
     fireEvent.click(screen.getByTestId("view-move-prev"));
-    expect(commands().at(-1)).toEqual({ t: "MoveView", viewId: 5, direction: "Prev" });
+    // **The bar knows its neighbour's number and writes the line** (S40).
+    // `MoveView` was relative until then; one absolute form covers both, and
+    // turning *left* into *view 2* is the screen's job rather than the
+    // protocol's — `ARCHITECTURE_SPEC.md` §4.5.
+    expect(acted().at(-1)).toEqual({
+      t: "Move",
+      from: { t: "View", viewId: 5 },
+      to: { t: "View", viewId: 2 },
+      mode: "Merge",
+    });
     // Nothing has moved: the order is the daemon's.
     expect(bar()).toEqual(["1:View 1", "2:Programming", "5:Front of house"]);
 
-    answer(recordedDeltas(stepAbout("move view 5 left")));
+    answer(recordedDeltas(stepAbout("move view 5 onto view 2")));
     // The names travelled and the numbers stayed: that is the decision.
     expect(bar()).toEqual(["1:View 1", "2:Front of house", "5:Programming"]);
   });
@@ -505,14 +527,14 @@ describe("managing a view", () => {
    * whatever comes back, and there is no code here that picks a successor.
    */
   it("deletes by command and lets the daemon say what the canvas becomes", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     upTo(answer, "select view 2 — which is now the layout");
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("yes");
     const before = drawn();
 
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-delete"));
-    expect(commands().at(-1)).toEqual({ t: "DeleteView", viewId: 2 });
+    expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "View", viewId: 2 } });
     // Still there, still active, canvas untouched: nothing is applied here.
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("yes");
     expect(drawn()).toEqual(before);
@@ -527,11 +549,16 @@ describe("managing a view", () => {
   });
 
   it("moves the other way by the same command", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     upTo(answer, "rename view 5");
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-move-next"));
-    expect(commands().at(-1)).toEqual({ t: "MoveView", viewId: 2, direction: "Next" });
+    expect(acted().at(-1)).toEqual({
+      t: "Move",
+      from: { t: "View", viewId: 2 },
+      to: { t: "View", viewId: 5 },
+      mode: "Merge",
+    });
     expect(bar()).toEqual(["1:View 1", "2:Programming", "5:Front of house"]);
   });
 
@@ -553,16 +580,16 @@ describe("managing a view", () => {
   });
 
   it("stores over a view and stores a new one, both by command", () => {
-    const { commands, answer } = desk();
+    const { acted, answer } = desk();
     upTo(answer, "store the canvas as view 5");
 
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-overwrite"));
-    expect(commands().at(-1)).toEqual({ t: "StoreView", viewId: 2, name: "Programming" });
+    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 2, name: "Programming" });
 
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-store-new"));
     // One past the highest, which is 5 — not 3, and not over anybody's layout.
-    expect(commands().at(-1)).toEqual({ t: "StoreView", viewId: 6, name: "View 6" });
+    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 6, name: "View 6" });
   });
 });

@@ -33,7 +33,7 @@ use std::time::Duration;
 
 use prism_domain::{
     Command, Delta, ExecutorId, FeatureGroup, FixtureId, JsonValue, NoticeLevel, OutputHealth,
-    OutputId, ProgrammerState, UniverseId,
+    OutputId, PlaybackTarget, ProgrammerState, UniverseId,
 };
 use prism_ipc::telemetry::{TelemetryFrame, UniverseLevels};
 use prism_ipc::transport::{local, memory, websocket};
@@ -128,7 +128,7 @@ fn the_world() -> Snapshot {
 /// The command the desk refuses, so a rejection is reachable from the suite.
 fn the_refused_command() -> Command {
     Command::ExecutorOff {
-        executor_id: ExecutorId::new(999),
+        target: PlaybackTarget::of_executor(ExecutorId::new(999)),
     }
 }
 

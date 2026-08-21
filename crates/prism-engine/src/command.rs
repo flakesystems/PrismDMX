@@ -12,7 +12,7 @@
 //! both ends are compiled together, and the queue is an in-process channel, not
 //! a wire.
 
-use prism_domain::{ExecutorId, GoDirection, GroupId};
+use prism_domain::{GoDirection, GroupId, PlaybackId};
 
 use crate::spsc::{PAYLOAD_BYTES, TickPayload};
 
@@ -26,10 +26,10 @@ use crate::spsc::{PAYLOAD_BYTES, TickPayload};
 pub enum TickCommand {
     /// Grand master level, `0..=65535`. Intensity only — `docs/DMX_MERGE.md`.
     SetGrandMaster(u16),
-    /// An executor's fader position, `0..=65535`.
+    /// A playback's fader position, `0..=65535`.
     SetExecutorLevel {
-        /// Which executor.
-        executor: ExecutorId,
+        /// Which playback.
+        executor: PlaybackId,
         /// The new position.
         level: u16,
     },
@@ -40,8 +40,8 @@ pub enum TickCommand {
     /// removes it from the merge and every attribute it was holding falls back
     /// to the next most recently activated source, or to home.
     SetExecutorActive {
-        /// Which executor.
-        executor: ExecutorId,
+        /// Which playback.
+        executor: PlaybackId,
         /// On or off.
         on: bool,
     },
@@ -55,8 +55,8 @@ pub enum TickCommand {
     /// also starts the sequence, and the release stops what the flash started
     /// and nothing else.
     SetExecutorFlash {
-        /// Which executor.
-        executor: ExecutorId,
+        /// Which playback.
+        executor: PlaybackId,
         /// Held or released.
         on: bool,
     },
@@ -65,8 +65,8 @@ pub enum TickCommand {
     /// The speed master of `docs/DMX_MERGE.md` §4 item 3: it is applied in step
     /// 2 of the tick, to the playback's own clock, and changes no value at all.
     SetExecutorSpeed {
-        /// Which executor.
-        executor: ExecutorId,
+        /// Which playback.
+        executor: PlaybackId,
         /// The new rate. `0` freezes the playback where it is.
         speed: u16,
     },
@@ -76,25 +76,37 @@ pub enum TickCommand {
     /// should take that long*, and the rate follows from that. One tap on its
     /// own changes nothing.
     TapExecutorSpeed {
-        /// Which executor.
-        executor: ExecutorId,
+        /// Which playback.
+        executor: PlaybackId,
     },
     /// Move an executor's manual crossfade fader — `ExecutorFaderFunction::XFade`.
     ///
     /// The transition is the one the cue list already has; what this replaces is
     /// its *clock*. See `crate::player`'s module documentation.
     SetExecutorXFade {
-        /// Which executor.
-        executor: ExecutorId,
+        /// Which playback.
+        executor: PlaybackId,
         /// Where the fader is, `0..=65535`.
         position: u16,
     },
-    /// Step an executor to its next or previous cue.
+    /// Step a playback to its next or previous cue.
     Go {
-        /// Which executor.
-        executor: ExecutorId,
+        /// Which playback.
+        executor: PlaybackId,
         /// Which way.
         direction: GoDirection,
+    },
+    /// Jump a playback straight to one cue of its list - S40's `Goto`.
+    ///
+    /// The **index**, not the number: a cue number is a string an operator
+    /// typed, and the tick resolves nothing (`ARCHITECTURE_SPEC.md` §3.1). The
+    /// core thread turns one into the other against the show it holds, which is
+    /// the same split `SetProgrammerValue` makes with a merge-plan slot.
+    GotoCue {
+        /// Which playback.
+        executor: PlaybackId,
+        /// Which cue, by index into the compiled list.
+        cue_index: u16,
     },
     /// Blackout on or off. Intensity only, like every other master.
     SetBlackout(bool),
@@ -133,7 +145,12 @@ pub enum TickCommand {
 impl TickCommand {
     /// Bytes the encoding actually uses. The rest of a queue slot is headroom
     /// for S3-S5; the assertion that it still fits lives in the tests.
-    pub const MAX_ENCODED: usize = 7;
+    ///
+    /// Eight since S40: a target used to be an executor number and is now a
+    /// [`PlaybackId`], whose kind takes the eighth byte. The alternative was a
+    /// second tag per variant that can name a sequence, which would have made
+    /// the codec's shape depend on the vocabulary rather than on the payload.
+    pub const MAX_ENCODED: usize = 8;
 
     const TAG_GRAND_MASTER: u8 = 1;
     const TAG_EXECUTOR_LEVEL: u8 = 2;
@@ -148,6 +165,20 @@ impl TickCommand {
     const TAG_EXECUTOR_SPEED: u8 = 11;
     const TAG_EXECUTOR_TAP: u8 = 12;
     const TAG_EXECUTOR_XFADE: u8 = 13;
+    const TAG_GOTO: u8 = 14;
+
+    /// The kind byte for a target that is an executor.
+    const KIND_EXECUTOR: u8 = 0;
+    /// The kind byte for a target that is a cue list on no fader (S40).
+    const KIND_SEQUENCE: u8 = 1;
+
+    /// The target, split into the two bytes the codec carries it in.
+    const fn split(target: PlaybackId) -> (u8, u32) {
+        match target {
+            PlaybackId::Executor { executor_id } => (Self::KIND_EXECUTOR, executor_id.get()),
+            PlaybackId::Sequence { sequence_id } => (Self::KIND_SEQUENCE, sequence_id.get()),
+        }
+    }
 }
 
 /// A variant added in a later session that outgrows a queue slot must fail to
@@ -157,19 +188,22 @@ const _: () = assert!(
     "TickCommand no longer fits a queue slot: raise PAYLOAD_BYTES"
 );
 
-/// Every variant flattens to the same shape — a tag, a 32-bit target and a
-/// 16-bit value — which keeps the codec free of per-variant byte arithmetic and
-/// makes adding a variant a matter of adding a tag. The target is an executor
-/// number, a group number or a merge-plan slot, according to the tag.
+/// Every variant flattens to the same shape — a tag, a target kind, a 32-bit
+/// target and a 16-bit value — which keeps the codec free of per-variant byte
+/// arithmetic and makes adding a variant a matter of adding a tag. The target is
+/// a playback, a group number or a merge-plan slot, according to the tag; the
+/// kind byte is read only where the target is a playback.
 impl TickPayload for TickCommand {
     fn encode(self, out: &mut [u8; PAYLOAD_BYTES]) {
-        let (tag, target, value) = match self {
-            Self::SetGrandMaster(level) => (Self::TAG_GRAND_MASTER, 0, level),
+        let (tag, kind, target, value) = match self {
+            Self::SetGrandMaster(level) => (Self::TAG_GRAND_MASTER, 0, 0, level),
             Self::SetExecutorLevel { executor, level } => {
-                (Self::TAG_EXECUTOR_LEVEL, executor.get(), level)
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_EXECUTOR_LEVEL, kind, target, level)
             }
             Self::SetExecutorActive { executor, on } => {
-                (Self::TAG_EXECUTOR_ACTIVE, executor.get(), u16::from(on))
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_EXECUTOR_ACTIVE, kind, target, u16::from(on))
             }
             Self::Go {
                 executor,
@@ -179,27 +213,45 @@ impl TickPayload for TickCommand {
                     GoDirection::Next => 0,
                     GoDirection::Prev => 1,
                 };
-                (Self::TAG_GO, executor.get(), direction)
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_GO, kind, target, direction)
+            }
+            Self::GotoCue {
+                executor,
+                cue_index,
+            } => {
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_GOTO, kind, target, cue_index)
             }
             Self::SetExecutorFlash { executor, on } => {
-                (Self::TAG_EXECUTOR_FLASH, executor.get(), u16::from(on))
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_EXECUTOR_FLASH, kind, target, u16::from(on))
             }
             Self::SetExecutorSpeed { executor, speed } => {
-                (Self::TAG_EXECUTOR_SPEED, executor.get(), speed)
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_EXECUTOR_SPEED, kind, target, speed)
             }
-            Self::TapExecutorSpeed { executor } => (Self::TAG_EXECUTOR_TAP, executor.get(), 0),
+            Self::TapExecutorSpeed { executor } => {
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_EXECUTOR_TAP, kind, target, 0)
+            }
             Self::SetExecutorXFade { executor, position } => {
-                (Self::TAG_EXECUTOR_XFADE, executor.get(), position)
+                let (kind, target) = Self::split(executor);
+                (Self::TAG_EXECUTOR_XFADE, kind, target, position)
             }
-            Self::SetBlackout(on) => (Self::TAG_BLACKOUT, 0, u16::from(on)),
-            Self::SetGroupMaster { group, level } => (Self::TAG_GROUP_MASTER, group.get(), level),
-            Self::SetProgrammerValue { slot, value } => (Self::TAG_PROGRAMMER_VALUE, slot, value),
-            Self::ClearProgrammerValue { slot } => (Self::TAG_PROGRAMMER_CLEAR_VALUE, slot, 0),
-            Self::ClearProgrammer => (Self::TAG_PROGRAMMER_CLEAR, 0, 0),
+            Self::SetBlackout(on) => (Self::TAG_BLACKOUT, 0, 0, u16::from(on)),
+            Self::SetGroupMaster { group, level } => {
+                (Self::TAG_GROUP_MASTER, 0, group.get(), level)
+            }
+            Self::SetProgrammerValue { slot, value } => {
+                (Self::TAG_PROGRAMMER_VALUE, 0, slot, value)
+            }
+            Self::ClearProgrammerValue { slot } => (Self::TAG_PROGRAMMER_CLEAR_VALUE, 0, slot, 0),
+            Self::ClearProgrammer => (Self::TAG_PROGRAMMER_CLEAR, 0, 0, 0),
         };
         let [e0, e1, e2, e3] = target.to_le_bytes();
         let [v0, v1] = value.to_le_bytes();
-        let encoded = [tag, e0, e1, e2, e3, v0, v1];
+        let encoded = [tag, kind, e0, e1, e2, e3, v0, v1];
         *out = [0; PAYLOAD_BYTES];
         for (slot, byte) in out.iter_mut().zip(encoded) {
             *slot = byte;
@@ -211,9 +263,16 @@ impl TickPayload for TickCommand {
         for (slot, byte) in fixed.iter_mut().zip(bytes.iter()) {
             *slot = *byte;
         }
-        let [tag, e0, e1, e2, e3, v0, v1] = fixed;
+        let [tag, kind, e0, e1, e2, e3, v0, v1] = fixed;
         let target = u32::from_le_bytes([e0, e1, e2, e3]);
-        let executor = ExecutorId::new(target);
+        // A kind byte that is neither is a corrupt slot rather than a playback
+        // this build does not know: both ends are compiled together (see the
+        // module documentation), so there is no version to be tolerant of.
+        let executor = match kind {
+            Self::KIND_EXECUTOR => PlaybackId::of_executor(prism_domain::ExecutorId::new(target)),
+            Self::KIND_SEQUENCE => PlaybackId::of_sequence(prism_domain::SequenceId::new(target)),
+            _ => return None,
+        };
         let value = u16::from_le_bytes([v0, v1]);
         match tag {
             Self::TAG_GRAND_MASTER => Some(Self::SetGrandMaster(value)),
@@ -253,6 +312,10 @@ impl TickPayload for TickCommand {
                 speed: value,
             }),
             Self::TAG_EXECUTOR_TAP => Some(Self::TapExecutorSpeed { executor }),
+            Self::TAG_GOTO => Some(Self::GotoCue {
+                executor,
+                cue_index: value,
+            }),
             Self::TAG_EXECUTOR_XFADE => Some(Self::SetExecutorXFade {
                 executor,
                 position: value,
@@ -296,44 +359,44 @@ mod tests {
             TickCommand::SetGrandMaster(0),
             TickCommand::SetGrandMaster(u16::MAX),
             TickCommand::SetExecutorLevel {
-                executor: ExecutorId::new(u32::MAX),
+                executor: ExecutorId::new(u32::MAX).into(),
                 level: 32_768,
             },
             TickCommand::Go {
-                executor: ExecutorId::new(9),
+                executor: ExecutorId::new(9).into(),
                 direction: GoDirection::Prev,
             },
             TickCommand::Go {
-                executor: ExecutorId::new(0),
+                executor: ExecutorId::new(0).into(),
                 direction: GoDirection::Next,
             },
             TickCommand::SetBlackout(true),
             TickCommand::SetBlackout(false),
             TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(3),
+                executor: ExecutorId::new(3).into(),
                 on: true,
             },
             TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(u32::MAX),
+                executor: ExecutorId::new(u32::MAX).into(),
                 on: false,
             },
             TickCommand::SetExecutorFlash {
-                executor: ExecutorId::new(3),
+                executor: ExecutorId::new(3).into(),
                 on: true,
             },
             TickCommand::SetExecutorFlash {
-                executor: ExecutorId::new(u32::MAX),
+                executor: ExecutorId::new(u32::MAX).into(),
                 on: false,
             },
             TickCommand::SetExecutorSpeed {
-                executor: ExecutorId::new(4),
+                executor: ExecutorId::new(4).into(),
                 speed: prism_domain::SPEED_UNITY,
             },
             TickCommand::TapExecutorSpeed {
-                executor: ExecutorId::new(5),
+                executor: ExecutorId::new(5).into(),
             },
             TickCommand::SetExecutorXFade {
-                executor: ExecutorId::new(6),
+                executor: ExecutorId::new(6).into(),
                 position: u16::MAX,
             },
             TickCommand::SetGroupMaster {
@@ -375,7 +438,7 @@ mod tests {
         command.encode(&mut bytes);
         assert_eq!(
             bytes[..TickCommand::MAX_ENCODED],
-            [7, 0x04, 0x03, 0x02, 0x01, 0x06, 0x05]
+            [7, 0, 0x04, 0x03, 0x02, 0x01, 0x06, 0x05]
         );
     }
 
@@ -395,7 +458,7 @@ mod tests {
         TickCommand::SetGrandMaster(u16::MAX).encode(&mut bytes);
         assert_eq!(
             bytes[..TickCommand::MAX_ENCODED],
-            [1, 0, 0, 0, 0, 0xFF, 0xFF]
+            [1, 0, 0, 0, 0, 0, 0xFF, 0xFF]
         );
         assert!(bytes[TickCommand::MAX_ENCODED..].iter().all(|&b| b == 0));
     }

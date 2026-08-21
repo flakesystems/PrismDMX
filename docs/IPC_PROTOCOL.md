@@ -121,17 +121,23 @@ type Command =
   | { t: "SetAttribute"; attribute: AttributeType; value: number; relative: boolean }
   | { t: "ApplyPreset"; presetId: PresetId }
   | { t: "ClearProgrammer" }
-  | { t: "StoreCue"; sequenceId: SequenceId; cueNumber: string; mode: StoreMode }
-  | { t: "StorePreset"; presetId: PresetId; pool: FeatureGroup; name: string; color: RgbColor | null; mode: StoreMode }
-  | { t: "StoreSequence"; sequenceId: SequenceId; mode: SequenceStoreMode }
-  | { t: "EditCue"; sequenceId: SequenceId; cueNumber: string }
+  | { t: "SelectGroup"; groupId: GroupId; mode: "Set" | "Add" | "Toggle" }
+  | { t: "StoreCue"; sequenceId: SequenceId | null; cueNumber: string; mode: StoreMode }
+  | { t: "StorePreset"; presetId: PresetId; pool: FeatureGroup | null; name: string; color: RgbColor | null; mode: StoreMode }
+  | { t: "StoreSequence"; sequenceId: SequenceId; name: string; mode: SequenceStoreMode }
+  | { t: "StoreGroup"; groupId: GroupId; name: string; mode: OverwriteMode }
+  | { t: "EditCue"; sequenceId: SequenceId | null; cueNumber: string }
   | { t: "Update" }
-  | { t: "CreateSequence"; sequenceId: SequenceId; name: string }
-  | { t: "SetCueProperty"; sequenceId: SequenceId; cueNumber: string; property: CueProperty }
-  | { t: "DeleteCue"; sequenceId: SequenceId; cueNumber: string }
+  | { t: "SetCueProperty"; sequenceId: SequenceId | null; cueNumber: string; property: CueProperty }
+  | { t: "Delete"; target: ObjectRef }
+  | { t: "Copy"; from: ObjectRef; to: ObjectRef; mode: OverwriteMode }
+  | { t: "Move"; from: ObjectRef; to: ObjectRef; mode: OverwriteMode }
+  | { t: "Label"; target: ObjectRef; name: string }
+  | { t: "Goto"; target: PlaybackTarget; cueNumber: string }
+  | { t: "ExecutorOn"; target: PlaybackTarget }
   | { t: "AssignExecutor"; executorId: ExecutorId; sequenceId: SequenceId | null }
-  | { t: "ExecutorGo"; executorId: ExecutorId; direction: "Next" | "Prev" }
-  | { t: "ExecutorOff"; executorId: ExecutorId }
+  | { t: "ExecutorGo"; target: PlaybackTarget; direction: "Next" | "Prev" }
+  | { t: "ExecutorOff"; target: PlaybackTarget }
   | { t: "ExecutorButton"; executorId: ExecutorId; button: ExecutorButtonRef; pressed: boolean }
   | { t: "SetExecutorMaster"; executorId: ExecutorId; level: number }
   | { t: "PatchFixture"; /* … */ }
@@ -142,9 +148,6 @@ type Command =
   // ---- Session and interface (D11) — issued by console and UI alike ----
   | { t: "SelectView"; viewId: number }
   | { t: "StoreView"; viewId: number; name: string }
-  | { t: "RenameView"; viewId: number; name: string }
-  | { t: "DeleteView"; viewId: number }
-  | { t: "MoveView"; viewId: number; direction: "Prev" | "Next" }
   | { t: "OpenWindow"; window: WindowType; params?: Record<string, unknown> }
   | { t: "CloseWindow"; instanceId: number }
   | { t: "FocusWindow"; instanceId: number }
@@ -160,15 +163,139 @@ type Command =
 
 The second group is the concrete form of **D11**. The console and the UI draw on one vocabulary; there is no separate surface command set to keep in sync.
 
+> **Four verbs over six things, and one command each** *(S40)*. `Delete`,
+> `Copy`, `Move` and `Label` name a **thing** rather than a pool:
+>
+> ```typescript
+> type ObjectRef =
+>   | { t: "Sequence"; sequenceId: SequenceId }
+>   | { t: "Cue"; sequenceId: SequenceId | null; cueNumber: string }
+>   | { t: "Group"; groupId: GroupId }
+>   | { t: "Preset"; presetId: PresetId }
+>   | { t: "View"; viewId: ViewId }
+>   | { t: "Executor"; executorId: ExecutorId };
+>
+> type OverwriteMode = "Merge" | "Override";
+> ```
+>
+> S40 made the command line **the** interface (`ARCHITECTURE_SPEC.md` §4.5), and
+> the grammar it needs is one production: `verb object number [object number]`.
+> *Delete sequence 4* and *delete group 4* are the same act on two things, so an
+> operator learns one word rather than six — and the parser never has to *choose*
+> a command, which would be a client deciding what a line means rather than what
+> it says. Written out as twenty-four commands, §5 would have gained twenty-four
+> variants whose only difference is which pool they index.
+>
+> The price is paid here rather than by an operator: **one of the six things is
+> session state**, since §4.1 puts the view library in the session. So
+> `Command::is_session_command` reads the *target*, `ShowFile::apply` routes on
+> it, and `is_undoable` follows — deleting a view is not undoable (§6.1: an Oops
+> must not pull a window out from under an operator) and deleting a cue is.
+>
+> They absorbed four commands that said the same thing in narrower words:
+> `DeleteCue` (S28), `DeleteView`, `RenameView` and `MoveView` (S35). `MoveView`
+> was **relative** and is now absolute — `Move View 1 View 3` — because the bar
+> knows its neighbour's number and writes the line; S35's decision that the
+> number *is* the order is unchanged, and a move still exchanges the two views'
+> contents while their numbers stay put. `CueProperty` lost its `Number` and its
+> `Name` to `Move` and `Label` for the same reason.
+>
+> What each verb means pool by pool is `prism_core::objects`, and two of them are
+> worth naming here because they are decisions rather than deletions:
+>
+> - **an executor swaps** rather than overwriting. A desk's faders are places,
+>   and an operator rearranging them is not throwing half of them away. A view
+>   swaps for the same reason.
+> - **a move brings the references along**: moving a sequence repoints every
+>   executor that played it, and moving a preset rewrites every `CuePart` that
+>   linked to it. Both would otherwise be silent — nothing looks different until
+>   somebody presses Go, or edits the preset and watches the cue not follow.
+>
+> **`Delete Executor` empties the slot and leaves the place.** The row leaves the
+> show, and executor 1 is still executor 1 on the bar, because the eight strips
+> of a page are `page * 8 + slot` arithmetic (**D7**) rather than rows. That is
+> also the exact inverse of the `AssignExecutor` that made the row, which is what
+> lets an Oops put the grid back rather than leaving a slot behind carrying a
+> deleted executor's master and buttons.
+
+> **A playback is no longer always an executor** *(S40)*. Every playback command
+> carried an executor number until S40, so `On Sequence 1` — a cue list nobody
+> has put on a fader — had no representation at all:
+>
+> ```typescript
+> type PlaybackTarget =
+>   | { t: "Executor"; executorId: ExecutorId }
+>   | { t: "Sequence"; sequenceId: SequenceId }
+>   | { t: "Selected" };
+> ```
+>
+> A client sends one of these and the daemon resolves it, because both of the
+> interesting cases are facts a client may not know: a **sequence** becomes the
+> executor that holds it when one does — a client that worked that out would race
+> an `AssignExecutor` from a second client (**D3**) — and **Selected** becomes
+> whatever `Session::selectedSequence` names, which is session state a client
+> filling in would be sending a command whose meaning had already moved. The last
+> is what makes a bare `Go+` on the command line mean something.
+>
+> A sequence that **no** executor holds gets a playback of its own in the engine
+> (`prism_domain::PlaybackId`), with its master at full and no keys. The two are
+> never both live for one cue list: two players of one list would fight over the
+> same slots in the merge and neither would be wrong.
+>
+> **`Goto` is new at every layer.** There was no `Goto` in this list *and* none
+> in `prism_engine::TickCommand`, so `Goto Cue 5` needed a message all the way
+> down to the tick. It enters the cue with its own delay and fade rather than
+> stepping to it, and it names the cue by **number**: the daemon resolves the
+> index, because the tick resolves nothing (`ARCHITECTURE_SPEC.md` §3.1) and a
+> client that sent an index would be reading a cue list it may be a delta behind
+> on.
+>
+> **`ExecutorOn`** is the command form of `ExecutorButtonFunction::On`, which
+> until S40 could only be reached by pressing a key *of an executor* — so
+> `On Sequence 1` had nothing to send. `ExecutorButton` is still the right
+> command for a strip and is still not the same thing: that one says *which key
+> went down* and lets the executor decide, which is **D3** for playback.
+
+> **Three commands a line needed, and three fields that became optional**
+> *(S40)*. `SelectGroup` expands a group **in the daemon**, because which
+> fixtures a group holds is show state and a client that expanded it would be
+> sending a selection a second client's edit had already made wrong — the same
+> rule that keeps channels out of `PatchFixture`. `StoreGroup` is the command
+> `prism_core::Show::store_group` had been waiting for since S11: it stores the
+> programmer's **selection**, because a group is a list of fixtures rather than a
+> look. And `StoreSequence` absorbed `CreateSequence`: `Store Sequence 4` creates
+> the cue list when the number is free, because the command line cannot know
+> which of the two acts it is (the parser does not read the show — S26).
+>
+> **A cue list made that way becomes the selected one**, and it is the one place
+> a show command writes a session field. `Store Cue 1` names no cue list and
+> means `Session::selectedSequence` (§4.1), so a desk that made list 4 and went
+> on pointing at list 1 would send the next store into the wrong place — and the
+> operator would not find out until they read the sheet. A store into a list that
+> **already exists** moves no selection: choosing what to edit is `SelectSequence`'s
+> job, and storing into a second list is not saying you want to move there. The
+> journal images the field with the sequence, so an Oops takes both back together
+> (`ARCHITECTURE_SPEC.md` §6.1).
+>
+> `StoreCue`, `EditCue` and `SetCueProperty` name their sequence as
+> `SequenceId | null`, and `StorePreset` its pool as `FeatureGroup | null`. A
+> `null` is not *not supplied*: it means **the one the session has** —
+> `Session::selectedSequence` and `Session::encoderBank` — and the daemon
+> resolves it in `ShowFile::apply`. A client that read the session and filled the
+> number in would be sending a command whose meaning had already moved on a
+> second screen. `StorePreset`'s `color` is the same shape one step further: a
+> `null` **keeps** the colour that is there, so a relabel through the command line
+> cannot throw away something an operator chose with a picker.
+
 > **Three commands the patch needed** *(S27)*. `PatchFixture` alone can only ever *add* to a rig, so a patch nobody could correct was the state the interface was in until S27. `UnpatchFixture` takes one out, and does **not** cascade into groups, presets or cues — a show outlives the rig it was written on (S11), and `Show::issues` reports what now dangles rather than deleting an operator's stored looks. `RenumberFixture` is one command and not an unpatch plus a patch, because the number is the key the patch is filed under: doing it in two steps leaves the rig without that fixture in between, and leaves it deleted if the second step is refused. `EmbedFixtureType` carries **a key and nothing else**, resolved by the daemon against `prism_core::library` — the same rule `PatchFixture` follows in carrying no channels, since a client that sent a whole `FixtureType` would be authoring show content for the daemon to validate. Without it a brand-new show, which carries no profiles at all, could not be patched from an interface.
 
 > **Five commands a show needed** *(S28)*. Before them the protocol could store a cue and apply a preset, and nothing else about a show could be written from an interface: there was no way to make a sequence to store into, no way to put one on an executor so it could be fired, no way to correct a cue that had been stored, and no way to make a preset for `ApplyPreset` to apply. So a show could only ever be written by hand, in a file, somewhere else.
 >
-> `CreateSequence` makes an **empty** cue list and is refused when the number is taken — a *create* that replaced a running cue list would empty a playback that is on stage. It is deliberately not S39's `StoreSequence`, which is a different act with a mode on it: that one stores the *programmer* into a sequence.
+> *(`CreateSequence` was absorbed into `StoreSequence` in **S40** — see the S40 note above. What it did:)* it makes an **empty** cue list and is refused when the number is taken — a *create* that replaced a running cue list would empty a playback that is on stage. It is deliberately not S39's `StoreSequence`, which is a different act with a mode on it: that one stores the *programmer* into a sequence.
 >
 > `SetCueProperty` carries **one field** (`CueProperty`: number, name, fade in, fade out, delay, trigger). The alternative — one command carrying every editable field — makes a client read the cue, change one member and send the rest back, which is a read-modify-write over state the daemon owns; two operators editing two different columns would then each undo the other. What a cue *sets* is not among the fields, for the reason `PatchFixture` carries no channels: values come from the programmer.
 >
-> `DeleteCue` does not renumber what is left. A cue number is what an operator has written on a running order and what a Goto names.
+> *(`DeleteCue` became `Delete` over an `ObjectRef::Cue` in **S40**; the rule did not move with it.)* It does not renumber what is left. A cue number is what an operator has written on a running order and what a Goto names.
 >
 > `AssignExecutor` puts a sequence on a slot, or takes one off. An empty slot gains an executor with **the desk's defaults** — the three button functions the protocol can actually press and a master at full — because what a fader and four buttons do is show content, and a client that chose it would be authoring the show. Taking the sequence off keeps everything else the slot has.
 >
@@ -211,9 +338,9 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 
 > **Three commands a view library needed** *(S35)*. Until S35 a view could be stored and selected and nothing else: no rename, no delete, and no way to put views in the order an operator wants to step through. All three are session commands that `ARCHITECTURE_SPEC.md` §4.4 does not list, for `PlaceWindow`'s reason — §4.4 is what a *console* issues, and an X-Touch cannot type a name — while §4.1 puts the view library in the session, so a client that reordered views locally would be holding session state.
 >
-> **`MoveView` exchanges the two views' numbers**, and that is a decision rather than an implementation detail. A view library carries its order either in the numbers or in an ordering beside them; the second gives two things that can disagree, and the disagreement an operator would meet is `Channel ◀▶` stepping to a view other than the one drawn next. Since `views` is keyed by number, the bar draws in number order and `SelectView` names a number, making the number *be* the order leaves nothing to keep in step. The price, paid deliberately: after a move `SelectView 3` names a different layout, and an F-key bound to a view number follows the **place** rather than the layout that used to be there — which is how a console's page numbers behave.
+> **`MoveView` exchanges the two views' numbers**, and that is a decision rather than an implementation detail. *(It became `Move` over an `ObjectRef::View` in **S40**, and absolute rather than relative; the decision below is unchanged and the contents swap while the numbers stay.)* A view library carries its order either in the numbers or in an ordering beside them; the second gives two things that can disagree, and the disagreement an operator would meet is `Channel ◀▶` stepping to a view other than the one drawn next. Since `views` is keyed by number, the bar draws in number order and `SelectView` names a number, making the number *be* the order leaves nothing to keep in step. The price, paid deliberately: after a move `SelectView 3` names a different layout, and an F-key bound to a view number follows the **place** rather than the layout that used to be there — which is how a console's page numbers behave.
 >
-> **`DeleteView` refuses the last view** (`SessionError::LastView`): `activeViewId` names a view from the first moment and `ShowStore` refuses a file whose active view is not stored, so a session with no views could satisfy neither. Deleting the **active** view is allowed, and what the canvas then shows is the *daemon's*: it selects the neighbour before it, or the one after it when there is none, exactly as `SelectView` would have. A client does not choose a successor, so two screens cannot choose differently.
+> **`DeleteView` refuses the last view** (`SessionError::LastView`) *(it is `Delete` over an `ObjectRef::View` since **S40**; the refusal is unchanged)*: `activeViewId` names a view from the first moment and `ShowStore` refuses a file whose active view is not stored, so a session with no views could satisfy neither. Deleting the **active** view is allowed, and what the canvas then shows is the *daemon's*: it selects the neighbour before it, or the one after it when there is none, exactly as `SelectView` would have. A client does not choose a successor, so two screens cannot choose differently.
 
 ### 5.1 Latency path
 
@@ -300,7 +427,7 @@ type Delta =
   | { t: "ShowPatch"; ops: JsonPatchOp[] }        // patch, sequences, presets, groups
   | { t: "SessionPatch"; ops: JsonPatchOp[] }     // views, windows, pages, selection
   | { t: "ProgrammerChanged"; state: ProgrammerState }
-  | { t: "ExecutorState"; executorId: ExecutorId; isActive: boolean; cueIndex: number | null }
+  | { t: "PlaybackState"; playback: PlaybackId; isActive: boolean; cueIndex: number | null }
   | { t: "OutputHealth"; outputId: OutputId; health: OutputHealth }
   | { t: "DirtyFlag"; unsavedChanges: boolean }   // drives the X-Touch Save LED
   | { t: "Notice"; level: "Info" | "Warn" | "Error"; message: string };
@@ -308,9 +435,11 @@ type Delta =
 
 Deltas are ordered per connection. A client that has applied every delta since its snapshot holds state identical to the daemon's.
 
-> **`ExecutorState` is the tick's, and only the tick's** *(S34)*. `isActive` and `cueIndex` are what `prism_engine::PlaybackReport` published on the last tick, sampled by the daemon at 25 ms and broadcast **only when one of them has changed**. Two things follow.
+> **`PlaybackState` is the tick's, and only the tick's** *(S34)*. `isActive` and `cueIndex` are what `prism_engine::PlaybackReport` published on the last tick, sampled by the daemon at 25 ms and broadcast **only when one of them has changed**. Two things follow.
 >
 > It **does not arrive with the command that caused it**: an `ExecutorGo` is acknowledged with no delta at all, and the state follows a fraction of a second later. That is deliberate — until S34 the daemon wrote `isActive` on the way past because nothing else could, and with a readback that becomes two authors racing, whose symptom is a strip that lights, goes dark and lights again. `ARCHITECTURE_SPEC.md` §3.1.1 has the rest.
+>
+> **It was `ExecutorState` until S40**, and the rename is that session's playback change in one line: a cue list on no fader can now play, so what reports is a `PlaybackId` — an executor or a sequence — and the two fields are written into the row that playback belongs to. A strip gets exactly what it got before, because an executor reports as `{ t: "Executor", executorId }`.
 >
 > And it is **silent while a fade runs**. A cue index changes when a cue changes, not when a level does, so this delta does not move at playback rates — which matters because it moves the show *document*, and a client that re-asks a question on every show change (`Query::StorePreview`, §5.2) would otherwise be asking it per frame.
 

@@ -53,6 +53,30 @@ where
     proptest::collection::btree_map(any::<K>(), any::<V>(), 0..max)
 }
 
+/// An arbitrary value, **behind a box**.
+///
+/// # This is a stack budget, not a style
+///
+/// `proptest_derive` builds one strategy value holding every variant's strategy
+/// at once, so an enum's strategy type is the *sum* of its variants'. `Command`
+/// is forty-two variants deep and in a debug build on Windows the sum has now
+/// twice been enough to overflow a test thread's stack while the strategy is
+/// still being constructed — S34's finding at the thirty-sixth variant, and
+/// S40's again with [`crate::ObjectRef`] appearing twice inside `Copy` and twice
+/// inside `Move`.
+///
+/// Boxing a *field's* strategy replaces its whole tree with one pointer, which
+/// is why this is applied to the `ObjectRef` and `PlaybackTarget` fields rather
+/// than to the enum as a whole. **A session adding a command with a large
+/// payload reaches for this and not for `RUST_MIN_STACK`**, which only moves the
+/// cliff a few variants further along.
+pub fn boxed<T>() -> BoxedStrategy<T>
+where
+    T: Arbitrary + core::fmt::Debug + 'static,
+{
+    any::<T>().boxed()
+}
+
 /// A map of between one and `max` arbitrary entries.
 ///
 /// For nested maps whose inner map must not be empty — see the invariant on

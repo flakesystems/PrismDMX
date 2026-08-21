@@ -43,7 +43,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use prism_core::SessionMirror;
-use prism_domain::{Command, JsonValue, ParamDirection, ViewId, WindowInstanceId, WindowType};
+use prism_domain::{
+    Command, JsonValue, ObjectRef, OverwriteMode, ViewId, WindowInstanceId, WindowType,
+};
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
 use prismd::cli::{Options, OutputSpec};
 use prismd::daemon::Daemon;
@@ -248,30 +250,56 @@ fn script() -> Vec<(&'static str, Command)> {
         ),
         (
             "rename view 5: the name changes and its windows do not",
-            Command::RenameView {
-                view_id: ViewId::new(5),
+            Command::Label {
+                target: ObjectRef::View {
+                    view_id: ViewId::new(5),
+                },
                 name: "Front of house".to_owned(),
             },
         ),
         (
             "rename a view that was never stored: refused, nothing changes",
-            Command::RenameView {
-                view_id: ViewId::new(9),
+            Command::Label {
+                target: ObjectRef::View {
+                    view_id: ViewId::new(9),
+                },
                 name: "Nowhere".to_owned(),
             },
         ),
         (
-            "move view 5 left: it swaps numbers with view 2, so it becomes view 2",
-            Command::MoveView {
-                view_id: ViewId::new(5),
-                direction: ParamDirection::Prev,
+            "move view 5 onto view 2: the two swap contents and keep their numbers",
+            Command::Move {
+                from: ObjectRef::View {
+                    view_id: ViewId::new(5),
+                },
+                to: ObjectRef::View {
+                    view_id: ViewId::new(2),
+                },
+                mode: OverwriteMode::Merge,
             },
         ),
         (
-            "move view 1 further left: it is already first, so nothing at all happens",
-            Command::MoveView {
-                view_id: ViewId::new(1),
-                direction: ParamDirection::Prev,
+            "move view 1 onto itself: nothing at all happens",
+            Command::Move {
+                from: ObjectRef::View {
+                    view_id: ViewId::new(1),
+                },
+                to: ObjectRef::View {
+                    view_id: ViewId::new(1),
+                },
+                mode: OverwriteMode::Merge,
+            },
+        ),
+        (
+            "copy view 2 onto a number nobody has used: view 7 appears",
+            Command::Copy {
+                from: ObjectRef::View {
+                    view_id: ViewId::new(2),
+                },
+                to: ObjectRef::View {
+                    view_id: ViewId::new(7),
+                },
+                mode: OverwriteMode::Merge,
             },
         ),
         (
@@ -282,14 +310,18 @@ fn script() -> Vec<(&'static str, Command)> {
         ),
         (
             "delete the active view: the daemon decides what the canvas then shows",
-            Command::DeleteView {
-                view_id: ViewId::new(2),
+            Command::Delete {
+                target: ObjectRef::View {
+                    view_id: ViewId::new(2),
+                },
             },
         ),
         (
             "delete a view that was never stored: refused",
-            Command::DeleteView {
-                view_id: ViewId::new(9),
+            Command::Delete {
+                target: ObjectRef::View {
+                    view_id: ViewId::new(9),
+                },
             },
         ),
     ]
@@ -901,8 +933,11 @@ fn the_recording_is_of_a_canvas_being_used() {
     );
 
     // **The ordering decision.** A move exchanges the two numbers, so the names
-    // travel and the numbers stay where they are on the bar.
-    let moved = at("move view 5 left");
+    // travel and the numbers stay where they are on the bar. S40 made the
+    // command absolute — `Move View 5 View 2` rather than `Prev` — and the
+    // decision did not move with it: the bar knows its neighbour's number and
+    // writes the line, which is `ARCHITECTURE_SPEC.md` §4.5.
+    let moved = at("move view 5 onto view 2");
     assert_eq!(
         named(&steps[moved - 1]),
         vec![
@@ -928,16 +963,39 @@ fn the_recording_is_of_a_canvas_being_used() {
         "the script lost the gap that gives the previous assertion its meaning"
     );
 
-    // A view already at the end of the bar does not move, and says nothing at
-    // all — a no-op rather than a refusal, like the jog wheel at the first
-    // parameter.
-    let stuck = at("move view 1 further left");
+    // A view moved onto **itself** does not move, and says nothing at all — a
+    // no-op rather than a refusal, and the only one the absolute form has. The
+    // relative form this replaced had one more (the end of the bar); an
+    // absolute move always has somewhere to go, and a number nobody has stored
+    // is a move into an empty place rather than a refusal.
+    let stuck = at("move view 1 onto itself");
     assert!(
         steps[stuck].deltas.is_empty(),
         "a move that could not happen spoke"
     );
     assert!(!steps[stuck].refused, "it is a no-op, not a refusal");
     assert_eq!(named(&steps[stuck]), named(&steps[stuck - 1]));
+
+    // **A copy makes a view that was not there** (S40), and leaves the source
+    // exactly as it was — which is the whole difference between a copy and a
+    // move, said on the recording rather than in a comment.
+    let copied = at("copy view 2 onto a number nobody has used");
+    assert!(
+        !steps[copied - 1]
+            .stored_views
+            .iter()
+            .any(|(id, _, _)| *id == 7),
+        "view 7 was already there"
+    );
+    assert!(
+        steps[copied].stored_views.iter().any(|(id, _, _)| *id == 7),
+        "the copy did not arrive"
+    );
+    assert_eq!(
+        windows_of(&steps[copied], 2),
+        windows_of(&steps[copied - 1], 2),
+        "a copy changed the view it was copied from"
+    );
 
     // **Deleting the active view: what the canvas then shows is the daemon's.**
     let deleted = at("delete the active view");

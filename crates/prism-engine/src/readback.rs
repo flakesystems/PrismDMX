@@ -40,15 +40,15 @@
 //! tick. Build it at [`crate::MAX_SOURCES`] and it can never be too small,
 //! because `PlaybackLayer::new` refuses a show with more executors than that.
 
-use prism_domain::ExecutorId;
+use prism_domain::PlaybackId;
 
 use crate::sync::{AtomicU64, AtomicUsize, Ordering};
 
 /// What one playback is doing, as the tick sees it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlaybackState {
-    /// Which executor.
-    pub executor: ExecutorId,
+    /// Which playback - an executor, or a cue list on no fader (S40).
+    pub playback: PlaybackId,
     /// Whether its sequence is running — a cue is in force, or an executor with
     /// no cue list has been switched on by hand.
     pub is_active: bool,
@@ -58,6 +58,9 @@ pub struct PlaybackState {
 }
 
 /// Bit of the packed word that says the playback is running.
+///
+/// Bits 0 to 32 are `PlaybackId::key` - thirty-two for the number and one for
+/// whether it is an executor or a sequence (S40) - and 33 to 47 are spare.
 const ACTIVE: u64 = 1 << 48;
 
 /// Bit of the packed word that says a cue index is present. The index sits
@@ -66,6 +69,9 @@ const HAS_CUE: u64 = 1 << 49;
 
 /// Where the cue index sits in the packed word.
 const CUE_SHIFT: u32 = 50;
+
+/// The bits `PlaybackId::key` occupies: the number and the kind.
+const KEY_MASK: u64 = (1 << 33) - 1;
 
 /// Largest cue index the packed word can carry.
 ///
@@ -77,7 +83,7 @@ const MAX_CUE_INDEX: u32 = (1 << 14) - 1;
 /// One playback's state, packed into a word that can be published with a single
 /// relaxed store.
 const fn pack(state: PlaybackState) -> u64 {
-    let mut word = state.executor.get() as u64;
+    let mut word = state.playback.key();
     if state.is_active {
         word |= ACTIVE;
     }
@@ -92,7 +98,7 @@ const fn pack(state: PlaybackState) -> u64 {
 /// The inverse of [`pack`].
 const fn unpack(word: u64) -> PlaybackState {
     PlaybackState {
-        executor: ExecutorId::new(word as u32),
+        playback: PlaybackId::from_key(word & KEY_MASK),
         is_active: word & ACTIVE != 0,
         cue_index: if word & HAS_CUE == 0 {
             None
@@ -192,11 +198,21 @@ impl PlaybackReport {
 #[cfg(all(test, not(loom)))]
 mod tests {
     use super::{MAX_CUE_INDEX, PlaybackReport, PlaybackState, pack, unpack};
-    use prism_domain::ExecutorId;
+    use prism_domain::PlaybackId;
 
     fn state(executor: u32, is_active: bool, cue_index: Option<u32>) -> PlaybackState {
         PlaybackState {
-            executor: ExecutorId::new(executor),
+            playback: PlaybackId::of_executor(prism_domain::ExecutorId::new(executor)),
+            is_active,
+            cue_index,
+        }
+    }
+
+    /// The same word carries a cue list playing on no fader (S40), and the two
+    /// kinds never collide - which is what the kind bit is for.
+    fn sequence_state(sequence: u32, is_active: bool, cue_index: Option<u32>) -> PlaybackState {
+        PlaybackState {
+            playback: PlaybackId::of_sequence(prism_domain::SequenceId::new(sequence)),
             is_active,
             cue_index,
         }
@@ -210,9 +226,26 @@ mod tests {
             state(u32::MAX, true, Some(MAX_CUE_INDEX)),
             state(9, false, Some(3)),
             state(9, true, None),
+            sequence_state(0, false, None),
+            sequence_state(u32::MAX, true, Some(MAX_CUE_INDEX)),
+            sequence_state(9, true, Some(3)),
         ] {
             assert_eq!(unpack(pack(candidate)), candidate, "{candidate:?}");
         }
+    }
+
+    /// Executor 9 and sequence 9 are two playbacks, and one word has to tell
+    /// them apart - S40.
+    #[test]
+    fn an_executor_and_a_sequence_with_the_same_number_pack_differently() {
+        assert_ne!(
+            pack(state(9, true, Some(1))),
+            pack(sequence_state(9, true, Some(1)))
+        );
+        assert_eq!(
+            unpack(pack(sequence_state(9, true, Some(1)))).playback,
+            PlaybackId::of_sequence(prism_domain::SequenceId::new(9))
+        );
     }
 
     #[test]

@@ -519,6 +519,8 @@ fn stress_sequence(fixture_type: &FixtureType, fixtures: u32, seed: u16) -> Sequ
         name: String::new(),
         cues,
         looping: true,
+        is_active: false,
+        current_cue_index: None,
     }
 }
 
@@ -628,7 +630,7 @@ fn the_whole_pipeline_holds_its_deadline_for_ten_minutes_under_full_cpu_load() {
             let executor = ExecutorId::new((index % 8) as u32 + 1);
             if index % 64 == 0 {
                 let _ = producer.push(TickCommand::Go {
-                    executor,
+                    executor: executor.into(),
                     direction: GoDirection::Next,
                 });
             }
@@ -717,7 +719,7 @@ fn the_whole_pipeline_fits_inside_a_tick_period() {
         |producer, index| {
             if index % 64 == 0 {
                 let _ = producer.push(TickCommand::Go {
-                    executor: ExecutorId::new((index % 8) as u32 + 1),
+                    executor: ExecutorId::new((index % 8) as u32 + 1).into(),
                     direction: GoDirection::Next,
                 });
             }

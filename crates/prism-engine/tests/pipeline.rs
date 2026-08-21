@@ -113,6 +113,8 @@ fn sequence(fade: f64) -> Sequence {
             ],
         }],
         looping: false,
+        is_active: false,
+        current_cue_index: None,
     }
 }
 
@@ -219,7 +221,7 @@ fn the_priority_stack_reaches_the_wire_one_layer_at_a_time() {
 
     // Playbacks: the cue runs, in zero time, and both heads take its values.
     rig.push(TickCommand::Go {
-        executor: ExecutorId::new(1),
+        executor: ExecutorId::new(1).into(),
         direction: GoDirection::Next,
     });
     let frame = rig.tick();
@@ -288,7 +290,7 @@ fn clearing_the_programmer_hands_the_attribute_back_to_the_playback_below_it() {
     let mut rig = rig(0.0);
     let pan = rig.slot(1, AttributeType::Pan) as u32;
     rig.push(TickCommand::Go {
-        executor: ExecutorId::new(1),
+        executor: ExecutorId::new(1).into(),
         direction: GoDirection::Next,
     });
     rig.push(TickCommand::SetProgrammerValue {
@@ -345,7 +347,7 @@ fn scripted_run(ticks: u64) -> Vec<Vec<u8>> {
     for index in 0..ticks {
         match index {
             0 => rig.push(TickCommand::Go {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 direction: GoDirection::Next,
             }),
             10 => rig.push(TickCommand::SetProgrammerValue {
@@ -413,7 +415,7 @@ fn a_fade_still_interpolates_underneath_the_masters() {
     let mut rig = rig(10.0);
     rig.push(TickCommand::SetGrandMaster(30_000));
     rig.push(TickCommand::Go {
-        executor: ExecutorId::new(1),
+        executor: ExecutorId::new(1).into(),
         direction: GoDirection::Next,
     });
 

@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 9d009ab7bf8305269df41c20d32babae1c58ed523a83034f9dfe24fdba5f9080 # shrinks to edits = [EmbedType(FixtureType { id: "type/0", manufacturer: "", name: "", mode: "", footprint: 1, attributes: [] })]
+cc a0e8285fca8dccf6d02b63e0f78954129cc7ce24f533aa96fd2148b54745f571 # shrinks to commands = [StoreSequence { sequence_id: SequenceId(2), name: "", mode: Append }]

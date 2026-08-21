@@ -63,8 +63,8 @@ use core::fmt;
 use std::collections::VecDeque;
 
 use prism_domain::{
-    Command, CueEdit, Executor, ExecutorId, Fixture, FixtureId, FixtureType, Preset, PresetId,
-    ProgrammerState, Sequence, SequenceId,
+    Command, CueEdit, Executor, ExecutorId, Fixture, FixtureId, FixtureType, Group, GroupId,
+    Preset, PresetId, ProgrammerState, Sequence, SequenceId,
 };
 
 /// Why an Oops or a Redo could not be carried out.
@@ -105,6 +105,8 @@ pub enum UndoScope {
     Sequence(SequenceId),
     /// One preset.
     Preset(PresetId),
+    /// One group (S40).
+    Group(GroupId),
     /// One executor slot.
     Executor(ExecutorId),
     /// The programmer, whole.
@@ -115,6 +117,9 @@ pub enum UndoScope {
     /// The session's update state: which cue the programmer is editing, and
     /// whether it has moved since (S39).
     CueEdit,
+    /// Which cue list a bare `Store Cue 5` goes into — `Session::selected_sequence`
+    /// (S40).
+    SelectedSequence,
 }
 
 /// One piece of state, as it stood at one moment.
@@ -152,6 +157,12 @@ pub(crate) enum Image {
     /// created by the store, restoring it means removing it, which relinks
     /// nothing at all.
     Preset(PresetId, Option<Preset>),
+    /// One group. `None`: the show did not have it.
+    ///
+    /// New in **S40**, which gave `Show::store_group` the command it had been
+    /// waiting for since S11 and gave the pool `Delete`, `Copy`, `Move` and
+    /// `Label` beside it.
+    Group(GroupId, Option<Group>),
     /// One executor slot. `None`: the slot was empty.
     Executor(ExecutorId, Option<Executor>),
     /// The whole programmer state, Clear stage included.
@@ -174,6 +185,18 @@ pub(crate) enum Image {
     /// 3 would restore half a state — and the half it left standing is the one
     /// an Update key acts on.
     CueEdit(Option<CueEdit>),
+    /// The cue list a bare cue number means — `Session::selected_sequence`.
+    /// `None`: none was selected.
+    ///
+    /// New in **S40**, and for one command only: `Store Sequence 4` on a free
+    /// number *makes* the cue list and puts it in force, so an Oops that took
+    /// the cue list back and left the desk pointing at it would leave the next
+    /// `Store Cue 1` naming a sequence that is not there. `SelectSequence`
+    /// itself is a session command and is not journalled — the exclusion §4.1
+    /// makes, for the reason a view switch is not undoable — so this image
+    /// exists to keep the *show* command whole rather than to make selecting
+    /// undoable.
+    SelectedSequence(Option<SequenceId>),
 }
 
 impl Image {
@@ -184,10 +207,12 @@ impl Image {
             Self::FixtureType(type_id, _) => UndoScope::FixtureType(type_id.clone()),
             Self::Sequence(id, _) => UndoScope::Sequence(*id),
             Self::Preset(id, _) => UndoScope::Preset(*id),
+            Self::Group(id, _) => UndoScope::Group(*id),
             Self::Executor(id, _) => UndoScope::Executor(*id),
             Self::Programmer(_) => UndoScope::Programmer,
             Self::ProgrammerPage { .. } => UndoScope::ProgrammerPage,
             Self::CueEdit(_) => UndoScope::CueEdit,
+            Self::SelectedSequence(_) => UndoScope::SelectedSequence,
         }
     }
 }
@@ -346,7 +371,9 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::{Image, Journal, JournalError, UndoRecord, UndoScope};
-    use prism_domain::{Command, FixtureId, ProgrammerState, Sequence, SequenceId};
+    use prism_domain::{
+        Command, FixtureId, ProgrammerState, Sequence, SequenceId, SequenceStoreMode,
+    };
 
     fn record(id: u32) -> UndoRecord {
         UndoRecord::new(
@@ -447,6 +474,8 @@ mod tests {
                 name: "Sequence 3".to_owned(),
                 cues: Vec::new(),
                 looping: false,
+                is_active: false,
+                current_cue_index: None,
             }),
         );
         assert_eq!(image.scope(), UndoScope::Sequence(SequenceId::new(3)));
@@ -461,9 +490,10 @@ mod tests {
         assert_eq!(image.scope(), UndoScope::Sequence(SequenceId::new(3)));
 
         let created = UndoRecord::new(
-            Command::CreateSequence {
+            Command::StoreSequence {
                 sequence_id: SequenceId::new(3),
                 name: "Act 1".to_owned(),
+                mode: SequenceStoreMode::Append,
             },
             vec![image],
             vec![Image::Sequence(
@@ -473,6 +503,8 @@ mod tests {
                     name: "Act 1".to_owned(),
                     cues: Vec::new(),
                     looping: false,
+                    is_active: false,
+                    current_cue_index: None,
                 }),
             )],
         );
@@ -498,7 +530,7 @@ mod tests {
         assert!(
             UndoRecord::new(
                 Command::EditCue {
-                    sequence_id: SequenceId::new(1),
+                    sequence_id: Some(SequenceId::new(1)),
                     cue_number: "3".to_owned(),
                 },
                 vec![Image::CueEdit(None)],

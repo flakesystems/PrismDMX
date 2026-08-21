@@ -30,6 +30,7 @@ import type {
   OutputId,
   PatchConflict,
   PatchPreview,
+  PlaybackId,
   ProgrammerState,
   Query,
   StoreMode,
@@ -244,6 +245,32 @@ function readPatchOp(value: unknown, path: string): JsonPatchOp {
   }
 }
 
+/**
+ * Which playback a `PlaybackState` is about — S40.
+ *
+ * A tagged pair rather than a number, because a cue list playing on no fader is
+ * a playback of its own (`prism_domain::PlaybackId`). Narrowed rather than
+ * asserted: the tag arrives as a `string` and `as` is a claim, not a check.
+ */
+function readPlaybackId(value: unknown, path: string): PlaybackId {
+  const record = asRecord(value, path);
+  const tag = asString(field(record, "t"), `${path}.t`);
+  switch (tag) {
+    case "Executor":
+      return {
+        t: "Executor",
+        executorId: asInteger(field(record, "executorId"), `${path}.executorId`),
+      };
+    case "Sequence":
+      return {
+        t: "Sequence",
+        sequenceId: asInteger(field(record, "sequenceId"), `${path}.sequenceId`),
+      };
+    default:
+      throw new ProtocolFault(`${path}.t`, `a playback this build knows, not ${JSON.stringify(tag)}`);
+  }
+}
+
 /** The operations of a patch delta. */
 function readPatchOps(value: unknown, path: string): JsonPatchOp[] {
   return asArray(value, path).map((op, index) => readPatchOp(op, `${path}[${index}]`));
@@ -306,10 +333,10 @@ export function readDelta(value: unknown, path: string): Delta {
         t: "ProgrammerChanged",
         state: readProgrammerState(field(record, "state"), `${path}.state`),
       };
-    case "ExecutorState":
+    case "PlaybackState":
       return {
-        t: "ExecutorState",
-        executorId: asInteger(field(record, "executorId"), `${path}.executorId`),
+        t: "PlaybackState",
+        playback: readPlaybackId(field(record, "playback"), `${path}.playback`),
         isActive: asBoolean(field(record, "isActive"), `${path}.isActive`),
         cueIndex: asNullable(field(record, "cueIndex"), `${path}.cueIndex`, asInteger),
       };

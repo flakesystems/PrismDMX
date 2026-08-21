@@ -98,6 +98,8 @@ fn sequence(cues: Vec<Cue>) -> Sequence {
         name: "Main".to_owned(),
         cues,
         looping: false,
+        is_active: false,
+        current_cue_index: None,
     }
 }
 
@@ -133,7 +135,7 @@ impl Rig {
     fn go(&mut self) {
         self.producer
             .push(TickCommand::Go {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 direction: GoDirection::Next,
             })
             .unwrap();
@@ -240,7 +242,7 @@ fn a_go_arriving_over_the_command_queue_runs_the_cue_list_to_the_wire() {
     // home value the patch gives it.
     rig.producer
         .push(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: false,
         })
         .unwrap();

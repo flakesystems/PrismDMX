@@ -19,7 +19,7 @@ import { WINDOW_TYPE_VARIANTS } from "../bindings/variants";
 import { TelemetrySink } from "../ipc/telemetry";
 import { readServerMessage } from "../ipc/protocol";
 import { nullSink, setLogSink } from "../log/logger";
-import { DeskProvider } from "../store/context";
+import { Shell } from "../testing/shell";
 import { DeskStore } from "../store/desk";
 import { TelemetryProvider } from "../telemetry/panel";
 import { WindowContent } from "./content";
@@ -45,7 +45,7 @@ const { show, session } = ((): { show: JsonValue; session: JsonValue } => {
 /** Renders one window's body, inside the two providers every window sits in. */
 function body(type: WindowType, document: JsonValue = show): string {
   const view = render(
-    <DeskProvider store={new DeskStore()}>
+    <Shell store={new DeskStore()} session={session} show={document}>
       <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
         <WindowContent
           window={{ instanceId: 1, type, x: 0, y: 0, w: 640, h: 480 }}
@@ -54,7 +54,7 @@ function body(type: WindowType, document: JsonValue = show): string {
           programmer={null}
         />
       </TelemetryProvider>
-    </DeskProvider>,
+    </Shell>,
   );
   const text = view.container.textContent ?? "";
   view.unmount();
@@ -94,19 +94,19 @@ describe("a window's body", () => {
   it("says what is missing rather than showing an empty box", () => {
     expect(body("Patch", {})).toContain("Nothing is patched");
     expect(body("FixtureSheet", {})).toContain("Nothing is patched");
-    expect(body("Groups", {})).toContain("No groups yet");
+    expect(body("Groups", {})).toContain("There are no groups");
     expect(body("SequenceSheet", {})).toContain("0 sequences");
     expect(body("SequenceSheet", {})).toContain("No cue list is in force");
     expect(body("CueViewer", {})).toContain("No cue list is in force");
     expect(body("PresetPool", {})).toContain("pool is empty");
     // A collection that is there but is not a collection — a hand-edited show,
     // or a daemon that changed shape.
-    expect(body("Groups", { groups: 7 })).toContain("No groups yet");
+    expect(body("Groups", { groups: 7 })).toContain("There are no groups");
   });
 
   it("puts the level view in the DMX sheet", () => {
     render(
-      <DeskProvider store={new DeskStore()}>
+      <Shell store={new DeskStore()} session={session} show={show}>
         <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
           <WindowContent
             window={{ instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480 }}
@@ -115,7 +115,7 @@ describe("a window's body", () => {
             programmer={null}
           />
         </TelemetryProvider>
-      </DeskProvider>,
+      </Shell>,
     );
     expect(screen.getByTestId("telemetry-canvas")).not.toBeNull();
   });

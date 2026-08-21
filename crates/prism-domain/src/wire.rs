@@ -16,6 +16,15 @@
 use proptest::prelude::*;
 
 /// One round-trip property per type, plus the list of covered type names.
+///
+/// The strategy is `.boxed()`, which looks like noise and is not. `Command` is
+/// a large enum and `proptest_derive` builds **one value tree holding every
+/// variant's tree at once**; the thirty-sixth variant tipped `prism-core`'s
+/// `tests/oops.rs` and `prism-ipc`'s `tests/framing.rs` into a stack overflow in
+/// a debug build (S34's finding), and S40's seven — two of which carry two
+/// `ObjectRef`s apiece — tipped this one. Boxing puts that tree on the heap.
+/// **A session adding a command should reach for this and not for
+/// `RUST_MIN_STACK`**, which only moves the cliff.
 macro_rules! round_trip {
     ($($name:ident => $ty:ty),* $(,)?) => {
         /// Every type covered by a round-trip property, by TypeScript name.
@@ -26,7 +35,7 @@ macro_rules! round_trip {
                 #![proptest_config(ProptestConfig::with_cases(64))]
 
                 #[test]
-                fn $name(value: $ty) {
+                fn $name(value in any::<$ty>().boxed()) {
                     let json = serde_json::to_string(&value)
                         .expect("every domain type must serialise to JSON");
                     let from_json: $ty = serde_json::from_str(&json)
@@ -99,6 +108,11 @@ round_trip! {
     json_patch_op => crate::JsonPatchOp,
     output_health => crate::OutputHealth,
     notice_level => crate::NoticeLevel,
+
+    playback_id => crate::PlaybackId,
+    playback_target => crate::PlaybackTarget,
+    object_ref => crate::ObjectRef,
+    overwrite_mode => crate::OverwriteMode,
 
     selection_mode => crate::SelectionMode,
     go_direction => crate::GoDirection,

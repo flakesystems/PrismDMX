@@ -346,7 +346,7 @@ export class DeskStore {
       case "ShowPatch":
       case "SessionPatch":
       case "ProgrammerChanged":
-      case "ExecutorState":
+      case "PlaybackState":
         return state;
     }
   }

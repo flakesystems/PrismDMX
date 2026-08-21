@@ -156,7 +156,7 @@ describe("the recorded delta stream", () => {
     expect(kinds).toContain("ShowPatch");
     expect(kinds).toContain("SessionPatch");
     expect(kinds).toContain("ProgrammerChanged");
-    expect(kinds).toContain("ExecutorState");
+    expect(kinds).toContain("PlaybackState");
   });
 
   it("is reproduced byte for byte by this build's encoder", () => {
@@ -213,7 +213,11 @@ function messageFor(what: string): ClientMessage {
       return {
         t: "Command",
         seq: 4,
-        command: { t: "ExecutorGo", executorId: 0, direction: "Prev" },
+        command: {
+          t: "ExecutorGo",
+          target: { t: "Executor", executorId: 0 },
+          direction: "Prev",
+        },
       };
     case "PatchFixture":
       return {

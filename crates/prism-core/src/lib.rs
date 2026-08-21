@@ -103,6 +103,7 @@ mod file;
 mod journal;
 mod library;
 mod mirror;
+mod objects;
 mod programmer;
 mod session;
 mod show;

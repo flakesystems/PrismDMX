@@ -37,6 +37,21 @@
  * sends the release as well, and the daemon drops the release of every function
  * that is not momentary. The bar does not know which is which, and does not need
  * to.
+ *
+ * # This bar is `ARCHITECTURE_SPEC.md` §4.5's exception, and the select head is
+ * not
+ *
+ * S40 made every key on the desk write a line rather than send a command. The
+ * **executor keys and faders are named there as the exception**, and this is
+ * that bar: a Go is a gesture with timing in it (§4.3), a fader is a stream of
+ * positions at S25's cadence, and neither survives being spelled as a line. So
+ * the strips' buttons and faders go on sending `ExecutorButton` and
+ * `SetExecutorMaster` directly.
+ *
+ * The **select head** is not one of those. Choosing which executor the transport
+ * acts on is `Executor 3` — a word and a number, with no timing in it — so it
+ * writes that line and submits it, exactly as a group in a pool does. The two
+ * page arrows are the same shape and write `Page 2`.
  */
 
 import { useEffect, useState } from "react";

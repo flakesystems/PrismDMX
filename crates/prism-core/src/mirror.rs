@@ -128,12 +128,22 @@ impl ShowMirror {
     pub fn apply_delta(&mut self, delta: &Delta) -> Result<(), MirrorError> {
         match delta {
             Delta::ShowPatch { ops } => self.apply_all(ops),
-            Delta::ExecutorState {
-                executor_id,
+            Delta::PlaybackState {
+                playback,
                 is_active,
                 cue_index,
             } => {
-                let base = crate::show::pointer(crate::show::EXECUTORS, &executor_id.to_string());
+                // Which collection the two fields live in is the playback's own
+                // answer (S40): an executor's are on its row of the grid, and a
+                // cue list playing on no fader keeps them on the sequence.
+                let base = match playback {
+                    prism_domain::PlaybackId::Executor { executor_id } => {
+                        crate::show::pointer(crate::show::EXECUTORS, &executor_id.to_string())
+                    }
+                    prism_domain::PlaybackId::Sequence { sequence_id } => {
+                        crate::show::pointer(crate::show::SEQUENCES, &sequence_id.to_string())
+                    }
+                };
                 self.apply(&JsonPatchOp::Replace {
                     path: format!("{base}/isActive"),
                     value: JsonValue::Bool(*is_active),
@@ -227,7 +237,7 @@ impl SessionMirror {
         match delta {
             Delta::SessionPatch { ops } => self.apply_all(ops),
             Delta::ShowPatch { .. }
-            | Delta::ExecutorState { .. }
+            | Delta::PlaybackState { .. }
             | Delta::ProgrammerChanged { .. }
             | Delta::OutputHealth { .. }
             | Delta::DirtyFlag { .. }
@@ -482,7 +492,7 @@ fn is_inside(from: &str, path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{MirrorError, SessionMirror, ShowMirror};
-    use prism_domain::{Delta, ExecutorId, JsonPatchOp, JsonValue};
+    use prism_domain::{Delta, ExecutorId, JsonPatchOp, JsonValue, PlaybackId};
     use std::collections::BTreeMap;
 
     fn document() -> JsonValue {
@@ -849,8 +859,8 @@ mod tests {
             )])),
         )])));
         mirror
-            .apply_delta(&Delta::ExecutorState {
-                executor_id: ExecutorId::new(3),
+            .apply_delta(&Delta::PlaybackState {
+                playback: PlaybackId::of_executor(ExecutorId::new(3)),
                 is_active: true,
                 cue_index: Some(2),
             })
@@ -865,8 +875,8 @@ mod tests {
         );
 
         mirror
-            .apply_delta(&Delta::ExecutorState {
-                executor_id: ExecutorId::new(3),
+            .apply_delta(&Delta::PlaybackState {
+                playback: PlaybackId::of_executor(ExecutorId::new(3)),
                 is_active: false,
                 cue_index: None,
             })

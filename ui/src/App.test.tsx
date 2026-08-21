@@ -13,7 +13,8 @@
  * scenario against a real `prismd` is `e2e/reconnect.spec.ts`.
  */
 
-import { render, screen } from "@testing-library/react";
+import { decode } from "@msgpack/msgpack";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -220,6 +221,27 @@ describe("the interface", () => {
 });
 
 describe("the command line", () => {
+    /**
+     * **A client that connects to a desk mid-word shows the word** — S40.
+     *
+     * `Session::commandLine` is §4.1 state, which is what makes a key on one
+     * screen write into the line on every other one. S26 kept the input purely
+     * local and the daemon's line beside it; §4.5 made the line *the* interface,
+     * so the input follows the session and the readout beside it is what a
+     * delta has actually confirmed.
+     */
+    it("opens on the line the daemon is already holding", () => {
+        const { network } = desk();
+        serve(network);
+
+        const input = screen.getByTestId("command-input");
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error("the command line is an input");
+        }
+        expect(input.value).toBe("fixture 1 at full");
+        expect(screen.getByTestId("command-line").textContent).toBe("fixture 1 at full");
+    });
+
     it("sends what was typed and shows only what the daemon answered", async () => {
         const { network } = desk();
         serve(network);
@@ -236,10 +258,14 @@ describe("the command line", () => {
         // at once — a test that fails only under `--coverage` is a flake, and S18
         // established that those get fixed rather than retried.
         const user = userEvent.setup({ delay: null });
+        // The input opens on the daemon's line since S40, so it is emptied
+        // first — with `fireEvent`, because `user.clear` is another fifteen
+        // awaits and this test already carries a note about that.
+        fireEvent.change(input, { target: { value: "" } });
         await user.type(input, "fixture 2 at 50");
 
-        // D3: what was typed is *local input*. Until the daemon says otherwise, the
-        // engine's command line is still what it was.
+        // D3: what was typed has been *mirrored* but not confirmed. Until a
+        // delta says otherwise, the engine's command line is still what it was.
         expect(input.value).toBe("fixture 2 at 50");
         expect(screen.getByTestId("command-line").textContent).toBe("fixture 1 at full");
 
@@ -262,6 +288,54 @@ describe("the command line", () => {
             network.last.deliver(serverMessage({ t: "Ack", seq: 0 }));
         });
         expect(screen.getByTestId("command-line").textContent).toBe("fixture 2 at 50");
+    });
+
+    /**
+     * **The exit criterion, as a gesture rather than a claim.**
+     *
+     * `ARCHITECTURE_SPEC.md` §4.5's three shapes, each pressed and each checked
+     * for what it did *and* for what it did not do:
+     *
+     * - an **argument keyword** puts its word in the line and sends **no**
+     *   `Command` at all beyond the line itself;
+     * - a **command that needs arguments** does the same and waits;
+     * - a **whole command** runs at once.
+     */
+    it("writes into the line with a key, and only the third shape acts", () => {
+        const { network } = desk();
+        serve(network);
+        const input = screen.getByTestId("command-input");
+        if (!(input instanceof HTMLInputElement)) {
+            throw new Error("the command line is an input");
+        }
+        fireEvent.change(input, { target: { value: "" } });
+
+        const acted = (): string[] =>
+            network.last.sent
+                .map((bytes) => decode(bytes))
+                .filter(
+                    (message): message is { t: "Command"; command: { t: string } } =>
+                        typeof message === "object" &&
+                        message !== null &&
+                        (message as { t?: unknown }).t === "Command",
+                )
+                .map((message) => message.command.t)
+                .filter((t) => t !== "CommandLineInput");
+
+        // An argument keyword: appended, and nothing acted.
+        fireEvent.click(screen.getByTestId("key-fixture"));
+        expect(input.value).toBe("Fixture ");
+        expect(acted()).toEqual([]);
+
+        // A command that needs arguments: written, and still nothing acted.
+        fireEvent.click(screen.getByTestId("key-store"));
+        expect(input.value).toBe("Store ");
+        expect(acted()).toEqual([]);
+
+        // A whole command with no argument: executed at once.
+        fireEvent.click(screen.getByTestId("key-clear"));
+        expect(acted()).toEqual(["ClearProgrammer"]);
+        expect(input.value).toBe("");
     });
 });
 

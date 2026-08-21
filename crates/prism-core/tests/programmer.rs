@@ -49,7 +49,7 @@ fn snapshot(file: &ShowFile) -> Vec<u8> {
 // -- the group ------------------------------------------------------------
 
 #[test]
-fn the_nine_programmer_commands_are_the_ones_the_show_hands_on() {
+fn the_programmer_commands_are_the_ones_the_show_hands_on() {
     // S11 decided the split by answering `Effect::Programmer`; this session is
     // the other half of exactly those five. Pinning the two lists together
     // means a sixth command cannot be given to one and not the other.
@@ -59,9 +59,13 @@ fn the_nine_programmer_commands_are_the_ones_the_show_hands_on() {
         Command::ApplyPreset {
             preset_id: PresetId::new(4),
         },
+        Command::SelectGroup {
+            group_id: prism_domain::GroupId::new(1),
+            mode: SelectionMode::Set,
+        },
         Command::ClearProgrammer,
         Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "3".to_owned(),
             mode: StoreMode::Merge,
         },
@@ -70,7 +74,7 @@ fn the_nine_programmer_commands_are_the_ones_the_show_hands_on() {
         // go in it.
         Command::StorePreset {
             preset_id: PresetId::new(4),
-            pool: FeatureGroup::Color,
+            pool: Some(FeatureGroup::Color),
             name: "Deep blue".to_owned(),
             color: None,
             mode: StoreMode::Merge,
@@ -82,13 +86,29 @@ fn the_nine_programmer_commands_are_the_ones_the_show_hands_on() {
         // it is loaded into.
         Command::StoreSequence {
             sequence_id: SequenceId::new(1),
+            name: String::new(),
             mode: prism_domain::SequenceStoreMode::Append,
         },
         Command::EditCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "1".to_owned(),
         },
         Command::Update,
+        // S40's, and the same split once more: a group is the *selection*, and
+        // the show holds no selection.
+        Command::StoreGroup {
+            group_id: prism_domain::GroupId::new(7),
+            name: "Front wash".to_owned(),
+            mode: prism_domain::OverwriteMode::Merge,
+        },
+        // `Store Sequence 9` on a number nobody has used, which S40 makes a
+        // create as well as a store — so it is the programmer's for the same
+        // reason the other stores are.
+        Command::StoreSequence {
+            sequence_id: SequenceId::new(9),
+            name: "Act 2".to_owned(),
+            mode: prism_domain::SequenceStoreMode::Append,
+        },
     ];
 
     for command in show_commands() {
@@ -104,7 +124,7 @@ fn the_nine_programmer_commands_are_the_ones_the_show_hands_on() {
             "{command:?}"
         );
     }
-    assert_eq!(programmer_commands.len(), 9);
+    assert_eq!(programmer_commands.len(), 12);
 }
 
 #[test]
@@ -118,12 +138,14 @@ fn a_command_that_is_not_the_programmers_is_refused_here() {
         if matches!(
             command,
             Command::SelectFixtures { .. }
+                | Command::SelectGroup { .. }
                 | Command::SetAttribute { .. }
                 | Command::ApplyPreset { .. }
                 | Command::ClearProgrammer
                 | Command::StoreCue { .. }
                 | Command::StorePreset { .. }
                 | Command::StoreSequence { .. }
+                | Command::StoreGroup { .. }
                 | Command::EditCue { .. }
                 | Command::Update
         ) {
@@ -332,6 +354,10 @@ fn any_other_programmer_interaction_puts_the_clear_stage_back_to_zero() {
         Command::ApplyPreset {
             preset_id: PresetId::new(4),
         },
+        Command::SelectGroup {
+            group_id: prism_domain::GroupId::new(1),
+            mode: SelectionMode::Set,
+        },
     ];
 
     for command in interactions {
@@ -370,7 +396,7 @@ fn a_store_can_never_meet_a_non_zero_clear_stage() {
     let before = snapshot(&file);
     assert!(
         file.apply(&Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "3".to_owned(),
             mode: StoreMode::Merge,
         })
@@ -438,7 +464,7 @@ fn a_preset_reaches_the_cue_with_its_link_intact() {
     })
     .unwrap();
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -511,7 +537,7 @@ fn storing_merges_into_the_cue_that_is_already_there() {
     file.apply(&select(&[3], SelectionMode::Set)).unwrap();
     file.apply(&set(AttributeType::Blue, 111)).unwrap();
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -547,7 +573,7 @@ fn storing_an_empty_programmer_is_refused_rather_than_storing_nothing() {
     let mut file = file();
     assert!(
         file.apply(&Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "9".to_owned(),
             mode: StoreMode::Merge,
         })
@@ -575,7 +601,7 @@ fn values_naming_a_fixture_that_has_been_unpatched_are_dropped_and_reported() {
 
     let applied = file
         .apply(&Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "4".to_owned(),
             mode: StoreMode::Merge,
         })
@@ -637,12 +663,12 @@ fn every_rejection_leaves_the_programmer_byte_identical() {
             preset_id: PresetId::new(99),
         },
         Command::StoreCue {
-            sequence_id: SequenceId::new(99),
+            sequence_id: Some(SequenceId::new(99)),
             cue_number: "1".to_owned(),
             mode: StoreMode::Merge,
         },
         Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "  ".to_owned(),
             mode: StoreMode::Merge,
         },
@@ -712,7 +738,7 @@ fn any_programmer_command() -> impl Strategy<Value = Command> {
         }),
         Just(Command::ClearProgrammer),
         (1u32..=2, "[0-9]").prop_map(|(id, number)| Command::StoreCue {
-            sequence_id: SequenceId::new(id),
+            sequence_id: Some(SequenceId::new(id)),
             cue_number: number,
             mode: StoreMode::Merge,
         }),
@@ -838,4 +864,194 @@ fn a_relative_move_starts_from_home_and_saturates() {
             Some(expected)
         );
     }
+}
+
+/* -------------------------------------------------------------------------- */
+/* S40: `Store Group`                                                         */
+/* -------------------------------------------------------------------------- */
+
+/// **A group store writes the selection, not the values.**
+///
+/// `Group 3` is a way of selecting fixtures, so what the programmer contributes
+/// to it is the list of fixtures — an operator who has also pushed a dimmer up
+/// does not want that level baked into the group.
+#[test]
+fn a_group_store_writes_the_selection_and_not_the_values() {
+    let mut file = file();
+    file.apply(&select(&[1, 3], SelectionMode::Set)).unwrap();
+    file.apply(&set(AttributeType::Red, 65535)).unwrap();
+
+    file.apply(&Command::StoreGroup {
+        group_id: prism_domain::GroupId::new(7),
+        name: "Front truss".to_owned(),
+        mode: prism_domain::OverwriteMode::Override,
+    })
+    .expect("something is selected");
+
+    let group = file.show.group(prism_domain::GroupId::new(7)).unwrap();
+    assert_eq!(group.name, "Front truss");
+    assert_eq!(
+        group.fixtures,
+        [FixtureId::new(1), FixtureId::new(3)],
+        "the selection, in the order it was made"
+    );
+}
+
+/// A store with **no name** falls back to the number, because a pool box with
+/// nothing written on it is a box an operator cannot find again.
+#[test]
+fn a_group_stored_without_a_name_is_called_after_its_number() {
+    let mut file = file();
+    file.apply(&select(&[2], SelectionMode::Set)).unwrap();
+
+    file.apply(&Command::StoreGroup {
+        group_id: prism_domain::GroupId::new(9),
+        name: String::new(),
+        mode: prism_domain::OverwriteMode::Override,
+    })
+    .unwrap();
+
+    assert_eq!(
+        file.show.group(prism_domain::GroupId::new(9)).unwrap().name,
+        "Group 9"
+    );
+}
+
+/// **A merge adds to a group and keeps its name**; an override replaces the
+/// membership. Either way the name an operator already gave the box survives,
+/// because `Store Group 1` is a store and not a rename — `Label Group 1` is.
+#[test]
+fn merging_into_a_group_adds_fixtures_once_and_keeps_the_name() {
+    let mut file = file();
+    // Group 1 is fixtures 1, 2 and 3 in the populated show.
+    file.apply(&select(&[3, 4], SelectionMode::Set)).unwrap();
+
+    file.apply(&Command::StoreGroup {
+        group_id: prism_domain::GroupId::new(1),
+        name: "ignored".to_owned(),
+        mode: prism_domain::OverwriteMode::Merge,
+    })
+    .unwrap();
+
+    let group = file.show.group(prism_domain::GroupId::new(1)).unwrap();
+    assert_eq!(
+        group.fixtures,
+        [
+            FixtureId::new(1),
+            FixtureId::new(2),
+            FixtureId::new(3),
+            FixtureId::new(4)
+        ],
+        "fixture 3 was already in it"
+    );
+    assert_eq!(group.name, "Group 1", "a store renamed the group");
+
+    // The same selection over the top replaces the membership.
+    file.apply(&Command::StoreGroup {
+        group_id: prism_domain::GroupId::new(1),
+        name: "ignored".to_owned(),
+        mode: prism_domain::OverwriteMode::Override,
+    })
+    .unwrap();
+    assert_eq!(
+        file.show
+            .group(prism_domain::GroupId::new(1))
+            .unwrap()
+            .fixtures,
+        [FixtureId::new(3), FixtureId::new(4)]
+    );
+    assert_eq!(
+        file.show.group(prism_domain::GroupId::new(1)).unwrap().name,
+        "Group 1"
+    );
+}
+
+/// A group store with **nothing selected** is refused and writes nothing, which
+/// is `NothingToStore` doing the same job it does for a cue.
+#[test]
+fn a_group_store_with_nothing_selected_is_refused() {
+    let mut file = file();
+    let before = rmp_serde::to_vec_named(&file.show).unwrap();
+
+    let refusal = file.apply(&Command::StoreGroup {
+        group_id: prism_domain::GroupId::new(7),
+        name: "Nothing".to_owned(),
+        mode: prism_domain::OverwriteMode::Override,
+    });
+
+    assert!(
+        matches!(
+            refusal,
+            Err(prism_core::ShowFileError::Programmer(
+                ProgrammerError::NothingToStore
+            ))
+        ),
+        "{refusal:?}"
+    );
+    assert_eq!(rmp_serde::to_vec_named(&file.show).unwrap(), before);
+}
+
+/* -------------------------------------------------------------------------- */
+/* S40: a cue list that was just made is the one being edited                 */
+/* -------------------------------------------------------------------------- */
+
+/// **`Store Sequence 4` on a free number makes the cue list and puts it in
+/// force**, and an Oops takes both back.
+///
+/// Not tidiness: `Store Cue 1` names no cue list and means the selected one
+/// (§4.1), so the next line an operator types after making a list would
+/// otherwise go into whatever was selected before. And an undo that put the show
+/// back and left `Session::selectedSequence` pointing at a cue list that no
+/// longer exists would restore half a state — the fault S39's `CueEdit` image
+/// exists to prevent, one field along.
+#[test]
+fn a_cue_list_made_by_a_store_becomes_the_selected_one() {
+    let mut file = file();
+    assert_eq!(file.session.session().selected_sequence, None);
+
+    file.apply(&Command::StoreSequence {
+        sequence_id: SequenceId::new(4),
+        name: "Act 2".to_owned(),
+        mode: prism_domain::SequenceStoreMode::Merge,
+    })
+    .expect("sequence 4 is free, so this makes it");
+
+    assert_eq!(
+        file.session.session().selected_sequence,
+        Some(SequenceId::new(4))
+    );
+
+    file.apply(&Command::Oops).expect("there is a step to undo");
+    assert!(file.show.sequence(SequenceId::new(4)).is_none());
+    assert_eq!(file.session.session().selected_sequence, None);
+}
+
+/// **A store into a cue list that is already there leaves the selection alone.**
+///
+/// Choosing what to edit is `Sequence 4`'s job, and an operator storing into a
+/// second list has not said they want to move there — a desk that dragged the
+/// selection after every store would make `Store Cue 1` mean somewhere new every
+/// time.
+#[test]
+fn a_store_into_an_existing_cue_list_does_not_move_the_selection() {
+    let mut file = file();
+    file.apply(&Command::SelectSequence {
+        sequence_id: SequenceId::new(1),
+    })
+    .unwrap();
+    file.apply(&select(&[1], SelectionMode::Set)).unwrap();
+    file.apply(&set(AttributeType::Red, 65535)).unwrap();
+
+    // Sequence 1 is in the populated show, so this is an ordinary store.
+    file.apply(&Command::StoreSequence {
+        sequence_id: SequenceId::new(1),
+        name: String::new(),
+        mode: prism_domain::SequenceStoreMode::Append,
+    })
+    .expect("sequence 1 is there and the programmer is not empty");
+
+    assert_eq!(
+        file.session.session().selected_sequence,
+        Some(SequenceId::new(1))
+    );
 }

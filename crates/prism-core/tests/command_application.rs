@@ -14,13 +14,13 @@
 mod common;
 
 use common::{
-    executor, fixture, group, par_type, patch_command, populated_show, preset, sequence,
+    cue, executor, fixture, group, par_type, patch_command, populated_show, preset, sequence,
     session_commands, show_commands,
 };
 use prism_core::{Effect, Show, ShowError};
 use prism_domain::{
-    AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, PresetId, SelectionMode,
-    SequenceId, StoreMode, UniverseId,
+    AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, PlaybackTarget, PresetId,
+    SelectionMode, SequenceId, StoreMode, UniverseId,
 };
 use proptest::prelude::*;
 
@@ -35,8 +35,12 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
 
 #[test]
 fn the_two_groups_together_are_the_whole_protocol() {
-    // A new command variant has to be given a home here, or this fails.
-    assert_eq!(show_commands().len() + session_commands().len(), 40);
+    // A new command variant has to be given a home here, or this fails. The
+    // sum is larger than the forty-two variants there are, because two of the
+    // show forms are repeats — a `StoreSequence` into a list that exists and
+    // into one that does not — and because S40's four generic verbs are in
+    // **both** lists, once with a view as their target and once without.
+    assert_eq!(show_commands().len() + session_commands().len(), 48);
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
     }
@@ -124,7 +128,7 @@ fn every_rejection_leaves_the_show_byte_identical() {
         ),
         (
             Command::StoreCue {
-                sequence_id: SequenceId::new(99),
+                sequence_id: Some(SequenceId::new(99)),
                 cue_number: "1".to_owned(),
                 mode: StoreMode::Merge,
             },
@@ -132,7 +136,7 @@ fn every_rejection_leaves_the_show_byte_identical() {
         ),
         (
             Command::StoreCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: String::new(),
                 mode: StoreMode::Merge,
             },
@@ -140,21 +144,21 @@ fn every_rejection_leaves_the_show_byte_identical() {
         ),
         (
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(99),
+                target: PlaybackTarget::of_executor(ExecutorId::new(99)),
                 direction: GoDirection::Prev,
             },
             ShowError::UnknownExecutor(ExecutorId::new(99)),
         ),
         (
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(1),
+                target: PlaybackTarget::of_executor(ExecutorId::new(1)),
                 direction: GoDirection::Next,
             },
             ShowError::ExecutorHasNoSequence(ExecutorId::new(1)),
         ),
         (
             Command::ExecutorOff {
-                executor_id: ExecutorId::new(1),
+                target: PlaybackTarget::of_executor(ExecutorId::new(1)),
             },
             ShowError::ExecutorHasNoSequence(ExecutorId::new(1)),
         ),
@@ -245,34 +249,25 @@ fn a_direct_edit_that_is_refused_changes_nothing_either() {
     show.store_preset(preset(5, 99, AttributeType::Red, 0))
         .unwrap_err();
     show.remove_preset(PresetId::new(99)).unwrap_err();
-    show.store_sequence(sequence(
-        2,
-        vec![common::cue("1", 99, AttributeType::Red, 0)],
-    ))
-    .unwrap_err();
+    show.store_sequence(sequence(2, vec![cue("1", 99, AttributeType::Red, 0)]))
+        .unwrap_err();
     show.store_sequence(sequence(
         2,
         vec![
-            common::cue("1", 1, AttributeType::Red, 0),
-            common::cue("1", 2, AttributeType::Red, 0),
+            cue("1", 1, AttributeType::Red, 0),
+            cue("1", 2, AttributeType::Red, 0),
         ],
     ))
     .unwrap_err();
     show.remove_sequence(SequenceId::new(99)).unwrap_err();
-    show.store_cue(
-        SequenceId::new(99),
-        common::cue("1", 1, AttributeType::Red, 0),
-    )
-    .unwrap_err();
-    show.store_cue(
-        SequenceId::new(1),
-        common::cue("", 1, AttributeType::Red, 0),
-    )
-    .unwrap_err();
+    show.store_cue(SequenceId::new(99), cue("1", 1, AttributeType::Red, 0))
+        .unwrap_err();
+    show.store_cue(SequenceId::new(1), cue("", 1, AttributeType::Red, 0))
+        .unwrap_err();
     show.store_executor(executor(2, Some(99))).unwrap_err();
     show.set_executor_master(ExecutorId::new(99), 0)
         .unwrap_err();
-    show.record_executor_state(ExecutorId::new(99), true, None)
+    show.record_playback_state(ExecutorId::new(99).into(), true, None)
         .unwrap_err();
 
     assert_eq!(snapshot(&show), before);
@@ -281,7 +276,7 @@ fn a_direct_edit_that_is_refused_changes_nothing_either() {
 #[test]
 fn a_cue_part_linked_to_a_preset_that_is_gone_is_refused() {
     let mut show = populated_show();
-    let mut linked = common::cue("5", 1, AttributeType::Red, 0);
+    let mut linked = cue("5", 1, AttributeType::Red, 0);
     linked.parts[0].preset_ref = Some(PresetId::new(99));
     let before = snapshot(&show);
     assert_eq!(
@@ -377,26 +372,49 @@ fn every_button_function_resolves_to_the_effect_its_name_says() {
         (
             Fn::GoForward,
             vec![Effect::ExecutorGo {
-                executor,
+                executor: executor.into(),
                 direction: GoDirection::Next,
             }],
         ),
         (
             Fn::GoBack,
             vec![Effect::ExecutorGo {
-                executor,
+                executor: executor.into(),
                 direction: GoDirection::Prev,
             }],
         ),
-        (Fn::On, vec![Effect::ExecutorOn { executor }]),
-        (Fn::Off, vec![Effect::ExecutorOff { executor }]),
+        (
+            Fn::On,
+            vec![Effect::ExecutorOn {
+                executor: executor.into(),
+            }],
+        ),
+        (
+            Fn::Off,
+            vec![Effect::ExecutorOff {
+                executor: executor.into(),
+            }],
+        ),
         (
             Fn::Flash,
-            vec![Effect::ExecutorFlash { executor, on: true }],
+            vec![Effect::ExecutorFlash {
+                executor: executor.into(),
+                on: true,
+            }],
         ),
-        (Fn::LearnSpeed, vec![Effect::ExecutorTapSpeed { executor }]),
+        (
+            Fn::LearnSpeed,
+            vec![Effect::ExecutorTapSpeed {
+                executor: executor.into(),
+            }],
+        ),
         // Not running, so a toggle starts it. The other half is below.
-        (Fn::Toggle, vec![Effect::ExecutorOn { executor }]),
+        (
+            Fn::Toggle,
+            vec![Effect::ExecutorOn {
+                executor: executor.into(),
+            }],
+        ),
     ] {
         let mut show = desk_with(vec![function], prism_domain::ExecutorFaderFunction::Master);
         assert_eq!(press(&mut show, 0, true), expected, "{function:?}");
@@ -420,20 +438,28 @@ fn a_toggle_reads_the_state_the_daemon_holds() {
     );
     assert_eq!(
         press(&mut show, 0, true),
-        vec![Effect::ExecutorOn { executor }]
+        vec![Effect::ExecutorOn {
+            executor: executor.into(),
+        }]
     );
 
     // Somebody — a tick readback, which is the only author — says it is running.
-    show.record_executor_state(executor, true, Some(0)).unwrap();
+    show.record_playback_state(executor.into(), true, Some(0))
+        .unwrap();
     assert_eq!(
         press(&mut show, 0, true),
-        vec![Effect::ExecutorOff { executor }]
+        vec![Effect::ExecutorOff {
+            executor: executor.into(),
+        }]
     );
 
-    show.record_executor_state(executor, false, None).unwrap();
+    show.record_playback_state(executor.into(), false, None)
+        .unwrap();
     assert_eq!(
         press(&mut show, 0, true),
-        vec![Effect::ExecutorOn { executor }]
+        vec![Effect::ExecutorOn {
+            executor: executor.into(),
+        }]
     );
 }
 
@@ -449,7 +475,7 @@ fn a_release_is_half_a_flash_and_nothing_at_all_to_anything_else() {
     assert_eq!(
         press(&mut show, 0, false),
         vec![Effect::ExecutorFlash {
-            executor,
+            executor: executor.into(),
             on: false,
         }]
     );
@@ -483,12 +509,17 @@ fn a_named_function_is_resolved_here_as_well() {
     // slot table: it is the profile's own row.
     assert_eq!(
         effects(&mut show, Fn::On),
-        vec![Effect::ExecutorOn { executor }]
+        vec![Effect::ExecutorOn {
+            executor: executor.into(),
+        }]
     );
-    show.record_executor_state(executor, true, Some(0)).unwrap();
+    show.record_playback_state(executor.into(), true, Some(0))
+        .unwrap();
     assert_eq!(
         effects(&mut show, Fn::Toggle),
-        vec![Effect::ExecutorOff { executor }],
+        vec![Effect::ExecutorOff {
+            executor: executor.into(),
+        }],
         "a named Toggle was not resolved against is_active"
     );
 }
@@ -567,7 +598,7 @@ fn what_a_fader_does_is_the_executors_own_setting() {
     assert_eq!(
         applied.effects,
         vec![Effect::SetExecutorMaster {
-            executor,
+            executor: executor.into(),
             level: 30_000
         }]
     );
@@ -587,7 +618,7 @@ fn what_a_fader_does_is_the_executors_own_setting() {
     assert_eq!(
         applied.effects,
         vec![Effect::ExecutorSpeed {
-            executor,
+            executor: executor.into(),
             speed: 30_000
         }]
     );
@@ -612,7 +643,7 @@ fn what_a_fader_does_is_the_executors_own_setting() {
     assert_eq!(
         applied.effects,
         vec![Effect::ExecutorXFade {
-            executor,
+            executor: executor.into(),
             position: 30_000
         }]
     );
@@ -631,4 +662,145 @@ fn what_a_fader_does_is_the_executors_own_setting() {
         .unwrap();
     assert_eq!(applied, prism_core::Applied::default());
     assert_eq!(snapshot(&empty), before);
+}
+
+// ------------------------------------------- S40: a playback named by sequence
+
+/// **A cue list an executor holds is played by that executor.**
+///
+/// `Go+ Sequence 1` and `Go+ Executor 0` are the same playback when executor 0
+/// holds sequence 1, and they have to be, or the operator would have two of the
+/// same cue list running out of step. `Show::playback_of` is where the two names
+/// meet, and it prefers the executor because that is the one with a fader.
+#[test]
+fn a_sequence_an_executor_holds_resolves_to_that_executor() {
+    let mut show = populated_show();
+    let applied = show
+        .apply(&Command::ExecutorOn {
+            target: PlaybackTarget::of_sequence(SequenceId::new(1)),
+        })
+        .expect("executor 0 holds sequence 1");
+    assert_eq!(
+        applied.effects,
+        vec![Effect::ExecutorOn {
+            executor: ExecutorId::new(0).into(),
+        }]
+    );
+}
+
+/// **A cue list no executor holds is played anyway**, as itself.
+///
+/// This is what makes the whole S40 vocabulary reachable from the command line
+/// on a show nobody has assigned yet: `Go+ Sequence 4` runs cue list 4 without
+/// an operator first having to find a free strip for it.
+#[test]
+fn a_sequence_no_executor_holds_is_a_playback_of_its_own() {
+    let mut show = populated_show();
+    show.store_sequence(sequence(4, vec![cue("1", 1, AttributeType::Red, 65535)]))
+        .unwrap();
+
+    let applied = show
+        .apply(&Command::ExecutorOn {
+            target: PlaybackTarget::of_sequence(SequenceId::new(4)),
+        })
+        .expect("sequence 4 is there");
+    assert_eq!(
+        applied.effects,
+        vec![Effect::ExecutorOn {
+            executor: prism_domain::PlaybackId::of_sequence(SequenceId::new(4)),
+        }]
+    );
+}
+
+/// A cue list that is not there cannot be played, and neither can a `Selected`
+/// target that reached the show — the session is what answers that one, and
+/// `ShowFile::resolve` has already filled it in before anything gets here.
+#[test]
+fn a_playback_the_show_cannot_name_is_refused() {
+    let mut show = populated_show();
+    assert!(matches!(
+        show.apply(&Command::ExecutorOn {
+            target: PlaybackTarget::of_sequence(SequenceId::new(404)),
+        }),
+        Err(ShowError::UnknownSequence(_))
+    ));
+    assert!(matches!(
+        show.apply(&Command::ExecutorOn {
+            target: PlaybackTarget::Selected,
+        }),
+        Err(ShowError::NoSelectedSequence)
+    ));
+}
+
+/// **`Goto Cue 2` is a cue *number*, resolved to the index the tick works in.**
+///
+/// The two are not the same thing — a cue list can be numbered 1, 2, 5, 5.5 —
+/// and this is the only place they meet, so the test says it on both kinds of
+/// playback and on the numbers that are not there.
+#[test]
+fn a_goto_turns_the_number_an_operator_typed_into_an_index() {
+    let mut show = populated_show();
+
+    // Through the executor that holds the list.
+    let applied = show
+        .apply(&Command::Goto {
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
+            cue_number: "2".to_owned(),
+        })
+        .expect("cue 2 is in sequence 1");
+    assert_eq!(
+        applied.effects,
+        vec![Effect::Goto {
+            executor: ExecutorId::new(0).into(),
+            cue_index: 1,
+        }]
+    );
+
+    // And on a cue list nobody holds, addressed by name. The number is trimmed,
+    // because the command line hands a word over with the spacing it was typed.
+    show.store_sequence(sequence(
+        4,
+        vec![
+            cue("1", 1, AttributeType::Red, 1),
+            cue("7", 1, AttributeType::Red, 2),
+        ],
+    ))
+    .unwrap();
+    let applied = show
+        .apply(&Command::Goto {
+            target: PlaybackTarget::of_sequence(SequenceId::new(4)),
+            cue_number: " 7 ".to_owned(),
+        })
+        .expect("cue 7 is in sequence 4");
+    assert_eq!(
+        applied.effects,
+        vec![Effect::Goto {
+            executor: prism_domain::PlaybackId::of_sequence(SequenceId::new(4)),
+            cue_index: 1,
+        }]
+    );
+}
+
+/// A `Goto` that names a cue nobody wrote is refused, and so is one on a strip
+/// with nothing loaded — an index into a list that is not there would be the
+/// tick's problem rather than the operator's.
+#[test]
+fn a_goto_with_nowhere_to_go_is_refused() {
+    let mut show = populated_show();
+    assert!(matches!(
+        show.apply(&Command::Goto {
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
+            cue_number: "404".to_owned(),
+        }),
+        Err(ShowError::UnknownCue { .. })
+    ));
+
+    show.store_executor(executor(3, None)).unwrap();
+    assert!(matches!(
+        show.apply(&Command::Goto {
+            target: PlaybackTarget::of_executor(ExecutorId::new(3)),
+            cue_number: "1".to_owned(),
+        }),
+        Err(ShowError::ExecutorHasNoSequence(_))
+    ));
 }

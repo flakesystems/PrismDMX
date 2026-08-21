@@ -35,8 +35,8 @@ use std::time::Duration;
 use prism_core::{Show, ShowFile, ShowMirror, ShowStore};
 use prism_domain::{
     Answer, AttributeType, Command, CueProperty, CueTrigger, ExecutorId, FeatureGroup, FixtureId,
-    GoDirection, JsonValue, PresetId, RgbColor, SelectionMode, SequenceId, SequenceStoreMode,
-    StoreMode, StoreTarget, UniverseId,
+    GoDirection, JsonValue, ObjectRef, OverwriteMode, PlaybackTarget, PresetId, RgbColor,
+    SelectionMode, SequenceId, SequenceStoreMode, StoreMode, StoreTarget, UniverseId,
 };
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
 use prismd::cli::{Options, OutputSpec};
@@ -303,7 +303,7 @@ fn preview_preset(preset: u32, pool: FeatureGroup, mode: StoreMode) -> Query {
 /// Storing the programmer into a cue, in a mode.
 fn store_cue(sequence: u32, number: &str, mode: StoreMode) -> Command {
     Command::StoreCue {
-        sequence_id: SequenceId::new(sequence),
+        sequence_id: Some(SequenceId::new(sequence)),
         cue_number: number.to_owned(),
         mode,
     }
@@ -318,9 +318,10 @@ fn script() -> Vec<Scripted> {
     vec![
         Scripted::Do(
             "make a cue list to store into: a fresh show has none at all",
-            Command::CreateSequence {
+            Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
                 name: "Act 1".to_owned(),
+                mode: SequenceStoreMode::Append,
             },
         ),
         Scripted::Do(
@@ -372,18 +373,18 @@ fn script() -> Vec<Scripted> {
         Scripted::Do("store a second cue", store_cue(1, "2", StoreMode::Merge)),
         Scripted::Do(
             "name it",
-            Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
-                cue_number: "2".to_owned(),
-                property: CueProperty::Name {
-                    name: "Green wash".to_owned(),
+            Command::Label {
+                target: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "2".to_owned(),
                 },
+                name: "Green wash".to_owned(),
             },
         ),
         Scripted::Do(
             "give it a fade",
             Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "2".to_owned(),
                 property: CueProperty::FadeIn { seconds: 5.5 },
             },
@@ -391,7 +392,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Do(
             "and a trigger that carries a time with it",
             Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "2".to_owned(),
                 property: CueProperty::Trigger {
                     trigger: CueTrigger::Time,
@@ -401,30 +402,47 @@ fn script() -> Vec<Scripted> {
         ),
         Scripted::Do(
             "renumber it to 1.5, which moves it up the list",
-            Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
-                cue_number: "2".to_owned(),
-                property: CueProperty::Number {
-                    number: "1.5".to_owned(),
+            Command::Move {
+                from: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "2".to_owned(),
                 },
+                to: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "1.5".to_owned(),
+                },
+                mode: OverwriteMode::Override,
             },
         ),
         Scripted::Do(
             "a fade that runs backwards: refused, and nothing moves",
             Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
                 property: CueProperty::FadeIn { seconds: -1.0 },
             },
         ),
+        // **A number that is taken is a question rather than a refusal** (S40).
+        // S28 refused a renumber onto an occupied number, for
+        // `RenumberFixture`'s reason: the number is the key, and replacing the
+        // other cue deletes a look nobody asked to delete. S40 keeps the
+        // *protection* and moves it one layer out — the line asks *merge,
+        // override or cancel* first, and the answer travels in the command. So
+        // what the recording holds here is the harmless one: a **copy** in
+        // Merge mode, which leaves the source where it is and adds to the
+        // destination.
         Scripted::Do(
-            "a renumber onto a number that is taken: refused, and nothing moves",
-            Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
-                cue_number: "1.5".to_owned(),
-                property: CueProperty::Number {
-                    number: "1".to_owned(),
+            "a copy onto a number that is taken: it merges, and the source stays",
+            Command::Copy {
+                from: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "1.5".to_owned(),
                 },
+                to: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "1".to_owned(),
+                },
+                mode: OverwriteMode::Merge,
             },
         ),
         Scripted::Do("clear the programmer", Command::ClearProgrammer),
@@ -443,7 +461,7 @@ fn script() -> Vec<Scripted> {
             "store it, with a name and a scribble-strip colour",
             Command::StorePreset {
                 preset_id: PresetId::new(1),
-                pool: FeatureGroup::Color,
+                pool: Some(FeatureGroup::Color),
                 name: "Deep blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 255 }),
                 mode: StoreMode::Merge,
@@ -473,7 +491,7 @@ fn script() -> Vec<Scripted> {
             "edit the preset — **and cue 3 follows it**, which is the whole claim",
             Command::StorePreset {
                 preset_id: PresetId::new(1),
-                pool: FeatureGroup::Color,
+                pool: Some(FeatureGroup::Color),
                 name: "Darker blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 120 }),
                 mode: StoreMode::Merge,
@@ -498,7 +516,7 @@ fn script() -> Vec<Scripted> {
             "load cue 3 back into the programmer — **its preset links come with \
              it**, which is the claim `EditCue` exists to keep",
             Command::EditCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "3".to_owned(),
             },
         ),
@@ -551,6 +569,7 @@ fn script() -> Vec<Scripted> {
              number, which is 4",
             Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
+                name: String::new(),
                 mode: SequenceStoreMode::Append,
             },
         ),
@@ -558,54 +577,60 @@ fn script() -> Vec<Scripted> {
             "and merge it into every cue there is",
             Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
+                name: String::new(),
                 mode: SequenceStoreMode::Merge,
             },
         ),
         Scripted::Do(
             "delete a cue: the numbers left do not close up",
-            Command::DeleteCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "1.5".to_owned(),
+            Command::Delete {
+                target: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "1.5".to_owned(),
+                },
             },
         ),
         Scripted::Do(
             "delete a cue that is not there: refused, and nothing moves",
-            Command::DeleteCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "99".to_owned(),
+            Command::Delete {
+                target: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "99".to_owned(),
+                },
             },
         ),
         Scripted::Do(
             "a sequence number that is taken: refused, and the cue list survives",
-            Command::CreateSequence {
+            Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
                 name: "Over the top".to_owned(),
+                mode: SequenceStoreMode::Append,
             },
         ),
         Scripted::Do(
             "fire the list",
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             },
         ),
         Scripted::Do(
             "step it again",
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             },
         ),
         Scripted::Do(
             "and stop it",
             Command::ExecutorOff {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             },
         ),
         Scripted::Do(
             "a Go on an executor with nothing on it: refused",
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(4),
+                target: PlaybackTarget::of_executor(ExecutorId::new(4)),
                 direction: GoDirection::Next,
             },
         ),
@@ -1184,24 +1209,33 @@ fn the_update_state_says_which_cue_is_loaded_and_whether_it_has_moved() {
 }
 
 /// **The cue list in force is the desk's, and it is a field of its own** — S39's
-/// other decision, seen from the wire.
+/// other decision, seen from the wire, with S40's one amendment.
+///
+/// The amendment: `Store Sequence 1` on a **free** number both makes the cue
+/// list and puts it in force, which is why the very first step of the script
+/// already has one. A bare `Store Cue 1` names no list and means the selected
+/// one (§4.1), so a desk that made a cue list and went on pointing somewhere
+/// else would send the next store into the wrong place. A store into a list that
+/// already exists leaves the selection alone, and the last three `StoreSequence`
+/// steps of the script are exactly that.
 #[test]
 fn the_selected_sequence_is_session_state() {
     let recording = recording();
-    assert!(
-        recording.steps[0].selected_sequence.is_none(),
-        "a fresh desk has no cue list in force"
+    assert_eq!(
+        recording.steps[0].selected_sequence,
+        Some(1),
+        "making a cue list did not put it in force"
     );
     let chosen = step(&recording, "and put it in force");
     assert_eq!(chosen.selected_sequence, Some(1));
     // And it stays chosen for the rest of the script, because nothing else in
     // it selects one — including the steps that assign executors, which is the
-    // coupling S39 deliberately did not build.
+    // coupling S39 deliberately did not build, and the later stores into a cue
+    // list that is already there.
     assert!(
         recording
             .steps
             .iter()
-            .skip_while(|step| step.selected_sequence.is_none())
             .all(|step| step.selected_sequence == Some(1)),
         "something moved the selected sequence that was not a SelectSequence"
     );

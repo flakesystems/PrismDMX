@@ -30,7 +30,7 @@ use std::fmt;
 use prism_domain::{
     Cue, CueProperty, Executor, ExecutorButtonFunction, ExecutorEncoderFunction,
     ExecutorFaderFunction, ExecutorId, Fixture, FixtureType, Group, GroupId, JsonPatchOp,
-    JsonValue, Preset, PresetId, Sequence, SequenceId, UniverseId,
+    JsonValue, PlaybackId, Preset, PresetId, Sequence, SequenceId, UniverseId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -171,6 +171,28 @@ pub enum ShowError {
     /// A session command reached the show applier. `ARCHITECTURE_SPEC.md` §4.4
     /// commands act on session state, which is S12.
     NotAShowCommand,
+    /// A `Copy` or a `Move` naming two different kinds of thing (S40).
+    ///
+    /// `Copy Cue 2 Group 6` is a line the parser will build and nothing can
+    /// carry out, which is the split S26 wrote down: the client decides what was
+    /// *asked for* and the daemon decides what is.
+    MismatchedObjects {
+        /// The source, as an operator would read it back.
+        from: String,
+        /// The destination.
+        to: String,
+    },
+    /// A `Copy` or a `Move` of something onto itself (S40).
+    ///
+    /// Refused rather than treated as a no-op: an operator who typed
+    /// `Copy Cue 3 Cue 3` meant something else, and silence is the wrong answer
+    /// to a line that cannot have been meant.
+    SameObject(String),
+    /// A line that needs the selected cue list, on a desk with none (S40).
+    ///
+    /// `Store Cue 5` names no sequence and means `Session::selectedSequence`
+    /// (§4.1). Nothing selected is a message rather than a silence.
+    NoSelectedSequence,
     /// The show could not be projected into JSON. `prism-domain` refuses
     /// non-finite floats in both directions, so this is what a NaN that reached
     /// the model looks like on the way out.
@@ -246,6 +268,16 @@ impl fmt::Display for ShowError {
                 write!(f, "attribute value {value} is outside 0..=65535")
             }
             Self::NotAShowCommand => write!(f, "this is a session command, not a show command"),
+            Self::MismatchedObjects { from, to } => {
+                write!(f, "{from} and {to} are not the same kind of thing")
+            }
+            Self::SameObject(what) => write!(f, "{what} is already where it is"),
+            Self::NoSelectedSequence => {
+                write!(
+                    f,
+                    "no cue list is selected: say which one, or select one first"
+                )
+            }
             Self::NotRepresentable(reason) => write!(f, "the show cannot be encoded: {reason}"),
         }
     }
@@ -993,6 +1025,8 @@ impl Show {
             name: name.to_owned(),
             cues: Vec::new(),
             looping: false,
+            is_active: false,
+            current_cue_index: None,
         })
     }
 
@@ -1032,7 +1066,7 @@ impl Show {
         };
 
         let mut next = sequence.clone();
-        let moved = apply_cue_property(&mut next, index, property, sequence_id)?;
+        let moved = apply_cue_property(&mut next, index, property)?;
         if !moved {
             return Ok(Vec::new());
         }
@@ -1219,31 +1253,50 @@ impl Show {
         }])
     }
 
-    /// Records what the engine reports about a running executor.
+    /// Records what the engine reports about a running playback.
     ///
-    /// This travels as `Delta::ExecutorState` rather than as a show patch: it
+    /// This travels as `Delta::PlaybackState` rather than as a show patch: it
     /// is playback state the engine owns, and the protocol gives it its own
     /// delta so a client does not have to diff the show to draw a moving
     /// executor bar.
+    ///
+    /// **Which row it is written into is the playback's own answer** (S40): an
+    /// executor's is on its row of the grid, and a cue list playing on no fader
+    /// keeps it on the sequence. `crate::mirror` writes it into the same two
+    /// places, from the same delta, which is what keeps a client's document and
+    /// the daemon's agreeing.
     ///
     /// Returns whether anything actually changed.
     ///
     /// # Errors
     ///
-    /// [`ShowError::UnknownExecutor`] if there is no such executor.
-    pub fn record_executor_state(
+    /// [`ShowError::UnknownExecutor`] or [`ShowError::UnknownSequence`] if the
+    /// playback is not in this show — which is ordinary rather than a fault: the
+    /// tick is one merge body behind for a poll after a rebuild.
+    pub fn record_playback_state(
         &mut self,
-        id: ExecutorId,
+        playback: PlaybackId,
         is_active: bool,
         cue_index: Option<u32>,
     ) -> Result<bool, ShowError> {
-        let Some(executor) = self.executors.get_mut(&id) else {
-            return Err(ShowError::UnknownExecutor(id));
+        let (was_active, was_index): (&mut bool, &mut Option<u32>) = match playback {
+            PlaybackId::Executor { executor_id } => {
+                let Some(executor) = self.executors.get_mut(&executor_id) else {
+                    return Err(ShowError::UnknownExecutor(executor_id));
+                };
+                (&mut executor.is_active, &mut executor.current_cue_index)
+            }
+            PlaybackId::Sequence { sequence_id } => {
+                let Some(sequence) = self.sequences.get_mut(&sequence_id) else {
+                    return Err(ShowError::UnknownSequence(sequence_id));
+                };
+                (&mut sequence.is_active, &mut sequence.current_cue_index)
+            }
         };
-        let changed = executor.is_active != is_active || executor.current_cue_index != cue_index;
-        executor.is_active = is_active;
-        executor.current_cue_index = cue_index;
-        // Deliberately not marked dirty: an executor running is not an unsaved
+        let changed = *was_active != is_active || *was_index != cue_index;
+        *was_active = is_active;
+        *was_index = cue_index;
+        // Deliberately not marked dirty: a playback running is not an unsaved
         // edit, and a Save LED that lit up because a cue advanced would tell
         // the operator nothing.
         Ok(changed)
@@ -1262,6 +1315,26 @@ impl Show {
     }
 
     // -- internals --------------------------------------------------------
+
+    /// The group pool, for writing. `crate::objects` is the other author.
+    pub(crate) const fn groups_mut(&mut self) -> &mut BTreeMap<GroupId, Group> {
+        &mut self.groups
+    }
+
+    /// The preset pools, for writing.
+    pub(crate) const fn presets_mut(&mut self) -> &mut BTreeMap<PresetId, Preset> {
+        &mut self.presets
+    }
+
+    /// The sequence pool, for writing.
+    pub(crate) const fn sequences_mut(&mut self) -> &mut BTreeMap<SequenceId, Sequence> {
+        &mut self.sequences
+    }
+
+    /// [`Self::touch`], reachable from `crate::objects`.
+    pub(crate) const fn mark(&mut self) {
+        self.dirty = true;
+    }
 
     /// The show changed and has not been saved.
     fn touch(&mut self) {
@@ -1339,35 +1412,8 @@ fn apply_cue_property(
     sequence: &mut Sequence,
     index: usize,
     property: &CueProperty,
-    sequence_id: SequenceId,
 ) -> Result<bool, ShowError> {
     match property {
-        CueProperty::Number { number } => {
-            let wanted = number.trim();
-            if wanted.is_empty() {
-                return Err(ShowError::EmptyCueNumber);
-            }
-            if sequence.cues[index].number == wanted {
-                return Ok(false);
-            }
-            // Refused rather than replacing, exactly as `RenumberFixture` is:
-            // the number is the key, and taking one that is in use would delete
-            // a look nobody asked to delete.
-            if sequence
-                .cues
-                .iter()
-                .enumerate()
-                .any(|(other, cue)| other != index && cue.number == wanted)
-            {
-                return Err(ShowError::DuplicateCueNumber {
-                    sequence: sequence_id,
-                    number: wanted.to_owned(),
-                });
-            }
-            sequence.cues[index].number = wanted.to_owned();
-            Ok(true)
-        }
-        CueProperty::Name { name } => Ok(replace(&mut sequence.cues[index].name, name.clone())),
         CueProperty::FadeIn { seconds } => {
             Ok(replace(&mut sequence.cues[index].fade_in, time(*seconds)?))
         }
@@ -1488,7 +1534,11 @@ fn escape(token: &str) -> String {
 /// RFC 6902 lets `add` overwrite an object member, so one operation would do -
 /// but a client that logs its deltas, and a reviewer reading them, learn more
 /// from the distinction than the extra branch costs.
-fn put(path: String, value: &impl Serialize, existed: bool) -> Result<JsonPatchOp, ShowError> {
+pub(crate) fn put(
+    path: String,
+    value: &impl Serialize,
+    existed: bool,
+) -> Result<JsonPatchOp, ShowError> {
     let value = to_json(value)?;
     Ok(if existed {
         JsonPatchOp::Replace { path, value }
@@ -1640,6 +1690,23 @@ mod tests {
             ShowError::ValueOutOfRange(70_000),
             ShowError::NotAShowCommand,
             ShowError::NotRepresentable("NaN".to_owned()),
+            // S40's, which a desk reads as often as any of the above: a line
+            // that names something twice, or nothing at all, is answered with a
+            // sentence rather than with a silence.
+            ShowError::FixtureNumberInUse(FixtureId::new(1)),
+            ShowError::UnknownLibraryType("generic.par".to_owned()),
+            ShowError::UnknownCue {
+                sequence: SequenceId::new(1),
+                number: "5".to_owned(),
+            },
+            ShowError::SequenceNumberInUse(SequenceId::new(1)),
+            ShowError::NegativeTime(-1.0),
+            ShowError::MismatchedObjects {
+                from: "cue 2".to_owned(),
+                to: "group 6".to_owned(),
+            },
+            ShowError::SameObject("cue 3".to_owned()),
+            ShowError::NoSelectedSequence,
         ] {
             assert!(!error.to_string().is_empty(), "{error:?}");
         }

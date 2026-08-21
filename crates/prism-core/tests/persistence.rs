@@ -154,6 +154,8 @@ fn saveable_file() -> ShowFile {
             id: SequenceId::new(5),
             name: "Act One".to_owned(),
             looping: true,
+            is_active: false,
+            current_cue_index: None,
             cues: vec![
                 Cue {
                     number: "1".to_owned(),
@@ -288,6 +290,8 @@ fn second_file() -> ShowFile {
             id: SequenceId::new(1),
             name: "Chase".to_owned(),
             looping: false,
+            is_active: false,
+            current_cue_index: None,
             cues: (1..=40)
                 .map(|id| Cue {
                     number: id.to_string(),

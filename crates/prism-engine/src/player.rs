@@ -77,7 +77,7 @@
 //! makes the next crossfade run in the other direction, which is how a console
 //! with one crossfade fader is operated.
 
-use prism_domain::{CueTrigger, ExecutorId, GoDirection, SPEED_UNITY};
+use prism_domain::{CueTrigger, GoDirection, PlaybackId, SPEED_UNITY};
 
 use crate::cue::{CuePlan, SequencePlan, interpolate};
 use crate::playback::{PlaybackLayer, PlaybackSource};
@@ -183,17 +183,20 @@ struct Entry {
 enum Change {
     /// Nothing: the source was already where it should be.
     None,
-    /// The playback started, so its executor goes active and is stamped with a
+    /// The playback started, so its source goes active and is stamped with a
     /// fresh activation counter — the top of the LTP order.
     Activate,
     /// The playback finished releasing and leaves the merge.
     Deactivate,
 }
 
-/// One executor's playback: where it is in its cue list, and what it is holding.
+/// One playback: where it is in its cue list, and what it is holding.
+///
+/// **It belonged to an executor until S40** and now belongs to a
+/// [`PlaybackId`], which may be a cue list on no fader - see that type.
 #[derive(Debug, Clone)]
 pub struct CuePlayer {
-    executor: ExecutorId,
+    playback: PlaybackId,
     sequence: Option<SequencePlan>,
     entries: Box<[Entry]>,
     /// The cue being played, or `None` when the playback is stopped or releasing.
@@ -232,11 +235,11 @@ pub struct CuePlayer {
 }
 
 impl CuePlayer {
-    /// A player for one executor, with no sequence on it.
+    /// A player for one playback, with no sequence on it.
     #[must_use]
-    fn new(executor: ExecutorId) -> Self {
+    fn new(playback: PlaybackId) -> Self {
         Self {
-            executor,
+            playback,
             sequence: None,
             entries: Box::default(),
             current: None,
@@ -255,10 +258,10 @@ impl CuePlayer {
         }
     }
 
-    /// Which executor this playback belongs to.
+    /// Which playback this is.
     #[must_use]
-    pub const fn executor(&self) -> ExecutorId {
-        self.executor
+    pub const fn playback(&self) -> PlaybackId {
+        self.playback
     }
 
     /// The compiled cue list, if one is loaded.
@@ -294,7 +297,7 @@ impl CuePlayer {
         entry.live.then_some(entry.value)
     }
 
-    /// Puts a compiled sequence on this executor.
+    /// Puts a compiled sequence on this playback.
     ///
     /// Allocates the working memory, so this is a set-up operation and not
     /// something to do while the tick is running. The playback is left stopped;
@@ -318,7 +321,7 @@ impl CuePlayer {
         // merge.
     }
 
-    /// Takes the sequence off this executor and gives the source back.
+    /// Takes the sequence off this playback and gives the source back.
     ///
     /// The next tick clears what the playback was holding and takes it out of
     /// the merge; after that the source is the host's again.
@@ -359,6 +362,43 @@ impl CuePlayer {
         // A crossfade takes the fader's *present* position as the start of the
         // new travel, which is what makes the second Go run the fader back the
         // way it came.
+        if let Some(fade) = crossfade.as_mut() {
+            *fade = Crossfade::new(fade.position);
+        }
+        true
+    }
+
+    /// Jumps straight to one cue of the list, starting it if it was stopped.
+    ///
+    /// **S40's `Goto`**, and the command that had no message at any layer before
+    /// it: there was no `Command::Goto`, no `TickCommand` for one and nothing
+    /// here. It is [`Self::go`] without the stepping — the cue is entered with
+    /// its own delay and fade, exactly as if the list had arrived there — so a
+    /// crossfade re-bases the same way and a `Follow` after it triggers on time.
+    ///
+    /// Returns `false` if there is no sequence or the index is past the end of
+    /// it. The **index** rather than the number, because a cue number is a
+    /// string and the tick resolves nothing (`ARCHITECTURE_SPEC.md` §3.1); the
+    /// daemon's core thread turns one into the other.
+    pub fn goto(&mut self, index: usize) -> bool {
+        let Self {
+            sequence,
+            entries,
+            current,
+            delay,
+            restart,
+            crossfade,
+            ..
+        } = self;
+        let Some(plan) = sequence.as_ref() else {
+            return false;
+        };
+        if index >= plan.cue_count() {
+            return false;
+        }
+        *delay = begin(plan, entries, index);
+        *current = Some(index);
+        *restart = true;
         if let Some(fade) = crossfade.as_mut() {
             *fade = Crossfade::new(fade.position);
         }
@@ -738,18 +778,18 @@ fn triggers(plan: &SequencePlan, current: usize, next: usize, elapsed: u64) -> b
     }
 }
 
-/// One player per executor, kept in step with a [`PlaybackLayer`].
+/// One player per playback, kept in step with a [`PlaybackLayer`].
 #[derive(Debug, Clone)]
 pub struct CueLayer {
-    /// Sorted by executor number, like the layer's sources, so a lookup is a
-    /// binary search and the two can be walked together.
+    /// Sorted by playback, like the layer's sources, so a lookup is a binary
+    /// search and the two can be walked together.
     players: Box<[CuePlayer]>,
 }
 
 impl CueLayer {
     /// A player for every source in a layer, none of them loaded.
     ///
-    /// Built from the layer rather than from a list of executors, so the two
+    /// Built from the layer rather than from a list of playbacks, so the two
     /// cannot end up describing different sets.
     #[must_use]
     pub fn for_layer(layer: &PlaybackLayer) -> Self {
@@ -757,7 +797,7 @@ impl CueLayer {
             players: layer
                 .sources()
                 .iter()
-                .map(|source| CuePlayer::new(source.executor()))
+                .map(|source| CuePlayer::new(source.id()))
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
         }
@@ -769,27 +809,27 @@ impl CueLayer {
         self.players.len()
     }
 
-    /// Every player, in executor order.
+    /// Every player, in playback order.
     #[must_use]
     pub const fn players(&self) -> &[CuePlayer] {
         &self.players
     }
 
-    fn index_of(&self, executor: ExecutorId) -> Option<usize> {
+    fn index_of(&self, id: PlaybackId) -> Option<usize> {
         self.players
-            .binary_search_by_key(&executor, CuePlayer::executor)
+            .binary_search_by_key(&id, CuePlayer::playback)
             .ok()
     }
 
-    /// One player by executor number.
+    /// One player by playback.
     #[must_use]
-    pub fn player(&self, executor: ExecutorId) -> Option<&CuePlayer> {
-        self.players.get(self.index_of(executor)?)
+    pub fn player(&self, id: impl Into<PlaybackId>) -> Option<&CuePlayer> {
+        self.players.get(self.index_of(id.into())?)
     }
 
-    /// One player by executor number, for loading a sequence or stepping it.
-    pub fn player_mut(&mut self, executor: ExecutorId) -> Option<&mut CuePlayer> {
-        let index = self.index_of(executor)?;
+    /// One player by playback, for loading a sequence or stepping it.
+    pub fn player_mut(&mut self, id: impl Into<PlaybackId>) -> Option<&mut CuePlayer> {
+        let index = self.index_of(id.into())?;
         self.players.get_mut(index)
     }
 
@@ -805,23 +845,23 @@ impl CueLayer {
                 if player.flush {
                     player.flush = false;
                     player.active = false;
-                    if let Some(source) = layer.source_mut(player.executor) {
+                    if let Some(source) = layer.source_mut(player.playback) {
                         source.clear();
                     }
-                    layer.deactivate(player.executor);
+                    layer.deactivate(player.playback);
                 }
                 continue;
             }
             match player.advance(tick) {
                 Change::Activate => {
-                    layer.activate(player.executor);
+                    layer.activate(player.playback);
                 }
                 Change::Deactivate => {
-                    layer.deactivate(player.executor);
+                    layer.deactivate(player.playback);
                 }
                 Change::None => {}
             }
-            if let Some(source) = layer.source_mut(player.executor) {
+            if let Some(source) = layer.source_mut(player.playback) {
                 player.write(source);
             }
         }
@@ -837,7 +877,7 @@ mod tests {
     use crate::player::{SPEED_UNITY, TAP_WINDOW};
     use crate::testkit::{cue, cue_part, moving_head, sequence};
     use prism_domain::{
-        AttributeType, Cue, CueTrigger, ExecutorId, FixtureId, GoDirection, Sequence,
+        AttributeType, Cue, CueTrigger, ExecutorId, FixtureId, GoDirection, PlaybackId, Sequence,
     };
 
     /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
@@ -960,6 +1000,125 @@ mod tests {
         assert_eq!(rig.current(1), Some(0));
         assert_eq!(rig.activation(1), Some(0));
         assert_eq!(rig.value(1, AttributeType::Dimmer), 40_000);
+    }
+
+    /// **S40's `Goto`: the cue is entered, not stepped to.**
+    ///
+    /// A jump to cue 3 of a list that is stopped starts it *there* — the whole
+    /// point of the command — and one to a cue past the end of the list changes
+    /// nothing at all, which is the tick's answer to an impossible instruction
+    /// everywhere else in this crate too.
+    #[test]
+    fn a_goto_enters_the_cue_it_names_and_ignores_one_that_is_not_there() {
+        let mut rig = Rig::new(1);
+        rig.load(
+            1,
+            &sequence(
+                vec![
+                    dimmer_cue("1", 10_000, 0.0),
+                    dimmer_cue("2", 20_000, 0.0),
+                    dimmer_cue("3", 30_000, 0.0),
+                ],
+                false,
+            ),
+        );
+
+        assert!(rig.player(1).goto(2), "cue 3 is in the list");
+        rig.run(0, 2);
+        assert_eq!(rig.current(1), Some(2));
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 30_000);
+        // It started the list as well as moving it: a jump from stopped is a
+        // start, exactly as a Go from stopped is.
+        assert_eq!(rig.activation(1), Some(0));
+
+        // Past the end: nothing moves and nothing is said.
+        assert!(!rig.player(1).goto(3));
+        rig.run(3, 4);
+        assert_eq!(rig.current(1), Some(2));
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 30_000);
+    }
+
+    /// A `Goto` on a playback with no cue list is `false` rather than a panic.
+    #[test]
+    fn a_goto_on_a_playback_with_no_sequence_does_nothing() {
+        let mut rig = Rig::new(1);
+        assert!(!rig.player(1).goto(0));
+    }
+
+    /// A jump **backwards** is a jump, not a step: the cue is entered with its
+    /// own fade, so `Goto Cue 1` from cue 3 is not the same as two Go-backs.
+    #[test]
+    fn a_goto_backwards_enters_the_cue_rather_than_stepping_to_it() {
+        let mut rig = Rig::new(1);
+        rig.load(
+            1,
+            &sequence(
+                vec![
+                    dimmer_cue("1", 10_000, 0.0),
+                    dimmer_cue("2", 20_000, 0.0),
+                    dimmer_cue("3", 30_000, 0.0),
+                ],
+                false,
+            ),
+        );
+        rig.go(1, GoDirection::Next);
+        rig.run(0, 1);
+        rig.go(1, GoDirection::Next);
+        rig.run(2, 3);
+        assert_eq!(rig.current(1), Some(1));
+
+        assert!(rig.player(1).goto(0));
+        rig.run(4, 5);
+        assert_eq!(rig.current(1), Some(0));
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 10_000);
+    }
+
+    /// **A cue list on no fader is a source like any other** — S40.
+    ///
+    /// The merge does not know the difference: `docs/DMX_MERGE.md` §2 is written
+    /// about *sources*, and this one has a master at full and no keys. What the
+    /// test holds is that a sequence playback and an executor playback merge
+    /// together, and that LTP orders them by activation rather than by kind.
+    #[test]
+    fn a_sequence_playback_merges_beside_an_executor() {
+        let plan = plan();
+        let layer = PlaybackLayer::new(
+            &plan,
+            [
+                PlaybackId::of_executor(ExecutorId::new(1)),
+                PlaybackId::of_sequence(prism_domain::SequenceId::new(7)),
+            ],
+        )
+        .unwrap();
+        let mut rig = Rig {
+            cues: CueLayer::for_layer(&layer),
+            plan,
+            layer,
+        };
+        let compiled = SequencePlan::build(
+            &rig.plan,
+            &sequence(vec![dimmer_cue("1", 40_000, 0.0)], false),
+        )
+        .unwrap();
+        rig.cues
+            .player_mut(PlaybackId::of_sequence(prism_domain::SequenceId::new(7)))
+            .unwrap()
+            .load(compiled);
+        rig.cues
+            .player_mut(PlaybackId::of_sequence(prism_domain::SequenceId::new(7)))
+            .unwrap()
+            .go(GoDirection::Next);
+
+        rig.run(0, 2);
+
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 40_000);
+        assert_eq!(
+            rig.layer
+                .source(PlaybackId::of_sequence(prism_domain::SequenceId::new(7)))
+                .and_then(crate::playback::PlaybackSource::activation),
+            Some(0),
+            "the sequence playback never went active"
+        );
     }
 
     #[test]
@@ -1502,7 +1661,7 @@ mod tests {
             None
         );
         assert_eq!(player.provides(usize::MAX), None);
-        assert_eq!(player.executor(), ExecutorId::new(1));
+        assert_eq!(player.playback(), ExecutorId::new(1).into());
         assert!(player.sequence().is_some());
     }
 

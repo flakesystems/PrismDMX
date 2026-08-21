@@ -93,10 +93,15 @@ describe("deltas", () => {
     });
   });
 
-  it("writes the two fields an executor delta carries", () => {
+  it("writes the two fields a playback delta carries", () => {
     const store = new DeskStore();
     store.applySnapshot(snapshot());
-    store.applyDelta({ t: "ExecutorState", executorId: 0, isActive: true, cueIndex: 2 });
+    store.applyDelta({
+      t: "PlaybackState",
+      playback: { t: "Executor", executorId: 0 },
+      isActive: true,
+      cueIndex: 2,
+    });
     expect(store.getState().documents?.show).toEqual({
       fixtures: { "1": { name: "Front", universe: 1, address: 1 } },
       groups: {},

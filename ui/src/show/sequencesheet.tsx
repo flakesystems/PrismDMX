@@ -70,6 +70,7 @@ import {
   sequenceRows,
   sequencesDocument,
 } from "./looks";
+import { useConsole } from "../desk/consoleshell";
 import { StoreRequester, isStorable, storeText } from "./store";
 import { StoreModeChooser } from "./storemode";
 
@@ -105,6 +106,7 @@ export function SequenceSheet({
 }) {
   const send = useSend();
   const ask = useAsk();
+  const { run } = useConsole();
   const sequences = useMemo(() => sequenceRows(show), [show]);
   const inForce = useMemo(() => executorInForce(session, show), [session, show]);
   const chosen = useMemo(() => sequenceInForce(session), [session]);
@@ -119,29 +121,24 @@ export function SequenceSheet({
     [show, inForce.sequenceId],
   );
 
+  // **Every key in this window writes a line** — `ARCHITECTURE_SPEC.md` §4.5.
+  // The pointer has supplied the argument, so each of them submits at once, and
+  // each is a line an operator could have typed instead.
   const create = useCallback(() => {
     const sequenceId = nextFreeNumber(sequences);
-    send({ t: "CreateSequence", sequenceId, name: `Sequence ${String(sequenceId)}` });
-    // And put it in force, so the sheet is looking at the list that was just
-    // made. Two commands rather than one, and each is meaningful on its own —
-    // making a cue list and choosing which one to edit are different acts, and
-    // since S39 neither of them needs an executor.
-    send({ t: "SelectSequence", sequenceId });
-    // A fader as well, if one is selected: a cue list nobody can fire is a cue
-    // list nobody can check. Refused where the slot is taken by another list,
-    // which is the daemon's decision and not this window's.
-    if (inForce.executorId !== null) {
-      send({ t: "AssignExecutor", executorId: inForce.executorId, sequenceId });
-    }
-  }, [inForce.executorId, send, sequences]);
+    // `Store Sequence n` on a free number makes the cue list — S40 folded
+    // `CreateSequence` into it, because the command line cannot know which of
+    // the two acts it is (the parser does not read the show, S26).
+    run(`Store Sequence ${String(sequenceId)}`);
+  }, [run, sequences]);
 
   const choose = useCallback(
     (sequenceId: number) => {
       // No executor needed since S39 — which is half the reason the field
       // exists. See the module documentation.
-      send({ t: "SelectSequence", sequenceId });
+      run(`Sequence ${String(sequenceId)}`);
     },
-    [send],
+    [run],
   );
 
   return (
@@ -157,14 +154,20 @@ export function SequenceSheet({
         sequenceName={onExecutor?.name ?? null}
         isActive={inForce.isActive}
         currentCueIndex={inForce.currentCueIndex}
+        // The transport is a line as well, and can be: it names an executor
+        // rather than being one. The **executor bar's** own keys are the
+        // exception §4.5 names, because a Go there is a gesture with timing in
+        // it (§4.3) — this is a window, and a window is not a fader bank.
         onGo={(direction) => {
           if (inForce.executorId !== null) {
-            send({ t: "ExecutorGo", executorId: inForce.executorId, direction });
+            run(
+              `${direction === "Next" ? "Go+" : "Go-"} Executor ${String(inForce.executorId)}`,
+            );
           }
         }}
         onOff={() => {
           if (inForce.executorId !== null) {
-            send({ t: "ExecutorOff", executorId: inForce.executorId });
+            run(`Off Executor ${String(inForce.executorId)}`);
           }
         }}
       />
@@ -194,7 +197,6 @@ export function SequenceSheet({
             programmer={programmer}
             editing={editing}
             ask={ask}
-            onSend={send}
           />
         </>
       )}
@@ -342,6 +344,7 @@ function CueTable({
   readonly onSend: ReturnType<typeof useSend>;
 }) {
   const [draft, setDraft] = useState<CellDraft | null>(null);
+  const { run } = useConsole();
 
   // A cue that has been renumbered or deleted under an open editor is one whose
   // draft names nothing; dropping it is what stops an edit landing on whatever
@@ -355,6 +358,29 @@ function CueTable({
   const commit = useCallback(
     (cue: CueRow, field: CellDraft["field"], text: string) => {
       setDraft(null);
+      // **The number and the name are verbs of their own since S40.**
+      // `CueProperty` lost both: renumbering a cue is `Move` and naming one is
+      // `Label`, because those are the same act on a cue as on a sequence, a
+      // group, a preset, a view and an executor. So these two cells write the
+      // line the command language already has rather than a command only this
+      // window can send. The number the cue **started** at is what the line
+      // names — the trap an operator meets by changing their mind halfway,
+      // which S27 met with Unpatch.
+      if (field === "number") {
+        const wanted = text.trim();
+        if (wanted !== "" && wanted !== cue.number) {
+          run(`Move Sequence ${String(sequence.id)} Cue ${cue.number} Sequence ${String(sequence.id)} Cue ${wanted}`);
+        }
+        return;
+      }
+      if (field === "name") {
+        run(`Label Sequence ${String(sequence.id)} Cue ${cue.number} ${JSON.stringify(text)}`);
+        return;
+      }
+      // The three times and the trigger stay `SetCueProperty`. They carry a
+      // *value* rather than naming a place, and S40's vocabulary has no word
+      // for a fade — inventing one would be a second grammar for something no
+      // console types. See `ARCHITECTURE_SPEC.md` §4.5.
       const property = propertyOf(field, text);
       if (property === null) {
         return;
@@ -362,14 +388,11 @@ function CueTable({
       onSend({
         t: "SetCueProperty",
         sequenceId: sequence.id,
-        // The number the cue **started** at, not the one being typed: the trap
-        // an operator meets by changing their mind halfway, which S27 met with
-        // Unpatch.
         cueNumber: cue.number,
         property,
       });
     },
-    [onSend, sequence.id],
+    [onSend, run, sequence.id],
   );
 
   if (sequence.cues.length === 0) {
@@ -477,11 +500,9 @@ function CueTable({
                     // comes back is the cue's every value with its preset links
                     // kept, and the desk remembers which cue it came from, which
                     // is what the Update key below acts on.
-                    onSend({
-                      t: "EditCue",
-                      sequenceId: sequence.id,
-                      cueNumber: cue.number,
-                    });
+                    run(
+                      `Edit Sequence ${String(sequence.id)} Cue ${cue.number}`,
+                    );
                   }}
                 >
                   Edit
@@ -492,11 +513,9 @@ function CueTable({
                   data-testid={`cue-delete-${cue.number}`}
                   aria-label={`Delete cue ${cue.number}`}
                   onClick={() => {
-                    onSend({
-                      t: "DeleteCue",
-                      sequenceId: sequence.id,
-                      cueNumber: cue.number,
-                    });
+                    run(
+                      `Delete Sequence ${String(sequence.id)} Cue ${cue.number}`,
+                    );
                   }}
                 >
                   ×
@@ -633,7 +652,6 @@ function StoreBar({
   programmer,
   editing,
   ask,
-  onSend,
 }: {
   readonly sequence: SequenceRow;
   /**
@@ -655,12 +673,12 @@ function StoreBar({
    */
   readonly editing: CueEditInForce | null;
   readonly ask: ReturnType<typeof useAsk>;
-  readonly onSend: ReturnType<typeof useSend>;
 }) {
   const [number, setNumber] = useState<string | null>(null);
   const [mode, setMode] = useState<StoreMode>("Merge");
   const [preview, setPreview] = useState<StorePreview | null>(null);
   const wanted = number ?? nextCueNumber(sequence.cues);
+  const { run, runWithMode } = useConsole();
 
   const requester = useRef<StoreRequester | null>(null);
   useEffect(() => {
@@ -697,7 +715,12 @@ function StoreBar({
       data-testid="cue-store"
       onSubmit={(event) => {
         event.preventDefault();
-        onSend({ t: "StoreCue", sequenceId: sequence.id, cueNumber: wanted, mode });
+        // **The store is a line too**, and the mode goes with it: the chooser
+        // beside the button is where an operator picks one *before* pressing,
+        // and the console's own prompt is what they get when they type the line
+        // instead. Both end in a `StoreCue` carrying the mode, which is S28's
+        // rule and S39's implementation.
+        runWithMode(`Store Sequence ${String(sequence.id)} Cue ${wanted}`, mode);
         // Dropped, not kept: what the cue list is comes back as a `ShowPatch`,
         // and the box goes back to offering the next number of whatever the
         // daemon ends up holding.
@@ -734,7 +757,8 @@ function StoreBar({
           onClick={() => {
             // It carries nothing: which cue, and that the mode is Override, are
             // both the desk's — see `Command::Update`.
-            onSend({ t: "Update" });
+            // A whole command with no argument, so it runs at once (§4.5).
+            run("Update");
           }}
         >
           Update cue {editing.cueNumber}
@@ -769,11 +793,9 @@ function rawOf(cue: CueRow, field: CellDraft["field"]): string {
  * a number already in use — is the daemon's to refuse, and it does.
  */
 function propertyOf(field: CellDraft["field"], text: string): CueProperty | null {
-  if (field === "number") {
-    return { t: "Number", number: text };
-  }
-  if (field === "name") {
-    return { t: "Name", name: text };
+  if (field === "number" || field === "name") {
+    // Both are lines now — see `commit`.
+    return null;
   }
   const seconds = Number(text.trim());
   if (text.trim() === "" || !Number.isFinite(seconds)) {

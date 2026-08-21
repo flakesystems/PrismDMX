@@ -68,6 +68,8 @@ pub enum ProgrammerError {
     UnknownFixture(FixtureId),
     /// A preset number that does not exist.
     UnknownPreset(PresetId),
+    /// A group number that does not exist (S40).
+    UnknownGroup(prism_domain::GroupId),
     /// A sequence number that does not exist.
     UnknownSequence(SequenceId),
     /// An absolute attribute value outside `0..=65535`.
@@ -91,6 +93,13 @@ pub enum ProgrammerError {
     NoCuesToMergeInto(SequenceId),
     /// An `Update` with no cue loaded — nothing is being edited (S39).
     NothingIsBeingEdited,
+    /// A line that names no cue list, on a desk with none selected (S40).
+    ///
+    /// `Store Cue 5` means `Session::selectedSequence` and
+    /// [`ShowFile::apply`](crate::ShowFile::apply) resolves it; this is what a
+    /// caller who applied the command straight to a [`Programmer`] gets, because
+    /// this type has no session to ask.
+    NoSelectedSequence,
     /// A command that is not one of the programmer's.
     NotAProgrammerCommand,
 }
@@ -100,6 +109,7 @@ impl fmt::Display for ProgrammerError {
         match self {
             Self::UnknownFixture(id) => write!(f, "fixture {id} is not patched"),
             Self::UnknownPreset(id) => write!(f, "there is no preset {id}"),
+            Self::UnknownGroup(id) => write!(f, "there is no group {id}"),
             Self::UnknownSequence(id) => write!(f, "there is no sequence {id}"),
             Self::ValueOutOfRange(value) => {
                 write!(
@@ -118,6 +128,12 @@ impl fmt::Display for ProgrammerError {
             }
             Self::NoCuesToMergeInto(id) => {
                 write!(f, "sequence {id} has no cues to merge into")
+            }
+            Self::NoSelectedSequence => {
+                write!(
+                    f,
+                    "no cue list is selected: say which one, or select one first"
+                )
             }
             Self::NothingIsBeingEdited => {
                 write!(f, "no cue is loaded, so there is nothing to update")
@@ -297,8 +313,70 @@ impl Programmer {
         Ok(cue)
     }
 
+    /// The group this selection would be stored as — S40's `Store Group 3`.
+    ///
+    /// A group is a list of **fixtures** and not a look, which is what makes
+    /// `Group 3` a selection rather than a set of values; the look over the same
+    /// fixtures is a preset. So this reads [`ProgrammerState::selection`] and
+    /// nothing else, and an empty selection is refused for the reason an empty
+    /// programmer refuses a cue store: a group nothing selects is one an
+    /// operator would press twice.
+    ///
+    /// An existing group **keeps its own name**. Renaming one is
+    /// `Command::Label`, and a store that renamed as a side effect would take a
+    /// name away that somebody typed.
+    ///
+    /// # Errors
+    ///
+    /// [`ProgrammerError::NothingToStore`] for an empty selection.
+    pub fn group(
+        &self,
+        show: &Show,
+        group_id: prism_domain::GroupId,
+        name: &str,
+        mode: prism_domain::OverwriteMode,
+    ) -> Result<prism_domain::Group, ProgrammerError> {
+        let selection = &self.state().selection;
+        if selection.is_empty() {
+            return Err(ProgrammerError::NothingToStore);
+        }
+        let existing = show.group(group_id);
+        let fixtures = match (existing, mode) {
+            (Some(existing), prism_domain::OverwriteMode::Merge) => {
+                let mut out = existing.fixtures.clone();
+                for fixture in selection {
+                    if !out.contains(fixture) {
+                        out.push(*fixture);
+                    }
+                }
+                out
+            }
+            _ => selection.clone(),
+        };
+        Ok(prism_domain::Group {
+            id: group_id,
+            name: existing.map_or_else(
+                || {
+                    if name.is_empty() {
+                        format!("Group {group_id}")
+                    } else {
+                        name.to_owned()
+                    }
+                },
+                |group| group.name.clone(),
+            ),
+            fixtures,
+        })
+    }
+
     /// The whole cue list this programmer stores into a sequence — S39's
     /// `Command::StoreSequence`.
+    ///
+    /// **The cue list is handed in rather than looked up** (S40), because
+    /// `Store Sequence 4` creates one when the number is free and this has to be
+    /// able to build against a list that is not in the show yet. Everything
+    /// fallible therefore happens before anything is written, which is what
+    /// makes a refused store leave the show without a half-made sequence in it.
     ///
     /// [`Self::cue`] one level up, and the three modes mean at the level of
     /// cues what [`StoreMode`]'s three mean at the level of values:
@@ -321,12 +399,11 @@ impl Programmer {
     pub fn sequence(
         &self,
         show: &Show,
-        sequence_id: SequenceId,
+        base: &Sequence,
         mode: SequenceStoreMode,
     ) -> Result<Sequence, ProgrammerError> {
-        let Some(sequence) = show.sequence(sequence_id) else {
-            return Err(ProgrammerError::UnknownSequence(sequence_id));
-        };
+        let sequence = base;
+        let sequence_id = base.id;
         let parts = self.cue_parts(show);
         if parts.is_empty() {
             return Err(ProgrammerError::NothingToStore);
@@ -461,6 +538,13 @@ impl Programmer {
     ) -> Result<Preset, ProgrammerError> {
         let values = self.preset_values(show, pool);
         let existing = show.preset(id);
+        // **A colour the command does not carry is one that is kept** (S40).
+        // `Preset::color` is what the scribble strips show and it is chosen with
+        // a picker; a store that dropped it would throw away something nothing
+        // else on the desk can put back. The alternative — a client reading the
+        // colour off its mirror and sending it with every store — is the
+        // read-modify-write S28 refused for a cue, one pool along.
+        let color = color.or_else(|| existing.and_then(|preset| preset.color));
 
         if mode == StoreMode::Remove {
             // The mirror of the cue's Remove, with the preset's own filter on
@@ -621,6 +705,16 @@ impl Programmer {
                 value,
                 relative,
             } => self.set_attribute(*attribute, *value, *relative, show)?,
+            // S40's `Group 3`. The daemon expands it, which is what stops a
+            // client sending a selection a second client's edit of that group
+            // has already made wrong.
+            Command::SelectGroup { group_id, mode } => {
+                let Some(group) = show.group(*group_id) else {
+                    return Err(ProgrammerError::UnknownGroup(*group_id));
+                };
+                let members = group.fixtures.clone();
+                self.select_fixtures(&members, *mode, show)?
+            }
             Command::ApplyPreset { preset_id } => self.apply_preset(*preset_id, show)?,
             Command::ClearProgrammer => self.clear(),
             Command::StoreCue {
@@ -631,7 +725,8 @@ impl Programmer {
                 // Validated even though the cue is written elsewhere, so that a
                 // direct caller cannot get a bare stage reset out of a store
                 // that could not have happened.
-                self.cue(show, *sequence_id, cue_number, *mode)?;
+                let sequence_id = sequence_id.ok_or(ProgrammerError::NoSelectedSequence)?;
+                self.cue(show, sequence_id, cue_number, *mode)?;
                 self.touch()
             }
             Command::StorePreset {
@@ -644,11 +739,33 @@ impl Programmer {
                 // Validated for the same reason `StoreCue` is: a direct caller
                 // must not get a bare stage reset out of a store that could not
                 // have happened.
-                self.preset(show, *preset_id, *pool, name, *color, *mode)?;
+                self.preset(
+                    show,
+                    *preset_id,
+                    pool.ok_or(ProgrammerError::NoSelectedSequence)?,
+                    name,
+                    *color,
+                    *mode,
+                )?;
                 self.touch()
             }
-            Command::StoreSequence { sequence_id, mode } => {
-                self.sequence(show, *sequence_id, *mode)?;
+            Command::StoreSequence {
+                sequence_id, mode, ..
+            } => {
+                // Validated for `StoreCue`'s reason, and **only when the cue
+                // list is there**: since S40 this command creates one when the
+                // number is free, and `ShowFile::apply` is where that happens.
+                if let Some(sequence) = show.sequence(*sequence_id) {
+                    self.sequence(show, sequence, *mode)?;
+                }
+                self.touch()
+            }
+            Command::StoreGroup {
+                group_id,
+                name,
+                mode,
+            } => {
+                self.group(show, *group_id, name, *mode)?;
                 self.touch()
             }
             // The one command that *fills* the programmer rather than reading
@@ -658,8 +775,12 @@ impl Programmer {
                 sequence_id,
                 cue_number,
             } => {
-                let Some(cue) = show.cue(*sequence_id, cue_number) else {
-                    return Err(ProgrammerError::UnknownSequence(*sequence_id));
+                // `None` is the selected cue list and `ShowFile::apply` resolved
+                // it; a direct caller who did not go through the file has not
+                // named one, and the show has no session to ask.
+                let sequence_id = sequence_id.ok_or(ProgrammerError::NoSelectedSequence)?;
+                let Some(cue) = show.cue(sequence_id, cue_number) else {
+                    return Err(ProgrammerError::UnknownSequence(sequence_id));
                 };
                 let cue = cue.clone();
                 self.load_cue(show, &cue)
@@ -673,12 +794,16 @@ impl Programmer {
             // match is then exhaustive, so a command added to the protocol is a
             // compile error here as well as in `Show::apply` and
             // `SessionState::apply`.
-            Command::CreateSequence { .. }
-            | Command::SetCueProperty { .. }
-            | Command::DeleteCue { .. }
+            Command::SetCueProperty { .. }
+            | Command::Delete { .. }
+            | Command::Copy { .. }
+            | Command::Move { .. }
+            | Command::Label { .. }
             | Command::AssignExecutor { .. }
             | Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
+            | Command::ExecutorOn { .. }
+            | Command::Goto { .. }
             | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
             | Command::PatchFixture { .. }
@@ -690,9 +815,6 @@ impl Programmer {
             | Command::SaveShow
             | Command::SelectView { .. }
             | Command::StoreView { .. }
-            | Command::RenameView { .. }
-            | Command::DeleteView { .. }
-            | Command::MoveView { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
@@ -1447,7 +1569,7 @@ mod tests {
         for (command, expected) in [
             (
                 Command::StoreCue {
-                    sequence_id: SequenceId::new(404),
+                    sequence_id: Some(SequenceId::new(404)),
                     cue_number: "1".to_owned(),
                     mode: StoreMode::Merge,
                 },
@@ -1455,7 +1577,7 @@ mod tests {
             ),
             (
                 Command::StoreCue {
-                    sequence_id: SequenceId::new(1),
+                    sequence_id: Some(SequenceId::new(1)),
                     cue_number: "9".to_owned(),
                     mode: StoreMode::Remove,
                 },
@@ -1464,15 +1586,8 @@ mod tests {
                 },
             ),
             (
-                Command::StoreSequence {
-                    sequence_id: SequenceId::new(404),
-                    mode: SequenceStoreMode::Append,
-                },
-                ProgrammerError::UnknownSequence(SequenceId::new(404)),
-            ),
-            (
                 Command::EditCue {
-                    sequence_id: SequenceId::new(1),
+                    sequence_id: Some(SequenceId::new(1)),
                     cue_number: "404".to_owned(),
                 },
                 ProgrammerError::UnknownSequence(SequenceId::new(1)),
@@ -1492,7 +1607,7 @@ mod tests {
             empty.apply(
                 &Command::StorePreset {
                     preset_id: PresetId::new(9),
-                    pool: FeatureGroup::Color,
+                    pool: Some(FeatureGroup::Color),
                     name: String::new(),
                     color: None,
                     mode: StoreMode::Merge,
@@ -1520,19 +1635,20 @@ mod tests {
 
         for command in [
             Command::StoreCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
                 mode: StoreMode::Merge,
             },
             Command::StorePreset {
                 preset_id: PresetId::new(4),
-                pool: FeatureGroup::Color,
+                pool: Some(FeatureGroup::Color),
                 name: "Deep red".to_owned(),
                 color: None,
                 mode: StoreMode::Merge,
             },
             Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
+                name: String::new(),
                 mode: SequenceStoreMode::Merge,
             },
             // And `Update`, which this type cannot validate at all: its target
@@ -1622,7 +1738,7 @@ mod tests {
             programmer
                 .apply(
                     &Command::EditCue {
-                        sequence_id: SequenceId::new(2),
+                        sequence_id: Some(SequenceId::new(2)),
                         cue_number: "1".to_owned(),
                     },
                     &show,
@@ -1647,7 +1763,7 @@ mod tests {
             programmer
                 .apply(
                     &Command::EditCue {
-                        sequence_id: SequenceId::new(2),
+                        sequence_id: Some(SequenceId::new(2)),
                         cue_number: "1".to_owned(),
                     },
                     &show,

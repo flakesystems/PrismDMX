@@ -115,6 +115,7 @@ impl TickBody for RampBody {
             | TickCommand::TapExecutorSpeed { .. }
             | TickCommand::SetExecutorXFade { .. }
             | TickCommand::Go { .. }
+            | TickCommand::GotoCue { .. }
             | TickCommand::SetGroupMaster { .. }
             | TickCommand::SetProgrammerValue { .. }
             | TickCommand::ClearProgrammerValue { .. }
@@ -158,7 +159,7 @@ fn harness(universes: u32, subscribers: usize) -> Harness {
 /// frame up. Every step of that is on the real-time path.
 fn cycle<C: Clock>(harness: &mut Harness, clock: &C, index: u16) {
     let _ = harness.producer.push(TickCommand::SetExecutorLevel {
-        executor: ExecutorId::new(u32::from(index)),
+        executor: ExecutorId::new(u32::from(index)).into(),
         level: index,
     });
     let _ = harness.producer.push(TickCommand::SetGrandMaster(index));
@@ -323,11 +324,11 @@ fn a_tick_running_the_merge_makes_no_allocator_call_either() {
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
             let executor = ExecutorId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::SetExecutorActive {
-                executor,
+                executor: executor.into(),
                 on: index.is_multiple_of(2),
             });
             let _ = producer.push(TickCommand::SetExecutorLevel {
-                executor,
+                executor: executor.into(),
                 level: index,
             });
             engine.run_ticks(&clock, 1);
@@ -380,11 +381,11 @@ fn a_tick_running_the_encoder_as_well_makes_no_allocator_call_either() {
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
             let executor = ExecutorId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::SetExecutorActive {
-                executor,
+                executor: executor.into(),
                 on: index.is_multiple_of(2),
             });
             let _ = producer.push(TickCommand::SetExecutorLevel {
-                executor,
+                executor: executor.into(),
                 level: index,
             });
             engine.run_ticks(&clock, 1);
@@ -464,6 +465,8 @@ fn loaded_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
         name: String::new(),
         cues,
         looping: true,
+        is_active: false,
+        current_cue_index: None,
     }
 }
 
@@ -503,7 +506,7 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
             let executor = ExecutorId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::Go {
-                executor,
+                executor: executor.into(),
                 direction: if index % 16 < 8 {
                     GoDirection::Next
                 } else {
@@ -513,7 +516,7 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
             // And an executor going off and on underneath the fades, so the
             // release path and the activation path are measured too.
             let _ = producer.push(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(u32::from(index % 8) + 1),
+                executor: ExecutorId::new(u32::from(index % 8) + 1).into(),
                 on: !index.is_multiple_of(32),
             });
             engine.run_ticks(&clock, 1);
@@ -609,7 +612,7 @@ fn a_tick_with_the_programmer_and_the_masters_makes_no_allocator_call_either() {
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
             let executor = ExecutorId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::Go {
-                executor,
+                executor: executor.into(),
                 direction: GoDirection::Next,
             });
             // The programmer filling up and being cleared out again, which is
@@ -730,23 +733,25 @@ fn a_tick_publishing_its_playbacks_makes_no_allocator_call_either() {
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
             let executor = ExecutorId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::Go {
-                executor,
+                executor: executor.into(),
                 direction: GoDirection::Next,
             });
             // Every S34 command, in rotation, so none of them is measured only
             // in the tick that happened to be quiet.
             let _ = producer.push(match index % 4 {
                 0 => TickCommand::SetExecutorFlash {
-                    executor,
+                    executor: executor.into(),
                     on: index.is_multiple_of(8),
                 },
                 1 => TickCommand::SetExecutorSpeed {
-                    executor,
+                    executor: executor.into(),
                     speed: 512 + index % 2_048,
                 },
-                2 => TickCommand::TapExecutorSpeed { executor },
+                2 => TickCommand::TapExecutorSpeed {
+                    executor: executor.into(),
+                },
                 _ => TickCommand::SetExecutorXFade {
-                    executor,
+                    executor: executor.into(),
                     position: index.wrapping_mul(577),
                 },
             });

@@ -41,7 +41,8 @@
 
 use prism_domain::{
     Command, Delta, ExecutorButtonFunction, ExecutorButtonRef, ExecutorFaderFunction, ExecutorId,
-    Fixture, FixtureId, GoDirection, JsonPatchOp, NoticeLevel, SequenceId, Vec3,
+    Fixture, FixtureId, GoDirection, JsonPatchOp, NoticeLevel, PlaybackId, PlaybackTarget,
+    SequenceId, Vec3,
 };
 
 use crate::show::{Show, ShowError};
@@ -79,17 +80,34 @@ pub enum Effect {
     /// [`ShowFile::apply`](crate::ShowFile::apply), which builds the cue out of
     /// the programmer, calls [`Show::store_cue`] and answers with this.
     ReloadSequence(SequenceId),
-    /// Step an executor.
+    /// Step a playback.
+    ///
+    /// **The target is a [`PlaybackId`] since S40**, because a cue list on no
+    /// fader can be played: `Show::playback_of` is where a
+    /// `prism_domain::PlaybackTarget` becomes one of these, and it is the show's
+    /// answer rather than a client's because which executor holds a sequence is
+    /// show state (**D3**).
     ExecutorGo {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
         /// Which way.
         direction: GoDirection,
     },
-    /// Stop an executor.
+    /// Stop a playback.
     ExecutorOff {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
+    },
+    /// Jump a playback straight to one cue of its list — S40's `Goto`.
+    ///
+    /// The **index**, resolved here from the number the operator typed: the tick
+    /// resolves nothing (`ARCHITECTURE_SPEC.md` §3.1) and a client that sent an
+    /// index would be reading a cue list it may be one delta behind on.
+    Goto {
+        /// The playback.
+        executor: PlaybackId,
+        /// Which cue, by index into the compiled list.
+        cue_index: u16,
     },
     /// Start an executor at the first cue of its list.
     ///
@@ -98,8 +116,8 @@ pub enum Effect {
     /// `prism_engine::CuePlayer::on` is where that rule lives, and it is the
     /// same rule `PlaybackLayer::activate` follows for the LTP order.
     ExecutorOn {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
     },
     /// Hold or release a flash over an executor's master.
     ///
@@ -107,15 +125,15 @@ pub enum Effect {
     /// master is untouched, so a release restores it byte for byte, and one that
     /// arrived while the flash was held is the one that stands.
     ExecutorFlash {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
         /// Held or released.
         on: bool,
     },
     /// Move an executor's speed master — `docs/DMX_MERGE.md` §4 item 3.
     ExecutorSpeed {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
         /// The new rate, in units of `prism_domain::SPEED_UNITY`.
         speed: u16,
     },
@@ -126,8 +144,8 @@ pub enum Effect {
     /// taps mean a duration, and what that means as a rate depends on the cue
     /// that is running.
     ExecutorTapSpeed {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
     },
     /// Move an executor's manual crossfade — `ExecutorFaderFunction::XFade`.
     ///
@@ -135,15 +153,15 @@ pub enum Effect {
     /// gesture in progress, like a flash, and a show file that remembered one
     /// would reload holding half a cue.
     ExecutorXFade {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
         /// Where the fader is, `0..=65535`.
         position: u16,
     },
     /// Move an executor's master.
     SetExecutorMaster {
-        /// The executor.
-        executor: ExecutorId,
+        /// The playback.
+        executor: PlaybackId,
         /// The new level.
         level: u16,
     },
@@ -259,6 +277,16 @@ impl Show {
                 }
                 Ok(Applied::effect(Effect::Programmer))
             }
+            // S40's `Group 3`: the show is what a group means, so the show is
+            // what expands it — and the whole of the check it can make is that
+            // the group is there. The members are validated by the programmer,
+            // which is where an unpatched member is refused.
+            Command::SelectGroup { group_id, .. } => {
+                if self.group(*group_id).is_none() {
+                    return Err(ShowError::UnknownGroup(*group_id));
+                }
+                Ok(Applied::effect(Effect::Programmer))
+            }
             Command::ApplyPreset { preset_id } => {
                 if self.preset(*preset_id).is_none() {
                     return Err(ShowError::UnknownPreset(*preset_id));
@@ -271,8 +299,12 @@ impl Show {
                 cue_number,
                 ..
             } => {
-                if self.sequence(*sequence_id).is_none() {
-                    return Err(ShowError::UnknownSequence(*sequence_id));
+                // `None` is the selected cue list and `ShowFile::apply` has
+                // already resolved it - see `Show::resolve`. A bare `Show` has
+                // no session to ask, so it is a refusal rather than a guess.
+                let sequence_id = require_sequence(*sequence_id)?;
+                if self.sequence(sequence_id).is_none() {
+                    return Err(ShowError::UnknownSequence(sequence_id));
                 }
                 if cue_number.trim().is_empty() {
                     return Err(ShowError::EmptyCueNumber);
@@ -285,22 +317,25 @@ impl Show {
             Command::StorePreset { .. } => Ok(Applied::effect(Effect::Programmer)),
             // S39's three, and all three are the `StoreCue` split again: the
             // show says the half only it can see and names who finishes.
-            Command::StoreSequence { sequence_id, .. } => {
-                if self.sequence(*sequence_id).is_none() {
-                    return Err(ShowError::UnknownSequence(*sequence_id));
-                }
+            // **No longer refused for a sequence that is not there** (S40):
+            // `Store Sequence 4` creates the cue list when the number is free,
+            // because the command line cannot know which of the two it is and
+            // the parser does not read the show (S26). `Programmer::sequence` is
+            // where the empty list is made.
+            Command::StoreSequence { .. } | Command::StoreGroup { .. } => {
                 Ok(Applied::effect(Effect::Programmer))
             }
             Command::EditCue {
                 sequence_id,
                 cue_number,
             } => {
-                if self.sequence(*sequence_id).is_none() {
-                    return Err(ShowError::UnknownSequence(*sequence_id));
+                let sequence_id = require_sequence(*sequence_id)?;
+                if self.sequence(sequence_id).is_none() {
+                    return Err(ShowError::UnknownSequence(sequence_id));
                 }
-                if self.cue(*sequence_id, cue_number).is_none() {
+                if self.cue(sequence_id, cue_number).is_none() {
                     return Err(ShowError::UnknownCue {
-                        sequence: *sequence_id,
+                        sequence: sequence_id,
                         number: cue_number.trim().to_owned(),
                     });
                 }
@@ -313,27 +348,35 @@ impl Show {
             // session. There is nothing here to check that would not be checked
             // again there against the cue that turns out to be meant.
             Command::Update => Ok(Applied::effect(Effect::Programmer)),
-            Command::CreateSequence { sequence_id, name } => {
-                let ops = self.create_sequence(*sequence_id, name)?;
-                Ok(Applied {
-                    deltas: vec![Delta::ShowPatch { ops }],
-                    effects: vec![Effect::ReloadSequence(*sequence_id)],
-                })
-            }
             Command::SetCueProperty {
                 sequence_id,
                 cue_number,
                 property,
             } => {
-                let ops = self.set_cue_property(*sequence_id, cue_number, property)?;
-                Ok(sequence_changed(*sequence_id, ops))
+                let sequence_id = require_sequence(*sequence_id)?;
+                let ops = self.set_cue_property(sequence_id, cue_number, property)?;
+                Ok(sequence_changed(sequence_id, ops))
             }
-            Command::DeleteCue {
-                sequence_id,
-                cue_number,
-            } => {
-                let ops = self.remove_cue(*sequence_id, cue_number)?;
-                Ok(sequence_changed(*sequence_id, ops))
+            // S40's four generic verbs. `crate::objects` is the applier and
+            // carries what each of them means pool by pool; here is only the
+            // engine-side consequence, which is the same question in all four:
+            // *did a cue list change, and does the merge body have to be
+            // rebuilt because of it*.
+            Command::Delete { target } => {
+                let ops = self.delete_object(target)?;
+                Ok(object_changed(&[target], ops))
+            }
+            Command::Label { target, name } => {
+                let ops = self.label_object(target, name)?;
+                Ok(object_changed(&[target], ops))
+            }
+            Command::Copy { from, to, mode } => {
+                let ops = self.copy_object(from, to, *mode)?;
+                Ok(object_changed(&[from, to], ops))
+            }
+            Command::Move { from, to, mode } => {
+                let ops = self.move_object(from, to, *mode)?;
+                Ok(object_changed(&[from, to], ops))
             }
             Command::AssignExecutor {
                 executor_id,
@@ -351,25 +394,32 @@ impl Show {
                     effects: match sequence_id {
                         Some(sequence) => vec![Effect::ReloadSequence(*sequence)],
                         None => vec![Effect::ExecutorOff {
-                            executor: *executor_id,
+                            executor: PlaybackId::of_executor(*executor_id),
                         }],
                     },
                 })
             }
-            Command::ExecutorGo {
-                executor_id,
-                direction,
-            } => {
-                self.require_playable(*executor_id)?;
+            Command::ExecutorGo { target, direction } => {
+                let executor = self.playback_of(target)?;
                 Ok(Applied::effect(Effect::ExecutorGo {
-                    executor: *executor_id,
+                    executor,
                     direction: *direction,
                 }))
             }
-            Command::ExecutorOff { executor_id } => {
-                self.require_playable(*executor_id)?;
-                Ok(Applied::effect(Effect::ExecutorOff {
-                    executor: *executor_id,
+            Command::ExecutorOff { target } => {
+                let executor = self.playback_of(target)?;
+                Ok(Applied::effect(Effect::ExecutorOff { executor }))
+            }
+            Command::ExecutorOn { target } => {
+                let executor = self.playback_of(target)?;
+                Ok(Applied::effect(Effect::ExecutorOn { executor }))
+            }
+            Command::Goto { target, cue_number } => {
+                let executor = self.playback_of(target)?;
+                let cue_index = self.cue_index_of(executor, cue_number)?;
+                Ok(Applied::effect(Effect::Goto {
+                    executor,
+                    cue_index,
                 }))
             }
             Command::ExecutorButton {
@@ -420,9 +470,6 @@ impl Show {
             // rejection at run time.
             Command::SelectView { .. }
             | Command::StoreView { .. }
-            | Command::RenameView { .. }
-            | Command::DeleteView { .. }
-            | Command::MoveView { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
@@ -516,12 +563,12 @@ impl Show {
     /// refusals.
     fn apply_executor_button(
         &mut self,
-        id: ExecutorId,
+        executor_id: ExecutorId,
         button: ExecutorButtonRef,
         pressed: bool,
     ) -> Result<Applied, ShowError> {
-        let Some(executor) = self.executor(id) else {
-            return Err(ShowError::UnknownExecutor(id));
+        let Some(executor) = self.executor(executor_id) else {
+            return Err(ShowError::UnknownExecutor(executor_id));
         };
         let function = match button {
             // A position the executor has no function for is a key with nothing
@@ -535,6 +582,9 @@ impl Show {
             ExecutorButtonRef::Function { function } => function,
         };
         let is_active = executor.is_active;
+        // A strip presses its own executor, which is one kind of playback since
+        // S40 - see `prism_domain::PlaybackId`.
+        let id = PlaybackId::of_executor(executor_id);
         let effect = match (function, pressed) {
             // A key with nothing on it, and the release of everything that is
             // not momentary. Neither is a refusal: **the executor said so**, and
@@ -566,7 +616,7 @@ impl Show {
         // Everything that got this far plays back a sequence, so the executor
         // must have one — the same check `ExecutorGo` and `ExecutorOff` make,
         // and the same refusal.
-        self.require_playable(id)?;
+        self.require_playable(executor_id)?;
         Ok(Applied::effect(effect))
     }
 
@@ -587,7 +637,7 @@ impl Show {
                 Ok(Applied {
                     deltas: vec![Delta::ShowPatch { ops }],
                     effects: vec![Effect::SetExecutorMaster {
-                        executor: id,
+                        executor: PlaybackId::of_executor(id),
                         level,
                     }],
                 })
@@ -597,13 +647,13 @@ impl Show {
                 Ok(Applied {
                     deltas: vec![Delta::ShowPatch { ops }],
                     effects: vec![Effect::ExecutorSpeed {
-                        executor: id,
+                        executor: PlaybackId::of_executor(id),
                         speed: level,
                     }],
                 })
             }
             ExecutorFaderFunction::XFade => Ok(Applied::effect(Effect::ExecutorXFade {
-                executor: id,
+                executor: PlaybackId::of_executor(id),
                 position: level,
             })),
             // A fader with nothing on it. Not a refusal: the executor says so.
@@ -620,6 +670,83 @@ impl Show {
         }
         Ok(())
     }
+
+    /// Which playback a command's target names — S40.
+    ///
+    /// **This is the whole of the sequence-addressed playback decision**, and it
+    /// is here rather than in a client because it is a fact about the *show*:
+    ///
+    /// - an **executor** is itself, and must have a cue list to play;
+    /// - a **sequence** is the executor that holds it if one does, and its own
+    ///   playback if none does. Resolving it to the executor is what stops two
+    ///   players of one cue list running side by side and fighting over the same
+    ///   slots in the merge — see `prism_domain::PlaybackId`.
+    /// - `Selected` never reaches here: [`crate::ShowFile`] has already turned
+    ///   it into a sequence, because the selection is the *session's*.
+    ///
+    /// A client that worked the first two out for itself would race an
+    /// `AssignExecutor` from a second client, which is **D3**.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownExecutor`], [`ShowError::ExecutorHasNoSequence`],
+    /// [`ShowError::UnknownSequence`], or [`ShowError::NoSelectedSequence`] for
+    /// a `Selected` that reached a bare [`Show`].
+    pub fn playback_of(&self, target: &PlaybackTarget) -> Result<PlaybackId, ShowError> {
+        match target {
+            PlaybackTarget::Executor { executor_id } => {
+                self.require_playable(*executor_id)?;
+                Ok(PlaybackId::of_executor(*executor_id))
+            }
+            PlaybackTarget::Sequence { sequence_id } => {
+                if self.sequence(*sequence_id).is_none() {
+                    return Err(ShowError::UnknownSequence(*sequence_id));
+                }
+                Ok(self
+                    .executors()
+                    .find(|executor| executor.sequence_id == Some(*sequence_id))
+                    .map_or_else(
+                        || PlaybackId::of_sequence(*sequence_id),
+                        |executor| PlaybackId::of_executor(executor.id),
+                    ))
+            }
+            PlaybackTarget::Selected => Err(ShowError::NoSelectedSequence),
+        }
+    }
+
+    /// Where a cue number sits in the list a playback is playing — S40's `Goto`.
+    ///
+    /// The tick works in indices and an operator types numbers, and this is the
+    /// one place the two meet. The index is into the cue list **as the show
+    /// holds it**, which is the order `Show::store_cue` sorts into and therefore
+    /// the order `prism_engine::SequencePlan` compiles.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownSequence`], [`ShowError::UnknownCue`], or
+    /// [`ShowError::ExecutorHasNoSequence`].
+    fn cue_index_of(&self, playback: PlaybackId, cue_number: &str) -> Result<u16, ShowError> {
+        let sequence_id = match playback {
+            PlaybackId::Sequence { sequence_id } => sequence_id,
+            PlaybackId::Executor { executor_id } => self
+                .executor(executor_id)
+                .and_then(|executor| executor.sequence_id)
+                .ok_or(ShowError::ExecutorHasNoSequence(executor_id))?,
+        };
+        let Some(sequence) = self.sequence(sequence_id) else {
+            return Err(ShowError::UnknownSequence(sequence_id));
+        };
+        let wanted = cue_number.trim();
+        sequence
+            .cues
+            .iter()
+            .position(|cue| cue.number == wanted)
+            .and_then(|index| u16::try_from(index).ok())
+            .ok_or_else(|| ShowError::UnknownCue {
+                sequence: sequence_id,
+                number: wanted.to_owned(),
+            })
+    }
 }
 
 /// A sequence edit, or nothing at all when the edit changed nothing.
@@ -635,6 +762,60 @@ fn sequence_changed(sequence: SequenceId, ops: Vec<JsonPatchOp>) -> Applied {
         deltas: vec![Delta::ShowPatch { ops }],
         effects: vec![Effect::ReloadSequence(sequence)],
     }
+}
+
+/// What a generic verb changed, and what the engine has to be told about it.
+///
+/// One answer for all four of S40's verbs, because the engine-side consequence
+/// is the same question in each: a cue list that moved has to be recompiled onto
+/// whatever plays it, a group that moved has to be reloaded onto the group
+/// masters, and an executor that moved has to be rebound. A **preset** is a cue
+/// list edit at one remove — storing or moving one rewrites the linked cue parts
+/// (S28's `relink`) — so it reloads every sequence, which is what
+/// `Effect::Repatch`'s neighbour `ReloadSequence` is for.
+///
+/// It is deliberately generous rather than precise: a rebuild costs a merge-body
+/// swap on the core thread and a wrong *omission* costs a cue list that plays the
+/// values it had before the edit, which is the fault S28's `relink` exists to
+/// prevent.
+fn object_changed(targets: &[&prism_domain::ObjectRef], ops: Vec<JsonPatchOp>) -> Applied {
+    use prism_domain::ObjectRef;
+    if ops.is_empty() {
+        return Applied::default();
+    }
+    let mut effects = Vec::new();
+    for target in targets {
+        match target {
+            ObjectRef::Sequence { sequence_id } => {
+                effects.push(Effect::ReloadSequence(*sequence_id));
+            }
+            ObjectRef::Cue { sequence_id, .. } => {
+                if let Some(sequence_id) = sequence_id {
+                    effects.push(Effect::ReloadSequence(*sequence_id));
+                }
+            }
+            ObjectRef::Group { .. } => effects.push(Effect::ReloadGroups),
+            // A preset reaches every cue list that links to it, and an executor
+            // reaches the grid the merge body binds sequences to. Both are the
+            // rebuild `Core::carry_out` already does for a `Repatch`.
+            ObjectRef::Preset { .. } | ObjectRef::Executor { .. } => {
+                effects.push(Effect::Repatch);
+            }
+            ObjectRef::View { .. } => {}
+        }
+    }
+    Applied {
+        deltas: vec![Delta::ShowPatch { ops }],
+        effects,
+    }
+}
+
+/// The sequence a command names, or the refusal for one that names none.
+///
+/// `None` means `Session::selectedSequence` and [`crate::ShowFile`] has already
+/// resolved it; a bare [`Show`] has no session to ask.
+fn require_sequence(sequence_id: Option<SequenceId>) -> Result<SequenceId, ShowError> {
+    sequence_id.ok_or(ShowError::NoSelectedSequence)
 }
 
 /// The operations a `Delta::ShowPatch` in `deltas` carries, for tests and for
@@ -658,7 +839,8 @@ mod tests {
     use crate::{Show, ShowError};
     use prism_domain::{
         AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, JsonPatchOp,
-        NoticeLevel, PresetId, SelectionMode, SequenceId, StoreMode, UniverseId,
+        NoticeLevel, PlaybackId, PlaybackTarget, PresetId, SelectionMode, SequenceId, StoreMode,
+        UniverseId,
     };
 
     fn show() -> Show {
@@ -754,26 +936,26 @@ mod tests {
         let mut show = show();
         assert_eq!(
             show.apply(&Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             })
             .unwrap(),
             Applied {
                 deltas: vec![],
                 effects: vec![Effect::ExecutorGo {
-                    executor: ExecutorId::new(0),
+                    executor: ExecutorId::new(0).into(),
                     direction: GoDirection::Next,
                 }],
             }
         );
         assert_eq!(
             show.apply(&Command::ExecutorOff {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             })
             .unwrap()
             .effects,
             vec![Effect::ExecutorOff {
-                executor: ExecutorId::new(0)
+                executor: PlaybackId::of_executor(ExecutorId::new(0))
             }]
         );
         // Playing an executor is not an edit.
@@ -785,14 +967,14 @@ mod tests {
         let mut show = show();
         assert_eq!(
             show.apply(&Command::ExecutorGo {
-                executor_id: ExecutorId::new(1),
+                target: PlaybackTarget::of_executor(ExecutorId::new(1)),
                 direction: GoDirection::Next,
             }),
             Err(ShowError::ExecutorHasNoSequence(ExecutorId::new(1)))
         );
         assert_eq!(
             show.apply(&Command::ExecutorOff {
-                executor_id: ExecutorId::new(9),
+                target: PlaybackTarget::of_executor(ExecutorId::new(9)),
             }),
             Err(ShowError::UnknownExecutor(ExecutorId::new(9)))
         );
@@ -810,7 +992,7 @@ mod tests {
         assert_eq!(
             applied.effects,
             vec![Effect::SetExecutorMaster {
-                executor: ExecutorId::new(0),
+                executor: ExecutorId::new(0).into(),
                 level: 32768,
             }]
         );
@@ -850,7 +1032,7 @@ mod tests {
             },
             Command::ClearProgrammer,
             Command::StoreCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "2".to_owned(),
                 mode: StoreMode::Merge,
             },
@@ -880,7 +1062,7 @@ mod tests {
         );
         assert_eq!(
             show.apply(&Command::StoreCue {
-                sequence_id: SequenceId::new(9),
+                sequence_id: Some(SequenceId::new(9)),
                 cue_number: "1".to_owned(),
                 mode: StoreMode::Merge,
             }),
@@ -888,7 +1070,7 @@ mod tests {
         );
         assert_eq!(
             show.apply(&Command::StoreCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "  ".to_owned(),
                 mode: StoreMode::Merge,
             }),

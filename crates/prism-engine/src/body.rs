@@ -29,7 +29,7 @@
 //! slot at a time, over [`TickCommand`]. Speed masters are playback rate rather
 //! than value, so they belong to step 2 and not to `crate::master`.
 
-use prism_domain::{ExecutorId, Fixture, FixtureType, Group, ProgrammerState, Sequence};
+use prism_domain::{Fixture, FixtureType, Group, PlaybackId, ProgrammerState, Sequence};
 
 use crate::command::TickCommand;
 use crate::cue::{CueError, SequencePlan};
@@ -61,8 +61,15 @@ pub struct MergeBody {
     values: Box<[u16]>,
 }
 
+/// A body with nothing to play, for the cases that are about the patch alone.
+///
+/// The type annotation an empty array needs, given once: since S40 the
+/// constructors take `impl Into<PlaybackId>` and `[]` on its own no longer says
+/// which type it is empty of.
+pub const NO_PLAYBACKS: [PlaybackId; 0] = [];
+
 impl MergeBody {
-    /// Builds the merge and the encoder for a patch and a set of executors.
+    /// Builds the merge and the encoder for a patch and a set of playbacks.
     ///
     /// Every buffer the tick will use is allocated here, once. The two plans
     /// must describe the same patch — build them with [`Self::for_patch`] unless
@@ -72,12 +79,12 @@ impl MergeBody {
     ///
     /// [`PatchError::PlanMismatch`] if the plans were built against different
     /// patches, or [`PatchError::Plan`] carrying
-    /// [`crate::MergeError::TooManySources`] if there are more executors than
+    /// [`crate::MergeError::TooManySources`] if there are more playbacks than
     /// [`crate::MAX_SOURCES`].
     pub fn new(
         plan: MergePlan,
         channels: ChannelPlan,
-        executors: impl IntoIterator<Item = ExecutorId>,
+        playbacks: impl IntoIterator<Item: Into<PlaybackId>>,
     ) -> Result<Self, PatchError> {
         if channels.slot_count() != plan.slot_count() {
             return Err(PatchError::PlanMismatch {
@@ -85,7 +92,7 @@ impl MergeBody {
                 channels: channels.slot_count(),
             });
         }
-        let layer = PlaybackLayer::new(&plan, executors)?;
+        let layer = PlaybackLayer::new(&plan, playbacks)?;
         let cues = CueLayer::for_layer(&layer);
         let programmer = ProgrammerLayer::new(&plan);
         let masters = MasterLayer::new(&plan);
@@ -122,14 +129,14 @@ impl MergeBody {
     pub fn for_patch<'a, I>(
         layout: &FrameLayout,
         fixtures: I,
-        executors: impl IntoIterator<Item = ExecutorId>,
+        playbacks: impl IntoIterator<Item: Into<PlaybackId>>,
     ) -> Result<Self, PatchError>
     where
         I: IntoIterator<Item = (&'a Fixture, &'a FixtureType)>,
     {
         let fixtures: Vec<(&Fixture, &FixtureType)> = fixtures.into_iter().collect();
         let (plan, channels) = plans(layout, &fixtures)?;
-        Self::new(plan, channels, executors)
+        Self::new(plan, channels, playbacks)
     }
 
     /// The patch this body merges over.
@@ -214,13 +221,13 @@ impl MergeBody {
         self.report.as_ref()
     }
 
-    /// What one executor's playback is doing, as the report describes it.
+    /// What one playback is doing, as the report describes it.
     ///
     /// The same answer the tick publishes, computed the same way in one place so
     /// a reader and the readback cannot disagree.
     #[must_use]
-    pub fn playback_state(&self, executor: ExecutorId) -> Option<PlaybackState> {
-        let player = self.cues.player(executor)?;
+    pub fn playback_state(&self, playback: impl Into<PlaybackId>) -> Option<PlaybackState> {
+        let player = self.cues.player(playback.into())?;
         Some(state_of(player, &self.layer))
     }
 
@@ -272,7 +279,7 @@ impl MergeBody {
         self.programmer.load(&self.plan, state)
     }
 
-    /// Compiles a cue list against this body's patch and puts it on an executor.
+    /// Compiles a cue list against this body's patch and puts it on a playback.
     ///
     /// The body compiles the sequence itself rather than taking a compiled one,
     /// for the same reason [`Self::for_patch`] builds both plans: a sequence
@@ -284,19 +291,20 @@ impl MergeBody {
     ///
     /// # Errors
     ///
-    /// [`CueError::UnknownExecutor`] if this body has no such executor, or
+    /// [`CueError::UnknownExecutor`] if this body has no such playback, or
     /// [`CueError::TooManyCues`] / [`CueError::TooManyParts`] if the sequence is
     /// implausibly large.
     pub fn load_sequence(
         &mut self,
-        executor: ExecutorId,
+        playback: impl Into<PlaybackId>,
         sequence: &Sequence,
     ) -> Result<(), CueError> {
-        if self.cues.player(executor).is_none() {
-            return Err(CueError::UnknownExecutor(executor));
+        let playback = playback.into();
+        if self.cues.player(playback).is_none() {
+            return Err(CueError::UnknownPlayback(playback));
         }
         let compiled = SequencePlan::build(&self.plan, sequence)?;
-        if let Some(player) = self.cues.player_mut(executor) {
+        if let Some(player) = self.cues.player_mut(playback) {
             player.load(compiled);
         }
         Ok(())
@@ -365,12 +373,12 @@ fn state_of(player: &crate::player::CuePlayer, layer: &PlaybackLayer) -> Playbac
         .current_cue()
         .and_then(|index| u32::try_from(index).ok());
     PlaybackState {
-        executor: player.executor(),
+        playback: player.playback(),
         is_active: if player.is_loaded() {
             cue_index.is_some()
         } else {
             layer
-                .source(player.executor())
+                .source(player.playback())
                 .is_some_and(PlaybackSource::is_active)
         },
         cue_index,
@@ -460,6 +468,18 @@ impl TickBody for MergeBody {
             } => {
                 if let Some(player) = self.cues.player_mut(executor) {
                     player.go(direction);
+                }
+            }
+            // S40's `Goto`. The index was resolved from the cue number on the
+            // core thread; a playback with fewer cues than that answers `false`
+            // and nothing moves, which is the tick's answer to an impossible
+            // instruction everywhere else in this file too.
+            TickCommand::GotoCue {
+                executor,
+                cue_index,
+            } => {
+                if let Some(player) = self.cues.player_mut(executor) {
+                    player.goto(cue_index as usize);
                 }
             }
             // `docs/DMX_MERGE.md` §4: the masters are applied after the merge,
@@ -573,11 +593,11 @@ mod tests {
             .unwrap()
             .set(dimmer, FULL);
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         });
         body.apply(TickCommand::SetExecutorLevel {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             level: 32_767,
         });
         body.resolve();
@@ -598,7 +618,7 @@ mod tests {
             .set(pan, 20_000);
         for executor in [1u32, 2] {
             body.apply(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(executor),
+                executor: ExecutorId::new(executor).into(),
                 on: true,
             });
         }
@@ -606,7 +626,7 @@ mod tests {
         assert_eq!(body.values().get(pan).copied(), Some(20_000));
 
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(2),
+            executor: ExecutorId::new(2).into(),
             on: false,
         });
         body.resolve();
@@ -618,11 +638,11 @@ mod tests {
         // A stale command from before a page change must not panic the tick.
         let mut body = body(1, 1);
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(77),
+            executor: ExecutorId::new(77).into(),
             on: true,
         });
         body.apply(TickCommand::SetExecutorLevel {
-            executor: ExecutorId::new(77),
+            executor: ExecutorId::new(77).into(),
             level: 1,
         });
         body.resolve();
@@ -887,7 +907,7 @@ mod tests {
 
         for command in [
             TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 on: true,
             },
             TickCommand::SetProgrammerValue {
@@ -929,11 +949,11 @@ mod tests {
             .unwrap()
             .set(dimmer, FULL);
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         });
         body.apply(TickCommand::Go {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             direction: GoDirection::Next,
         });
         body.render(&tick(0), &mut DmxFrame::new(&layout()));
@@ -959,7 +979,7 @@ mod tests {
         let mut frame = DmxFrame::new(&layout());
         for (index, expected) in [(0u64, 10_000u16), (1, 20_000)] {
             body.apply(TickCommand::Go {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 direction: GoDirection::Next,
             });
             body.render(&tick(index), &mut frame);
@@ -996,14 +1016,14 @@ mod tests {
 
         let mut frame = DmxFrame::new(&layout());
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         });
         body.render(&tick(0), &mut frame);
         assert_eq!(body.values().get(dimmer).copied(), Some(40_000));
 
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: false,
         });
         body.render(&tick(1), &mut frame);
@@ -1021,12 +1041,12 @@ mod tests {
     }
 
     #[test]
-    fn a_sequence_can_only_be_loaded_onto_an_executor_this_body_has() {
+    fn a_sequence_can_only_be_loaded_onto_a_playback_this_body_has() {
         let mut body = body(1, 2);
         assert_eq!(
             body.load_sequence(ExecutorId::new(77), &sequence(Vec::new(), false))
                 .unwrap_err(),
-            CueError::UnknownExecutor(ExecutorId::new(77))
+            CueError::UnknownPlayback(ExecutorId::new(77).into())
         );
     }
 
@@ -1089,7 +1109,7 @@ mod tests {
 
         producer
             .push(TickCommand::Go {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 direction: GoDirection::Next,
             })
             .unwrap();
@@ -1162,7 +1182,7 @@ mod tests {
         let head = moving_head();
         let patched = fixture(1, "test.movinghead", 9, 1);
         assert_eq!(
-            MergeBody::for_patch(&layout(), [(&patched, &head)], []).unwrap_err(),
+            MergeBody::for_patch(&layout(), [(&patched, &head)], crate::NO_PLAYBACKS).unwrap_err(),
             PatchError::UniverseNotPatched {
                 fixture: FixtureId::new(1),
                 universe: UniverseId::new(9),
@@ -1170,7 +1190,12 @@ mod tests {
         );
         let twice = fixture(1, "test.movinghead", 1, 1);
         assert_eq!(
-            MergeBody::for_patch(&layout(), [(&twice, &head), (&twice, &head)], []).unwrap_err(),
+            MergeBody::for_patch(
+                &layout(),
+                [(&twice, &head), (&twice, &head)],
+                crate::NO_PLAYBACKS
+            )
+            .unwrap_err(),
             PatchError::Plan(MergeError::DuplicateFixture(FixtureId::new(1)))
         );
     }
@@ -1191,13 +1216,13 @@ mod tests {
 
         producer
             .push(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 on: true,
             })
             .unwrap();
         producer
             .push(TickCommand::SetExecutorLevel {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 level: 32_767,
             })
             .unwrap();
@@ -1488,11 +1513,11 @@ mod tests {
         // A quarter master on a running executor: a quarter of the light.
         for command in [
             TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 on: true,
             },
             TickCommand::SetExecutorLevel {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 level: 16_383,
             },
         ] {
@@ -1515,7 +1540,7 @@ mod tests {
         // Held: full light, and the stored master has not moved.
         producer
             .push(TickCommand::SetExecutorFlash {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 on: true,
             })
             .unwrap();
@@ -1537,7 +1562,7 @@ mod tests {
         // the flash is on top — and the new level is what the release restores.
         producer
             .push(TickCommand::SetExecutorLevel {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 level: 49_151,
             })
             .unwrap();
@@ -1547,7 +1572,7 @@ mod tests {
 
         producer
             .push(TickCommand::SetExecutorFlash {
-                executor: ExecutorId::new(1),
+                executor: ExecutorId::new(1).into(),
                 on: false,
             })
             .unwrap();
@@ -1583,7 +1608,7 @@ mod tests {
         assert!(!body.layer().source(ExecutorId::new(1)).unwrap().is_active());
 
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         });
         body.resolve();
@@ -1591,7 +1616,7 @@ mod tests {
         assert_eq!(body.values()[dimmer], FULL);
 
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: false,
         });
         body.resolve();
@@ -1602,11 +1627,11 @@ mod tests {
         // the flash started and nothing else.
         body.layer_mut().activate(ExecutorId::new(2));
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(2),
+            executor: ExecutorId::new(2).into(),
             on: true,
         });
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(2),
+            executor: ExecutorId::new(2).into(),
             on: false,
         });
         assert!(body.layer().source(ExecutorId::new(2)).unwrap().is_active());
@@ -1647,7 +1672,7 @@ mod tests {
 
         let mut frame = DmxFrame::new(&layout());
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         });
         body.render(&tick(1), &mut frame);
@@ -1656,7 +1681,7 @@ mod tests {
         assert_eq!(report.get(1).unwrap().cue_index, None);
 
         body.apply(TickCommand::Go {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             direction: GoDirection::Next,
         });
         body.render(&tick(2), &mut frame);
@@ -1665,7 +1690,7 @@ mod tests {
         // Stopped: the cue index goes away with it, rather than being left
         // pointing at the cue that used to be running.
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: false,
         });
         body.render(&tick(3), &mut frame);
@@ -1677,9 +1702,12 @@ mod tests {
         assert_eq!(
             report
                 .states()
-                .map(|state| state.executor)
+                .map(|state| state.playback)
                 .collect::<Vec<_>>(),
-            vec![ExecutorId::new(1), ExecutorId::new(2)]
+            vec![
+                prism_domain::PlaybackId::from(ExecutorId::new(1)),
+                prism_domain::PlaybackId::from(ExecutorId::new(2))
+            ]
         );
     }
 
@@ -1695,18 +1723,18 @@ mod tests {
         body.report_into(Arc::clone(&report));
         assert!(body.report().is_some());
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(2),
+            executor: ExecutorId::new(2).into(),
             on: true,
         });
         let mut frame = DmxFrame::new(&layout());
         body.render(&tick(1), &mut frame);
         for state in report.states() {
-            assert_eq!(body.playback_state(state.executor), Some(state));
+            assert_eq!(body.playback_state(state.playback), Some(state));
         }
         assert!(
             report
                 .states()
-                .any(|state| state.executor == ExecutorId::new(2) && state.is_active)
+                .any(|state| state.playback == ExecutorId::new(2).into() && state.is_active)
         );
     }
 
@@ -1737,7 +1765,7 @@ mod tests {
         let mut frame = DmxFrame::new(&layout());
 
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         });
         for index in 1..=40 {
@@ -1747,7 +1775,7 @@ mod tests {
         assert!(moving > 0 && moving < 65_535, "{moving}");
 
         body.apply(TickCommand::SetExecutorSpeed {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             speed: 0,
         });
         for index in 41..=200 {
@@ -1765,14 +1793,14 @@ mod tests {
         // nothing and do not panic — the tick's answer to an impossible command
         // is to ignore it.
         body.apply(TickCommand::TapExecutorSpeed {
-            executor: ExecutorId::new(99),
+            executor: ExecutorId::new(99).into(),
         });
         body.apply(TickCommand::SetExecutorXFade {
-            executor: ExecutorId::new(99),
+            executor: ExecutorId::new(99).into(),
             position: 4,
         });
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(99),
+            executor: ExecutorId::new(99).into(),
             on: true,
         });
         body.render(&tick(201), &mut frame);
@@ -1806,23 +1834,23 @@ mod tests {
         let mut frame = DmxFrame::new(&layout());
 
         body.apply(TickCommand::SetExecutorXFade {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             position: 0,
         });
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             on: true,
         });
         body.render(&tick(1), &mut frame);
         body.apply(TickCommand::Go {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             direction: GoDirection::Next,
         });
         body.render(&tick(2), &mut frame);
         assert_eq!(body.values()[dimmer], 0);
 
         body.apply(TickCommand::SetExecutorXFade {
-            executor: ExecutorId::new(1),
+            executor: ExecutorId::new(1).into(),
             position: 65_535,
         });
         body.render(&tick(3), &mut frame);

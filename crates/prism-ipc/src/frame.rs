@@ -206,7 +206,9 @@ mod tests {
         encode_frame, payload_length,
     };
     use crate::scan::ScanFault;
-    use prism_domain::{Command, Delta, JsonPatchOp, JsonValue, NoticeLevel, SelectionMode};
+    use prism_domain::{
+        Command, Delta, JsonPatchOp, JsonValue, NoticeLevel, PlaybackTarget, SelectionMode,
+    };
 
     fn notice() -> Delta {
         Delta::Notice {
@@ -242,7 +244,7 @@ mod tests {
     #[test]
     fn the_payload_is_a_map_carrying_the_tag_and_the_field_names() {
         let command = Command::ExecutorOff {
-            executor_id: prism_domain::ExecutorId::new(3),
+            target: PlaybackTarget::of_executor(prism_domain::ExecutorId::new(3)),
         };
         let payload = encode(&command).unwrap();
 

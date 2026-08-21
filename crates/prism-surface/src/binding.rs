@@ -56,7 +56,7 @@ use core::fmt;
 
 use prism_domain::{
     AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId, FeatureGroup,
-    GoDirection, ParamDirection, ViewId, WindowType,
+    GoDirection, ParamDirection, PlaybackTarget, ViewId, WindowType,
 };
 use serde::{Deserialize, Serialize};
 
@@ -325,11 +325,11 @@ impl SurfaceAction {
                 level: input.level()?,
             },
             Self::ExecutorGo { target, direction } => Command::ExecutorGo {
-                executor_id: target.resolve(origin, context)?,
+                target: PlaybackTarget::of_executor(target.resolve(origin, context)?),
                 direction,
             },
             Self::ExecutorOff { target } => Command::ExecutorOff {
-                executor_id: target.resolve(origin, context)?,
+                target: PlaybackTarget::of_executor(target.resolve(origin, context)?),
             },
             Self::ExecutorButton { target, button } => Command::ExecutorButton {
                 executor_id: target.resolve(origin, context)?,
@@ -960,7 +960,7 @@ mod tests {
     use crate::profile::{Fader, GlobalButton, McuProfile, StripButton, X_TOUCH};
     use prism_domain::{
         AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId,
-        FeatureGroup, GoDirection, ParamDirection, ViewId, WindowType,
+        FeatureGroup, GoDirection, ParamDirection, PlaybackTarget, ViewId, WindowType,
     };
 
     fn context() -> SurfaceContext {
@@ -1407,7 +1407,7 @@ mod tests {
                     direction: GoDirection::Prev,
                 },
                 Command::ExecutorGo {
-                    executor_id: ExecutorId::new(19),
+                    target: PlaybackTarget::of_executor(ExecutorId::new(19)),
                     direction: GoDirection::Prev,
                 },
             ),

@@ -37,7 +37,7 @@ use std::time::Duration;
 
 use prism_core::{Applied, Autosave, Effect, ShowFile, ShowFileError, ShowStore};
 use prism_domain::{
-    AttributeType, Command, Delta, ExecutorId, FixtureId, GroupId, NoticeLevel, ProgrammerState,
+    AttributeType, Command, Delta, FixtureId, GroupId, NoticeLevel, PlaybackId, ProgrammerState,
     UniverseId,
 };
 use prism_engine::{FrameLayout, MergeBody, MergePlan, PatchError, PlaybackReport, TickCommand};
@@ -108,7 +108,7 @@ pub struct Core {
     /// new says nothing. A `Delta::ExecutorState` per tick would move the show
     /// document at playback rate, and every view that watches the show would
     /// re-ask its questions with it.
-    reported: BTreeMap<ExecutorId, (bool, Option<u32>)>,
+    reported: BTreeMap<PlaybackId, (bool, Option<u32>)>,
     autosave: Autosave,
     /// The patch revision the current plan was built from (S11).
     patch_revision: u64,
@@ -242,6 +242,15 @@ impl Core {
                 } => self.send(TickCommand::Go {
                     executor,
                     direction,
+                }),
+                // S40's `Goto`. The cue number became an index in
+                // `Show::cue_index_of`, because the tick resolves nothing.
+                Effect::Goto {
+                    executor,
+                    cue_index,
+                } => self.send(TickCommand::GotoCue {
+                    executor,
+                    cue_index,
                 }),
                 Effect::ExecutorOff { executor } => self.send(TickCommand::SetExecutorActive {
                     executor,
@@ -465,10 +474,10 @@ impl Core {
     /// question per frame.
     pub fn poll_playback(&mut self) -> Vec<Delta> {
         let mut deltas = Vec::new();
-        let mut seen: BTreeMap<ExecutorId, (bool, Option<u32>)> = BTreeMap::new();
+        let mut seen: BTreeMap<PlaybackId, (bool, Option<u32>)> = BTreeMap::new();
         for state in self.report.states() {
-            seen.insert(state.executor, (state.is_active, state.cue_index));
-            if self.reported.get(&state.executor) == Some(&(state.is_active, state.cue_index)) {
+            seen.insert(state.playback, (state.is_active, state.cue_index));
+            if self.reported.get(&state.playback) == Some(&(state.is_active, state.cue_index)) {
                 continue;
             }
             // The show is asked as well, because the desk's own record is what a
@@ -476,15 +485,15 @@ impl Core {
             // wrote `is_active` on the way past, and the cue index is what
             // arrives late.
             // Nothing to broadcast when the show already agreed, and nothing at
-            // all for an executor the show no longer has — the tick is one body
+            // all for a playback the show no longer has — the tick is one body
             // behind after a rebuild, and that is ordinary.
-            if let Ok(true) = self.file.show.record_executor_state(
-                state.executor,
+            if let Ok(true) = self.file.show.record_playback_state(
+                state.playback,
                 state.is_active,
                 state.cue_index,
             ) {
-                deltas.push(Delta::ExecutorState {
-                    executor_id: state.executor,
+                deltas.push(Delta::PlaybackState {
+                    playback: state.playback,
                     is_active: state.is_active,
                     cue_index: state.cue_index,
                 });
@@ -579,8 +588,33 @@ pub fn build_body(
     file: &ShowFile,
     report: &Arc<PlaybackReport>,
 ) -> Result<MergeBody, PatchError> {
-    let executors: Vec<ExecutorId> = file.show.executors().map(|executor| executor.id).collect();
-    let mut body = MergeBody::for_patch(layout, file.show.patched(), executors)?;
+    let mut playbacks: Vec<PlaybackId> = file
+        .show
+        .executors()
+        .map(|executor| PlaybackId::of_executor(executor.id))
+        .collect();
+    // **A cue list on no fader gets a playback of its own** (S40), which is
+    // what makes `On Sequence 1` mean something for a sequence nobody has
+    // assigned. The two are never both live for one cue list — `playback_of`
+    // resolves a sequence to the executor that holds it whenever one does — so
+    // the set here is *executors, plus the sequences nothing plays*.
+    //
+    // It is rebuilt with the body rather than allocated on demand, because
+    // allocating one is exactly what the tick may not do (§3.1): assigning a
+    // sequence to an executor answers `Effect::ReloadSequence`, which rebuilds,
+    // and the sequence's own source goes away in the same swap.
+    playbacks.extend(
+        file.show
+            .sequences()
+            .filter(|sequence| {
+                !file
+                    .show
+                    .executors()
+                    .any(|executor| executor.sequence_id == Some(sequence.id))
+            })
+            .map(|sequence| PlaybackId::of_sequence(sequence.id)),
+    );
+    let mut body = MergeBody::for_patch(layout, file.show.patched(), playbacks)?;
     body.report_into(Arc::clone(report));
 
     let groups: Vec<prism_domain::Group> = file.show.groups().cloned().collect();
@@ -614,6 +648,22 @@ pub fn build_body(
             );
         }
     }
+    // And the same for every cue list that is on no fader (S40). `load_sequence`
+    // answers `UnknownPlayback` for one that is, which is exactly the set the
+    // loop above has already covered — so the filter is the same one, written
+    // once by asking the body.
+    for sequence in file.show.sequences() {
+        let playback = PlaybackId::of_sequence(sequence.id);
+        if body.cues().player(playback).is_none() {
+            continue;
+        }
+        if let Err(error) = body.load_sequence(playback, sequence) {
+            log::warn(
+                "engine",
+                &format!("sequence {} could not be loaded: {error}", sequence.id),
+            );
+        }
+    }
     let unresolved = body.load_programmer(file.programmer.state());
     if unresolved > 0 {
         log::debug(
@@ -632,8 +682,8 @@ mod tests {
     use crate::testkit::{cue, dimmer_type, fixture, sequence, show_file};
     use prism_core::ShowStore;
     use prism_domain::{
-        AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, GroupId, SelectionMode,
-        SequenceId, UniverseId,
+        AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, GroupId, PlaybackId,
+        PlaybackTarget, SelectionMode, SequenceId, UniverseId,
     };
     use prism_engine::FramePublisher;
     use prism_protocols::{MockOutput, MockOutputHandle, OutputThread, RunnerConfig, spawn};
@@ -833,7 +883,7 @@ mod tests {
         // author racing the first.
         let deltas = core
             .apply(&Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             })
             .unwrap();
@@ -848,15 +898,15 @@ mod tests {
         let mut told = Vec::new();
         until("the client to be told", || {
             told.extend(core.poll_playback());
-            told.contains(&Delta::ExecutorState {
-                executor_id: ExecutorId::new(0),
+            told.contains(&Delta::PlaybackState {
+                playback: PlaybackId::of_executor(ExecutorId::new(0)),
                 is_active: true,
                 cue_index: Some(0),
             })
         });
 
         core.apply(&Command::ExecutorOff {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
         })
         .unwrap();
         let mut stopped = Vec::new();
@@ -865,7 +915,7 @@ mod tests {
             stopped.iter().any(|delta| {
                 matches!(
                     delta,
-                    Delta::ExecutorState {
+                    Delta::PlaybackState {
                         is_active: false,
                         cue_index: None,
                         ..
@@ -916,7 +966,7 @@ mod tests {
 
         let error = core
             .apply(&Command::ExecutorGo {
-                executor_id: ExecutorId::new(9),
+                target: PlaybackTarget::of_executor(ExecutorId::new(9)),
                 direction: GoDirection::Next,
             })
             .unwrap_err();
@@ -1009,7 +1059,7 @@ mod tests {
 
         // The cue raises channel 5; the master scales what it raises it to.
         core.apply(&Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: GoDirection::Next,
         })
         .unwrap();
@@ -1105,7 +1155,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (mut core, _frames, driver) = desk(dir.path());
         core.apply(&Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: GoDirection::Next,
         })
         .unwrap();
@@ -1117,7 +1167,7 @@ mod tests {
         assert!(
             first
                 .iter()
-                .any(|delta| matches!(delta, Delta::ExecutorState { .. }))
+                .any(|delta| matches!(delta, Delta::PlaybackState { .. }))
         );
 
         // Already running, and this sequence has one cue: the Go steps to the
@@ -1125,7 +1175,7 @@ mod tests {
         // readback has nothing to say. An LED cannot be lit twice (S11), and
         // since S34 the *readback* is what would say so.
         core.apply(&Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: GoDirection::Next,
         })
         .unwrap();
@@ -1193,7 +1243,7 @@ mod tests {
         .unwrap();
         let swaps = core.engine().health().swaps();
         core.apply(&Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "2".to_owned(),
             mode: prism_domain::StoreMode::Merge,
         })
@@ -1436,7 +1486,7 @@ mod tests {
 
         // The other client starts it. Nobody pressed the toggle.
         core.apply(&Command::ExecutorGo {
-            executor_id: ExecutorId::new(3),
+            target: PlaybackTarget::of_executor(ExecutorId::new(3)),
             direction: GoDirection::Next,
         })
         .unwrap();
@@ -1544,7 +1594,7 @@ mod tests {
         until("the rig at home", || channel(&frames, 1) == Some(255));
 
         core.apply(&Command::ExecutorGo {
-            executor_id: ExecutorId::new(3),
+            target: PlaybackTarget::of_executor(ExecutorId::new(3)),
             direction: GoDirection::Next,
         })
         .unwrap();

@@ -35,16 +35,17 @@
 import { useCallback, useState } from "react";
 
 import "./App.css";
-import type { Command, FeatureGroup, JsonValue, WindowType } from "./bindings";
+import type { FeatureGroup, JsonValue, WindowType } from "./bindings";
 import { Canvas } from "./canvas/canvas";
 import type { Rect } from "./canvas/geometry";
 import { ViewBar } from "./canvas/viewbar";
-import type { MoveDirection } from "./canvas/viewbar";
 import { CommandLine } from "./desk/commandline";
 import { EncoderBar } from "./desk/encoderbar";
 import { ExecutorBar } from "./desk/executorbar";
 import type { ParameterReading } from "./desk/programmer";
 import { commandLine } from "./desk/session";
+import { objectLine, useConsole } from "./desk/consoleshell";
+import { ConsoleProvider } from "./desk/shell";
 import type { ConnectionStatus } from "./ipc/connection";
 import { countAt, numberAt, stringAt } from "./mirror/select";
 import { statusText } from "./status";
@@ -61,17 +62,24 @@ const selectNotices = (state: DeskState): readonly Notice[] => state.notices;
 /** The whole interface. */
 export default function App() {
     const status = useDesk(selectStatus);
+    const documents = useDesk(selectDocuments);
     const connected = status.kind === "connected";
     return (
-        <main className="desk">
-            <header className="desk-header">
-                <h1>PrismDMX</h1>
-                <StatusPill status={status} />
-                {connected ? <Views /> : null}
-            </header>
-            {connected ? <Desk /> : <NotConnected status={status} />}
-            <Notices />
-        </main>
+        // **Every key on the screen writes into one line** —
+        // `ARCHITECTURE_SPEC.md` §4.5 — so the shell that holds it is above the
+        // header as well as the canvas: the View Selector Bar's keys are lines
+        // like any other.
+        <ConsoleProvider session={documents?.session ?? null} show={documents?.show ?? null}>
+            <main className="desk">
+                <header className="desk-header">
+                    <h1>PrismDMX</h1>
+                    <StatusPill status={status} />
+                    {connected ? <Views /> : null}
+                </header>
+                {connected ? <Desk /> : <NotConnected status={status} />}
+                <Notices />
+            </main>
+        </ConsoleProvider>
     );
 }
 
@@ -108,39 +116,45 @@ function NotConnected({ status }: { readonly status: ConnectionStatus }) {
 function Views() {
     const documents = useDesk(selectDocuments);
     const send = useSend();
+    const { run } = useConsole();
+    // **Every one of these writes a line and submits it** (§4.5): the pointer
+    // has supplied the argument the line was waiting for, so there is nothing
+    // left to type. They are the same lines an operator could have typed, which
+    // is what makes the screen teach the vocabulary.
     const onSelectView = useCallback(
         (viewId: number) => {
-            send({ t: "SelectView", viewId });
+            run(objectLine({ t: "View", viewId }));
         },
-        [send],
+        [run],
     );
     const onStoreView = useCallback(
         (viewId: number, name: string) => {
-            send({ t: "StoreView", viewId, name });
+            run(`Store View ${String(viewId)} ${JSON.stringify(name)}`);
         },
-        [send],
+        [run],
     );
-    // S35's three. Each is a command whose answer is a `SessionPatch`: what a
-    // view *is*, whether it still exists, and what order the bar draws them in
-    // are all the daemon's, and this component holds none of them.
     const onRenameView = useCallback(
         (viewId: number, name: string) => {
-            send({ t: "RenameView", viewId, name });
+            run(`Label View ${String(viewId)} ${JSON.stringify(name)}`);
         },
-        [send],
+        [run],
     );
     const onDeleteView = useCallback(
         (viewId: number) => {
-            send({ t: "DeleteView", viewId });
+            run(`Delete View ${String(viewId)}`);
         },
-        [send],
+        [run],
     );
     const onMoveView = useCallback(
-        (viewId: number, direction: MoveDirection) => {
-            send({ t: "MoveView", viewId, direction });
+        (viewId: number, toViewId: number) => {
+            run(`Move View ${String(viewId)} View ${String(toViewId)}`);
         },
-        [send],
+        [run],
     );
+    // Opening a window is the one thing on this bar that is **not** a line, and
+    // deliberately: `OpenWindow` names a window *type* rather than a number, and
+    // S40's vocabulary has no word for one. It is the same category as dragging
+    // a window (§4.2) — a canvas gesture rather than a console one.
     const onOpenWindow = useCallback(
         (type: WindowType) => {
             send({ t: "OpenWindow", window: type });
@@ -167,6 +181,7 @@ function Views() {
 function Desk() {
     const documents = useDesk(selectDocuments);
     const send = useSend();
+    const { run } = useConsole();
 
     const onPlace = useCallback(
         (instanceId: number, rect: Rect) => {
@@ -187,18 +202,22 @@ function Desk() {
         [send],
     );
 
-    // The executor bar's five.
+    // The executor bar's five. **Two of them are lines and three are not**, and
+    // `ARCHITECTURE_SPEC.md` §4.5 draws that line: paging and selecting are a
+    // word and a number, so they are written and submitted like any other pick;
+    // the fader and the buttons are the exception the spec names, because a Go
+    // is a gesture with timing in it (§4.3) and a fader is a stream of positions.
     const onPage = useCallback(
         (page: number) => {
-            send({ t: "SetExecutorPage", page });
+            run(`Page ${String(page)}`);
         },
-        [send],
+        [run],
     );
     const onSelect = useCallback(
         (executorId: number) => {
-            send({ t: "SelectExecutor", executorId });
+            run(objectLine({ t: "Executor", executorId }));
         },
-        [send],
+        [run],
     );
     const onMaster = useCallback(
         (executorId: number, level: number) => {
@@ -254,25 +273,13 @@ function Desk() {
         },
         [send],
     );
+    // A whole command with no argument: written and executed at once (§4.5).
+    // The three-stage Clear is still the daemon's — the key says *clear*, and
+    // which stage that is is `prism_core::Programmer`'s answer.
     const onClear = useCallback(() => {
-        send({ t: "ClearProgrammer" });
-    }, [send]);
+        run("Clear");
+    }, [run]);
 
-    // The command line's two.
-    const onCommands = useCallback(
-        (commands: readonly Command[]) => {
-            for (const command of commands) {
-                send(command);
-            }
-        },
-        [send],
-    );
-    const onText = useCallback(
-        (text: string) => {
-            send({ t: "CommandLineInput", text });
-        },
-        [send],
-    );
 
     if (documents === null) {
         return null;
@@ -317,11 +324,7 @@ function Desk() {
                 />
             </div>
             <footer className="desk-footer">
-                <CommandLine
-                    daemonLine={commandLine(documents.session)}
-                    onCommands={onCommands}
-                    onText={onText}
-                />
+                <CommandLine daemonLine={commandLine(documents.session)} />
                 <StatusStrip session={documents.session} show={documents.show} />
             </footer>
         </>

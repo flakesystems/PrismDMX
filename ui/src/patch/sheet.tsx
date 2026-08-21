@@ -42,6 +42,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { AttributeType, JsonValue, ProgrammerState } from "../bindings";
 import { bankParameters, groupOf, valueFor } from "../desk/programmer";
 import { encoderBank } from "../desk/session";
+import { useConsole } from "../desk/consoleshell";
 import { percentOfLevel } from "../desk/level";
 import { useTelemetryChannel } from "../telemetry/context";
 import { canvasSurface, devicePixelRatio, resizeCanvas } from "../telemetry/painter";
@@ -119,6 +120,7 @@ function SheetBody({
     readonly selected: ReadonlySet<number>;
 }) {
     const channel = useTelemetryChannel();
+    const { run } = useConsole();
     const scroller = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
     // A ref rather than state: the loop reads it, and a repatch must not be a
@@ -170,7 +172,27 @@ function SheetBody({
                                 className={selected.has(row.id) ? "row-selected" : ""}
                                 data-testid={`sheet-row-${String(row.id)}`}
                             >
-                                <td>{row.id}</td>
+                                {/*
+                                  **The fixture number is a list pick** — §4.5.
+                                  It writes `Fixture 12` and submits, because the
+                                  pointer has supplied the argument the line was
+                                  waiting for, and it is exactly the line an
+                                  operator would have typed to select the same
+                                  fixture.
+                                */}
+                                <td>
+                                    <button
+                                        type="button"
+                                        className="linkish"
+                                        data-testid={`sheet-select-${String(row.id)}`}
+                                        title={`Select fixture ${String(row.id)}`}
+                                        onClick={() => {
+                                            run(`Fixture ${String(row.id)}`);
+                                        }}
+                                    >
+                                        {row.id}
+                                    </button>
+                                </td>
                                 <td>{row.name === "" ? "—" : row.name}</td>
                                 {attributes.map((attribute) => (
                                     <td key={attribute} data-testid={`prog-${String(row.id)}-${attribute}`}>

@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 44c77f53c3c5d513661886cbb095b392314aecacc6df4c0be1728c72d2a5298d # shrinks to commands = [SelectFixtures { ids: [FixtureId(1)], mode: Set }]
 cc 80474b5a4da26995fa2b2705b9e8e4a1ae9f907ae4ea09383944c502a48a3f2a # shrinks to commands = [AssignExecutor { executor_id: ExecutorId(2), sequence_id: None }]
+cc f7d9dcdafd8b1b4efc17b3ed190c24c31837f8985381f1c646feb7dbf7ed06d0 # shrinks to commands = [StoreSequence { sequence_id: SequenceId(2), name: "", mode: Append }]

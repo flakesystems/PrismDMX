@@ -36,6 +36,7 @@ mod ids;
 mod json;
 mod output;
 mod patch;
+mod playback;
 mod preset;
 mod programmer;
 mod query;
@@ -45,7 +46,10 @@ mod session;
 mod wire;
 
 pub use attribute::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
-pub use command::{Command, GoDirection, ParamDirection, SelectionMode, SequenceStoreMode};
+pub use command::{
+    Command, GoDirection, ObjectRef, OverwriteMode, ParamDirection, SelectionMode,
+    SequenceStoreMode,
+};
 pub use delta::{Delta, NoticeLevel};
 pub use executor::{
     EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction, ExecutorButtonRef,
@@ -59,6 +63,7 @@ pub use ids::{
 pub use json::{JsonPatchOp, JsonValue};
 pub use output::OutputHealth;
 pub use patch::{CHANNELS_PER_UNIVERSE, Fixture, Group, RgbColor, Vec3};
+pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetValue};
 pub use programmer::{
     ClearStage, InvalidClearStage, ProgrammerEntry, ProgrammerState, ProgrammerValue,

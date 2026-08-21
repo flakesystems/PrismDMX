@@ -32,16 +32,25 @@ export interface Documents {
 /** The pointer the executor collection lives at, matching `prism_core::show`. */
 const EXECUTORS = "executors";
 
+/** The other collection a playback writes into — S40. */
+const SEQUENCES = "sequences";
+
 /**
  * Applies one delta, answering with the documents that result.
  *
  * The answer is the *same object* when a delta changes nothing here, so a
  * caller can compare by identity to decide whether to notify anybody.
  *
- * `ExecutorState` writes the two fields it carries into the show. The protocol
- * gives running executors a delta of their own so a client does not have to
+ * `PlaybackState` writes the two fields it carries into the show. The protocol
+ * gives running playbacks a delta of their own so a client does not have to
  * diff the show to draw a moving executor bar, and a mirror that ignored it
  * would drift on exactly those fields — S18 checked that by removing it.
+ *
+ * **Which collection it writes into is the playback's own answer** (S40): an
+ * executor's state is on its row of the grid, and a cue list playing on no fader
+ * keeps it on the sequence. `prism_core::Show::record_playback_state` writes the
+ * same two places from the same delta, which is what keeps this document and the
+ * daemon's agreeing.
  *
  * @throws {import("./patch").MirrorFault} if an operation does not fit. That is
  * not a recoverable condition: it means this client and the daemon have already
@@ -63,8 +72,11 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
     }
     case "ProgrammerChanged":
       return { ...documents, programmer: delta.state };
-    case "ExecutorState": {
-      const base = `/${EXECUTORS}/${delta.executorId}`;
+    case "PlaybackState": {
+      const base =
+        delta.playback.t === "Executor"
+          ? `/${EXECUTORS}/${String(delta.playback.executorId)}`
+          : `/${SEQUENCES}/${String(delta.playback.sequenceId)}`;
       const active = applyOp(documents.show, {
         op: "replace",
         path: `${base}/isActive`,

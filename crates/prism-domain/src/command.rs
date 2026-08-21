@@ -8,14 +8,16 @@
 //! console and the UI draw on one vocabulary, so there is no second command
 //! world to keep in sync.
 
+use core::fmt;
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, JsonValue,
-    PresetId, RgbColor, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+    AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, GroupId,
+    JsonValue, PlaybackTarget, PresetId, RgbColor, SequenceId, StoreMode, UniverseId, ViewId,
+    WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -99,6 +101,179 @@ pub enum ParamDirection {
     Next,
 }
 
+/// One of the numbered things on a desk — what `Delete`, `Copy`, `Move` and
+/// `Label` name (S40).
+///
+/// # Why one type rather than four commands each
+///
+/// S40 made the command line the interface (`ARCHITECTURE_SPEC.md` §4.5), and
+/// the grammar it needs is one production:
+///
+/// ```text
+///   verb := "delete" | "copy" | "move" | "label"
+///   line := verb object number [object number] [name]
+/// ```
+///
+/// *Delete sequence 4* and *delete group 4* are the same act on two things, and
+/// an operator learns one word rather than six. Writing them as six commands
+/// apiece would have put twenty-four variants into `docs/IPC_PROTOCOL.md` §5
+/// whose only difference is which pool they index, and — worse — it would have
+/// made the parser choose the command, which is the client deciding what a line
+/// *means* rather than what it *says*.
+///
+/// The price is that a command carrying one of these is show state for five of
+/// the six and **session** state for [`Self::View`], since
+/// `ARCHITECTURE_SPEC.md` §4.1 puts the view library in the session. So
+/// [`Command::is_session_command`] reads the target instead of matching on the
+/// variant alone. That is a real cost and it is paid once, here, rather than by
+/// an operator learning that views are renamed with a different word.
+///
+/// # A cue names its sequence, or does not
+///
+/// `Delete Cue 3` typed on the command line names no cue list, and it means the
+/// one the session has selected — `Session::selectedSequence`, which is S39's
+/// field and the reason it exists (§4.1). The daemon resolves it, and a client
+/// that filled the number in for itself would be sending a command whose
+/// meaning had already moved on a second screen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(tag = "t", rename_all_fields = "camelCase")]
+pub enum ObjectRef {
+    /// A cue list.
+    Sequence {
+        /// The sequence number.
+        sequence_id: SequenceId,
+    },
+    /// One cue of a cue list.
+    Cue {
+        /// The sequence, or `None` for the one the session has selected.
+        #[serde(default)]
+        sequence_id: Option<SequenceId>,
+        /// The cue, by the number an operator typed.
+        cue_number: String,
+    },
+    /// A fixture group.
+    Group {
+        /// The group number.
+        group_id: GroupId,
+    },
+    /// A preset, in whichever pool it is filed in.
+    ///
+    /// Numbers are unique **across** pools (`prism_core::Show::store_preset`),
+    /// so a preset is reached by number alone.
+    Preset {
+        /// The preset number.
+        preset_id: PresetId,
+    },
+    /// A stored canvas layout. **Session state** — see the type documentation.
+    View {
+        /// The view number.
+        view_id: ViewId,
+    },
+    /// One slot of the executor grid, `page * 8 + slot` (**D7**).
+    Executor {
+        /// The executor number.
+        executor_id: ExecutorId,
+    },
+}
+
+impl ObjectRef {
+    /// Whether this names something in the **session** rather than in the show.
+    ///
+    /// One variant does, and [`Command::is_session_command`] is why it matters:
+    /// `ARCHITECTURE_SPEC.md` §4.1 puts the view library in the session, so a
+    /// `Delete` of a view is applied by the session applier and journalled the
+    /// way every session command is — that is, not at all (§6.1).
+    #[must_use]
+    pub const fn is_session_object(&self) -> bool {
+        matches!(self, Self::View { .. })
+    }
+
+    /// The word an operator would use for this kind of thing.
+    ///
+    /// Used in refusals, so it is the word the command line takes rather than a
+    /// Rust identifier.
+    #[must_use]
+    pub const fn noun(&self) -> &'static str {
+        match self {
+            Self::Sequence { .. } => "sequence",
+            Self::Cue { .. } => "cue",
+            Self::Group { .. } => "group",
+            Self::Preset { .. } => "preset",
+            Self::View { .. } => "view",
+            Self::Executor { .. } => "executor",
+        }
+    }
+
+    /// Whether two references name the same **kind** of thing.
+    ///
+    /// `Copy Cue 2 Group 6` is a line the parser will happily build and nothing
+    /// can carry out, so it is refused rather than interpreted — the same split
+    /// `Command::SelectFixtures` has with a fixture the rig has not got.
+    #[must_use]
+    pub const fn same_kind_as(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Sequence { .. }, Self::Sequence { .. })
+                | (Self::Cue { .. }, Self::Cue { .. })
+                | (Self::Group { .. }, Self::Group { .. })
+                | (Self::Preset { .. }, Self::Preset { .. })
+                | (Self::View { .. }, Self::View { .. })
+                | (Self::Executor { .. }, Self::Executor { .. })
+        )
+    }
+}
+
+impl fmt::Display for ObjectRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Sequence { sequence_id } => write!(f, "sequence {sequence_id}"),
+            Self::Cue {
+                sequence_id: Some(sequence),
+                cue_number,
+            } => write!(f, "sequence {sequence} cue {cue_number}"),
+            Self::Cue {
+                sequence_id: None,
+                cue_number,
+            } => write!(f, "cue {cue_number}"),
+            Self::Group { group_id } => write!(f, "group {group_id}"),
+            Self::Preset { preset_id } => write!(f, "preset {preset_id}"),
+            Self::View { view_id } => write!(f, "view {view_id}"),
+            Self::Executor { executor_id } => write!(f, "executor {executor_id}"),
+        }
+    }
+}
+
+/// What a `Copy`, a `Move` or a `Store Group` does when the destination is
+/// already taken (S40).
+///
+/// Two values and not [`crate::StoreMode`]'s three, because *remove* means
+/// nothing here: a copy takes what is in one place and puts it in another, and
+/// there is no third thing it could do. The command line offers **merge,
+/// override or cancel**, and cancel is not a mode — it is the operator not
+/// sending the command, which is why it is not a variant.
+///
+/// `Merge` is the default for [`crate::StoreMode::Merge`]'s reason: it is the
+/// one that cannot lose anything.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum OverwriteMode {
+    /// Write into what is there and leave the rest standing.
+    ///
+    /// A cue keeps the parts the source does not mention, a group keeps the
+    /// fixtures, a view keeps the windows, a sequence keeps the cue numbers the
+    /// source has none of.
+    #[default]
+    Merge,
+    /// Make the destination **exactly** what the source is.
+    ///
+    /// What it does not mention is gone. This is the destructive one, and it is
+    /// why the interface asks before sending it.
+    Override,
+}
+
 /// Everything a client — or the surface controller — can ask the daemon to do.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -113,11 +288,19 @@ pub enum Command {
         )]
         ids: Vec<FixtureId>,
         /// How to combine with the current selection.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         mode: SelectionMode,
     },
     /// Set an attribute on the current selection.
     SetAttribute {
         /// The attribute to change.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         attribute: AttributeType,
         /// Absolute value `0..=65535`, or a signed delta when `relative` is set.
         ///
@@ -127,6 +310,27 @@ pub enum Command {
         value: i32,
         /// Whether `value` is a delta rather than an absolute value.
         relative: bool,
+    },
+    /// Select every fixture of a group — S40's `Group 3`.
+    ///
+    /// **Not [`Self::SelectFixtures`] with the members filled in**, and the
+    /// difference is D3: which fixtures a group holds is *show* state, so a
+    /// client that expanded the group would be sending a selection that a
+    /// second client's edit of that group had already made wrong. The command
+    /// names the group and the daemon expands it — the same split
+    /// `Command::PatchFixture` makes by carrying no channels.
+    ///
+    /// Refused when there is no such group, which is what makes `Group 9` on a
+    /// show with eight of them a message rather than an empty selection.
+    SelectGroup {
+        /// The group.
+        group_id: GroupId,
+        /// How to combine with the current selection.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        mode: SelectionMode,
     },
     /// Apply a preset to the current selection.
     ApplyPreset {
@@ -148,11 +352,22 @@ pub enum Command {
     /// client sent the command. See [`crate::StoreMode`] for what each of the
     /// three does.
     StoreCue {
-        /// Target sequence.
-        sequence_id: SequenceId,
+        /// Target sequence, or `None` for the one the session has selected.
+        ///
+        /// **`Store Cue 5` names no cue list** (S40), and it means
+        /// `Session::selectedSequence` — the field S39 added for exactly this
+        /// line (`ARCHITECTURE_SPEC.md` §4.1). The daemon resolves it, because a
+        /// client that read the session and filled the number in would be
+        /// sending a command whose meaning had already moved on another screen.
+        #[serde(default)]
+        sequence_id: Option<SequenceId>,
         /// Cue number as typed, e.g. `1.5`.
         cue_number: String,
         /// How it combines with the cue that is already there.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         mode: StoreMode,
     },
     /// Store the programmer contents into a preset of a pool.
@@ -179,11 +394,30 @@ pub enum Command {
         /// The preset number. Unique across pools — `prism_core::Show::
         /// store_preset` explains why, and [`Self::ApplyPreset`] is the reason.
         preset_id: PresetId,
-        /// Which pool it is filed in, and which values it takes.
-        pool: FeatureGroup,
+        /// Which pool it is filed in, and which values it takes, or `None` for
+        /// the bank the session has in force.
+        ///
+        /// **`Store Preset 1` names no pool** (S40), and the desk's answer is
+        /// `Session::encoderBank` — the bank whose values are under the
+        /// operator's hands at that moment, which is the one they mean. The
+        /// alternative, making the line name a pool, would put a word in front
+        /// of the commonest store on a console for no gain: the bank is already
+        /// lit on the encoder bar. A preset that **exists** keeps its own pool
+        /// instead, because a store onto preset 1 is a store into preset 1
+        /// rather than a way of moving it between pools.
+        #[serde(default)]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        pool: Option<FeatureGroup>,
         /// Operator-facing name.
         name: String,
         /// Colour for the scribble strip, if one was chosen.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         color: Option<RgbColor>,
         /// How it combines with the preset that is already there (S39).
         ///
@@ -191,6 +425,10 @@ pub enum Command {
         /// reason the preview does: `Query::StorePreview` can be asked about a
         /// preset in any of the three modes, and an answer describing an outcome
         /// no command can produce is exactly what S28 refused to ship.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         mode: StoreMode,
     },
     /// Store the programmer contents into a whole **sequence** (S39).
@@ -201,13 +439,52 @@ pub enum Command {
     /// that look, and `Merge` writes it into every cue there is — see
     /// [`SequenceStoreMode`].
     ///
-    /// It is also **not** [`Self::CreateSequence`], which makes an empty cue
-    /// list and stores nothing.
+    /// **It creates the cue list when the number is free** (S40). S39 refused a
+    /// store into a sequence that was not there and had `CreateSequence` beside
+    /// it for the other case; S40 removed that command, because `Store Sequence
+    /// 4` on the command line cannot know which of the two it is — the parser
+    /// does not read the show, and never will (S26). So this is both: it makes
+    /// the list if it has to, and stores into it. With an **empty programmer**
+    /// on a number nobody has used, that is exactly the empty cue list
+    /// `CreateSequence` used to make.
     StoreSequence {
-        /// Target sequence, which must already exist.
+        /// Target sequence. Created when the number is free.
         sequence_id: SequenceId,
+        /// Operator-facing name, used only when the sequence is created.
+        ///
+        /// Renaming one is [`Self::Label`]: a store must not quietly rename a
+        /// cue list somebody else named.
+        name: String,
         /// What to do with the cue list that is there.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         mode: SequenceStoreMode,
+    },
+    /// Store the programmer's **selection** as a group (S40).
+    ///
+    /// The command `prism_core::Show::store_group` had been waiting for since
+    /// S11: the method existed, `Effect::ReloadGroups` named it, and no command
+    /// in `docs/IPC_PROTOCOL.md` §5 reached it — so a group could be read,
+    /// selected and merged, and never made. S40 needs one, because `Copy Group 2
+    /// Group 6` and `Delete Group 4` are lines about groups that have to exist
+    /// first.
+    ///
+    /// It stores the **selection** and not the values: a group is a list of
+    /// fixtures (`prism_domain::Group`), which is what makes `Group 3` a
+    /// selection rather than a look. A look over the same fixtures is a preset.
+    StoreGroup {
+        /// The group number.
+        group_id: GroupId,
+        /// Operator-facing name, used only when the group is created.
+        name: String,
+        /// What to do with the group that is already there.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        mode: OverwriteMode,
     },
     /// Load a stored cue back into the programmer (S39).
     ///
@@ -224,8 +501,11 @@ pub enum Command {
     ///
     /// It also sets the **update state** — see [`Self::Update`].
     EditCue {
-        /// The sequence the cue is in.
-        sequence_id: SequenceId,
+        /// The sequence the cue is in, or `None` for the selected one — see
+        /// [`Self::StoreCue`] for why the daemon resolves it rather than a
+        /// client.
+        #[serde(default)]
+        sequence_id: Option<SequenceId>,
         /// The cue, by its number.
         cue_number: String,
     },
@@ -241,44 +521,195 @@ pub enum Command {
     /// undoable, unlike the playback actions beside it in
     /// `ARCHITECTURE_SPEC.md` §6.1.
     Update,
-    /// Create an empty sequence.
+    /// Change one timing field of one cue.
     ///
-    /// **Not `StoreSequence`**, which is S39's and is a different act: that one
-    /// stores the *programmer* into a sequence with a mode. This one makes the
-    /// cue list exist, which is what [`Self::StoreCue`] needs before it can put a
-    /// cue anywhere and what a show with nothing in it has none of. It is refused
-    /// when the number is taken, so it can never empty a cue list that is on
-    /// stage.
-    CreateSequence {
-        /// The sequence number.
-        sequence_id: SequenceId,
-        /// Operator-facing name.
-        name: String,
-    },
-    /// Change one field of one cue.
-    ///
-    /// One field rather than a whole cue — see [`CueProperty`]. What a cue
-    /// *does* is not among the fields: values come from the programmer through
+    /// One field rather than a whole cue — see [`CueProperty`], which also
+    /// explains why the number and the name are no longer among them. What a cue
+    /// *does* is not among them either: values come from the programmer through
     /// [`Self::StoreCue`], the same rule that keeps channels out of
     /// [`Self::PatchFixture`].
     SetCueProperty {
-        /// The sequence the cue is in.
-        sequence_id: SequenceId,
+        /// The sequence the cue is in, or `None` for the selected one.
+        #[serde(default)]
+        sequence_id: Option<SequenceId>,
         /// The cue, by the number it has **now**.
         cue_number: String,
         /// The field, and its new value.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         property: CueProperty,
     },
-    /// Take a cue out of a sequence.
+    /// Empty a place on the desk — S40's `Delete`.
     ///
-    /// Does not cascade and does not renumber: the cues after it keep their
-    /// numbers, because a cue number is what an operator has written on a running
-    /// order and what an F-key may be bound to.
-    DeleteCue {
-        /// The sequence.
-        sequence_id: SequenceId,
-        /// The cue, by number.
+    /// One command for six kinds of thing, and [`ObjectRef`] says why. What each
+    /// one means is the pool's own answer and is documented on the
+    /// `prism_core::Show` method behind it, but three of them are worth stating
+    /// here because they are decisions rather than deletions:
+    ///
+    /// - **A cue does not renumber what is left.** The cues after it keep their
+    ///   numbers, because a cue number is what an operator has written on a
+    ///   running order and what a `Goto` names.
+    /// - **A preset keeps its links.** A cue part that referenced it keeps the
+    ///   value it was given and loses the link, which `Show::issues` reports —
+    ///   editing every cue that used it would change light nobody asked to
+    ///   change.
+    /// - **An executor's *place* survives.** The row leaves the show, and the
+    ///   eight strips of a page are `page * 8 + slot` arithmetic (**D7**) rather
+    ///   than rows, so executor 1 is still there and is now empty. That is the
+    ///   requirement read literally, and it is also the exact inverse of the
+    ///   `AssignExecutor` that made the row — which is what lets an Oops put the
+    ///   grid back as it was rather than leaving a slot behind with the master
+    ///   and the button functions of a deleted executor still on it.
+    ///
+    /// The **last view** cannot be deleted (`SessionError::LastView`):
+    /// `activeViewId` names a view from the first moment
+    /// (`prism_core::SessionState::new`) and a session whose active view is not
+    /// a view is a dangling reference. Deleting the *active* view is allowed and
+    /// what the canvas then shows is the daemon's to decide.
+    Delete {
+        /// What to empty.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        target: ObjectRef,
+    },
+    /// Copy one place on the desk onto another — S40's `Copy`.
+    ///
+    /// `Copy Sequence 2 Sequence 6` and its five siblings. The source is left
+    /// exactly as it was; what happens at the destination when something is
+    /// already there is [`OverwriteMode`], and the interface asks before sending
+    /// an `Override`.
+    ///
+    /// The two references must name the **same kind** of thing
+    /// ([`ObjectRef::same_kind_as`]) — `Copy Cue 2 Group 6` is a line the parser
+    /// will build and nothing can carry out, so it is refused rather than
+    /// guessed at.
+    Copy {
+        /// What to copy.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        from: ObjectRef,
+        /// Where to put it.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        to: ObjectRef,
+        /// What to do when the destination is taken.
+        mode: OverwriteMode,
+    },
+    /// Move one place on the desk to another — S40's `Move`.
+    ///
+    /// [`Self::Copy`] followed by [`Self::Delete`] of the source, except where
+    /// that would be the wrong answer, and two of the six are exactly that:
+    ///
+    /// - **An executor swaps.** `Move Executor 1 Executor 5` puts 1's content on
+    ///   5; if 5 held something it goes to 1, because a desk's faders are places
+    ///   and an operator moving one is rearranging the grid rather than throwing
+    ///   half of it away. The mode is not read.
+    /// - **A view swaps, and its number does not travel.** S35 decided that a
+    ///   view library's order **is** its numbers — `views` is keyed by number,
+    ///   the View Selector Bar draws in number order and `Channel ◀▶` steps from
+    ///   one number to the next — so moving a view exchanges the two views'
+    ///   *contents* and leaves the numbers where they are. The cost is the one
+    ///   S35 named and accepted: after a move, `SelectView 3` names a different
+    ///   layout.
+    ///
+    /// A cue does **not** swap: `Move Cue 3 Cue 8` is a renumber, and a renumber
+    /// onto a number that is taken is the merge-or-override question again.
+    ///
+    /// > **This replaced `MoveView`, which was relative** (S35: `Prev`/`Next`).
+    /// > One absolute form covers both, because the bar knows its neighbour's
+    /// > number and writes the line — which is the whole of §4.5. Two commands
+    /// > for one act would have been the second grammar S40 exists to remove.
+    Move {
+        /// What to move.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        from: ObjectRef,
+        /// Where to move it.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        to: ObjectRef,
+        /// What to do when the destination is taken, where that is a question.
+        mode: OverwriteMode,
+    },
+    /// Name one place on the desk — S40's `Label`.
+    ///
+    /// Six kinds of thing and one word, for [`ObjectRef`]'s reason. It replaced
+    /// `RenameView` (S35) and `CueProperty::Name` (S28), which were the same act
+    /// said twice; a sequence, a group and a preset could not be renamed at all
+    /// before this, which `PROGRESS.md` §7 had been carrying out of S28 as *the
+    /// correcting half is not covered*.
+    ///
+    /// An **executor** has no name of its own — what a strip shows is its
+    /// sequence's — so `Label Executor 1` labels the cue list on it, and is
+    /// refused when the slot is empty. That is one indirection and it is the one
+    /// an operator means: the scribble strip is what they are trying to change.
+    ///
+    /// The name may be empty. Everything here is reached by its number, and an
+    /// operator clearing a label is not making anything unreachable.
+    Label {
+        /// What to name.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        target: ObjectRef,
+        /// The new name.
+        name: String,
+    },
+    /// Jump a playback straight to a cue — S40's `Goto`.
+    ///
+    /// **The command S40 found missing at the bottom of the stack**: there was
+    /// no `Goto` in this enum *and* none in `prism_engine::TickCommand`, so
+    /// `Goto Cue 5` needed a message all the way down to the tick before the
+    /// parser could send anything. What it does is [`Self::ExecutorGo`] without
+    /// the stepping: the cue is entered with its own fade, delay and trigger,
+    /// exactly as if the list had arrived there.
+    ///
+    /// The cue is named by **number**, and the daemon resolves it to the index
+    /// the tick works in — a client that sent an index would be reading a cue
+    /// list it may be one delta behind on.
+    ///
+    /// Not undoable, like every other playback action (`ARCHITECTURE_SPEC.md`
+    /// §6.1).
+    Goto {
+        /// Which playback.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        target: PlaybackTarget,
+        /// The cue, by the number an operator typed.
         cue_number: String,
+    },
+    /// Start a playback at the first cue of its list — S40's `On`.
+    ///
+    /// The command form of `ExecutorButtonFunction::On`, which until S40 could
+    /// only be reached by *pressing a key of an executor* — so `On Sequence 1`
+    /// had nothing to send. A second press does not restart a list that is
+    /// already running (`prism_engine::CuePlayer::on`).
+    ///
+    /// [`Self::ExecutorButton`] is still the right command for a strip, and this
+    /// is still not the same thing: that one says *which key went down* and lets
+    /// the executor decide, which is **D3** for playback.
+    ExecutorOn {
+        /// Which playback.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        target: PlaybackTarget,
     },
     /// Put a sequence on an executor, or take one off.
     ///
@@ -294,17 +725,32 @@ pub enum Command {
         /// The sequence to put on it, or `None` to clear the slot's sequence.
         sequence_id: Option<SequenceId>,
     },
-    /// Step an executor.
+    /// Step a playback.
+    ///
+    /// **The target grew in S40** and the reason is in [`PlaybackTarget`]: until
+    /// then every playback command named an executor, so `Go+ Sequence 1` for a
+    /// cue list on no fader had no representation at all. A strip still sends
+    /// [`PlaybackTarget::Executor`] and nothing about the latency path
+    /// (`ARCHITECTURE_SPEC.md` §4.3) changed — resolving that variant is the
+    /// identity.
     ExecutorGo {
-        /// Target executor.
-        executor_id: ExecutorId,
+        /// Which playback.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        target: PlaybackTarget,
         /// Which way to step.
         direction: GoDirection,
     },
-    /// Stop an executor.
+    /// Stop a playback.
     ExecutorOff {
-        /// Target executor.
-        executor_id: ExecutorId,
+        /// Which playback.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        target: PlaybackTarget,
     },
     /// Press or release one of an executor's buttons.
     ///
@@ -324,6 +770,10 @@ pub enum Command {
         /// Target executor.
         executor_id: ExecutorId,
         /// Which button.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         button: ExecutorButtonRef,
         /// Whether the button went down (`true`) or came up (`false`).
         pressed: bool,
@@ -434,58 +884,13 @@ pub enum Command {
         /// Name for the view.
         name: String,
     },
-    /// Rename a stored view, leaving its windows alone.
-    ///
-    /// **Not one of `ARCHITECTURE_SPEC.md` §4.4's eleven**, for the same reason
-    /// as [`Self::PlaceWindow`]: §4.4 lists what the *console* issues, and an
-    /// X-Touch has no way to type a name. It travels with the twelve, is
-    /// journalled with them — that is, not at all, §6.1 — and exists because
-    /// §4.1 puts the view library in the session, so a client that renamed a
-    /// view locally would be holding session state.
-    ///
-    /// Deliberately separate from [`Self::StoreView`], which overwrites the
-    /// windows: renaming a view must not silently replace the layout in it with
-    /// whatever happens to be on the canvas.
-    RenameView {
-        /// The view to rename.
-        view_id: ViewId,
-        /// The new name.
-        name: String,
-    },
-    /// Delete a stored view.
-    ///
-    /// The **last** view cannot be deleted: `activeViewId` names a view from the
-    /// first moment (`prism_core::SessionState::new`) and a session whose active
-    /// view is not a view is a dangling reference. Deleting the *active* view is
-    /// allowed, and what the canvas then shows is the daemon's to decide — see
-    /// `prism_core::SessionState::delete_view`.
-    DeleteView {
-        /// The view to delete.
-        view_id: ViewId,
-    },
-    /// Move a stored view one place along the bar.
-    ///
-    /// # The number is the order
-    ///
-    /// Views are held by number and drawn in number order, and `Channel ◀▶`
-    /// (**D8**) steps that same order. So moving a view **exchanges its number
-    /// with its neighbour's** rather than recording an order beside the numbers:
-    /// there is one order, and the console cannot disagree with the screen about
-    /// what comes next because there is nothing for it to disagree with.
-    ///
-    /// The cost is real and deliberate: after a move, `SelectView 3` names a
-    /// different layout, and an F-key bound to a view number follows the *place*
-    /// rather than the layout that used to be there. That is how a console's
-    /// page numbers behave, and it is the price of the two never drifting apart.
-    MoveView {
-        /// The view to move.
-        view_id: ViewId,
-        /// Which way along the bar.
-        direction: ParamDirection,
-    },
     /// Open a window on the canvas.
     OpenWindow {
         /// Which window to open.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         window: WindowType,
         /// Window-specific parameters, e.g. which preset pool.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -593,6 +998,10 @@ pub enum Command {
     /// Switch the encoder bank.
     SetEncoderBank {
         /// The feature group to switch to.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         group: FeatureGroup,
     },
     /// Page the programmer.
@@ -603,6 +1012,10 @@ pub enum Command {
     /// Move the programmer parameter the jog wheel turns.
     SelectProgrammerParam {
         /// Which way to move.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         direction: ParamDirection,
     },
     /// Type into the command line.
@@ -615,38 +1028,53 @@ pub enum Command {
 impl Command {
     /// Whether this command acts on session state rather than on the show.
     ///
-    /// `ARCHITECTURE_SPEC.md` §4.4's eleven, plus [`Self::PlaceWindow`], which
-    /// is twelfth because §4.4 lists what the *console* issues and a canvas is
-    /// not a console, plus [`Self::RenameView`], [`Self::DeleteView`] and
-    /// [`Self::MoveView`], which are thirteenth to fifteenth for the same
-    /// reason: managing a view library is something an operator does with a
-    /// pointer, and §4.1 puts that library in the session. See those variants
-    /// for why they have to exist at all.
+    /// `ARCHITECTURE_SPEC.md` §4.4's twelve, plus [`Self::PlaceWindow`], which
+    /// is thirteenth because §4.4 lists what the *console* issues and a canvas
+    /// is not a console.
     ///
-    /// [`Self::SelectSequence`] is the sixteenth and it **is** on §4.4's list
-    /// since S39, because a console issues it: `Sequence 5` on the command line
-    /// is how an operator picks a cue list without a pointer.
+    /// [`Self::SelectSequence`] is on §4.4's list since S39, because a console
+    /// issues it: `Sequence 5` on the command line is how an operator picks a
+    /// cue list without a pointer.
+    ///
+    /// # Four of them are session commands only sometimes, and that is S40's
+    ///
+    /// [`Self::Delete`], [`Self::Copy`], [`Self::Move`] and [`Self::Label`] name
+    /// a *thing* rather than a model, and one of the six things they can name —
+    /// a view — lives in the session (§4.1). So which applier owns one of these
+    /// is a property of its target, and this predicate reads it.
+    ///
+    /// That is new in this codebase and it is worth being plain about the cost:
+    /// `ShowFile::apply` routes on this predicate, so a `Delete` is a session
+    /// command or a show command depending on its payload, and
+    /// [`Self::is_undoable`] follows it — deleting a view is not undoable, for
+    /// §6.1's reason that an Oops must not pull a window out from under an
+    /// operator, and deleting a cue is. The alternative was twenty-four
+    /// commands whose only difference is which pool they index, and
+    /// [`ObjectRef`] has the rest of that argument.
+    ///
+    /// `Copy` and `Move` read the **source**. A pair naming two different kinds
+    /// of thing is refused by whichever applier gets it, which is why it does
+    /// not matter which one that is.
     #[must_use]
     pub const fn is_session_command(&self) -> bool {
-        matches!(
-            self,
+        match self {
             Self::SelectView { .. }
-                | Self::StoreView { .. }
-                | Self::RenameView { .. }
-                | Self::DeleteView { .. }
-                | Self::MoveView { .. }
-                | Self::OpenWindow { .. }
-                | Self::CloseWindow { .. }
-                | Self::FocusWindow { .. }
-                | Self::PlaceWindow { .. }
-                | Self::SetExecutorPage { .. }
-                | Self::SelectExecutor { .. }
-                | Self::SelectSequence { .. }
-                | Self::SetEncoderBank { .. }
-                | Self::SetProgrammerPage { .. }
-                | Self::SelectProgrammerParam { .. }
-                | Self::CommandLineInput { .. }
-        )
+            | Self::StoreView { .. }
+            | Self::OpenWindow { .. }
+            | Self::CloseWindow { .. }
+            | Self::FocusWindow { .. }
+            | Self::PlaceWindow { .. }
+            | Self::SetExecutorPage { .. }
+            | Self::SelectExecutor { .. }
+            | Self::SelectSequence { .. }
+            | Self::SetEncoderBank { .. }
+            | Self::SetProgrammerPage { .. }
+            | Self::SelectProgrammerParam { .. }
+            | Self::CommandLineInput { .. } => true,
+            Self::Delete { target } | Self::Label { target, .. } => target.is_session_object(),
+            Self::Copy { from, .. } | Self::Move { from, .. } => from.is_session_object(),
+            _ => false,
+        }
     }
 
     /// Whether applying this command should push an entry onto the Oops journal.
@@ -662,7 +1090,9 @@ impl Command {
             self,
             Self::ExecutorGo { .. }
                 | Self::ExecutorOff { .. }
+                | Self::ExecutorOn { .. }
                 | Self::ExecutorButton { .. }
+                | Self::Goto { .. }
                 | Self::SetExecutorMaster { .. }
                 | Self::Oops
                 | Self::Redo
@@ -675,8 +1105,9 @@ impl Command {
 mod tests {
     use crate::{
         AttributeType, Command, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup,
-        FixtureId, GoDirection, JsonValue, ParamDirection, PresetId, RgbColor, SelectionMode,
-        SequenceId, SequenceStoreMode, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+        FixtureId, GoDirection, GroupId, JsonValue, ObjectRef, OverwriteMode, ParamDirection,
+        PlaybackTarget, PresetId, RgbColor, SelectionMode, SequenceId, SequenceStoreMode,
+        StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -766,12 +1197,16 @@ mod tests {
                 value: 0,
                 relative: false,
             },
+            Command::SelectGroup {
+                group_id: GroupId::new(1),
+                mode: SelectionMode::Set,
+            },
             Command::ApplyPreset {
                 preset_id: PresetId::new(1),
             },
             Command::ClearProgrammer,
             Command::StoreCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
                 mode: StoreMode::Merge,
             },
@@ -779,19 +1214,33 @@ mod tests {
             // the programmer, and the store that puts it back.
             Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
+                name: "Act 1".to_owned(),
                 mode: SequenceStoreMode::Append,
             },
+            Command::StoreGroup {
+                group_id: GroupId::new(1),
+                name: "Front wash".to_owned(),
+                mode: OverwriteMode::Merge,
+            },
             Command::EditCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
             },
             Command::Update,
+            // S40's playback vocabulary: four verbs and three targets.
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             },
             Command::ExecutorOff {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_sequence(SequenceId::new(1)),
+            },
+            Command::ExecutorOn {
+                target: PlaybackTarget::Selected,
+            },
+            Command::Goto {
+                target: PlaybackTarget::Selected,
+                cue_number: "5".to_owned(),
             },
             Command::ExecutorButton {
                 executor_id: ExecutorId::new(0),
@@ -821,25 +1270,46 @@ mod tests {
             },
             Command::StorePreset {
                 preset_id: PresetId::new(4),
-                pool: FeatureGroup::Color,
+                pool: Some(FeatureGroup::Color),
                 name: "Deep blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 255 }),
                 mode: StoreMode::Override,
             },
-            Command::CreateSequence {
-                sequence_id: SequenceId::new(1),
-                name: "Act 1".to_owned(),
-            },
             Command::SetCueProperty {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
-                property: CueProperty::Name {
-                    name: "Blackout".to_owned(),
+                property: CueProperty::FadeIn { seconds: 3.0 },
+            },
+            // S40's four verbs, one target apiece out of the six there are.
+            Command::Delete {
+                target: ObjectRef::Cue {
+                    sequence_id: Some(SequenceId::new(1)),
+                    cue_number: "1".to_owned(),
                 },
             },
-            Command::DeleteCue {
-                sequence_id: SequenceId::new(1),
-                cue_number: "1".to_owned(),
+            Command::Copy {
+                from: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(2),
+                },
+                to: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(6),
+                },
+                mode: OverwriteMode::Merge,
+            },
+            Command::Move {
+                from: ObjectRef::Executor {
+                    executor_id: ExecutorId::new(1),
+                },
+                to: ObjectRef::Executor {
+                    executor_id: ExecutorId::new(5),
+                },
+                mode: OverwriteMode::Merge,
+            },
+            Command::Label {
+                target: ObjectRef::Group {
+                    group_id: GroupId::new(3),
+                },
+                name: "Front wash".to_owned(),
             },
             Command::AssignExecutor {
                 executor_id: ExecutorId::new(0),
@@ -854,17 +1324,6 @@ mod tests {
             Command::StoreView {
                 view_id: ViewId::new(1),
                 name: "Programming".to_owned(),
-            },
-            Command::RenameView {
-                view_id: ViewId::new(1),
-                name: "Busking".to_owned(),
-            },
-            Command::DeleteView {
-                view_id: ViewId::new(1),
-            },
-            Command::MoveView {
-                view_id: ViewId::new(1),
-                direction: ParamDirection::Next,
             },
             Command::OpenWindow {
                 window: WindowType::Patch,
@@ -901,7 +1360,7 @@ mod tests {
                 text: "1 thru 4 at full".to_owned(),
             },
         ];
-        assert_eq!(commands.len(), 40);
+        assert_eq!(commands.len(), 43);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -914,12 +1373,13 @@ mod tests {
 
     #[test]
     fn session_commands_are_the_architecture_spec_list_plus_the_ones_a_screen_needs() {
-        // ARCHITECTURE_SPEC.md §4.4's eleven, plus the four a *screen* needs and
-        // a console cannot issue: `PlaceWindow`, because §4.1 puts a window's
-        // position and size in the session and an X-Touch never drags one, and
-        // `RenameView` / `DeleteView` / `MoveView`, because §4.1 puts the view
-        // library there too and an X-Touch cannot type a name. Each of them is a
-        // command or it is client-local state pretending not to be.
+        // ARCHITECTURE_SPEC.md §4.4's twelve, plus `PlaceWindow`, which a
+        // *screen* needs and a console cannot issue: §4.1 puts a window's
+        // position and size in the session and an X-Touch never drags one. Each
+        // of them is a command or it is client-local state pretending not to be.
+        //
+        // S40's four generic verbs join them **when they name a view**, because
+        // §4.1 puts the view library in the session too.
         let session_commands = [
             Command::SelectView {
                 view_id: ViewId::new(1),
@@ -927,17 +1387,6 @@ mod tests {
             Command::StoreView {
                 view_id: ViewId::new(1),
                 name: String::new(),
-            },
-            Command::RenameView {
-                view_id: ViewId::new(1),
-                name: String::new(),
-            },
-            Command::DeleteView {
-                view_id: ViewId::new(1),
-            },
-            Command::MoveView {
-                view_id: ViewId::new(1),
-                direction: ParamDirection::Next,
             },
             Command::OpenWindow {
                 window: WindowType::Patch,
@@ -975,12 +1424,255 @@ mod tests {
             Command::CommandLineInput {
                 text: String::new(),
             },
+            // S40's four, each with a **view** as its target. The same four
+            // commands naming anything else are show commands - see
+            // `Command::is_session_command`, which is why this list is the
+            // interesting half rather than the whole of the predicate.
+            Command::Delete {
+                target: ObjectRef::View {
+                    view_id: ViewId::new(1),
+                },
+            },
+            Command::Label {
+                target: ObjectRef::View {
+                    view_id: ViewId::new(1),
+                },
+                name: "Busking".to_owned(),
+            },
+            Command::Copy {
+                from: ObjectRef::View {
+                    view_id: ViewId::new(1),
+                },
+                to: ObjectRef::View {
+                    view_id: ViewId::new(2),
+                },
+                mode: OverwriteMode::Merge,
+            },
+            Command::Move {
+                from: ObjectRef::View {
+                    view_id: ViewId::new(1),
+                },
+                to: ObjectRef::View {
+                    view_id: ViewId::new(3),
+                },
+                mode: OverwriteMode::Merge,
+            },
         ];
-        assert_eq!(session_commands.len(), 16);
+        assert_eq!(session_commands.len(), 17);
         for command in session_commands {
             assert!(command.is_session_command(), "{command:?}");
         }
         assert!(!Command::ClearProgrammer.is_session_command());
+    }
+
+    /// **The same verb is a show command when it names anything but a view.**
+    /// S40's cost, asserted rather than described: `ARCHITECTURE_SPEC.md` §4.1
+    /// puts the view library in the session and everything else in the show, so
+    /// which applier owns a `Delete` is a property of its payload.
+    #[test]
+    fn the_four_generic_verbs_follow_their_target_into_the_show() {
+        let show_targets = [
+            ObjectRef::Sequence {
+                sequence_id: SequenceId::new(1),
+            },
+            ObjectRef::Cue {
+                sequence_id: None,
+                cue_number: "1".to_owned(),
+            },
+            ObjectRef::Group {
+                group_id: GroupId::new(1),
+            },
+            ObjectRef::Preset {
+                preset_id: PresetId::new(1),
+            },
+            ObjectRef::Executor {
+                executor_id: ExecutorId::new(1),
+            },
+        ];
+        for target in show_targets {
+            let commands = [
+                Command::Delete {
+                    target: target.clone(),
+                },
+                Command::Label {
+                    target: target.clone(),
+                    name: String::new(),
+                },
+                Command::Copy {
+                    from: target.clone(),
+                    to: target.clone(),
+                    mode: OverwriteMode::Merge,
+                },
+                Command::Move {
+                    from: target.clone(),
+                    to: target.clone(),
+                    mode: OverwriteMode::Override,
+                },
+            ];
+            for command in commands {
+                assert!(!command.is_session_command(), "{command:?}");
+                // And therefore undoable: a show edit is, a session edit is not.
+                assert!(command.is_undoable(), "{command:?}");
+            }
+        }
+        assert!(
+            !Command::Delete {
+                target: ObjectRef::View {
+                    view_id: ViewId::new(1)
+                }
+            }
+            .is_undoable()
+        );
+    }
+
+    /// The playback verbs are the exclusion `ARCHITECTURE_SPEC.md` §6.1 names:
+    /// an Oops must not change light the operator is currently driving. `Goto`
+    /// and `ExecutorOn` joined them in S40.
+    #[test]
+    fn no_playback_action_is_undoable() {
+        let playback = [
+            Command::ExecutorGo {
+                target: PlaybackTarget::Selected,
+                direction: GoDirection::Next,
+            },
+            Command::ExecutorOff {
+                target: PlaybackTarget::Selected,
+            },
+            Command::ExecutorOn {
+                target: PlaybackTarget::Selected,
+            },
+            Command::Goto {
+                target: PlaybackTarget::Selected,
+                cue_number: "5".to_owned(),
+            },
+            Command::ExecutorButton {
+                executor_id: ExecutorId::new(1),
+                button: ExecutorButtonRef::Slot { index: 0 },
+                pressed: true,
+            },
+            Command::SetExecutorMaster {
+                executor_id: ExecutorId::new(1),
+                level: 0,
+            },
+        ];
+        for command in playback {
+            assert!(!command.is_undoable(), "{command:?}");
+        }
+    }
+
+    /// A pair naming two different kinds of thing is a line the parser will
+    /// build and nothing can carry out - S40's rule that the client decides what
+    /// was *asked for* and the daemon decides what is.
+    #[test]
+    fn a_copy_knows_whether_its_two_ends_are_the_same_kind_of_thing() {
+        let cue = ObjectRef::Cue {
+            sequence_id: None,
+            cue_number: "1".to_owned(),
+        };
+        let other_cue = ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(4)),
+            cue_number: "9".to_owned(),
+        };
+        let group = ObjectRef::Group {
+            group_id: GroupId::new(1),
+        };
+        assert!(cue.same_kind_as(&other_cue));
+        assert!(!cue.same_kind_as(&group));
+        assert!(group.same_kind_as(&group));
+    }
+
+    /// Refusals are shown to an operator, so a reference has to read as the
+    /// words they typed.
+    #[test]
+    fn an_object_reference_reads_as_the_line_that_named_it() {
+        assert_eq!(
+            ObjectRef::Sequence {
+                sequence_id: SequenceId::new(4)
+            }
+            .to_string(),
+            "sequence 4"
+        );
+        assert_eq!(
+            ObjectRef::Cue {
+                sequence_id: None,
+                cue_number: "1.5".to_owned()
+            }
+            .to_string(),
+            "cue 1.5"
+        );
+        assert_eq!(
+            ObjectRef::Cue {
+                sequence_id: Some(SequenceId::new(2)),
+                cue_number: "1.5".to_owned()
+            }
+            .to_string(),
+            "sequence 2 cue 1.5"
+        );
+        assert_eq!(
+            ObjectRef::Group {
+                group_id: GroupId::new(3)
+            }
+            .to_string(),
+            "group 3"
+        );
+        assert_eq!(
+            ObjectRef::Preset {
+                preset_id: PresetId::new(3)
+            }
+            .to_string(),
+            "preset 3"
+        );
+        assert_eq!(
+            ObjectRef::View {
+                view_id: ViewId::new(3)
+            }
+            .to_string(),
+            "view 3"
+        );
+        assert_eq!(
+            ObjectRef::Executor {
+                executor_id: ExecutorId::new(3)
+            }
+            .to_string(),
+            "executor 3"
+        );
+        assert_eq!(
+            ObjectRef::Group {
+                group_id: GroupId::new(3)
+            }
+            .noun(),
+            "group"
+        );
+    }
+
+    /// **A cue that names no sequence carries a `null`, not an absence.**
+    ///
+    /// The distinction is worth a test because it is a decision: `#[ts(optional)]`
+    /// would have rendered `sequenceId?: SequenceId`, which says *not supplied*,
+    /// and this field says something more definite — *the cue list the session
+    /// has selected* (`ARCHITECTURE_SPEC.md` §4.1). A `null` says that and a
+    /// missing key does not, and a recording is easier to read for it.
+    ///
+    /// A file or a client from before S40 that leaves the key out is still
+    /// accepted, because the field is `#[serde(default)]`.
+    #[test]
+    fn a_cue_that_names_no_sequence_says_so_with_a_null() {
+        assert_eq!(
+            serde_json::to_string(&ObjectRef::Cue {
+                sequence_id: None,
+                cue_number: "5".to_owned()
+            })
+            .unwrap(),
+            r#"{"t":"Cue","sequenceId":null,"cueNumber":"5"}"#
+        );
+        let back: ObjectRef = serde_json::from_str(r#"{"t":"Cue","cueNumber":"5"}"#).unwrap();
+        assert_eq!(
+            back,
+            ObjectRef::Cue {
+                sequence_id: None,
+                cue_number: "5".to_owned()
+            }
+        );
     }
 
     #[test]
@@ -1019,11 +1711,11 @@ mod tests {
         // currently driving, nor pull windows out from under them.
         for command in [
             Command::ExecutorGo {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                 direction: GoDirection::Next,
             },
             Command::ExecutorOff {
-                executor_id: ExecutorId::new(0),
+                target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             },
             Command::SetExecutorMaster {
                 executor_id: ExecutorId::new(0),
@@ -1058,7 +1750,7 @@ mod tests {
                 preset_id: PresetId::new(1),
             },
             Command::StoreCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
                 mode: StoreMode::Remove,
             },
@@ -1067,10 +1759,11 @@ mod tests {
             // undoable however playback-shaped the key on the desk looks.
             Command::StoreSequence {
                 sequence_id: SequenceId::new(1),
+                name: String::new(),
                 mode: SequenceStoreMode::Override,
             },
             Command::EditCue {
-                sequence_id: SequenceId::new(1),
+                sequence_id: Some(SequenceId::new(1)),
                 cue_number: "1".to_owned(),
             },
             Command::Update,

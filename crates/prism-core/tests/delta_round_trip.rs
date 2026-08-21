@@ -25,8 +25,8 @@ use prism_core::{
 };
 use prism_domain::{
     AttributeType, Command, Cue, CuePart, Delta, Executor, ExecutorId, Fixture, FixtureId,
-    FixtureType, Group, GroupId, JsonPatchOp, ParamDirection, Preset, PresetId, PresetValue,
-    Sequence, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+    FixtureType, Group, GroupId, JsonPatchOp, ParamDirection, PlaybackId, Preset, PresetId,
+    PresetValue, Sequence, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 use proptest::prelude::*;
 
@@ -111,12 +111,12 @@ fn a_scripted_show_is_reproduced_operation_by_operation() {
     // follow that too or it drifts on exactly those two fields.
     assert!(
         pair.show
-            .record_executor_state(ExecutorId::new(0), true, Some(1))
+            .record_playback_state(ExecutorId::new(0).into(), true, Some(1))
             .unwrap()
     );
     pair.mirror
-        .apply_delta(&Delta::ExecutorState {
-            executor_id: ExecutorId::new(0),
+        .apply_delta(&Delta::PlaybackState {
+            playback: PlaybackId::of_executor(ExecutorId::new(0)),
             is_active: true,
             cue_index: Some(1),
         })
@@ -363,12 +363,12 @@ proptest! {
                 Edit::SetMaster(id, level) => show.set_executor_master(id, level),
                 Edit::ExecutorState(id, active, index) => {
                     // Not a JSON Patch: this one has its own delta.
-                    if show.record_executor_state(id, active, index).is_ok() {
+                    if show.record_playback_state(id.into(), active, index).is_ok() {
                         applied += 1;
                         mirror
-                            .apply_delta(&Delta::ExecutorState {
-                                executor_id: id,
-                                is_active: active,
+                            .apply_delta(&Delta::PlaybackState {
+                                playback: PlaybackId::of_executor(id),
+                                                                is_active: active,
                                 cue_index: index,
                             })
                             .unwrap();
@@ -670,7 +670,7 @@ fn a_scripted_programmer_is_reproduced_command_by_command() {
     });
     // A store writes the show, so this one command moves two documents at once.
     pair.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     });
@@ -703,7 +703,7 @@ fn an_undo_and_a_redo_reach_all_three_mirrors() {
     // the programmer at once.
     pair.apply(&patch_command(9, 3, 1));
     pair.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "3".to_owned(),
         mode: StoreMode::Merge,
     });

@@ -19,8 +19,8 @@ use common::{cue, executor, populated_show, preset, sequence};
 use prism_core::{Effect, Show, ShowError, ShowFile, ShowFileError};
 use prism_domain::{
     AttributeType, Command, CueProperty, CueTrigger, ExecutorButtonFunction, ExecutorFaderFunction,
-    ExecutorId, FeatureGroup, FixtureId, GoDirection, PresetId, RgbColor, SelectionMode,
-    SequenceId, StoreMode, StoreTarget,
+    ExecutorId, FeatureGroup, FixtureId, GoDirection, ObjectRef, OverwriteMode, PlaybackTarget,
+    PresetId, RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, StoreTarget,
 };
 
 /// The show as bytes, so "nothing changed" can be asserted rather than claimed.
@@ -92,7 +92,7 @@ fn editing_a_preset_changes_the_cues_that_reference_it() {
     })
     .expect("preset 4 exists");
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "7".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -111,7 +111,7 @@ fn editing_a_preset_changes_the_cues_that_reference_it() {
     let applied = file
         .apply(&Command::StorePreset {
             preset_id: PresetId::new(4),
-            pool: FeatureGroup::Color,
+            pool: Some(FeatureGroup::Color),
             name: "Half red".to_owned(),
             color: Some(RgbColor { r: 128, g: 0, b: 0 }),
             mode: StoreMode::Merge,
@@ -160,7 +160,7 @@ fn editing_a_preset_leaves_the_values_that_are_not_linked_to_it() {
     dial(&mut file, &[1], AttributeType::Red, 111);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: FeatureGroup::Color,
+        pool: Some(FeatureGroup::Color),
         name: "Dim red".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -189,7 +189,7 @@ fn a_link_to_a_value_the_preset_does_not_carry_survives_untouched() {
     })
     .expect("preset 4 exists");
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "7".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -201,7 +201,7 @@ fn a_link_to_a_value_the_preset_does_not_carry_survives_untouched() {
     dial(&mut file, &[2], AttributeType::Green, 200);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: FeatureGroup::Color,
+        pool: Some(FeatureGroup::Color),
         name: "Preset 4".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -226,7 +226,7 @@ fn an_oops_over_a_preset_edit_puts_the_cues_back_too() {
     })
     .expect("preset 4 exists");
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "7".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -237,7 +237,7 @@ fn an_oops_over_a_preset_edit_puts_the_cues_back_too() {
     dial(&mut file, &[1], AttributeType::Red, 1000);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: FeatureGroup::Color,
+        pool: Some(FeatureGroup::Color),
         name: "Nearly off".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -266,7 +266,7 @@ fn a_preset_stores_the_values_of_its_own_pool_only() {
 
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(9),
-        pool: FeatureGroup::Color,
+        pool: Some(FeatureGroup::Color),
         name: "Reds".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -288,7 +288,7 @@ fn an_empty_store_creates_nothing_and_relabels_what_is_there() {
     let before = bytes(&file.show);
     let refusal = file.apply(&Command::StorePreset {
         preset_id: PresetId::new(9),
-        pool: FeatureGroup::Position,
+        pool: Some(FeatureGroup::Position),
         name: "Nowhere".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -302,7 +302,7 @@ fn an_empty_store_creates_nothing_and_relabels_what_is_there() {
     // Preset 4 exists, so the same empty programmer is a rename.
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: FeatureGroup::Color,
+        pool: Some(FeatureGroup::Color),
         name: "Renamed".to_owned(),
         color: Some(RgbColor { r: 1, g: 2, b: 3 }),
         mode: StoreMode::Merge,
@@ -346,7 +346,7 @@ fn a_store_preview_says_what_the_store_that_follows_it_does() {
 
     let before = bytes(&file.show);
     file.apply(&Command::StoreCue {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
         mode: StoreMode::Merge,
     })
@@ -500,18 +500,22 @@ fn a_cue_is_corrected_one_field_at_a_time() {
     let mut file = file();
     let set = |file: &mut ShowFile, property: CueProperty| {
         file.apply(&Command::SetCueProperty {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "1".to_owned(),
             property,
         })
         .expect("the edit is accepted");
     };
-    set(
-        &mut file,
-        CueProperty::Name {
-            name: "Blackout".to_owned(),
+    // The name is `Command::Label`'s since S40, and it is applied through the
+    // same file so the round trip below covers it too.
+    file.apply(&Command::Label {
+        target: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
         },
-    );
+        name: "Blackout".to_owned(),
+    })
+    .expect("the label is accepted");
     set(&mut file, CueProperty::FadeIn { seconds: 0.5 });
     set(&mut file, CueProperty::FadeOut { seconds: 12.0 });
     set(&mut file, CueProperty::Delay { seconds: 2.0 });
@@ -543,12 +547,16 @@ fn a_cue_is_corrected_one_field_at_a_time() {
 #[test]
 fn renumbering_a_cue_reorders_the_list() {
     let mut file = file();
-    file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
-        property: CueProperty::Number {
-            number: "3".to_owned(),
+    file.apply(&Command::Move {
+        from: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
         },
+        to: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "3".to_owned(),
+        },
+        mode: OverwriteMode::Override,
     })
     .expect("3 is free");
     let numbers: Vec<String> = file
@@ -562,29 +570,92 @@ fn renumbering_a_cue_reorders_the_list() {
     assert_eq!(numbers, vec!["2".to_owned(), "3".to_owned()]);
 }
 
-/// A renumber onto a number that is taken is refused, and nothing moves.
+/// **A renumber onto a number that is taken is a question, not a refusal**
+/// (S40).
 ///
-/// `RenumberFixture`'s rule for a cue: the number is the key, and replacing the
-/// other cue would delete a look nobody asked to delete.
+/// S28 refused it, for `RenumberFixture`'s reason: the number is the key, and
+/// replacing the other cue deletes a look nobody asked to delete. S40 keeps the
+/// *protection* and moves it one layer out — `Move Cue 3 Cue 8` onto a cue that
+/// exists asks **merge, override or cancel**, and cancel is the operator not
+/// sending the command. So the refusal became a mode, and what this test holds
+/// is that each mode does what its name says.
 #[test]
-fn renumbering_onto_an_existing_cue_is_refused() {
-    let mut file = file();
-    let before = bytes(&file.show);
-    let refusal = file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
-        cue_number: "1".to_owned(),
-        property: CueProperty::Number {
-            number: "2".to_owned(),
-        },
-    });
-    assert!(
-        matches!(
-            refusal,
-            Err(ShowFileError::Show(ShowError::DuplicateCueNumber { .. }))
-        ),
-        "{refusal:?}"
+fn a_cue_moved_onto_one_that_exists_does_what_the_mode_says() {
+    let moved = |mode| {
+        let mut file = file();
+        file.apply(&Command::Move {
+            from: ObjectRef::Cue {
+                sequence_id: Some(SequenceId::new(1)),
+                cue_number: "1".to_owned(),
+            },
+            to: ObjectRef::Cue {
+                sequence_id: Some(SequenceId::new(1)),
+                cue_number: "2".to_owned(),
+            },
+            mode,
+        })
+        .expect("the move is accepted");
+        file.show
+            .sequence(SequenceId::new(1))
+            .expect("sequence 1")
+            .clone()
+    };
+
+    // Override: cue 2 *becomes* cue 1, name and all, and cue 1 is gone. One cue
+    // is left and it is the one that moved.
+    let overridden = moved(OverwriteMode::Override);
+    assert_eq!(
+        overridden
+            .cues
+            .iter()
+            .map(|cue| cue.number.clone())
+            .collect::<Vec<_>>(),
+        vec!["2".to_owned()]
     );
-    assert_eq!(bytes(&file.show), before);
+    assert_eq!(overridden.cues[0].name, "Cue 1");
+    assert_eq!(overridden.cues[0].parts.len(), 1);
+    assert_eq!(overridden.cues[0].parts[0].attribute, AttributeType::Red);
+
+    // Merge: cue 2 keeps its own name and gains cue 1's values beside its own.
+    let merged = moved(OverwriteMode::Merge);
+    assert_eq!(
+        merged
+            .cues
+            .iter()
+            .map(|cue| cue.number.clone())
+            .collect::<Vec<_>>(),
+        vec!["2".to_owned()]
+    );
+    assert_eq!(merged.cues[0].name, "Cue 2");
+    assert_eq!(merged.cues[0].parts.len(), 2);
+}
+
+/// A cue moved onto a **free** number is an ordinary renumber, and the mode is
+/// not read at all.
+#[test]
+fn a_cue_moved_onto_a_free_number_is_a_renumber() {
+    let mut file = file();
+    file.apply(&Command::Move {
+        from: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
+        },
+        to: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1.5".to_owned(),
+        },
+        mode: OverwriteMode::Merge,
+    })
+    .expect("1.5 is free");
+    let numbers: Vec<String> = file
+        .show
+        .sequence(SequenceId::new(1))
+        .expect("sequence 1")
+        .cues
+        .iter()
+        .map(|cue| cue.number.clone())
+        .collect();
+    assert_eq!(numbers, vec!["1.5".to_owned(), "2".to_owned()]);
 }
 
 /// A time that runs backwards is refused, and it says what was wrong with it.
@@ -592,7 +663,7 @@ fn renumbering_onto_an_existing_cue_is_refused() {
 fn a_negative_time_is_refused_and_names_itself() {
     let mut file = file();
     let refusal = file.apply(&Command::SetCueProperty {
-        sequence_id: SequenceId::new(1),
+        sequence_id: Some(SequenceId::new(1)),
         cue_number: "1".to_owned(),
         property: CueProperty::FadeIn { seconds: -2.0 },
     });
@@ -611,12 +682,12 @@ fn a_negative_time_is_refused_and_names_itself() {
 fn setting_a_field_to_what_it_already_holds_is_not_a_step() {
     let mut file = file();
     let applied = file
-        .apply(&Command::SetCueProperty {
-            sequence_id: SequenceId::new(1),
-            cue_number: "1".to_owned(),
-            property: CueProperty::Name {
-                name: "Cue 1".to_owned(),
+        .apply(&Command::Label {
+            target: ObjectRef::Cue {
+                sequence_id: Some(SequenceId::new(1)),
+                cue_number: "1".to_owned(),
             },
+            name: "Cue 1".to_owned(),
         })
         .expect("it is accepted");
     assert!(applied.deltas.is_empty(), "{:?}", applied.deltas);
@@ -641,9 +712,11 @@ fn deleting_a_cue_leaves_the_other_numbers_where_they_are() {
             ],
         ))
         .expect("a sequence stores");
-    file.apply(&Command::DeleteCue {
-        sequence_id: SequenceId::new(2),
-        cue_number: "2".to_owned(),
+    file.apply(&Command::Delete {
+        target: ObjectRef::Cue {
+            sequence_id: Some(SequenceId::new(2)),
+            cue_number: "2".to_owned(),
+        },
     })
     .expect("cue 2 is there");
     let numbers: Vec<String> = file
@@ -663,13 +736,15 @@ fn an_edit_to_a_cue_that_is_not_there_is_refused() {
     let mut file = file();
     for command in [
         Command::SetCueProperty {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: "404".to_owned(),
             property: CueProperty::Delay { seconds: 1.0 },
         },
-        Command::DeleteCue {
-            sequence_id: SequenceId::new(1),
-            cue_number: "404".to_owned(),
+        Command::Delete {
+            target: ObjectRef::Cue {
+                sequence_id: Some(SequenceId::new(1)),
+                cue_number: "404".to_owned(),
+            },
         },
     ] {
         let refusal = file.apply(&command);
@@ -687,16 +762,24 @@ fn an_edit_to_a_cue_that_is_not_there_is_refused() {
 /* Sequences and executors                                                    */
 /* -------------------------------------------------------------------------- */
 
-/// A sequence is created empty, and a number that is taken is refused.
+/// **A store into a free number makes the cue list, and one into a taken number
+/// never empties it by accident** (S40).
 ///
-/// The refusal is the point: a *create* that replaced a cue list would empty a
-/// playback that may be running.
+/// S39 had two commands here — `CreateSequence`, refused when the number was
+/// taken, and `StoreSequence`, refused when it was free — and S40 has one,
+/// because `Store Sequence 4` typed on the command line cannot know which it is
+/// (the parser does not read the show, S26). What survived is the protection
+/// rather than the refusal: an empty programmer on a **free** number makes an
+/// empty cue list, which is what `CreateSequence` did, and an empty programmer
+/// on a **taken** one is refused and writes nothing, so a store can never empty
+/// a playback that is on stage without a look and a mode behind it.
 #[test]
 fn a_sequence_is_created_empty_and_never_replaces_one() {
     let mut file = file();
-    file.apply(&Command::CreateSequence {
+    file.apply(&Command::StoreSequence {
         sequence_id: SequenceId::new(9),
         name: "Act 2".to_owned(),
+        mode: SequenceStoreMode::Append,
     })
     .expect("9 is free");
     let made = file.show.sequence(SequenceId::new(9)).expect("sequence 9");
@@ -705,18 +788,27 @@ fn a_sequence_is_created_empty_and_never_replaces_one() {
     assert!(!made.looping);
 
     let before = bytes(&file.show);
-    let refusal = file.apply(&Command::CreateSequence {
+    let refusal = file.apply(&Command::StoreSequence {
         sequence_id: SequenceId::new(1),
         name: "Over the top".to_owned(),
+        mode: SequenceStoreMode::Append,
     });
     assert!(
         matches!(
             refusal,
-            Err(ShowFileError::Show(ShowError::SequenceNumberInUse(_)))
+            Err(ShowFileError::Programmer(
+                prism_core::ProgrammerError::NothingToStore
+            ))
         ),
         "{refusal:?}"
     );
     assert_eq!(bytes(&file.show), before);
+    // And the name it carried did not land either: a store names a cue list
+    // only when it makes one.
+    assert_eq!(
+        file.show.sequence(SequenceId::new(1)).unwrap().name,
+        "Sequence 1"
+    );
 }
 
 /// **A cue list can be put on an executor, and then it can be fired.**
@@ -728,7 +820,7 @@ fn a_sequence_is_created_empty_and_never_replaces_one() {
 fn assigning_a_sequence_to_an_empty_slot_makes_it_playable() {
     let mut file = file();
     let refusal = file.apply(&Command::ExecutorGo {
-        executor_id: ExecutorId::new(5),
+        target: PlaybackTarget::of_executor(ExecutorId::new(5)),
         direction: GoDirection::Next,
     });
     assert!(
@@ -763,13 +855,13 @@ fn assigning_a_sequence_to_an_empty_slot_makes_it_playable() {
 
     let applied = file
         .apply(&Command::ExecutorGo {
-            executor_id: ExecutorId::new(5),
+            target: PlaybackTarget::of_executor(ExecutorId::new(5)),
             direction: GoDirection::Next,
         })
         .expect("it can be fired now");
     assert!(
         applied.effects.contains(&Effect::ExecutorGo {
-            executor: ExecutorId::new(5),
+            executor: ExecutorId::new(5).into(),
             direction: GoDirection::Next,
         }),
         "{:?}",

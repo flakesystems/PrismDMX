@@ -53,7 +53,8 @@ use std::time::Duration;
 use prism_core::{JsonMirror, SessionMirror, ShowMirror};
 use prism_domain::{
     AttributeType, Command, Delta, ExecutorId, FeatureGroup, FixtureId, GoDirection, JsonValue,
-    ProgrammerState, SelectionMode, SequenceId, StoreMode, UniverseId, ViewId, WindowType,
+    PlaybackTarget, ProgrammerState, SelectionMode, SequenceId, StoreMode, UniverseId, ViewId,
+    WindowType,
 };
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
 use prismd::cli::{Options, OutputSpec};
@@ -181,7 +182,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
             level: u16::try_from(rng.below(65536)).unwrap_or(0),
         },
         5 => Command::ExecutorGo {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: if rng.below(2) == 0 {
                 GoDirection::Next
             } else {
@@ -189,7 +190,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
             },
         },
         6 => Command::ExecutorOff {
-            executor_id: ExecutorId::new(0),
+            target: PlaybackTarget::of_executor(ExecutorId::new(0)),
         },
         7 => Command::CommandLineInput {
             text: format!("fixture {} at {}", rng.below(4), rng.below(101)),
@@ -216,7 +217,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
             }
         }
         12 => Command::StoreCue {
-            sequence_id: SequenceId::new(1),
+            sequence_id: Some(SequenceId::new(1)),
             cue_number: format!("{}", 1 + rng.below(4)),
             mode: StoreMode::Merge,
         },
@@ -490,7 +491,7 @@ fn client_messages() -> Vec<ClientRecord> {
             ClientMessage::Command {
                 seq: 4,
                 command: Command::ExecutorGo {
-                    executor_id: ExecutorId::new(0),
+                    target: PlaybackTarget::of_executor(ExecutorId::new(0)),
                     direction: GoDirection::Prev,
                 },
             },
@@ -618,7 +619,7 @@ fn the_recording_is_a_delta_stream_this_build_could_have_sent() {
                 Delta::ShowPatch { ops } if !ops.is_empty() => with_show += 1,
                 Delta::SessionPatch { ops } if !ops.is_empty() => with_session += 1,
                 Delta::ProgrammerChanged { .. } => with_programmer += 1,
-                Delta::ExecutorState { .. } => with_executor_state += 1,
+                Delta::PlaybackState { .. } => with_executor_state += 1,
                 _ => {}
             }
             show.apply_delta(&delta)

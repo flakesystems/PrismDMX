@@ -32,7 +32,7 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
-use prism_domain::{Cue, CueTrigger, ExecutorId, GoDirection, MergeMode, Sequence, SequenceId};
+use prism_domain::{Cue, CueTrigger, GoDirection, MergeMode, PlaybackId, Sequence, SequenceId};
 
 use crate::plan::MergePlan;
 use crate::tick::TICK_HZ;
@@ -54,8 +54,8 @@ pub enum CueError {
     TooManyCues(usize),
     /// More parts than [`MAX_CUE_PARTS`].
     TooManyParts(usize),
-    /// The sequence was loaded onto an executor this engine does not have.
-    UnknownExecutor(ExecutorId),
+    /// The sequence was loaded onto a playback this engine does not have.
+    UnknownPlayback(PlaybackId),
 }
 
 impl fmt::Display for CueError {
@@ -67,8 +67,8 @@ impl fmt::Display for CueError {
             Self::TooManyParts(count) => {
                 write!(f, "{count} cue parts exceeds the limit of {MAX_CUE_PARTS}")
             }
-            Self::UnknownExecutor(executor) => {
-                write!(f, "executor {executor} is not in this patch")
+            Self::UnknownPlayback(playback) => {
+                write!(f, "{playback} is not in this patch")
             }
         }
     }
@@ -789,7 +789,10 @@ mod tests {
             "9000000 cue parts exceeds the limit of 1048576"
         );
         assert_eq!(
-            CueError::UnknownExecutor(prism_domain::ExecutorId::new(7)).to_string(),
+            CueError::UnknownPlayback(prism_domain::PlaybackId::of_executor(
+                prism_domain::ExecutorId::new(7)
+            ))
+            .to_string(),
             "executor 7 is not in this patch"
         );
         let as_error: &dyn std::error::Error = &CueError::TooManyCues(1);
