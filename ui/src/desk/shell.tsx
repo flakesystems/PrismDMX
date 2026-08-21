@@ -68,17 +68,38 @@ export function ConsoleProvider({ session, show, children }: ConsoleProviderProp
   const history = useRef(new History());
   const mirror = useMirror(send);
 
-  // **The daemon's line wins the moment it differs from ours.** A key pressed on
-  // a second screen, a console typing on the X-Touch, and this client's own
-  // paced mirror all arrive the same way; the ref is what stops the echo of our
-  // own send from fighting the keystroke after it.
-  const echoed = mirror.sent;
+  // **The daemon's line wins — but never over a keystroke that has not reached
+  // it yet.**
+  //
+  // A key pressed on a second screen, a console typing on the X-Touch and this
+  // client's own paced mirror all arrive the same way, so the line has to be
+  // adopted from the session or two screens would drift apart. What must *not*
+  // happen is the one this cost a CI run to find: our own `CommandLineInput`
+  // comes back as a session delta some milliseconds later, and by then the
+  // operator has typed more. Adopting that echo puts the input back to a prefix
+  // of what they typed — on a fast machine the echo lands between keystrokes and
+  // nothing is ever seen, on a loaded one a whole line is eaten.
+  //
+  // So every line this client sends is remembered until its echo comes back, and
+  // while any is outstanding the session's line is somebody else's opinion about
+  // a line we are still writing. Ours wins until we are level again.
+  const outstanding = mirror.outstanding;
   useEffect(() => {
-    if (daemonLine !== echoed.current) {
-      echoed.current = daemonLine;
-      setTyped(daemonLine);
+    const queue = outstanding.current;
+    const mine = queue.indexOf(daemonLine);
+    if (mine !== -1) {
+      // Our own echo. Everything sent before it is superseded, because the
+      // session holds one line and this is what it holds.
+      queue.splice(0, mine + 1);
+      return;
     }
-  }, [daemonLine, echoed]);
+    if (queue.length > 0) {
+      // A send of ours has not come back yet, so this is an older state of the
+      // field than the one we are already writing.
+      return;
+    }
+    setTyped(daemonLine);
+  }, [daemonLine, outstanding]);
 
   // **Memoised on the line, and that is a render budget rather than a tidy-up.**
   // The shell's value goes into a context every window reads, so a `reading`
@@ -224,11 +245,19 @@ export function ConsoleProvider({ session, show, children }: ConsoleProviderProp
 function useMirror(send: (command: Command) => void): {
   readonly soon: (text: string) => void;
   readonly now: (text: string) => void;
-  readonly sent: { current: string };
+  readonly outstanding: { current: string[] };
 } {
   const sent = useRef("");
   const owed = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * The lines this client has sent and not yet seen come back.
+   *
+   * A queue rather than a single value, because the pacing below sends a burst
+   * as two commands and both are in flight at once. See the effect that reads
+   * it for what it is for.
+   */
+  const outstanding = useRef<string[]>([]);
 
   useEffect(
     () => () => {
@@ -243,6 +272,7 @@ function useMirror(send: (command: Command) => void): {
     const flush = (text: string): void => {
       sent.current = text;
       owed.current = null;
+      outstanding.current.push(text);
       send({ t: "CommandLineInput", text });
     };
     const now = (text: string): void => {
@@ -272,6 +302,6 @@ function useMirror(send: (command: Command) => void): {
         }
       }, SEND_INTERVAL_MS);
     };
-    return { soon, now, sent };
+    return { soon, now, outstanding };
   }, [send]);
 }

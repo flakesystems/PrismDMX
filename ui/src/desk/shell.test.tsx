@@ -327,3 +327,87 @@ describe("the two spellings a key uses", () => {
     expect(objectLine({ t: "Executor", executorId: 3 })).toBe("Executor 3");
   });
 });
+
+describe("the line the daemon holds, and the one being typed", () => {
+  /**
+   * **A stale echo of our own line must not eat what has been typed since.**
+   *
+   * This is the defect the local machine could not reproduce and CI found in
+   * three tests at once. `Session::commandLine` is §4.1 state, so every keystroke
+   * is mirrored to the daemon and comes back as a session delta — and by the time
+   * it comes back the operator has typed more. Adopting that echo puts the input
+   * back to a **prefix** of what they typed; on a fast machine the round trip
+   * lands between keystrokes and nothing is ever seen, on a loaded one a whole
+   * line disappears and the store that follows it is refused for an empty
+   * programmer.
+   *
+   * The rule: while a line this client sent has not come back yet, ours wins.
+   */
+  it("keeps what is typed while an older echo of our own line arrives", () => {
+    const store = new DeskStore();
+    store.attach(
+      () => 1,
+      () => null,
+    );
+    const holding = (line: string): JsonValue => ({
+      ...(SESSION as Record<string, JsonValue>),
+      session: { commandLine: line, selectedSequence: 1, encoderBank: "Color" },
+    });
+
+    const view = render(
+      <DeskProvider store={store}>
+        <ConsoleProvider session={holding("")} show={SHOW}>
+          <CommandLine daemonLine="" />
+        </ConsoleProvider>
+      </DeskProvider>,
+    );
+
+    fireEvent.change(input(), { target: { value: "1 thru 3 red at 100" } });
+    expect(input().value).toBe("1 thru 3 red at 100");
+
+    // The daemon answers the *first* keystroke of that burst, long after it was
+    // typed. It is a line this client sent, so it is an echo and not news.
+    view.rerender(
+      <DeskProvider store={store}>
+        <ConsoleProvider session={holding("1")} show={SHOW}>
+          <CommandLine daemonLine="1" />
+        </ConsoleProvider>
+      </DeskProvider>,
+    );
+    expect(input().value).toBe("1 thru 3 red at 100");
+  });
+
+  /**
+   * **And a line somebody else typed still wins**, which is the whole reason the
+   * input follows the session at all: a key pressed on a second screen, or on the
+   * X-Touch, appears here.
+   */
+  it("adopts a line this client did not send", () => {
+    const store = new DeskStore();
+    store.attach(
+      () => 1,
+      () => null,
+    );
+    const holding = (line: string): JsonValue => ({
+      ...(SESSION as Record<string, JsonValue>),
+      session: { commandLine: line, selectedSequence: 1, encoderBank: "Color" },
+    });
+    const view = render(
+      <DeskProvider store={store}>
+        <ConsoleProvider session={holding("")} show={SHOW}>
+          <CommandLine daemonLine="" />
+        </ConsoleProvider>
+      </DeskProvider>,
+    );
+    expect(input().value).toBe("");
+
+    view.rerender(
+      <DeskProvider store={store}>
+        <ConsoleProvider session={holding("Group ")} show={SHOW}>
+          <CommandLine daemonLine="Group " />
+        </ConsoleProvider>
+      </DeskProvider>,
+    );
+    expect(input().value).toBe("Group ");
+  });
+});
