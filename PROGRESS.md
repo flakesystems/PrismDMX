@@ -999,6 +999,30 @@ whole of §5 testable with arithmetic rather than with a wait.
 | `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu` | ✅ exit 0. **No new dependency**: layer 2 needed nothing that was not already in the workspace, and the one thing it added to the crate's own graph is `prism-domain`, which was in the manifest **unused** since S19 and is now used for exactly one type — `RgbColor`, on the way into the colour quantiser |
 | CI green on the pushed commit | ☐ recorded below after the push, per `IMPLEMENTATION_PLAN.md`'s session protocol |
 
+**Two things CI found that this machine could not**, and both are worth the
+space because each is a class rather than a typo:
+
+- **A test that assumed a MIDI backend is a test that only runs on Windows.**
+  `a_real_port_that_is_not_there_is_attached_all_the_same_and_says_why` asserted
+  that the reason mentions the port name — which is `PortError::NotFound`'s
+  wording. The Linux job has **no backend compiled into it**, so it meets
+  `NoBackend` instead, and the assertion was red there and green here. It now
+  asserts the reason is *one of the two*, which is the honest claim and is
+  better than the original: from the caller's side *this port is not plugged in*
+  and *this build cannot look* are the same fact, and both produce a port that
+  is attached, not open, and not a failure to start. **The no-backend build is
+  not a lesser build to be tolerated in CI — it is the machine-with-nothing-
+  plugged-in case, exercised for real.**
+- **An absolute `missed_ticks == 0` is a claim about a runner, not about a
+  fault.** `tests/outputs.rs::an_output_whose_device_disappears_degrades_alone`
+  is S33's and nothing this session went near it, but it read **1** on run
+  32579984199 where every run before it had read 0. `missed()` counts from
+  start-up, and a cold two-core runner may perfectly well drop one 22.7 ms
+  deadline while a twelve-universe show and five driver threads are still coming
+  up. The assertion now compares the count **across the panic**, which is what
+  its own message always said — *and it did not miss a tick over it*. The other
+  two places this session asserts the same thing were already deltas.
+
 **What was built, and the shape of it.** One object: `SurfaceController` holds the
 codec, two `SurfaceState`s — what the show wants shown and what the desk was last
 told — and the rules between them. It owns no port, no thread and **no clock**;

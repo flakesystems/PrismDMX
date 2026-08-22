@@ -487,6 +487,15 @@ async fn an_output_whose_device_disappears_degrades_alone() {
     // The cable is pulled — and then panics on the way back, which is the worse
     // half: a driver that unwinds must not take the process with it.
     let ticks_before = daemon.desk().core().engine().health().ticks();
+    // Taken here rather than compared against zero, because `missed()` counts
+    // from start-up and this test is about **the fault**. A cold two-core CI
+    // runner can perfectly well drop one 22.7 ms deadline while a
+    // twelve-universe show and five driver threads are still coming up, and a
+    // test that called that a regression would be measuring the runner. What
+    // must not move is the count across the panic, which is what the message
+    // below has always claimed. (Loosened in S36, after run 32579984199 read 1
+    // where every run before it had read 0.)
+    let missed_before = daemon.desk().core().engine().health().missed();
     let failing = &handles[2].1;
     failing.fail_send(20, prism_protocols::OutputError::Disconnected);
     failing.panic_on_send(3);
@@ -513,7 +522,7 @@ async fn an_output_whose_device_disappears_degrades_alone() {
     );
     assert_eq!(
         daemon.desk().core().engine().health().missed(),
-        0,
+        missed_before,
         "and it did not miss a tick over it"
     );
 

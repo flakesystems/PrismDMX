@@ -1152,6 +1152,14 @@ mod tests {
     /// `CLAUDE.md`: no test touches a device, and this machine has an X-Touch
     /// attached that the suite must not open. The name asked for is one nothing
     /// can be called.
+    ///
+    /// **The reason is asserted as one of two**, and that is the point rather
+    /// than a hedge: a build with a MIDI backend says *no MIDI port called …*
+    /// and one without says *this build has no backend* — and from the caller's
+    /// side those are the same fact, which is why both produce a port that is
+    /// attached, not open, and not a failure to start. The Linux CI job runs
+    /// the second case for real, so a test that assumed the first was a test
+    /// that only ran on Windows — which is what it turned out to be.
     #[test]
     fn a_real_port_that_is_not_there_is_attached_all_the_same_and_says_why() {
         let port = super::RealSurfacePort::attach("no such port \u{1F50C}");
@@ -1159,7 +1167,10 @@ mod tests {
         assert!(!port.connected());
         assert_eq!(port.open_name(), None);
         let why = port.why().expect("a port that is not open says why");
-        assert!(why.contains("no such port"), "{why}");
+        assert!(
+            why.contains("no such port") || why.contains("no MIDI backend"),
+            "the reason has to name the port or say the build cannot look: {why}"
+        );
         // What a log line and a settings panel show.
         let shown = port.describe();
         assert!(shown.contains("configured on MIDI port"), "{shown}");
