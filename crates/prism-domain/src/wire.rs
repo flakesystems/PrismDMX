@@ -107,6 +107,11 @@ round_trip! {
     json_value => crate::JsonValue,
     json_patch_op => crate::JsonPatchOp,
     output_health => crate::OutputHealth,
+    art_net_port => crate::ArtNetPort,
+    sacn_port => crate::SacnPort,
+    output_kind => crate::OutputKind,
+    output_instance => crate::OutputInstance,
+    output_change => crate::OutputChange,
     notice_level => crate::NoticeLevel,
 
     playback_id => crate::PlaybackId,

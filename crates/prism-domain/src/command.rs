@@ -16,8 +16,8 @@ use ts_rs::TS;
 
 use crate::{
     AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, GroupId,
-    JsonValue, PlaybackTarget, PresetId, RgbColor, SequenceId, StoreMode, UniverseId, ViewId,
-    WindowInstanceId, WindowType,
+    JsonValue, OutputId, OutputInstance, OutputKind, PlaybackTarget, PresetId, RgbColor,
+    SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -99,6 +99,51 @@ pub enum ParamDirection {
     Prev,
     /// To the next parameter.
     Next,
+}
+
+/// One thing about a configured output that `Command::ConfigureOutput` changes
+/// *(S33)*.
+///
+/// **One field per command, for `CueProperty`'s reason.** The alternative — one
+/// command carrying the whole [`OutputInstance`] — makes a client read the row,
+/// change one member and send the rest back, which is a read-modify-write over
+/// state the daemon owns: two people in a settings window, one re-addressing a
+/// node and one renaming it, would each undo the other and neither would have
+/// done anything wrong.
+///
+/// The `id` and the `enabled` flag are not here. The number is the key the
+/// output is filed under — changing it is `RemoveOutput` and `AddOutput`, said
+/// out loud — and enabling is [`Command::SetOutputEnabled`], which is a switch
+/// an operator flips at a rack rather than a field they edit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(tag = "t", rename_all_fields = "camelCase")]
+pub enum OutputChange {
+    /// What the operator calls it. Costs the rig nothing — see
+    /// [`OutputInstance::needs_restart`].
+    Name {
+        /// The new name.
+        name: String,
+    },
+    /// The interface and its parameters: a node's address, an adapter's serial,
+    /// the port mapping, the hop limit.
+    Kind {
+        /// The new kind.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        kind: OutputKind,
+    },
+    /// Which of the desk's universes this interface carries.
+    Universes {
+        /// The new set, in send order.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(4)")
+        )]
+        universes: Vec<UniverseId>,
+    },
 }
 
 /// One of the numbered things on a desk — what `Delete`, `Copy`, `Move` and
@@ -1023,6 +1068,57 @@ pub enum Command {
         /// The text entered.
         text: String,
     },
+
+    // ---- The machine's own rig (S33) ----
+    /// Adds an output to **this machine's** rig — S33.
+    ///
+    /// The number is the operator's, like a fixture number: `Output 3` names
+    /// this row afterwards. A number that is taken is refused rather than
+    /// overwritten, because an add that replaced a running node would take a
+    /// universe off stage without saying so.
+    ///
+    /// It is neither a show command nor a session command — see
+    /// [`Self::is_machine_command`].
+    AddOutput {
+        /// The output to add, with the number it is to have.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        output: OutputInstance,
+    },
+    /// Changes one thing about a configured output — S33.
+    ///
+    /// See [`OutputChange`] for why it is one field and not the whole row.
+    ConfigureOutput {
+        /// Which output.
+        id: OutputId,
+        /// What to change.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        change: OutputChange,
+    },
+    /// Takes an output out of the rig — S33.
+    ///
+    /// Its driver stops and its line goes quiet; every other output carries on
+    /// without a missed frame, which is asserted rather than assumed.
+    RemoveOutput {
+        /// Which output.
+        id: OutputId,
+    },
+    /// Stops an output sending, or starts it again — S33.
+    ///
+    /// A disabled output keeps its whole configuration, which is what an
+    /// operator wants of a node that is being worked on: the alternative is
+    /// deleting the row and typing it back in afterwards.
+    SetOutputEnabled {
+        /// Which output.
+        id: OutputId,
+        /// Whether it should be sending.
+        enabled: bool,
+    },
 }
 
 impl Command {
@@ -1077,13 +1173,51 @@ impl Command {
         }
     }
 
+    /// Whether this command configures **the machine** rather than the show or
+    /// the session — S33.
+    ///
+    /// # A third applier, and why there had to be one
+    ///
+    /// The output patch is neither. It is not the show's, because a show copied
+    /// to a second machine on a stick must not bring the first hall's cabling
+    /// with it — the same argument `prism_core::desk` makes for the sACN CID,
+    /// and the same reason a `.prism` file has no table for either. And it is
+    /// not the session's, because the session is *persisted with the show*
+    /// (`ARCHITECTURE_SPEC.md` §4.1) and would carry the cabling by the same
+    /// route.
+    ///
+    /// So these four go to `prism_core::MachineConfig::apply`, and both of the
+    /// other two appliers refuse them by name. `ShowFile::apply` never sees one:
+    /// the daemon routes on this predicate first, exactly as it routes on
+    /// [`Self::is_session_command`] second.
+    ///
+    /// **None of them is undoable**, and that follows from where they live
+    /// rather than from a separate decision: the Oops journal is the *show's*,
+    /// it is cleared when a show is loaded, and an undo that re-addressed a
+    /// node would move light on a stage while somebody was driving it — which is
+    /// §6.1's rule for playback actions, met by another road.
+    #[must_use]
+    pub const fn is_machine_command(&self) -> bool {
+        matches!(
+            self,
+            Self::AddOutput { .. }
+                | Self::ConfigureOutput { .. }
+                | Self::RemoveOutput { .. }
+                | Self::SetOutputEnabled { .. }
+        )
+    }
+
     /// Whether applying this command should push an entry onto the Oops journal.
     ///
     /// `ARCHITECTURE_SPEC.md` §6.1: playback actions and every session command
     /// are deliberately excluded, so undo during a running show neither changes
     /// light the operator is driving nor pulls windows out from under them.
     /// `Oops`, `Redo` and `SaveShow` are excluded because they are not show
-    /// mutations in the first place.
+    /// mutations in the first place. **Every machine command is excluded too**
+    /// (S33): the journal belongs to the show and is cleared when one is loaded,
+    /// so an Oops that reached the venue's cabling would take back a change the
+    /// show it is journaling knows nothing about — and it would move light on a
+    /// stage, which is the rule the playback actions are excluded by.
     #[must_use]
     pub const fn is_undoable(&self) -> bool {
         !matches!(
@@ -1098,6 +1232,7 @@ impl Command {
                 | Self::Redo
                 | Self::SaveShow
         ) && !self.is_session_command()
+            && !self.is_machine_command()
     }
 }
 
@@ -1105,9 +1240,10 @@ impl Command {
 mod tests {
     use crate::{
         AttributeType, Command, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup,
-        FixtureId, GoDirection, GroupId, JsonValue, ObjectRef, OverwriteMode, ParamDirection,
-        PlaybackTarget, PresetId, RgbColor, SelectionMode, SequenceId, SequenceStoreMode,
-        StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+        FixtureId, GoDirection, GroupId, JsonValue, ObjectRef, OutputChange, OutputId,
+        OutputInstance, OutputKind, OverwriteMode, ParamDirection, PlaybackTarget, PresetId,
+        RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, UniverseId, ViewId,
+        WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -1359,8 +1495,31 @@ mod tests {
             Command::CommandLineInput {
                 text: "1 thru 4 at full".to_owned(),
             },
+            // S33's four. Neither the show's nor the session's — see
+            // `Command::is_machine_command`.
+            Command::AddOutput {
+                output: OutputInstance::new(
+                    OutputId::new(1),
+                    "Hall dimmers",
+                    OutputKind::OpenDmx { serial: None },
+                    [UniverseId::new(1)],
+                ),
+            },
+            Command::ConfigureOutput {
+                id: OutputId::new(1),
+                change: OutputChange::Universes {
+                    universes: vec![UniverseId::new(2)],
+                },
+            },
+            Command::RemoveOutput {
+                id: OutputId::new(1),
+            },
+            Command::SetOutputEnabled {
+                id: OutputId::new(1),
+                enabled: false,
+            },
         ];
-        assert_eq!(commands.len(), 43);
+        assert_eq!(commands.len(), 47);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -1368,6 +1527,66 @@ mod tests {
             assert!(json.starts_with(r#"{"t":""#), "{json}");
             let back: Command = serde_json::from_str(&json).unwrap();
             assert_eq!(back, command);
+        }
+    }
+
+    /// S33's four are a group of their own, and the three predicates partition
+    /// the protocol: every command is the show's, the session's or the
+    /// machine's, and never two of those.
+    #[test]
+    fn the_machine_commands_are_neither_the_shows_nor_the_sessions() {
+        let machine = [
+            Command::AddOutput {
+                output: OutputInstance::new(
+                    OutputId::new(2),
+                    "Stage left node",
+                    OutputKind::ArtNet {
+                        nodes: vec!["10.0.0.9:6454".parse().unwrap()],
+                        sync: false,
+                        ports: Vec::new(),
+                    },
+                    [UniverseId::new(5)],
+                ),
+            },
+            Command::ConfigureOutput {
+                id: OutputId::new(2),
+                change: OutputChange::Name {
+                    name: "Stage right node".to_owned(),
+                },
+            },
+            Command::ConfigureOutput {
+                id: OutputId::new(2),
+                change: OutputChange::Kind {
+                    kind: OutputKind::Mock,
+                },
+            },
+            Command::RemoveOutput {
+                id: OutputId::new(2),
+            },
+            Command::SetOutputEnabled {
+                id: OutputId::new(2),
+                enabled: true,
+            },
+        ];
+        for command in &machine {
+            assert!(command.is_machine_command(), "{command:?}");
+            assert!(!command.is_session_command(), "{command:?}");
+            // The journal is the show's and is cleared when a show is loaded, so
+            // an Oops must not reach the venue's cabling — and it must not move
+            // light on a stage either (§6.1).
+            assert!(!command.is_undoable(), "{command:?}");
+        }
+
+        // And nothing else is one. A command that grew a machine meaning
+        // without saying so here would be routed to the wrong applier.
+        for command in [
+            Command::ClearProgrammer,
+            Command::SelectView {
+                view_id: ViewId::new(1),
+            },
+            Command::SaveShow,
+        ] {
+            assert!(!command.is_machine_command(), "{command:?}");
         }
     }
 

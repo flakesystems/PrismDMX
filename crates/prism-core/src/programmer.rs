@@ -825,7 +825,11 @@ impl Programmer {
             | Command::SetProgrammerPage { .. }
             | Command::SelectProgrammerParam { .. }
             | Command::SelectSequence { .. }
-            | Command::CommandLineInput { .. } => {
+            | Command::CommandLineInput { .. }
+            | Command::AddOutput { .. }
+            | Command::ConfigureOutput { .. }
+            | Command::RemoveOutput { .. }
+            | Command::SetOutputEnabled { .. } => {
                 return Err(ProgrammerError::NotAProgrammerCommand);
             }
         };

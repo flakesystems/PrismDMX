@@ -53,7 +53,7 @@ use prism_domain::{
 };
 use prism_domain::{Cue, CuePart, CueTrigger};
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
-use prismd::cli::{Options, OutputSpec};
+use prismd::cli::{Options, mock_output};
 use prismd::daemon::Daemon;
 
 mod common;
@@ -940,7 +940,7 @@ async fn record_the_desk_script_for_the_interface() {
         data_dir: Some(dir.path().to_path_buf()),
         show: Some(show),
         universes: 2,
-        outputs: vec![OutputSpec::Mock],
+        outputs: vec![mock_output(1)],
         local: true,
         log_level: prismd::log::Level::Warn,
         ..Options::default()

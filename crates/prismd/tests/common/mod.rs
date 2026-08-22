@@ -49,7 +49,7 @@ fn attribute(attribute: AttributeType, coarse_offset: u16, home: u16) -> Attribu
     }
 }
 
-fn dimmer_type(id: &str, home: u16) -> FixtureType {
+pub fn dimmer_type(id: &str, home: u16) -> FixtureType {
     FixtureType {
         id: id.to_owned(),
         manufacturer: "Generic".to_owned(),
@@ -60,7 +60,7 @@ fn dimmer_type(id: &str, home: u16) -> FixtureType {
     }
 }
 
-fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
+pub fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),

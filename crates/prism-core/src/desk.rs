@@ -46,7 +46,11 @@
 use core::fmt;
 use core::str::FromStr;
 
+use prism_domain::{Command, OutputId, OutputInstance};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::command::Applied;
+use crate::outputs::MachineError;
 
 /// The UUID that identifies this desk on the network.
 ///
@@ -150,28 +154,160 @@ impl<'de> Deserialize<'de> for DeskId {
 
 /// Settings that belong to this machine and travel with it, not with the show.
 ///
-/// One field today. It exists as a type rather than as a loose value because
-/// the question it answers — "what is this desk, as opposed to what is it
-/// playing?" — comes up again for output configuration and for the DMX adapter
-/// on this machine, and those must not end up in the show file either.
+/// Two things today, and the second is the one this type was predicted for: S11
+/// wrote *"the question it answers — what is this desk, as opposed to what is it
+/// playing? — comes up again for output configuration and for the DMX adapter on
+/// this machine, and those must not end up in the show file either"*. S33 is
+/// that session, and [`crate::outputs`] has the argument in full.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MachineConfig {
     /// The sACN CID of this desk. See the module documentation.
     desk_id: DeskId,
+    /// This building's rig: which universes leave by which cable — S33.
+    ///
+    /// Kept in output-number order, because a settings panel draws it in that
+    /// order and a delta that reordered the rows would move them under an
+    /// operator's hand.
+    ///
+    /// `#[serde(default)]` so that a machine configuration written before S33 —
+    /// which is every one written so far — still opens, and opens with no rig
+    /// rather than with an error.
+    #[serde(default)]
+    outputs: Vec<OutputInstance>,
 }
 
 impl MachineConfig {
-    /// A configuration for a desk that has an identity.
+    /// A configuration for a desk that has an identity and no rig yet.
     #[must_use]
     pub const fn new(desk_id: DeskId) -> Self {
-        Self { desk_id }
+        Self {
+            desk_id,
+            outputs: Vec::new(),
+        }
+    }
+
+    /// A configuration for a desk whose rig is already decided.
+    ///
+    /// Every row is validated on the way in and one that is not usable is left
+    /// out — the caller has already reported it (`prismd::daemon::rig_for`), and
+    /// a row nothing can open must not reach a driver.
+    ///
+    /// It exists for the one case the four commands do not cover: a daemon whose
+    /// outputs were named on its command line, which holds a rig it did not read
+    /// from a file and will not write back to one.
+    #[must_use]
+    pub fn with_outputs(
+        desk_id: DeskId,
+        outputs: impl IntoIterator<Item = OutputInstance>,
+    ) -> Self {
+        let mut config = Self::new(desk_id);
+        for output in outputs {
+            if crate::outputs::validate(&output).is_ok() {
+                config.insert_output(output);
+            }
+        }
+        config
     }
 
     /// This desk's identity.
     #[must_use]
     pub const fn desk_id(&self) -> DeskId {
         self.desk_id
+    }
+
+    /// This building's rig, in output-number order.
+    #[must_use]
+    pub fn outputs(&self) -> &[OutputInstance] {
+        &self.outputs
+    }
+
+    /// One output by number.
+    #[must_use]
+    pub fn output(&self, id: OutputId) -> Option<&OutputInstance> {
+        self.outputs.iter().find(|output| output.id == id)
+    }
+
+    /// Puts an output into the rig, replacing one with the same number.
+    ///
+    /// `pub(crate)` on purpose: [`Self::apply`] is the only door, so a row
+    /// cannot reach the rig without passing [`crate::outputs::validate`] — the
+    /// same rule the journal follows in [`crate::ShowFile`].
+    pub(crate) fn insert_output(&mut self, output: OutputInstance) {
+        match self
+            .outputs
+            .binary_search_by_key(&output.id, |existing| existing.id)
+        {
+            Ok(index) => match self.outputs.get_mut(index) {
+                Some(slot) => *slot = output,
+                // Unreachable: `binary_search_by_key` answered with an index
+                // into this vector. A push rather than a panic, because
+                // `CLAUDE.md`'s zero-crash invariant does not make exceptions
+                // for lines that cannot happen.
+                None => self.outputs.push(output),
+            },
+            Err(index) => self.outputs.insert(index, output),
+        }
+    }
+
+    /// Takes an output out of the rig and answers with it.
+    pub(crate) fn remove_output(&mut self, id: OutputId) -> Option<OutputInstance> {
+        let index = self.outputs.iter().position(|output| output.id == id)?;
+        Some(self.outputs.remove(index))
+    }
+
+    /// The universes this rig carries, in order and without repeats.
+    ///
+    /// A **disabled** output carries nothing here, and that is deliberate: the
+    /// question this answers is *where does the light actually go*, and an
+    /// operator who switched a node off is told that its universes now go
+    /// nowhere rather than being reassured by a row that is not sending.
+    #[must_use]
+    pub fn carried_universes(&self) -> Vec<prism_domain::UniverseId> {
+        let mut carried = Vec::new();
+        for output in self.outputs.iter().filter(|output| output.enabled) {
+            for universe in &output.universes {
+                if !carried.contains(universe) {
+                    carried.push(*universe);
+                }
+            }
+        }
+        carried.sort_unstable();
+        carried
+    }
+
+    /// The outputs that carry `universe` — the routing, read the other way.
+    #[must_use]
+    pub fn outputs_for(&self, universe: prism_domain::UniverseId) -> Vec<OutputId> {
+        self.outputs
+            .iter()
+            .filter(|output| output.enabled && output.carries(universe))
+            .map(|output| output.id)
+            .collect()
+    }
+
+    /// The universes a show patches that this rig does not carry — S33.
+    ///
+    /// Reported rather than refused, and reported rather than dropped in
+    /// silence: see [`crate::ShowIssue::UniverseNotOutput`]. It is a method on
+    /// the machine rather than on the show because a show has no business
+    /// knowing about cables, which is the whole of this module's argument.
+    #[must_use]
+    pub fn dark_universes(&self, show: &crate::Show) -> Vec<crate::ShowIssue> {
+        crate::conflict::dark_universes(show, &self.carried_universes())
+    }
+
+    /// Applies one of S33's four output commands.
+    ///
+    /// The third applier — see [`crate::outputs`] for why the rig is neither
+    /// show state nor session state, and `Command::is_machine_command` for the
+    /// predicate a daemon routes on.
+    ///
+    /// # Errors
+    ///
+    /// [`MachineError`], and the configuration is unchanged after any of them.
+    pub fn apply(&mut self, command: &Command) -> Result<Applied, MachineError> {
+        crate::outputs::apply(self, command)
     }
 
     /// Whether this desk has an identity at all.
@@ -192,6 +328,7 @@ mod tests {
     use crate::Show;
     use crate::testkit::par_type;
     use core::str::FromStr as _;
+    use prism_domain::{Command, OutputId, OutputInstance, OutputKind, UniverseId};
 
     const TEXT: &str = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
     const BYTES: [u8; 16] = [
@@ -252,10 +389,139 @@ mod tests {
     fn a_machine_configuration_is_readable_text() {
         let config = MachineConfig::new(DeskId::parse(TEXT).unwrap());
         let json = serde_json::to_string(&config).unwrap();
-        assert_eq!(json, format!(r#"{{"deskId":"{TEXT}"}}"#));
+        assert_eq!(json, format!(r#"{{"deskId":"{TEXT}","outputs":[]}}"#));
         let back: MachineConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back, config);
         assert_eq!(back.desk_id(), DeskId::parse(TEXT).unwrap());
+        assert!(back.outputs().is_empty(), "a fresh desk has no rig yet");
+    }
+
+    /// Every machine configuration written before S33 has no `outputs` key, and
+    /// they all still open — with no rig rather than with an error.
+    #[test]
+    fn a_configuration_written_before_the_rig_existed_still_opens() {
+        let config: MachineConfig =
+            serde_json::from_str(&format!(r#"{{"deskId":"{TEXT}"}}"#)).unwrap();
+        assert_eq!(config.desk_id(), DeskId::parse(TEXT).unwrap());
+        assert!(config.outputs().is_empty());
+        assert!(config.is_configured());
+    }
+
+    /// S33's half of the decision `desk_id_is_not_show_content` states for the
+    /// identity: the **rig belongs to the building**, so a show carried to
+    /// another hall on a stick arrives with no cabling in it at all.
+    #[test]
+    fn outputs_are_not_show_content() {
+        // The structural half: a show has nowhere to put an output, so nothing
+        // can write one into a `.prism` file by accident.
+        let mut show = Show::new();
+        show.embed_fixture_type(par_type()).unwrap();
+        let json = serde_json::to_string(&show).unwrap();
+        for word in ["output", "artNet", "sacn", "openDmx", "universes"] {
+            assert!(!json.contains(word), "the show mentions {word}");
+        }
+
+        // And the other half: a configured rig is in the machine's document and
+        // in no other. This is the same assertion one layer up from
+        // `desk_id_is_not_show_content`, and it is written out rather than
+        // implied because the whole of S33 rests on it.
+        let mut machine = MachineConfig::new(DeskId::parse(TEXT).unwrap());
+        machine
+            .apply(&Command::AddOutput {
+                output: OutputInstance::new(
+                    OutputId::new(1),
+                    "Stage left node",
+                    OutputKind::ArtNet {
+                        nodes: vec!["192.168.1.50:6454".parse().unwrap()],
+                        sync: false,
+                        ports: Vec::new(),
+                    },
+                    [UniverseId::new(5)],
+                ),
+            })
+            .unwrap();
+        let machine_json = serde_json::to_string(&machine).unwrap();
+        assert!(machine_json.contains("192.168.1.50:6454"), "{machine_json}");
+        assert!(
+            !serde_json::to_string(&show)
+                .unwrap()
+                .contains("192.168.1.50"),
+            "the show learned the hall's cabling"
+        );
+    }
+
+    /// A rig decided somewhere other than by the four commands — a daemon whose
+    /// outputs were named on its command line — still passes the same
+    /// validation, and a row that fails it is left out rather than carried.
+    #[test]
+    fn a_rig_built_all_at_once_is_validated_row_by_row() {
+        let good = OutputInstance::new(
+            OutputId::new(2),
+            "Hall",
+            OutputKind::Mock,
+            [UniverseId::new(1)],
+        );
+        // Two universes on a cable that is one DMX line, which
+        // `crate::outputs::validate` refuses.
+        let bad = OutputInstance::new(
+            OutputId::new(1),
+            "Cable",
+            OutputKind::OpenDmx { serial: None },
+            [UniverseId::new(1), UniverseId::new(2)],
+        );
+
+        let config = MachineConfig::with_outputs(DeskId::parse(TEXT).unwrap(), [bad, good.clone()]);
+        assert_eq!(config.outputs(), [good]);
+        assert_eq!(config.desk_id(), DeskId::parse(TEXT).unwrap());
+        assert!(config.is_configured());
+        assert!(
+            MachineConfig::with_outputs(DeskId::NIL, [])
+                .outputs()
+                .is_empty()
+        );
+    }
+
+    /// The routing, read both ways — and a disabled output carries nothing,
+    /// because the question is *where does the light actually go*.
+    #[test]
+    fn the_rig_answers_which_universes_go_out_and_by_which_cable() {
+        let mut config = MachineConfig::default();
+        for (id, universes) in [(1u32, vec![1u32, 2]), (2, vec![2, 3])] {
+            config
+                .apply(&Command::AddOutput {
+                    output: OutputInstance::new(
+                        OutputId::new(id),
+                        format!("Output {id}"),
+                        OutputKind::Mock,
+                        universes.into_iter().map(UniverseId::new),
+                    ),
+                })
+                .unwrap();
+        }
+
+        assert_eq!(
+            config.carried_universes(),
+            vec![UniverseId::new(1), UniverseId::new(2), UniverseId::new(3)],
+            "once each, in order, however many outputs carry them"
+        );
+        assert_eq!(
+            config.outputs_for(UniverseId::new(2)),
+            vec![OutputId::new(1), OutputId::new(2)],
+            "one universe may go to several outputs"
+        );
+
+        config
+            .apply(&Command::SetOutputEnabled {
+                id: OutputId::new(2),
+                enabled: false,
+            })
+            .unwrap();
+        assert_eq!(
+            config.carried_universes(),
+            vec![UniverseId::new(1), UniverseId::new(2)],
+            "universe 3 goes nowhere now, and saying otherwise would be a lie"
+        );
+        assert_eq!(config.outputs_for(UniverseId::new(3)), Vec::new());
     }
 
     #[test]

@@ -1031,7 +1031,19 @@ impl ShowFile {
             | Command::SetEncoderBank { .. }
             | Command::SetProgrammerPage { .. }
             | Command::SelectProgrammerParam { .. }
-            | Command::CommandLineInput { .. } => Vec::new(),
+            | Command::CommandLineInput { .. }
+            // S33's four have no image because the journal is the **show's**:
+            // it is cleared when a show is loaded and it images show and
+            // session scopes, so a record of a rig change would be a record of
+            // something the show it belongs to knows nothing about.
+            // `Command::is_undoable` says the same thing one layer up, and
+            // `a_command_has_a_scope_exactly_when_it_is_undoable` holds the two
+            // together.
+            | Command::AddOutput { .. }
+            | Command::ConfigureOutput { .. }
+            | Command::RemoveOutput { .. }
+            | Command::SetOutputEnabled { .. }
+            => Vec::new(),
         }
     }
 

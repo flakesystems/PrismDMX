@@ -10,9 +10,10 @@ use prism_core::{SessionState, Show};
 use prism_domain::{
     AttributeDef, AttributeType, Command, Cue, CuePart, CueTrigger, Executor,
     ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FeatureGroup, Fixture, FixtureId,
-    FixtureType, Group, GroupId, ObjectRef, OverwriteMode, ParamDirection, PlaybackTarget, Preset,
-    PresetId, PresetValue, SelectionMode, Sequence, SequenceId, SequenceStoreMode, StoreMode,
-    UniverseId, Vec3, ViewId, WindowInstanceId, WindowType,
+    FixtureType, Group, GroupId, ObjectRef, OutputChange, OutputId, OutputInstance, OutputKind,
+    OverwriteMode, ParamDirection, PlaybackTarget, Preset, PresetId, PresetValue, SelectionMode,
+    Sequence, SequenceId, SequenceStoreMode, StoreMode, UniverseId, Vec3, ViewId, WindowInstanceId,
+    WindowType,
 };
 
 /// An 8-bit attribute at a given offset, with everything else neutral.
@@ -313,6 +314,43 @@ pub fn show_commands() -> Vec<Command> {
         Command::Oops,
         Command::Redo,
         Command::SaveShow,
+    ]
+}
+
+/// Every command the **machine** applier accepts, each in a form a configured
+/// rig takes — S33.
+///
+/// The third list, and the third applier. `Delete`, `Copy`, `Move` and `Label`
+/// are in two lists because their *target* decides which applier owns them;
+/// these four are in one, because a rig is never show content and never session
+/// content. `prism_core::outputs` has the argument in full and
+/// `desk::tests::outputs_are_not_show_content` is the asserted half.
+///
+/// They are applied **in order** where they are applied at all: the `AddOutput`
+/// is what the three after it name.
+pub fn machine_commands() -> Vec<Command> {
+    vec![
+        Command::AddOutput {
+            output: OutputInstance::new(
+                OutputId::new(1),
+                "Hall dimmers",
+                OutputKind::OpenDmx { serial: None },
+                [UniverseId::new(1)],
+            ),
+        },
+        Command::ConfigureOutput {
+            id: OutputId::new(1),
+            change: OutputChange::Name {
+                name: "Hall".to_owned(),
+            },
+        },
+        Command::SetOutputEnabled {
+            id: OutputId::new(1),
+            enabled: false,
+        },
+        Command::RemoveOutput {
+            id: OutputId::new(1),
+        },
     ]
 }
 

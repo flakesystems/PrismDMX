@@ -15,6 +15,7 @@
 //! reason it did not is the most useful thing S8 found.
 
 use core::fmt;
+use std::borrow::Cow;
 use std::time::Duration;
 
 use crate::ftdi::PortConfig;
@@ -90,7 +91,13 @@ impl fmt::Display for AccessPath {
 /// constant usable for every adapter of a type: the serial number differs per
 /// cable and is the field an operator uses to pin one output to one physical
 /// port once there are two of them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// **Not `Copy` since S33**, and the serial is why: the output patch is
+/// configuration now, so the serial that pins one cable comes off a
+/// `machine.json` an operator wrote rather than out of a constant in this
+/// crate. `Cow` is what lets [`SH_RS09B`] stay a `const` with a borrowed string
+/// in it while a configured output carries an owned one.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceDescriptor {
     /// USB vendor ID. FTDI is `0x0403`.
     pub vendor_id: u16,
@@ -100,7 +107,7 @@ pub struct DeviceDescriptor {
     /// Product string to require, or `None` to accept any.
     pub product: Option<&'static str>,
     /// Serial number to require, or `None` to accept the first match.
-    pub serial: Option<&'static str>,
+    pub serial: Option<Cow<'static, str>>,
 }
 
 impl DeviceDescriptor {
@@ -121,15 +128,22 @@ impl DeviceDescriptor {
             return false;
         }
         let wanted_product = self.product.is_none_or(|want| product == Some(want));
-        let wanted_serial = self.serial.is_none_or(|want| serial == Some(want));
+        let wanted_serial = self
+            .serial
+            .as_deref()
+            .is_none_or(|want| serial == Some(want));
         wanted_product && wanted_serial
     }
 
     /// The same descriptor pinned to one physical cable by its serial number.
+    ///
+    /// Takes anything that can be a `Cow` so that the serial can come from a
+    /// constant in this crate *or* from the machine configuration an operator
+    /// wrote — S33's `OutputKind::OpenDmx { serial }` is the second.
     #[must_use]
-    pub const fn with_serial(self, serial: &'static str) -> Self {
+    pub fn with_serial(self, serial: impl Into<Cow<'static, str>>) -> Self {
         Self {
-            serial: Some(serial),
+            serial: Some(serial.into()),
             ..self
         }
     }
@@ -138,7 +152,7 @@ impl DeviceDescriptor {
 impl fmt::Display for DeviceDescriptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:04x}:{:04x}", self.vendor_id, self.product_id)?;
-        if let Some(serial) = self.serial {
+        if let Some(serial) = &self.serial {
             write!(f, " serial {serial}")?;
         }
         Ok(())
@@ -225,7 +239,9 @@ pub struct DmxTiming {
 }
 
 /// Everything the driver needs to know about one kind of adapter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// **Not `Copy` since S33** — see [`DeviceDescriptor`] for why.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceProfile {
     /// Human-readable name, as the UI shows it when the output is created.
     pub name: &'static str,

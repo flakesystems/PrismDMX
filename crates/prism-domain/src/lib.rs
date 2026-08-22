@@ -42,12 +42,13 @@ mod programmer;
 mod query;
 mod sequence;
 mod session;
+pub mod socket;
 #[cfg(test)]
 mod wire;
 
 pub use attribute::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
 pub use command::{
-    Command, GoDirection, ObjectRef, OverwriteMode, ParamDirection, SelectionMode,
+    Command, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection, SelectionMode,
     SequenceStoreMode,
 };
 pub use delta::{Delta, NoticeLevel};
@@ -61,7 +62,7 @@ pub use ids::{
     WindowInstanceId,
 };
 pub use json::{JsonPatchOp, JsonValue};
-pub use output::OutputHealth;
+pub use output::{ArtNetPort, OutputHealth, OutputInstance, OutputKind, SacnPort};
 pub use patch::{CHANNELS_PER_UNIVERSE, Fixture, Group, RgbColor, Vec3};
 pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetValue};

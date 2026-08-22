@@ -28,6 +28,8 @@ import type {
   LibraryEntry,
   OutputHealth,
   OutputId,
+  OutputInstance,
+  OutputKind,
   PatchConflict,
   PatchPreview,
   PlaybackId,
@@ -126,7 +128,15 @@ export function closesTheConnection(reason: RejectReason): boolean {
   return reason !== "CommandRefused" && reason !== "Undecodable";
 }
 
-/** One DMX output, as the status panel shows it. */
+/**
+ * One DMX output, as the status panel shows it.
+ *
+ * **Grown in S33** from three fields to seven, and the extra four are what a
+ * settings window has to draw: the configured row — kind, parameters, universes,
+ * whether it is enabled — how much it has sent, and the last thing that went
+ * wrong with how long ago that was. Before S33 a client could be told an output
+ * was red and nothing about why, or about what had gone dark with it.
+ */
 export interface OutputSnapshot {
   /** Which output. */
   readonly id: OutputId;
@@ -134,6 +144,30 @@ export interface OutputSnapshot {
   readonly name: string;
   /** Whether frames are reaching the fixtures. */
   readonly health: OutputHealth;
+  /**
+   * The configured row, or `null` from a daemon older than S33.
+   *
+   * `null` rather than absent, because *this daemon does not send one* and
+   * *this output has no configuration* are the same statement here and there is
+   * no second reading to keep apart.
+   */
+  readonly output: OutputInstance | null;
+  /**
+   * Universes put on the wire since this driver started.
+   *
+   * One frame is one universe, so a two-universe node counts two per cadence —
+   * and it is deliberately not a datagram count, because both network outputs
+   * suppress a universe that has not changed.
+   */
+  readonly framesSent: number;
+  /** The last thing that went wrong, in words, or `null` if nothing has. */
+  readonly lastError: string | null;
+  /**
+   * How long ago that was, in milliseconds, measured when the snapshot was
+   * taken. An age rather than a time: the daemon and this client have no shared
+   * clock.
+   */
+  readonly lastErrorAgoMs: number | null;
 }
 
 /** The daemon's own state at snapshot time. */
@@ -481,7 +515,46 @@ function readOutputSnapshot(value: unknown, path: string): OutputSnapshot {
     id: asInteger(field(record, "id"), `${path}.id`),
     name: asString(field(record, "name"), `${path}.name`),
     health: asVariant(field(record, "health"), `${path}.health`, OUTPUT_HEALTH_VARIANTS),
+    // The four S33 added, each optional on the wire: a daemon one version
+    // behind sends a three-field row, and meeting a missing field is better
+    // than refusing a snapshot over a status panel.
+    output: readOptionalOutputInstance(field(record, "output"), `${path}.output`),
+    framesSent: asInteger(field(record, "framesSent") ?? 0, `${path}.framesSent`),
+    lastError: readOptionalString(field(record, "lastError"), `${path}.lastError`),
+    lastErrorAgoMs: readOptionalInteger(
+      field(record, "lastErrorAgoMs"),
+      `${path}.lastErrorAgoMs`,
+    ),
   };
+}
+
+/** A configured output row, or `null` when there is none. */
+function readOutputInstance(value: unknown, path: string): OutputInstance {
+  const record = asRecord(value, path);
+  return {
+    id: asInteger(field(record, "id"), `${path}.id`),
+    name: asString(field(record, "name"), `${path}.name`),
+    // The kind is a tagged union whose arms a status panel does not narrow: it
+    // is drawn through `OutputKind`'s own `t`, and a client that re-derived the
+    // arms here would be a second copy of the generated type.
+    kind: field(record, "kind") as OutputKind,
+    universes: asArray(field(record, "universes"), `${path}.universes`).map((universe, index) =>
+      asInteger(universe, `${path}.universes[${index}]`),
+    ),
+    enabled: asBoolean(field(record, "enabled"), `${path}.enabled`),
+  };
+}
+
+function readOptionalOutputInstance(value: unknown, path: string): OutputInstance | null {
+  return value === undefined || value === null ? null : readOutputInstance(value, path);
+}
+
+function readOptionalString(value: unknown, path: string): string | null {
+  return value === undefined || value === null ? null : asString(value, path);
+}
+
+function readOptionalInteger(value: unknown, path: string): number | null {
+  return value === undefined || value === null ? null : asInteger(value, path);
 }
 
 /** The daemon's own state. */

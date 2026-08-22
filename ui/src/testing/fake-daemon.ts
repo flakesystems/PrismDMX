@@ -225,7 +225,25 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
       views: { "1": { id: 1, name: "View 1", windows: [] } },
     },
     programmer: emptyProgrammer(),
-    outputs: [{ id: 1, name: "Mock", health: "Ok" }],
+    outputs: [
+      {
+        id: 1,
+        name: "Mock",
+        health: "Ok",
+        // The configured row, as S33 made a snapshot carry it: a status panel
+        // draws the kind and the universes beside the light.
+        output: {
+          id: 1,
+          name: "Mock",
+          kind: { t: "Mock" },
+          universes: [1],
+          enabled: true,
+        },
+        framesSent: 0,
+        lastError: null,
+        lastErrorAgoMs: null,
+      },
+    ],
     health: health(),
     fixtureLibrary: fixtureLibrary().length,
     ...overrides,

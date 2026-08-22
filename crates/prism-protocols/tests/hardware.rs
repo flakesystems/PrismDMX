@@ -388,9 +388,10 @@ fn where_the_time_in_a_frame_actually_goes() {
     // like noise.
     use libftd2xx::{BitsPerWord, Ftdi, FtdiCommon, Parity, StopBits};
 
-    let mut device = Ftdi::with_serial_number(SH_RS09B.device.serial.unwrap_or("B0037HIY"))
-        .or_else(|_| Ftdi::new())
-        .expect("no FTDI device could be opened");
+    let mut device =
+        Ftdi::with_serial_number(SH_RS09B.device.serial.as_deref().unwrap_or("B0037HIY"))
+            .or_else(|_| Ftdi::new())
+            .expect("no FTDI device could be opened");
     device.set_baud_rate(250_000).unwrap();
     device
         .set_data_characteristics(BitsPerWord::Bits8, StopBits::Bits2, Parity::No)

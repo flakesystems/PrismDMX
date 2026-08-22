@@ -40,7 +40,7 @@ use std::time::Duration;
 use prism_core::{Show, ShowFile, ShowMirror, ShowStore};
 use prism_domain::{Answer, Command, FixtureId, JsonValue, LibraryEntry, Query, UniverseId};
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
-use prismd::cli::{Options, OutputSpec};
+use prismd::cli::{Options, mock_output};
 use prismd::daemon::Daemon;
 
 mod common;
@@ -491,7 +491,7 @@ async fn record_the_patch_script_for_the_interface() {
         show: Some(show),
         fixtures: Some(library),
         universes: 2,
-        outputs: vec![OutputSpec::Mock],
+        outputs: vec![mock_output(1)],
         local: true,
         log_level: prismd::log::Level::Warn,
         ..Options::default()

@@ -61,7 +61,7 @@ use prism_ipc::{
     ClientKind, ClientMessage, Hello, ServerMessage, TELEMETRY_HEADER_BYTES, TELEMETRY_VERSION,
     TelemetryError, TelemetryFrame, Wire, local,
 };
-use prismd::cli::{Options, OutputSpec};
+use prismd::cli::{Options, mock_output};
 use prismd::daemon::Daemon;
 
 mod common;
@@ -378,7 +378,7 @@ async fn frames_from(
         data_dir: Some(directory.to_path_buf()),
         show: Some(show.to_path_buf()),
         universes,
-        outputs: vec![OutputSpec::Mock],
+        outputs: vec![mock_output(1)],
         local: true,
         log_level: prismd::log::Level::Warn,
         ..Options::default()

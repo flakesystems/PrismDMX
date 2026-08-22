@@ -51,22 +51,58 @@ pub struct OutputEntry {
     pub status: Arc<OutputStatus>,
 }
 
+/// One snapshot row per configured output — S33.
+///
+/// A free function rather than a method because it needs the core lock the
+/// caller is already holding, and taking it twice would let the rig change
+/// between the two halves of one snapshot.
+///
+/// **Every configured output, not every running one.** A disabled node and one
+/// whose thread could not start are both rows an operator has to see: the second
+/// is the case a status panel exists for, and leaving it out would be an output
+/// that vanished rather than one that is red.
+fn output_snapshots(core: &Core) -> Vec<OutputSnapshot> {
+    let supervisor = core.outputs();
+    let elapsed = supervisor.elapsed();
+    core.machine()
+        .outputs()
+        .iter()
+        .map(|output| {
+            let status = supervisor.status(output.id);
+            let fault = status.and_then(|status| status.last_error(elapsed));
+            OutputSnapshot {
+                id: output.id,
+                name: output.name.clone(),
+                health: status.map_or(prism_domain::OutputHealth::Disconnected, |status| {
+                    status.health()
+                }),
+                output: Some(output.clone()),
+                frames_sent: status.map_or(0, |status| status.frames_sent()),
+                last_error: fault.map(|fault| fault.error.to_string()),
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    reason = "a fault 584 million years ago is not the number that is wrong"
+                )]
+                last_error_ago_ms: fault.map(|fault| fault.ago.as_millis() as u64),
+            }
+        })
+        .collect()
+}
+
 /// The daemon, as the protocol sees it.
 ///
 /// Cheap to share: the IPC server, the autosave timer and the telemetry task
 /// all hold one, and every one of them reaches the show through the same lock.
 pub struct Desk {
     core: Mutex<Core>,
-    outputs: Vec<OutputEntry>,
 }
 
 impl Desk {
     /// A desk over a wired-up core.
     #[must_use]
-    pub fn new(core: Core, outputs: Vec<OutputEntry>) -> Self {
+    pub fn new(core: Core) -> Self {
         Self {
             core: Mutex::new(core),
-            outputs,
         }
     }
 
@@ -80,10 +116,14 @@ impl Desk {
         self.core.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// The configured outputs and their health.
+    /// The running outputs and their health.
+    ///
+    /// **Through the core since S33**: the rig changes while the daemon runs, so
+    /// a list fixed at construction would be a list that stopped being true the
+    /// first time an operator added a node.
     #[must_use]
-    pub fn outputs(&self) -> &[OutputEntry] {
-        &self.outputs
+    pub fn outputs(&self) -> Vec<OutputEntry> {
+        self.core().outputs().entries()
     }
 
     /// The world, as `docs/IPC_PROTOCOL.md` §4.1 defines it.
@@ -112,7 +152,7 @@ impl Desk {
             show,
             session,
             programmer: core.file.programmer.state().clone(),
-            outputs: self.output_snapshots(),
+            outputs: output_snapshots(&core),
             health: self.health(&core),
             // How many profiles this desk can embed — a number, not the
             // profiles. S44 made the library two thousand of them, so a client
@@ -122,17 +162,10 @@ impl Desk {
         }
     }
 
-    /// One entry per configured output.
+    /// One entry per **configured** output — S33.
     #[must_use]
     pub fn output_snapshots(&self) -> Vec<OutputSnapshot> {
-        self.outputs
-            .iter()
-            .map(|output| OutputSnapshot {
-                id: output.id,
-                name: output.name.clone(),
-                health: output.status.health(),
-            })
-            .collect()
+        output_snapshots(&self.core())
     }
 
     /// How the daemon itself is doing.
@@ -269,33 +302,63 @@ mod tests {
     use prism_core::{JsonMirror, ShowStore};
     use prism_domain::{
         Answer, AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, OutputHealth,
-        OutputId, PlaybackTarget, Query, SelectionMode,
+        OutputId, OutputInstance, OutputKind, PlaybackTarget, Query, SelectionMode,
     };
     use prism_engine::FramePublisher;
     use prism_ipc::CommandOutcome;
-    use prism_protocols::{MockOutput, OutputStatus, OutputThread, RunnerConfig, spawn};
+    use prism_protocols::OutputStatus;
     use std::sync::Arc;
 
-    fn desk(dir: &std::path::Path) -> (Arc<Desk>, OutputThread) {
+    /// A desk over one mock output, wired the way the daemon wires one.
+    ///
+    /// **The rig goes through the machine configuration since S33**, because
+    /// that is where it lives: a `Desk` handed a list of `OutputEntry` values
+    /// would be a second place an output can come from, and the one thing S33
+    /// is about is that there is only one.
+    fn desk(dir: &std::path::Path) -> Arc<Desk> {
         let file = show_file();
         let store = ShowStore::open(dir.join("test.prism")).unwrap();
         let layout = Arc::new(crate::engine::frame_layout(4).unwrap());
         let report = Arc::new(prism_engine::PlaybackReport::new(8));
         let body = crate::core::build_body(&layout, &file, &report).unwrap();
 
-        let mut publisher = FramePublisher::new(Arc::clone(&layout));
-        let subscriber = publisher.subscribe();
-        let output = MockOutput::new(OutputId::new(1), [prism_domain::UniverseId::new(1)]);
-        let driver = spawn("out-mock", output, subscriber, RunnerConfig::default()).unwrap();
-        let engine = EngineThread::start(body, publisher).unwrap();
-        let core = Core::new(file, store, engine, layout, report).unwrap();
+        let publisher = FramePublisher::new(Arc::clone(&layout));
+        let mut outputs = crate::outputs::OutputSupervisor::new(
+            publisher.enrolment(),
+            Box::new(crate::outputs::MockDevices::default()),
+            crate::outputs::OutputContext {
+                cid: prism_protocols::Cid::from_u128(1),
+                source_name: "PrismDMX test".to_owned(),
+            },
+        );
+        let mut machine = prism_core::MachineConfig::default();
+        machine
+            .apply(&Command::AddOutput {
+                output: OutputInstance::new(
+                    OutputId::new(1),
+                    "Mock",
+                    OutputKind::Mock,
+                    [prism_domain::UniverseId::new(1)],
+                ),
+            })
+            .unwrap();
+        outputs.reconcile(machine.outputs());
 
-        let outputs = vec![OutputEntry {
-            id: OutputId::new(1),
-            name: "Mock".to_owned(),
-            status: Arc::clone(driver.status()),
-        }];
-        (Arc::new(Desk::new(core, outputs)), driver)
+        let engine = EngineThread::start(body, publisher).unwrap();
+        let core = Core::new(
+            file,
+            crate::outputs::Machine {
+                config: machine,
+                path: Some(dir.join("machine.json")),
+                outputs,
+            },
+            store,
+            engine,
+            layout,
+            report,
+        )
+        .unwrap();
+        Arc::new(Desk::new(core))
     }
 
     /// The exit criterion: the handshake serves a snapshot carrying the show
@@ -303,7 +366,7 @@ mod tests {
     #[test]
     fn a_snapshot_carries_the_show_the_session_and_the_programmer() {
         let dir = tempfile::tempdir().unwrap();
-        let (desk, driver) = desk(dir.path());
+        let desk = desk(dir.path());
         // Something in the programmer, so an empty one would be visible.
         desk.command(Command::SelectFixtures {
             ids: vec![FixtureId::new(1)],
@@ -365,14 +428,12 @@ mod tests {
             desk.snapshot().health.tick_hz > 0.0,
             "the tick is running and the snapshot says so"
         );
-
-        driver.stop();
     }
 
     #[test]
     fn a_command_is_applied_and_a_refused_one_says_why() {
         let dir = tempfile::tempdir().unwrap();
-        let (desk, driver) = desk(dir.path());
+        let desk = desk(dir.path());
         let outcome = desk.command(Command::ExecutorGo {
             target: PlaybackTarget::of_executor(ExecutorId::new(0)),
             direction: GoDirection::Next,
@@ -406,14 +467,12 @@ mod tests {
             panic!("an executor that does not exist is refused, not {outcome:?}");
         };
         assert!(message.contains('9'), "{message}");
-
-        driver.stop();
     }
 
     #[test]
     fn the_snapshot_says_what_the_save_lamp_shows() {
         let dir = tempfile::tempdir().unwrap();
-        let (desk, driver) = desk(dir.path());
+        let desk = desk(dir.path());
         assert!(!desk.snapshot().health.unsaved_changes);
 
         desk.command(Command::PatchFixture {
@@ -427,14 +486,12 @@ mod tests {
 
         desk.command(Command::SaveShow);
         assert!(!desk.snapshot().health.unsaved_changes);
-
-        driver.stop();
     }
 
     #[test]
     fn an_output_reports_its_health_into_the_snapshot() {
         let dir = tempfile::tempdir().unwrap();
-        let (desk, driver) = desk(dir.path());
+        let desk = desk(dir.path());
         // The driver connects on its first step, so this is the ordinary state
         // rather than a contrived one.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
@@ -445,8 +502,6 @@ mod tests {
         }
         assert_eq!(desk.snapshot().outputs[0].health, OutputHealth::Ok);
         assert_eq!(desk.outputs().len(), 1);
-
-        driver.stop();
     }
 
     /// **A question changes nothing, and the answer is the daemon's arithmetic.**
@@ -458,7 +513,7 @@ mod tests {
     #[test]
     fn a_question_is_answered_and_the_show_does_not_move() {
         let dir = tempfile::tempdir().unwrap();
-        let (desk, driver) = desk(dir.path());
+        let desk = desk(dir.path());
         let before = desk.snapshot().show;
 
         let Answer::PatchConflicts { conflicts } = desk.query(&Query::PatchConflicts) else {
@@ -498,8 +553,6 @@ mod tests {
         // desk that is running a show.
         assert_eq!(desk.snapshot().show, before);
         assert!(!desk.snapshot().health.unsaved_changes);
-
-        driver.stop();
     }
 
     /// **The snapshot carries how many profiles there are, and not the
@@ -511,7 +564,7 @@ mod tests {
     #[test]
     fn the_snapshot_counts_the_profiles_and_the_search_answers_them() {
         let dir = tempfile::tempdir().unwrap();
-        let (desk, driver) = desk(dir.path());
+        let desk = desk(dir.path());
         // `show_file` builds a `ShowFile`, whose library defaults to the four
         // generic profiles — this daemon never read a directory.
         let counted = desk.snapshot().fixture_library;
@@ -545,7 +598,6 @@ mod tests {
 
         // A question changes nothing, this one included.
         assert!(!desk.snapshot().health.unsaved_changes);
-        driver.stop();
     }
 
     #[test]

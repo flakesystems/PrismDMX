@@ -541,7 +541,7 @@ impl MockState {
 impl FtdiBackend for MockFtdi {
     fn open(&mut self, device: &DeviceDescriptor) -> Result<(), FtdiError> {
         let mut state = lock(&self.state);
-        state.record(FtdiCall::Open(*device));
+        state.record(FtdiCall::Open(device.clone()));
         let MockState {
             open, open_faults, ..
         } = &mut *state;

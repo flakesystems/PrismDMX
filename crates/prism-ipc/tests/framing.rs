@@ -76,11 +76,31 @@ fn any_hello() -> impl Strategy<Value = Hello> {
 }
 
 fn any_output() -> impl Strategy<Value = OutputSnapshot> {
-    (any::<u32>(), ".{0,16}", any::<OutputHealth>()).prop_map(|(id, name, health)| OutputSnapshot {
-        id: OutputId::new(id),
-        name,
-        health,
-    })
+    // S33 grew this from three fields to seven; the configured row is generated
+    // as well, because it is the one that carries a socket address and an enum
+    // and is therefore the one a codec can get wrong.
+    (
+        any::<u32>(),
+        ".{0,16}",
+        any::<OutputHealth>(),
+        proptest::option::of(any::<prism_domain::OutputInstance>()),
+        any::<u64>(),
+        proptest::option::of(".{0,16}"),
+        proptest::option::of(any::<u64>()),
+    )
+        .prop_map(
+            |(id, name, health, output, frames_sent, last_error, last_error_ago_ms)| {
+                OutputSnapshot {
+                    id: OutputId::new(id),
+                    name,
+                    health,
+                    output,
+                    frames_sent,
+                    last_error,
+                    last_error_ago_ms,
+                }
+            },
+        )
 }
 
 fn any_health() -> impl Strategy<Value = DaemonHealth> {

@@ -89,6 +89,18 @@ pub enum ShowIssue {
         /// The sequence it points at.
         sequence: SequenceId,
     },
+    /// The show patches a universe that **no output carries** — S33.
+    ///
+    /// A legitimate state and not an error: a rig is built over an afternoon,
+    /// and refusing to patch a fixture into universe 7 until somebody had wired
+    /// universe 7 would be a desk that cannot be prepared in advance. What it
+    /// must never be is *silent* — an operator whose universe 7 goes nowhere has
+    /// to read that before the show rather than discover it when the light does
+    /// not come up. See [`crate::outputs`].
+    UniverseNotOutput {
+        /// The universe the patch uses and nothing sends.
+        universe: UniverseId,
+    },
 }
 
 impl fmt::Display for ShowIssue {
@@ -126,6 +138,9 @@ impl fmt::Display for ShowIssue {
                 f,
                 "sequence {sequence} cue {cue} is linked to preset {preset}, which is gone"
             ),
+            Self::UniverseNotOutput { universe } => {
+                write!(f, "universe {universe} is patched and no output carries it")
+            }
             Self::ExecutorSequenceMissing { executor, sequence } => write!(
                 f,
                 "executor {executor} plays sequence {sequence}, which is gone"
@@ -302,6 +317,35 @@ pub(crate) fn issues(show: &Show) -> Vec<ShowIssue> {
         }
     }
     issues
+}
+
+/// The universes this show patches that `carried` does not cover — S33.
+///
+/// A separate function rather than a branch inside [`issues`] because it needs
+/// something [`Show`] deliberately does not hold: the output patch belongs to the
+/// **building** and lives in [`crate::MachineConfig`] (see [`crate::outputs`]).
+/// Folding it in would have meant giving `Show::issues` an argument that is not
+/// the show's, which is the seam this whole session is about.
+///
+/// It takes the universes rather than the configuration so that the caller
+/// decides *whose* answer it is: [`crate::MachineConfig::dark_universes`] asks it
+/// about the configured rig, and `prismd` asks it about the rig that is actually
+/// running — which differ when a row was refused or a thread would not start,
+/// and the second is the one an operator needs before a show.
+///
+/// A **disabled** output carries nothing either way, on purpose:
+/// [`crate::MachineConfig::carried_universes`] answers *where the light actually
+/// goes*, and a row that has been switched off is not sending.
+pub fn dark_universes(show: &Show, carried: &[UniverseId]) -> Vec<ShowIssue> {
+    let mut dark = Vec::new();
+    for universe in show.universes() {
+        if !carried.contains(&universe) && !dark.contains(&universe) {
+            dark.push(universe);
+        }
+    }
+    dark.into_iter()
+        .map(|universe| ShowIssue::UniverseNotOutput { universe })
+        .collect()
 }
 
 #[cfg(test)]
@@ -723,8 +767,101 @@ mod tests {
                 executor: ExecutorId::new(0),
                 sequence: SequenceId::new(1),
             },
+            ShowIssue::UniverseNotOutput {
+                universe: UniverseId::new(7),
+            },
         ] {
             assert!(!issue.to_string().is_empty(), "{issue:?}");
         }
+    }
+
+    /// S33: a patched universe nothing carries is **reported**, and reporting it
+    /// is the whole of the criterion — it is not an error, nothing is refused,
+    /// and nothing is dropped.
+    #[test]
+    fn a_patched_universe_that_no_output_carries_is_reported() {
+        use prism_domain::{Command, OutputId, OutputInstance, OutputKind};
+
+        let mut show = Show::new();
+        show.embed_fixture_type(par_type()).unwrap();
+        for (id, universe) in [(1u32, 1u32), (2, 7)] {
+            show.patch_fixture(prism_domain::Fixture {
+                id: FixtureId::new(id),
+                name: format!("Par {id}"),
+                type_id: "generic.rgbw.par".to_owned(),
+                universe: UniverseId::new(universe),
+                address: 1,
+                position: prism_domain::Vec3::ZERO,
+                rotation: prism_domain::Vec3::ZERO,
+                invert_pan: false,
+                invert_tilt: false,
+            })
+            .unwrap();
+        }
+
+        // No rig at all: both universes go nowhere, and both are named.
+        let mut machine = crate::MachineConfig::default();
+        assert_eq!(
+            machine.dark_universes(&show),
+            vec![
+                ShowIssue::UniverseNotOutput {
+                    universe: UniverseId::new(1)
+                },
+                ShowIssue::UniverseNotOutput {
+                    universe: UniverseId::new(7)
+                },
+            ]
+        );
+
+        // One cable for universe 1 leaves exactly one complaint standing.
+        machine
+            .apply(&Command::AddOutput {
+                output: OutputInstance::new(
+                    OutputId::new(1),
+                    "Hall",
+                    OutputKind::Mock,
+                    [UniverseId::new(1)],
+                ),
+            })
+            .unwrap();
+        assert_eq!(
+            machine.dark_universes(&show),
+            vec![ShowIssue::UniverseNotOutput {
+                universe: UniverseId::new(7)
+            }]
+        );
+        assert!(
+            show.issues().is_empty(),
+            "and none of it is a fault of the show"
+        );
+
+        // A universe an output carries and the patch does not use is *not* an
+        // issue: an installer wires a hall before the show is written.
+        machine
+            .apply(&Command::AddOutput {
+                output: OutputInstance::new(
+                    OutputId::new(2),
+                    "Spare",
+                    OutputKind::Mock,
+                    [UniverseId::new(7), UniverseId::new(9)],
+                ),
+            })
+            .unwrap();
+        assert!(machine.dark_universes(&show).is_empty());
+
+        // Switching that output off puts universe 7 back in the dark, which is
+        // what `carried_universes` answering only about enabled rows is for.
+        machine
+            .apply(&Command::SetOutputEnabled {
+                id: OutputId::new(2),
+                enabled: false,
+            })
+            .unwrap();
+        assert_eq!(
+            machine.dark_universes(&show),
+            vec![ShowIssue::UniverseNotOutput {
+                universe: UniverseId::new(7)
+            }]
+        );
     }
 }

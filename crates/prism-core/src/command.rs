@@ -194,6 +194,15 @@ pub enum Effect {
     Undo,
     /// Redo the last undone command — the same, in the other direction.
     Redo,
+    /// The output patch changed — S33.
+    ///
+    /// Answered by whoever owns the driver threads: `prismd`'s output
+    /// supervisor reconciles the rig against what is running and writes the
+    /// machine configuration back to disk. Like [`Self::Save`] it is **not**
+    /// carried out inside `prism-core`, and for the same reason: a cable has a
+    /// thread, a socket and a failure mode, and the model that decides what a
+    /// rig *is* deliberately holds none of the three.
+    Outputs,
     /// Write the show to disk.
     ///
     /// Unlike [`Effect::Programmer`], [`Effect::Undo`] and [`Effect::Redo`],
@@ -481,6 +490,14 @@ impl Show {
             | Command::SelectProgrammerParam { .. }
             | Command::SelectSequence { .. }
             | Command::CommandLineInput { .. } => Err(ShowError::NotAShowCommand),
+            // S33's four. Named here rather than caught by a wildcard for the
+            // same reason as the sixteen above, and refused with a different
+            // error because they are not session commands either: the rig
+            // belongs to the **building**, and `crate::outputs` has why.
+            Command::AddOutput { .. }
+            | Command::ConfigureOutput { .. }
+            | Command::RemoveOutput { .. }
+            | Command::SetOutputEnabled { .. } => Err(ShowError::NotAShowCommand),
         }
     }
 

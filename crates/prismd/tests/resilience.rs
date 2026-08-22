@@ -66,7 +66,7 @@ use prism_domain::{
 };
 use prism_ipc::{Client, ClientError, ClientEvent, ClientKind, Hello, RejectReason};
 use prism_protocols::FrameRecord;
-use prismd::cli::{Options, OutputSpec};
+use prismd::cli::{Options, mock_output};
 use prismd::daemon::Daemon;
 
 mod common;
@@ -97,7 +97,7 @@ fn options(dir: &Path) -> Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
         universes: 2,
-        outputs: vec![OutputSpec::Mock],
+        outputs: vec![mock_output(1)],
         local: true,
         log_level: prismd::log::Level::Warn,
         ..Options::default()

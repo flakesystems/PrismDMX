@@ -271,13 +271,39 @@ mod tests {
         assert_eq!(
             handle.calls(),
             vec![
-                FtdiCall::Open(SH_RS09B.device),
+                FtdiCall::Open(SH_RS09B.device.clone()),
                 FtdiCall::Configure(PortConfig::DMX512),
                 FtdiCall::Purge,
             ]
         );
         assert_eq!(driver.health(), OutputHealth::Ok);
         assert!(handle.is_open());
+    }
+
+    /// S33: an output patch carries a serial, and a serial that did not reach
+    /// the bus would be a setting that quietly did nothing — two adapters both
+    /// opening the first cable, with universe 2 dark and every light green.
+    #[test]
+    fn a_serial_from_the_configuration_is_what_the_bus_is_asked_for() {
+        let backend = MockFtdi::new();
+        let handle = backend.handle();
+        let mut profile = SH_RS09B;
+        profile.device = profile.device.with_serial("A50285BI".to_owned());
+        let mut driver = OpenDmxUsb::with_profile(
+            OutputId::new(2),
+            UniverseId::new(2),
+            backend,
+            profile.clone(),
+        );
+        // The mock accepts any descriptor; what is asserted is the one the
+        // driver *asked* for, which is what a real backend matches on.
+        driver.connect().unwrap();
+        assert_eq!(
+            handle.calls().first(),
+            Some(&FtdiCall::Open(profile.device.clone()))
+        );
+        assert_eq!(profile.device.serial.as_deref(), Some("A50285BI"));
+        assert!(profile.device.to_string().contains("serial A50285BI"));
     }
 
     #[test]
@@ -532,7 +558,7 @@ mod tests {
         assert_eq!(
             handle.calls(),
             vec![
-                FtdiCall::Open(SH_RS09B.device),
+                FtdiCall::Open(SH_RS09B.device.clone()),
                 FtdiCall::Configure(PortConfig::DMX512),
                 FtdiCall::Purge,
             ]
@@ -553,7 +579,7 @@ mod tests {
             handle.calls(),
             vec![
                 FtdiCall::Close,
-                FtdiCall::Open(SH_RS09B.device),
+                FtdiCall::Open(SH_RS09B.device.clone()),
                 FtdiCall::Configure(PortConfig::DMX512),
                 FtdiCall::Purge,
             ]

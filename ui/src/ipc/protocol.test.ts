@@ -216,6 +216,52 @@ describe("the snapshot", () => {
     expect(readSnapshot(snapshot, "s")).toEqual(snapshot);
   });
 
+  /// S33: a daemon one version behind sends the three fields an output row had
+  /// before the rig was data. Meeting a missing field is better than refusing a
+  /// snapshot over a status panel, so the four new ones read as absent.
+  it("reads an output row from a daemon that predates the rig", () => {
+    const older = { ...aSnapshot(), outputs: [{ id: 1, name: "Mock", health: "Ok" }] };
+    expect(readSnapshot(older, "s").outputs).toEqual([
+      {
+        id: 1,
+        name: "Mock",
+        health: "Ok",
+        output: null,
+        framesSent: 0,
+        lastError: null,
+        lastErrorAgoMs: null,
+      },
+    ]);
+  });
+
+  it("reads the configured row beside the light", () => {
+    const rig = {
+      ...aSnapshot(),
+      outputs: [
+        {
+          id: 2,
+          name: "Stage left node",
+          health: "Degraded",
+          output: {
+            id: 2,
+            name: "Stage left node",
+            kind: { t: "ArtNet", nodes: ["10.0.0.9:6454"], sync: false, ports: [] },
+            universes: [5, 6],
+            enabled: true,
+          },
+          framesSent: 4711,
+          lastError: "the interface is not connected",
+          lastErrorAgoMs: 4000,
+        },
+      ],
+    };
+    const read = readSnapshot(rig, "s").outputs[0];
+    expect(read?.output?.universes).toEqual([5, 6]);
+    expect(read?.framesSent).toBe(4711);
+    expect(read?.lastError).toBe("the interface is not connected");
+    expect(read?.lastErrorAgoMs).toBe(4000);
+  });
+
   it("names the document that was wrong", () => {
     expect(faultPath(() => readSnapshot({ ...aSnapshot(), show: undefined }, "s"))).toBe("s.show");
     expect(

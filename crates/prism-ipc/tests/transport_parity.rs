@@ -105,14 +105,19 @@ fn the_world() -> Snapshot {
         },
         outputs: vec![
             OutputSnapshot {
-                id: OutputId::new(1),
-                name: "Open DMX USB".to_owned(),
-                health: OutputHealth::Ok,
+                output: Some(prism_domain::OutputInstance::new(
+                    OutputId::new(1),
+                    "Open DMX USB",
+                    prism_domain::OutputKind::OpenDmx { serial: None },
+                    [UniverseId::new(1)],
+                )),
+                frames_sent: 4_711,
+                ..OutputSnapshot::new(OutputId::new(1), "Open DMX USB", OutputHealth::Ok)
             },
             OutputSnapshot {
-                id: OutputId::new(2),
-                name: "sACN universe 5".to_owned(),
-                health: OutputHealth::Degraded,
+                last_error: Some("the interface is not connected".to_owned()),
+                last_error_ago_ms: Some(4_000),
+                ..OutputSnapshot::new(OutputId::new(2), "sACN universe 5", OutputHealth::Degraded)
             },
         ],
         health: DaemonHealth {

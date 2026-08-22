@@ -16,6 +16,9 @@
 //!   [`cli`] ──▶ [`daemon::Daemon`] ──┬──▶ [`lock`]     one daemon, and the file
 //!                                    │                 clients find it by
 //!                                    ├──▶ [`machine`]  the desk's sACN identity
+//!                                    ├──▶ [`outputs`]  the rig, and the driver
+//!                                    │                 threads kept in step
+//!                                    │                 with it (S33)
 //!                                    ├──▶ [`core`]     ShowFile + ShowStore,
 //!                                    │        │        and the effects that follow
 //!                                    │        ▼
@@ -59,6 +62,7 @@ pub mod engine;
 pub mod lock;
 pub mod log;
 pub mod machine;
+pub mod outputs;
 pub mod paths;
 pub mod server;
 pub mod surface;

@@ -44,7 +44,8 @@
 //! second channel discriminator in the framing, which §3 rules out.
 
 use prism_domain::{
-    Answer, Command, Delta, JsonValue, OutputHealth, OutputId, ProgrammerState, Query,
+    Answer, Command, Delta, JsonValue, OutputHealth, OutputId, OutputInstance, ProgrammerState,
+    Query,
 };
 use serde::{Deserialize, Serialize};
 
@@ -292,6 +293,17 @@ pub struct Snapshot {
 }
 
 /// One DMX output, as the status panel shows it.
+///
+/// **Grown in S33** from three fields to seven, and the extra four are what a
+/// settings window has to draw: what kind of interface it is and how it is
+/// configured, which universes it carries, how much it has sent, and the last
+/// thing that went wrong. Before S33 a client could be told an output was red
+/// and nothing about why or about what had gone dark with it.
+///
+/// `output` carries the whole configured row, so the *configuration* and the
+/// *health* arrive together: a client that had to join `Delta::OutputsChanged`
+/// against this list to draw one line would be doing arithmetic to learn
+/// something it can be told.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputSnapshot {
@@ -301,6 +313,52 @@ pub struct OutputSnapshot {
     pub name: String,
     /// Whether frames are reaching the fixtures.
     pub health: OutputHealth,
+    /// The configured row: kind, parameters, universes and whether it is
+    /// enabled — S33.
+    ///
+    /// `#[serde(default)]` with the whole row optional, because a snapshot is a
+    /// message rather than a file and a client one version behind should meet a
+    /// missing field rather than a decode error.
+    #[serde(default)]
+    pub output: Option<OutputInstance>,
+    /// Universes put on the wire since this driver started. One frame here is
+    /// one universe, so a two-universe node counts two per cadence — and it is
+    /// deliberately not a datagram count, because both network outputs suppress
+    /// a universe that has not changed (S9, S10).
+    #[serde(default)]
+    pub frames_sent: u64,
+    /// The last thing that went wrong, in words an operator can read, or `None`
+    /// if nothing has.
+    #[serde(default)]
+    pub last_error: Option<String>,
+    /// How long ago that was, in milliseconds, measured when this snapshot was
+    /// taken.
+    ///
+    /// **An age rather than a time**, because the daemon and the client have no
+    /// shared clock and an `Instant` is not a thing that goes on a wire. See
+    /// `prism_protocols::OutputFault`.
+    #[serde(default)]
+    pub last_error_ago_ms: Option<u64>,
+}
+
+impl OutputSnapshot {
+    /// An output about which nothing is known beyond its light.
+    ///
+    /// The three fields the protocol carried before S33, with the four it gained
+    /// left empty — which is exactly the state a client one version behind
+    /// decodes into, and therefore the one worth being able to build.
+    #[must_use]
+    pub fn new(id: OutputId, name: impl Into<String>, health: OutputHealth) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            health,
+            output: None,
+            frames_sent: 0,
+            last_error: None,
+            last_error_ago_ms: None,
+        }
+    }
 }
 
 /// The daemon's own state at snapshot time.
@@ -367,11 +425,11 @@ mod tests {
                 selection: vec![FixtureId::new(3)],
                 ..ProgrammerState::default()
             },
-            outputs: vec![OutputSnapshot {
-                id: OutputId::new(1),
-                name: "Open DMX".to_owned(),
-                health: OutputHealth::Degraded,
-            }],
+            outputs: vec![OutputSnapshot::new(
+                OutputId::new(1),
+                "Open DMX",
+                OutputHealth::Degraded,
+            )],
             health: DaemonHealth {
                 protocol_version: PROTOCOL_VERSION,
                 tick_hz: 44.0,

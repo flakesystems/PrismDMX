@@ -105,8 +105,8 @@ pub use ftdi::{
 pub use opendmx::{DMX_PACKET_BYTES, OpenDmxUsb, START_CODE};
 pub use output::{DmxOutput, FrameRecord, MockOutput, MockOutputHandle, OutputError};
 pub use runner::{
-    Backoff, BackoffConfig, OutputRunner, OutputStatus, OutputThread, RunnerConfig, StepOutcome,
-    spawn,
+    Backoff, BackoffConfig, OutputFault, OutputRunner, OutputStatus, OutputThread, RunnerConfig,
+    StepOutcome, spawn,
 };
 pub use sacn::{
     ACN_PACKET_IDENTIFIER, Cid, DMP_PDU_BYTES, E131_DATA_BYTES, E131_DATA_HEADER, E131_PORT,

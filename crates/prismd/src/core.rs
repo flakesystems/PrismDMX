@@ -35,7 +35,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use prism_core::{Applied, Autosave, Effect, ShowFile, ShowFileError, ShowStore};
+use prism_core::{
+    Applied, Autosave, Effect, MachineConfig, MachineError, ShowFile, ShowFileError, ShowStore,
+};
 use prism_domain::{
     AttributeType, Command, Delta, FixtureId, GroupId, NoticeLevel, PlaybackId, ProgrammerState,
     UniverseId,
@@ -44,12 +46,18 @@ use prism_engine::{FrameLayout, MergeBody, MergePlan, PatchError, PlaybackReport
 
 use crate::engine::EngineThread;
 use crate::log;
+use crate::outputs::{Machine, OutputSupervisor};
 
 /// Why a command did not happen.
 #[derive(Debug)]
 pub enum CoreError {
     /// One of the three models refused it, and nothing changed (§5).
     Refused(ShowFileError),
+    /// The **machine** refused it — S33's fourth applier, and a refusal about
+    /// the building rather than about the show. Kept apart from
+    /// [`Self::Refused`] so an operator is not told *the show refused it* for a
+    /// mistyped hop limit.
+    Machine(MachineError),
     /// It was applied and the disk would not take it.
     Store(prism_core::StoreError),
 }
@@ -58,6 +66,7 @@ impl core::fmt::Display for CoreError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Refused(error) => error.fmt(f),
+            Self::Machine(error) => error.fmt(f),
             Self::Store(error) => error.fmt(f),
         }
     }
@@ -90,6 +99,13 @@ impl Default for Masters {
 pub struct Core {
     /// The show, the session, the programmer and the Oops journal.
     pub file: ShowFile,
+    /// **This machine**, as opposed to what it is playing: the desk identity,
+    /// the output patch, where it is written and the driver threads keeping step
+    /// with it (S33). Held here rather than beside the show because it is what
+    /// S33's four commands edit and what has to be written back when they do —
+    /// and never inside a `.prism` file, which is the whole of
+    /// `prism_core::outputs`' argument.
+    machine: Machine,
     store: ShowStore,
     engine: EngineThread,
     layout: Arc<FrameLayout>,
@@ -128,6 +144,7 @@ impl Core {
     /// rebuilt here so the daemon holds the same one the tick does.
     pub fn new(
         file: ShowFile,
+        machine: Machine,
         store: ShowStore,
         engine: EngineThread,
         layout: Arc<FrameLayout>,
@@ -143,6 +160,7 @@ impl Core {
         let engine_programmer = file.programmer.state().clone();
         Ok(Self {
             file,
+            machine,
             store,
             engine,
             layout,
@@ -160,6 +178,37 @@ impl Core {
     #[must_use]
     pub const fn store(&self) -> &ShowStore {
         &self.store
+    }
+
+    /// This machine: the desk identity and the rig — S33.
+    #[must_use]
+    pub const fn machine(&self) -> &MachineConfig {
+        &self.machine.config
+    }
+
+    /// The driver threads.
+    #[must_use]
+    pub const fn outputs(&self) -> &OutputSupervisor {
+        &self.machine.outputs
+    }
+
+    /// The universes this show patches that the rig does not carry — S33.
+    ///
+    /// Reported rather than refused (`prism_core::ShowIssue::UniverseNotOutput`):
+    /// an operator whose universe 7 goes nowhere has to be able to read that
+    /// before the show rather than discover it when the light does not come up.
+    #[must_use]
+    pub fn dark_universes(&self) -> Vec<prism_core::ShowIssue> {
+        // The **running** rig rather than the configured one: a row that was
+        // refused, or whose thread would not start, is configuration that is
+        // not carrying anything — and *where does the light actually go* is the
+        // question this answers.
+        prism_core::dark_universes(&self.file.show, &self.machine.outputs.carried_universes())
+    }
+
+    /// Stops every driver thread. The shutdown path.
+    pub fn stop_outputs(&mut self) {
+        self.machine.outputs.stop_all();
     }
 
     /// The engine, for the daemon's own timers and its shutdown.
@@ -202,8 +251,69 @@ impl Core {
     /// [`CoreError`] if the command was refused, or if it was applied and the
     /// save it asked for failed.
     pub fn apply(&mut self, command: &Command) -> Result<Vec<Delta>, CoreError> {
-        let applied = self.file.apply(command).map_err(CoreError::Refused)?;
+        // **Three appliers, routed on two predicates** (S33). The rig belongs to
+        // the building rather than to the show, so it is neither
+        // `ShowFile::apply`'s nor a second match over the command list here —
+        // `Command::is_machine_command` is the door, exactly as
+        // `is_session_command` is one level down.
+        let applied = if command.is_machine_command() {
+            if self.machine.path.is_none() {
+                return Err(CoreError::Machine(MachineError::ConfiguredOnTheCommandLine));
+            }
+            self.machine
+                .config
+                .apply(command)
+                .map_err(CoreError::Machine)?
+        } else {
+            self.file.apply(command).map_err(CoreError::Refused)?
+        };
         self.carry_out(applied)
+    }
+
+    /// Brings the driver threads into line with the rig and writes it down.
+    ///
+    /// Answered here rather than in `prism-core` for [`Effect::Save`]'s reason,
+    /// one level along: a cable has a thread, a socket and a failure mode, and
+    /// the model that decides what a rig *is* holds none of the three.
+    ///
+    /// A configuration that cannot be written is a **notice, not a refusal**.
+    /// The change has already happened — the threads are running, the light is
+    /// on the stage — and taking it back because a disk is full would be
+    /// undoing something an operator can see working. What they need instead is
+    /// to be told it will not survive a restart.
+    fn carry_out_outputs(&mut self) -> Vec<Delta> {
+        let Machine {
+            config,
+            path,
+            outputs,
+        } = &mut self.machine;
+        let mut deltas = outputs.reconcile(config.outputs());
+        let Some(path) = path else {
+            return deltas;
+        };
+        if let Err(error) = crate::machine::write(path, config) {
+            log::error(
+                "output",
+                &format!("the output patch could not be written: {error}"),
+            );
+            deltas.push(Delta::Notice {
+                level: NoticeLevel::Warn,
+                message: format!(
+                    "the outputs were changed but could not be saved to {}: {error}",
+                    path.display()
+                ),
+            });
+        }
+        // A universe that now goes nowhere is said out loud, once, when the rig
+        // changes — `ShowIssue::UniverseNotOutput` is the same fact as data.
+        for issue in self.dark_universes() {
+            log::warn("output", &issue.to_string());
+            deltas.push(Delta::Notice {
+                level: NoticeLevel::Warn,
+                message: issue.to_string(),
+            });
+        }
+        deltas
     }
 
     /// Carries out the effects of an [`Applied`] and returns everything to
@@ -284,6 +394,9 @@ impl Core {
                 // library and gets it there). Named rather than caught by a
                 // wildcard, so an effect added later is a compile error here.
                 Effect::Programmer | Effect::Undo | Effect::Redo | Effect::EmbedProfile => {}
+                // S33: the rig changed, so the driver threads have to catch up
+                // and the machine configuration has to be written down.
+                Effect::Outputs => deltas.extend(self.carry_out_outputs()),
                 Effect::Save => deltas.extend(self.save()?),
             }
         }
@@ -707,13 +820,33 @@ mod tests {
         let body = super::build_body(&layout, &file, &report).unwrap();
 
         let mut publisher = FramePublisher::new(Arc::clone(&layout));
+        let enrolment = publisher.enrolment();
         let subscriber = publisher.subscribe();
         let output = MockOutput::new(prism_domain::OutputId::new(1), [UniverseId::new(1)]);
         let frames = output.handle();
         let driver = spawn("out-mock", output, subscriber, RunnerConfig::default()).unwrap();
         let engine = EngineThread::start(body, publisher).unwrap();
 
-        let core = Core::new(file, store, engine, layout, report).unwrap();
+        let core = Core::new(
+            file,
+            crate::outputs::Machine {
+                config: prism_core::MachineConfig::default(),
+                path: None,
+                outputs: crate::outputs::OutputSupervisor::new(
+                    enrolment,
+                    Box::new(crate::outputs::MockDevices::default()),
+                    crate::outputs::OutputContext {
+                        cid: prism_protocols::Cid::from_u128(1),
+                        source_name: "PrismDMX test".to_owned(),
+                    },
+                ),
+            },
+            store,
+            engine,
+            layout,
+            report,
+        )
+        .unwrap();
         (core, frames, driver)
     }
 

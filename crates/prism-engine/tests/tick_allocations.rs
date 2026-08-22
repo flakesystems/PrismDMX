@@ -194,6 +194,61 @@ fn a_warm_tick_makes_no_allocator_call_at_all() {
     assert_eq!(harness.engine.stats().panics, 0);
 }
 
+/// S33: an output added, removed and re-addressed while the show runs, and the
+/// tick that takes it on calls the allocator **no** more than the ones around
+/// it — which is zero.
+///
+/// The whole of the hot-reconfiguration claim is here. `FrameEnrolment` puts the
+/// arriving subscriber's buffer where the tick can take it with one atomic load
+/// and a `try_lock`, and takes the departing one's back so that it is freed on
+/// this thread rather than on the tick's. If either half were done the obvious
+/// way — `Vec::push` on a full vector, or dropping the link where it was
+/// removed — this test is what would say so.
+#[test]
+fn taking_a_subscriber_on_and_giving_one_up_costs_the_tick_no_allocation() {
+    let mut harness = harness(64, 4);
+    let clock = ManualClock::new();
+    let enrolment = harness.engine.publisher_mut().enrolment();
+
+    for index in 0..200 {
+        cycle(&mut harness, &clock, index);
+    }
+    harness.engine.reset_stats();
+
+    // Everything the *daemon* would do is done here, off the measured region:
+    // the buffers are allocated by whoever asks for the output, never by the
+    // tick. What is measured is the tick that picks them up.
+    let mut arriving = Vec::new();
+    for _ in 0..8 {
+        arriving.push(enrolment.subscribe().unwrap());
+    }
+    let leaving: Vec<_> = arriving.drain(..4).collect();
+    for subscriber in &leaving {
+        enrolment.unsubscribe(subscriber.id());
+    }
+
+    let calls = allocator_calls(|| {
+        // The first of these is the tick that takes on four and gives up four
+        // at once; the rest are ordinary ticks with twice the subscribers.
+        for index in 0..100 {
+            cycle(&mut harness, &clock, index);
+        }
+    });
+
+    println!("allocator calls in the tick that took on 4 subscribers and gave up 4: {calls}");
+    assert_eq!(calls, 0, "the tick called the allocator {calls} times");
+    // And the frames really did change hands: the four that stayed are reading,
+    // the four that left are not.
+    for subscriber in &mut arriving {
+        assert!(subscriber.refresh() || subscriber.frame().sequence() > 0);
+    }
+    let freed = enrolment.collect();
+    assert_eq!(
+        freed, 4,
+        "the departed buffers are freed here, not on the tick"
+    );
+}
+
 #[test]
 fn the_real_clock_path_is_allocation_free_too() {
     // The manual clock proves the engine allocates nothing. This proves the

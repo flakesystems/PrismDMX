@@ -8,7 +8,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{JsonPatchOp, OutputId, PlaybackId, ProgrammerState, output::OutputHealth};
+use crate::{
+    JsonPatchOp, OutputId, OutputInstance, PlaybackId, ProgrammerState, output::OutputHealth,
+};
 
 /// Severity of a [`Delta::Notice`], matching the logger levels in `CLAUDE.md`.
 #[derive(
@@ -72,6 +74,25 @@ pub enum Delta {
         /// Index of the current cue, if one is active.
         cue_index: Option<u32>,
     },
+    /// **This machine's** output patch changed — S33.
+    ///
+    /// Sent whole, like [`Self::ProgrammerChanged`] and for the same reason: it
+    /// is small and sparse, a rig is a handful of rows rather than a document,
+    /// and a client that had to diff a JSON patch to redraw five status lights
+    /// would be doing arithmetic to learn something it can simply be told.
+    ///
+    /// It is deliberately **not** a `ShowPatch`. The output patch is not show
+    /// content — see `Command::is_machine_command` — so it must not travel in
+    /// the document a client mirrors as the show, or a client would write the
+    /// venue's cabling into its idea of the show and a save would be next.
+    OutputsChanged {
+        /// The whole rig as it now stands, in output-number order.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(2)")
+        )]
+        outputs: Vec<OutputInstance>,
+    },
     /// A DMX output changed health.
     OutputHealth {
         /// The output concerned.
@@ -97,8 +118,8 @@ pub enum Delta {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Delta, ExecutorId, JsonPatchOp, JsonValue, NoticeLevel, OutputHealth, OutputId, PlaybackId,
-        ProgrammerState, SequenceId,
+        Delta, ExecutorId, JsonPatchOp, JsonValue, NoticeLevel, OutputHealth, OutputId,
+        OutputInstance, OutputKind, PlaybackId, ProgrammerState, SequenceId, UniverseId,
     };
 
     #[test]
@@ -154,6 +175,24 @@ mod tests {
         );
     }
 
+    /// S33: the rig travels whole, and it says which universes each output
+    /// carries — which is the routing an operator reads off a settings panel.
+    #[test]
+    fn the_output_patch_travels_whole() {
+        let delta = Delta::OutputsChanged {
+            outputs: vec![OutputInstance::new(
+                OutputId::new(1),
+                "Hall",
+                OutputKind::OpenDmx { serial: None },
+                [UniverseId::new(1)],
+            )],
+        };
+        let json = serde_json::to_string(&delta).unwrap();
+        assert!(json.starts_with(r#"{"t":"OutputsChanged""#), "{json}");
+        assert!(json.contains(r#""universes":[1]"#), "{json}");
+        assert_eq!(serde_json::from_str::<Delta>(&json).unwrap(), delta);
+    }
+
     #[test]
     fn the_dirty_flag_drives_the_console_save_led() {
         assert_eq!(
@@ -190,6 +229,9 @@ mod tests {
                 is_active: false,
                 cue_index: None,
             },
+            Delta::OutputsChanged {
+                outputs: Vec::new(),
+            },
             Delta::OutputHealth {
                 output_id: OutputId::new(0),
                 health: OutputHealth::Ok,
@@ -202,7 +244,7 @@ mod tests {
                 message: String::new(),
             },
         ];
-        assert_eq!(deltas.len(), 7);
+        assert_eq!(deltas.len(), 8);
         for delta in deltas {
             let json = serde_json::to_string(&delta).unwrap();
             let back: Delta = serde_json::from_str(&json).unwrap();

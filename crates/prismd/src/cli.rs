@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use prism_domain::UniverseId;
+use prism_domain::{OutputId, OutputInstance, OutputKind, UniverseId};
 
 use crate::log::Level;
 
@@ -33,6 +33,14 @@ pub const DEFAULT_WEBSOCKET: &str = "127.0.0.1:7373";
 /// [`crate::engine::frame_layout`] for why it is the desk's and not the show's.
 pub const DEFAULT_UNIVERSES: u32 = 64;
 
+/// The multicast hop limit an sACN output asked for on the command line gets.
+///
+/// One: the local segment, which is right for a lighting network that is one
+/// switch and wrong for a venue whose gateways are behind a router. A rig that
+/// needs more says so in its machine configuration, where the number is a field
+/// rather than a flag (`ARCHITECTURE_SPEC.md` §7.2).
+pub const DEFAULT_HOP_LIMIT: u32 = 1;
+
 /// What to do with the stage when the daemon stops.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Exit {
@@ -44,31 +52,58 @@ pub enum Exit {
     Blackout,
 }
 
-/// A DMX output the daemon should open.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum OutputSpec {
-    /// An output that accepts every frame and puts it nowhere.
-    /// `ARCHITECTURE_SPEC.md` §12's "daemon in mock-output mode".
-    Mock,
-    /// Art-Net, unicast to one node.
-    ArtNet {
-        /// Where the datagrams go.
-        target: SocketAddr,
-    },
-    /// sACN on the show's universes.
-    Sacn {
-        /// Where the datagrams go, when the venue forbids multicast. `None` is
-        /// the default and is multicast, which is what an sACN network
-        /// ordinarily is — an sACN group carries **one universe**, so a switch
-        /// that does IGMP snooping delivers it only to the ports that asked for
-        /// it (S10).
-        unicast: Option<SocketAddr>,
-    },
-    /// The Open DMX USB adapter, carrying exactly one universe (§7.1).
-    OpenDmx {
-        /// The universe on that cable.
-        universe: UniverseId,
-    },
+/// An output named on the command line, before the show has said which
+/// universes it patches.
+///
+/// **S33 replaced `OutputSpec` with the domain's own [`OutputInstance`]**: the
+/// rig is data now, and a second vocabulary for the same thing would be a second
+/// place to add an output kind. What the command line still cannot supply is the
+/// *universes* — a flag has nowhere to put a list, and the show is not open when
+/// the arguments are read — so an output built here carries none, and
+/// [`fill_universes`] fills them in from the show before anything is validated.
+///
+/// [`OutputInstance`]: prism_domain::OutputInstance
+pub type OutputSpec = OutputInstance;
+
+/// Fills in the universes of every command-line output that named none.
+///
+/// `--open-dmx 3` names its universe; the rest carry the show's, because that is
+/// what "put this show on this interface" means when a flag is all there is to
+/// say it with. Called once, in [`crate::Daemon::start`], after the show is open
+/// and before the rig is validated.
+#[must_use]
+pub fn fill_universes(outputs: &[OutputInstance], show: &[UniverseId]) -> Vec<OutputInstance> {
+    outputs
+        .iter()
+        .map(|output| {
+            if output.universes.is_empty() {
+                OutputInstance {
+                    universes: show.to_vec(),
+                    ..output.clone()
+                }
+            } else {
+                output.clone()
+            }
+        })
+        .collect()
+}
+
+/// A mock output carrying whatever the show patches — what `--mock-output`
+/// builds, as a value a test can put in [`Options`] directly.
+///
+/// `ARCHITECTURE_SPEC.md` §12 runs the end-to-end tests "against a daemon in
+/// mock-output mode", and every daemon target in this repository starts one this
+/// way. It is here rather than in a test helper because it has to stay exactly
+/// what the flag produces: two spellings of the mode would be two modes.
+#[must_use]
+pub fn mock_output(id: u32) -> OutputSpec {
+    OutputInstance::new(OutputId::new(id), "Mock output", OutputKind::Mock, [])
+}
+
+/// The next output number, so the flags are numbered 1, 2, 3 in the order they
+/// were typed.
+fn next_id(outputs: &[OutputInstance]) -> OutputId {
+    OutputId::new(u32::try_from(outputs.len() + 1).unwrap_or(u32::MAX))
 }
 
 /// Everything the daemon was told to be.
@@ -88,9 +123,29 @@ pub struct Options {
     pub fixtures: Option<PathBuf>,
     /// Universes the frame layout carries.
     pub universes: u32,
-    /// The outputs to open. Empty is a legitimate configuration: a daemon with
-    /// no output still holds a show and still answers clients.
+    /// Outputs named on the command line.
+    ///
+    /// **The whole rig for this run when it is not empty** — the machine
+    /// configuration's own is not read, and nothing is written back to it. See
+    /// [`crate::daemon::rig_for`] for the reasoning: a flag is what a test and a
+    /// bring-up use, and a daemon started with `--mock-output` must neither
+    /// inherit a venue's cabling nor overwrite it.
+    ///
+    /// Empty is the ordinary configuration and is what a desk runs: the rig
+    /// comes out of `prism_core::MachineConfig`, and S33's four commands edit
+    /// it. Empty on both sides is legitimate too — a daemon with no output still
+    /// holds a show and still answers clients.
     pub outputs: Vec<OutputSpec>,
+    /// Open every configured output with a **mock driver** instead of the real
+    /// one — S33.
+    ///
+    /// The daemon-wide form of `--mock-output`, and what makes S33's worked
+    /// example testable: a rig of two Open DMX adapters, an sACN node and two
+    /// Art-Net nodes can be configured, started and asserted frame by frame with
+    /// nothing plugged in and nothing on the network. `CLAUDE.md` requires
+    /// exactly that of every test, and this machine has a real SH-RS09B attached
+    /// that the suite must not open.
+    pub mock_devices: bool,
     /// Whether to open the named pipe or Unix domain socket.
     pub local: bool,
     /// The WebSocket address, or `None` to leave it closed.
@@ -132,6 +187,7 @@ impl Default for Options {
             fixtures: None,
             universes: DEFAULT_UNIVERSES,
             outputs: Vec::new(),
+            mock_devices: false,
             local: true,
             websocket: None,
             token: None,
@@ -198,6 +254,14 @@ Options:
   --sacn-to <ADDR>      an sACN output unicast to ADDR, for a venue whose
                         network forbids multicast (the port defaults to {})
   --open-dmx <N>        the Open DMX USB adapter, carrying universe N
+  --mock-devices        open every configured output with a mock driver
+                        instead of the real one, so a rig of adapters and
+                        nodes can be driven with nothing plugged in
+
+Outputs named above are the whole rig for this run: the machine configuration
+is not read and nothing is written back to it, and AddOutput and its three
+companions are refused. A daemon started with none of them uses the rig in
+machine.json, which is where a settings window puts it.
 
   --no-local            do not open the named pipe / Unix domain socket
   --websocket [ADDR]    open the WebSocket listener (default: {DEFAULT_WEBSOCKET})
@@ -268,19 +332,53 @@ where
                 }
                 options.universes = count;
             }
-            "--mock-output" => options.outputs.push(OutputSpec::Mock),
+            "--mock-output" => {
+                let id = next_id(&options.outputs);
+                options.outputs.push(mock_output(id.get()));
+            }
+            "--mock-devices" => options.mock_devices = true,
             "--artnet" => {
                 let text = value()?;
-                options.outputs.push(OutputSpec::ArtNet {
-                    target: socket_address(&text, prism_protocols::ART_NET_PORT)?,
-                });
+                let target = socket_address(&text, prism_protocols::ART_NET_PORT)?;
+                let id = next_id(&options.outputs);
+                options.outputs.push(OutputInstance::new(
+                    id,
+                    format!("Art-Net to {target}"),
+                    OutputKind::ArtNet {
+                        nodes: vec![target],
+                        sync: false,
+                        ports: Vec::new(),
+                    },
+                    [],
+                ));
             }
-            "--sacn" => options.outputs.push(OutputSpec::Sacn { unicast: None }),
+            "--sacn" => {
+                let id = next_id(&options.outputs);
+                options.outputs.push(OutputInstance::new(
+                    id,
+                    "sACN",
+                    OutputKind::Sacn {
+                        receivers: Vec::new(),
+                        ttl: DEFAULT_HOP_LIMIT,
+                        ports: Vec::new(),
+                    },
+                    [],
+                ));
+            }
             "--sacn-to" => {
                 let text = value()?;
-                options.outputs.push(OutputSpec::Sacn {
-                    unicast: Some(socket_address(&text, prism_protocols::E131_PORT)?),
-                });
+                let target = socket_address(&text, prism_protocols::E131_PORT)?;
+                let id = next_id(&options.outputs);
+                options.outputs.push(OutputInstance::new(
+                    id,
+                    format!("sACN unicast to {target}"),
+                    OutputKind::Sacn {
+                        receivers: vec![target],
+                        ttl: DEFAULT_HOP_LIMIT,
+                        ports: Vec::new(),
+                    },
+                    [],
+                ));
             }
             "--open-dmx" => {
                 let text = value()?;
@@ -295,7 +393,13 @@ where
                         UniverseId::MAX
                     )));
                 }
-                options.outputs.push(OutputSpec::OpenDmx { universe });
+                let id = next_id(&options.outputs);
+                options.outputs.push(OutputInstance::new(
+                    id,
+                    format!("Open DMX USB on universe {universe}"),
+                    OutputKind::OpenDmx { serial: None },
+                    [universe],
+                ));
             }
             "--no-local" => options.local = false,
             "--websocket" => {
@@ -373,11 +477,11 @@ fn socket_address(text: &str, default_port: u16) -> Result<SocketAddr, CliError>
 #[cfg(test)]
 mod tests {
     use super::{
-        CliError, DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET, Exit, Invocation, Options, OutputSpec,
-        parse, usage,
+        CliError, DEFAULT_HOP_LIMIT, DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET, Exit, Invocation,
+        Options, fill_universes, parse, usage,
     };
     use crate::log::Level;
-    use prism_domain::UniverseId;
+    use prism_domain::{OutputKind, UniverseId};
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::time::Duration;
@@ -417,19 +521,54 @@ mod tests {
             "--open-dmx",
             "3",
         ]);
+        let kinds: Vec<&OutputKind> = options.outputs.iter().map(|output| &output.kind).collect();
         assert_eq!(
-            options.outputs,
+            kinds,
             vec![
-                OutputSpec::Mock,
-                OutputSpec::Sacn { unicast: None },
-                OutputSpec::ArtNet {
-                    target: "192.168.1.50:6454".parse::<SocketAddr>().unwrap()
+                &OutputKind::Mock,
+                &OutputKind::Sacn {
+                    receivers: Vec::new(),
+                    ttl: DEFAULT_HOP_LIMIT,
+                    ports: Vec::new(),
                 },
-                OutputSpec::OpenDmx {
-                    universe: UniverseId::new(3)
+                &OutputKind::ArtNet {
+                    nodes: vec!["192.168.1.50:6454".parse::<SocketAddr>().unwrap()],
+                    sync: false,
+                    ports: Vec::new(),
                 },
+                &OutputKind::OpenDmx { serial: None },
             ],
             "in the order they were asked for"
+        );
+        // Numbered 1, 2, 3, 4 in that order, because the rig is data now and a
+        // row without a number is not one an operator can name.
+        let numbers: Vec<u32> = options
+            .outputs
+            .iter()
+            .map(|output| output.id.get())
+            .collect();
+        assert_eq!(numbers, vec![1, 2, 3, 4]);
+    }
+
+    /// A flag has nowhere to put a list of universes, so every kind but one
+    /// carries none until the show has been opened — [`fill_universes`] is what
+    /// fills them, and `--open-dmx` is the exception because it *is* a universe.
+    #[test]
+    fn a_flag_names_no_universes_except_the_one_that_is_a_universe() {
+        let options = options(&["--mock-output", "--open-dmx", "3"]);
+        assert!(options.outputs[0].universes.is_empty());
+        assert_eq!(options.outputs[1].universes, vec![UniverseId::new(3)]);
+
+        let filled = fill_universes(&options.outputs, &[UniverseId::new(1), UniverseId::new(2)]);
+        assert_eq!(
+            filled[0].universes,
+            vec![UniverseId::new(1), UniverseId::new(2)],
+            "the show's universes"
+        );
+        assert_eq!(
+            filled[1].universes,
+            vec![UniverseId::new(3)],
+            "and the one the flag named is left alone"
         );
     }
 
@@ -439,14 +578,21 @@ mod tests {
     #[test]
     fn sacn_is_multicast_unless_a_receiver_is_named() {
         assert_eq!(
-            options(&["--sacn"]).outputs,
-            vec![OutputSpec::Sacn { unicast: None }]
+            options(&["--sacn"]).outputs[0].kind,
+            OutputKind::Sacn {
+                receivers: Vec::new(),
+                ttl: DEFAULT_HOP_LIMIT,
+                ports: Vec::new(),
+            },
+            "no receiver named is multicast"
         );
         assert_eq!(
-            options(&["--sacn-to", "10.0.0.9"]).outputs,
-            vec![OutputSpec::Sacn {
-                unicast: Some("10.0.0.9:5568".parse::<SocketAddr>().unwrap())
-            }],
+            options(&["--sacn-to", "10.0.0.9"]).outputs[0].kind,
+            OutputKind::Sacn {
+                receivers: vec!["10.0.0.9:5568".parse::<SocketAddr>().unwrap()],
+                ttl: DEFAULT_HOP_LIMIT,
+                ports: Vec::new(),
+            },
             "the port defaults to E1.31's own"
         );
         assert!(refusal(&["--sacn-to", "somewhere"]).contains("not an address"));
@@ -457,12 +603,28 @@ mod tests {
     fn an_artnet_target_may_carry_its_own_port() {
         let options = options(&["--artnet", "10.0.0.2:6455"]);
         assert_eq!(
-            options.outputs,
-            vec![OutputSpec::ArtNet {
-                target: "10.0.0.2:6455".parse::<SocketAddr>().unwrap()
-            }]
+            options.outputs[0].kind,
+            OutputKind::ArtNet {
+                nodes: vec!["10.0.0.2:6455".parse::<SocketAddr>().unwrap()],
+                sync: false,
+                ports: Vec::new(),
+            }
         );
+        assert_eq!(options.outputs[0].name, "Art-Net to 10.0.0.2:6455");
         assert!(refusal(&["--artnet", "not-an-address"]).contains("192.168.1.50"));
+    }
+
+    /// S33: the flag that lets a rig of real kinds be driven with no device.
+    #[test]
+    fn every_output_can_be_opened_with_a_mock_driver() {
+        assert!(!Options::default().mock_devices, "off unless asked for");
+        let options = options(&["--mock-devices", "--open-dmx", "1"]);
+        assert!(options.mock_devices);
+        assert_eq!(
+            options.outputs[0].kind,
+            OutputKind::OpenDmx { serial: None },
+            "the rig is the real configuration; only the last inch is a double"
+        );
     }
 
     #[test]
@@ -621,6 +783,7 @@ mod tests {
             "--no-local",
             "--websocket",
             "--token",
+            "--mock-devices",
             "--surface-profile",
             "--mock-surface",
             "--blackout-on-exit",

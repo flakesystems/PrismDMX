@@ -328,6 +328,28 @@ export class DeskStore {
   /** The deltas that are not documents: the status panel, the save lamp, the messages. */
   #sideEffects(state: DeskState, delta: Delta): DeskState {
     switch (delta.t) {
+      // S33: the rig itself changed. It arrives whole, so the panel is
+      // replaced rather than patched - and the health of each row is carried
+      // over from what was there, because `OutputsChanged` is the
+      // *configuration* and `OutputHealth` is what a driver is doing.
+      case "OutputsChanged": {
+        const previous = state.outputs ?? [];
+        return {
+          ...state,
+          outputs: delta.outputs.map((output) => {
+            const standing = previous.find((entry) => entry.id === output.id);
+            return {
+              id: output.id,
+              name: output.name,
+              health: standing?.health ?? "Disconnected",
+              output,
+              framesSent: standing?.framesSent ?? 0,
+              lastError: standing?.lastError ?? null,
+              lastErrorAgoMs: standing?.lastErrorAgoMs ?? null,
+            };
+          }),
+        };
+      }
       case "OutputHealth": {
         if (state.outputs === null) {
           return state;

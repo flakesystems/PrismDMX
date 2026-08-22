@@ -10,7 +10,9 @@
 
 mod common;
 
-use common::{populated_session, populated_show, session_commands, show_commands};
+use common::{
+    machine_commands, populated_session, populated_show, session_commands, show_commands,
+};
 use prism_core::{SessionError, SessionState, ShowFile, session_patch_ops};
 use prism_domain::{
     Command, ExecutorId, FeatureGroup, JsonValue, SessionId, ViewId, WindowInstanceId, WindowType,
@@ -36,10 +38,32 @@ fn the_session_commands_are_the_session_group() {
     for command in session_commands() {
         assert!(command.is_session_command(), "{command:?}");
     }
-    // And the two groups together are still the whole protocol —
+    // And the three groups together are still the whole protocol —
     // `command_application.rs` carries why the sum is larger than the number of
-    // variants there are.
-    assert_eq!(show_commands().len() + session_commands().len(), 48);
+    // variants there are. **Three since S33**, which gave this machine's rig an
+    // applier of its own: see `common::machine_commands`.
+    assert_eq!(
+        show_commands().len() + session_commands().len() + machine_commands().len(),
+        52
+    );
+}
+
+/// S33's four are refused here, and they leave the session byte-identical while
+/// being refused — the same claim `a_show_command_is_not_a_session_command`
+/// makes, for the applier that did not exist when it was written.
+#[test]
+fn a_machine_command_is_not_a_session_command() {
+    for command in machine_commands() {
+        let mut session = populated_session();
+        let before = snapshot(&session);
+        assert!(!command.is_session_command(), "{command:?}");
+        assert_eq!(
+            session.apply(&command),
+            Err(SessionError::NotASessionCommand),
+            "{command:?}"
+        );
+        assert_eq!(snapshot(&session), before, "{command:?}");
+    }
 }
 
 #[test]

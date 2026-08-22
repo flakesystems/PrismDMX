@@ -28,10 +28,10 @@ use std::net::{SocketAddr, UdpSocket};
 use std::path::Path;
 use std::time::Duration;
 
-use prism_domain::{OutputHealth, UniverseId};
+use prism_domain::{OutputHealth, OutputId, OutputInstance, OutputKind, UniverseId};
 use prism_ipc::{Client, ClientEvent, ClientKind, Hello};
 use prism_protocols::OutputError;
-use prismd::cli::{Options, OutputSpec};
+use prismd::cli::{Options, mock_output};
 use prismd::daemon::Daemon;
 
 mod common;
@@ -41,7 +41,7 @@ fn options(dir: &Path) -> Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
         universes: 2,
-        outputs: vec![OutputSpec::Mock],
+        outputs: vec![mock_output(1)],
         local: false,
         log_level: prismd::log::Level::Warn,
         ..Options::default()
@@ -306,7 +306,16 @@ async fn an_artnet_output_puts_the_shows_look_on_the_wire() {
     let (socket, address) = receiver();
 
     let mut options = options(dir.path());
-    options.outputs = vec![OutputSpec::ArtNet { target: address }];
+    options.outputs = vec![OutputInstance::new(
+        OutputId::new(1),
+        format!("Art-Net to {address}"),
+        OutputKind::ArtNet {
+            nodes: vec![address],
+            sync: false,
+            ports: Vec::new(),
+        },
+        [],
+    )];
     let daemon = Daemon::start(&options).await.unwrap();
 
     let received = tokio::task::spawn_blocking(move || {
@@ -345,9 +354,16 @@ async fn an_sacn_output_unicast_carries_this_desks_identity() {
     let (socket, address) = receiver();
 
     let mut options = options(dir.path());
-    options.outputs = vec![OutputSpec::Sacn {
-        unicast: Some(address),
-    }];
+    options.outputs = vec![OutputInstance::new(
+        OutputId::new(1),
+        format!("sACN unicast to {address}"),
+        OutputKind::Sacn {
+            receivers: vec![address],
+            ttl: 1,
+            ports: Vec::new(),
+        },
+        [],
+    )];
     let daemon = Daemon::start(&options).await.unwrap();
 
     // The identity the daemon made on this start is the CID on the wire, which

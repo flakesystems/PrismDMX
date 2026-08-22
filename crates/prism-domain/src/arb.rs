@@ -88,3 +88,18 @@ where
 {
     proptest::collection::btree_map(any::<K>(), any::<V>(), 1..max.max(2))
 }
+
+/// A vector of at most `max` socket addresses.
+///
+/// `SocketAddr` has no `Arbitrary` of its own and does not want one: what the
+/// output patch holds is a lighting network's node addresses, so the strategy
+/// generates IPv4 addresses on plausible ports rather than exploring the shape
+/// of the type. See [`crate::OutputKind`].
+pub fn sockets(max: usize) -> impl Strategy<Value = Vec<std::net::SocketAddr>> {
+    proptest::collection::vec(
+        (any::<[u8; 4]>(), any::<u16>()).prop_map(|(octets, port)| {
+            std::net::SocketAddr::from((std::net::Ipv4Addr::from(octets), port))
+        }),
+        0..max,
+    )
+}

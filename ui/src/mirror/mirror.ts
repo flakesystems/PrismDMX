@@ -92,8 +92,14 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
       };
     }
     // Everything else describes something that is not one of the three
-    // documents: the output health panel, the save lamp, and a message for the
-    // operator. The store holds those; the mirror does not.
+    // documents: the output patch and its status lights, the save lamp, and a
+    // message for the operator. The store holds those; the mirror does not.
+    //
+    // `OutputsChanged` is deliberately here rather than in the show: the rig
+    // belongs to the **machine** and not to the show (S33), so writing it into
+    // the show document would put a hall's cabling into what a client believes
+    // the show to be - and a save would be next.
+    case "OutputsChanged":
     case "OutputHealth":
     case "DirtyFlag":
     case "Notice":

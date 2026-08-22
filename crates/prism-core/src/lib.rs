@@ -104,6 +104,7 @@ mod journal;
 mod library;
 mod mirror;
 mod objects;
+mod outputs;
 mod programmer;
 mod session;
 mod show;
@@ -112,12 +113,13 @@ mod store;
 mod testkit;
 
 pub use command::{Applied, Effect, show_patch_ops};
-pub use conflict::ShowIssue;
+pub use conflict::{ShowIssue, dark_universes};
 pub use desk::{DeskId, InvalidDeskId, MachineConfig};
 pub use file::{ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
 pub use library::{DEFAULT_SEARCH_LIMIT, FixtureLibrary, MAX_SEARCH_LIMIT, generic_profiles};
 pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
+pub use outputs::{MachineError, validate as validate_output};
 /// Re-exported from `prism-domain`, where S27 moved it so that it could travel
 /// on the wire as the answer to a `Query::PatchPreview`.
 pub use prism_domain::PatchConflict;

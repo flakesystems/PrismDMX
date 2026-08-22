@@ -28,7 +28,7 @@ use std::time::Duration;
 use prism_core::ShowStore;
 use prism_domain::{AttributeType, Command, FixtureId, SelectionMode, UniverseId};
 use prism_ipc::{Client, ClientEvent, ClientKind, Hello};
-use prismd::cli::{Options, OutputSpec};
+use prismd::cli::{Options, mock_output};
 use prismd::daemon::Daemon;
 
 mod common;
@@ -40,7 +40,7 @@ fn options(dir: &Path) -> Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
         universes: 2,
-        outputs: vec![OutputSpec::Mock],
+        outputs: vec![mock_output(1)],
         // The daemon under test opens the local transport; the tests that do
         // not need a client switch it off, because a pipe name is global to the
         // machine and two of these run at once under `cargo test`.

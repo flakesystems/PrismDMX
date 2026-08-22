@@ -401,6 +401,13 @@ impl SessionState {
             | Command::SetCueProperty { .. }
             | Command::AssignExecutor { .. }
             | Command::SaveShow => return Err(SessionError::NotASessionCommand),
+            // S33's four: this machine's rig, which is neither the show's nor
+            // the session's. `crate::outputs` has the argument, and
+            // `Command::is_machine_command` is what a daemon routes on.
+            Command::AddOutput { .. }
+            | Command::ConfigureOutput { .. }
+            | Command::RemoveOutput { .. }
+            | Command::SetOutputEnabled { .. } => return Err(SessionError::NotASessionCommand),
         };
         Ok(if ops.is_empty() {
             Applied::default()

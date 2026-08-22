@@ -120,6 +120,8 @@ impl ShowMirror {
     /// bar, and a mirror that ignored it would drift on exactly those fields.
     /// Every other delta describes something that is not show state
     /// (`SessionPatch`, which is [`SessionMirror`]'s, `ProgrammerChanged`,
+    /// `OutputsChanged` — S33's rig, which belongs to the *machine* and must
+    /// never be written into a document a client thinks is the show —
     /// `OutputHealth`, `DirtyFlag`, `Notice`) and is ignored here.
     ///
     /// # Errors
@@ -156,6 +158,7 @@ impl ShowMirror {
             }
             Delta::SessionPatch { .. }
             | Delta::ProgrammerChanged { .. }
+            | Delta::OutputsChanged { .. }
             | Delta::OutputHealth { .. }
             | Delta::DirtyFlag { .. }
             | Delta::Notice { .. } => Ok(()),
@@ -239,6 +242,7 @@ impl SessionMirror {
             Delta::ShowPatch { .. }
             | Delta::PlaybackState { .. }
             | Delta::ProgrammerChanged { .. }
+            | Delta::OutputsChanged { .. }
             | Delta::OutputHealth { .. }
             | Delta::DirtyFlag { .. }
             | Delta::Notice { .. } => Ok(()),

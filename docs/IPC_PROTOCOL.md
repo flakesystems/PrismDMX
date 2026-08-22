@@ -100,6 +100,38 @@ The `Snapshot` carries **three** documents: the show model, the session state an
 
 The show and the session travel as **documents** rather than as models, because `ShowPatch` and `SessionPatch` are RFC 6902 operations and an operation is only meaningful against a document root. `prism_core::ShowMirror` and `SessionMirror` apply them to exactly these two values.
 
+> **`OutputSnapshot` is seven fields since S33**, and the four it gained are what
+> a settings window has to draw:
+>
+> ```typescript
+> interface OutputSnapshot {
+>   id: OutputId;
+>   name: string;
+>   health: OutputHealth;
+>   output: OutputInstance | null;   // the configured row: kind, parameters,
+>                                    // universes, enabled
+>   framesSent: number;              // universes put on the wire, not datagrams
+>   lastError: string | null;
+>   lastErrorAgoMs: number | null;   // an age, not a time
+> }
+> ```
+>
+> Before S33 a client could be told an output was red and nothing about **why**,
+> or about **what had gone dark with it**. The configured row travels here as
+> well as in `Delta::OutputsChanged` (§6) so that the configuration and the
+> health arrive together: a client that had to join two lists to draw one line
+> would be doing arithmetic to learn something it can be told.
+>
+> `lastErrorAgoMs` is an **age rather than a time**, and that is the decision in
+> the field rather than a convenience. The daemon and the client have no shared
+> clock — one may be a browser on another machine — and a `std::time::Instant` is
+> not a thing that goes on a wire at all. The age is measured when the snapshot
+> is taken, so *four seconds ago* is true when it is read.
+>
+> All four are optional on the wire (`#[serde(default)]`), because a snapshot is
+> a message rather than a file: a client one version behind should meet a missing
+> field rather than a decode error.
+
 > **The snapshot carries `fixtureLibrary` as a number** *(S27, changed in S44)*. It is how many profiles **this desk** can embed — `prism_core::library` — and it is a property of the build rather than of the show: a show that has embedded one of them owns its copy from then on (§5's `EmbedFixtureType`, and the embedding rule on `Command::PatchFixture`).
 >
 > S27 carried the whole list here, which was right for the four built-in profiles and impossible for the two thousand S44 brought: the Open Fixture Library is 634 fixtures across 2 798 modes, which is several megabytes and would not fit in the 1 MiB frame §3 defines — and a menu of two thousand entries is not a menu. So the list is **searched** (§5.2's `SearchLibrary`) and this field is only what a client needs in order to say *2 157 profiles* beside the box. Zero is an ordinary state: it means no library is installed and the built-in profiles are all that is offered, which the daemon logs on the way up.
@@ -158,10 +190,88 @@ type Command =
   | { t: "SetEncoderBank"; group: FeatureGroup }
   | { t: "SetProgrammerPage"; page: number }
   | { t: "SelectProgrammerParam"; direction: "Prev" | "Next" }
-  | { t: "CommandLineInput"; text: string };
+  | { t: "CommandLineInput"; text: string }
+  // ---- This machine's own rig (S33) — neither the show's nor the session's ----
+  | { t: "AddOutput"; output: OutputInstance }
+  | { t: "ConfigureOutput"; id: OutputId; change: OutputChange }
+  | { t: "RemoveOutput"; id: OutputId }
+  | { t: "SetOutputEnabled"; id: OutputId; enabled: boolean };
 ```
 
 The second group is the concrete form of **D11**. The console and the UI draw on one vocabulary; there is no separate surface command set to keep in sync.
+
+> **Four commands for the venue's rig, and a third applier** *(S33)*. Until S33
+> an output was a `prismd` command-line flag built once at start-up, and every
+> network output was handed the show's whole set of universes. Two Art-Net nodes
+> therefore both received every universe, an sACN output could not be told to
+> carry only 3 and 4, and nothing could be added, removed or re-addressed without
+> restarting the daemon.
+>
+> ```typescript
+> interface OutputInstance {
+>   id: OutputId;            // the operator's number: `Output 3`
+>   name: string;
+>   kind: OutputKind;
+>   universes: UniverseId[]; // what this interface puts on the wire, in order
+>   enabled: boolean;
+> }
+>
+> type OutputKind =
+>   | { t: "Mock" }
+>   | { t: "OpenDmx"; serial: string | null }
+>   | { t: "ArtNet"; nodes: string[]; sync: boolean; ports: ArtNetPort[] }
+>   | { t: "Sacn"; receivers: string[]; ttl: number; ports: SacnPort[] };
+>
+> interface ArtNetPort { universe: UniverseId; net: number; subNet: number; port: number; }
+> interface SacnPort   { universe: UniverseId; sacnUniverse: number; priority: number; }
+>
+> type OutputChange =
+>   | { t: "Name"; name: string }
+>   | { t: "Kind"; kind: OutputKind }
+>   | { t: "Universes"; universes: UniverseId[] };
+> ```
+>
+> **Where the rig lives is the decision, and it is neither the show nor the
+> session.** It is `prism_core::MachineConfig`, beside the desk identity: a show
+> carried to another hall on a stick must not bring the first hall's cabling with
+> it, which is the argument `prism_core::desk` already makes for the sACN CID, and
+> a rig is a property of the *building*. The session is not a home for it either,
+> because `ARCHITECTURE_SPEC.md` §4.1 persists the session **with the show** and
+> it would travel by the same route. So `Command::is_machine_command` is a third
+> predicate, `MachineConfig::apply` is a third applier, and both of the other two
+> refuse these four by name.
+>
+> **None of the four is undoable**, and that follows from where they live rather
+> than from a separate decision: the Oops journal is the show's, it is cleared
+> when a show is loaded, and an undo that re-addressed a node would move light on
+> a stage while somebody was driving it — which is §6.1's rule for playback
+> actions, arrived at by another road.
+>
+> `ConfigureOutput` carries **one field**, for `SetCueProperty`'s reason: one
+> command carrying the whole row would make a client read it, change one member
+> and send the rest back, and two people in a settings window — one re-addressing
+> a node, one renaming it — would each undo the other. The number is not among the
+> fields, because it is the key the output is filed under: changing it is a
+> `RemoveOutput` and an `AddOutput`, said out loud.
+>
+> **A rename costs the rig nothing.** `prismd`'s supervisor restarts a driver only
+> when the kind, the universes, the number or the enabled flag changed, so an
+> operator who typed a better name does not watch their rig blink.
+>
+> **What is validated and what is not.** An Open DMX adapter carries exactly one
+> universe because that is what the cable is (`ARCHITECTURE_SPEC.md` §7.1); an
+> Art-Net output with no node address would unicast to nobody; an sACN priority
+> above 200 is refused rather than clamped, because a desk that quietly lowered a
+> number an operator typed would take over a rig it was told not to. Whether the
+> *device is there* is deliberately not validated: an unplugged cable is an
+> ordinary state of a correct configuration, and a desk that refused the row could
+> not be configured before the get-in.
+>
+> **A patched universe no output carries is reported, not refused**
+> (`prism_core::ShowIssue::UniverseNotOutput`): a rig is built over an afternoon,
+> and an operator whose universe 7 goes nowhere has to read that before the show
+> rather than discover it when the light does not come up. The daemon says it on
+> the way up and again as a `Delta::Notice` whenever the rig changes.
 
 > **Four verbs over six things, and one command each** *(S40)*. `Delete`,
 > `Copy`, `Move` and `Label` name a **thing** rather than a pool:
@@ -428,6 +538,7 @@ type Delta =
   | { t: "SessionPatch"; ops: JsonPatchOp[] }     // views, windows, pages, selection
   | { t: "ProgrammerChanged"; state: ProgrammerState }
   | { t: "PlaybackState"; playback: PlaybackId; isActive: boolean; cueIndex: number | null }
+  | { t: "OutputsChanged"; outputs: OutputInstance[] }   // this machine's rig (S33)
   | { t: "OutputHealth"; outputId: OutputId; health: OutputHealth }
   | { t: "DirtyFlag"; unsavedChanges: boolean }   // drives the X-Touch Save LED
   | { t: "Notice"; level: "Info" | "Warn" | "Error"; message: string };
@@ -442,6 +553,21 @@ Deltas are ordered per connection. A client that has applied every delta since i
 > **It was `ExecutorState` until S40**, and the rename is that session's playback change in one line: a cue list on no fader can now play, so what reports is a `PlaybackId` — an executor or a sequence — and the two fields are written into the row that playback belongs to. A strip gets exactly what it got before, because an executor reports as `{ t: "Executor", executorId }`.
 >
 > And it is **silent while a fade runs**. A cue index changes when a cue changes, not when a level does, so this delta does not move at playback rates — which matters because it moves the show *document*, and a client that re-asks a question on every show change (`Query::StorePreview`, §5.2) would otherwise be asking it per frame.
+
+> **`OutputsChanged` carries the rig whole** *(S33)*, like `ProgrammerChanged`
+> and for the same reason: it is small and sparse, a rig is a handful of rows
+> rather than a document, and a client that had to diff a JSON patch to redraw
+> five status lights would be doing arithmetic to learn something it can be told.
+>
+> It is deliberately **not** a `ShowPatch`. The rig belongs to the *machine* and
+> not to the show (§5's S33 note), so putting it in the document a client mirrors
+> as the show would write a hall's cabling into what that client believes the
+> show to be — and a save would be next. `prism_core::ShowMirror` ignores it by
+> name for exactly that reason.
+>
+> It says what the rig **is**; `OutputHealth` says what a driver is *doing*. A
+> row that has just arrived is `Disconnected` until its driver says otherwise,
+> which is the truth rather than an omission.
 
 ---
 
@@ -499,4 +625,6 @@ A client is never a dependency of the engine. Disconnecting every client leaves 
 | **A store says what it will do first (§5.2)** | Record a script of stores and questions off a running daemon; assert every question was answered, broadcast **no** deltas, and left the sequences, the presets and the executors exactly as the step before it did — and that the counts a preview answered with are the cue the daemon ended up holding *(S28: `crates/prismd/tests/ui_show.rs`. The same file asserts the session's hardest claim, that **editing a preset moves the values of the cues that reference it**: the recorded cue's blues change and its whites, which the store never mentioned, do not)* |
 | **Each store mode does what its name says (§5)** | Assert on the **stored cue** rather than on the command being accepted, for every mode and against a cue that already exists; assert that a cue loaded with `EditCue` and updated unchanged is **byte-identical**, that every `presetRef` survives the round trip, and that the update state clears on a Clear, a delete and another load *(S39: `crates/prism-core/tests/store_modes.rs`, plus the same claims off a running daemon in `crates/prismd/tests/ui_show.rs` — where the preview of each mode is compared against the cue the daemon ended up holding)* |
 | **Queries change nothing (§5.2)** | Record a script of commands and questions off a running daemon; assert every question was answered, broadcast **no** deltas at all, and left the patch and the profiles exactly as the step before it did *(S27: `crates/prismd/tests/ui_patch.rs`. The same file asserts the harder half — that a preview is what the patch that follows it does: the address a preview called free is the address the fixture ends up at, and the overlap a preview named before the command is the overlap `Show::conflicts` reports afterwards)* |
+| **The output patch (S33)** | Twelve universes across five outputs of three kinds, configured entirely from commands against a running daemon, with **every driver a recording double** (`--mock-devices`) — each is asserted to have been given exactly the universes its row named and no others. Adding, removing and re-addressing one mid-show is asserted on the *captured frame sequence*: the outputs that did not change have no silence over 250 ms across the whole reconfiguration, which is S18's threshold. A driver that loses its device and then panics degrades alone, and the tick misses nothing over it *(S33: `crates/prismd/tests/outputs.rs`)* |
+| **A rig is not show content (S33)** | A show saved twice on a desk with a configured rig is read back as **bytes** and must not contain a node address, an adapter serial or an output name; the machine configuration beside it must contain all three, and a second start must find the rig where it left it *(S33: `crates/prism-core/tests/outputs.rs`, `crates/prismd/tests/outputs.rs`)*. The structural half is `desk.rs`'s `outputs_are_not_show_content`, written after `desk_id_is_not_show_content` |
 | Transport parity | Run the full suite over both named pipe / UDS and WebSocket; results must be identical *(S16: one suite, called three times — the third transport is the in-process duplex — plus a scripted session recorded over each and compared as bytes)* |

@@ -159,10 +159,56 @@ describe("deltas", () => {
     expect(store.getState().unsavedChanges).toBe(true);
 
     store.applyDelta({ t: "OutputHealth", outputId: 1, health: "Degraded" });
-    expect(store.getState().outputs).toEqual([{ id: 1, name: "Mock", health: "Degraded" }]);
+    expect(store.getState().outputs?.map((output) => [output.id, output.health])).toEqual([
+      [1, "Degraded"],
+    ]);
     // An output nobody has heard of changes nothing rather than inventing a row.
     store.applyDelta({ t: "OutputHealth", outputId: 9, health: "Disconnected" });
-    expect(store.getState().outputs).toEqual([{ id: 1, name: "Mock", health: "Degraded" }]);
+    expect(store.getState().outputs?.map((output) => [output.id, output.health])).toEqual([
+      [1, "Degraded"],
+    ]);
+  });
+
+  /// S33: the rig itself changes while the daemon runs, and it arrives whole.
+  it("replaces the rig when it changes and keeps the lights that were on it", () => {
+    const store = new DeskStore();
+    store.applySnapshot(snapshot());
+    store.applyDelta({ t: "OutputHealth", outputId: 1, health: "Ok" });
+
+    store.applyDelta({
+      t: "OutputsChanged",
+      outputs: [
+        { id: 1, name: "Hall dimmers", kind: { t: "Mock" }, universes: [1], enabled: true },
+        {
+          id: 2,
+          name: "Stage left node",
+          kind: { t: "ArtNet", nodes: ["10.0.0.9:6454"], sync: false, ports: [] },
+          universes: [5, 6],
+          enabled: true,
+        },
+      ],
+    });
+
+    const outputs = store.getState().outputs ?? [];
+    expect(outputs.map((output) => [output.id, output.name])).toEqual([
+      [1, "Hall dimmers"],
+      [2, "Stage left node"],
+    ]);
+    expect(outputs[0]?.health).toBe("Ok");
+    expect(outputs[0]?.output?.universes).toEqual([1]);
+    // A row nobody has heard from yet is dark rather than green: the delta says
+    // what the rig *is*, and what a driver is doing is `OutputHealth`'s.
+    expect(outputs[1]?.health).toBe("Disconnected");
+    expect(outputs[1]?.output?.kind).toEqual({
+      t: "ArtNet",
+      nodes: ["10.0.0.9:6454"],
+      sync: false,
+      ports: [],
+    });
+
+    // An output taken out of the rig leaves the panel with it.
+    store.applyDelta({ t: "OutputsChanged", outputs: [] });
+    expect(store.getState().outputs).toEqual([]);
   });
 
   it("keeps notices, newest last, and forgets the oldest", () => {

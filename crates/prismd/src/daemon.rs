@@ -29,25 +29,24 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use prism_core::{ShowFile, ShowStore};
-use prism_domain::{Delta, OutputHealth, OutputId, UniverseId};
+use prism_core::{MachineConfig, ShowFile, ShowStore};
+use prism_domain::{Delta, OutputHealth, OutputId, OutputInstance, UniverseId};
 use prism_engine::{FrameLayout, FramePublisher, FrameSubscriber, PlaybackReport};
 use prism_ipc::{
     Server, ServerConfig, TelemetryFrame, local::LocalListener, websocket::WebSocketListener,
 };
-use prism_protocols::{
-    ArtNetConfig, ArtNetOutput, Destination, DmxOutput, MockOutput, MockOutputHandle, OpenDmxUsb,
-    OutputThread, RunnerConfig, SacnConfig, SacnDestination, SacnOutput, SystemUdp, spawn,
-    system_backend,
-};
+use prism_protocols::MockOutputHandle;
 
-use crate::cli::{Exit, Options, OutputSpec};
+use crate::cli::{Exit, Options};
 use crate::core::{Core, build_body};
 use crate::engine::EngineThread;
 use crate::lock::{DaemonLock, LockError};
 use crate::log;
+use crate::outputs::{
+    Machine, MockDevices, OutputContext, OutputFactory, OutputSupervisor, SystemOutputs,
+};
 use crate::paths;
-use crate::server::{Desk, DeskHandler, OutputEntry};
+use crate::server::{Desk, DeskHandler};
 use crate::surface::{SURFACE_PERIOD, SurfaceLink, SurfacePort};
 use prism_surface::Bindings;
 
@@ -134,8 +133,6 @@ impl From<prism_core::StoreError> for StartError {
 pub struct Daemon {
     desk: Arc<Desk>,
     server: Server,
-    outputs: Vec<OutputThread>,
-    recordings: Vec<MockOutputHandle>,
     telemetry: FrameSubscriber,
     /// Whether the engine has published its first frame — see [`Self::published`].
     telemetry_started: bool,
@@ -156,7 +153,7 @@ impl core::fmt::Debug for Daemon {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Daemon")
             .field("endpoints", &self.endpoints())
-            .field("outputs", &self.outputs.len())
+            .field("outputs", &self.desk.core().outputs().entries().len())
             .field("exit", &self.exit)
             .finish_non_exhaustive()
     }
@@ -235,20 +232,45 @@ impl Daemon {
 
         let mut publisher = FramePublisher::new(Arc::clone(&layout));
         let source_name = source_name(&show_path);
-        let opened = open_outputs(
-            &options.outputs,
-            &mut publisher,
-            &machine,
-            &source_name,
-            &file,
-        );
         // The telemetry channel is a subscriber like any driver, so what a
         // client sees is the frame the fixtures got rather than a second
-        // calculation of it. Subscribed last, and still before the tick starts.
+        // calculation of it. Taken **before** the outputs and directly off the
+        // publisher, because it is the one subscriber that is never
+        // reconfigured — every other one now joins and leaves through the
+        // enrolment (S33).
         let telemetry = crate::engine::telemetry_subscriber(&mut publisher);
 
-        let output_count = opened.threads.len();
-        let entries = opened.entries.clone();
+        // Which rig this run uses, and whether it is this machine's to change.
+        // See `rig_for`: outputs named on the command line are the whole rig for
+        // the run and are not written back, so a daemon started with
+        // `--mock-output` neither inherits a venue's cabling nor overwrites it.
+        let (rig, machine_path) = rig_for(options, &machine, &file, &data_dir);
+        let factory: Box<dyn OutputFactory> = if options.mock_devices {
+            log::info(
+                "output",
+                "every output is opened with a mock driver (--mock-devices):                  no device is touched and nothing goes on the network",
+            );
+            Box::new(MockDevices::default())
+        } else {
+            Box::new(SystemOutputs::default())
+        };
+        let mut outputs = OutputSupervisor::new(
+            publisher.enrolment(),
+            factory,
+            OutputContext {
+                cid: crate::machine::cid_of(&machine),
+                source_name: source_name.clone(),
+            },
+        );
+        outputs.reconcile(&rig);
+        let output_count = outputs.entries().len();
+        // Said once on the way up, before anything is on stage: a universe the
+        // patch uses and no cable carries is a legitimate state and never a
+        // silent one (`prism_core::ShowIssue::UniverseNotOutput`).
+        for issue in prism_core::dark_universes(&file.show, &outputs.carried_universes()) {
+            log::warn("output", &issue.to_string());
+        }
+
         let engine = EngineThread::start(body, publisher)?;
 
         // Joined **after** the engine is running and **before** anything can
@@ -258,9 +280,29 @@ impl Daemon {
         // engine and output start-up to run in.
         let mut file = file;
         file.library = join_library_load(loading);
-        let core = Core::new(file, store, engine, Arc::clone(&layout), report)
-            .map_err(StartError::Patch)?;
-        let desk = Arc::new(Desk::new(core, entries));
+        // The rig this run is using, so that a snapshot shows what is actually
+        // there. When the command line supplied it, `machine_path` is `None`,
+        // the stored configuration is left alone and the four output commands
+        // are refused.
+        let machine = if machine_path.is_some() {
+            machine
+        } else {
+            MachineConfig::with_outputs(machine.desk_id(), rig.clone())
+        };
+        let core = Core::new(
+            file,
+            Machine {
+                config: machine,
+                path: machine_path,
+                outputs,
+            },
+            store,
+            engine,
+            Arc::clone(&layout),
+            report,
+        )
+        .map_err(StartError::Patch)?;
+        let desk = Arc::new(Desk::new(core));
 
         // 4. The listeners, and only then their addresses.
         let server = Server::with_config(
@@ -320,8 +362,6 @@ impl Daemon {
         let mut daemon = Self {
             desk,
             server,
-            outputs: opened.threads,
-            recordings: opened.recordings,
             telemetry,
             telemetry_started: false,
             layout,
@@ -400,8 +440,18 @@ impl Daemon {
     /// gate is what this exists for**: *assert the output frame sequence has no
     /// gap across the whole run, on captured frames rather than by watching*.
     #[must_use]
-    pub fn recorded_outputs(&self) -> &[MockOutputHandle] {
-        &self.recordings
+    pub fn recorded_outputs(&self) -> Vec<MockOutputHandle> {
+        self.desk.core().outputs().recordings()
+    }
+
+    /// What **one** mock output has been given, by output number — S33.
+    ///
+    /// The worked example asks each driver what it was handed, so it has to be
+    /// able to name one: `recorded_outputs` in a rig of five is five recordings
+    /// in output-number order and no way to say *the sACN node*.
+    #[must_use]
+    pub fn recorded_output(&self, id: OutputId) -> Option<MockOutputHandle> {
+        self.desk.core().outputs().recording(id)
     }
 
     /// The IPC server, for a caller that wants to know about the connections.
@@ -439,11 +489,16 @@ impl Daemon {
         let mut playback = tokio::time::interval(PLAYBACK_PERIOD);
         let mut sequence = 0u64;
         let mut buffer = Vec::new();
-        let mut health: Vec<OutputHealth> = self
+        // Keyed by output number rather than by position, because the rig can
+        // change under this loop now (S33): a `Vec` in step with a list that
+        // grew and shrank would compare one output's health against another's.
+        let mut health: std::collections::BTreeMap<OutputId, OutputHealth> = self
             .desk
+            .core()
             .outputs()
-            .iter()
-            .map(|output| output.status.health())
+            .entries()
+            .into_iter()
+            .map(|output| (output.id, output.status.health()))
             .collect();
 
         let deadline = run_for.map(|duration| tokio::time::Instant::now() + duration);
@@ -559,12 +614,20 @@ impl Daemon {
     }
 
     /// Outputs whose status light has changed since the last look.
-    fn output_health_changes(&self, seen: &mut [OutputHealth]) -> Vec<Delta> {
+    ///
+    /// **Keyed by output number since S33**, because the rig changes while the
+    /// daemon runs: an output that has gone is dropped from the record, one that
+    /// has arrived is reported the first time it says anything, and a position
+    /// in a list is no longer a stable name for an interface.
+    fn output_health_changes(
+        &self,
+        seen: &mut std::collections::BTreeMap<OutputId, OutputHealth>,
+    ) -> Vec<Delta> {
         let mut deltas = Vec::new();
-        for (output, seen) in self.desk.outputs().iter().zip(seen.iter_mut()) {
+        let entries = self.desk.core().outputs().entries();
+        for output in &entries {
             let health = output.status.health();
-            if health != *seen {
-                *seen = health;
+            if seen.insert(output.id, health) != Some(health) {
                 log::info("output", &format!("{} is {health:?}", output.name));
                 deltas.push(Delta::OutputHealth {
                     output_id: output.id,
@@ -572,6 +635,10 @@ impl Daemon {
                 });
             }
         }
+        // An output that is no longer there stops being reported about. It is
+        // not a health change — a client learns it has gone from
+        // `Delta::OutputsChanged`, which is the fact rather than a symptom.
+        seen.retain(|id, _| entries.iter().any(|output| output.id == *id));
         deltas
     }
 
@@ -596,9 +663,7 @@ impl Daemon {
         // `OutputThread::stop` runs `DmxOutput::shutdown`, which is where sACN
         // ends its streams with three `Stream_Terminated` packets per universe
         // (S10). Before the engine, so the last frame is one the outputs sent.
-        for output in self.outputs.drain(..) {
-            output.stop();
-        }
+        self.desk.core().stop_outputs();
         log::info("daemon", "stopped");
         // The lock goes last, as it was taken first: it is dropped with `self`,
         // which removes the discovery file and releases the guard.
@@ -758,124 +823,68 @@ fn label_for(data_dir: &Path) -> String {
     format!("{hash:016x}")
 }
 
-/// Opens every output the command line asked for and puts each on its own
-/// thread.
+/// Which rig this run uses, and whether it is this machine's to change — S33.
 ///
-/// An output that cannot be built is reported and skipped rather than stopping
-/// the daemon: a missing USB adapter must not take the Art-Net rig with it, and
-/// `OutputRunner` is written so that a driver that cannot connect retries with
-/// backoff for as long as the show runs.
-fn open_outputs(
-    specs: &[OutputSpec],
-    publisher: &mut FramePublisher,
-    machine: &prism_core::MachineConfig,
-    source_name: &str,
+/// Two answers, and they go together:
+///
+/// - **Nothing on the command line**: the rig is `MachineConfig::outputs`, the
+///   configuration is this desk's, and `AddOutput` and its three companions edit
+///   it and write it back. This is what a venue runs.
+/// - **Outputs on the command line**: those are the whole rig for this run, the
+///   stored configuration is not used and not touched, and the four commands are
+///   refused (`MachineError::ConfiguredOnTheCommandLine`).
+///
+/// **Why not merge the two.** A flag is what a test and a bring-up use — every
+/// target in this repository starts a daemon with `--mock-output` — and a run
+/// like that must neither inherit a hall's cabling nor write a mock output into
+/// it. Adding to the stored rig would do the first; writing back would do the
+/// second; and letting the commands edit a rig nothing saves would be an
+/// `AddOutput` that appeared to work and vanished at the next restart.
+///
+/// The universes are filled in here because a flag has nowhere to put a list:
+/// `--open-dmx 3` names its own and everything else carries the show's. See
+/// [`crate::cli::fill_universes`].
+///
+/// Every row is validated on the way in, whichever side it came from, and one
+/// that is refused is **reported and skipped** rather than stopping the daemon —
+/// a hand-edited `machine.json` with one bad hop limit in it must not be a desk
+/// that will not start half an hour before a show.
+fn rig_for(
+    options: &Options,
+    machine: &MachineConfig,
     file: &ShowFile,
-) -> OpenOutputs {
-    let mut open = OpenOutputs::default();
-    let universes = show_universes(file);
-    for (index, spec) in specs.iter().enumerate() {
-        let id = OutputId::new(u32::try_from(index + 1).unwrap_or(u32::MAX));
-        match spec {
-            OutputSpec::Mock => {
-                let output = MockOutput::new(id, universes.clone());
-                open.recordings.push(output.handle());
-                open.attach(
-                    publisher,
-                    id,
-                    "Mock output".to_owned(),
-                    output,
-                    RunnerConfig::default(),
+    data_dir: &Path,
+) -> (Vec<OutputInstance>, Option<PathBuf>) {
+    if options.outputs.is_empty() {
+        let rig = validated(machine.outputs().to_vec());
+        return (rig, Some(paths::machine_config_path(data_dir)));
+    }
+    let rig = crate::cli::fill_universes(&options.outputs, &show_universes(file));
+    log::info(
+        "output",
+        &format!(
+            "{} output(s) named on the command line: this machine's own configuration \
+             is neither read nor written this run",
+            rig.len()
+        ),
+    );
+    (validated(rig), None)
+}
+
+/// Keeps the rows that are usable and says why about the ones that are not.
+fn validated(rig: Vec<OutputInstance>) -> Vec<OutputInstance> {
+    rig.into_iter()
+        .filter(|output| match prism_core::validate_output(output) {
+            Ok(()) => true,
+            Err(error) => {
+                log::error(
+                    "output",
+                    &format!("output {} is not usable: {error}", output.id),
                 );
+                false
             }
-            OutputSpec::ArtNet { target } => open.attach(
-                publisher,
-                id,
-                format!("Art-Net to {target}"),
-                ArtNetOutput::new(
-                    id,
-                    universes.clone(),
-                    SystemUdp::new(),
-                    ArtNetConfig {
-                        destination: Destination::Unicast(vec![*target]),
-                        ..ArtNetConfig::default()
-                    },
-                ),
-                RunnerConfig::default(),
-            ),
-            OutputSpec::Sacn { unicast } => open.attach(
-                publisher,
-                id,
-                unicast.map_or_else(
-                    || "sACN".to_owned(),
-                    |target| format!("sACN unicast to {target}"),
-                ),
-                SacnOutput::new(
-                    id,
-                    universes.clone(),
-                    SystemUdp::new(),
-                    SacnConfig {
-                        cid: crate::machine::cid_of(machine),
-                        source_name: source_name.to_owned(),
-                        destination: unicast.map_or(SacnDestination::Multicast, |target| {
-                            SacnDestination::Unicast(vec![target])
-                        }),
-                        ..SacnConfig::default()
-                    },
-                ),
-                RunnerConfig::default(),
-            ),
-            OutputSpec::OpenDmx { universe } => open.attach(
-                publisher,
-                id,
-                format!("Open DMX USB on universe {universe}"),
-                OpenDmxUsb::new(id, *universe, system_backend()),
-                RunnerConfig::for_profile(&prism_protocols::SH_RS09B),
-            ),
-        }
-    }
-    open
-}
-
-/// The outputs opened so far.
-///
-/// A type rather than two locals because [`OpenOutputs::attach`] is generic over
-/// the driver: `DmxOutput` is object-safe but a `Box<dyn DmxOutput>` is not
-/// itself one, and `OutputRunner` wants the concrete type so that its
-/// `catch_unwind` sits directly around the driver's own code.
-#[derive(Default)]
-struct OpenOutputs {
-    entries: Vec<OutputEntry>,
-    threads: Vec<OutputThread>,
-    /// The recordings of the mock outputs among them — see
-    /// [`Daemon::recorded_outputs`].
-    recordings: Vec<MockOutputHandle>,
-}
-
-impl OpenOutputs {
-    fn attach<O: DmxOutput + 'static>(
-        &mut self,
-        publisher: &mut FramePublisher,
-        id: OutputId,
-        name: String,
-        output: O,
-        config: RunnerConfig,
-    ) {
-        // Before the tick starts, always: `subscribe` allocates (S2).
-        let subscriber = publisher.subscribe();
-        match spawn(&format!("out-{}", id.get()), output, subscriber, config) {
-            Ok(thread) => {
-                log::info("output", &format!("{name} started"));
-                self.entries.push(OutputEntry {
-                    id,
-                    name,
-                    status: Arc::clone(thread.status()),
-                });
-                self.threads.push(thread);
-            }
-            Err(error) => log::error("output", &format!("{name} could not be started: {error}")),
-        }
-    }
+        })
+        .collect()
 }
 
 /// The universes an output carries: the ones the show patches, or universe 1 if
@@ -949,7 +958,7 @@ mod tests {
         let daemon = Daemon::start(&crate::cli::Options {
             data_dir: Some(dir.path().to_path_buf()),
             universes: 1,
-            outputs: vec![crate::cli::OutputSpec::Mock],
+            outputs: vec![crate::cli::mock_output(1)],
             local: false,
             log_level: crate::log::Level::Warn,
             ..crate::cli::Options::default()

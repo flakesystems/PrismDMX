@@ -14,8 +14,8 @@
 mod common;
 
 use common::{
-    cue, executor, fixture, group, par_type, patch_command, populated_show, preset, sequence,
-    session_commands, show_commands,
+    cue, executor, fixture, group, machine_commands, par_type, patch_command, populated_show,
+    preset, sequence, session_commands, show_commands,
 };
 use prism_core::{Effect, Show, ShowError};
 use prism_domain::{
@@ -34,18 +34,48 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
 }
 
 #[test]
-fn the_two_groups_together_are_the_whole_protocol() {
+fn the_three_groups_together_are_the_whole_protocol() {
     // A new command variant has to be given a home here, or this fails. The
-    // sum is larger than the forty-two variants there are, because two of the
+    // sum is larger than the forty-seven variants there are, because two of the
     // show forms are repeats — a `StoreSequence` into a list that exists and
     // into one that does not — and because S40's four generic verbs are in
-    // **both** lists, once with a view as their target and once without.
-    assert_eq!(show_commands().len() + session_commands().len(), 48);
+    // **two** of the lists, once with a view as their target and once without.
+    //
+    // **Three groups since S33**, which gave this machine's rig an applier of
+    // its own: the show's, the session's and the machine's, and every command
+    // is in exactly one of the three.
+    assert_eq!(
+        show_commands().len() + session_commands().len() + machine_commands().len(),
+        52
+    );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
+        assert!(!command.is_machine_command(), "{command:?}");
     }
     for command in session_commands() {
         assert!(command.is_session_command(), "{command:?}");
+        assert!(!command.is_machine_command(), "{command:?}");
+    }
+    for command in machine_commands() {
+        assert!(command.is_machine_command(), "{command:?}");
+        assert!(!command.is_session_command(), "{command:?}");
+    }
+}
+
+/// The rig is refused by the show applier and leaves the show byte-identical —
+/// the same claim `every_session_command_is_refused_and_changes_nothing` makes,
+/// for the applier S33 added.
+#[test]
+fn every_machine_command_is_refused_by_the_show_and_changes_nothing() {
+    for command in machine_commands() {
+        let mut show = populated_show();
+        let before = snapshot(&show);
+        assert_eq!(
+            show.apply(&command),
+            Err(ShowError::NotAShowCommand),
+            "{command:?}"
+        );
+        assert_eq!(snapshot(&show), before, "{command:?}");
     }
 }
 

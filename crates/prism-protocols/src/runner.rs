@@ -150,6 +150,53 @@ pub struct OutputStatus {
     panics: AtomicU64,
     connections: AtomicU64,
     stop: AtomicBool,
+    /// The last thing that went wrong, encoded — see [`OutputFault`] and
+    /// [`encode_fault`]. Two words rather than a string behind a lock, because
+    /// the writer is a driver thread that must not be held up by a reader and
+    /// because §3.1's rules are easier to keep when there is nothing to keep
+    /// them about.
+    fault: AtomicU8,
+    fault_universe: AtomicU64,
+    /// Milliseconds since this status was made, at the moment of the fault.
+    /// Zero means *nothing has gone wrong yet*, which the epoch below makes
+    /// safe: a fault in the first millisecond of a driver's life reads as one
+    /// millisecond, not as none.
+    fault_at: AtomicU64,
+}
+
+/// The last thing that went wrong on an output, and how long ago.
+///
+/// **Relative rather than absolute**, and that is deliberate (S33): a status
+/// panel wants *four seconds ago*, the daemon and the client have no shared
+/// clock, and an `Instant` is not a thing that can be put on a wire at all. The
+/// age is measured when the status is read, so it is always current.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutputFault {
+    /// What went wrong.
+    pub error: OutputError,
+    /// How long ago, at the moment the status was read.
+    pub ago: Duration,
+}
+
+/// `OutputError` as one byte plus a universe. The mapping is private and its
+/// round trip is asserted, for `encode_health`'s reason.
+const fn encode_fault(error: OutputError) -> (u8, u64) {
+    match error {
+        OutputError::Disconnected => (1, 0),
+        OutputError::Faulted => (2, 0),
+        OutputError::UniverseNotCarried(universe) => (3, universe.get() as u64),
+    }
+}
+
+fn decode_fault(code: u8, universe: u64) -> Option<OutputError> {
+    match code {
+        1 => Some(OutputError::Disconnected),
+        2 => Some(OutputError::Faulted),
+        3 => Some(OutputError::UniverseNotCarried(UniverseId::new(
+            u32::try_from(universe).unwrap_or(0),
+        ))),
+        _ => None,
+    }
 }
 
 /// `OutputHealth` as one byte. The mapping is private, and the round trip is
@@ -180,6 +227,35 @@ impl OutputStatus {
             health: AtomicU8::new(encode_health(OutputHealth::Disconnected)),
             ..Self::default()
         }
+    }
+
+    /// The last thing that went wrong on this interface, and how long ago —
+    /// S33.
+    ///
+    /// `None` until something does. The age is measured against `epoch`, which
+    /// is the runner's own start: a caller that holds the runner passes
+    /// [`OutputRunner::now`], and the daemon passes the elapsed time of the
+    /// thread it started. See [`OutputFault`] for why it is an age and not an
+    /// instant.
+    #[must_use]
+    pub fn last_error(&self, elapsed: Duration) -> Option<OutputFault> {
+        let at = self.fault_at.load(Ordering::Relaxed);
+        if at == 0 {
+            return None;
+        }
+        let error = decode_fault(
+            self.fault.load(Ordering::Relaxed),
+            self.fault_universe.load(Ordering::Relaxed),
+        )?;
+        Some(OutputFault {
+            error,
+            // `at - 1` undoes the offset `record_fault` adds to keep zero
+            // meaning *nothing yet*. Saturating, because the two numbers are
+            // read one after the other and a driver that faulted between them
+            // would otherwise produce a negative age — which as a `Duration`
+            // is a panic.
+            ago: elapsed.saturating_sub(Duration::from_millis(at - 1)),
+        })
     }
 
     /// What the status light for this interface should show.
@@ -238,6 +314,22 @@ impl OutputStatus {
 
     fn count_error(&self) {
         self.errors.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records what went wrong and when, for a status panel to show.
+    ///
+    /// `at` is the driver's own elapsed time; `+ 1` so that a fault in the first
+    /// millisecond is not indistinguishable from no fault at all.
+    fn record_fault(&self, error: OutputError, at: Duration) {
+        let (code, universe) = encode_fault(error);
+        self.fault.store(code, Ordering::Relaxed);
+        self.fault_universe.store(universe, Ordering::Relaxed);
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a driver that has been running for 584 million years has other problems"
+        )]
+        self.fault_at
+            .store(at.as_millis() as u64 + 1, Ordering::Relaxed);
     }
 
     fn count_panic(&self) {
@@ -359,7 +451,7 @@ impl<O: DmxOutput, C: Clock> OutputRunner<O, C> {
         self.next_wake = now + self.config.cadence;
 
         if self.output.health().is_sending() {
-            let outcome = self.send_step();
+            let outcome = self.send_step(now);
             if outcome == StepOutcome::Disconnected {
                 // Losing the interface starts the backoff, rather than the
                 // first failed reconnection starting it: otherwise every
@@ -389,11 +481,17 @@ impl<O: DmxOutput, C: Clock> OutputRunner<O, C> {
             }
             Ok(Err(error)) => {
                 self.status.count_error();
+                self.status.record_fault(error, now);
                 self.status.set_health(error.health());
                 StepOutcome::ConnectFailed
             }
             Err(_) => {
                 self.status.count_panic();
+                // A panic *is* "the frame did not reach the interface intact",
+                // and a status panel that showed nothing at all for the one
+                // fault `CLAUDE.md`'s zero-crash invariant is really about
+                // would be the least useful it could be.
+                self.status.record_fault(OutputError::Faulted, now);
                 self.status.set_health(OutputHealth::Degraded);
                 StepOutcome::Panicked
             }
@@ -404,7 +502,7 @@ impl<O: DmxOutput, C: Clock> OutputRunner<O, C> {
         outcome
     }
 
-    fn send_step(&mut self) -> StepOutcome {
+    fn send_step(&mut self, now: Duration) -> StepOutcome {
         let Self {
             output,
             subscriber,
@@ -413,7 +511,7 @@ impl<O: DmxOutput, C: Clock> OutputRunner<O, C> {
             ..
         } = self;
         let attempt = catch_unwind(AssertUnwindSafe(|| {
-            Self::send_all(output, subscriber, mapped, status)
+            Self::send_all(output, subscriber, mapped, status, now)
         }));
         match attempt {
             Ok(outcome) => {
@@ -424,6 +522,7 @@ impl<O: DmxOutput, C: Clock> OutputRunner<O, C> {
             }
             Err(_) => {
                 self.status.count_panic();
+                self.status.record_fault(OutputError::Faulted, now);
                 self.status.set_health(OutputHealth::Degraded);
                 StepOutcome::Panicked
             }
@@ -445,6 +544,7 @@ impl<O: DmxOutput, C: Clock> OutputRunner<O, C> {
         subscriber: &mut FrameSubscriber,
         mapped: &[(UniverseId, usize)],
         status: &OutputStatus,
+        now: Duration,
     ) -> StepOutcome {
         subscriber.refresh();
         let frame = subscriber.frame();
@@ -467,6 +567,7 @@ impl<O: DmxOutput, C: Clock> OutputRunner<O, C> {
                 Ok(()) => status.count_frame(),
                 Err(error) => {
                     status.count_error();
+                    status.record_fault(error, now);
                     if error == OutputError::Disconnected {
                         // The interface has gone. The universes after this one
                         // are on the same cable, so there is nothing to try.
@@ -697,6 +798,87 @@ mod tests {
         assert_eq!(status.errors(), 0);
         assert_eq!(status.connections(), 0);
         assert!(!status.stop_requested());
+        assert_eq!(
+            status.last_error(Duration::from_secs(10)),
+            None,
+            "nothing has gone wrong yet, which is not the same as a fault at time zero"
+        );
+    }
+
+    /// S33: a settings panel shows the last error and how long ago it was, so
+    /// every error a driver can produce has to survive the two words it is
+    /// stored in — the same claim `every_health_survives_the_trip` makes about
+    /// the health byte, for the same reason.
+    #[test]
+    fn every_error_survives_the_trip_through_the_shared_status() {
+        let status = OutputStatus::new();
+        for error in [
+            OutputError::Disconnected,
+            OutputError::Faulted,
+            OutputError::UniverseNotCarried(universe(9)),
+        ] {
+            status.record_fault(error, Duration::from_secs(4));
+            let fault = status.last_error(Duration::from_secs(6)).unwrap();
+            assert_eq!(fault.error, error);
+            assert_eq!(fault.ago, Duration::from_secs(2));
+        }
+        assert!(format!("{status:?}").contains("OutputStatus"));
+    }
+
+    /// A fault in the first millisecond of a driver's life is a fault, and must
+    /// not read as *nothing has gone wrong*.
+    #[test]
+    fn a_fault_at_the_very_start_is_still_a_fault() {
+        let status = OutputStatus::new();
+        status.record_fault(OutputError::Disconnected, Duration::ZERO);
+        let fault = status.last_error(Duration::ZERO).unwrap();
+        assert_eq!(fault.error, OutputError::Disconnected);
+        // The two numbers are read one after the other, so an age that would be
+        // negative saturates rather than panicking.
+        assert_eq!(fault.ago, Duration::ZERO);
+    }
+
+    /// The whole point of recording it: a cable that is pulled says what
+    /// happened, and it goes on saying so after the health has gone green
+    /// again — an operator wants to know their node dropped out during the
+    /// second act.
+    #[test]
+    fn a_driver_that_loses_its_interface_says_what_happened_and_when() {
+        let mut publisher = publisher();
+        let (mut runner, handle, status) = runner(&mut publisher, &[1]);
+        assert_eq!(runner.step(), StepOutcome::Connected);
+        assert!(status.last_error(runner.now()).is_none());
+
+        handle.fail_send(1, OutputError::Disconnected);
+        assert_eq!(runner.step(), StepOutcome::Disconnected);
+        let fault = status.last_error(runner.now()).unwrap();
+        assert_eq!(fault.error, OutputError::Disconnected);
+        assert_eq!(fault.ago, Duration::ZERO, "it has only just happened");
+
+        // The clock moves on, the interface comes back, and the fault is still
+        // readable — with its age.
+        while runner.step() != StepOutcome::Connected {}
+        assert_eq!(status.health(), OutputHealth::Ok);
+        let later = status.last_error(runner.now()).unwrap();
+        assert_eq!(later.error, OutputError::Disconnected);
+        assert!(later.ago >= Duration::from_millis(100), "{later:?}");
+    }
+
+    /// A panic is the one fault `CLAUDE.md`'s zero-crash invariant is really
+    /// about, and a status panel that showed nothing for it would be the least
+    /// useful it could be.
+    #[test]
+    fn a_driver_that_panics_records_a_fault_as_well_as_a_count() {
+        let mut publisher = publisher();
+        let (mut runner, handle, status) = runner(&mut publisher, &[1]);
+        assert_eq!(runner.step(), StepOutcome::Connected);
+        handle.panic_on_send(1);
+        assert_eq!(runner.step(), StepOutcome::Panicked);
+        assert_eq!(status.panics(), 1);
+        assert_eq!(
+            status.last_error(runner.now()).map(|fault| fault.error),
+            Some(OutputError::Faulted)
+        );
     }
 
     #[test]

@@ -182,4 +182,6 @@ pub use stats::{Histogram, TickStats};
 pub use tick::{
     Engine, IdleBody, TICK_HZ, TICK_PERIOD, TickBody, TickInfo, deadline_offset, tick_index_at,
 };
-pub use triple_buffer::{FramePublisher, FrameSubscriber};
+pub use triple_buffer::{
+    EnrolmentFull, FrameEnrolment, FramePublisher, FrameSubscriber, MAX_SUBSCRIBERS, SubscriberId,
+};

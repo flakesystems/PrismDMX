@@ -11,3 +11,5 @@ cc 15acbb75b8fea47d7465e1d50bef2f073fca659f162d5eb017cdaa230c9b1281 # shrinks to
 cc 16f7dd75261048369f96e38f2f755ff5bd9fc0e14ed594e7447c375725f9511b # shrinks to value = Add { path: "", value: Array([Float(-960806.3455093987)]) }
 cc 0875290cfb9fc74872f1e998fda477e7ac3485834f04f1d8adbc549ba593899a # shrinks to value = Array([Array([Float(-990916.8862451371)])])
 cc 533aba511139a57667f620568b822e1604f77d9e65a17d0f1f0ea54edbfe7a9b # shrinks to value = ProgrammerState { selection: [], active_feature_group: Dimmer, values: {FixtureId(0): {}}, clear_stage: Idle }
+cc 5e3cacbd4969a3498df8b6759bec09c0dee9b1d5bd45fd3e142b9a9ea4b9cf04 # shrinks to value = OutputsChanged { outputs: [OutputInstance { id: OutputId(0), name: "", kind: ArtNet { nodes: [0.0.0.0:0], sync: false, ports: [] }, universes: [], enabled: false }] }
+cc e420e39a3d68e469d4fae3d2fe6248abc0a5b62c84978852aeecd46fcce2f39c # shrinks to value = Kind { kind: ArtNet { nodes: [0.0.0.0:0], sync: false, ports: [] } }

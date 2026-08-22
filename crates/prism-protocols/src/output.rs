@@ -115,6 +115,49 @@ pub trait DmxOutput: Send {
     fn shutdown(&mut self);
 }
 
+/// A boxed output is an output.
+///
+/// **What this is for (S33).** The daemon's rig is configured data now, so the
+/// driver for one row is chosen at run time: `prismd::outputs` has a factory
+/// that answers with a `Box<dyn DmxOutput>` — the real one on a desk, a
+/// [`MockOutput`] under `--mock-devices`, which is what lets S33's worked
+/// example be asserted with no device on the machine. `OutputRunner` is generic
+/// over the output, so without this the factory would have to be generic over
+/// four kinds and a test double, at every call site.
+///
+/// Panic containment is unchanged: [`OutputRunner`](crate::OutputRunner) wraps
+/// every call in `catch_unwind`, and a panic inside the boxed driver unwinds
+/// through this forwarding exactly as it would through a direct call.
+impl DmxOutput for Box<dyn DmxOutput> {
+    fn id(&self) -> OutputId {
+        (**self).id()
+    }
+
+    fn universes(&self) -> &[UniverseId] {
+        (**self).universes()
+    }
+
+    fn connect(&mut self) -> Result<(), OutputError> {
+        (**self).connect()
+    }
+
+    fn send_frame(
+        &mut self,
+        universe: UniverseId,
+        data: &[u8; UNIVERSE_CHANNELS],
+    ) -> Result<(), OutputError> {
+        (**self).send_frame(universe, data)
+    }
+
+    fn health(&self) -> OutputHealth {
+        (**self).health()
+    }
+
+    fn shutdown(&mut self) {
+        (**self).shutdown();
+    }
+}
+
 /// An output that accepts every frame and puts it nowhere.
 ///
 /// Not test scaffolding: `ARCHITECTURE_SPEC.md` §12 has the end-to-end tests
@@ -610,6 +653,32 @@ mod tests {
             out.send_frame(universe(1), &[9; 512]).unwrap();
             assert_eq!(out.health(), OutputHealth::Ok);
         }
+    }
+
+    /// S33: a boxed output is an output, so a runner can be built over one that
+    /// was chosen at run time. Every method forwards, including the two a
+    /// blanket implementation is easiest to get wrong — `universes`, which
+    /// hands out a slice, and `shutdown`, which is on the way out.
+    #[test]
+    fn a_boxed_output_forwards_every_method_to_the_driver_inside_it() {
+        let inner = output(&[4, 7]);
+        let handle = inner.handle();
+        let mut boxed: Box<dyn DmxOutput> = Box::new(inner);
+
+        assert_eq!(boxed.id(), OutputId::new(1));
+        assert_eq!(boxed.universes(), [universe(4), universe(7)]);
+        assert_eq!(boxed.health(), OutputHealth::Disconnected);
+        assert_eq!(boxed.connect(), Ok(()));
+        assert_eq!(boxed.health(), OutputHealth::Ok);
+        assert_eq!(boxed.send_frame(universe(4), &[5; 512]), Ok(()));
+        assert_eq!(
+            boxed.send_frame(universe(5), &[5; 512]),
+            Err(OutputError::UniverseNotCarried(universe(5)))
+        );
+        assert_eq!(handle.last_frame(), Some((universe(4), vec![5u8; 512])));
+        boxed.shutdown();
+        assert_eq!(handle.shutdowns(), 1);
+        assert_eq!(boxed.health(), OutputHealth::Disconnected);
     }
 
     #[test]

@@ -33,7 +33,7 @@ use prism_core::{SessionState, ShowStore};
 use prism_domain::{Executor, ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, ViewId};
 use prism_ipc::{Client, ClientEvent, ClientKind, Hello};
 use prism_surface::Bindings;
-use prismd::cli::{Options, OutputSpec};
+use prismd::cli::{Options, mock_output};
 use prismd::daemon::Daemon;
 use prismd::surface::MockSurfacePort;
 
@@ -57,7 +57,7 @@ fn options(dir: &Path) -> Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
         universes: 2,
-        outputs: vec![OutputSpec::Mock],
+        outputs: vec![mock_output(1)],
         local: false,
         log_level: prismd::log::Level::Warn,
         ..Options::default()
