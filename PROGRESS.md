@@ -3,7 +3,7 @@
 **Last updated:** 2026-08-22
 **Current phase:** Phase 7 — Outputs, devices and the machine
 **Current session:** S36 — `prism-midi`, the real MIDI port (not started — see §8 for the prompt that starts it)
-**Last completed:** S33 — `prism-core` + `prism-protocols` + `prismd` the output patch ✅ — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
+**Last completed:** S33 — `prism-core` + `prism-protocols` + `prismd` the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
 
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
@@ -105,7 +105,7 @@
 ### Phase 7 — Outputs, devices and the machine
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
-| S33 | The output patch: many outputs, many kinds | ✅ | 2026-08-22 | `OutputInstance` in `prism_core::MachineConfig` — twelve universes across five outputs of three kinds, hot-reconfigurable without a missed tick, and never in the show file. See §2.35 |
+| S33 | The output patch: many outputs, many kinds | ✅ | 2026-08-22 | CI green on run **32539636281**. `OutputInstance` in `prism_core::MachineConfig` — twelve universes across five outputs of three kinds, hot-reconfigurable without a missed tick, and never in the show file. See §2.35 |
 | S36 | `prism-midi` — the real MIDI port | ☐ | | Added 2026-08-14. Neither `SurfacePort` implementation opens a device, and §10.1 allows no crate that has one a home yet 🔌 |
 
 ### Phase 8 — Settings and the control editor
@@ -2188,6 +2188,7 @@ Nothing else moved.
 | `cargo fmt --all --check` | ✅ |
 | `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **618 tests in 46 files**; the build is 327 KB, 98 KB gzipped |
 | Playwright | ✅ **28 tests** |
+| CI green on the pushed commit | ✅ run **32539636281** on `6e938f9` — all **five** jobs, zero non-success steps: Windows full build and test 8 m 19 s, Linux platform-neutral crates 4 m 16 s, Linux ARM64 cross-compile check 40 s, UI typecheck/lint/test/build 1 m 59 s, UI end-to-end against a daemon 2 m 40 s. The ARM64 job is what says `#[cfg(target_os = …)]` did not spread: S33 added none |
 
 ---
 
