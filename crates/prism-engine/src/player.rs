@@ -617,10 +617,13 @@ impl CuePlayer {
             };
         }
 
-        // Follow and Time, once per tick at most.
+        // Follow and Time, once per tick at most. `follow_step` and not `step`:
+        // a **Go** always comes round to the first cue and an automatic chain
+        // only does when the list loops, which is what `Sequence::loop` has
+        // always meant. `None` is the end of the chain, so the guard the two
+        // used to share is the type now.
         if let Some(index) = *current
-            && let Some(next) = plan.step(Some(index), GoDirection::Next)
-            && (next != index || plan.looping())
+            && let Some(next) = plan.follow_step(index)
             && triggers(plan, index, next, elapsed)
         {
             *delay = begin(plan, entries, next);

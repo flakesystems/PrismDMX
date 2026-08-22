@@ -234,10 +234,13 @@ fn a_go_arriving_over_the_command_queue_runs_the_cue_list_to_the_wire() {
     rig.go();
     assert_eq!(rig.tick(), (0x80, 0x00));
 
-    // A Go at the end of a list that does not loop holds the last look rather
-    // than dropping the stage to black.
+    // **A Go at the end comes round to the first cue**, on a list that does not
+    // loop as much as on one that does: an operator at the bottom of a list who
+    // presses Go wants the top of it, and a desk that held would look broken.
+    // Nothing goes to black on the way — cue 1 is entered with its own fade,
+    // exactly as it was the first time.
     rig.go();
-    assert_eq!(rig.tick(), (0x80, 0x00));
+    assert_eq!(rig.tick(), (0xFF, 0x00));
 
     // Switching the executor off releases it, and the channel falls back to the
     // home value the patch gives it.

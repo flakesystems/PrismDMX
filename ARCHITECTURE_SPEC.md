@@ -371,8 +371,8 @@ interface Cue {
 interface Sequence {
   id: SequenceId; name: string; cues: Cue[];
   color: RgbColor | null;      // what the scribble strip lights; null is no colour, not black
-  loop: boolean;
-}
+  loop: boolean;               // whether an automatic follow chain comes round —
+}                              // a **Go** always does, on every list
 
 type ExecutorButtonFunction =
   | "Empty" | "Go+" | "Go-" | "LearnSpeed" | "Off" | "On" | "Flash" | "Toggle";
@@ -446,6 +446,8 @@ interface View { id: number; name: string; windows: WindowInstance[]; }
 ```
 
 The `Command` and `Delta` wire types are specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md).
+
+> **A Go always comes round, and `loop` is a different question.** `Go+` on the last cue of a list enters the first, and `Go-` on the first enters the last, whether or not the list loops — a Go is a key somebody pressed, and a desk that did nothing would look broken in the dark. Nothing goes to black on the way: the wrap enters that cue with its own fade, exactly as any other Go into it would. `Sequence.loop` governs the **automatic** chain instead — whether `Follow` and `Time` cues run off the end and round again, which is a list that never stops on its own. `prism_engine::SequencePlan` answers the two with `step` and `follow_step`, and the split is the type: a Go always has somewhere to go, and a follow chain can end.
 
 ### 6.1 Oops (undo/redo)
 

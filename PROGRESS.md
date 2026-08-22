@@ -2573,6 +2573,48 @@ full `npm run test` reported `App.test.tsx` timing out at 5 s with the machine a
 36 % before the run started. Alone the file takes 3.6 s and the whole suite
 passes idle.
 
+### 2.38 A Go comes round, and `loop` stops meaning two things
+
+Asked for beside §2.37 and worth its own entry, because the fix is a **split**
+rather than a flag flip.
+
+`SequencePlan::step` held at the end of a list that did not loop — `Go+` on the
+last cue stayed on the last cue. Holding is the wrong answer to a key somebody
+pressed: an operator at the bottom of a busking list who presses Go wants the top
+of it, and a desk that does nothing looks broken in the dark. **A Go now always
+comes round**, forward and back, on every list. Nothing goes to black on the way;
+the wrap enters cue 1 with cue 1's own fade, exactly as a Go into it from cue 0
+would, which `cue_playback.rs` asserts on the encoded DMX byte rather than on the
+index.
+
+**The naïve fix would have been wrong.** `Sequence::loop` gated *both* the manual
+Go and the automatic `Follow`/`Time` chain, so simply removing the gate would
+have turned every follow chain in every show into an endless chase — a behaviour
+change nobody asked for and one that only shows up on stage. So the two questions
+are two functions now:
+
+| | Wraps at the end? |
+|---|---|
+| `SequencePlan::step` — a **Go**, a hand on a key | always |
+| `SequencePlan::follow_step` — an **automatic** `Follow` or `Time` | only when `Sequence::loop` |
+
+`follow_step` returns `None` where the chain ends, so the `next != index ||
+plan.looping()` guard the player used to carry is the return type instead — and
+the one case that guard would have got wrong if written the obvious way, a
+**one-cue looping list following itself**, is a test of its own.
+
+`ARCHITECTURE_SPEC.md` §6 and `Sequence::looping`'s own documentation now say
+which of the two the flag is, since both said "the last cue wraps back to the
+first" and that is no longer what it buys.
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | ✅ **1 847 tests**, 66 targets, 20 ignored, 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check` | ✅ |
+| `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **625 tests in 46 files**; 329 KB, 99 KB gzipped |
+| Playwright | ✅ **28 tests**, telemetry **0.20 ms median, 0.50 ms p99** over 159 frames at 30.5 Hz |
+| Recordings | ✅ unchanged — no wire type moved, and the recorded script has no Go at the end of a list |
+
 ---
 
 ## 3. Coverage tracking

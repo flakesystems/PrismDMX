@@ -320,7 +320,9 @@ impl SequencePlan {
         self.id
     }
 
-    /// Whether the last cue wraps back to the first.
+    /// Whether an automatic chain of follows runs off the end and round again.
+    ///
+    /// **Not whether a Go wraps** — a Go always does. See [`Self::step`].
     #[must_use]
     pub const fn looping(&self) -> bool {
         self.looping
@@ -375,12 +377,27 @@ impl SequencePlan {
             .unwrap_or(&[])
     }
 
-    /// Where a Go from `current` lands.
+    /// Where a **Go** from `current` lands.
     ///
     /// `None` means the playback is stopped: stepping forward from there enters
-    /// at the first cue and stepping back enters at the last. At the end of a
-    /// list that does not loop the step stays where it is — a Go past the end
-    /// holds the last look rather than dropping the show to black.
+    /// at the first cue and stepping back enters at the last.
+    ///
+    /// # A Go always comes round, and that is not [`Self::looping`]
+    ///
+    /// Go+ on the last cue enters the first, and Go− on the first enters the
+    /// last, **whether or not the list loops**. It used to hold at the end
+    /// instead, and holding is the wrong answer to a key somebody pressed: an
+    /// operator at the end of a busking list who presses Go expects the top of
+    /// it, and a desk that does nothing is a desk that looks broken in the dark.
+    /// Nothing goes to black either way — the wrap enters cue 1 with its own
+    /// fade, exactly as a Go into it from cue 0 would.
+    ///
+    /// [`Self::looping`] is a different question and keeps its own answer:
+    /// whether an **automatic** chain of `Follow` and `Time` cues runs off the
+    /// end and round again, which is a list that never stops on its own. That is
+    /// [`Self::follow_step`], and it is deliberately not this: a chase that
+    /// repeats for ever is a decision somebody makes about a cue list, and a Go
+    /// is a hand on a key.
     #[must_use]
     pub fn step(&self, current: Option<usize>, direction: GoDirection) -> Option<usize> {
         let last = self.cues.len().checked_sub(1)?;
@@ -395,22 +412,42 @@ impl SequencePlan {
             GoDirection::Next => {
                 if current < last {
                     current + 1
-                } else if self.looping {
-                    0
                 } else {
-                    last
+                    0
                 }
             }
             GoDirection::Prev => {
                 if current > 0 {
                     current - 1
-                } else if self.looping {
-                    last
                 } else {
-                    0
+                    last
                 }
             }
         })
+    }
+
+    /// Where an **automatic** trigger from `current` goes — `Follow` and `Time`.
+    ///
+    /// `None` where the chain ends: the last cue of a list that does not loop,
+    /// or a list with no cues at all. That is the whole difference from
+    /// [`Self::step`], and the type says it — a Go always has somewhere to go
+    /// and a follow chain does not.
+    ///
+    /// A **one-cue looping list** answers `Some(0)` from cue 0, which is a cue
+    /// that retriggers itself for ever. That is what the flag asks for and the
+    /// player has always allowed it; it is spelled out here because the obvious
+    /// `next != current` guard would silently forbid it.
+    #[must_use]
+    pub fn follow_step(&self, current: usize) -> Option<usize> {
+        let last = self.cues.len().checked_sub(1)?;
+        let current = current.min(last);
+        if current < last {
+            Some(current + 1)
+        } else if self.looping {
+            Some(0)
+        } else {
+            None
+        }
     }
 }
 
@@ -698,8 +735,15 @@ mod tests {
         assert_eq!(compiled.transition_ticks(), 484);
     }
 
+    /// **A Go always comes round**, on a list that does not loop as much as on
+    /// one that does.
+    ///
+    /// It used to hold at the end, and holding is the wrong answer to a key
+    /// somebody pressed — an operator at the bottom of a busking list who
+    /// presses Go wants the top of it. `looping` governs the *automatic* chain
+    /// and is asserted separately below, on a plan built with it off.
     #[test]
-    fn stepping_forward_and_back_walks_the_list_and_stops_at_its_ends() {
+    fn stepping_forward_and_back_walks_the_list_and_comes_round_at_its_ends() {
         let plan = plan();
         let compiled = SequencePlan::build(
             &plan,
@@ -712,13 +756,20 @@ mod tests {
             ),
         )
         .unwrap();
+        assert!(!compiled.looping(), "the wrap is not this flag");
         assert_eq!(compiled.step(None, GoDirection::Next), Some(0));
         assert_eq!(compiled.step(Some(0), GoDirection::Next), Some(1));
-        assert_eq!(compiled.step(Some(2), GoDirection::Next), Some(2));
+        assert_eq!(compiled.step(Some(2), GoDirection::Next), Some(0));
         // Stepping back into a stopped list enters at the end.
         assert_eq!(compiled.step(None, GoDirection::Prev), Some(2));
         assert_eq!(compiled.step(Some(1), GoDirection::Prev), Some(0));
-        assert_eq!(compiled.step(Some(0), GoDirection::Prev), Some(0));
+        assert_eq!(compiled.step(Some(0), GoDirection::Prev), Some(2));
+
+        // And the automatic chain, which is the half `looping` still decides:
+        // it walks to the end of this list and stops there.
+        assert_eq!(compiled.follow_step(0), Some(1));
+        assert_eq!(compiled.follow_step(1), Some(2));
+        assert_eq!(compiled.follow_step(2), None);
     }
 
     #[test]
@@ -738,6 +789,49 @@ mod tests {
         assert!(compiled.looping());
         assert_eq!(compiled.step(Some(2), GoDirection::Next), Some(0));
         assert_eq!(compiled.step(Some(0), GoDirection::Prev), Some(2));
+        // The chain comes round too, which is the whole of what the flag buys.
+        assert_eq!(compiled.follow_step(2), Some(0));
+    }
+
+    /// A **one-cue looping list** follows itself for ever, and a one-cue list
+    /// that does not loop stops after it.
+    ///
+    /// Spelled out because the obvious `next != current` guard — which is what
+    /// the player used to carry — would forbid the first of these silently.
+    #[test]
+    fn a_single_cue_follows_itself_only_when_the_list_loops() {
+        let plan = plan();
+        let one = || vec![cue("1", 0.0, Vec::new())];
+        let round = SequencePlan::build(&plan, &sequence(one(), true)).unwrap();
+        let once = SequencePlan::build(&plan, &sequence(one(), false)).unwrap();
+        assert_eq!(round.follow_step(0), Some(0));
+        assert_eq!(once.follow_step(0), None);
+        // A Go on either is the same key on the same one cue.
+        assert_eq!(round.step(Some(0), GoDirection::Next), Some(0));
+        assert_eq!(once.step(Some(0), GoDirection::Next), Some(0));
+        assert_eq!(once.step(Some(0), GoDirection::Prev), Some(0));
+    }
+
+    /// An index past the end — which a client can send, since it names a cue by
+    /// number and the list may have shrunk since — is clamped rather than
+    /// panicking or wrapping from nowhere.
+    #[test]
+    fn an_index_past_the_end_is_read_as_the_end() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                ["1", "2"]
+                    .into_iter()
+                    .map(|number| cue(number, 0.0, Vec::new()))
+                    .collect(),
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(compiled.step(Some(99), GoDirection::Next), Some(0));
+        assert_eq!(compiled.step(Some(99), GoDirection::Prev), Some(0));
+        assert_eq!(compiled.follow_step(99), None);
     }
 
     #[test]
@@ -748,6 +842,8 @@ mod tests {
         assert_eq!(compiled.step(None, GoDirection::Next), None);
         assert_eq!(compiled.step(None, GoDirection::Prev), None);
         assert_eq!(compiled.step(Some(0), GoDirection::Next), None);
+        // A list with no cues has no chain either, looping or not.
+        assert_eq!(compiled.follow_step(0), None);
         assert!(compiled.cue(0).is_none());
         assert!(compiled.parts_of(0).is_empty());
     }

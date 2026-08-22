@@ -277,7 +277,16 @@ pub struct Sequence {
         proptest(strategy = "crate::arb::small_vec(3)")
     )]
     pub cues: Vec<Cue>,
-    /// Whether the last cue wraps back to the first.
+    /// Whether an **automatic** chain of follows runs off the end and round
+    /// again.
+    ///
+    /// **Not whether a Go wraps.** A Go always does — Go+ on the last cue enters
+    /// the first and Go− on the first enters the last, on every list — because
+    /// holding is the wrong answer to a key somebody pressed. What this flag
+    /// buys is a list that never stops on its own: `Follow` and `Time` cues
+    /// carry on past the end instead of resting there, which is a chase. The two
+    /// are different questions and `prism_engine::SequencePlan` answers them
+    /// with two functions, `step` and `follow_step`.
     ///
     /// Named `looping` in Rust because `loop` is a keyword; the wire name stays
     /// `loop`, as specified.
