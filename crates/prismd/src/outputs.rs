@@ -734,12 +734,22 @@ mod tests {
 
     /// The rule that keeps a rename free — and the rule that makes a
     /// re-addressing a new thread.
+    ///
+    /// The old status is held as an **`Arc`** rather than as a bare pointer,
+    /// and that is not tidiness: a restart drops the original, and an allocator
+    /// is entirely free to hand the replacement the address it just freed —
+    /// which is what happened on run **32580777886**, where `assert_ne!` on two
+    /// pointers compared `0x1e635c4fc90` against itself and failed a rule the
+    /// code had kept. Keeping the `Arc` alive across the reconcile makes the
+    /// two allocations genuinely distinct, so pointer identity means what the
+    /// assertion says it means (S36).
     #[test]
     fn a_rename_keeps_the_thread_and_a_re_addressing_replaces_it() {
         let publisher = publisher();
         let mut supervisor = supervisor(&publisher);
         supervisor.reconcile(&[mock(1, &[1])]);
-        let first = Arc::as_ptr(supervisor.status(OutputId::new(1)).unwrap());
+        let held = Arc::clone(supervisor.status(OutputId::new(1)).unwrap());
+        let first = Arc::as_ptr(&held);
 
         let renamed = OutputInstance {
             name: "Hall dimmers".to_owned(),
@@ -760,6 +770,9 @@ mod tests {
             "a universe change is a new driver on a new set of universes"
         );
         assert_eq!(supervisor.instances()[0].universes, vec![universe(4)]);
+        // Held to the end: the moment this is dropped, the address is free to
+        // be handed out again, and everything above it stops meaning anything.
+        drop(held);
         supervisor.stop_all();
     }
 

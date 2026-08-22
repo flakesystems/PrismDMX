@@ -999,8 +999,10 @@ whole of §5 testable with arithmetic rather than with a wait.
 | `cargo check -p prism-surface --all-targets --target aarch64-unknown-linux-gnu` | ✅ exit 0. **No new dependency**: layer 2 needed nothing that was not already in the workspace, and the one thing it added to the crate's own graph is `prism-domain`, which was in the manifest **unused** since S19 and is now used for exactly one type — `RgbColor`, on the way into the colour quantiser |
 | CI green on the pushed commit | ☐ recorded below after the push, per `IMPLEMENTATION_PLAN.md`'s session protocol |
 
-**Two things CI found that this machine could not**, and both are worth the
-space because each is a class rather than a typo:
+**Three things CI found that this machine could not**, and each is a class
+rather than a typo. Two of the three are **latent flakes in S33's tests that
+this session's run happened to expose** rather than anything S36 changed, and
+both are recorded here because the next session should not rediscover them:
 
 - **A test that assumed a MIDI backend is a test that only runs on Windows.**
   `a_real_port_that_is_not_there_is_attached_all_the_same_and_says_why` asserted
@@ -1013,6 +1015,18 @@ space because each is a class rather than a typo:
   is attached, not open, and not a failure to start. **The no-backend build is
   not a lesser build to be tolerated in CI — it is the machine-with-nothing-
   plugged-in case, exercised for real.**
+- **A pointer freed is a pointer the allocator may hand back.**
+  `outputs.rs::a_rename_keeps_the_thread_and_a_re_addressing_replaces_it` is
+  S33's, and it asserted that a re-addressed output has a *different*
+  `Arc<OutputStatus>` by comparing `Arc::as_ptr` across the restart — after
+  dropping the original. On run **32580777886** the replacement landed at the
+  address the old one had just vacated, and `assert_ne!` compared
+  `0x1e635c4fc90` against itself. The rule the test is about was kept perfectly;
+  the test could not tell. It holds the old `Arc` across the reconcile now, so
+  the two allocations are genuinely distinct and pointer identity means what the
+  assertion says. **The general shape: an identity claim over a value that has
+  been dropped is not a claim at all** — keep the thing alive, or compare
+  something other than an address.
 - **An absolute `missed_ticks == 0` is a claim about a runner, not about a
   fault.** `tests/outputs.rs::an_output_whose_device_disappears_degrades_alone`
   is S33's and nothing this session went near it, but it read **1** on run
