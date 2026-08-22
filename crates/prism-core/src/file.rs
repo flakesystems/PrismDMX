@@ -629,6 +629,9 @@ impl ShowFile {
             let base = existing.clone().unwrap_or_else(|| Sequence {
                 id: *sequence_id,
                 name: name.clone(),
+                // A store makes a cue list; colouring one is `Command::Color`,
+                // for the reason a store does not rename one either.
+                color: None,
                 cues: Vec::new(),
                 looping: false,
                 is_active: false,
@@ -986,11 +989,30 @@ impl ShowFile {
             // The update state travels with all four for the reason above: a
             // deleted cue clears it and a moved cue carries it, so an Oops over
             // either has to put it back where it was.
-            Command::Delete { target } | Command::Label { target, .. } => {
+            Command::Delete { target } => {
                 let mut images = self.object_image(target);
                 images.push(self.cue_edit_image());
                 images
             }
+            // **A label through an executor images the sequence**, not the
+            // executor: `Show::label_object` writes the name onto the cue list
+            // on the fader, so an image of the fader is an image of the one
+            // thing the command did not touch — and a record whose before and
+            // after are equal is no record at all, which made `Label Executor 1`
+            // silently un-undoable. Found while giving `Color` the same
+            // indirection; see [`Self::colored_image`].
+            Command::Label { target, .. } => {
+                let mut images = self.colored_image(target);
+                images.push(self.cue_edit_image());
+                images
+            }
+            // A colour reaches one cue list and nothing else — no cue moves, so
+            // the update state is not in scope the way it is for the four above.
+            // **The image is the sequence's even when the line named an
+            // executor**, because that is what the command writes to: an image
+            // of the executor would restore a fader that never changed and
+            // leave the colour where the Oops was meant to take it from.
+            Command::Color { target, .. } => self.colored_image(target),
             Command::Copy { from, to, .. } | Command::Move { from, to, .. } => {
                 let mut images = self.object_image(from);
                 images.extend(self.object_image(to));
@@ -1079,6 +1101,26 @@ impl ShowFile {
                 self.show.executor(*executor_id).cloned(),
             )],
             ObjectRef::View { .. } => Vec::new(),
+        }
+    }
+
+    /// The image `Command::Color` writes over: the cue list itself, or the one
+    /// standing on the executor that was named.
+    ///
+    /// `Command::Label` has the same indirection and needs the same image, which
+    /// is why this is its own function rather than an arm of
+    /// [`Self::object_image`]: that one answers *what did this reference name*,
+    /// and this one answers *what did the command write to*. For four of the six
+    /// they are the same thing.
+    fn colored_image(&self, target: &ObjectRef) -> Vec<Image> {
+        match target {
+            ObjectRef::Executor { executor_id } => self
+                .show
+                .executor(*executor_id)
+                .and_then(|executor| executor.sequence_id)
+                .map(|sequence_id| vec![self.sequence_image(sequence_id)])
+                .unwrap_or_default(),
+            other => self.object_image(other),
         }
     }
 

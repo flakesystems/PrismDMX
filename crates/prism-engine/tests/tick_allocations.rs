@@ -518,6 +518,7 @@ fn loaded_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
     Sequence {
         id: SequenceId::new(u32::from(seed)),
         name: String::new(),
+        color: None,
         cues,
         looping: true,
         is_active: false,

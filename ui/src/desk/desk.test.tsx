@@ -233,6 +233,31 @@ function pressButton(testId: string) {
     fireEvent.pointerUp(button, { pointerId: 1 });
 }
 
+/**
+ * **A colour is drawn where the operator can see it**, and it is the *cue
+ * list's* — so a fader shows the colour of the list standing on it.
+ *
+ * The last two steps of the recording are the two forms of the line: one
+ * naming a sequence, one naming the executor holding it. Strip 0 plays
+ * sequence 1 and strip 2 plays sequence 2, on the page the recording opens on.
+ */
+it("draws the colour of the cue list on each fader, and nothing where there is none", () => {
+    const { answer } = desk();
+    // Nothing is coloured until the daemon says so — the same claim every
+    // other test in this file makes about every other field.
+    expect(screen.queryByTestId("color-0")).toBeNull();
+    expect(screen.queryByTestId("color-2")).toBeNull();
+
+    answer(54);
+    expect(screen.getByTestId("color-0").style.background).toBe("rgb(255, 0, 0)");
+    expect(screen.queryByTestId("color-2")).toBeNull();
+
+    answer(55);
+    expect(screen.getByTestId("color-2").style.background).toBe("rgb(255, 136, 0)");
+    // An empty slot has no colour: there is no cue list to have one.
+    expect(screen.queryByTestId("color-1")).toBeNull();
+});
+
 it("sends which button was pressed, and never what it means", () => {
     const { acted, answer } = desk();
     // Strip 0's four are Go+, Go−, Off, Empty — and Empty draws nothing.

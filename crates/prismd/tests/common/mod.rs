@@ -97,6 +97,7 @@ pub fn show_file() -> ShowFile {
     show.store_sequence(Sequence {
         id: SequenceId::new(1),
         name: "Sequence 1".to_owned(),
+        color: None,
         cues: vec![Cue {
             number: "1".to_owned(),
             name: "Cue 1".to_owned(),

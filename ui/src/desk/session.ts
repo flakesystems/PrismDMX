@@ -77,6 +77,16 @@ export interface ExecutorStrip {
   readonly assigned: boolean;
   /** The sequence's name, or `null` when there is no sequence on it. */
   readonly name: string | null;
+  /**
+   * The sequence's colour as `#rrggbb`, or `null` when it has none.
+   *
+   * The **sequence's**, like the name beside it: an executor is a place and a
+   * colour belongs to the cue list standing in it, so a list moved to another
+   * fader takes its colour along. What the X-Touch shows is this quantised to
+   * one of eight (`docs/MCU_MAPPING.md` §2.3); a screen has no such limit, so
+   * the bar draws the colour an operator actually chose.
+   */
+  readonly color: string | null;
   /** The master, `0..=65535`. */
   readonly masterLevel: number;
   /** Whether it is running. */
@@ -169,6 +179,7 @@ function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorSt
       executorId,
       assigned: false,
       name: null,
+      color: null,
       masterLevel: 0,
       isActive: false,
       currentCueIndex: null,
@@ -185,12 +196,39 @@ function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorSt
       sequenceId === null
         ? null
         : stringAt(show, `/sequences/${String(sequenceId)}/name`),
+    color:
+      sequenceId === null
+        ? null
+        : hexAt(show, `/sequences/${String(sequenceId)}/color`),
     masterLevel: numberAt(executor, "/masterLevel") ?? 0,
     isActive: valueAt(executor, "/isActive") === true,
     currentCueIndex: numberAt(executor, "/currentCueIndex"),
     faderFunction: faderFunctionOf(stringAt(executor, "/faderFunction")),
     buttonFunctions: buttonFunctionsOf(valueAt(executor, "/buttonFunctions")),
   };
+}
+
+/**
+ * An `{ r, g, b }` at a pointer, as `#rrggbb` — or `null` when there is none.
+ *
+ * Defensive about the three channels rather than trusting the document: this
+ * reads a mirror, and a mirror one delta behind a schema change is exactly the
+ * shape S26 wrote the *do not read the show* rule about. A colour it cannot make
+ * sense of is no colour, which draws as an uncoloured strip rather than as a
+ * broken one.
+ */
+function hexAt(document: JsonValue | null, pointer: string): string | null {
+  const value = valueAt(document, pointer);
+  if (!isObject(value)) {
+    return null;
+  }
+  const channels = ["/r", "/g", "/b"].map((channel) => numberAt(value, channel));
+  if (channels.some((channel) => channel === null)) {
+    return null;
+  }
+  return `#${channels
+    .map((channel) => Math.max(0, Math.min(255, channel ?? 0)).toString(16).padStart(2, "0"))
+    .join("")}`;
 }
 
 /** A fader function this build knows, or `null`. */

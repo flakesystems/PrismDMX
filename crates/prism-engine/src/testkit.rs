@@ -114,6 +114,7 @@ pub(crate) fn sequence(cues: Vec<Cue>, looping: bool) -> Sequence {
     Sequence {
         id: SequenceId::new(1),
         name: "Test".to_owned(),
+        color: None,
         cues,
         looping,
         is_active: false,

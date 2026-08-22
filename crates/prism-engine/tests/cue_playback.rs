@@ -96,6 +96,7 @@ fn sequence(cues: Vec<Cue>) -> Sequence {
     Sequence {
         id: SequenceId::new(1),
         name: "Main".to_owned(),
+        color: None,
         cues,
         looping: false,
         is_active: false,

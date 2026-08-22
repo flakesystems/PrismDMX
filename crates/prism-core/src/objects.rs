@@ -1,5 +1,10 @@
-//! `Delete`, `Copy`, `Move` and `Label` over the six numbered things a desk has
-//! — S40.
+//! `Delete`, `Copy`, `Move`, `Label` and `Color` over the six numbered things a
+//! desk has — S40, and the fifth verb after it.
+//!
+//! `Color` is the one that does **not** reach all six, and that is the shape of
+//! the thing rather than an omission: a colour is drawn on a scribble strip and
+//! a strip shows a cue list, so it reaches a sequence and — through the list
+//! standing on it — an executor. See [`Show::color_object`].
 //!
 //! # One verb, six pools
 //!
@@ -56,7 +61,7 @@
 
 use prism_domain::{
     Cue, CuePart, Executor, Group, JsonPatchOp, ObjectRef, OverwriteMode, Preset, PresetValue,
-    Sequence, SequenceId,
+    RgbColor, Sequence, SequenceId,
 };
 
 use crate::show::{GROUPS, PRESETS, SEQUENCES, Show, ShowError, pointer, put};
@@ -146,6 +151,40 @@ impl Show {
                 self.label_sequence(sequence_id, name)
             }
             ObjectRef::View { .. } => Err(ShowError::NotAShowCommand),
+        }
+    }
+
+    /// Colours one cue list — `Command::Color`.
+    ///
+    /// The mirror of [`Self::label_object`], with the same executor indirection
+    /// and a narrower reach: a colour is drawn on a strip and only a **sequence**
+    /// has one, so the other four are refused with the noun an operator typed.
+    /// See `prism_domain::Command::Color` for why the colour lives on the cue
+    /// list rather than on the fader holding it.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownSequence`] or [`ShowError::UnknownExecutor`] for
+    /// something that is not there, [`ShowError::ExecutorHasNoSequence`] for an
+    /// empty slot, [`ShowError::NotColourable`] for a cue, a group, a preset or
+    /// a view.
+    pub fn color_object(
+        &mut self,
+        target: &ObjectRef,
+        color: Option<RgbColor>,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        match target {
+            ObjectRef::Sequence { sequence_id } => self.color_sequence(*sequence_id, color),
+            ObjectRef::Executor { executor_id } => {
+                let Some(executor) = self.executor(*executor_id) else {
+                    return Err(ShowError::UnknownExecutor(*executor_id));
+                };
+                let Some(sequence_id) = executor.sequence_id else {
+                    return Err(ShowError::ExecutorHasNoSequence(*executor_id));
+                };
+                self.color_sequence(sequence_id, color)
+            }
+            other => Err(ShowError::NotColourable(other.noun())),
         }
     }
 
@@ -348,6 +387,33 @@ impl Show {
         )?])
     }
 
+    /// Puts a colour on a cue list, or takes one off.
+    ///
+    /// A colour that is already there is **no change and no patch**, exactly as
+    /// a label that is already there is: a mirror told about an edit that did
+    /// not happen would redraw for nothing, and the show would be marked dirty
+    /// by a line that changed nothing in it.
+    fn color_sequence(
+        &mut self,
+        id: SequenceId,
+        color: Option<RgbColor>,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(sequence) = self.sequences_mut().get_mut(&id) else {
+            return Err(ShowError::UnknownSequence(id));
+        };
+        if sequence.color == color {
+            return Ok(Vec::new());
+        }
+        sequence.color = color;
+        let sequence = sequence.clone();
+        self.mark();
+        Ok(vec![put(
+            pointer(SEQUENCES, &id.to_string()),
+            &sequence,
+            true,
+        )?])
+    }
+
     /// Renames one cue of a cue list.
     fn label_cue(
         &mut self,
@@ -398,6 +464,14 @@ impl Show {
                 existing.as_ref().map(|sequence| sequence.name.as_str()),
                 &from.name,
             ),
+            // The colour goes the way the name goes, because it is the other
+            // half of what a strip shows: a **copy** onto a list that exists
+            // leaves its colour alone, a copy that creates one takes the
+            // source's, and a **move** brings it along with the thing itself.
+            color: match naming {
+                Naming::Keep => existing.as_ref().map_or(from.color, |held| held.color),
+                Naming::Carry => from.color,
+            },
             cues,
             looping: match naming {
                 Naming::Keep => existing.as_ref().map_or(from.looping, |held| held.looping),

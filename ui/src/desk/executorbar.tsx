@@ -182,6 +182,23 @@ function Strip({
                     onSelect(strip.executorId);
                 }}
             >
+                {/*
+                  The scribble strip's backlight, drawn as a dot rather than as
+                  a background: the X-Touch lights the whole strip because it
+                  has three lamps and no other way to say it, and a screen that
+                  copied that would be putting text on a coloured field eight
+                  times over. The dot is the same fact at the same glance.
+                  Absent, not grey, when the list has no colour — an empty
+                  swatch would read as a colour somebody chose.
+                */}
+                {strip.color !== null && (
+                    <span
+                        className="strip-color"
+                        data-testid={`color-${String(strip.slot)}`}
+                        style={{ background: strip.color }}
+                        title={`Colour ${strip.color}`}
+                    />
+                )}
                 <span className="strip-number">{strip.executorId}</span>
                 <span className="strip-name" data-testid={`name-${String(strip.slot)}`}>
                     {strip.name ?? (strip.assigned ? "—" : "")}

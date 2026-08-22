@@ -212,6 +212,8 @@ Routing through the UI (MIDI → daemon → UI → daemon) would add two IPC rou
 
 These twelve are what the **console** issues — eleven since S12, plus `SelectSequence` (**S39**), which a console issues by typing `Sequence 5` on the command line. `PlaceWindow` (**S25**) is a session command that is deliberately not in this list, for one reason: a console never drags a window, but §4.1 puts a window's position in the session, so a client that kept it locally would be holding session state. It travels with the twelve, is journalled with them (that is, not at all — §6.1), and is specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md) §5.
 
+> **`Color` is `Label`'s mirror and is always a show command.** `Color Sequence 4 Red` and `Color Executor 1 Red` write the same colour onto the same cue list — an executor is a place and the colour belongs to the list standing in it, so a list moved to another fader takes it along. It reaches two of the six things `ObjectRef` names, because only a cue list is drawn on a scribble strip; the other four are refused with the noun that was typed. `docs/MCU_MAPPING.md` §2.3 has what the surface does with the twenty-four bits, and `null` is *no colour chosen* rather than black.
+
 > **Four commands are session commands only sometimes** *(S40)*. `Delete`, `Copy`, `Move` and `Label` name one of the six numbered things a desk has, and one of the six — a **view** — is session state by §4.1. So which applier owns one of them is a property of its *target*: `Command::is_session_command` reads it, `ShowFile::apply` routes on it, and §6.1 follows. They replaced S35's `RenameView`, `DeleteView` and `MoveView`, which said the same thing in narrower words; managing a view library is still something an operator does with a pointer, and now the pointer writes the same line the console types. `docs/IPC_PROTOCOL.md` §5 has why there are four verbs rather than twenty-four commands.
 
 > **The view library's order is its numbers** *(S35, kept in S40)*. `views` is keyed by number, the View Selector Bar draws in number order, `SelectView` names a number and `Channel ◀▶` steps from one number to the next — so a move **exchanges two views' contents** and leaves their numbers where they are, rather than recording an order beside them. One order means the console cannot step to a view other than the one drawn next. It costs what it has to: after a move, `SelectView 3` names a different layout, and an F-key bound to a view number reaches whatever now sits in that place.
@@ -245,7 +247,7 @@ Three shapes, and every control on the screen is one of them:
 | Shape | Example | What pressing it does |
 |---|---|---|
 | **A whole command with no argument** | `Clear`, `Oops`, `Update`, `Full` | writes the word and **executes it at once** |
-| **A command that needs arguments** | `Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Assign` | writes the word and **waits** — the operator types the rest and presses Enter, which is also a key on the surface |
+| **A command that needs arguments** | `Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Color`, `Assign` | writes the word and **waits** — the operator types the rest and presses Enter, which is also a key on the surface |
 | **An argument keyword** | `Fixture`, `Group`, `Sequence`, `Cue`, `Preset`, `View`, `Executor` | **appends** the word to the line as it stands |
 
 So `Fixture` `1` `Enter` is three presses that build `Fixture 1`, and it is the
@@ -366,7 +368,11 @@ interface Cue {
   parts: CuePart[];
 }
 
-interface Sequence { id: SequenceId; name: string; cues: Cue[]; loop: boolean; }
+interface Sequence {
+  id: SequenceId; name: string; cues: Cue[];
+  color: RgbColor | null;      // what the scribble strip lights; null is no colour, not black
+  loop: boolean;
+}
 
 type ExecutorButtonFunction =
   | "Empty" | "Go+" | "Go-" | "LearnSpeed" | "Off" | "On" | "Flash" | "Toggle";

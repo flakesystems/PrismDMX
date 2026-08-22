@@ -990,6 +990,20 @@
     font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The cue list's colour, as a dot at the head of the strip — the screen's half
+ * of what the X-Touch shows on the backlight. `flex: 0 0 auto` so it never
+ * takes width from the name, which is the thing being read.
+ */
+.strip-color {
+    flex: 0 0 auto;
+    align-self: center;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    border: 1px solid var(--edge-lit);
+}
+
 .strip-name {
     flex: 1 1 auto;
     min-width: 0;

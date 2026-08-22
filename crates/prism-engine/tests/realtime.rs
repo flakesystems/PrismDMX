@@ -517,6 +517,7 @@ fn stress_sequence(fixture_type: &FixtureType, fixtures: u32, seed: u16) -> Sequ
     Sequence {
         id: SequenceId::new(u32::from(seed)),
         name: String::new(),
+        color: None,
         cues,
         looping: true,
         is_active: false,

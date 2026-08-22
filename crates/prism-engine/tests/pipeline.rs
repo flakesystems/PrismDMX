@@ -98,6 +98,7 @@ fn sequence(fade: f64) -> Sequence {
     Sequence {
         id: SequenceId::new(1),
         name: "Show".to_owned(),
+        color: None,
         cues: vec![Cue {
             number: "1".to_owned(),
             name: "Up".to_owned(),

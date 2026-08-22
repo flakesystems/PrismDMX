@@ -472,6 +472,7 @@ mod tests {
             Some(Sequence {
                 id: SequenceId::new(3),
                 name: "Sequence 3".to_owned(),
+                color: None,
                 cues: Vec::new(),
                 looping: false,
                 is_active: false,
@@ -501,6 +502,7 @@ mod tests {
                 Some(Sequence {
                     id: SequenceId::new(3),
                     name: "Act 1".to_owned(),
+                    color: None,
                     cues: Vec::new(),
                     looping: false,
                     is_active: false,

@@ -9,7 +9,7 @@ use core::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AttributeType, FixtureId, PresetId, SequenceId};
+use crate::{AttributeType, FixtureId, PresetId, RgbColor, SequenceId};
 
 /// What starts a cue.
 #[derive(
@@ -253,6 +253,24 @@ pub struct Sequence {
     pub id: SequenceId,
     /// Operator-facing name.
     pub name: String,
+    /// Colour for the scribble strip and the executor bar, if one was chosen.
+    ///
+    /// **The sequence carries it, not the executor**, for [`Self::name`]'s
+    /// reason: what a strip shows is the cue list that is on it, so a list moved
+    /// from fader 3 to fader 6 takes its colour with it and a fader that is
+    /// given a different list shows that one's. An executor is a place, and a
+    /// colour is a property of the thing standing in it.
+    ///
+    /// `None` is *no colour chosen* rather than black, and the two are different
+    /// things: a strip with no colour is lit white and readable, and
+    /// `prism_surface::color` refuses to quantise anything but exact black to an
+    /// unlit strip. `Command::Color` with `None` is how an operator takes a
+    /// colour back off.
+    ///
+    /// `#[serde(default)]` because a `.prism` file keeps each sequence as a
+    /// MessagePack document (S15) and one written before this does not carry it.
+    #[serde(default)]
+    pub color: Option<RgbColor>,
     /// The cues, in playback order.
     #[cfg_attr(
         any(test, feature = "proptest"),
@@ -291,7 +309,8 @@ pub struct Sequence {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AttributeType, Cue, CuePart, CueProperty, CueTrigger, FixtureId, Sequence, SequenceId,
+        AttributeType, Cue, CuePart, CueProperty, CueTrigger, FixtureId, RgbColor, Sequence,
+        SequenceId,
     };
 
     /// **The number is trimmed on both sides**, because an operator typed one
@@ -386,6 +405,7 @@ mod tests {
         let sequence = Sequence {
             id: SequenceId::new(1),
             name: "Main".to_owned(),
+            color: None,
             cues: vec![cue("1"), cue("2")],
             looping: true,
             is_active: false,
@@ -394,6 +414,34 @@ mod tests {
         let json = serde_json::to_value(&sequence).unwrap();
         assert_eq!(json["loop"], true);
         assert_eq!(json["cues"].as_array().unwrap().len(), 2);
+        assert_eq!(json["color"], serde_json::Value::Null);
+    }
+
+    /// A colour is not required, and a sequence written before there was one
+    /// opens without a colour rather than failing to open.
+    ///
+    /// The same claim as the playback state below it, for the same reason: a
+    /// `.prism` file keeps each sequence as its own MessagePack document (S15),
+    /// so every field added to this type after S15 is one an older file does not
+    /// carry.
+    #[test]
+    fn a_sequence_written_before_colours_opens_without_one() {
+        let sequence: Sequence =
+            serde_json::from_str(r#"{"id":1,"name":"Main","cues":[],"loop":false}"#).unwrap();
+        assert_eq!(sequence.color, None);
+
+        // And a colour that is there survives the round trip it was written for.
+        let blue = RgbColor { r: 0, g: 0, b: 255 };
+        let colored = Sequence {
+            color: Some(blue),
+            ..sequence
+        };
+        let text = serde_json::to_string(&colored).unwrap();
+        assert!(text.contains(r#""color":{"r":0,"g":0,"b":255}"#), "{text}");
+        assert_eq!(
+            serde_json::from_str::<Sequence>(&text).unwrap().color,
+            Some(blue)
+        );
     }
 
     /// **A sequence written before S40 does not carry its playback state**, and

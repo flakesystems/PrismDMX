@@ -165,6 +165,7 @@ type Command =
   | { t: "Copy"; from: ObjectRef; to: ObjectRef; mode: OverwriteMode }
   | { t: "Move"; from: ObjectRef; to: ObjectRef; mode: OverwriteMode }
   | { t: "Label"; target: ObjectRef; name: string }
+  | { t: "Color"; target: ObjectRef; color: RgbColor | null }
   | { t: "Goto"; target: PlaybackTarget; cueNumber: string }
   | { t: "ExecutorOn"; target: PlaybackTarget }
   | { t: "AssignExecutor"; executorId: ExecutorId; sequenceId: SequenceId | null }
@@ -339,6 +340,17 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > number *is* the order is unchanged, and a move still exchanges the two views'
 > contents while their numbers stay put. `CueProperty` lost its `Number` and its
 > `Name` to `Move` and `Label` for the same reason.
+>
+> **`Color` is the fifth verb and reaches two of the six.** A colour is drawn on
+> a scribble strip, and only a cue list has one: `Color Sequence 4 Red` puts it
+> there and `Color Executor 1 Red` colours the list on that fader, which is the
+> same indirection `Label` has and the same reason for it — the strip is what the
+> operator is looking at. The other four are refused with the noun that was
+> typed, because a group is a set of fixtures and a view is a window layout and
+> neither is ever on a strip. **The colour lives on the sequence**, so a list
+> moved to another fader takes it along; `null` is *no colour chosen* rather than
+> black, and an uncoloured strip is lit white, since an unlit one cannot be read
+> (`docs/MCU_MAPPING.md` §2.3).
 >
 > What each verb means pool by pool is `prism_core::objects`, and two of them are
 > worth naming here because they are decisions rather than deletions:

@@ -799,6 +799,7 @@ impl Programmer {
             | Command::Copy { .. }
             | Command::Move { .. }
             | Command::Label { .. }
+            | Command::Color { .. }
             | Command::AssignExecutor { .. }
             | Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }

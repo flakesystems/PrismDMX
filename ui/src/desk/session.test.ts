@@ -284,6 +284,42 @@ describe("a document that is not one", () => {
     expect(strips[1]?.buttonFunctions).toEqual([]);
   });
 
+  /**
+   * The colour is the sequence's, and it is read channel by channel — a mirror
+   * one delta behind a schema change is the shape S26 wrote the *do not read
+   * the show* rule about, so a colour this build cannot make sense of is no
+   * colour rather than a broken strip.
+   */
+  it("reads a cue list's colour as hex, and refuses to guess at a broken one", () => {
+    const session = { session: { executorPage: 0 } };
+    const show = {
+      executors: {
+        "0": { masterLevel: 0, sequenceId: 1 },
+        "1": { masterLevel: 0, sequenceId: 2 },
+        "2": { masterLevel: 0, sequenceId: 3 },
+        "3": { masterLevel: 0, sequenceId: 4 },
+        "4": { masterLevel: 0 },
+      },
+      sequences: {
+        "1": { name: "Warm", color: { r: 255, g: 136, b: 0 } },
+        // Every channel at its ends, so the two-digit padding is exercised in
+        // both directions: `#00ff0f` and not `#0ff0f` or `#0FF0F`.
+        "2": { name: "Edges", color: { r: 0, g: 255, b: 15 } },
+        "3": { name: "Uncoloured", color: null },
+        "4": { name: "Nonsense", color: { r: "warm", g: 0, b: 0 } },
+      },
+    };
+    const strips = pageStrips(session, show);
+    expect(strips[0]?.color).toBe("#ff8800");
+    expect(strips[1]?.color).toBe("#00ff0f");
+    expect(strips[2]?.color).toBeNull();
+    expect(strips[3]?.color).toBeNull();
+    // An executor with no cue list on it has no colour either: the colour
+    // belongs to the list, not to the place it is standing in.
+    expect(strips[4]?.color).toBeNull();
+    expect(strips[5]?.color).toBeNull();
+  });
+
   it("leaves out a button function this build has never heard of", () => {
     const show = {
       executors: { "0": { masterLevel: 0, buttonFunctions: ["Go+", "Hologram", 7, "Off"] } },

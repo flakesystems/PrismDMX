@@ -149,6 +149,8 @@ describe("what a line means", () => {
       "delete group 2",
       "delete executor 9",
       "delete sequence 404",
+      "color sequence 1 red",
+      "color executor 2 #ff8800",
       "goto cue 1",
       "on sequence 1",
       "on sequence 4",
@@ -456,6 +458,15 @@ describe("what the line says it will do", () => {
     expect(readingText(parseCommandLine('label view 1 "Programmer"'))).toBe(
       'label view 1 "Programmer"',
     );
+    expect(readingText(parseCommandLine("color sequence 4 red"))).toBe(
+      "colour sequence 4 #ff0000",
+    );
+    expect(readingText(parseCommandLine("color executor 1 #f80"))).toBe(
+      "colour executor 1 #ff8800",
+    );
+    expect(readingText(parseCommandLine("color sequence 4"))).toBe(
+      "take the colour off sequence 4",
+    );
     expect(readingText(parseCommandLine("assign sequence 5 executor 1"))).toBe(
       "assign sequence 5 to executor 1",
     );
@@ -502,6 +513,10 @@ describe("a line that cannot be meant is answered rather than sent", () => {
     ["copy sequence 2 sequence 6 and then some", "says more"],
     ["copy sequence 2 group 6", "not the same kind"],
     ["label nonsense 3 \"x\"", "nonsense"],
+    ["color nonsense 3 red", "nonsense"],
+    ["color sequence 4 puce", "is not a colour"],
+    ["color sequence 4 #ff88", "is not a colour"],
+    ["color sequence 4 red and then some", "says more"],
     ["assign nonsense 5 executor 1", "nonsense"],
     ["assign cue 5 executor 1", "assign takes a sequence"],
     ["assign sequence 5", "assign it where?"],

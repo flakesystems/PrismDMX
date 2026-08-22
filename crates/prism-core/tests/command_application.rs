@@ -48,7 +48,7 @@ fn the_three_groups_together_are_the_whole_protocol() {
     // same reason the cabling does.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        53
+        54
     );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");

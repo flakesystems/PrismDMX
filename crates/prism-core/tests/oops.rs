@@ -18,8 +18,9 @@ use common::{
 };
 use prism_core::{Effect, Journal, JournalError, ShowFile, ShowFileError, UndoScope};
 use prism_domain::{
-    AttributeType, ClearStage, Command, Delta, ExecutorId, FixtureId, GoDirection, PlaybackTarget,
-    PresetId, ProgrammerState, SelectionMode, SequenceId, StoreMode, UniverseId,
+    AttributeType, ClearStage, Command, Delta, ExecutorId, FixtureId, GoDirection, ObjectRef,
+    PlaybackTarget, PresetId, ProgrammerState, RgbColor, SelectionMode, SequenceId, StoreMode,
+    UniverseId,
 };
 use proptest::prelude::*;
 
@@ -575,6 +576,50 @@ fn one_record_can_cover_the_show_the_programmer_and_the_session() {
         ClearStage::SelectionCleared,
         "the Clear button came back in a stage the operator never left it in"
     );
+}
+
+/// A colour is taken back by an Oops like every other show edit — **including
+/// one written through an executor**, which is where the image has to be the
+/// sequence's rather than the fader's.
+///
+/// The half that was a real fault: `Label Executor 1` imaged the *executor*,
+/// which the command never touches, so its before and after were equal and no
+/// record was written at all — the rename applied and an Oops answered
+/// `NothingToUndo`. Both verbs image the cue list now, and both are asserted
+/// here rather than only the new one.
+#[test]
+fn a_colour_and_a_name_written_through_a_fader_come_back_off() {
+    let mut file = file();
+    let name = file.show.sequence(SequenceId::new(1)).unwrap().name.clone();
+    let before = state(&file);
+    let executor = ObjectRef::Executor {
+        executor_id: ExecutorId::new(0),
+    };
+
+    file.apply(&Command::Color {
+        target: executor.clone(),
+        color: Some(RgbColor {
+            r: 255,
+            g: 140,
+            b: 0,
+        }),
+    })
+    .unwrap();
+    file.apply(&Command::Label {
+        target: executor,
+        name: "Named from the fader".to_owned(),
+    })
+    .unwrap();
+    assert_eq!(
+        file.show.sequence(SequenceId::new(1)).unwrap().name,
+        "Named from the fader"
+    );
+
+    file.apply(&Command::Oops).unwrap();
+    file.apply(&Command::Oops).unwrap();
+    assert_eq!(file.show.sequence(SequenceId::new(1)).unwrap().name, name);
+    assert_eq!(file.show.sequence(SequenceId::new(1)).unwrap().color, None);
+    assert_eq!(state(&file), before);
 }
 
 /// The scope is what the command touched, and nothing else. That is the whole

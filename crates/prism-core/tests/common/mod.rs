@@ -100,6 +100,7 @@ pub fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
     Sequence {
         id: SequenceId::new(id),
         name: format!("Sequence {id}"),
+        color: None,
         cues,
         looping: false,
         is_active: false,
@@ -261,6 +262,19 @@ pub fn show_commands() -> Vec<Command> {
                 cue_number: "1".to_owned(),
             },
             name: "Blackout".to_owned(),
+        },
+        // `Label`'s mirror, on the one pool that has a colour. Sequence 1 exists
+        // and has no colour, so this changes something — which is what every
+        // command in this list has to do.
+        Command::Color {
+            target: ObjectRef::Sequence {
+                sequence_id: SequenceId::new(1),
+            },
+            color: Some(prism_domain::RgbColor {
+                r: 255,
+                g: 140,
+                b: 0,
+            }),
         },
         Command::Delete {
             target: ObjectRef::Cue {

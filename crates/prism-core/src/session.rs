@@ -398,6 +398,7 @@ impl SessionState {
             | Command::Copy { .. }
             | Command::Move { .. }
             | Command::Label { .. }
+            | Command::Color { .. }
             | Command::SetCueProperty { .. }
             | Command::AssignExecutor { .. }
             | Command::SaveShow => return Err(SessionError::NotASessionCommand),

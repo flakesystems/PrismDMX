@@ -58,8 +58,8 @@ use prism_domain::{AttributeType, Delta, EXECUTORS_PER_PAGE, ExecutorId, NoticeL
 use prism_ipc::CommandOutcome;
 use prism_surface::{
     Bindings, ButtonId, DisplayLine, Fader, GlobalButton, LedState, MAX_MESSAGE_BYTES, MAX_STRIPS,
-    StripButton, SurfaceController, SurfaceCounters, SurfaceEvent, SurfaceHealth, SurfaceTiming,
-    X_TOUCH,
+    StripButton, StripColor, SurfaceController, SurfaceCounters, SurfaceEvent, SurfaceHealth,
+    SurfaceTiming, X_TOUCH,
 };
 
 use crate::core::Core;
@@ -383,11 +383,10 @@ impl SurfaceLink {
             // named. An executor with no sequence shows its own number, which is
             // what makes an empty strip readable rather than blank.
             self.text.clear();
-            let name = executor
+            let sequence = executor
                 .and_then(|executor| executor.sequence_id)
-                .and_then(|sequence| core.file.show.sequence(sequence))
-                .map(|sequence| sequence.name.as_str());
-            match name {
+                .and_then(|sequence| core.file.show.sequence(sequence));
+            match sequence.map(|sequence| sequence.name.as_str()) {
                 Some(name) => self.text.push_str(name),
                 None => {
                     let _ = write!(self.text, "Ex {}", id.get());
@@ -395,6 +394,19 @@ impl SurfaceLink {
             }
             self.controller
                 .set_text(index, DisplayLine::Upper, &self.text);
+            // The backlight is the other half of what an operator wrote on the
+            // strip, and it comes from the same place the name does: the cue
+            // list. `prism_surface::color` quantises the twenty-four bits to one
+            // of the eight corners a strip can light, hue first.
+            //
+            // **A list with no colour is white, not off.** An unlit strip cannot
+            // be read (`docs/MCU_MAPPING.md` §2.3), so *no colour chosen* has to
+            // be the readable default rather than the dark one — and an empty
+            // slot is white for the same reason: it is showing "Ex 5".
+            match sequence.and_then(|sequence| sequence.color) {
+                Some(color) => self.controller.set_color_rgb(index, color),
+                None => self.controller.set_color(index, StripColor::White),
+            }
             self.text.clear();
             // §4.1's "value": the master as a percentage, which is what the
             // fader beside it is showing.

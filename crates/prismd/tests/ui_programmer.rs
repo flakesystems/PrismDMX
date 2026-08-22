@@ -162,6 +162,7 @@ fn desk_show() -> ShowFile {
         show.store_sequence(Sequence {
             id: SequenceId::new(id),
             name: name.to_owned(),
+            color: None,
             cues: vec![Cue {
                 number: "1".to_owned(),
                 name: "Cue 1".to_owned(),
@@ -839,6 +840,30 @@ fn script() -> Vec<Scripted> {
             },
         ),
         ("take the last edit back", Some((42, "oops")), Command::Oops),
+        (
+            "colour a cue list, which is the other thing a scribble strip shows",
+            Some((43, "color sequence 1 red")),
+            Command::Color {
+                target: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(1),
+                },
+                color: Some(prism_domain::RgbColor { r: 255, g: 0, b: 0 }),
+            },
+        ),
+        (
+            "and the same line through a **fader**, which colours the list on              it: executor 2 plays sequence 2",
+            Some((44, "color executor 2 #ff8800")),
+            Command::Color {
+                target: ObjectRef::Executor {
+                    executor_id: ExecutorId::new(2),
+                },
+                color: Some(prism_domain::RgbColor {
+                    r: 255,
+                    g: 136,
+                    b: 0,
+                }),
+            },
+        ),
     ]
 }
 

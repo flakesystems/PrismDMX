@@ -188,6 +188,14 @@ pub enum ShowError {
     /// `Copy Cue 3 Cue 3` meant something else, and silence is the wrong answer
     /// to a line that cannot have been meant.
     SameObject(String),
+    /// A `Color` naming something that is not drawn on a strip.
+    ///
+    /// A colour belongs to a cue list, and an executor's is the list on it — the
+    /// other four things `ObjectRef` names have nowhere to show one. Refused
+    /// with the word an operator typed rather than ignored, for
+    /// [`Self::MismatchedObjects`]'s reason: a line that cannot be carried out
+    /// is told so.
+    NotColourable(&'static str),
     /// A line that needs the selected cue list, on a desk with none (S40).
     ///
     /// `Store Cue 5` names no sequence and means `Session::selectedSequence`
@@ -272,6 +280,10 @@ impl fmt::Display for ShowError {
                 write!(f, "{from} and {to} are not the same kind of thing")
             }
             Self::SameObject(what) => write!(f, "{what} is already where it is"),
+            Self::NotColourable(noun) => write!(
+                f,
+                "a {noun} has no colour: a colour belongs to a sequence, or to the                  sequence on an executor"
+            ),
             Self::NoSelectedSequence => {
                 write!(
                     f,
@@ -1023,6 +1035,7 @@ impl Show {
         self.store_sequence(Sequence {
             id,
             name: name.to_owned(),
+            color: None,
             cues: Vec::new(),
             looping: false,
             is_active: false,
@@ -1706,6 +1719,7 @@ mod tests {
                 to: "group 6".to_owned(),
             },
             ShowError::SameObject("cue 3".to_owned()),
+            ShowError::NotColourable("group"),
             ShowError::NoSelectedSequence,
         ] {
             assert!(!error.to_string().is_empty(), "{error:?}");

@@ -22,7 +22,8 @@ mod common;
 use common::{cue, executor, group, populated_show, preset, sequence};
 use prism_core::{Show, ShowError, ShowFile};
 use prism_domain::{
-    AttributeType, Command, ExecutorId, GroupId, ObjectRef, OverwriteMode, PresetId, SequenceId,
+    AttributeType, Command, ExecutorId, GroupId, ObjectRef, OverwriteMode, PresetId, RgbColor,
+    SequenceId, ViewId,
 };
 
 /// The show as bytes, for "a refusal changes nothing".
@@ -52,6 +53,12 @@ fn group_ref(id: u32) -> ObjectRef {
 fn preset_ref(id: u32) -> ObjectRef {
     ObjectRef::Preset {
         preset_id: PresetId::new(id),
+    }
+}
+
+fn view_ref(id: u32) -> ObjectRef {
+    ObjectRef::View {
+        view_id: ViewId::new(id),
     }
 }
 
@@ -201,6 +208,113 @@ fn label_names_each_pool_and_an_executor_names_its_cue_list() {
         name: "Nowhere".to_owned(),
     });
     assert!(matches!(refusal, Err(ShowError::ExecutorHasNoSequence(_))));
+}
+
+/// A colour is `Label`'s mirror: the same executor indirection, a narrower
+/// reach, and `None` takes it off again.
+#[test]
+fn a_sequence_takes_a_colour_and_an_executor_passes_one_on() {
+    let amber = RgbColor {
+        r: 255,
+        g: 140,
+        b: 0,
+    };
+    let mut show = populated_show();
+    show.apply(&Command::Color {
+        target: seq(1),
+        color: Some(amber),
+    })
+    .unwrap();
+    assert_eq!(
+        show.sequence(SequenceId::new(1)).unwrap().color,
+        Some(amber)
+    );
+
+    // **An executor has no colour of its own**, so this colours the cue list on
+    // it — executor 0 plays sequence 1 in a populated show.
+    let blue = RgbColor { r: 0, g: 0, b: 255 };
+    show.apply(&Command::Color {
+        target: executor_ref(0),
+        color: Some(blue),
+    })
+    .unwrap();
+    assert_eq!(show.sequence(SequenceId::new(1)).unwrap().color, Some(blue));
+
+    // And `None` is how it comes back off. Not black: an unlit strip cannot be
+    // read, so *no colour* and *black* are different answers.
+    show.apply(&Command::Color {
+        target: seq(1),
+        color: None,
+    })
+    .unwrap();
+    assert_eq!(show.sequence(SequenceId::new(1)).unwrap().color, None);
+}
+
+/// The four pools that have nowhere to show a colour, and the two shapes of
+/// "not there" — each refused, each leaving the show byte-identical.
+#[test]
+fn colouring_something_that_has_no_colour_is_refused() {
+    let mut show = populated_show();
+    let before = bytes(&show);
+    for target in [cue_ref(1, "1"), group_ref(1), preset_ref(4), view_ref(1)] {
+        let refusal = show.apply(&Command::Color {
+            target: target.clone(),
+            color: Some(RgbColor { r: 1, g: 2, b: 3 }),
+        });
+        assert!(
+            matches!(refusal, Err(ShowError::NotColourable(_))),
+            "{target:?} was accepted: {refusal:?}"
+        );
+        assert_eq!(bytes(&show), before);
+    }
+
+    // A sequence that is not there, and an executor with an empty slot: the
+    // same two refusals `Label` gives, because it is the same indirection.
+    assert!(matches!(
+        show.apply(&Command::Color {
+            target: seq(404),
+            color: None,
+        }),
+        Err(ShowError::UnknownSequence(_))
+    ));
+    assert!(matches!(
+        show.apply(&Command::Color {
+            target: executor_ref(1),
+            color: None,
+        }),
+        Err(ShowError::ExecutorHasNoSequence(_))
+    ));
+    assert!(matches!(
+        show.apply(&Command::Color {
+            target: executor_ref(404),
+            color: None,
+        }),
+        Err(ShowError::UnknownExecutor(_))
+    ));
+    assert_eq!(bytes(&show), before);
+}
+
+/// A colour that is already there is not an edit, for the reason a label that is
+/// already there is not: an empty `ShowPatch` is a broadcast that says nothing.
+#[test]
+fn a_colour_that_changes_nothing_says_nothing() {
+    let mut show = populated_show();
+    let green = RgbColor { r: 0, g: 255, b: 0 };
+    let first = show
+        .apply(&Command::Color {
+            target: seq(1),
+            color: Some(green),
+        })
+        .unwrap();
+    assert!(!first.deltas.is_empty(), "the first one is an edit");
+
+    let again = show
+        .apply(&Command::Color {
+            target: seq(1),
+            color: Some(green),
+        })
+        .unwrap();
+    assert!(again.deltas.is_empty(), "{again:?}");
 }
 
 #[test]
@@ -724,7 +838,7 @@ fn a_cue_cannot_be_moved_onto_a_blank_number() {
 fn a_view_pair_is_not_the_shows_to_copy() {
     let mut show = populated_show();
     let view = |id: u32| ObjectRef::View {
-        view_id: prism_domain::ViewId::new(id),
+        view_id: ViewId::new(id),
     };
     for command in [
         Command::Copy {
@@ -821,7 +935,7 @@ fn a_view_is_not_the_shows_to_delete() {
     let before = bytes(&show);
     let refusal = show.apply(&Command::Delete {
         target: ObjectRef::View {
-            view_id: prism_domain::ViewId::new(1),
+            view_id: ViewId::new(1),
         },
     });
     assert!(matches!(refusal, Err(ShowError::NotAShowCommand)));

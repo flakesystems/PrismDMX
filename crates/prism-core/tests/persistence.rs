@@ -153,6 +153,13 @@ fn saveable_file() -> ShowFile {
         .store_sequence(Sequence {
             id: SequenceId::new(5),
             name: "Act One".to_owned(),
+            // A colour on the strip is show content and travels in the file,
+            // like the name beside it.
+            color: Some(RgbColor {
+                r: 255,
+                g: 140,
+                b: 0,
+            }),
             looping: true,
             is_active: false,
             current_cue_index: None,
@@ -289,6 +296,7 @@ fn second_file() -> ShowFile {
         .store_sequence(Sequence {
             id: SequenceId::new(1),
             name: "Chase".to_owned(),
+            color: None,
             looping: false,
             is_active: false,
             current_cue_index: None,

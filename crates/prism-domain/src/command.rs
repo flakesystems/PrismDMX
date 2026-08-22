@@ -713,6 +713,44 @@ pub enum Command {
         /// The new name.
         name: String,
     },
+    /// Colour one cue list — `Color Sequence 4 Red`.
+    ///
+    /// The mirror of [`Self::Label`] and deliberately the same shape: a colour
+    /// is the other thing an operator writes on a strip, and a strip shows one
+    /// name and one colour. `prism_surface::color` turns the twenty-four bits
+    /// into one of the eight a scribble strip can light.
+    ///
+    /// **An executor names its sequence**, exactly as it does for a label: an
+    /// executor has no colour of its own, so `Color Executor 1 Blue` colours the
+    /// cue list on it and is refused when the slot is empty. That is the
+    /// indirection an operator means — the lit strip is what they are looking
+    /// at — and it is the reason the colour lives on the sequence: a list moved
+    /// to another fader takes its colour with it.
+    ///
+    /// **Only a sequence has one.** [`ObjectRef`] names six things and this
+    /// reaches two of them, which is a narrower verb than `Label`'s and is meant
+    /// to be: a group is a set of fixtures and a view is a window layout, and
+    /// neither is ever drawn on a strip. A cue is not one either — a cue list is
+    /// what a fader holds. The other four are refused with the reason rather
+    /// than quietly ignored.
+    ///
+    /// `None` takes the colour back off. It is *no colour chosen*, not black:
+    /// an uncoloured strip is lit white and readable, and a black one cannot be
+    /// read at all (`docs/MCU_MAPPING.md` §2.3).
+    Color {
+        /// What to colour: a sequence, or an executor that holds one.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        target: ObjectRef,
+        /// The colour, or `None` to take one off.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        color: Option<RgbColor>,
+    },
     /// Jump a playback straight to a cue — S40's `Goto`.
     ///
     /// **The command S40 found missing at the bottom of the stack**: there was
@@ -1484,6 +1522,12 @@ mod tests {
                 },
                 name: "Front wash".to_owned(),
             },
+            Command::Color {
+                target: ObjectRef::Sequence {
+                    sequence_id: SequenceId::new(1),
+                },
+                color: Some(RgbColor { r: 0, g: 0, b: 255 }),
+            },
             Command::AssignExecutor {
                 executor_id: ExecutorId::new(0),
                 sequence_id: Some(SequenceId::new(1)),
@@ -1561,7 +1605,7 @@ mod tests {
                 port: Some("X-Touch".to_owned()),
             },
         ];
-        assert_eq!(commands.len(), 48);
+        assert_eq!(commands.len(), 49);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {

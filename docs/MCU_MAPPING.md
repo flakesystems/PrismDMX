@@ -159,6 +159,16 @@ sends greys to white and only an explicitly chosen black to black. **Hue-first i
 the better default for a lighting desk**, where a pastel is still the colour it
 is a pastel of.
 
+**Where the colour comes from.** `Command::Color` — `Color Sequence 4 Red` on
+the command line, or `Color Executor 1 Red` for the fader an operator is looking
+at, which colours the cue list standing on it. It is stored on the **sequence**,
+beside its name, for the reason a strip shows the sequence's name and not the
+executor's: a cue list moved to another fader takes what is written on it along.
+`prismd::surface` paints strip *n* from the list on executor *n* of the current
+page, `prism_surface::color` quantises hue-first, and a list with **no** colour
+is drawn white rather than off — which is the "unassigned wants white" rule
+above, applied to the commoner case of a list nobody has coloured yet.
+
 **There is a way to fake more than eight colours, and it is worth knowing about
 before somebody invents it badly.** The Ableton script has a "colour mix mode"
 that cycles a strip between two or three of the eight at speed, so the eye

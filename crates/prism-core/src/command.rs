@@ -388,6 +388,13 @@ impl Show {
                 let ops = self.label_object(target, name)?;
                 Ok(object_changed(&[target], ops))
             }
+            // `Label`'s mirror, and it reaches the tick for the same reason:
+            // nothing about a colour changes a merge, but a colour is written
+            // into the sequence document, so the same question is asked of it.
+            Command::Color { target, color } => {
+                let ops = self.color_object(target, *color)?;
+                Ok(object_changed(&[target], ops))
+            }
             Command::Copy { from, to, mode } => {
                 let ops = self.copy_object(from, to, *mode)?;
                 Ok(object_changed(&[from, to], ops))

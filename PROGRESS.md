@@ -2523,6 +2523,56 @@ test` reported one failure — `App.test.tsx`'s command-line test timing out at
 2.3 s, and the whole suite passes on an idle machine. A busy machine looks
 exactly like a regression.
 
+### 2.37 `Color` — sequences take a colour, out of band
+
+A small feature asked for between sessions, built the same way the ones around
+it were, and recorded here because two of its consequences are structural.
+
+**`Command::Color { target, color }`** is `Label`'s mirror: the same
+`ObjectRef`, the same executor indirection, and a narrower reach. It is the
+**49th** variant and the **54th** entry across the three example lists. A colour
+is drawn on a scribble strip and only a cue list is drawn on one, so it reaches a
+sequence and — through the list standing on it — an executor; a cue, a group, a
+preset and a view are refused with `ShowError::NotColourable` naming the noun
+that was typed.
+
+**Where it lives is the decision.** `Sequence::color`, beside the name, and not
+on the executor: a list moved to another fader takes what is written on it along,
+which is the same argument the name already made. `#[serde(default)]`, so a
+`.prism` file written before this opens without one. `None` is *no colour
+chosen* rather than black, and the two are different things — an uncoloured
+strip is lit **white**, because the text on an unlit one cannot be read
+(`docs/MCU_MAPPING.md` §2.3).
+
+**The command line**: `color sequence 4 red`, `color executor 1 #ff8800`,
+`color sequence 4` or `… none` to take it off. Seven colour words — the seven a
+strip can light — plus a hex triplet in either the three- or six-digit form. The
+words are the ones whose result an operator can predict exactly; anything else is
+kept in full and quantised hue-first for the surface, which is what
+`prism_surface::color` was already written to do.
+
+**A latent fault in S40 came out with it.** `Label Executor 1 "…"` imaged the
+**executor** for the Oops journal, and the command writes to the *sequence* — so
+the record's before and after were equal, no record was written, the rename
+applied and an Oops answered `NothingToUndo`. Both verbs image the cue list now
+(`ShowFile::colored_image`), and `oops.rs` asserts it for both rather than only
+for the new one. Found by giving `Color` the same indirection and checking what
+its undo image ought to be.
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | ✅ **1 845 tests**, 66 targets, 20 ignored, 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅, measured **cold** — `cargo clean -p` on the five changed crates first |
+| `cargo fmt --all --check` | ✅ |
+| `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **625 tests in 46 files**; 329 KB, 99 KB gzipped |
+| Playwright | ✅ **28 tests**, telemetry **0.10 ms median, 0.30 ms p99** over 154 frames at 30.3 Hz |
+| Recordings | ✅ all six regenerated and diffed structurally. Four classes, all explained: the new `color` key wherever a sequence is serialised; `tickHz` and `framesSent`; S34's async playback readback moving between steps; and the two steps appended to the script |
+
+The same load trap as S36 appeared again and was handled the same way: the first
+full `npm run test` reported `App.test.tsx` timing out at 5 s with the machine at
+36 % before the run started. Alone the file takes 3.6 s and the whole suite
+passes idle.
+
 ---
 
 ## 3. Coverage tracking

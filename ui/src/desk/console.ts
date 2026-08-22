@@ -50,11 +50,14 @@
  *             | "move"   object object
  *             | "copy"   object object
  *             | "label"  object [name]
+ *             | "color"  object [colour]
  *             | "assign" "sequence" n "executor" n
  *             | "page"   n
  *   playback := ("on" | "off" | "go" | "go+" | "go-") [target]
  *
  *   object   := ("sequence" | "cue" | "group" | "preset" | "view" | "executor") n
+ *   colour   := "red" | "green" | "yellow" | "blue" | "magenta" | "cyan"
+ *             | "white" | "none" | hex        -- #f80 · #ff8800 · ff8800
  *   target   := object | n                  -- `go 3` is S26's, and is an executor
  *   fixtures := range (("+" | ",") range)*
  *   range    := number ["thru" number]
@@ -79,6 +82,7 @@ import type {
   ObjectRef,
   OverwriteMode,
   PlaybackTarget,
+  RgbColor,
   SequenceStoreMode,
   StoreMode,
 } from "../bindings";
@@ -140,6 +144,7 @@ export const CONSOLE_WORDS: readonly string[] = [
   "at",
   "assign",
   "clear",
+  "color",
   "copy",
   "cue",
   "delete",
@@ -238,6 +243,10 @@ function describe(command: Command): string {
       return `move ${objectText(command.from)} to ${objectText(command.to)}`;
     case "Label":
       return `label ${objectText(command.target)} ${JSON.stringify(command.name)}`;
+    case "Color":
+      return command.color === null
+        ? `take the colour off ${objectText(command.target)}`
+        : `colour ${objectText(command.target)} ${hexOf(command.color)}`;
     case "AssignExecutor":
       return `assign ${
         command.sequenceId === null ? "nothing" : `sequence ${String(command.sequenceId)}`
@@ -383,6 +392,8 @@ export function parseCommandLine(line: string): ConsoleResult {
       return pairLine(words, "copy");
     case "label":
       return labelLine(words);
+    case "color":
+      return colorLine(words);
     case "assign":
       return assignLine(words);
     case "on":
@@ -732,6 +743,109 @@ function labelLine(words: readonly Token[]): ConsoleResult {
     kind: "commands",
     commands: [{ t: "Label", target: read.target, name: joinName(read.rest) }],
   };
+}
+
+/**
+ * The colours a scribble strip can light, and what each one is as twenty-four
+ * bits.
+ *
+ * **Seven words and not seventy.** A strip's backlight is three lamps
+ * (`docs/MCU_MAPPING.md` §2.3), so these are the colours it can actually show —
+ * an operator who types one of them knows exactly what the desk will look like.
+ * Anything else is a hex triplet, which the daemon keeps in full and the surface
+ * quantises hue-first; the interface draws the hex.
+ */
+const COLOR_NAMES: Readonly<Record<string, RgbColor>> = {
+  red: { r: 255, g: 0, b: 0 },
+  green: { r: 0, g: 255, b: 0 },
+  yellow: { r: 255, g: 255, b: 0 },
+  blue: { r: 0, g: 0, b: 255 },
+  magenta: { r: 255, g: 0, b: 255 },
+  cyan: { r: 0, g: 255, b: 255 },
+  white: { r: 255, g: 255, b: 255 },
+};
+
+/** The words that take a colour off rather than putting one on. */
+const NO_COLOR_WORDS = ["none", "off"] as const;
+
+/** Every word a colour may be written as, for completion. */
+export const COLOR_WORDS: readonly string[] = [
+  ...Object.keys(COLOR_NAMES),
+  ...NO_COLOR_WORDS,
+];
+
+/** `#f80`, `#ff8800`, `ff8800` — or `null` for a word that is not one. */
+function hexColor(text: string): RgbColor | null {
+  const digits = text.startsWith("#") ? text.slice(1) : text;
+  if (!/^[0-9a-f]+$/.test(digits)) {
+    return null;
+  }
+  // The three-digit form doubles each digit, as CSS does: `#f80` is `#ff8800`
+  // rather than `#0f0800`, which is what an operator who typed it means.
+  const full =
+    digits.length === 3
+      ? digits
+          .split("")
+          .map((digit) => digit + digit)
+          .join("")
+      : digits;
+  if (full.length !== 6) {
+    return null;
+  }
+  return {
+    r: Number.parseInt(full.slice(0, 2), 16),
+    g: Number.parseInt(full.slice(2, 4), 16),
+    b: Number.parseInt(full.slice(4, 6), 16),
+  };
+}
+
+/** A colour as `#ff8800`, for the readout. */
+function hexOf(color: RgbColor): string {
+  const pair = (value: number): string => value.toString(16).padStart(2, "0");
+  return `#${pair(color.r)}${pair(color.g)}${pair(color.b)}`;
+}
+
+/**
+ * `color sequence 4 red`, `color executor 1 #ff8800`, `color sequence 4 none`.
+ *
+ * **A colour with no word after it takes the colour off**, which is `Label`'s
+ * rule one verb along: `label view 1` clears the name, and clearing is not a
+ * second command. `none` and `off` say the same thing out loud, for an operator
+ * who would rather see the word than trust the absence of one.
+ */
+function colorLine(words: readonly Token[]): ConsoleResult {
+  const read = readObject(words.slice(1));
+  if (typeof read === "string") {
+    return { kind: "error", message: read };
+  }
+  const [chosen, ...extra] = read.rest;
+  if (extra.length > 0) {
+    return tooMuch("color", words);
+  }
+  const color = colorOf(chosen);
+  if (typeof color === "string") {
+    return { kind: "error", message: color };
+  }
+  return {
+    kind: "commands",
+    commands: [{ t: "Color", target: read.target, color }],
+  };
+}
+
+/** One colour word, or the complaint for a word that is not one. */
+function colorOf(word: Token | undefined): RgbColor | null | string {
+  if (word === undefined || (NO_COLOR_WORDS as readonly string[]).includes(word.text)) {
+    return null;
+  }
+  const named = COLOR_NAMES[word.text];
+  if (named !== undefined) {
+    return named;
+  }
+  const hex = hexColor(word.text);
+  if (hex !== null) {
+    return hex;
+  }
+  return `"${spoken(word.raw)}" is not a colour. Try ${COLOR_WORDS.join(", ")} or a hex triplet like #ff8800.`;
 }
 
 /** `assign sequence 5 executor 1`. */
@@ -1217,6 +1331,11 @@ function legalWords(before: readonly Token[]): readonly string[] {
     return CONSOLE_WORDS;
   }
   switch (head.text) {
+    case "color":
+      // The one verb whose **last** argument is a word rather than a thing. A
+      // reference is two tokens, so anything from the fourth word on is the
+      // colour — `color sequence 4 ‹here›`.
+      return before.length >= 3 ? COLOR_WORDS : OBJECT_WORDS;
     case "store":
     case "delete":
     case "move":
