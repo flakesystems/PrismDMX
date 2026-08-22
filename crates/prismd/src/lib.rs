@@ -29,17 +29,21 @@
 //!                                    │        ▼
 //!                                    │   clients, or none
 //!                                    └──▶ [`surface`]  the X-Touch, whose
-//!                                                      presses become the same
-//!                                                      commands a client sends
+//!                                                 │    presses become the same
+//!                                                 │    commands a client sends
+//!                                                 ▼
+//!                                          `prism-midi`  the port itself: the
+//!                                                        name, the cable coming
+//!                                                        and going (S36)
 //! ```
 //!
 //! # What this crate is not allowed to contain
 //!
 //! `ARCHITECTURE_SPEC.md` §10.1 confines `#[cfg(target_os = …)]` to
-//! `prism-protocols`, `prism-app` and `prism-ipc`'s `transport/local.rs`. It
-//! does not name this crate, so there is none here — and the three places it
-//! would otherwise have been are worth naming, because each was solved rather
-//! than avoided:
+//! `prism-protocols`, `prism-app`, `prism-ipc`'s `transport/local.rs` and — since
+//! S36 — `prism-midi`'s `system.rs`. It does not name this crate, so there is
+//! none here — and the four places it would otherwise have been are worth
+//! naming, because each was solved rather than avoided:
 //!
 //! - **The user data directory** is resolved from the environment
 //!   ([`paths`]), which is what the platform conventions are actually written
@@ -48,6 +52,10 @@
 //!   whole purpose is to hold that split ([`engine`]).
 //! - **The IPC endpoint** — a named pipe or a Unix domain socket — is
 //!   `prism_ipc::local::daemon_address`, in the module §10.1 already exempts.
+//! - **The MIDI port** — WinMM, CoreMIDI or ALSA — is `prism-midi`, a crate whose
+//!   whole purpose is to hold that split (S36). Exactly the move
+//!   `thread-priority` is, one device along: [`surface::RealSurfacePort`] is the
+//!   join, and it is four forwarding methods and no `#[cfg]`.
 //!
 //! # The order everything happens in
 //!

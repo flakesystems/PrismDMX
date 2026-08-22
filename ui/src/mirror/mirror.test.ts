@@ -122,6 +122,10 @@ describe("the three documents", () => {
     const start = documents();
     const others: Delta[] = [
       { t: "OutputHealth", outputId: 1, health: "Degraded" },
+      { t: "OutputsChanged", outputs: [] },
+      // S36. The desk in the rack belongs to the machine, so it must never
+      // reach the document a client believes the show to be.
+      { t: "SurfaceChanged", port: "2- X-Touch" },
       { t: "DirtyFlag", unsavedChanges: true },
       { t: "Notice", level: "Info", message: "saved" },
       { t: "ShowPatch", ops: [] },

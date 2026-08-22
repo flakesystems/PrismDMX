@@ -407,7 +407,8 @@ impl SessionState {
             Command::AddOutput { .. }
             | Command::ConfigureOutput { .. }
             | Command::RemoveOutput { .. }
-            | Command::SetOutputEnabled { .. } => return Err(SessionError::NotASessionCommand),
+            | Command::SetOutputEnabled { .. }
+            | Command::SetSurfacePort { .. } => return Err(SessionError::NotASessionCommand),
         };
         Ok(if ops.is_empty() {
             Applied::default()

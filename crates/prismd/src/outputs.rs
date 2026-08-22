@@ -73,6 +73,15 @@ pub struct Machine {
     pub path: Option<std::path::PathBuf>,
     /// The driver threads.
     pub outputs: OutputSupervisor,
+    /// The control surface's MIDI port was named with `--surface`, so it is not
+    /// the machine configuration's to change either — S36.
+    ///
+    /// A **second** flag rather than a second meaning for `path`, because the
+    /// two are genuinely independent: a daemon may perfectly well take its rig
+    /// from `machine.json` and its surface from a command line while somebody
+    /// is trying a desk out. `MachineError::SurfaceOnTheCommandLine` is what a
+    /// `SetSurfacePort` is refused with, and it names the right flag.
+    pub surface_on_command_line: bool,
 }
 
 /// What every driver on this machine needs and no row of the rig carries.

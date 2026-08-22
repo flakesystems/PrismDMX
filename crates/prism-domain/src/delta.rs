@@ -93,6 +93,23 @@ pub enum Delta {
         )]
         outputs: Vec<OutputInstance>,
     },
+    /// **This machine's** control surface is on a different MIDI port — S36.
+    ///
+    /// The one-field counterpart of [`Self::OutputsChanged`], and it is a delta
+    /// for the same reason: the configured port belongs to the machine rather
+    /// than to the show, so it must not travel inside the document a client
+    /// mirrors as the show. Sent whole because it *is* whole — one name, or none.
+    ///
+    /// What is **not** here is the list of ports that exist. That is not state
+    /// the daemon owns: it changes when a person moves a plug, no command causes
+    /// it, and a client holding a copy would be holding the operating system's
+    /// opinion from whenever it last connected. It is asked for —
+    /// [`crate::Query::MidiPorts`] — and this delta is what tells a settings
+    /// window that asking again is worth it.
+    SurfaceChanged {
+        /// The configured port, or `None` for no surface at all.
+        port: Option<String>,
+    },
     /// A DMX output changed health.
     OutputHealth {
         /// The output concerned.

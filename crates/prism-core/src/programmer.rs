@@ -829,7 +829,8 @@ impl Programmer {
             | Command::AddOutput { .. }
             | Command::ConfigureOutput { .. }
             | Command::RemoveOutput { .. }
-            | Command::SetOutputEnabled { .. } => {
+            | Command::SetOutputEnabled { .. }
+            | Command::SetSurfacePort { .. } => {
                 return Err(ProgrammerError::NotAProgrammerCommand);
             }
         };

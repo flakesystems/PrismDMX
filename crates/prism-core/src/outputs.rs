@@ -66,6 +66,15 @@ pub enum MachineError {
     /// that appeared to work and vanished at the next restart would be worse
     /// than one that says why.
     ConfiguredOnTheCommandLine,
+    /// This daemon's control surface was named on its command line, so which
+    /// port it is on is not the machine configuration's to change — S36.
+    ///
+    /// The same rule as [`Self::ConfiguredOnTheCommandLine`] one cable along,
+    /// and separate from it because the message has to name the right flag: a
+    /// daemon may perfectly well have its rig from a file and its surface from
+    /// `--surface`, and an operator told the wrong one would go looking in the
+    /// wrong place.
+    SurfaceOnTheCommandLine,
     /// No output carries that number.
     UnknownOutput(OutputId),
     /// That number is already an output. An add that replaced a running node
@@ -112,6 +121,10 @@ impl fmt::Display for MachineError {
                 f,
                 "this daemon's outputs were named on its command line; \
                  start it without them to configure the rig from an interface"
+            ),
+            Self::SurfaceOnTheCommandLine => write!(
+                f,
+                "this daemon's control surface was named on its command line;                  start it without --surface to configure the port from an interface"
             ),
             Self::UnknownOutput(id) => write!(f, "there is no output {id}"),
             Self::OutputExists(id) => write!(f, "output {id} already exists"),
@@ -282,6 +295,20 @@ pub(crate) fn apply(
             next.enabled = *enabled;
             config.insert_output(next);
             Ok(changed(config))
+        }
+        // **A port name is not validated against a cable being plugged in**,
+        // for the reason the module documentation gives about outputs: a desk
+        // that is switched off, or a show being prepared a week before the
+        // get-in, is an ordinary state of a correct configuration. Whether the
+        // port is there is the daemon's business, and its answer is a warning.
+        Command::SetSurfacePort { port } => {
+            config.set_surface_port(port.as_deref());
+            Ok(Applied {
+                deltas: vec![Delta::SurfaceChanged {
+                    port: config.surface_port().map(str::to_owned),
+                }],
+                effects: vec![Effect::Surface],
+            })
         }
         _ => Err(MachineError::NotAMachineCommand),
     }
@@ -683,6 +710,7 @@ mod tests {
                 MachineError::ConfiguredOnTheCommandLine,
                 "named on its command line",
             ),
+            (MachineError::SurfaceOnTheCommandLine, "--surface"),
             (MachineError::UnknownOutput(OutputId::new(4)), "output 4"),
             (MachineError::OutputExists(OutputId::new(4)), "already"),
             (MachineError::NoUniverses, "at least one universe"),
@@ -818,6 +846,53 @@ mod tests {
             )
             .is_ok()
         );
+    }
+
+    /// S36's fifth machine command, and the two things it has to do: name a
+    /// port, and answer with something a second client can act on.
+    #[test]
+    fn the_surface_port_is_named_and_the_answer_says_so() {
+        let mut config = MachineConfig::default();
+        assert_eq!(config.surface_port(), None, "a fresh desk has no surface");
+
+        let applied = apply(
+            &mut config,
+            &Command::SetSurfacePort {
+                port: Some("2- X-Touch".to_owned()),
+            },
+        )
+        .unwrap();
+        assert_eq!(config.surface_port(), Some("2- X-Touch"));
+        assert_eq!(
+            applied.deltas,
+            vec![Delta::SurfaceChanged {
+                port: Some("2- X-Touch".to_owned())
+            }],
+            "a second client has to learn which desk this one chose"
+        );
+        assert_eq!(
+            applied.effects,
+            vec![crate::Effect::Surface],
+            "and somebody has to open it"
+        );
+
+        // A port that is not plugged in is **accepted**, exactly as an output
+        // row naming a node that is switched off is: a show is prepared before
+        // the get-in, and a desk that refused the name could not be configured
+        // until the van arrived.
+        apply(
+            &mut config,
+            &Command::SetSurfacePort {
+                port: Some("A desk nobody owns".to_owned()),
+            },
+        )
+        .unwrap();
+        assert_eq!(config.surface_port(), Some("A desk nobody owns"));
+
+        // And taking it away is a change like any other, with a delta of its own.
+        let applied = apply(&mut config, &Command::SetSurfacePort { port: None }).unwrap();
+        assert_eq!(config.surface_port(), None);
+        assert_eq!(applied.deltas, vec![Delta::SurfaceChanged { port: None }]);
     }
 
     #[test]

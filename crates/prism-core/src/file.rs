@@ -1043,6 +1043,8 @@ impl ShowFile {
             | Command::ConfigureOutput { .. }
             | Command::RemoveOutput { .. }
             | Command::SetOutputEnabled { .. }
+            // S36's, for the same reason: a port name is not show content.
+            | Command::SetSurfacePort { .. }
             => Vec::new(),
         }
     }

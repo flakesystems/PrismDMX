@@ -113,6 +113,7 @@ round_trip! {
     output_instance => crate::OutputInstance,
     output_change => crate::OutputChange,
     notice_level => crate::NoticeLevel,
+    midi_port_info => crate::MidiPortInfo,
 
     playback_id => crate::PlaybackId,
     playback_target => crate::PlaybackTarget,

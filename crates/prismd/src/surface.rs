@@ -83,9 +83,14 @@ const INBOX_BYTES: usize = 512;
 /// so the whole suite runs with nothing plugged in. It is also where the
 /// platform lives — opening a MIDI device is `midir`'s or the operating
 /// system's business, and neither `prism-surface` nor this crate may contain
-/// `#[cfg(target_os = …)]` (`ARCHITECTURE_SPEC.md` §10.1). **No implementation
-/// that opens a real device exists yet**: S20's probe is the only code in the
-/// repository that does, and it lives outside the workspace on purpose.
+/// `#[cfg(target_os = …)]` (`ARCHITECTURE_SPEC.md` §10.1).
+///
+/// **S36 gave it a real implementation**, and put it in a crate of its own for
+/// exactly that reason: `prism_midi::MidiSurfacePort`, wrapped by
+/// [`RealSurfacePort`] below in the one place that knows about both. The other
+/// two — [`MockSurfacePort`] and [`FileSurfacePort`] — are unchanged, and the
+/// whole suite including the D11 gate still runs on them with nothing plugged
+/// in.
 pub trait SurfacePort: Send {
     /// Takes the next packet the surface sent, if one is waiting.
     ///
@@ -107,6 +112,40 @@ pub trait SurfacePort: Send {
     /// Default `true`: a port that cannot tell is not a port that is gone.
     fn connected(&self) -> bool {
         true
+    }
+
+    /// Gives the port a chance to notice a cable — S36.
+    ///
+    /// Called once per poll, with the same instant everything else in this
+    /// module is given, which is S21's rule kept one layer further down: the
+    /// port owns no clock either. A port with nothing to notice does nothing,
+    /// which is why this defaults to nothing at all.
+    ///
+    /// What it must **not** do is reopen because the desk has gone quiet. A
+    /// surface that has stopped transmitting while still receiving is
+    /// [`SurfaceHealth::Unresponsive`], it is S20's finding, and only a power
+    /// cycle recovers it (`docs/MCU_MAPPING.md` §2.7) — so a port that
+    /// reconnected on silence would churn the one state that cannot be
+    /// recovered that way and take the diagnosis away from the operator who has
+    /// to read it. `prism_midi` says the same thing in its own tests.
+    fn refresh(&mut self, _now: Duration) {}
+
+    /// What this port is, for a log line and a settings panel.
+    ///
+    /// The name the operating system gave it where there is one, and something
+    /// a person can read where there is not.
+    fn describe(&self) -> String {
+        "a control surface".to_owned()
+    }
+
+    /// The MIDI port that is actually open, by name — S36.
+    ///
+    /// `None` for a port that is not open **and** for one that is not a MIDI
+    /// port at all: a mock and a file are surfaces without being ports, and a
+    /// settings window asking *which device is the desk on* is asking about a
+    /// device. What it is answered with instead is nothing, which is true.
+    fn open_name(&self) -> Option<String> {
+        None
     }
 }
 
@@ -147,13 +186,26 @@ impl core::fmt::Debug for SurfaceLink {
 impl SurfaceLink {
     /// Attaches a port, with a binding table.
     ///
-    /// The surface is marked connected immediately, which invalidates the shadow
-    /// model and therefore draws the whole picture once — §5.3's resync burst,
-    /// paced by the layer below rather than poured into the port.
+    /// A port that is **there** is marked connected immediately, which
+    /// invalidates the shadow model and therefore draws the whole picture once —
+    /// §5.3's resync burst, paced by the layer below rather than poured into the
+    /// port.
+    ///
+    /// A port that is **not** there is attached all the same and starts
+    /// disconnected (S36). That is the exit criterion rather than a nicety: a
+    /// configured port whose desk is switched off is a warning and a daemon that
+    /// starts, the picture goes on being maintained while it is away, and the
+    /// moment somebody plugs it in [`follow_the_cable`](Self::follow_the_cable)
+    /// draws the whole of it. Starting *connected* and discovering otherwise on
+    /// the first poll would have said *the surface has gone* about a surface
+    /// that was never there.
     #[must_use]
     pub fn attach(port: Box<dyn SurfacePort>, bindings: Bindings) -> Self {
         let mut controller = SurfaceController::new(X_TOUCH);
-        controller.connected(Duration::ZERO);
+        if port.connected() {
+            controller.connected(Duration::ZERO);
+        }
+        let reported = controller.health();
         Self {
             controller,
             bindings,
@@ -164,7 +216,7 @@ impl SurfaceLink {
             events: Vec::new(),
             text: String::new(),
             next_paint: Duration::ZERO,
-            reported: SurfaceHealth::Connected,
+            reported,
         }
     }
 
@@ -203,16 +255,56 @@ impl SurfaceLink {
             self.paint(&desk.core());
         }
         self.send(now);
-        if !self.port.connected() && self.controller.health().is_attached() {
-            // The port itself says it has gone. §5.3: a hardware fault like any
-            // other — the picture is kept, nothing is sent, and the engine is
-            // never told.
-            self.controller.disconnected();
-        }
+        self.follow_the_cable(now);
         if let Some(notice) = self.health_notice() {
             deltas.push(notice);
         }
         deltas
+    }
+
+    /// Keeps the controller's idea of the surface in step with the port's — the
+    /// hot-plug edge, **S36**.
+    ///
+    /// Two transitions and nothing else, and the engine hears about neither:
+    ///
+    /// - **Gone.** `docs/MCU_MAPPING.md` §5.3 — a hardware fault like any other.
+    ///   The picture is kept and goes on being maintained, so whatever the show
+    ///   did meanwhile is on the desk when it comes back; nothing is sent; a
+    ///   hand that was on a fader is taken off it, or that fader would be
+    ///   suppressed for ever.
+    /// - **Back.** `connected` invalidates the shadow model, so the resync burst
+    ///   of §5.3 is the ordinary diff rather than a special path — 156 messages,
+    ///   paced at the same floor as everything else, which is about 156 ms.
+    ///
+    /// The port is asked *after* the send: a write is one of the two things that
+    /// discovers a cable has come out (`prism_midi::MidiSurfacePort::write`), so
+    /// asking first would report a port gone one poll later than it went.
+    fn follow_the_cable(&mut self, now: Duration) {
+        self.port.refresh(now);
+        let there = self.port.connected();
+        let believed = self.controller.health().is_attached();
+        if there && !believed {
+            log::info(
+                "surface",
+                &format!("{} is back; redrawing it", self.port.describe()),
+            );
+            self.controller.connected(now);
+        } else if !there && believed {
+            log::warn("surface", &format!("{} has gone", self.port.describe()));
+            self.controller.disconnected();
+        }
+    }
+
+    /// What the port is, for a log line and a settings panel.
+    #[must_use]
+    pub fn describe(&self) -> String {
+        self.port.describe()
+    }
+
+    /// The MIDI port this surface is actually open on, by name — S36.
+    #[must_use]
+    pub fn open_name(&self) -> Option<String> {
+        self.port.open_name()
     }
 
     /// Feeds everything the port has into the controller.
@@ -550,6 +642,88 @@ impl MockSurfaceHandle {
     pub fn unplug(&self) {
         self.state().unplugged = true;
     }
+
+    /// Puts it back in — S36.
+    ///
+    /// The other half of [`unplug`](Self::unplug), and the reason the hot-plug
+    /// edge can be asserted with nothing plugged in: `SurfaceLink` learns a port
+    /// has come back through `SurfacePort::connected` and nothing else, so a
+    /// mock that can answer both ways exercises exactly the path a real cable
+    /// does.
+    pub fn replug(&self) {
+        self.state().unplugged = false;
+    }
+}
+
+/// The X-Touch that is actually plugged in — **S36**.
+///
+/// One line of substance and a reason for existing: `prism_midi` knows nothing
+/// about a daemon and this crate may hold no platform code, so the two are
+/// joined here, where a `MidiSurfacePort` becomes a [`SurfacePort`] and nothing
+/// else happens at all.
+///
+/// Everything interesting is one layer down. The port keeps a **name** rather
+/// than a device, so it survives the cable coming out and going back in; it
+/// retries on a doubling backoff to a five-second ceiling; and it reopens only
+/// when the port has genuinely gone — never because the desk has stopped
+/// talking, which is S20's finding and the one fault reconnecting cannot fix
+/// (`docs/MCU_MAPPING.md` §2.7).
+#[derive(Debug)]
+pub struct RealSurfacePort(prism_midi::MidiSurfacePort);
+
+impl RealSurfacePort {
+    /// Opens the port a configured name selects, or arranges to keep trying.
+    ///
+    /// **Never fails.** A configured port that is not there is a warning and a
+    /// daemon that starts; [`why`](Self::why) is the warning's text.
+    #[must_use]
+    pub fn attach(port: &str) -> Self {
+        Self(prism_midi::MidiSurfacePort::attach(port))
+    }
+
+    /// Why the port is not open, or `None` when it is.
+    #[must_use]
+    pub fn why(&self) -> Option<String> {
+        self.0.error().map(ToString::to_string)
+    }
+
+    /// The port name the configuration asked for.
+    #[must_use]
+    pub fn configured(&self) -> &str {
+        self.0.configured()
+    }
+}
+
+impl SurfacePort for RealSurfacePort {
+    fn read(&mut self, buffer: &mut [u8]) -> Option<usize> {
+        self.0.read(buffer)
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.write(bytes);
+    }
+
+    fn connected(&self) -> bool {
+        self.0.connected()
+    }
+
+    fn refresh(&mut self, now: Duration) {
+        self.0.refresh(now);
+    }
+
+    fn describe(&self) -> String {
+        match self.0.port_name() {
+            Some(name) => format!("the surface on MIDI port {name:?}"),
+            None => format!(
+                "the surface configured on MIDI port {:?}",
+                self.0.configured()
+            ),
+        }
+    }
+
+    fn open_name(&self) -> Option<String> {
+        self.0.port_name().map(str::to_owned)
+    }
 }
 
 /// A control surface with no device behind it, fed from a file.
@@ -878,6 +1052,147 @@ mod tests {
         assert!(super::FileSurfacePort::open(missing).is_err());
     }
 
+    /// **The hot-plug edge, S36**, asserted with nothing plugged in.
+    ///
+    /// A `SurfaceLink` learns that a port has gone or come back through
+    /// `SurfacePort::connected` and nothing else, so a mock that answers both
+    /// ways exercises exactly the path a real cable does. What is asserted is
+    /// the pair of transitions and the resync: coming back **invalidates the
+    /// shadow model**, which is `docs/MCU_MAPPING.md` §5.3's burst arriving as
+    /// the ordinary diff rather than as a special path.
+    #[test]
+    fn a_cable_pulled_and_put_back_costs_one_notice_each_way_and_a_redraw() {
+        use prism_surface::Fader;
+
+        let (port, handle) = super::MockSurfacePort::new();
+        let mut link = super::SurfaceLink::attach(Box::new(port), Bindings::defaults());
+        assert_eq!(link.health(), SurfaceHealth::Connected);
+
+        // Draw something and let it out, so the shadow model believes something.
+        link.controller.set_fader(Fader::Strip(0), u16::MAX);
+        for step in 0..400 {
+            link.send(std::time::Duration::from_millis(step));
+        }
+        assert!(!handle.received().is_empty());
+        let drawn = handle.received().len();
+        link.send(std::time::Duration::from_millis(500));
+        assert_eq!(
+            handle.received().len(),
+            drawn,
+            "a picture that has not changed costs nothing"
+        );
+
+        // Out.
+        handle.unplug();
+        link.follow_the_cable(std::time::Duration::from_millis(501));
+        assert_eq!(link.health(), SurfaceHealth::Disconnected);
+        let Some(Delta::Notice { level, message }) = link.health_notice() else {
+            panic!("the operator has to be told the desk has gone");
+        };
+        assert_eq!(level, NoticeLevel::Warn);
+        assert!(message.contains("no surface"), "{message}");
+
+        // And nothing is sent to a port that is not there.
+        handle.clear_received();
+        link.controller.set_fader(Fader::Strip(1), u16::MAX);
+        for step in 502..600 {
+            link.send(std::time::Duration::from_millis(step));
+        }
+        assert!(handle.received().is_empty(), "nothing goes to a dead port");
+
+        // Back in. The whole picture is owed again, because `connected`
+        // invalidates what the desk was believed to be showing.
+        handle.replug();
+        link.follow_the_cable(std::time::Duration::from_millis(601));
+        assert_eq!(link.health(), SurfaceHealth::Connected);
+        assert_eq!(
+            link.health_notice(),
+            None,
+            "a desk that is there again is not news to report as a fault"
+        );
+        for step in 602..1200 {
+            link.send(std::time::Duration::from_millis(step));
+        }
+        let redrawn = handle.received().len();
+        assert!(
+            redrawn >= drawn,
+            "the whole surface is redrawn ({redrawn}), not just the one fader that              changed while it was away — the first draw was {drawn} messages"
+        );
+        assert!(
+            redrawn > 100,
+            "and a whole surface is a hundred and fifty-odd messages, not one: {redrawn}"
+        );
+    }
+
+    /// A configured port whose desk is switched off: the daemon has a surface,
+    /// the surface is disconnected, and **nothing claims it has gone** — because
+    /// it was never there.
+    #[test]
+    fn a_port_that_was_never_there_starts_disconnected_and_says_nothing_about_going() {
+        let (port, handle) = super::MockSurfacePort::new();
+        handle.unplug();
+        let mut link = super::SurfaceLink::attach(Box::new(port), Bindings::defaults());
+        assert_eq!(link.health(), SurfaceHealth::Disconnected);
+        assert_eq!(
+            link.health_notice(),
+            None,
+            "the daemon warned about the port at start-up; this is not a second event"
+        );
+        link.follow_the_cable(std::time::Duration::from_millis(1));
+        assert_eq!(link.health(), SurfaceHealth::Disconnected);
+
+        // And the moment it appears, it is drawn.
+        handle.replug();
+        link.follow_the_cable(std::time::Duration::from_millis(2));
+        assert_eq!(link.health(), SurfaceHealth::Connected);
+    }
+
+    /// The real port, described without one being plugged in.
+    ///
+    /// `CLAUDE.md`: no test touches a device, and this machine has an X-Touch
+    /// attached that the suite must not open. The name asked for is one nothing
+    /// can be called.
+    #[test]
+    fn a_real_port_that_is_not_there_is_attached_all_the_same_and_says_why() {
+        let port = super::RealSurfacePort::attach("no such port \u{1F50C}");
+        assert_eq!(port.configured(), "no such port \u{1F50C}");
+        assert!(!port.connected());
+        assert_eq!(port.open_name(), None);
+        let why = port.why().expect("a port that is not open says why");
+        assert!(why.contains("no such port"), "{why}");
+        // What a log line and a settings panel show.
+        let shown = port.describe();
+        assert!(shown.contains("configured on MIDI port"), "{shown}");
+
+        // Reading, writing and being asked to look again are all ordinary
+        // no-ops on a port that is not there rather than anything worse —
+        // which is the whole of *a configured port that is absent is a warning
+        // and a daemon that starts*, seen from the seam.
+        let mut port = port;
+        let mut buffer = [0u8; 8];
+        assert_eq!(port.read(&mut buffer), None);
+        port.write(&[0xE0, 0, 0]);
+        port.refresh(std::time::Duration::from_millis(1));
+        assert!(!port.connected());
+
+        // Attached to a link, it is a surface that is simply not there yet —
+        // which is the exit criterion in one line.
+        let link = super::SurfaceLink::attach(Box::new(port), Bindings::defaults());
+        assert_eq!(link.health(), SurfaceHealth::Disconnected);
+        assert_eq!(link.open_name(), None);
+        assert!(link.describe().contains("no such port"));
+    }
+
+    /// The two ports that are not MIDI ports answer the same way about being
+    /// one, which is what a settings window needs in order to draw nothing
+    /// rather than draw a guess.
+    #[test]
+    fn a_surface_that_is_not_a_midi_port_names_none() {
+        let (port, _handle) = super::MockSurfacePort::new();
+        assert_eq!(port.open_name(), None);
+        assert_eq!(port.describe(), "a control surface");
+    }
+
     #[test]
     fn a_port_that_cannot_tell_whether_it_is_there_says_it_is() {
         struct Silent;
@@ -888,5 +1203,13 @@ mod tests {
             fn write(&mut self, _bytes: &[u8]) {}
         }
         assert!(Silent.connected());
+        // And a port with nothing to notice notices nothing, rather than
+        // needing to say so.
+        let mut silent = Silent;
+        silent.refresh(std::time::Duration::from_secs(1));
+        assert_eq!(silent.open_name(), None);
+        assert_eq!(silent.read(&mut [0u8; 4]), None);
+        silent.write(&[0x90, 54, 127]);
+        assert_eq!(silent.describe(), "a control surface");
     }
 }

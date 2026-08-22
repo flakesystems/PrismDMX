@@ -211,6 +211,24 @@ describe("deltas", () => {
     expect(store.getState().outputs).toEqual([]);
   });
 
+  /// S36: which MIDI port this machine's control surface is on.
+  it("follows the surface port and lets it be taken away", () => {
+    const store = new DeskStore();
+    store.applySnapshot(snapshot());
+    // Not in the snapshot: a client learns it from a delta while it is
+    // connected, and asks `Query::MidiPorts` when a settings window opens.
+    expect(store.getState().surfacePort).toBeNull();
+
+    store.applyDelta({ t: "SurfaceChanged", port: "2- X-Touch" });
+    expect(store.getState().surfacePort).toBe("2- X-Touch");
+    // And the documents are untouched, because the desk in the rack is not
+    // show content.
+    expect(JSON.stringify(store.getState().documents)).not.toContain("X-Touch");
+
+    store.applyDelta({ t: "SurfaceChanged", port: null });
+    expect(store.getState().surfacePort).toBeNull();
+  });
+
   it("keeps notices, newest last, and forgets the oldest", () => {
     const store = new DeskStore();
     store.applySnapshot(snapshot());

@@ -25,6 +25,12 @@ prism-core = { path = "../prism-core" }
 prism-domain = { path = "../prism-domain" }
 prism-engine = { path = "../prism-engine" }
 prism-ipc = { path = "../prism-ipc" }
+# The MIDI port, and the reason it is a crate of its own: opening one is
+# `#[cfg(target_os = ...)]` from top to bottom and section 10.1 allows this crate
+# none. Exactly the move `thread-priority` is below, one device along - and the
+# ARM64 cross-check is what says it worked, because on that target `prism-midi`
+# has no dependencies at all.
+prism-midi = { path = "../prism-midi" }
 prism-protocols = { path = "../prism-protocols" }
 prism-surface = { path = "../prism-surface" }
 serde = { workspace = true }

@@ -195,7 +195,9 @@ type Command =
   | { t: "AddOutput"; output: OutputInstance }
   | { t: "ConfigureOutput"; id: OutputId; change: OutputChange }
   | { t: "RemoveOutput"; id: OutputId }
-  | { t: "SetOutputEnabled"; id: OutputId; enabled: boolean };
+  | { t: "SetOutputEnabled"; id: OutputId; enabled: boolean }
+  // ---- This machine's own control surface (S36) ----
+  | { t: "SetSurfacePort"; port: string | null };
 ```
 
 The second group is the concrete form of **D11**. The console and the UI draw on one vocabulary; there is no separate surface command set to keep in sync.
@@ -267,6 +269,34 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > ordinary state of a correct configuration, and a desk that refused the row could
 > not be configured before the get-in.
 >
+> **The desk in the rack is the same kind of fact as the cabling** *(S36)*.
+> `SetSurfacePort` names the MIDI port this machine's X-Touch is on, and it is a
+> **machine** command for the four above it's reason exactly: a show carried to
+> another hall on a stick must not bring a port name with it. So it lands in
+> `prism_core::MachineConfig`, both of the other appliers refuse it by name, and
+> it is not undoable.
+>
+> A **name** rather than an index, because an index renumbers itself when
+> somebody moves a plug. What a name has to survive is the decoration each
+> platform puts round it — a Windows driver-instance prefix, an ALSA client
+> address — and that is `prism_midi::selects`' rule rather than the protocol's:
+> what travels is exactly what the operator picked out of `Answer::MidiPorts`.
+> `null` is *no surface at all*, which is the ordinary state of a laptop.
+>
+> **A port that is not there is accepted**, for the reason an output row naming a
+> node that is switched off is: a show is prepared before the get-in, and a desk
+> that refused the name could not be configured until the van arrived. The daemon
+> warns, keeps trying, and starts. `Delta::SurfaceChanged` carries the new name
+> to every client, so two settings windows cannot disagree about which desk this
+> is.
+>
+> **A daemon told its port on the command line refuses to change it** —
+> `--surface <port>` is the surface for that run, the configured port is neither
+> read nor written, and the refusal names that flag rather than the output one.
+> The same rule `--mock-output` puts the four output commands under, and a
+> separate flag from it because the two are separate facts: a daemon may take its
+> rig from `machine.json` and its surface from a command line at the same time.
+
 > **A patched universe no output carries is reported, not refused**
 > (`prism_core::ShowIssue::UniverseNotOutput`): a rig is built over an afternoon,
 > and an operator whose universe 7 goes nowhere has to read that before the show
@@ -468,7 +498,8 @@ type Query =
   | { t: "PatchConflicts" }
   | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number }
   | { t: "SearchLibrary"; text: string; limit: number }
-  | { t: "StorePreview"; target: StoreTarget; mode: StoreMode };
+  | { t: "StorePreview"; target: StoreTarget; mode: StoreMode }
+  | { t: "MidiPorts" };
 
 type StoreTarget =
   | { t: "Cue"; sequenceId: SequenceId; cueNumber: string }
@@ -478,7 +509,10 @@ type Answer =
   | { t: "PatchConflicts"; conflicts: PatchConflict[] }
   | { t: "PatchPreview"; preview: PatchPreview }
   | { t: "LibraryMatches"; matches: LibraryEntry[]; total: number }
-  | { t: "StorePreview"; preview: StorePreview };
+  | { t: "StorePreview"; preview: StorePreview }
+  | { t: "MidiPorts"; ports: MidiPortInfo[]; configured: string | null; open: string | null };
+
+interface MidiPortInfo { name: string; input: boolean; output: boolean }
 
 interface StorePreview {
   accepted: boolean; refusal: string | null;
@@ -505,6 +539,28 @@ interface StorePreview {
 > **The mode is asked rather than answered, since S39.** S28 put it on the *answer*, because `prism_core::Programmer` was what decided it and an interface that had spelled `"Merge"` itself would have gone on looking right and been wrong. Now the operator chooses, the choice travels in the question, and the answer **echoes it** — so a bar drawing an answer beside a chooser that has since moved cannot describe the wrong one. A client still renders the word it is given rather than the word it sent.
 >
 > It takes its refusal from the **same** builders the store runs (`Programmer::cue`, `Programmer::preset`), so a preview and the store after it cannot disagree — the rule `PatchPreview` and `check_patch` already share.
+
+> **`MidiPorts` is the variant S36 needed** *(S36)*. What is plugged into the
+> daemon's machine is not state the daemon owns: it changes when a person moves a
+> plug, no command causes it, and a client that mirrored it would hold the
+> operating system's opinion from whenever it last connected. So a settings
+> window asks when it opens, and asks again when the operator presses *rescan* —
+> the gesture that exists precisely because plugging a desk in produces no
+> message. Enumerating is also a system call, which is the other reason it is not
+> a field of the snapshot.
+>
+> The answer carries the **configuration** as well as the enumeration, and that
+> is not a convenience: a list of ports with no mark against the chosen one is a
+> list an operator cannot act on, and joining it against `Delta::SurfaceChanged`
+> would be arithmetic to learn something the daemon can say. `configured` need
+> not be in `ports` — a desk that is switched off is named and absent at the same
+> time, which is exactly the state a panel has to draw — and `open` is what is
+> actually there, which differs from `configured` in that one case and equals it
+> whenever all is well.
+>
+> **An empty `ports` is an ordinary answer.** A laptop with nothing attached and a
+> build with no MIDI backend produce the same one, because from a client's side
+> they are the same fact.
 
 Four rules, and the first three are what make it safe to ask one on a desk that
 is running a show:
@@ -539,6 +595,7 @@ type Delta =
   | { t: "ProgrammerChanged"; state: ProgrammerState }
   | { t: "PlaybackState"; playback: PlaybackId; isActive: boolean; cueIndex: number | null }
   | { t: "OutputsChanged"; outputs: OutputInstance[] }   // this machine's rig (S33)
+  | { t: "SurfaceChanged"; port: string | null }  // this machine's desk (S36)
   | { t: "OutputHealth"; outputId: OutputId; health: OutputHealth }
   | { t: "DirtyFlag"; unsavedChanges: boolean }   // drives the X-Touch Save LED
   | { t: "Notice"; level: "Info" | "Warn" | "Error"; message: string };
@@ -564,6 +621,13 @@ Deltas are ordered per connection. A client that has applied every delta since i
 > as the show would write a hall's cabling into what that client believes the
 > show to be — and a save would be next. `prism_core::ShowMirror` ignores it by
 > name for exactly that reason.
+>
+> **`SurfaceChanged` is the same shape for the other device** *(S36)*: one name,
+> or none, sent whole because it *is* whole, and ignored by both mirrors for
+> exactly the reason above — which desk is in the rack is the machine's and not
+> the show's. What it deliberately does **not** carry is the list of ports that
+> exist, which is `Query::MidiPorts`' answer (§5.2): a delta describes a change
+> the daemon made, and somebody plugging a desk in is not one.
 >
 > It says what the rig **is**; `OutputHealth` says what a driver is *doing*. A
 > row that has just arrived is `Disconnected` until its driver says otherwise,

@@ -43,10 +43,12 @@ fn the_three_groups_together_are_the_whole_protocol() {
     //
     // **Three groups since S33**, which gave this machine's rig an applier of
     // its own: the show's, the session's and the machine's, and every command
-    // is in exactly one of the three.
+    // is in exactly one of the three. The machine group grew a fifth in S36 —
+    // the control surface's MIDI port, which belongs to the building for the
+    // same reason the cabling does.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        52
+        53
     );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");

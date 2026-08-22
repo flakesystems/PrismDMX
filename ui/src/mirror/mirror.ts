@@ -100,6 +100,10 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
     // the show document would put a hall's cabling into what a client believes
     // the show to be - and a save would be next.
     case "OutputsChanged":
+    // `SurfaceChanged` is here for the same reason (S36): which desk is in the
+    // rack belongs to the **machine**, so writing it into the show document
+    // would put a hall's hardware into what a client believes the show to be.
+    case "SurfaceChanged":
     case "OutputHealth":
     case "DirtyFlag":
     case "Notice":

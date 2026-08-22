@@ -44,7 +44,8 @@
 //! # Platform code, and why it is allowed here
 //!
 //! `ARCHITECTURE_SPEC.md` §10.1 confines `#[cfg(target_os = …)]` to
-//! `prism-protocols` and `prism-app`, and a named pipe on Windows beside a Unix
+//! `prism-protocols`, `prism-app` and — since S36 — `prism-midi`, and a named
+//! pipe on Windows beside a Unix
 //! domain socket on Linux is exactly the kind of split that rule exists to
 //! contain. It is contained: the two `#[cfg]`s in this crate are both in
 //! [`local`], both select a listener and a connector type, and everything above

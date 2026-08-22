@@ -160,6 +160,18 @@ pub struct Options {
     /// will not start. `IMPLEMENTATION_PLAN.md` S22, and
     /// [`crate::surface::load_profile`] is where it is kept.
     pub surface_profile: Option<PathBuf>,
+    /// The MIDI port the control surface is on, or `None` to use whatever the
+    /// machine configuration names — S36.
+    ///
+    /// **The surface for this run when it is given.** The stored port is
+    /// neither read nor written, and `Command::SetSurfacePort` is refused, for
+    /// the reason `--mock-output` refuses the four output commands (S33): a
+    /// daemon started with a port on its command line must not overwrite the
+    /// one the venue configured, and a `SetSurfacePort` that appeared to work
+    /// and vanished at the next restart would be worse than one that says why.
+    ///
+    /// A port that is not plugged in is a **warning and a daemon that starts**.
+    pub surface: Option<String>,
     /// A file to read MIDI bytes from as though a control surface were plugged
     /// in, or `None` for no surface at all.
     ///
@@ -192,6 +204,7 @@ impl Default for Options {
             websocket: None,
             token: None,
             surface_profile: None,
+            surface: None,
             mock_surface: None,
             exit: Exit::default(),
             log_level: Level::Info,
@@ -209,6 +222,13 @@ pub enum Invocation {
     Help,
     /// Print the version and stop.
     Version,
+    /// Print the MIDI ports this machine has and stop — S36.
+    ///
+    /// How a person finds the name to write into `--surface` or into a settings
+    /// window, and the plainest form of S36's exit criterion: on a machine with
+    /// no MIDI device it prints an empty list and exits **successfully**, rather
+    /// than reporting that it could not look.
+    MidiPorts,
 }
 
 /// Why a command line was refused.
@@ -272,6 +292,13 @@ machine.json, which is where a settings window puts it.
                         profiles/surface/xtouch.json). A profile that is
                         missing or malformed is reported and the built-in
                         bindings are used; it never stops the daemon
+  --surface <PORT>      the MIDI port the control surface is on, by name. A
+                        port that is not plugged in is a warning and a daemon
+                        that starts, and one plugged in later is picked up
+                        without a restart. This is the surface for the run:
+                        the configured port is neither read nor written, and
+                        SetSurfacePort is refused
+  --midi-ports          print the MIDI ports this machine has and stop
   --mock-surface <PATH> a control surface with no device behind it: MIDI bytes
                         appended to PATH are read as though the console had
                         sent them, and the feedback goes nowhere, because a
@@ -290,6 +317,51 @@ machine.json, which is where a settings window puts it.
         prism_protocols::ART_NET_PORT,
         prism_protocols::E131_PORT,
     )
+}
+
+/// What `--midi-ports` prints — S36.
+///
+/// Here rather than in `main.rs` because it is arithmetic over a list and
+/// `main.rs` has no test target: a two-line binary is the one thing in this
+/// crate that cannot be asserted, so as little as possible goes in it.
+///
+/// A machine with nothing plugged in prints the backend and **`no MIDI ports`**,
+/// and the exit code is success — *there is no MIDI device here* is an answer
+/// rather than a failure to look, which is one of S36's exit criteria and is
+/// also what CI runs.
+#[must_use]
+pub fn midi_port_report(listed: &prism_midi::PortList) -> String {
+    use core::fmt::Write as _;
+
+    let mut out = format!(
+        "MIDI backend: {}
+",
+        prism_midi::backend_name()
+    );
+    if listed.is_empty() {
+        out.push_str(
+            "no MIDI ports
+",
+        );
+        return out;
+    }
+    for name in listed.names() {
+        // Both directions are marked because a surface needs both: a
+        // synthesiser is output only and a keyboard with no lamps is input
+        // only, and an operator looking for their desk in this list has to be
+        // able to see why the wrong row is the wrong row.
+        let directions = match (
+            listed.inputs.contains(&name),
+            listed.outputs.contains(&name),
+        ) {
+            (true, true) => "in+out",
+            (true, false) => "in    ",
+            (false, true) => "   out",
+            (false, false) => "      ",
+        };
+        let _ = writeln!(out, "  [{directions}] {name}");
+    }
+    out
 }
 
 /// Reads a command line, without the program name.
@@ -407,6 +479,8 @@ where
             }
             "--token" => options.token = Some(value()?),
             "--surface-profile" => options.surface_profile = Some(PathBuf::from(value()?)),
+            "--surface" => options.surface = Some(value()?),
+            "--midi-ports" => return Ok(Invocation::MidiPorts),
             "--mock-surface" => options.mock_surface = Some(PathBuf::from(value()?)),
             "--blackout-on-exit" => options.exit = Exit::Blackout,
             "--hold-on-exit" => options.exit = Exit::Hold,
@@ -485,6 +559,8 @@ mod tests {
     use std::net::SocketAddr;
     use std::path::PathBuf;
     use std::time::Duration;
+
+    use super::midi_port_report;
 
     fn options(arguments: &[&str]) -> Options {
         match parse(arguments) {
@@ -765,6 +841,67 @@ mod tests {
         assert!(refusal(&["--mock-surface"]).contains("needs a value"));
     }
 
+    /// What `--midi-ports` prints, on a machine with nothing plugged in and on
+    /// one with a desk on it.
+    #[test]
+    fn the_port_listing_says_what_there_is_and_which_way_each_one_goes() {
+        use prism_midi::PortList;
+
+        // The exit criterion in one line: an empty list is an answer.
+        let nothing = midi_port_report(&PortList::default());
+        assert!(nothing.contains("no MIDI ports"), "{nothing}");
+        assert!(nothing.contains("MIDI backend:"), "{nothing}");
+
+        let listed = PortList {
+            inputs: vec!["2- X-Touch".to_owned(), "nanoKEY".to_owned()],
+            outputs: vec!["2- X-Touch".to_owned(), "Wavetable Synth".to_owned()],
+        };
+        let report = midi_port_report(&listed);
+        assert!(report.contains("[in+out] 2- X-Touch"), "{report}");
+        assert!(report.contains("[in    ] nanoKEY"), "{report}");
+        assert!(report.contains("[   out] Wavetable Synth"), "{report}");
+        assert!(!report.contains("no MIDI ports"), "{report}");
+        // Inputs first, and a port that is both is offered once.
+        assert_eq!(report.matches("X-Touch").count(), 1, "{report}");
+
+        // And the real machine's, whatever it is: it answers, and nothing is
+        // opened to answer it.
+        let real = midi_port_report(&prism_midi::ports());
+        assert!(real.starts_with("MIDI backend: "), "{real}");
+    }
+
+    /// S36's two: the port a real surface is on, and the way a person finds its
+    /// name.
+    #[test]
+    fn a_real_surface_is_named_by_its_port_and_the_ports_can_be_listed() {
+        let chosen = options(&["--surface", "2- X-Touch"]);
+        assert_eq!(chosen.surface, Some("2- X-Touch".to_owned()));
+        assert_eq!(
+            Options::default().surface,
+            None,
+            "a daemon with no --surface uses whatever machine.json names"
+        );
+        assert!(refusal(&["--surface"]).contains("needs a value"));
+
+        // The listing stops before anything else is read, like --help: it is a
+        // question about the machine rather than a daemon to start.
+        assert_eq!(
+            parse(["--midi-ports", "--nonsense"]),
+            Ok(Invocation::MidiPorts)
+        );
+
+        // A port name is taken as it stands. Whether it selects anything is
+        // `prism_midi`'s rule and not the parser's — a name with a space, a
+        // hyphen or a bracket in it is what Windows and ALSA actually produce.
+        for name in [
+            "X-Touch",
+            "MIDIIN2 (X-Touch)",
+            "X-Touch:X-Touch MIDI 1 24:0",
+        ] {
+            assert_eq!(options(&["--surface", name]).surface, Some(name.to_owned()));
+        }
+    }
+
     /// The help is the documentation, so it has to name every option the parser
     /// answers to. A flag that works and is not written down is a flag nobody
     /// uses.
@@ -778,6 +915,8 @@ mod tests {
             "--mock-output",
             "--artnet",
             "--sacn",
+            "--surface",
+            "--midi-ports",
             "--open-dmx",
             "--sacn-to",
             "--no-local",

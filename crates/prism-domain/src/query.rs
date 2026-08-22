@@ -32,7 +32,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{FeatureGroup, FixtureId, PresetId, SequenceId, UniverseId};
+use crate::{FeatureGroup, FixtureId, MidiPortInfo, PresetId, SequenceId, UniverseId};
 
 /// Two fixtures sharing DMX channels.
 ///
@@ -324,6 +324,22 @@ pub enum Query {
         /// Which mode to answer about — the one the operator has chosen.
         mode: StoreMode,
     },
+    /// The MIDI ports plugged into **this machine**, and which one the desk is
+    /// configured for — S36.
+    ///
+    /// Asked rather than mirrored because it is not state the daemon owns: it
+    /// changes when a person moves a plug, no command causes it, and a client
+    /// that mirrored it would hold the operating system's opinion from whenever
+    /// it last connected. A settings window asks when it opens, and again when
+    /// the operator presses *rescan* — which is the gesture that exists
+    /// precisely because plugging a desk in produces no message.
+    ///
+    /// **The answer carries the configuration as well as the enumeration**, and
+    /// that is not a convenience: a list of ports with no mark against the
+    /// chosen one is a list an operator cannot act on, and joining it against
+    /// [`crate::Delta::SurfaceChanged`] would be arithmetic to learn something
+    /// the daemon can simply say.
+    MidiPorts,
 }
 
 /// The daemon's answer to a [`Query`].
@@ -361,6 +377,29 @@ pub enum Answer {
     StorePreview {
         /// The whole of it.
         preview: StorePreview,
+    },
+    /// What is plugged in, and what this desk is configured for — S36.
+    ///
+    /// An **empty** `ports` is an ordinary answer rather than a failure: a
+    /// laptop with nothing attached, and a build with no MIDI backend, produce
+    /// the same one, because from a client's side they are the same fact. That
+    /// is an exit criterion of S36 and it is what CI runs.
+    MidiPorts {
+        /// Every port the operating system offers, in its own order.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        ports: Vec<MidiPortInfo>,
+        /// The port this machine's configuration names, or `None` for no
+        /// surface. It need not be in `ports`: a desk that is switched off is
+        /// configured and absent at the same time, which is exactly the state a
+        /// settings window has to draw.
+        configured: Option<String>,
+        /// The port that is actually open, or `None`. Different from
+        /// `configured` in the one case that matters — the desk is named and is
+        /// not there — and equal to it whenever all is well.
+        open: Option<String>,
     },
 }
 

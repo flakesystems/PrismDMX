@@ -127,6 +127,14 @@ pub trait ServerHandler: Send + Sync + 'static {
                 matches: Vec::new(),
                 total: 0,
             },
+            // A handler with no machine behind it has no ports and has chosen
+            // none — which is the same answer a laptop with nothing plugged in
+            // gives, so there is nothing here for a client to special-case.
+            Query::MidiPorts => Answer::MidiPorts {
+                ports: Vec::new(),
+                configured: None,
+                open: None,
+            },
             // The mode is **echoed**, not chosen: a handler with no show still
             // has to answer about the mode it was asked about, or a client
             // would draw a refusal beside a word nobody typed (S39).

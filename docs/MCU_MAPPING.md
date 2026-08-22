@@ -759,6 +759,22 @@ why it is rate-limited rather than sent as fast as the port accepts.
 | **The handshake** (§2.7) | Sent **once**, and only when the surface has gone quiet after having talked, and only when the send queue is empty — the opposite of the condition that caused the fault. If it goes unanswered the health is `Unresponsive`, whose remedy text says *power-cycle*, because reconnecting is the one thing that will not help |
 | **Connection** (§5.3) | `connected` invalidates everything, so the resync burst is the ordinary diff rather than a special path — and so are a reconnect and a switch back from the sound console. `disconnected` keeps the picture and sends nothing; the engine is never told |
 
+### 5.5 As wired to a real port (S36)
+
+S21 built the two transitions and asserted them against a mock; what did not
+exist until S36 was anything that could *cause* one, because no code in the
+workspace opened a MIDI port. `prism-midi` is that code, and the rules it keeps
+are these:
+
+| Rule | How it is kept |
+|---|---|
+| **A port is named, not numbered** | A configuration holds the port's *name*, because an index renumbers itself when somebody moves a plug. `prism_midi::selects` compares names after taking the platform's decoration off — a Windows driver-instance prefix (`2- `), an ALSA client address (` 24:0`) — with the exact name tried first, the undecorated name second and a case-insensitive fragment last. Looser rules come last so a venue with two X-Touches can always write both names out in full and neither row can drift onto the other |
+| **A port that is not there is not a failure** | `MidiSurfacePort::attach` never fails. The daemon warns with the reason, starts, and keeps trying on a backoff that doubles from 250 ms to a five-second ceiling. A desk switched off half an hour before a show must not be why the show cannot be run |
+| **Only two things close a port** | It disappearing from the enumeration — checked once a second, not once a millisecond — and a write the operating system refuses. Which is to say: **not silence** |
+| **Silence is not a reason to reconnect** (§2.7) | The whole of S20's unwelcome finding, kept as a rule one layer below the health state that reports it. A surface that has stopped transmitting while still receiving is `SurfaceHealth::Unresponsive`, only a power cycle recovers it, and a port layer that reopened on silence would churn the one state that cannot be recovered that way *and* take the diagnosis away from the operator. Ten seconds of nothing inbound with writes still landing leaves the port open and the count of opens at one — `a_desk_that_has_gone_quiet_is_not_reopened` |
+| **The clock is still an argument** | `refresh(now)`, like `push(bytes, now, sink)` and `pump(now, sink)` above it. The surface thread in `prismd` reads the only real instant in the stack, and the reconnection schedule is arithmetic a test can walk in milliseconds |
+| **Nothing is paced here** | The minimum gap, the 30 Hz coalescing and the once-only handshake are all §5's, enforced one layer up. A second pacer would be a second opinion about §2.7 |
+
 **One deliberate non-rule, and it is the reverse of what §5.1 suggests.** An
 inbound fader *move* does not invalidate the shadow, only a *touch* does. §5.1's
 own description of the oscillation says the motor's movement generates an inbound
@@ -824,7 +840,7 @@ untried cable pull are not results.
 - [x] **§2 updated and the UNVERIFIED banner removed**; `profiles/surface/xtouch.json` written with the verification recorded in it. `prism_surface::X_TOUCH.verified` is `true`, and `ARCHITECTURE_SPEC.md` §14's row is closed
 - ◻ **Foot switches (notes 102, 103)** — *untested.* Nothing is plugged into either jack, and there is no way to make an absent pedal send a note. Their LEDs were driven and, as expected for a jack rather than a button, nothing lit
 - ◻ **The combined Xctl+MC mode** — *untested, and it is the deployment that is actually planned* (§4.3). The desk was in plain MC for all of the above, which is the right mode to have verified first: the MC half of the combined mode is the same MC, so nothing in §2 depends on it. What is **not** verified is the division of the panel — that only what Xctl leaves unused reaches MC, and that the transport section and the jog wheel are what reliably remain. That is the operator's account of the surface, not a measurement, and checking it needs the sound console on the other end of it. Worth doing before S22 finalises a default profile, because it decides which bindings can be relied on. **S21 has modelled it as data** (`McuProfile::permanent`, `SurfaceMode::Shared`), so confirming or correcting it is a one-line edit rather than a change to the diffing
-- ◻ **Behaviour when the USB cable is pulled** — *untested at the device.* **S21 built the handling** and it is asserted against a mock: the port going away invalidates the shadow model and stops all traffic, the engine is never told, the picture goes on being maintained, and a reconnect redraws the whole surface once, paced. A hand on a fader at the moment the cable goes does not stay on it, which would otherwise suppress that fader for ever. What is left for a device is whether a real unplug and replug produces exactly one `Disconnected` and one `connected` from whatever MIDI backend S22 chooses — a question about `midir`, not about this crate
+- ◻ **Behaviour when the USB cable is pulled** — *untested at the device, and **S36 answered everything except the device*** (§5.5). S21 built the handling against a mock and S36 built the thing that can produce the event: `prism_midi::MidiSurfacePort` closes a port when it leaves the enumeration or refuses a write, reopens it on a backoff, and `prismd::surface::SurfaceLink::follow_the_cable` turns those two edges into `disconnected` and `connected` — so a reconnect redraws the whole surface once, paced, and the engine hears about neither. All of that is asserted with nothing plugged in. What is **still** left for a device is the one thing a mock cannot say: whether `midir` produces exactly one disappearance and one reappearance for one real unplug and replug, rather than a flap. The backend is now chosen and named, which is the half of this row S21 could not close. `ARCHITECTURE_SPEC.md` §14 carries it as a 🔌 row with the recipe
 
 Findings go into this document. Discrepancies against the MCU standard are recorded explicitly rather than silently corrected, so the next device profile can reuse the knowledge — see §2.7, which is that list.
 
@@ -837,6 +853,23 @@ Findings go into this document. Discrepancies against the MCU standard are recor
 platform code, and `ARCHITECTURE_SPEC.md` §10.1 allows `prism-surface` none. So
 `cargo test --workspace`, `cargo clippy --workspace --all-targets` and the ARM64
 cross-check never see `midir`, and `prism-surface` gained no dependency at all.
+
+**S36 did not move it, and `prism-midi` is not a replacement for it.** The
+shipping backend now lives in the workspace, in a crate whose whole purpose is to
+hold the platform split — but the probe does things no test may: it walks a panel
+button by button, it lights one LED at a time and asks which button lit, and it
+floods the surface in both directions until it stops answering. That last one is
+how §2.7 was found and it is not something to run against a desk somebody is
+about to use. The division is the same as it always was — **platform code and a
+device in a tool, evidence in a fixture** — with one line added: the *shipping*
+port is `prism-midi`, and it opens nothing that a name in a configuration did not
+ask for.
+
+To read the names this machine offers, without starting anything:
+
+```bash
+cargo run -p prismd -- --midi-ports
+```
 
 It depends on `prism-surface` by path, which is the point: **every byte it sent
 was produced by `Feedback::encode_into` and every byte it read was decoded by

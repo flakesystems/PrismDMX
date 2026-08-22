@@ -39,6 +39,15 @@ fn main() -> ExitCode {
             println!("prismd {}", env!("CARGO_PKG_VERSION"));
             return ExitCode::SUCCESS;
         }
+        // S36: how a person finds the name to write into `--surface`. It exits
+        // **successfully** on a machine with nothing plugged in, printing an
+        // empty list, because *there is no MIDI device here* is an answer and
+        // not a failure to look. The text is built in the library, where it has
+        // a test; this line is the printing, which is all a binary does.
+        Ok(Invocation::MidiPorts) => {
+            print!("{}", prismd::cli::midi_port_report(&prism_midi::ports()));
+            return ExitCode::SUCCESS;
+        }
         Err(error) => {
             eprintln!("prismd: {error}");
             return ExitCode::FAILURE;

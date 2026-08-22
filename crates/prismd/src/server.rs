@@ -95,6 +95,16 @@ fn output_snapshots(core: &Core) -> Vec<OutputSnapshot> {
 /// all hold one, and every one of them reaches the show through the same lock.
 pub struct Desk {
     core: Mutex<Core>,
+    /// The MIDI port the control surface is actually open on, as the run loop
+    /// last saw it — S36.
+    ///
+    /// Here rather than on the `Core` because the *port* is the daemon's: a
+    /// cable has a thread's worth of state and a `Core` is what a client's
+    /// command reaches. `Daemon::run` refreshes this on its housekeeping tick
+    /// and [`Desk::query`] answers `Answer::MidiPorts` from it, so what a
+    /// settings window is told is at most half a second old — which is the right
+    /// freshness for a fact that changes when a person moves a plug.
+    open_surface: Mutex<Option<String>>,
 }
 
 impl Desk {
@@ -103,7 +113,27 @@ impl Desk {
     pub fn new(core: Core) -> Self {
         Self {
             core: Mutex::new(core),
+            open_surface: Mutex::new(None),
         }
+    }
+
+    /// Records which MIDI port the surface is open on — S36.
+    ///
+    /// Written by the run loop and by nobody else.
+    pub fn set_open_surface(&self, port: Option<String>) {
+        *self
+            .open_surface
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = port;
+    }
+
+    /// The MIDI port the surface is open on, as last recorded.
+    #[must_use]
+    pub fn open_surface(&self) -> Option<String> {
+        self.open_surface
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     /// The daemon's state.
@@ -229,6 +259,28 @@ impl Desk {
             Query::StorePreview { target, mode } => Answer::StorePreview {
                 preview: core.file.preview_store(target, *mode),
             },
+            // S36. **The enumeration is done here and now**, on the thread that
+            // asked, because that is what makes the answer true: a list built at
+            // start-up would be a list of what was plugged in then, and the
+            // gesture this exists for is somebody plugging a desk in and
+            // pressing *rescan*. It is a system call and not a cheap one, which
+            // is exactly why it is a query rather than a field of the snapshot.
+            Query::MidiPorts => {
+                let listed = prism_midi::ports();
+                Answer::MidiPorts {
+                    ports: listed
+                        .names()
+                        .into_iter()
+                        .map(|name| prism_domain::MidiPortInfo {
+                            input: listed.inputs.contains(&name),
+                            output: listed.outputs.contains(&name),
+                            name,
+                        })
+                        .collect(),
+                    configured: core.surface_port().map(str::to_owned),
+                    open: self.open_surface(),
+                }
+            }
             Query::SearchLibrary { text, limit } => Answer::LibraryMatches {
                 matches: core
                     .file
@@ -351,6 +403,7 @@ mod tests {
                 config: machine,
                 path: Some(dir.join("machine.json")),
                 outputs,
+                surface_on_command_line: false,
             },
             store,
             engine,

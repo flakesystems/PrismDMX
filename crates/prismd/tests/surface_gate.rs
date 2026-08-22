@@ -467,6 +467,13 @@ async fn the_show_is_drawn_onto_the_surface_faders_first() {
 }
 
 /// A cable pulled out is reported to the operator and changes nothing else.
+/// A cable pulled mid-show, and put back.
+///
+/// **S36 added the second half.** Until then a surface that went away stayed
+/// away for the life of the daemon, because nothing looked again; now the port
+/// is asked once per poll and a desk that comes back is redrawn whole. Neither
+/// edge reaches the engine, which is the §5.3 rule and is asserted rather than
+/// described: the tick count moves and no tick is missed across both of them.
 #[tokio::test]
 async fn a_surface_that_goes_away_is_reported_and_the_show_carries_on() {
     let _turn = common::one_daemon_at_a_time();
@@ -531,6 +538,27 @@ async fn a_surface_that_goes_away_is_reported_and_the_show_carries_on() {
     assert!(
         output.frames_sent() > frames,
         "and the rig is still being driven"
+    );
+
+    // **And it comes back** — S36. `docs/MCU_MAPPING.md` §5.3: a reconnect
+    // invalidates the shadow model, so the whole picture is transmitted once as
+    // the ordinary diff rather than as a special path. The engine hears about
+    // neither edge, which is asserted the same way it was above: the tick count
+    // moves and no tick is missed.
+    let missed = daemon.desk().core().engine().health().missed();
+    surface.replug();
+    run_until(&mut daemon, "the desk to be redrawn", || {
+        surface.received().len() > 100
+    })
+    .await;
+    assert_eq!(
+        daemon.desk().core().engine().health().missed(),
+        missed,
+        "the tick never noticed a cable"
+    );
+    assert!(
+        output.frames_sent() > frames,
+        "and the rig never stopped for one"
     );
 
     daemon.shutdown().await;

@@ -318,13 +318,14 @@ pub fn show_commands() -> Vec<Command> {
 }
 
 /// Every command the **machine** applier accepts, each in a form a configured
-/// rig takes — S33.
+/// rig takes — S33, and the surface port S36 put beside it.
 ///
 /// The third list, and the third applier. `Delete`, `Copy`, `Move` and `Label`
 /// are in two lists because their *target* decides which applier owns them;
-/// these four are in one, because a rig is never show content and never session
-/// content. `prism_core::outputs` has the argument in full and
-/// `desk::tests::outputs_are_not_show_content` is the asserted half.
+/// these five are in one, because neither a rig nor the desk in the rack is
+/// ever show content or session content. `prism_core::outputs` has the argument
+/// in full, and `desk::tests::outputs_are_not_show_content` and
+/// `the_surface_port_is_not_show_content` are the asserted halves.
 ///
 /// They are applied **in order** where they are applied at all: the `AddOutput`
 /// is what the three after it name.
@@ -350,6 +351,11 @@ pub fn machine_commands() -> Vec<Command> {
         },
         Command::RemoveOutput {
             id: OutputId::new(1),
+        },
+        // S36's. Last because it has nothing to do with the four before it:
+        // it is the *other* device this machine owns.
+        Command::SetSurfacePort {
+            port: Some("X-Touch".to_owned()),
         },
     ]
 }

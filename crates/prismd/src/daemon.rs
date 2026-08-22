@@ -295,6 +295,7 @@ impl Daemon {
                 config: machine,
                 path: machine_path,
                 outputs,
+                surface_on_command_line: options.surface.is_some(),
             },
             store,
             engine,
@@ -375,10 +376,13 @@ impl Daemon {
             surface: None,
         };
 
-        // The one surface a command line can ask for. A real MIDI port is not
-        // among them yet — there is no backend (S22) — but a file of MIDI bytes
-        // is a surface as far as all three layers are concerned, and it is what
-        // lets D11 be watched from outside the process.
+        // Which surface this run has, in order — **S36**.
+        //
+        // `--mock-surface` first, because it is the one a test asks for and a
+        // test must never reach a device; then `--surface`, which is the port
+        // for the run and is why `SetSurfacePort` is refused; then the machine
+        // configuration, which is what a desk in a rack actually starts with.
+        // Nothing is a legitimate outcome: a laptop has no X-Touch.
         if let Some(path) = &options.mock_surface {
             match crate::surface::FileSurfacePort::open(path) {
                 Ok(port) => daemon.attach_surface(Box::new(port)),
@@ -390,8 +394,67 @@ impl Daemon {
                     ),
                 ),
             }
+        } else if let Some(port) = options
+            .surface
+            .clone()
+            .or_else(|| daemon.desk.core().surface_port().map(str::to_owned))
+        {
+            daemon.attach_midi_surface(&port);
         }
+        // Said once here as well as every half second in the run loop, so a
+        // client that asks `Query::MidiPorts` before the first housekeeping
+        // tick is told what is open rather than *nothing*.
+        daemon
+            .desk
+            .set_open_surface(daemon.surface.as_ref().and_then(SurfaceLink::open_name));
         Ok(daemon)
+    }
+
+    /// Opens a real MIDI port and attaches it — **S36**.
+    ///
+    /// **A port that is not there is a warning and a daemon that starts**, which
+    /// is the exit criterion and not a kindness: a desk switched off half an
+    /// hour before a show must not be the reason the show cannot be run, and the
+    /// same daemon picks the desk up the moment somebody plugs it in, without a
+    /// restart. That is `crate::surface::SurfaceLink::follow_the_cable`, and
+    /// `prism_midi` does the retrying underneath it.
+    pub fn attach_midi_surface(&mut self, port: &str) {
+        let port = crate::surface::RealSurfacePort::attach(port);
+        if let Some(why) = port.why() {
+            log::warn(
+                "surface",
+                &format!(
+                    "the configured MIDI port {:?} is not open: {why}.                      The daemon is running and will take it when it appears",
+                    port.configured()
+                ),
+            );
+        }
+        self.attach_surface(Box::new(port));
+    }
+
+    /// Puts the current surface down and takes up whatever the configuration now
+    /// names — **S36**.
+    ///
+    /// Called from the run loop when a `SetSurfacePort` has been applied. A
+    /// `--mock-surface` is left alone, because a run that asked for one asked
+    /// for exactly it.
+    fn follow_surface_change(&mut self, port: Option<String>) {
+        match port {
+            Some(port) => {
+                log::info(
+                    "surface",
+                    &format!("the surface moves to MIDI port {port:?}"),
+                );
+                self.attach_midi_surface(&port);
+            }
+            None => {
+                log::info(
+                    "surface",
+                    "no MIDI port is configured; the surface is detached",
+                );
+                self.surface = None;
+            }
+        }
     }
 
     /// Attaches a control surface.
@@ -521,6 +584,26 @@ impl Daemon {
                     return;
                 }
                 _ = housekeeping.tick() => {
+                    // S36's other door, and it is here because the surface tick
+                    // above only runs when there **is** a surface: a desk with
+                    // none has to be able to acquire one. Half a second rather
+                    // than a millisecond is the right cost for a gesture nobody
+                    // makes twice, and the fast path is still the fast one.
+                    let change = if self.surface.is_none() {
+                        self.desk.core().take_surface_change()
+                    } else {
+                        None
+                    };
+                    if let Some(port) = change {
+                        self.follow_surface_change(port);
+                    }
+                    // What a settings window is told about the desk: the port
+                    // that is actually open, refreshed on this cadence rather
+                    // than on the surface's. Half a second is the right
+                    // freshness for a fact that changes when somebody moves a
+                    // plug, and it keeps the millisecond path free of a string.
+                    self.desk
+                        .set_open_surface(self.surface.as_ref().and_then(SurfaceLink::open_name));
                     for delta in self.desk.poll_autosave() {
                         self.server.broadcast(delta).await;
                     }
@@ -529,6 +612,14 @@ impl Daemon {
                     }
                 }
                 _ = surface.tick(), if self.surface.is_some() => {
+                    // S36: a `SetSurfacePort` left a name behind. Taken before
+                    // the poll, so the very next poll is the new port's and the
+                    // resync burst starts a millisecond after the command
+                    // rather than a frame after it.
+                    let change = self.desk.core().take_surface_change();
+                    if let Some(port) = change {
+                        self.follow_surface_change(port);
+                    }
                     // A press becomes a command, the command reaches the
                     // daemon's own state, and the delta goes to whoever is
                     // attached — which may be nobody. That is D11.

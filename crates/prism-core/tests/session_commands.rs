@@ -41,10 +41,11 @@ fn the_session_commands_are_the_session_group() {
     // And the three groups together are still the whole protocol —
     // `command_application.rs` carries why the sum is larger than the number of
     // variants there are. **Three since S33**, which gave this machine's rig an
-    // applier of its own: see `common::machine_commands`.
+    // applier of its own, and the machine group grew a fifth in S36: see
+    // `common::machine_commands`.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        52
+        53
     );
 }
 

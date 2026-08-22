@@ -1,0 +1,39 @@
+[package]
+name = "prism-midi"
+description = "The MIDI port: the one crate in the workspace that opens a device."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# `midir` is here and nowhere else, and this crate exists to hold it. The
+# precedent is `thread-priority` (S17): a dependency whose whole purpose is to
+# keep a platform split out of a crate that may not have one.
+# `ARCHITECTURE_SPEC.md` section 10.1 allows `prism-surface` and `prismd` no
+# `#[cfg(target_os = ...)]` at all, and opening a MIDI port is nothing but.
+#
+# **Why the dependency is written twice.** On Windows and macOS the MIDI service
+# is part of the operating system, so `midir` builds against nothing that has to
+# be installed first. On Linux it reaches ALSA through `alsa-sys`, which is a
+# `pkg-config` probe for `libasound2-dev` - a package the ARM64 cross-compile
+# check does not have and must not need, because that job exists to catch
+# portability breaks in *our* code rather than to prove a C library can be
+# cross-installed. So on Linux the backend is opt-in, and a Raspberry Pi build
+# (D10, section 10.2) is `--features prism-midi/alsa` with that package present.
+#
+# What a build without it gets is not a failure: it is `NoBackend`, which
+# enumerates an empty list and refuses to open, which is exactly the state a
+# machine with no MIDI device is in. That is what the Linux CI jobs run.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+midir = "0.11"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+midir = { version = "0.11", optional = true }
+
+[features]
+# ALSA on Linux. See the comment above the dependency tables.
+alsa = ["dep:midir"]
+
+[lints]
+workspace = true

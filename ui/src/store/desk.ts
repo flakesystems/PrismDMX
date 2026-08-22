@@ -68,6 +68,17 @@ export interface DeskState {
   readonly documents: Documents | null;
   /** The configured DMX outputs, or `null` when not connected. */
   readonly outputs: readonly OutputSnapshot[] | null;
+  /**
+   * The MIDI port the control surface is configured on, or `null` for none
+   * (S36).
+   *
+   * Not in the snapshot and not a document: a client learns it from
+   * `Delta::SurfaceChanged` while it is connected, and asks for it - together
+   * with the ports that exist - with `Query::MidiPorts`, because what is
+   * plugged into the daemon's machine is the operating system's answer rather
+   * than the daemon's state.
+   */
+  readonly surfacePort: string | null;
   /** How the daemon is doing, or `null` when not connected. */
   readonly health: DaemonHealth | null;
   /**
@@ -90,6 +101,7 @@ export const INITIAL_STATE: DeskState = {
   status: { kind: "connecting", attempt: 0 },
   documents: null,
   outputs: null,
+  surfacePort: null,
   health: null,
   fixtureLibrary: null,
   unsavedChanges: false,
@@ -350,6 +362,11 @@ export class DeskStore {
           }),
         };
       }
+      // S36: which MIDI port this machine's desk is on. It arrives whole
+      // because it *is* whole - one name, or none - and it is the machine's
+      // rather than the show's, for the reason the rig above it is.
+      case "SurfaceChanged":
+        return { ...state, surfacePort: delta.port };
       case "OutputHealth": {
         if (state.outputs === null) {
           return state;

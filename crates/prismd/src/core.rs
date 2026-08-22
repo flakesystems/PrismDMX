@@ -128,6 +128,18 @@ pub struct Core {
     autosave: Autosave,
     /// The patch revision the current plan was built from (S11).
     patch_revision: u64,
+    /// A surface port change nobody has acted on yet — S36.
+    ///
+    /// The port is the **daemon's**, not the core's: `Daemon` owns the
+    /// `SurfaceLink` because a port has a thread's worth of state and a cable
+    /// that can come out, and `Core` is what a client's command reaches. So a
+    /// `SetSurfacePort` leaves the new name here and the run loop picks it up on
+    /// its next surface tick — which is at most a millisecond later
+    /// (`surface::SURFACE_PERIOD`).
+    ///
+    /// `Some(None)` and `None` are different things and both are needed:
+    /// *change it to no surface at all*, and *nothing to do*.
+    surface_change: Option<Option<String>>,
 }
 
 impl Core {
@@ -171,6 +183,7 @@ impl Core {
             reported: BTreeMap::new(),
             autosave: Autosave::new(),
             patch_revision,
+            surface_change: None,
         })
     }
 
@@ -260,6 +273,15 @@ impl Core {
             if self.machine.path.is_none() {
                 return Err(CoreError::Machine(MachineError::ConfiguredOnTheCommandLine));
             }
+            // S36's flag, and it is asked separately because it is a separate
+            // fact: a daemon may take its rig from `machine.json` and its
+            // surface from `--surface` at the same time, and an operator told
+            // the wrong flag would go looking in the wrong place.
+            if matches!(command, Command::SetSurfacePort { .. })
+                && self.machine.surface_on_command_line
+            {
+                return Err(CoreError::Machine(MachineError::SurfaceOnTheCommandLine));
+            }
             self.machine
                 .config
                 .apply(command)
@@ -286,6 +308,7 @@ impl Core {
             config,
             path,
             outputs,
+            ..
         } = &mut self.machine;
         let mut deltas = outputs.reconcile(config.outputs());
         let Some(path) = path else {
@@ -314,6 +337,53 @@ impl Core {
             });
         }
         deltas
+    }
+
+    /// Leaves the new port for the run loop and writes the configuration down
+    /// — S36.
+    ///
+    /// [`Self::carry_out_outputs`] for the other device this machine owns, and
+    /// the same two rules: the model that decided the *name* does not open
+    /// anything, and a configuration that cannot be written is a **notice, not a
+    /// refusal** — the operator has already chosen, and what they need to be
+    /// told is that the choice will not survive a restart.
+    ///
+    /// Opening the port is deliberately **not** done here. `Daemon` owns the
+    /// `SurfaceLink`; this leaves the name behind and the next surface tick
+    /// takes it, at most a millisecond later.
+    fn carry_out_surface(&mut self) -> Vec<Delta> {
+        self.surface_change = Some(self.machine.config.surface_port().map(str::to_owned));
+        let Some(path) = &self.machine.path else {
+            return Vec::new();
+        };
+        let Err(error) = crate::machine::write(path, &self.machine.config) else {
+            return Vec::new();
+        };
+        log::error(
+            "surface",
+            &format!("the surface port could not be written: {error}"),
+        );
+        vec![Delta::Notice {
+            level: NoticeLevel::Warn,
+            message: format!(
+                "the control surface was changed but could not be saved to {}: {error}",
+                path.display()
+            ),
+        }]
+    }
+
+    /// The port a `SetSurfacePort` asked for, once — S36.
+    ///
+    /// Taken rather than read, so the run loop opens a port on the poll after
+    /// the command and not on every poll after it.
+    pub fn take_surface_change(&mut self) -> Option<Option<String>> {
+        self.surface_change.take()
+    }
+
+    /// The MIDI port this machine's control surface is configured on — S36.
+    #[must_use]
+    pub fn surface_port(&self) -> Option<&str> {
+        self.machine.config.surface_port()
     }
 
     /// Carries out the effects of an [`Applied`] and returns everything to
@@ -397,6 +467,11 @@ impl Core {
                 // S33: the rig changed, so the driver threads have to catch up
                 // and the machine configuration has to be written down.
                 Effect::Outputs => deltas.extend(self.carry_out_outputs()),
+                // S36: the surface is on a different port, so the daemon has to
+                // put the old one down and pick the new one up — and the
+                // machine configuration has to be written down, exactly as a
+                // rig change is.
+                Effect::Surface => deltas.extend(self.carry_out_surface()),
                 Effect::Save => deltas.extend(self.save()?),
             }
         }
@@ -840,6 +915,7 @@ mod tests {
                         source_name: "PrismDMX test".to_owned(),
                     },
                 ),
+                surface_on_command_line: false,
             },
             store,
             engine,

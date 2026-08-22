@@ -1119,6 +1119,36 @@ pub enum Command {
         /// Whether it should be sending.
         enabled: bool,
     },
+
+    // ---- The machine's own control surface (S36) ----
+    /// Names the MIDI port this desk's control surface is on — S36.
+    ///
+    /// A **machine** command for the same reason the four above it are: the
+    /// X-Touch is plugged into *this building's* rack, and a show copied to
+    /// another hall on a stick must not bring a port name with it any more than
+    /// it brings the cabling. So it lands in `prism_core::MachineConfig` beside
+    /// the desk identity and the output patch, and both of the other appliers
+    /// refuse it by name.
+    ///
+    /// The port is a **name** rather than an index, because an index renumbers
+    /// itself when somebody moves a plug and a name does not. What a name has
+    /// to survive is the decoration each platform puts round it, which is
+    /// `prism_midi::selects`' business and not the protocol's — the protocol
+    /// carries exactly what the operator picked out of
+    /// [`crate::Answer::MidiPorts`].
+    ///
+    /// `None` is *no surface*, and it is an ordinary state rather than an
+    /// error: a desk being programmed on a laptop has no X-Touch, and a
+    /// settings window has to be able to say so.
+    ///
+    /// **A port that is not there is still accepted.** The device may be
+    /// switched off, or the show may be being prepared a week before the get-in
+    /// — the same reason an output row is not validated against a cable being
+    /// plugged in (S33). The daemon warns, keeps trying, and starts.
+    SetSurfacePort {
+        /// The port name, or `None` for no surface at all.
+        port: Option<String>,
+    },
 }
 
 impl Command {
@@ -1186,7 +1216,7 @@ impl Command {
     /// (`ARCHITECTURE_SPEC.md` §4.1) and would carry the cabling by the same
     /// route.
     ///
-    /// So these four go to `prism_core::MachineConfig::apply`, and both of the
+    /// So these go to `prism_core::MachineConfig::apply`, and both of the
     /// other two appliers refuse them by name. `ShowFile::apply` never sees one:
     /// the daemon routes on this predicate first, exactly as it routes on
     /// [`Self::is_session_command`] second.
@@ -1196,6 +1226,12 @@ impl Command {
     /// it is cleared when a show is loaded, and an undo that re-addressed a
     /// node would move light on a stage while somebody was driving it — which is
     /// §6.1's rule for playback actions, met by another road.
+    ///
+    /// **Five since S36**, which put the control surface's MIDI port in the same
+    /// place for the same reason: the desk in the rack belongs to the building,
+    /// not to the show. S33 carried that out of itself in as many words — *a
+    /// later session that wants anything else about this building puts it here*
+    /// — and [`Self::SetSurfacePort`] is the session that did.
     #[must_use]
     pub const fn is_machine_command(&self) -> bool {
         matches!(
@@ -1204,6 +1240,7 @@ impl Command {
                 | Self::ConfigureOutput { .. }
                 | Self::RemoveOutput { .. }
                 | Self::SetOutputEnabled { .. }
+                | Self::SetSurfacePort { .. }
         )
     }
 
@@ -1518,8 +1555,13 @@ mod tests {
                 id: OutputId::new(1),
                 enabled: false,
             },
+            // S36's one, and it is a machine command for S33's reason: the desk
+            // in the rack belongs to the building.
+            Command::SetSurfacePort {
+                port: Some("X-Touch".to_owned()),
+            },
         ];
-        assert_eq!(commands.len(), 47);
+        assert_eq!(commands.len(), 48);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -1567,6 +1609,12 @@ mod tests {
                 id: OutputId::new(2),
                 enabled: true,
             },
+            Command::SetSurfacePort {
+                port: Some("2- X-Touch".to_owned()),
+            },
+            // No surface at all is an ordinary configuration, not an absent
+            // one: a show programmed on a laptop has no X-Touch.
+            Command::SetSurfacePort { port: None },
         ];
         for command in &machine {
             assert!(command.is_machine_command(), "{command:?}");

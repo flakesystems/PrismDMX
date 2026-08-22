@@ -203,6 +203,15 @@ pub enum Effect {
     /// thread, a socket and a failure mode, and the model that decides what a
     /// rig *is* deliberately holds none of the three.
     Outputs,
+    /// The control surface is on a different MIDI port — S36.
+    ///
+    /// [`Self::Outputs`] for the other device this machine owns, and carried
+    /// out in the same place and for the same reason: a MIDI port has a
+    /// connection, a thread and a cable that can come out, and the model that
+    /// decides *which* port is named holds none of the three. `prismd` puts the
+    /// old port down, opens the new one — or arranges to keep trying for it —
+    /// and writes the machine configuration back.
+    Surface,
     /// Write the show to disk.
     ///
     /// Unlike [`Effect::Programmer`], [`Effect::Undo`] and [`Effect::Redo`],
@@ -497,7 +506,8 @@ impl Show {
             Command::AddOutput { .. }
             | Command::ConfigureOutput { .. }
             | Command::RemoveOutput { .. }
-            | Command::SetOutputEnabled { .. } => Err(ShowError::NotAShowCommand),
+            | Command::SetOutputEnabled { .. }
+            | Command::SetSurfacePort { .. } => Err(ShowError::NotAShowCommand),
         }
     }
 

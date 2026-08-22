@@ -175,6 +175,24 @@ pub struct MachineConfig {
     /// rather than with an error.
     #[serde(default)]
     outputs: Vec<OutputInstance>,
+    /// The MIDI port this building's control surface is on — S36.
+    ///
+    /// A **name**, because a port index renumbers itself when somebody moves a
+    /// plug and a name does not; `prism_midi::selects` is the rule that makes
+    /// one survive the decoration a platform puts round it. `None` is *no
+    /// surface*, and it is the ordinary state of a laptop.
+    ///
+    /// Here for the rig's reason exactly: the desk in the rack belongs to the
+    /// **building**. A show carried to another hall on a stick must not bring a
+    /// port name with it, and S33 said so in as many words on its way out — *a
+    /// later session that wants anything else about this building puts it
+    /// here*.
+    ///
+    /// `#[serde(default)]` for S33's reason too: every machine configuration
+    /// written so far has no such field, and one of them must open with no
+    /// surface rather than with an error.
+    #[serde(default)]
+    surface_port: Option<String>,
 }
 
 impl MachineConfig {
@@ -184,6 +202,7 @@ impl MachineConfig {
         Self {
             desk_id,
             outputs: Vec::new(),
+            surface_port: None,
         }
     }
 
@@ -220,6 +239,26 @@ impl MachineConfig {
     #[must_use]
     pub fn outputs(&self) -> &[OutputInstance] {
         &self.outputs
+    }
+
+    /// The MIDI port this building's control surface is on, or `None` — S36.
+    #[must_use]
+    pub fn surface_port(&self) -> Option<&str> {
+        self.surface_port.as_deref()
+    }
+
+    /// Names the surface's port, or takes the name away.
+    ///
+    /// `pub(crate)` for [`Self::insert_output`]'s reason: [`Self::apply`] is the
+    /// only door, so nothing reaches this without having been a command.
+    /// **Blank is `None`**, because a settings window that cleared its text box
+    /// means *no surface* and a configuration holding `""` would be a name
+    /// nothing can ever match.
+    pub(crate) fn set_surface_port(&mut self, port: Option<&str>) {
+        self.surface_port = port
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned);
     }
 
     /// One output by number.
@@ -389,22 +428,73 @@ mod tests {
     fn a_machine_configuration_is_readable_text() {
         let config = MachineConfig::new(DeskId::parse(TEXT).unwrap());
         let json = serde_json::to_string(&config).unwrap();
-        assert_eq!(json, format!(r#"{{"deskId":"{TEXT}","outputs":[]}}"#));
+        assert_eq!(
+            json,
+            format!(r#"{{"deskId":"{TEXT}","outputs":[],"surfacePort":null}}"#)
+        );
         let back: MachineConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back, config);
         assert_eq!(back.desk_id(), DeskId::parse(TEXT).unwrap());
         assert!(back.outputs().is_empty(), "a fresh desk has no rig yet");
+        assert_eq!(back.surface_port(), None, "and no surface yet either");
     }
 
-    /// Every machine configuration written before S33 has no `outputs` key, and
-    /// they all still open — with no rig rather than with an error.
+    /// Every machine configuration written before S33 has no `outputs` key and
+    /// every one written before S36 has no `surfacePort`, and they all still
+    /// open — with no rig and no surface rather than with an error.
     #[test]
     fn a_configuration_written_before_the_rig_existed_still_opens() {
         let config: MachineConfig =
             serde_json::from_str(&format!(r#"{{"deskId":"{TEXT}"}}"#)).unwrap();
         assert_eq!(config.desk_id(), DeskId::parse(TEXT).unwrap());
         assert!(config.outputs().is_empty());
+        assert_eq!(config.surface_port(), None);
         assert!(config.is_configured());
+
+        // And one written by S33, which has the rig and not the surface.
+        let config: MachineConfig =
+            serde_json::from_str(&format!(r#"{{"deskId":"{TEXT}","outputs":[]}}"#)).unwrap();
+        assert_eq!(config.surface_port(), None);
+    }
+
+    /// **S36's half of the same decision**, written beside S33's because it is
+    /// the same argument: the desk in the rack belongs to the *building*.
+    ///
+    /// A school's template for next term names a port that the hall it is
+    /// opened in has never heard of, exactly as it would name an Art-Net node,
+    /// and a show that carried one would silently point a surface at nothing.
+    #[test]
+    fn the_surface_port_is_not_show_content() {
+        // The structural half: a show has nowhere to put a port name.
+        let mut show = Show::new();
+        show.embed_fixture_type(par_type()).unwrap();
+        let mut machine = MachineConfig::new(DeskId::parse(TEXT).unwrap());
+        machine
+            .apply(&Command::SetSurfacePort {
+                port: Some("2- X-Touch".to_owned()),
+            })
+            .unwrap();
+        assert_eq!(machine.surface_port(), Some("2- X-Touch"));
+
+        // And the asserted half, on the bytes, beside `desk_id` and the rig.
+        let machine_json = serde_json::to_string(&machine).unwrap();
+        assert!(machine_json.contains("2- X-Touch"), "{machine_json}");
+        assert!(
+            !serde_json::to_string(&show).unwrap().contains("X-Touch"),
+            "the show learned which desk is in the rack"
+        );
+
+        // No surface is an ordinary configuration rather than an absent one,
+        // and a name that is nothing but spaces is that same state: a
+        // configuration holding `""` would be a name nothing can ever match.
+        for blank in [None, Some(String::new()), Some("   ".to_owned())] {
+            machine
+                .apply(&Command::SetSurfacePort {
+                    port: blank.clone(),
+                })
+                .unwrap();
+            assert_eq!(machine.surface_port(), None, "{blank:?}");
+        }
     }
 
     /// S33's half of the decision `desk_id_is_not_show_content` states for the

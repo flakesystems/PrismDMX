@@ -779,6 +779,17 @@ home before it can have an implementation.
 - A configured port that is not there is a warning and a daemon that starts, never a daemon that will not
 - 🔌 With the X-Touch attached: the D11 gate passes over a **real** port, and §7's checklist gains a row
 
+**Done 2026-08-22.** Every criterion above except the 🔌 one, which by
+construction cannot be a test — see `PROGRESS.md` §2.36 for the measurements and
+`ARCHITECTURE_SPEC.md` §14 for the row and the recipe. Three things are worth
+carrying forward: the backend is a **crate** rather than a second tool outside
+the workspace, because S37 has to enumerate ports over the protocol and a
+separate process cannot answer that; `midir` is declared **per target** so the
+ARM64 job compiles none of it and a Raspberry Pi build is one feature; and S20's
+finding is now a rule the port layer obeys as well as a health state the
+operator reads — **a desk that has merely gone quiet is never reopened**, because
+reopening is the one thing that cannot recover it.
+
 ---
 
 # Phase 8 — Settings and the control editor
@@ -949,8 +960,8 @@ is, is the order the work was planned to make sense in.
 | 6 | **S39** `prism-core` — store modes, cue editing, the update state | Answers it, and defines the update state the shell's blinking Update needs. **Done 2026-08-20**, CI green on run **32412552879** — see `PROGRESS.md` §2.33. The two tests written to go red when it landed did: `prism-domain`'s `merge_is_the_only_store_mode_this_build_has` and the browser's *every recorded preview is a Merge*, and both are turned round. It also decided the selected sequence the other way from S28's assumption: `Session::selectedSequence` is a field of its own |
 | 7 | **S40** `ui` + protocol — the console shell | Needs all four above: groups and presets to select, cues to store, executors to press, views to label. Grew on 2026-08-20 into the session that makes the command line **the** interface rather than one of two (`ARCHITECTURE_SPEC.md` §4.5), which pulled a dozen missing commands into it — Goto, the deletes, the copies, an absolute Move, and playback addressed to a sequence rather than only to a fader. **Done 2026-08-21** — see `PROGRESS.md` §2.34. The vocabulary was built in full, and the decision held everywhere: every key in every window writes a line, and the two structural questions it raised — where a sequence-addressed playback lives, and one command per verb rather than one per pool — were put to the operator and are recorded with their reasons |
 | 8 | **S33** core/protocols — the output patch | The first session a venue rather than a laptop needs. Independent of everything above, so it may equally run earlier if hardware is waiting. **Done 2026-08-22** — see `PROGRESS.md` §2.35. The worked example is expressible and asserted: twelve universes across five outputs of three kinds, each given exactly its own. It settled where a rig lives — `prism_core::MachineConfig`, beside the desk identity, so a show carried on a stick brings no cabling with it — which made the four commands a **third applier** and none of them undoable. Hot reconfiguration needed a new thing in `prism-engine`: `FrameEnrolment`, a subscriber hand-over behind one atomic flag, and the tick that takes one on and gives one up still makes no allocator call |
-| 9 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock. S33 left it the pattern for exactly this problem — the device behind a factory, a mock beside it, a flag that demands the mock, and the configured port in `MachineConfig`. **Next** |
-| 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure |
+| 9 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock. S33 left it the pattern for exactly this problem — the device behind a factory, a mock beside it, a flag that demands the mock, and the configured port in `MachineConfig`. **Done 2026-08-22** — see `PROGRESS.md` §2.36. The backend got a home rather than a second tool: `prism-midi` is §10.1's fourth exception, `midir` is target-gated so the ARM64 cross-check compiles none of it, and `prism-surface` gained no dependency at all. A configured port is a **name** that survives a replug; one that is not there is a warning and a daemon that starts; a cable pulled mid-show and put back costs the engine nothing. S20's finding is kept as a rule the port layer obeys — **a desk that has merely gone quiet is never reopened** — and the 🔌 half, the gate over a *real* port, is a row in `ARCHITECTURE_SPEC.md` §14 with the recipe |
+| 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure, and now has it: S33's rig and S36's port are both `MachineConfig`'s, both reachable over the protocol, and three of the four panels need no protocol change at all. The fourth — show files — is the one that does. **Next** |
 | 11 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from |
 | 12 | **S43** `ui` — cleanup and polish | After the last feature and before the first release, because that is the only moment the list is complete |
 | 13 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab |
