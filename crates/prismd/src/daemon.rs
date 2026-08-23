@@ -684,28 +684,39 @@ impl Daemon {
                     return;
                 }
                 _ = housekeeping.tick() => {
-                    // S36's other door, and it is here because the surface tick
-                    // above only runs when there **is** a surface: a desk with
-                    // none has to be able to acquire one. Half a second rather
-                    // than a millisecond is the right cost for a gesture nobody
-                    // makes twice, and the fast path is still the fast one.
-                    let change = if self.surface.is_none() {
-                        self.desk.core().take_surface_change()
-                    } else {
-                        None
+                    // **One lock for all three**, and that is a cost decision
+                    // rather than tidiness: this arm runs on the same runtime as
+                    // the surface's millisecond poll, on machines with two cores
+                    // (a CI runner) as well as on a desk. Three acquisitions of
+                    // the `Core` mutex to learn that nothing has changed is
+                    // twice as much contention as one, for no answer.
+                    let (change, profile, exit) = {
+                        let mut core = self.desk.core();
+                        (
+                            // S36's other door, and it is here because the
+                            // surface tick only runs when there **is** a
+                            // surface: a desk with none has to be able to
+                            // acquire one. Half a second rather than a
+                            // millisecond is the right cost for a gesture
+                            // nobody makes twice.
+                            if self.surface.is_none() {
+                                core.take_surface_change()
+                            } else {
+                                None
+                            },
+                            // S37's two settings that this loop rather than the
+                            // core has to act on: the binding table a surface
+                            // draws with, and what the stage does when the
+                            // daemon stops. Both are picked up here for
+                            // `surface_change`'s reason exactly — the thing they
+                            // change is the daemon's.
+                            core.take_profile_change(),
+                            core.take_exit_change(),
+                        )
                     };
                     if let Some(port) = change {
                         self.follow_surface_change(port);
                     }
-                    // S37's two settings that this loop rather than the core has
-                    // to act on: the binding table a surface draws with, and
-                    // what the stage does when the daemon stops. Both are picked
-                    // up here rather than in `Core` for `surface_change`'s
-                    // reason exactly — the thing they change is the daemon's.
-                    let (profile, exit) = {
-                        let mut core = self.desk.core();
-                        (core.take_profile_change(), core.take_exit_change())
-                    };
                     if let Some(path) = profile {
                         self.follow_profile_change(path.as_deref());
                     }

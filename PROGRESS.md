@@ -2636,7 +2636,7 @@ what this machine is**.
 | `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **688 tests in 48 files** (675 before this session's last two files, 619 at S36); the build is **359 KB, 107 KB gzipped**, up 32 KB on S36 — and **this session adds no dependency** |
 | Playwright | ✅ **34 tests** (28 before), all green |
 | Coverage on what this session wrote | ✅ **99.28 % lines on the new `ui/src/settings/`** — `settings.ts` and `settingswindow.tsx` at **100 % on every column**, `devices.tsx` and `machine.tsx` at 100 % lines, `outputs.tsx` 99.03 %, `showfiles.tsx` 96.77 %. The two lines that are left were read rather than counted and are both a guard this interface cannot reach: an apply with no draft, and a submit with nothing typed. `prism-domain`'s new `machine.rs` is **100 % on every column** |
-| CI green on the pushed commit | ☐ recorded below after the push, per `IMPLEMENTATION_PLAN.md`'s session protocol |
+| CI green on the pushed commit | ✅ run **32611422650** on `dd5d3cd` — all five jobs, **and the Windows one on its second attempt**: Windows full build and test 12 m 01 s, Linux platform-neutral 4 m 25 s, UI end-to-end against a daemon 2 m 57 s, UI typecheck/lint/test/build 2 m 07 s, ARM64 cross-check 41 s. **The six settings end-to-end tests passed on a Linux runner**, so a venue's rig was built from the window, a show was saved under a new name and reopened, and a second tab followed the first — on a machine that has never run this interface by hand. The first attempt is written up below rather than re-run and forgotten |
 
 **What was built, and where the line is.** Four panels in one window, and the
 window is a **window**: it lives on the canvas, it can be dragged, it can be open
@@ -2867,6 +2867,40 @@ waits for anything — every step is a keystroke, a delivered message or an
 assertion — so a deadline there is measuring the machine rather than the desk, and
 a real regression would hang rather than take nineteen seconds.
 
+#### The Windows job failed once, and it is S36's real-time assertion
+
+`crates/prismd/tests/surface_gate.rs::a_surface_that_goes_away_is_reported_and_the_show_carries_on`
+failed on the first attempt with **`missed()` reading 1 where it read 0**, and
+passed on the second. It is not one of this session's tests and S37 changed
+nothing in it but the types of four `Options` fields.
+
+What it asserts is §5.3's rule — *the engine is never told about a cable* — in
+the form `missed == missed_before` **exactly**, over a window in which a replugged
+desk is redrawn with 156 messages. That is the right claim and an unlucky way to
+state it on a shared runner: a two-core GitHub VM can lose a tick for reasons that
+have nothing to do with a cable, and the *tick jitter* gate in §3 is where the
+real-time claim actually lives — ten minutes, 64 universes, under 100 % CPU load,
+0 of 26 401 ticks missed.
+
+Two things were done about it and a third is left open, deliberately:
+
+- **The housekeeping tick now takes the `Core` lock once instead of three
+  times.** S37 had added two takes to that arm (`take_profile_change` and
+  `take_exit_change`) beside S36's `take_surface_change`; they are one guard now.
+  That is a real reduction in contention with the surface's millisecond poll and
+  it costs nothing — but it is **not** offered as the cause, because nothing in
+  this session runs on the engine thread at all, and the engine is what missed
+  the tick.
+- **It was run three times locally on a quiet machine** before the re-run and
+  passed every time, in 6.3, 6.6 and 7.2 s.
+- **The assertion was left strict.** Weakening somebody else's gate on one
+  observation is how a gate stops meaning anything, and the honest fix is not a
+  tolerance but a **control**: compare the missed ticks across the replug against
+  the missed ticks across an equally long window with no replug, which is the
+  shape S18 used for the D2 gate (*either claim alone is passed by a daemon
+  broken in the other way*). That is a change to S36's test and belongs to
+  whoever next has reason to open it.
+
 #### The numbers that had to stay where they were
 
 | Gate | Result |
@@ -2880,7 +2914,7 @@ a real regression would hang rather than take nineteen seconds.
 | `cargo fmt --all --check` | ✅ |
 | `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **688 tests in 48 files**; 359 KB, 107 KB gzipped |
 | Playwright | ✅ **34 tests** |
-| CI green on the pushed commit | ☐ recorded below after the push |
+| CI green on the pushed commit | ✅ run **32611422650** on `dd5d3cd`, the Windows job on its second attempt — see above and the paragraph below |
 
 ---
 
