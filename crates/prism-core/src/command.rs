@@ -54,7 +54,11 @@ use crate::show::{Show, ShowError};
 /// model has no engine, no journal and no file — and because a command that
 /// was validated but not yet executed is exactly what a caller needs in order
 /// to execute it in the right order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `Clone` rather than `Copy` **since S37**, because three of the effects carry
+/// a path. It costs a `clone` at the two places the daemon matches on one and
+/// buys the file commands somewhere to put the file they name — the alternative
+/// was a second channel out of [`Applied`] for one string.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     /// The patch or the embedded profiles changed.
     ///
@@ -222,6 +226,47 @@ pub enum Effect {
     /// answer to it is [`ShowStore::save`](crate::ShowStore::save), which marks
     /// the file saved when the commit has returned and not before.
     Save,
+    /// Write the show to a different file and open that one from then on —
+    /// S37's `SaveShowAs`.
+    ///
+    /// The four below it are [`Self::Save`]'s family and are here for exactly
+    /// its reason: a path, a disk and a failure mode, none of which the model
+    /// that decides what a show *is* holds. What this layer does decide is
+    /// whether the path is one a show can live at — `crate::file::show_path`
+    /// — because that is arithmetic over a string and belongs where the command
+    /// is validated rather than where it is carried out.
+    SaveShowAs(std::path::PathBuf),
+    /// Open a `.prism` file over the running show — S37's `OpenShow`.
+    OpenShow(std::path::PathBuf),
+    /// Make an empty show at a path nothing is at, and open it — S37's
+    /// `NewShow`.
+    NewShow(std::path::PathBuf),
+    /// Write the show out as JSON — S37's `ExportShow`, over S15's
+    /// [`export_json`](crate::export_json).
+    ExportShow(std::path::PathBuf),
+    /// Read a JSON export back over the running show — S37's `ImportShow`.
+    ImportShow(std::path::PathBuf),
+    /// One of **this machine's** settings changed — S37.
+    ///
+    /// [`Self::Outputs`] and [`Self::Surface`] for the rest of the machine, and
+    /// answered in the same place: `prismd` writes the machine configuration
+    /// back and broadcasts `Delta::MachineChanged`. The delta is built there
+    /// rather than here because half of what it carries — the data directory,
+    /// what is actually listening, which settings a command line is holding —
+    /// is the *daemon's* knowledge and not the configuration's.
+    Machine,
+    /// This desk needs a new identity — S37's `MachineChange::NewIdentity`.
+    ///
+    /// [`Effect::EmbedProfile`]'s shape: the value has to be made somewhere
+    /// this crate cannot reach. A UUID needs an entropy source and `prism-core`
+    /// is platform-neutral and dependency-free by rule, which is the same
+    /// sentence `crate::desk` has carried since S11.
+    NewDeskIdentity,
+    /// This desk needs a §2.1 token — S37's `MachineChange::NewToken`.
+    ///
+    /// [`Self::NewDeskIdentity`]'s reason exactly, and one more: a **client**
+    /// that chose the token would be choosing this desk's password.
+    NewToken,
 }
 
 /// What applying a command produced.
@@ -489,6 +534,27 @@ impl Show {
             Command::Oops => Ok(Applied::effect(Effect::Undo)),
             Command::Redo => Ok(Applied::effect(Effect::Redo)),
             Command::SaveShow => Ok(Applied::effect(Effect::Save)),
+            // S37's four file commands beside it, each validated as far as a
+            // string can be validated here and carried out one layer up. The
+            // extension is the whole of the check and it is not cosmetic: a
+            // `.prism` file is a SQLite database and a `.json` export is text,
+            // so a path with the wrong one is a command that would either fail
+            // obscurely or write the wrong format under the right name.
+            Command::SaveShowAs { path } => Ok(Applied::effect(Effect::SaveShowAs(
+                crate::file::show_path(path)?,
+            ))),
+            Command::OpenShow { path } => Ok(Applied::effect(Effect::OpenShow(
+                crate::file::show_path(path)?,
+            ))),
+            Command::NewShow { path } => Ok(Applied::effect(Effect::NewShow(
+                crate::file::show_path(path)?,
+            ))),
+            Command::ExportShow { path } => Ok(Applied::effect(Effect::ExportShow(
+                crate::file::export_path(path)?,
+            ))),
+            Command::ImportShow { path } => Ok(Applied::effect(Effect::ImportShow(
+                crate::file::export_path(path)?,
+            ))),
             // The sixteen session commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
             // the protocol is a compile error here instead of a silent
@@ -514,7 +580,8 @@ impl Show {
             | Command::ConfigureOutput { .. }
             | Command::RemoveOutput { .. }
             | Command::SetOutputEnabled { .. }
-            | Command::SetSurfacePort { .. } => Err(ShowError::NotAShowCommand),
+            | Command::SetSurfacePort { .. }
+            | Command::ConfigureMachine { .. } => Err(ShowError::NotAShowCommand),
         }
     }
 

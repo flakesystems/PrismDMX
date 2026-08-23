@@ -288,7 +288,18 @@ describe("the command line", () => {
             network.last.deliver(serverMessage({ t: "Ack", seq: 0 }));
         });
         expect(screen.getByTestId("command-line").textContent).toBe("fixture 2 at 50");
-    });
+        // **Twenty seconds, and the number is about the harness rather than
+        // about the desk** (S37). Nothing here waits for anything: every step is
+        // a keystroke, a delivered message or an assertion, and on an idle
+        // machine the whole test takes about two seconds. Under `--coverage` it
+        // takes seven, because v8 instruments every module in a suite that is
+        // now forty-eight files — and S36 recorded this exact test hitting the
+        // 5 s default while `cargo llvm-cov` was using half the machine.
+        //
+        // The default is the wrong bound for it either way: what this asserts is
+        // a *sequence of messages*, so a deadline is measuring the machine. A
+        // regression here would hang rather than take nineteen seconds.
+    }, 20_000);
 
     /**
      * **The exit criterion, as a gesture rather than a claim.**

@@ -1599,3 +1599,176 @@
     clip-path: inset(50%);
     white-space: nowrap;
 }
+
+/* ---- the settings window (S37) ------------------------------------------ */
+
+/*
+ * A window like any other, so it takes its height from the window frame and the
+ * **body** is the one thing that scrolls. `CLAUDE.md` forbids scrolling outside
+ * the canvas; a settings panel with more outputs than it has room for is
+ * exactly what a window is for.
+ */
+.settings {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    height: 100%;
+    min-height: 0;
+}
+
+.settings-tabs {
+    display: flex;
+    gap: 0.25rem;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--edge);
+    padding-bottom: 0.25rem;
+}
+
+.settings-tabs .tab {
+    font: inherit;
+    color: var(--ink-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 0.1rem 0.5rem;
+    cursor: pointer;
+}
+
+.settings-tabs .tab-active {
+    color: inherit;
+    border-color: var(--edge-lit);
+    background: var(--panel);
+}
+
+.settings-body {
+    flex: 1 1 auto;
+    min-height: 3rem;
+    overflow: auto;
+}
+
+.settings-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.settings-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    border-top: 1px solid var(--edge);
+    padding-top: 0.4rem;
+}
+
+.settings-group h3,
+.settings-panel h3 {
+    margin: 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+
+.settings-group label,
+.settings-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    color: var(--ink-dim);
+}
+
+.settings-group input[type="text"],
+.settings-group input:not([type]) {
+    font: inherit;
+    min-width: 16rem;
+}
+
+.settings-form {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--edge);
+    padding-top: 0.35rem;
+}
+
+.settings-form fieldset {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    border: 0;
+    margin: 0;
+    padding: 0;
+}
+
+.settings-form legend {
+    padding: 0;
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.settings-form label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--ink-dim);
+}
+
+.settings-form input,
+.settings-form select,
+.settings-form textarea {
+    font: inherit;
+}
+
+.settings-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+}
+
+.settings-hint,
+.settings-note {
+    margin: 0;
+    color: var(--ink-dim);
+    font-size: 0.75rem;
+}
+
+.settings-reading {
+    margin: 0;
+}
+
+/* Said in the operator's colours: something that needs looking at. */
+.settings-warning {
+    margin: 0;
+    color: var(--warn);
+}
+
+.settings-readings {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+/*
+ * The health colours are the status strip's, so an output that is red here is
+ * the same red as the one in the footer. Two palettes for one fact is two
+ * answers an operator has to learn.
+ */
+.output-ok {
+    color: var(--ok, #7bd88f);
+}
+
+.output-degraded {
+    color: var(--warn);
+}
+
+.output-disconnected {
+    color: var(--bad);
+}

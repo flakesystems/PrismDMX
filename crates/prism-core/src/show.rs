@@ -205,6 +205,19 @@ pub enum ShowError {
     /// non-finite floats in both directions, so this is what a NaN that reached
     /// the model looks like on the way out.
     NotRepresentable(String),
+    /// A file command named a path a show cannot live at — S37.
+    ///
+    /// The extension is the whole check and it is not cosmetic: a `.prism` file
+    /// is a SQLite database and a `.json` export is text, so a path with the
+    /// wrong one is a command that would either fail obscurely or write one
+    /// format under the other's name. An empty path is refused for the reason a
+    /// blank surface port is turned into `None`: nothing is not a file.
+    NotAShowPath {
+        /// What was asked for.
+        path: String,
+        /// The extension a path here has to have.
+        wanted: &'static str,
+    },
 }
 
 impl fmt::Display for ShowError {
@@ -291,6 +304,9 @@ impl fmt::Display for ShowError {
                 )
             }
             Self::NotRepresentable(reason) => write!(f, "the show cannot be encoded: {reason}"),
+            Self::NotAShowPath { path, wanted } => {
+                write!(f, "{path:?} is not a {wanted} file")
+            }
         }
     }
 }
@@ -525,6 +541,20 @@ impl Show {
     #[must_use]
     pub const fn is_dirty(&self) -> bool {
         self.dirty
+    }
+
+    /// Records that the show holds something the file does not — S37.
+    ///
+    /// Every ordinary edit lights the lamp on its own way through
+    /// [`Show::apply`]. This exists for the one change that is not an edit:
+    /// `Command::ImportShow` **replaces** the show with a document read out of a
+    /// JSON export, which arrives clean because it has just been deserialised.
+    /// An import that left the lamp dark would be telling an operator their
+    /// `.prism` file already held what they had just read in — and it does not,
+    /// deliberately, because an import somebody did not mean to do must be one
+    /// they can walk away from.
+    pub const fn mark_dirty(&mut self) {
+        self.dirty = true;
     }
 
     /// Records that the show has been written to disk.

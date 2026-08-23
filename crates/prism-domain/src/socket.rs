@@ -63,6 +63,52 @@ pub fn deserialize<'de, D: Deserializer<'de>>(
         .collect()
 }
 
+/// One optional address, as text or nothing.
+///
+/// The same problem one container along: a `Option<SocketAddr>` written with
+/// `rmp_serde::to_vec_named` cannot be read back either, because the inner value
+/// goes through the same asymmetric implementation. S37 needs it for the
+/// WebSocket listener's address, which is *an address or not listening at all*.
+pub mod option {
+    use std::net::SocketAddr;
+
+    use serde::Deserialize;
+    use serde::de::{Deserializer, Error as _};
+    use serde::ser::Serializer;
+
+    /// Writes the address as a string, or nothing.
+    ///
+    /// # Errors
+    ///
+    /// Whatever the serializer says.
+    pub fn serialize<S: Serializer>(
+        address: &Option<SocketAddr>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match address {
+            Some(address) => serializer.serialize_some(&address.to_string()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    /// Reads a string back as an address, or nothing.
+    ///
+    /// # Errors
+    ///
+    /// A string that is not an address is refused with the text in the message.
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<SocketAddr>, D::Error> {
+        let text = Option::<String>::deserialize(deserializer)?;
+        text.map(|entry| {
+            entry
+                .parse::<SocketAddr>()
+                .map_err(|_| D::Error::custom(format!("{entry:?} is not an address")))
+        })
+        .transpose()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{OutputKind, SacnPort, UniverseId};

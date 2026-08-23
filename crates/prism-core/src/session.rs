@@ -401,7 +401,12 @@ impl SessionState {
             | Command::Color { .. }
             | Command::SetCueProperty { .. }
             | Command::AssignExecutor { .. }
-            | Command::SaveShow => return Err(SessionError::NotASessionCommand),
+            | Command::SaveShow
+            | Command::SaveShowAs { .. }
+            | Command::OpenShow { .. }
+            | Command::NewShow { .. }
+            | Command::ExportShow { .. }
+            | Command::ImportShow { .. } => return Err(SessionError::NotASessionCommand),
             // S33's four: this machine's rig, which is neither the show's nor
             // the session's. `crate::outputs` has the argument, and
             // `Command::is_machine_command` is what a daemon routes on.
@@ -409,7 +414,10 @@ impl SessionState {
             | Command::ConfigureOutput { .. }
             | Command::RemoveOutput { .. }
             | Command::SetOutputEnabled { .. }
-            | Command::SetSurfacePort { .. } => return Err(SessionError::NotASessionCommand),
+            | Command::SetSurfacePort { .. }
+            | Command::ConfigureMachine { .. } => {
+                return Err(SessionError::NotASessionCommand);
+            }
         };
         Ok(if ops.is_empty() {
             Applied::default()

@@ -104,6 +104,12 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
     // rack belongs to the **machine**, so writing it into the show document
     // would put a hall's hardware into what a client believes the show to be.
     case "SurfaceChanged":
+    // And S37's two, for the third time and the same reason: what this machine
+    // is *set to*, and which show file is open, are the machine's rather than
+    // the show's — a mirror that wrote either into the show document would put
+    // a desk's own settings into what a client believes the show to be.
+    case "MachineChanged":
+    case "ShowFileChanged":
     case "OutputHealth":
     case "DirtyFlag":
     case "Notice":

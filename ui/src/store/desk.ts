@@ -30,7 +30,16 @@
  * them from until the next snapshot arrives, which is checkable and is checked.
  */
 
-import type { Answer, Command, Delta, NoticeLevel, ProgrammerState, Query } from "../bindings";
+import type {
+  Answer,
+  Command,
+  Delta,
+  MachineSettings,
+  NoticeLevel,
+  ProgrammerState,
+  Query,
+  ShowFileInfo,
+} from "../bindings";
 import type { ConnectionStatus, ConnectionEvents } from "../ipc/connection";
 import type { DaemonHealth, OutputSnapshot, RejectReason, Snapshot } from "../ipc/protocol";
 import { logger } from "../log/logger";
@@ -90,6 +99,25 @@ export interface DeskState {
    * whether there are any at all.
    */
   readonly fixtureLibrary: number | null;
+  /**
+   * What this machine is set to, or `null` when not connected — S37.
+   *
+   * The fourth settings panel, and it arrives with the world rather than being
+   * asked for: it is state the daemon owns, it changes only when a command
+   * changes it, and a client that had to ask would draw an empty panel for a
+   * round trip. `Delta::MachineChanged` keeps it current.
+   */
+  readonly machine: MachineSettings | null;
+  /**
+   * Which show file is open, what was open before it, and what the autosave is
+   * doing — S37.
+   *
+   * Kept current by `Delta::ShowFileChanged`. It carries the dirty flag as
+   * well, which {@link DeskState.unsavedChanges} also holds — the two are the
+   * same fact drawn in two places, and the flag is the one the console's Save
+   * LED reads because it moves far more often.
+   */
+  readonly showFile: ShowFileInfo | null;
   /** Whether the show has unsaved changes — the Save lamp. */
   readonly unsavedChanges: boolean;
   /** Messages for the operator, newest last. */
@@ -104,6 +132,8 @@ export const INITIAL_STATE: DeskState = {
   surfacePort: null,
   health: null,
   fixtureLibrary: null,
+  machine: null,
+  showFile: null,
   unsavedChanges: false,
   notices: [],
 };
@@ -233,6 +263,8 @@ export class DeskStore {
       outputs: snapshot.outputs,
       health: snapshot.health,
       fixtureLibrary: snapshot.fixtureLibrary,
+      machine: snapshot.machine,
+      showFile: snapshot.showFile,
       unsavedChanges: snapshot.health.unsavedChanges,
     });
   }
@@ -262,6 +294,12 @@ export class DeskStore {
       outputs: null,
       health: null,
       fixtureLibrary: null,
+      // The settings go with the documents, and for the module documentation's
+      // reason: a settings panel that went on showing a listener address after
+      // the daemon holding it stopped would be telling an operator something
+      // that is no longer true about a machine they may be about to restart.
+      machine: null,
+      showFile: null,
       unsavedChanges: false,
     });
   }
@@ -367,6 +405,19 @@ export class DeskStore {
       // rather than the show's, for the reason the rig above it is.
       case "SurfaceChanged":
         return { ...state, surfacePort: delta.port };
+      // S37: this machine's settings and the show file it has open. Both arrive
+      // whole, for `OutputsChanged`'s reason: they are a handful of fields
+      // rather than a document, and a panel that had to diff a JSON patch to
+      // redraw itself would be doing arithmetic to learn something it can be
+      // told.
+      case "MachineChanged":
+        return { ...state, machine: delta.settings };
+      // The dirty flag travels twice - here and as `DirtyFlag` - and the two
+      // must not disagree, so the one that arrives last wins in the one place
+      // each of them is read. This is the panel's copy; `unsavedChanges` is the
+      // lamp's, and `DirtyFlag` below keeps them level.
+      case "ShowFileChanged":
+        return { ...state, showFile: delta.file, unsavedChanges: delta.file.unsavedChanges };
       case "OutputHealth": {
         if (state.outputs === null) {
           return state;
@@ -379,7 +430,16 @@ export class DeskStore {
         };
       }
       case "DirtyFlag":
-        return { ...state, unsavedChanges: delta.unsavedChanges };
+        return {
+          ...state,
+          unsavedChanges: delta.unsavedChanges,
+          // The show-files panel draws the same flag, so it follows the lamp
+          // rather than holding a second answer that goes stale between opens.
+          showFile:
+            state.showFile === null
+              ? null
+              : { ...state.showFile, unsavedChanges: delta.unsavedChanges },
+        };
       case "Notice":
         return this.#withNotice(state, delta.level, delta.message);
       case "ShowPatch":

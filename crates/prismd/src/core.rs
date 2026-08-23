@@ -140,6 +140,22 @@ pub struct Core {
     /// `Some(None)` and `None` are different things and both are needed:
     /// *change it to no surface at all*, and *nothing to do*.
     surface_change: Option<Option<String>>,
+    /// Whether a recovery copy is standing beside the show — S37.
+    ///
+    /// Tracked here rather than asked of the file system, because a settings
+    /// panel wants it and the alternative is a `stat` twice a second for a fact
+    /// that changes when the autosave writes one or a save removes one. Both of
+    /// those go through this type, so both can say so.
+    recovery: bool,
+    /// A setting change nobody has acted on yet — S37.
+    ///
+    /// [`Self::surface_change`]'s shape and its reason: the *binding profile* is
+    /// the daemon's, because `Daemon` owns the `SurfaceLink` and the table it is
+    /// drawing with. `Some(None)` is *go back to the built-in table*.
+    profile_change: Option<Option<std::path::PathBuf>>,
+    /// A new exit action nobody has acted on yet — S37, and the same shape one
+    /// field along: what the stage does when the daemon stops is `Daemon`'s.
+    exit_change: Option<prism_domain::ExitAction>,
 }
 
 impl Core {
@@ -184,6 +200,9 @@ impl Core {
             autosave: Autosave::new(),
             patch_revision,
             surface_change: None,
+            recovery: false,
+            profile_change: None,
+            exit_change: None,
         })
     }
 
@@ -405,7 +424,7 @@ impl Core {
         }) || self.patch_revision != self.file.show.patch_revision();
 
         for effect in &effects {
-            match *effect {
+            match effect {
                 // Answered by the rebuild below.
                 Effect::Repatch | Effect::ReloadGroups | Effect::ReloadSequence(_) => {}
                 // **Playback state is the tick's to report, and only the
@@ -420,8 +439,8 @@ impl Core {
                     executor,
                     direction,
                 } => self.send(TickCommand::Go {
-                    executor,
-                    direction,
+                    executor: *executor,
+                    direction: *direction,
                 }),
                 // S40's `Goto`. The cue number became an index in
                 // `Show::cue_index_of`, because the tick resolves nothing.
@@ -429,35 +448,50 @@ impl Core {
                     executor,
                     cue_index,
                 } => self.send(TickCommand::GotoCue {
-                    executor,
-                    cue_index,
+                    executor: *executor,
+                    cue_index: *cue_index,
                 }),
                 Effect::ExecutorOff { executor } => self.send(TickCommand::SetExecutorActive {
-                    executor,
+                    executor: *executor,
                     on: false,
                 }),
-                Effect::ExecutorOn { executor } => {
-                    self.send(TickCommand::SetExecutorActive { executor, on: true });
-                }
+                Effect::ExecutorOn { executor } => self.send(TickCommand::SetExecutorActive {
+                    executor: *executor,
+                    on: true,
+                }),
                 // A flash does **not** touch the stored master and does not
                 // record `is_active` either: it is a momentary gesture, and the
                 // readback is what tells the desk the strip is lit. Writing
                 // playback state here as well would be two authors for one
                 // field, one of them a guess.
                 Effect::ExecutorFlash { executor, on } => {
-                    self.send(TickCommand::SetExecutorFlash { executor, on });
+                    self.send(TickCommand::SetExecutorFlash {
+                        executor: *executor,
+                        on: *on,
+                    });
                 }
                 Effect::ExecutorSpeed { executor, speed } => {
-                    self.send(TickCommand::SetExecutorSpeed { executor, speed });
+                    self.send(TickCommand::SetExecutorSpeed {
+                        executor: *executor,
+                        speed: *speed,
+                    });
                 }
                 Effect::ExecutorTapSpeed { executor } => {
-                    self.send(TickCommand::TapExecutorSpeed { executor });
+                    self.send(TickCommand::TapExecutorSpeed {
+                        executor: *executor,
+                    });
                 }
                 Effect::ExecutorXFade { executor, position } => {
-                    self.send(TickCommand::SetExecutorXFade { executor, position });
+                    self.send(TickCommand::SetExecutorXFade {
+                        executor: *executor,
+                        position: *position,
+                    });
                 }
                 Effect::SetExecutorMaster { executor, level } => {
-                    self.send(TickCommand::SetExecutorLevel { executor, level });
+                    self.send(TickCommand::SetExecutorLevel {
+                        executor: *executor,
+                        level: *level,
+                    });
                 }
                 // Carried out by `ShowFile::apply` and never handed on (S13,
                 // S14, and S44's `EmbedProfile`, which needs the desk's
@@ -473,6 +507,18 @@ impl Core {
                 // rig change is.
                 Effect::Surface => deltas.extend(self.carry_out_surface()),
                 Effect::Save => deltas.extend(self.save()?),
+                // S37's five file commands and its three machine effects. Each
+                // is named rather than caught by a wildcard, for the reason the
+                // rest of this match is: an effect added later is a compile
+                // error here.
+                Effect::SaveShowAs(path) => deltas.extend(self.save_show_as(path.clone())?),
+                Effect::OpenShow(path) => deltas.extend(self.open_show(path.clone())?),
+                Effect::NewShow(path) => deltas.extend(self.new_show(path.clone())?),
+                Effect::ExportShow(path) => deltas.extend(self.export_show(path)?),
+                Effect::ImportShow(path) => deltas.extend(self.import_show(path.clone())?),
+                Effect::NewDeskIdentity => deltas.extend(self.new_desk_identity()),
+                Effect::NewToken => deltas.extend(self.new_token()),
+                Effect::Machine => deltas.extend(self.carry_out_machine()),
             }
         }
 
@@ -483,6 +529,343 @@ impl Core {
         // repatch is translated against the plan it belongs to.
         self.push_programmer();
         Ok(deltas)
+    }
+
+    // -- the show file, and this machine (S37) --------------------------------
+
+    /// The `.prism` file this daemon has open, the ones before it and what the
+    /// autosave is doing — S37.
+    #[must_use]
+    pub fn show_file_info(&self) -> prism_domain::ShowFileInfo {
+        let path = self.store.path().display().to_string();
+        prism_domain::ShowFileInfo {
+            recent: self.machine.config.shows().without(&path),
+            path,
+            unsaved_changes: self.file.is_dirty(),
+            recovery: self.recovery,
+            autosave_seconds: u32::try_from(Autosave::INTERVAL.as_secs()).unwrap_or(u32::MAX),
+        }
+    }
+
+    /// What this machine is set to, and what this run is actually doing — S37.
+    ///
+    /// Half of it is the configuration and half of it is the run: where the data
+    /// directory is, what is really listening, and which settings a command line
+    /// is holding. That is why the delta is built here rather than in
+    /// `prism_core::MachineConfig::apply`.
+    #[must_use]
+    pub fn machine_settings(&self) -> prism_domain::MachineSettings {
+        let settings = self.machine.config.settings();
+        prism_domain::MachineSettings {
+            desk_id: self.machine.config.desk_id().to_string(),
+            data_dir: self.machine.data_dir.display().to_string(),
+            local: settings.local,
+            websocket: settings.websocket,
+            websocket_open: self.machine.websocket_open,
+            token: settings.token.clone(),
+            log_level: settings.log_level,
+            universes: settings.universes,
+            exit_action: settings.exit_action,
+            autostart: settings.autostart,
+            fixture_library: settings.fixture_library.clone(),
+            surface_profile: settings.surface_profile.clone(),
+            overrides: self.machine.overrides.clone(),
+        }
+    }
+
+    /// Records where the WebSocket listener actually bound — S37.
+    ///
+    /// Written by `Daemon::start` and by nobody else, and only when the bind
+    /// succeeded: a listener that could not bind leaves this `None`, which is
+    /// what makes *configured here, listening nowhere* a state a panel can draw.
+    pub const fn set_websocket_open(&mut self, address: Option<std::net::SocketAddr>) {
+        self.machine.websocket_open = address;
+    }
+
+    /// Writes down which show this desk has open, so it starts here next time —
+    /// S37.
+    pub fn remember_show(&mut self) {
+        let path = self.store.path().display().to_string();
+        self.machine.config.remember_show(&path);
+        drop(self.write_machine());
+    }
+
+    /// The binding profile a `ConfigureMachine` asked for, once — S37.
+    ///
+    /// `Core::take_surface_change`'s shape: the table belongs to `Daemon`, which
+    /// owns the `SurfaceLink` drawing with it.
+    pub fn take_profile_change(&mut self) -> Option<Option<std::path::PathBuf>> {
+        self.profile_change.take()
+    }
+
+    /// The exit action a `ConfigureMachine` asked for, once — S37.
+    pub fn take_exit_change(&mut self) -> Option<prism_domain::ExitAction> {
+        self.exit_change.take()
+    }
+
+    /// Answers `Effect::Machine`: writes the configuration down and says what
+    /// this machine is now — S37.
+    ///
+    /// A configuration that cannot be written is a **notice, not a refusal**,
+    /// which is `carry_out_outputs`' rule and its reason: the change has already
+    /// happened, and what an operator needs to be told is that it will not
+    /// survive a restart.
+    fn carry_out_machine(&mut self) -> Vec<Delta> {
+        // Two of the settings are the daemon's to act on rather than merely to
+        // store, and both are left for the run loop for `surface_change`'s
+        // reason: the thing they change belongs to `Daemon`.
+        self.profile_change = Some(
+            self.machine
+                .config
+                .settings()
+                .surface_profile
+                .as_deref()
+                .map(std::path::PathBuf::from),
+        );
+        self.exit_change = Some(self.machine.config.settings().exit_action);
+        // …and one takes effect on the spot, because a log level is a switch.
+        log::set_level(log::Level::from(self.machine.config.settings().log_level));
+
+        let mut deltas = vec![Delta::MachineChanged {
+            settings: self.machine_settings(),
+        }];
+        deltas.extend(self.write_machine());
+        deltas
+    }
+
+    /// Writes `machine.json`, or says why it could not.
+    fn write_machine(&mut self) -> Vec<Delta> {
+        let Some(path) = &self.machine.path else {
+            return Vec::new();
+        };
+        let Err(error) = crate::machine::write(path, &self.machine.config) else {
+            return Vec::new();
+        };
+        log::error(
+            "machine",
+            &format!("the settings could not be written: {error}"),
+        );
+        vec![Delta::Notice {
+            level: NoticeLevel::Warn,
+            message: format!(
+                "the settings were changed but could not be saved to {}: {error}",
+                path.display()
+            ),
+        }]
+    }
+
+    /// Gives this desk a new sACN identity — S37's `MachineChange::NewIdentity`.
+    ///
+    /// **It takes effect at the next start**, and that is the decision rather
+    /// than a limitation: the outputs were built with the old CID, and an sACN
+    /// source that changed its identity mid-show would be a *new* source
+    /// fighting the old one until its 2.5 s network-data-loss timeout expires
+    /// (`prism_core::desk`). So the number is written down and the operator is
+    /// told, which is what `MachineChange::needs_restart` says of it.
+    fn new_desk_identity(&mut self) -> Vec<Delta> {
+        match crate::machine::generate_desk_id() {
+            Ok(id) => {
+                self.machine.config.set_desk_id(id);
+                log::info("desk", &format!("this desk has a new identity: {id}"));
+                vec![Delta::Notice {
+                    level: NoticeLevel::Info,
+                    message: format!(
+                        "this desk's identity is now {id}. The sACN outputs keep the old one until the daemon is restarted"
+                    ),
+                }]
+            }
+            // A machine with no entropy is a **notice rather than a refusal**:
+            // the rest of the command has been applied, and refusing here would
+            // leave half a change behind.
+            Err(error) => vec![Delta::Notice {
+                level: NoticeLevel::Error,
+                message: format!("this machine has no entropy for a new identity: {error}"),
+            }],
+        }
+    }
+
+    /// Makes a §2.1 token — S37's `MachineChange::NewToken`.
+    ///
+    /// [`Self::new_desk_identity`]'s shape and its reason: a client that chose
+    /// the token would be choosing this desk's password.
+    fn new_token(&mut self) -> Vec<Delta> {
+        match crate::machine::generate_token() {
+            Ok(token) => {
+                self.machine.config.set_token(&token);
+                Vec::new()
+            }
+            Err(error) => vec![Delta::Notice {
+                level: NoticeLevel::Error,
+                message: format!("this machine has no entropy for an access token: {error}"),
+            }],
+        }
+    }
+
+    /// Writes the show to a different file and opens that one from then on —
+    /// S37's `SaveShowAs`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Store`] if the file cannot be opened or written, in which
+    /// case the show that is open is untouched and still the one that is open.
+    fn save_show_as(&mut self, path: std::path::PathBuf) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path);
+        let mut store = ShowStore::open(&path).map_err(CoreError::Store)?;
+        // **The new file first, the switch afterwards.** A daemon that adopted
+        // the path and then failed to write it would be holding a show whose
+        // file does not exist, and the Save lamp would be lit over a name
+        // nothing is behind.
+        let mut deltas = store.save(&mut self.file).map_err(CoreError::Store)?;
+        self.store = store;
+        self.recovery = false;
+        log::info("show", &format!("saved as {}", self.store.path().display()));
+        deltas.extend(self.show_file_changed());
+        Ok(deltas)
+    }
+
+    /// Opens a `.prism` file over the running show — S37's `OpenShow`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Store`] if the file is not there or will not read, and the
+    /// running show is untouched.
+    fn open_show(&mut self, path: std::path::PathBuf) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path);
+        // **An open is not a create**, which is the whole difference between
+        // this and `NewShow`: `ShowStore::open` makes a file that is not there,
+        // so an operator's typo would otherwise silently become an empty show
+        // with the file they meant still on the disk beside it.
+        if !path.is_file() {
+            return Err(CoreError::Store(prism_core::StoreError::Io(format!(
+                "there is no show at {}",
+                path.display()
+            ))));
+        }
+        let store = ShowStore::open(&path).map_err(CoreError::Store)?;
+        self.adopt(store)
+    }
+
+    /// Makes an empty show and opens it — S37's `NewShow`.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Store`] if something is already there, or if the file cannot
+    /// be made. **Refused rather than overwritten**: a *new* show that replaced
+    /// an existing one would be the most destructive command in
+    /// `docs/IPC_PROTOCOL.md` §5 and would look like the least.
+    fn new_show(&mut self, path: std::path::PathBuf) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path);
+        if path.exists() {
+            return Err(CoreError::Store(prism_core::StoreError::Io(format!(
+                "{} is already there; open it, or choose another name",
+                path.display()
+            ))));
+        }
+        let mut store = ShowStore::open(&path).map_err(CoreError::Store)?;
+        let mut empty = ShowFile::new();
+        store.save(&mut empty).map_err(CoreError::Store)?;
+        self.adopt(store)
+    }
+
+    /// Writes the show out as JSON — S37's `ExportShow`, over S15's
+    /// `export_json`.
+    ///
+    /// Changes nothing at all, the open file included: an export is a copy in a
+    /// second format, for a diff, a backup or a bug report. `prism_core::store`
+    /// is where it says out loud that JSON is not bit-exact for floats and the
+    /// `.prism` file is the authoritative one.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Store`] if the show cannot be encoded or the file written.
+    fn export_show(&mut self, path: &std::path::Path) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path.to_path_buf());
+        let text = prism_core::export_json(&self.file).map_err(CoreError::Store)?;
+        std::fs::write(&path, text)
+            .map_err(|error| CoreError::Store(prism_core::StoreError::Io(error.to_string())))?;
+        log::info("show", &format!("exported to {}", path.display()));
+        Ok(vec![Delta::Notice {
+            level: NoticeLevel::Info,
+            message: format!("the show was exported to {}", path.display()),
+        }])
+    }
+
+    /// Reads a JSON export back over the running show — S37's `ImportShow`.
+    ///
+    /// The show is replaced and **not** written to disk, so the Save lamp is lit
+    /// afterwards: an import an operator did not mean to do must be one they can
+    /// walk away from.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::Store`] if the file cannot be read or is not an export, and
+    /// the running show is untouched.
+    fn import_show(&mut self, path: std::path::PathBuf) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path);
+        let text = std::fs::read_to_string(&path)
+            .map_err(|error| CoreError::Store(prism_core::StoreError::Io(error.to_string())))?;
+        let imported = prism_core::import_json(&text).map_err(CoreError::Store)?;
+        self.file.show = imported.show;
+        self.file.session = imported.session;
+        self.file.programmer = prism_core::Programmer::new();
+        self.file.journal.clear();
+        // An import is **not** a save: what is in memory is not what is in the
+        // `.prism` file, and the lamp has to say so. `Show::mark_dirty` exists
+        // for this one case, because a document read out of an export arrives
+        // clean — it has just been deserialised.
+        self.file.show.mark_dirty();
+        self.masters = Masters::default();
+        self.engine_programmer = ProgrammerState::default();
+        let mut deltas = self.carry_out(Applied {
+            deltas: Vec::new(),
+            effects: vec![Effect::Repatch, Effect::ReloadGroups],
+        })?;
+        log::info("show", &format!("imported {}", path.display()));
+        deltas.push(Delta::DirtyFlag {
+            unsaved_changes: self.file.is_dirty(),
+        });
+        deltas.extend(self.show_file_changed());
+        Ok(deltas)
+    }
+
+    /// Takes up a different `ShowStore` and loads what is in it.
+    fn adopt(&mut self, store: ShowStore) -> Result<Vec<Delta>, CoreError> {
+        self.store = store;
+        self.recovery = self.store.has_recovery();
+        let mut deltas = self.load()?;
+        log::info("show", &format!("opened {}", self.store.path().display()));
+        // A freshly loaded show has no unsaved edits, and the lamp has to say
+        // so: the one that was open may well have had some.
+        deltas.push(Delta::DirtyFlag {
+            unsaved_changes: self.file.is_dirty(),
+        });
+        deltas.extend(self.show_file_changed());
+        Ok(deltas)
+    }
+
+    /// Says which show is open, and writes it down so the next start finds it.
+    fn show_file_changed(&mut self) -> Vec<Delta> {
+        let path = self.store.path().display().to_string();
+        self.machine.config.remember_show(&path);
+        let mut deltas = self.write_machine();
+        deltas.push(Delta::ShowFileChanged {
+            file: self.show_file_info(),
+        });
+        deltas
+    }
+
+    /// Resolves a relative path against the data directory — S37.
+    ///
+    /// A client and a daemon do not share a working directory, so a bare
+    /// `aula.prism` has to mean somewhere in particular, and the data directory
+    /// is where a desk's own show already lives. An absolute path is taken as it
+    /// stands, which is how a show on a stick is opened.
+    fn resolve(&self, path: std::path::PathBuf) -> std::path::PathBuf {
+        if path.is_absolute() {
+            path
+        } else {
+            self.machine.data_dir.join(path)
+        }
     }
 
     /// Writes the show, and answers with the `DirtyFlag` transition.
@@ -916,6 +1299,9 @@ mod tests {
                     },
                 ),
                 surface_on_command_line: false,
+                data_dir: dir.to_path_buf(),
+                overrides: Vec::new(),
+                websocket_open: None,
             },
             store,
             engine,

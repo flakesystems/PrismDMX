@@ -147,6 +147,31 @@ pub trait SurfacePort: Send {
     fn open_name(&self) -> Option<String> {
         None
     }
+
+    /// How many times this port has been reopened after a cable came out —
+    /// S36's count, offered to a settings panel in S37.
+    ///
+    /// Zero for a port that cannot have a cable pulled: a mock and a file are
+    /// surfaces without being devices, and *never reconnected* is the truth
+    /// about both.
+    fn reconnects(&self) -> u64 {
+        0
+    }
+}
+
+/// This crate's health as the domain spells it — S37.
+///
+/// Two types on purpose, for `crate::log::Level`'s reason: `prism-domain` is
+/// not allowed to know what a feedback model is, and a panel is not allowed to
+/// know what one does.
+const fn domain_health(health: SurfaceHealth) -> prism_domain::SurfaceHealth {
+    match health {
+        SurfaceHealth::Disconnected => prism_domain::SurfaceHealth::Disconnected,
+        SurfaceHealth::Connected => prism_domain::SurfaceHealth::Connected,
+        SurfaceHealth::Live => prism_domain::SurfaceHealth::Live,
+        SurfaceHealth::Probing => prism_domain::SurfaceHealth::Probing,
+        SurfaceHealth::Unresponsive => prism_domain::SurfaceHealth::Unresponsive,
+    }
 }
 
 /// A surface attached to a daemon.
@@ -236,6 +261,50 @@ impl SurfaceLink {
     #[must_use]
     pub const fn bindings(&self) -> &Bindings {
         &self.bindings
+    }
+
+    /// Everything the Devices panel draws about this surface — S37.
+    ///
+    /// Built here rather than by the caller because it is the one place that
+    /// holds all four: the feedback model's health and counters, the port's
+    /// reconnection count, and the binding table. The domain's types rather than
+    /// this crate's, for `crate::log::Level`'s reason — what a panel draws and
+    /// what a feedback layer switches on are the same fact and two types.
+    #[must_use]
+    pub fn status(&self, profile: Option<&Path>) -> prism_domain::SurfaceStatus {
+        let counters = self.counters();
+        let health = self.health();
+        prism_domain::SurfaceStatus {
+            health: domain_health(health),
+            remedy: health.remedy().map(str::to_owned),
+            sent: counters.sent,
+            superseded: counters.superseded,
+            touch_suppressed: counters.touch_suppressed,
+            resyncs: counters.resyncs,
+            reserved: counters.reserved,
+            probes: counters.probes,
+            reconnects: self.port.reconnects(),
+            profile: profile.map(|path| path.display().to_string()),
+            bound_controls: u32::try_from(self.bindings.bound()).unwrap_or(u32::MAX),
+        }
+    }
+
+    /// Gives the port back, so it can be attached with a different binding
+    /// table — S37.
+    ///
+    /// The port is the expensive half: it holds an open MIDI connection, a
+    /// reconnection schedule and a count of how many times the cable has come
+    /// out. Re-reading a profile must not throw any of that away, so the link is
+    /// rebuilt round the same port rather than the port being reopened — which
+    /// would also be the one thing S20's finding says cannot recover a desk that
+    /// has gone quiet.
+    ///
+    /// The shadow model **is** thrown away, and that is right: a new table can
+    /// mean a different scribble strip on every strip, so the whole picture is
+    /// redrawn (§5.3's burst as the ordinary diff).
+    #[must_use]
+    pub fn into_port(self) -> Box<dyn SurfacePort> {
+        self.port
     }
 
     /// Reads, applies, repaints and sends. Returns what to broadcast.
@@ -735,6 +804,10 @@ impl SurfacePort for RealSurfacePort {
 
     fn open_name(&self) -> Option<String> {
         self.0.port_name().map(str::to_owned)
+    }
+
+    fn reconnects(&self) -> u64 {
+        self.0.reconnects()
     }
 }
 

@@ -161,6 +161,8 @@ impl ShowMirror {
             | Delta::ProgrammerChanged { .. }
             | Delta::OutputsChanged { .. }
             | Delta::SurfaceChanged { .. }
+            | Delta::MachineChanged { .. }
+            | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }
             | Delta::DirtyFlag { .. }
             | Delta::Notice { .. } => Ok(()),
@@ -246,6 +248,8 @@ impl SessionMirror {
             | Delta::ProgrammerChanged { .. }
             | Delta::OutputsChanged { .. }
             | Delta::SurfaceChanged { .. }
+            | Delta::MachineChanged { .. }
+            | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }
             | Delta::DirtyFlag { .. }
             | Delta::Notice { .. } => Ok(()),

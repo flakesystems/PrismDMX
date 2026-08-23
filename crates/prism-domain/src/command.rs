@@ -16,8 +16,8 @@ use ts_rs::TS;
 
 use crate::{
     AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, GroupId,
-    JsonValue, OutputId, OutputInstance, OutputKind, PlaybackTarget, PresetId, RgbColor,
-    SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+    JsonValue, MachineChange, OutputId, OutputInstance, OutputKind, PlaybackTarget, PresetId,
+    RgbColor, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -193,6 +193,10 @@ pub enum ObjectRef {
     Cue {
         /// The sequence, or `None` for the one the session has selected.
         #[serde(default)]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         sequence_id: Option<SequenceId>,
         /// The cue, by the number an operator typed.
         cue_number: String,
@@ -405,6 +409,10 @@ pub enum Command {
         /// client that read the session and filled the number in would be
         /// sending a command whose meaning had already moved on another screen.
         #[serde(default)]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         sequence_id: Option<SequenceId>,
         /// Cue number as typed, e.g. `1.5`.
         cue_number: String,
@@ -550,6 +558,10 @@ pub enum Command {
         /// [`Self::StoreCue`] for why the daemon resolves it rather than a
         /// client.
         #[serde(default)]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         sequence_id: Option<SequenceId>,
         /// The cue, by its number.
         cue_number: String,
@@ -576,6 +588,10 @@ pub enum Command {
     SetCueProperty {
         /// The sequence the cue is in, or `None` for the selected one.
         #[serde(default)]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         sequence_id: Option<SequenceId>,
         /// The cue, by the number it has **now**.
         cue_number: String,
@@ -646,6 +662,10 @@ pub enum Command {
         )]
         to: ObjectRef,
         /// What to do when the destination is taken.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         mode: OverwriteMode,
     },
     /// Move one place on the desk to another — S40's `Move`.
@@ -686,6 +706,10 @@ pub enum Command {
         )]
         to: ObjectRef,
         /// What to do when the destination is taken, where that is a question.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         mode: OverwriteMode,
     },
     /// Name one place on the desk — S40's `Label`.
@@ -806,6 +830,10 @@ pub enum Command {
         /// The executor slot, `page * 8 + slot` (**D7**).
         executor_id: ExecutorId,
         /// The sequence to put on it, or `None` to clear the slot's sequence.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         sequence_id: Option<SequenceId>,
     },
     /// Step a playback.
@@ -824,6 +852,10 @@ pub enum Command {
         )]
         target: PlaybackTarget,
         /// Which way to step.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         direction: GoDirection,
     },
     /// Stop a playback.
@@ -955,6 +987,62 @@ pub enum Command {
     Redo,
     /// Write the show to disk.
     SaveShow,
+    /// Write the show to a different file, and open that file from then on —
+    /// S37.
+    ///
+    /// The four that follow it are the rest of what a *Show files* panel needs,
+    /// and until S37 [`Self::SaveShow`] was the only one of the five that
+    /// existed: a show could be written and never opened, renamed or replaced
+    /// from an interface, so the file an operator was working in was whatever
+    /// `--show` had named at start-up.
+    ///
+    /// **Not undoable, and none of the five is.** Three of them replace the show
+    /// outright and therefore empty the Oops journal (`prism_core::journal`: a
+    /// record is an assertion about the show that was open a moment ago), and
+    /// the other two change no show state at all.
+    SaveShowAs {
+        /// Where to write it. A `.prism` path; a relative one is resolved
+        /// against the daemon's data directory, because a client and a daemon
+        /// do not share a working directory.
+        path: String,
+    },
+    /// Open a `.prism` file, replacing the show that is running — S37.
+    ///
+    /// The journal and the programmer go with the show that was open, which is
+    /// `ShowStore::load`'s rule and not this command's.
+    OpenShow {
+        /// The file to open. It has to be there: a `.prism` path that names
+        /// nothing is [`Self::NewShow`]'s job, and an *open* that quietly made
+        /// an empty show would lose an operator's file to a typo.
+        path: String,
+    },
+    /// Make an empty show and open it — S37.
+    ///
+    /// **Refused when something is already at that path.** A *new* show that
+    /// replaced an existing one would be the most destructive command in §5 and
+    /// would look like the least destructive.
+    NewShow {
+        /// Where to make it.
+        path: String,
+    },
+    /// Write the show out as JSON — S15's export, with a command in front of it
+    /// at last (S37).
+    ///
+    /// Changes nothing at all, including the file that is open: an export is a
+    /// copy in a second format, for a diff, a backup or a bug report.
+    ExportShow {
+        /// Where to write it. A `.json` path.
+        path: String,
+    },
+    /// Read a JSON export back over the running show — S37.
+    ///
+    /// The show is replaced and is **not** written to disk, so the Save lamp is
+    /// lit afterwards: an import an operator did not mean to do must be one they
+    /// can walk away from.
+    ImportShow {
+        /// The file to read.
+        path: String,
+    },
     /// Switch the canvas to a stored view.
     SelectView {
         /// The view to activate.
@@ -1185,7 +1273,30 @@ pub enum Command {
     /// plugged in (S33). The daemon warns, keeps trying, and starts.
     SetSurfacePort {
         /// The port name, or `None` for no surface at all.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         port: Option<String>,
+    },
+
+    // ---- The machine's own settings (S37) ----
+    /// Changes one setting of **this machine** — S37.
+    ///
+    /// The sixth machine command, and the one that finishes the job S33 started:
+    /// everything `prismd` used to be told on a command line is a field of
+    /// `prism_core::MachineConfig` now, so a venue's desk is configured where an
+    /// operator can see it rather than in a shortcut nobody opens.
+    ///
+    /// One field at a time — see [`MachineChange`], which also says which
+    /// changes a running daemon can make and which wait for a start.
+    ConfigureMachine {
+        /// What to change.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        change: MachineChange,
     },
 }
 
@@ -1265,6 +1376,13 @@ impl Command {
     /// node would move light on a stage while somebody was driving it — which is
     /// §6.1's rule for playback actions, met by another road.
     ///
+    /// **Six since S37**, which put everything else `prismd` used to be told on
+    /// a command line here as well — the network exposure and its token, the log
+    /// level, the universe count, the exit action, the autostart flag, the
+    /// fixture library's path and the surface binding profile. The argument is
+    /// unchanged and is the one below; what changed is that there is nothing
+    /// left about *this building* that only a shortcut's arguments can say.
+    ///
     /// **Five since S36**, which put the control surface's MIDI port in the same
     /// place for the same reason: the desk in the rack belongs to the building,
     /// not to the show. S33 carried that out of itself in as many words — *a
@@ -1279,6 +1397,7 @@ impl Command {
                 | Self::RemoveOutput { .. }
                 | Self::SetOutputEnabled { .. }
                 | Self::SetSurfacePort { .. }
+                | Self::ConfigureMachine { .. }
         )
     }
 
@@ -1287,8 +1406,11 @@ impl Command {
     /// `ARCHITECTURE_SPEC.md` §6.1: playback actions and every session command
     /// are deliberately excluded, so undo during a running show neither changes
     /// light the operator is driving nor pulls windows out from under them.
-    /// `Oops`, `Redo` and `SaveShow` are excluded because they are not show
-    /// mutations in the first place. **Every machine command is excluded too**
+    /// `Oops`, `Redo` and the five file commands (`SaveShow`, and S37's
+    /// `SaveShowAs`, `OpenShow`, `NewShow`, `ExportShow` and `ImportShow`) are
+    /// excluded because they are not show mutations in the first place — and
+    /// three of the five *replace* the show, which empties the journal an Oops
+    /// would have read (`prism_core::journal`). **Every machine command is excluded too**
     /// (S33): the journal belongs to the show and is cleared when one is loaded,
     /// so an Oops that reached the venue's cabling would take back a change the
     /// show it is journaling knows nothing about — and it would move light on a
@@ -1306,6 +1428,11 @@ impl Command {
                 | Self::Oops
                 | Self::Redo
                 | Self::SaveShow
+                | Self::SaveShowAs { .. }
+                | Self::OpenShow { .. }
+                | Self::NewShow { .. }
+                | Self::ExportShow { .. }
+                | Self::ImportShow { .. }
         ) && !self.is_session_command()
             && !self.is_machine_command()
     }

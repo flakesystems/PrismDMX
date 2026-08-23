@@ -121,12 +121,25 @@ describe("a window's body", () => {
   });
 
   it("says so, by name, for the windows that are not built yet", () => {
-    for (const type of ["Viewer3D", "PhaserEditor", "ClockViewer", "Settings"] as const) {
+    // **Three, since S37 built the fourth.** `Settings` had been in this list
+    // since S25 reserved it; what is left is the three whose sessions have not
+    // happened.
+    for (const type of ["Viewer3D", "PhaserEditor", "ClockViewer"] as const) {
       const text = body(type);
       expect(text, type).toContain("is not built yet");
       // Named, so an operator can tell which button they pressed.
-      expect(text, type).toMatch(/Viewer 3D|Phaser Editor|Clock Viewer|Settings/);
+      expect(text, type).toMatch(/Viewer 3D|Phaser Editor|Clock Viewer/);
     }
+  });
+
+  it("draws the settings window, which S25 reserved and S37 built", () => {
+    const text = body("Settings");
+    expect(text).not.toContain("is not built yet");
+    // The four panels S37 asks for, in the order the plan gives them.
+    expect(text).toContain("Outputs");
+    expect(text).toContain("Devices");
+    expect(text).toContain("Show files");
+    expect(text).toContain("This machine");
   });
 
   it("renders something for every window type there is", () => {

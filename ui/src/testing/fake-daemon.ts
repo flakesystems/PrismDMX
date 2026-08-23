@@ -16,7 +16,14 @@
 
 import { encode } from "@msgpack/msgpack";
 
-import type { Answer, Delta, FixtureType, ProgrammerState } from "../bindings";
+import type {
+  Answer,
+  Delta,
+  FixtureType,
+  MachineSettings,
+  ProgrammerState,
+  ShowFileInfo,
+} from "../bindings";
 import type { Socket, SocketFactory, SocketHandlers, Timer } from "../ipc/connection";
 import type { DaemonHealth, RejectReason, Snapshot } from "../ipc/protocol";
 import type { Payload } from "../ipc/shape";
@@ -246,6 +253,47 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     ],
     health: health(),
     fixtureLibrary: fixtureLibrary().length,
+    machine: machine(),
+    showFile: showFile(),
+    ...overrides,
+  };
+}
+
+/**
+ * What this machine is set to — S37, and deliberately not at its defaults.
+ *
+ * S14's rule again: a settings panel drawn from a struct of zeroes cannot tell
+ * *carried across* from *never filled in*. So this desk has an identity, a data
+ * directory, a listener that is up, eight universes and no command line holding
+ * anything.
+ */
+export function machine(overrides: Partial<MachineSettings> = {}): MachineSettings {
+  return {
+    deskId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    dataDir: "C:/ProgramData/PrismDMX",
+    local: true,
+    websocket: "127.0.0.1:7373",
+    websocketOpen: "127.0.0.1:7373",
+    token: null,
+    logLevel: "Info",
+    universes: 8,
+    exitAction: "Hold",
+    autostart: false,
+    fixtureLibrary: null,
+    surfaceProfile: null,
+    overrides: [],
+    ...overrides,
+  };
+}
+
+/** Which show is open, and what the autosave is doing — S37. */
+export function showFile(overrides: Partial<ShowFileInfo> = {}): ShowFileInfo {
+  return {
+    path: "D:/shows/aula.prism",
+    recent: ["D:/shows/panto.prism"],
+    unsavedChanges: false,
+    recovery: false,
+    autosaveSeconds: 30,
     ...overrides,
   };
 }

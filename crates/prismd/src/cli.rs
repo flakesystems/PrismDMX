@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use prism_domain::{OutputId, OutputInstance, OutputKind, UniverseId};
+use prism_domain::{MachineOverride, OutputId, OutputInstance, OutputKind, UniverseId};
 
 use crate::log::Level;
 
@@ -26,12 +26,37 @@ use crate::log::Level;
 /// `docs/IPC_PROTOCOL.md` §2.1 gives: school networks are shared, and an
 /// unauthenticated lighting console reachable from any classroom machine is not
 /// acceptable.
+///
+/// **Since S37 this is where the listener is by default rather than a value a
+/// flag opts in to.** `prism_core::Settings::websocket` holds it, the settings
+/// window edits it, and the constant is here so the help text can print it.
 pub const DEFAULT_WEBSOCKET: &str = "127.0.0.1:7373";
 
-/// Universes the frame layout carries unless the operator says otherwise —
+/// Universes the frame layout carries unless it is told otherwise —
 /// `UniverseId::MAX`, i.e. the desk's whole range. See
 /// [`crate::engine::frame_layout`] for why it is the desk's and not the show's.
-pub const DEFAULT_UNIVERSES: u32 = 64;
+///
+/// One number, held in `prism-core` beside the setting that carries it, so that
+/// the default a machine configuration is written with and the bound this parser
+/// checks against cannot drift apart.
+pub const DEFAULT_UNIVERSES: u32 = prism_core::DEFAULT_UNIVERSES;
+
+/// What a command line says about the WebSocket listener — S37.
+///
+/// Three states rather than an `Option<SocketAddr>`, because since S37 there are
+/// three things to say: *use the setting* (the default, and the setting is a
+/// loopback listener), *use exactly this address* and *none at all*. Before S37
+/// there was no setting, so absence meant off and two states were enough.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Listen {
+    /// Whatever `prism_core::Settings::websocket` says. The default.
+    #[default]
+    Configured,
+    /// `--websocket [ADDR]`: this address, and the setting is not read.
+    At(SocketAddr),
+    /// `--no-websocket`: nothing at all, and the setting is not read.
+    Off,
+}
 
 /// The multicast hop limit an sACN output asked for on the command line gets.
 ///
@@ -50,6 +75,29 @@ pub enum Exit {
     Hold,
     /// Publish a blackout frame, let the outputs send it, and then stop.
     Blackout,
+}
+
+/// The domain's spelling and this crate's, converted in one place — S37.
+///
+/// `crate::log::Level`'s reason exactly: what travels and what the shutdown path
+/// switches on are the same fact and two types, because `prism-domain` is not
+/// allowed to know what a blackout frame is.
+impl From<prism_domain::ExitAction> for Exit {
+    fn from(action: prism_domain::ExitAction) -> Self {
+        match action {
+            prism_domain::ExitAction::Hold => Self::Hold,
+            prism_domain::ExitAction::Blackout => Self::Blackout,
+        }
+    }
+}
+
+impl From<Exit> for prism_domain::ExitAction {
+    fn from(exit: Exit) -> Self {
+        match exit {
+            Exit::Hold => Self::Hold,
+            Exit::Blackout => Self::Blackout,
+        }
+    }
 }
 
 /// An output named on the command line, before the show has said which
@@ -121,8 +169,9 @@ pub struct Options {
     /// committed** (`profiles/fixtures/SOURCE.md`), so an installer that put it
     /// somewhere else has to be able to say where.
     pub fixtures: Option<PathBuf>,
-    /// Universes the frame layout carries.
-    pub universes: u32,
+    /// Universes the frame layout carries, or `None` for the configured count
+    /// — S37.
+    pub universes: Option<u32>,
     /// Outputs named on the command line.
     ///
     /// **The whole rig for this run when it is not empty** — the machine
@@ -146,11 +195,13 @@ pub struct Options {
     /// exactly that of every test, and this machine has a real SH-RS09B attached
     /// that the suite must not open.
     pub mock_devices: bool,
-    /// Whether to open the named pipe or Unix domain socket.
-    pub local: bool,
-    /// The WebSocket address, or `None` to leave it closed.
-    pub websocket: Option<SocketAddr>,
-    /// The §2.1 token. Required when the WebSocket listener is not on loopback.
+    /// Whether to open the named pipe or Unix domain socket, or `None` for the
+    /// configured answer — S37.
+    pub local: Option<bool>,
+    /// What the command line said about the WebSocket listener — S37.
+    pub websocket: Listen,
+    /// The §2.1 token, or `None` for the configured one. Required when the
+    /// WebSocket listener is not on loopback.
     pub token: Option<String>,
     /// The X-Touch binding profile to read (`docs/MCU_MAPPING.md` §4.2), or
     /// `None` for the built-in defaults.
@@ -182,10 +233,11 @@ pub struct Options {
     /// real daemon while bytes from `docs/MCU_MAPPING.md` §2.1 are appended to
     /// a file. See [`crate::surface::FileSurfacePort`].
     pub mock_surface: Option<PathBuf>,
-    /// What the stage does when the daemon stops.
-    pub exit: Exit,
-    /// How much to log.
-    pub log_level: Level,
+    /// What the stage does when the daemon stops, or `None` for the configured
+    /// answer — S37.
+    pub exit: Option<Exit>,
+    /// How much to log, or `None` for the configured level — S37.
+    pub log_level: Option<Level>,
     /// Stop by itself after this long. For a smoke test and for CI, where a
     /// daemon that runs until interrupted is a job that never ends.
     pub run_for: Option<Duration>,
@@ -197,17 +249,17 @@ impl Default for Options {
             data_dir: None,
             show: None,
             fixtures: None,
-            universes: DEFAULT_UNIVERSES,
+            universes: None,
             outputs: Vec::new(),
             mock_devices: false,
-            local: true,
-            websocket: None,
+            local: None,
+            websocket: Listen::Configured,
             token: None,
             surface_profile: None,
             surface: None,
             mock_surface: None,
-            exit: Exit::default(),
-            log_level: Level::Info,
+            exit: None,
+            log_level: None,
             run_for: None,
         }
     }
@@ -256,15 +308,21 @@ The daemon owns the show, the engine and every DMX output. It runs with no
 client attached and keeps running when one goes away; that is decision D2.
 
 Options:
+Every option below that is not about *this run* is a **setting** since S37:
+the machine configuration holds it, the settings window edits it, and a flag
+here is the value for this run only - the stored one is neither read nor
+written, and the window says which flag is holding which row.
+
   --data-dir <PATH>     where the lock file and the machine configuration live
                         (default: the platform's user data directory, or
                         {} if it is set)
   --show <PATH>         the .prism file to open, created if it is not there
+                        (default: the one this desk last had open, or
+                        default.prism in the data directory)
   --fixtures <DIR>      the installed fixture library; found beside the
                         executable when this is not given
-                        (default: default.prism in the data directory)
   --universes <N>       universes the frame layout carries, 1..={DEFAULT_UNIVERSES}
-                        (default: {DEFAULT_UNIVERSES})
+                        (default: the configured count, 64 out of the box)
 
   --mock-output         a DMX output that accepts every frame and puts it
                         nowhere - the headless mode the tests run against
@@ -283,8 +341,13 @@ is not read and nothing is written back to it, and AddOutput and its three
 companions are refused. A daemon started with none of them uses the rig in
 machine.json, which is where a settings window puts it.
 
-  --no-local            do not open the named pipe / Unix domain socket
-  --websocket [ADDR]    open the WebSocket listener (default: {DEFAULT_WEBSOCKET})
+  --local, --no-local   open the named pipe / Unix domain socket, or do not
+                        (default: the configured answer, open out of the box)
+  --websocket [ADDR]    bind the WebSocket listener here
+  --no-websocket        do not bind it at all
+                        (default: the configured address, {DEFAULT_WEBSOCKET} out of
+                        the box - a listener that cannot bind is a warning and
+                        a daemon that starts)
   --token <TOKEN>       the access token a listener off loopback requires
 
   --surface-profile <PATH>
@@ -305,9 +368,11 @@ machine.json, which is where a settings window puts it.
                         file has no faders. The console half of --mock-output
 
   --blackout-on-exit    publish a blackout before stopping the outputs
-  --hold-on-exit        leave the last look on stage (default)
+  --hold-on-exit        leave the last look on stage
+                        (default: the configured action, hold out of the box)
 
-  --log-level <LEVEL>   debug, info, warn, error or off (default: info)
+  --log-level <LEVEL>   debug, info, warn, error or off
+                        (default: the configured level, info out of the box)
   --run-for <SECONDS>   stop by itself after this long
   -h, --help            print this and stop
   -V, --version         print the version and stop
@@ -402,7 +467,7 @@ where
                         "--universes must be between 1 and {DEFAULT_UNIVERSES}, not {count}"
                     )));
                 }
-                options.universes = count;
+                options.universes = Some(count);
             }
             "--mock-output" => {
                 let id = next_id(&options.outputs);
@@ -473,21 +538,25 @@ where
                     [universe],
                 ));
             }
-            "--no-local" => options.local = false,
+            "--no-local" => options.local = Some(false),
+            "--local" => options.local = Some(true),
             "--websocket" => {
-                options.websocket = Some(socket_address(DEFAULT_WEBSOCKET, 0)?);
+                options.websocket = Listen::At(socket_address(DEFAULT_WEBSOCKET, 0)?);
             }
+            "--no-websocket" => options.websocket = Listen::Off,
             "--token" => options.token = Some(value()?),
             "--surface-profile" => options.surface_profile = Some(PathBuf::from(value()?)),
             "--surface" => options.surface = Some(value()?),
             "--midi-ports" => return Ok(Invocation::MidiPorts),
             "--mock-surface" => options.mock_surface = Some(PathBuf::from(value()?)),
-            "--blackout-on-exit" => options.exit = Exit::Blackout,
-            "--hold-on-exit" => options.exit = Exit::Hold,
+            "--blackout-on-exit" => options.exit = Some(Exit::Blackout),
+            "--hold-on-exit" => options.exit = Some(Exit::Hold),
             "--log-level" => {
                 let text = value()?;
-                options.log_level = Level::parse(&text)
-                    .ok_or_else(|| CliError(format!("--log-level does not know {text:?}")))?;
+                options.log_level = Some(
+                    Level::parse(&text)
+                        .ok_or_else(|| CliError(format!("--log-level does not know {text:?}")))?,
+                );
             }
             "--run-for" => {
                 let text = value()?;
@@ -503,10 +572,8 @@ where
             // mistake, and anything that does not is an argument this program
             // has no use for.
             other => {
-                if let Some(websocket) = options.websocket.as_mut()
-                    && !other.starts_with('-')
-                {
-                    *websocket = socket_address(other, 0)?;
+                if matches!(options.websocket, Listen::At(_)) && !other.starts_with('-') {
+                    options.websocket = Listen::At(socket_address(other, 0)?);
                     continue;
                 }
                 return Err(CliError(format!(
@@ -520,7 +587,7 @@ where
     // reachable from another machine requires a token, and a daemon that
     // started without one would be an unauthenticated console on a school
     // network.
-    if let Some(address) = options.websocket
+    if let Listen::At(address) = options.websocket
         && !address.ip().is_loopback()
         && options.token.is_none()
     {
@@ -531,6 +598,136 @@ where
     }
 
     Ok(Invocation::Run(Box::new(options)))
+}
+
+/// What the daemon actually runs with, once the command line and the machine
+/// configuration have been put together — S37.
+///
+/// # Why this is one function and not fifteen `unwrap_or`s
+///
+/// The rule is S33's and S36's, generalised: **a flag is the value for that
+/// run**, and the stored setting is neither read nor written. Written inline at
+/// each use that rule would be fifteen places to get it wrong, and — worse — the
+/// list of which settings a run is holding would have to be built a second time
+/// for the settings window to grey the right rows out. So it is decided once,
+/// here, and [`Resolved::overrides`] falls out of the same match.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Resolved {
+    /// Whether to open the named pipe / Unix domain socket.
+    pub local: bool,
+    /// Where the WebSocket listener should bind, or `None`.
+    pub websocket: Option<SocketAddr>,
+    /// The §2.1 token.
+    pub token: Option<String>,
+    /// Universes the frame layout carries.
+    pub universes: u32,
+    /// How much to log.
+    pub log_level: Level,
+    /// What the stage does when the daemon stops.
+    pub exit: Exit,
+    /// Where the installed fixture library is.
+    pub fixtures: Option<PathBuf>,
+    /// Which X-Touch binding profile to read.
+    pub surface_profile: Option<PathBuf>,
+    /// Which settings this run's command line is holding — what a settings
+    /// window greys out, and the flag it names when it does.
+    pub overrides: Vec<MachineOverride>,
+}
+
+/// Puts a command line and a machine configuration together — S37.
+///
+/// `outputs_from_flags` and `surface_from_flag` are the two S33 and S36 already
+/// decided; they are arguments rather than being read off `options` because the
+/// rig's answer is `crate::daemon::rig_for`'s and this function must not be a
+/// second opinion about it.
+#[must_use]
+pub fn resolve(
+    options: &Options,
+    settings: &prism_core::Settings,
+    outputs_from_flags: bool,
+    surface_from_flag: bool,
+) -> Resolved {
+    let mut overrides = Vec::new();
+    let mut held = |what: MachineOverride| overrides.push(what);
+    if outputs_from_flags {
+        held(MachineOverride::Outputs);
+    }
+    if surface_from_flag {
+        held(MachineOverride::Surface);
+    }
+
+    let local = match options.local {
+        Some(local) => {
+            held(MachineOverride::Local);
+            local
+        }
+        None => settings.local,
+    };
+    let websocket = match options.websocket {
+        Listen::At(address) => {
+            held(MachineOverride::Websocket);
+            Some(address)
+        }
+        Listen::Off => {
+            held(MachineOverride::Websocket);
+            None
+        }
+        Listen::Configured => settings.websocket,
+    };
+    let token = match &options.token {
+        Some(token) => {
+            held(MachineOverride::Token);
+            Some(token.clone())
+        }
+        None => settings.token.clone(),
+    };
+    let universes = match options.universes {
+        Some(universes) => {
+            held(MachineOverride::Universes);
+            universes
+        }
+        None => settings.universes,
+    };
+    let log_level = match options.log_level {
+        Some(level) => {
+            held(MachineOverride::LogLevel);
+            level
+        }
+        None => Level::from(settings.log_level),
+    };
+    let exit = match options.exit {
+        Some(exit) => {
+            held(MachineOverride::ExitAction);
+            exit
+        }
+        None => Exit::from(settings.exit_action),
+    };
+    let fixtures = match &options.fixtures {
+        Some(path) => {
+            held(MachineOverride::FixtureLibrary);
+            Some(path.clone())
+        }
+        None => settings.fixture_library.as_deref().map(PathBuf::from),
+    };
+    let surface_profile = match &options.surface_profile {
+        Some(path) => {
+            held(MachineOverride::SurfaceProfile);
+            Some(path.clone())
+        }
+        None => settings.surface_profile.as_deref().map(PathBuf::from),
+    };
+
+    Resolved {
+        local,
+        websocket,
+        token,
+        universes,
+        log_level,
+        exit,
+        fixtures,
+        surface_profile,
+        overrides,
+    }
 }
 
 /// A socket address, filling in a default port when only a host was given.
@@ -551,8 +748,8 @@ fn socket_address(text: &str, default_port: u16) -> Result<SocketAddr, CliError>
 #[cfg(test)]
 mod tests {
     use super::{
-        CliError, DEFAULT_HOP_LIMIT, DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET, Exit, Invocation,
-        Options, fill_universes, parse, usage,
+        CliError, DEFAULT_HOP_LIMIT, DEFAULT_WEBSOCKET, Exit, Invocation, Listen, Options,
+        Resolved, fill_universes, parse, resolve, usage,
     };
     use crate::log::Level;
     use prism_domain::{OutputKind, UniverseId};
@@ -576,14 +773,143 @@ mod tests {
         }
     }
 
+    /// The default machine configuration, so a `resolve` test is about the
+    /// flags rather than about the settings.
+    fn settings() -> prism_core::Settings {
+        prism_core::Settings::default()
+    }
+
+    /// A command line that says nothing leaves every setting to the machine
+    /// configuration, and **holds nothing** — S37.
+    ///
+    /// The second half is what a settings window draws from: an empty
+    /// `overrides` is a panel with no greyed-out rows in it.
+    #[test]
+    fn a_silent_command_line_takes_the_configuration_as_it_stands() {
+        let settings = prism_core::Settings {
+            local: false,
+            websocket: Some("127.0.0.1:9001".parse().unwrap()),
+            token: Some("stored".to_owned()),
+            log_level: prism_domain::LogLevel::Warn,
+            universes: 12,
+            exit_action: prism_domain::ExitAction::Blackout,
+            autostart: true,
+            fixture_library: Some("D:/fixtures".to_owned()),
+            surface_profile: Some("D:/xtouch.json".to_owned()),
+        };
+        let resolved = resolve(&Options::default(), &settings, false, false);
+        assert_eq!(
+            resolved,
+            Resolved {
+                local: false,
+                websocket: Some("127.0.0.1:9001".parse().unwrap()),
+                token: Some("stored".to_owned()),
+                universes: 12,
+                log_level: Level::Warn,
+                exit: Exit::Blackout,
+                fixtures: Some(PathBuf::from("D:/fixtures")),
+                surface_profile: Some(PathBuf::from("D:/xtouch.json")),
+                overrides: Vec::new(),
+            }
+        );
+    }
+
+    /// **A flag is the value for that run** — S33's rule and S36's, generalised
+    /// — and every one of them says so in `overrides`.
+    ///
+    /// The list is what the settings window greys rows out from, and it names
+    /// the flag: a box an operator can type into that does nothing is worse than
+    /// a box that is not there.
+    #[test]
+    fn every_flag_holds_its_setting_and_says_which_flag_is_holding_it() {
+        let options = Options {
+            local: Some(true),
+            websocket: Listen::At("0.0.0.0:7000".parse().unwrap()),
+            token: Some("from-the-flag".to_owned()),
+            universes: Some(4),
+            log_level: Some(Level::Debug),
+            exit: Some(Exit::Blackout),
+            fixtures: Some(PathBuf::from("/opt/fixtures")),
+            surface_profile: Some(PathBuf::from("/opt/xtouch.json")),
+            ..Options::default()
+        };
+        let resolved = resolve(&options, &settings(), true, true);
+
+        assert!(resolved.local);
+        assert_eq!(
+            resolved.websocket,
+            Some("0.0.0.0:7000".parse::<SocketAddr>().unwrap())
+        );
+        assert_eq!(resolved.token.as_deref(), Some("from-the-flag"));
+        assert_eq!(resolved.universes, 4);
+        assert_eq!(resolved.log_level, Level::Debug);
+        assert_eq!(resolved.exit, Exit::Blackout);
+        assert_eq!(resolved.fixtures, Some(PathBuf::from("/opt/fixtures")));
+
+        // Every override there is, including the two S33 and S36 decided.
+        use prism_domain::MachineOverride as Held;
+        for held in [
+            Held::Outputs,
+            Held::Surface,
+            Held::Local,
+            Held::Websocket,
+            Held::Token,
+            Held::LogLevel,
+            Held::Universes,
+            Held::ExitAction,
+            Held::FixtureLibrary,
+            Held::SurfaceProfile,
+        ] {
+            assert!(resolved.overrides.contains(&held), "{held:?}");
+        }
+    }
+
+    /// `--no-websocket` is an override too, and that is the point of it.
+    ///
+    /// Before S37 there was no setting, so *absence* meant off. Now the setting
+    /// says *loopback*, so saying nothing is not the same as saying no — and a
+    /// run that says no is holding the setting exactly as one that names an
+    /// address is.
+    #[test]
+    fn saying_no_listener_is_different_from_saying_nothing() {
+        let off = resolve(
+            &Options {
+                websocket: Listen::Off,
+                ..Options::default()
+            },
+            &settings(),
+            false,
+            false,
+        );
+        assert_eq!(off.websocket, None);
+        assert!(
+            off.overrides
+                .contains(&prism_domain::MachineOverride::Websocket)
+        );
+
+        let silent = resolve(&Options::default(), &settings(), false, false);
+        assert_eq!(
+            silent.websocket.map(|address| address.to_string()),
+            Some(DEFAULT_WEBSOCKET.to_owned()),
+            "the desk's own setting, and since S37 that is a loopback listener"
+        );
+        assert!(silent.overrides.is_empty());
+    }
+
     #[test]
     fn a_daemon_with_no_arguments_is_a_daemon_with_defaults() {
         let options = options(&[]);
         assert_eq!(options, Options::default());
-        assert!(options.local, "the local transport is what the shell uses");
-        assert_eq!(options.websocket, None, "the Web Remote is opt-in");
-        assert_eq!(options.exit, Exit::Hold, "the stage keeps its look");
-        assert_eq!(options.universes, DEFAULT_UNIVERSES);
+        // **Every one of these is now *unset* rather than a value** — S37. A
+        // command line that says nothing about a setting is a command line that
+        // leaves it to the machine configuration, and `resolve` is where the two
+        // are put together. Before S37 there was no configuration, so a default
+        // here was the whole answer.
+        assert_eq!(options.local, None);
+        assert_eq!(options.websocket, Listen::Configured);
+        assert_eq!(options.exit, None);
+        assert_eq!(options.universes, None);
+        assert_eq!(options.log_level, None);
         assert!(options.outputs.is_empty());
     }
 
@@ -707,12 +1033,17 @@ mod tests {
     fn the_websocket_defaults_to_loopback_and_takes_an_address() {
         assert_eq!(
             options(&["--websocket"]).websocket,
-            Some(DEFAULT_WEBSOCKET.parse::<SocketAddr>().unwrap())
+            Listen::At(DEFAULT_WEBSOCKET.parse::<SocketAddr>().unwrap())
         );
         assert_eq!(
             options(&["--websocket", "127.0.0.1:9000"]).websocket,
-            Some("127.0.0.1:9000".parse::<SocketAddr>().unwrap())
+            Listen::At("127.0.0.1:9000".parse::<SocketAddr>().unwrap())
         );
+        // And the flag that says *not at all*, which S37 needed because the
+        // setting says *yes* — before it, absence was how you said no.
+        assert_eq!(options(&["--no-websocket"]).websocket, Listen::Off);
+        assert_eq!(options(&["--no-local"]).local, Some(false));
+        assert_eq!(options(&["--local"]).local, Some(true));
     }
 
     /// §2.1, and the reason it is checked here rather than at the listener:
@@ -743,7 +1074,7 @@ mod tests {
         ]);
         assert_eq!(options.data_dir, Some(PathBuf::from("/srv/prism")));
         assert_eq!(options.show, Some(PathBuf::from("/srv/prism/aula.prism")));
-        assert_eq!(options.universes, 4);
+        assert_eq!(options.universes, Some(4));
     }
 
     #[test]
@@ -760,18 +1091,21 @@ mod tests {
 
     #[test]
     fn the_exit_behaviour_is_the_last_one_asked_for() {
-        assert_eq!(options(&["--blackout-on-exit"]).exit, Exit::Blackout);
-        assert_eq!(options(&["--hold-on-exit"]).exit, Exit::Hold);
+        assert_eq!(options(&["--blackout-on-exit"]).exit, Some(Exit::Blackout));
+        assert_eq!(options(&["--hold-on-exit"]).exit, Some(Exit::Hold));
         assert_eq!(
             options(&["--blackout-on-exit", "--hold-on-exit"]).exit,
-            Exit::Hold
+            Some(Exit::Hold)
         );
     }
 
     #[test]
     fn the_log_level_and_the_run_time_are_parsed() {
-        assert_eq!(options(&["--log-level", "debug"]).log_level, Level::Debug);
-        assert_eq!(options(&["--log-level", "OFF"]).log_level, Level::Off);
+        assert_eq!(
+            options(&["--log-level", "debug"]).log_level,
+            Some(Level::Debug)
+        );
+        assert_eq!(options(&["--log-level", "OFF"]).log_level, Some(Level::Off));
         assert!(refusal(&["--log-level", "chatty"]).contains("chatty"));
 
         assert_eq!(
@@ -785,7 +1119,7 @@ mod tests {
 
     #[test]
     fn the_local_transport_can_be_switched_off() {
-        assert!(!options(&["--no-local"]).local);
+        assert_eq!(options(&["--no-local"]).local, Some(false));
     }
 
     #[test]

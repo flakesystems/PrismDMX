@@ -316,10 +316,14 @@ async fn record_the_delta_stream_for_the_interface() {
     let mut daemon = Daemon::start(&Options {
         data_dir: Some(dir.path().to_path_buf()),
         show: Some(dir.path().join("aula.prism")),
-        universes: 2,
+        universes: Some(2),
         outputs: vec![mock_output(1)],
-        local: true,
-        log_level: prismd::log::Level::Warn,
+        local: Some(true),
+        // No WebSocket listener: since S37 the *setting* opens one, and a
+        // recording target that said nothing would bind 127.0.0.1:7373 for the
+        // length of the run.
+        websocket: prismd::cli::Listen::Off,
+        log_level: Some(prismd::log::Level::Warn),
         ..Options::default()
     })
     .await

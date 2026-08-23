@@ -114,6 +114,15 @@ round_trip! {
     output_change => crate::OutputChange,
     notice_level => crate::NoticeLevel,
     midi_port_info => crate::MidiPortInfo,
+    surface_health => crate::SurfaceHealth,
+    surface_status => crate::SurfaceStatus,
+    output_status_info => crate::OutputStatusInfo,
+    log_level => crate::LogLevel,
+    exit_action => crate::ExitAction,
+    machine_change => crate::MachineChange,
+    machine_override => crate::MachineOverride,
+    machine_settings => crate::MachineSettings,
+    show_file_info => crate::ShowFileInfo,
 
     playback_id => crate::PlaybackId,
     playback_target => crate::PlaybackTarget,
@@ -182,5 +191,45 @@ fn every_exported_type_has_a_round_trip_property() {
     assert!(
         missing.is_empty(),
         "these types have TypeScript bindings but no round-trip property: {missing:?}"
+    );
+}
+
+/// How much stack one generated `Command` costs, as a budget rather than a
+/// story.
+///
+/// # Why this is a test and not a comment
+///
+/// Three sessions have now been surprised by the same thing: `proptest_derive`
+/// builds one **value tree** per generated value holding a slot for every
+/// variant, that tree is constructed as a local before it is moved into a
+/// `Box`, and a debug test thread on Windows has 2 MiB. The symptom is a
+/// `STATUS_STACK_OVERFLOW` in a *different crate's* test target with no failing
+/// case to read — S34 met it at the thirty-sixth variant, S40 at the
+/// forty-second, and S37 at the fifty-fourth, in `prism-core`'s `tests/oops.rs`
+/// both of the last two times.
+///
+/// The remedy has always been the same and is `crate::arb::boxed`: boxing a
+/// **field's** strategy replaces its whole subtree with a pointer. What was
+/// missing was a way to find out before CI did, so here it is. The two numbers
+/// in the budget are measured rather than guessed: with `Copy`, `Move`,
+/// `ExecutorGo`, `SetSurfacePort` and the five `Option<SequenceId>` fields
+/// unboxed the tree was **36 160 bytes** and `oops.rs` overflowed; with them
+/// boxed it is **30 992** and it does not.
+///
+/// **A session that fails this boxes a field.** `RUST_MIN_STACK` only moves the
+/// cliff a few variants along, and it moves it in one crate rather than in the
+/// four that generate commands.
+#[test]
+fn a_generated_command_fits_in_a_test_thread() {
+    const BUDGET: usize = 32 * 1024;
+    let command = size_of::<<<crate::Command as Arbitrary>::Strategy as Strategy>::Tree>();
+    let delta = size_of::<<<crate::Delta as Arbitrary>::Strategy as Strategy>::Tree>();
+    assert!(
+        command <= BUDGET,
+        "a Command value tree is {command} bytes, over the {BUDGET}-byte budget:          box a field's strategy with crate::arb::boxed"
+    );
+    assert!(
+        delta <= BUDGET,
+        "a Delta value tree is {delta} bytes, over the {BUDGET}-byte budget"
     );
 }

@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    JsonPatchOp, OutputId, OutputInstance, PlaybackId, ProgrammerState, output::OutputHealth,
+    JsonPatchOp, MachineSettings, OutputId, OutputInstance, PlaybackId, ProgrammerState,
+    ShowFileInfo, output::OutputHealth,
 };
 
 /// Severity of a [`Delta::Notice`], matching the logger levels in `CLAUDE.md`.
@@ -109,6 +110,45 @@ pub enum Delta {
     SurfaceChanged {
         /// The configured port, or `None` for no surface at all.
         port: Option<String>,
+    },
+    /// One of **this machine's** settings changed — S37.
+    ///
+    /// [`Self::OutputsChanged`]'s shape for the rest of the machine, and the
+    /// same three reasons: it is small, it is not a document, and a client that
+    /// had to diff a JSON patch to redraw a settings panel would be doing
+    /// arithmetic to learn something it can be told. Both mirrors ignore it by
+    /// name, because what this desk is set to is no more show content than its
+    /// cabling is.
+    ///
+    /// It carries the settings **whole**, including the two things that are not
+    /// configuration at all — where the daemon's data directory is, and which
+    /// settings this run's command line is holding. Those change when a command
+    /// changes them and at no other time, which is the test a delta has to pass.
+    MachineChanged {
+        /// Every field of the *This machine* panel.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        settings: MachineSettings,
+    },
+    /// The daemon opened, made or renamed a show file — S37.
+    ///
+    /// Which `.prism` file is open is state the daemon owns and that only a
+    /// command changes, so it is a delta rather than a question. It carries the
+    /// recent list with it because the two move together: a show that has just
+    /// been opened is the one that has just left the list.
+    ///
+    /// It is **not** the Save lamp, which is [`Self::DirtyFlag`] and moves far
+    /// more often; the flag is repeated inside for the panel's convenience and
+    /// the lamp is still the thing the console reads.
+    ShowFileChanged {
+        /// The file, the recent ones, and the autosave's state.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        file: ShowFileInfo,
     },
     /// A DMX output changed health.
     OutputHealth {

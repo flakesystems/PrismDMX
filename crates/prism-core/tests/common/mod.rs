@@ -328,6 +328,24 @@ pub fn show_commands() -> Vec<Command> {
         Command::Oops,
         Command::Redo,
         Command::SaveShow,
+        // S37's four beside it, each with a path the show applier accepts.
+        // What it checks is the extension and nothing else — whether the file
+        // is there needs a disk, which is `prismd`'s (`prism_core::file`).
+        Command::SaveShowAs {
+            path: "aula.prism".to_owned(),
+        },
+        Command::OpenShow {
+            path: "aula.prism".to_owned(),
+        },
+        Command::NewShow {
+            path: "next-term.prism".to_owned(),
+        },
+        Command::ExportShow {
+            path: "aula.json".to_owned(),
+        },
+        Command::ImportShow {
+            path: "aula.json".to_owned(),
+        },
     ]
 }
 
@@ -366,10 +384,17 @@ pub fn machine_commands() -> Vec<Command> {
         Command::RemoveOutput {
             id: OutputId::new(1),
         },
-        // S36's. Last because it has nothing to do with the four before it:
-        // it is the *other* device this machine owns.
+        // S36's. Last but one because it has nothing to do with the four
+        // before it: it is the *other* device this machine owns.
         Command::SetSurfacePort {
             port: Some("X-Touch".to_owned()),
+        },
+        // S37's, and the last thing about this building that was only ever a
+        // command-line flag. One field at a time, like `ConfigureOutput`.
+        Command::ConfigureMachine {
+            change: prism_domain::MachineChange::LogLevel {
+                level: prism_domain::LogLevel::Warn,
+            },
         },
     ]
 }

@@ -82,6 +82,27 @@ pub struct Machine {
     /// is trying a desk out. `MachineError::SurfaceOnTheCommandLine` is what a
     /// `SetSurfacePort` is refused with, and it names the right flag.
     pub surface_on_command_line: bool,
+    /// Where the lock file, the machine configuration and the default show are
+    /// — S37.
+    ///
+    /// Read and never written: a settings window draws it, and it cannot edit
+    /// it, because the settings themselves are in this directory. A daemon told
+    /// to move it would have to be told somewhere else, and
+    /// `ARCHITECTURE_SPEC.md` §10.3 is where that decision is written down.
+    pub data_dir: std::path::PathBuf,
+    /// Which settings this run's command line is holding — S37.
+    ///
+    /// `crate::cli::resolve` decides it once, and it travels to a client in
+    /// `MachineSettings::overrides` so that a panel can grey out the rows a flag
+    /// is holding and name the flag. Fixed for the life of the process: a
+    /// command line does not change while it is running.
+    pub overrides: Vec<prism_domain::MachineOverride>,
+    /// Where the WebSocket listener is **actually** bound, or `None` — S37.
+    ///
+    /// Configured and absent at the same time is an ordinary state, because a
+    /// listener that could not bind is a warning and a daemon that starts. It is
+    /// S36's `configured` and `open` for a MIDI port, one device along.
+    pub websocket_open: Option<std::net::SocketAddr>,
 }
 
 /// What every driver on this machine needs and no row of the rig carries.

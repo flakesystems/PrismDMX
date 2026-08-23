@@ -40,8 +40,8 @@
 use core::fmt;
 
 use prism_domain::{
-    ArtNetPort, Command, Delta, OutputChange, OutputId, OutputInstance, OutputKind, SacnPort,
-    UniverseId,
+    ArtNetPort, Command, Delta, MachineChange, OutputChange, OutputId, OutputInstance, OutputKind,
+    SacnPort, UniverseId,
 };
 
 use crate::command::{Applied, Effect};
@@ -109,6 +109,17 @@ pub enum MachineError {
     /// A multicast hop limit of zero, which is a datagram that leaves no
     /// machine at all.
     ZeroHopLimit,
+    /// A universe count outside the desk's `1..=64` — S37.
+    UniverseCountOutOfRange(u32),
+    /// A WebSocket listener asked for an address that is **not** loopback,
+    /// while this desk has no §2.1 token — S37.
+    ///
+    /// The whole of the network-exposure rule, refused here rather than in an
+    /// interface: a second client could otherwise put an unauthenticated
+    /// lighting console on a school's network, which is the thing
+    /// `docs/IPC_PROTOCOL.md` §2.1 exists to prevent. The remedy is one command
+    /// — `MachineChange::NewToken` — and the message says so.
+    NoTokenForNetwork(std::net::SocketAddr),
 }
 
 impl fmt::Display for MachineError {
@@ -171,6 +182,15 @@ impl fmt::Display for MachineError {
                 SacnPort::MAX_PRIORITY
             ),
             Self::ZeroHopLimit => write!(f, "a hop limit of 0 leaves the machine it was sent from"),
+            Self::UniverseCountOutOfRange(universes) => write!(
+                f,
+                "a desk carries between 1 and {} universes, not {universes}",
+                UniverseId::MAX
+            ),
+            Self::NoTokenForNetwork(address) => write!(
+                f,
+                "{address} is reachable from other machines, so it needs an access token:                  make one first"
+            ),
         }
     }
 }
@@ -308,6 +328,26 @@ pub(crate) fn apply(
                     port: config.surface_port().map(str::to_owned),
                 }],
                 effects: vec![Effect::Surface],
+            })
+        }
+        // S37. The delta is **not** built here, unlike every other machine
+        // command's: half of what `Delta::MachineChanged` carries is the
+        // daemon's knowledge rather than the configuration's — where its data
+        // directory is, what is actually listening, and which settings this
+        // run's command line is holding. So this answers with the effect alone
+        // and `prismd` says what changed.
+        Command::ConfigureMachine { change } => {
+            config.configure(change)?;
+            let mut effects = Vec::new();
+            match change {
+                MachineChange::NewIdentity => effects.push(Effect::NewDeskIdentity),
+                MachineChange::NewToken => effects.push(Effect::NewToken),
+                _ => {}
+            }
+            effects.push(Effect::Machine);
+            Ok(Applied {
+                deltas: Vec::new(),
+                effects,
             })
         }
         _ => Err(MachineError::NotAMachineCommand),
@@ -654,6 +694,20 @@ mod tests {
             sacn_universe: 3,
             priority: 201,
         };
+        // The same universe twice on one gateway, which is two E1.31 rows for
+        // one wire. The Art-Net branch has this rule and so does this one; the
+        // twin is written out because a rule that only one of the two branches
+        // enforces is the shape of an sACN output that quietly sends the wrong
+        // priority.
+        let twice = SacnPort {
+            universe: universe(3),
+            sacn_universe: 3,
+            priority: 100,
+        };
+        assert_eq!(
+            add(&mut config, sacn(1, &[3, 4], 1, vec![twice, twice])),
+            Err(MachineError::DuplicatePort(universe(3)))
+        );
         assert_eq!(
             add(&mut config, sacn(1, &[3, 4], 1, vec![row])),
             Err(MachineError::BadSacnPort(row)),

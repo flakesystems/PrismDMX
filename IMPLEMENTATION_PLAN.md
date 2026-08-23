@@ -813,6 +813,23 @@ reopening is the one thing that cannot recover it.
 - Every panel is a reader over daemon state: closing and reopening the window shows the same thing, and a second client sees the change
 - A panel with more rows than it has room for scrolls **inside its window** — nothing outside the canvas scrolls
 
+**Done 2026-08-23.** Every criterion above, and the *targets to replace all cli
+start commands* sentence taken literally: `prism_core::Settings` holds the
+network exposure and the §2.1 token, the log level, the universe count, the exit
+action, the autostart flag, the fixture library and the surface profile, and the
+WebSocket listener is **on by default** on loopback. See `PROGRESS.md` §2.39 for
+the measurements. Four things are worth carrying forward. A flag is still the
+value for its run, so `prismd::cli::resolve` answers both the value in force and
+the **list of rows a command line is holding** — one function, so the panel and
+the daemon cannot disagree, and a greyed row names its flag. A value a client
+must not choose is **asked for rather than sent**: `NewToken` and `NewIdentity`
+carry nothing, because a client choosing either would be choosing this desk's
+password or giving two desks one sACN CID. A counter that moves faster than any
+delta is a **query with a cadence of the client's own** — `Query::OutputStatus`,
+which is the gap S33 named on its way out. And a listener that cannot bind is a
+**warning and a daemon that starts**, which is S36's rule for a MIDI port and
+matters more here, because two daemons on one machine both want 7373.
+
 ## S38 · `ui` — the interactive control editor
 **Size:** L · **Depends on:** S37, S36, S34
 
@@ -961,8 +978,8 @@ is, is the order the work was planned to make sense in.
 | 7 | **S40** `ui` + protocol — the console shell | Needs all four above: groups and presets to select, cues to store, executors to press, views to label. Grew on 2026-08-20 into the session that makes the command line **the** interface rather than one of two (`ARCHITECTURE_SPEC.md` §4.5), which pulled a dozen missing commands into it — Goto, the deletes, the copies, an absolute Move, and playback addressed to a sequence rather than only to a fader. **Done 2026-08-21** — see `PROGRESS.md` §2.34. The vocabulary was built in full, and the decision held everywhere: every key in every window writes a line, and the two structural questions it raised — where a sequence-addressed playback lives, and one command per verb rather than one per pool — were put to the operator and are recorded with their reasons |
 | 8 | **S33** core/protocols — the output patch | The first session a venue rather than a laptop needs. Independent of everything above, so it may equally run earlier if hardware is waiting. **Done 2026-08-22** — see `PROGRESS.md` §2.35. The worked example is expressible and asserted: twelve universes across five outputs of three kinds, each given exactly its own. It settled where a rig lives — `prism_core::MachineConfig`, beside the desk identity, so a show carried on a stick brings no cabling with it — which made the four commands a **third applier** and none of them undoable. Hot reconfiguration needed a new thing in `prism-engine`: `FrameEnrolment`, a subscriber hand-over behind one atomic flag, and the tick that takes one on and gives one up still makes no allocator call |
 | 9 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock. S33 left it the pattern for exactly this problem — the device behind a factory, a mock beside it, a flag that demands the mock, and the configured port in `MachineConfig`. **Done 2026-08-22**, CI green on run **32581376059** — see `PROGRESS.md` §2.36. The backend got a home rather than a second tool: `prism-midi` is §10.1's fourth exception, `midir` is target-gated so the ARM64 cross-check compiles none of it, and `prism-surface` gained no dependency at all. A configured port is a **name** that survives a replug; one that is not there is a warning and a daemon that starts; a cable pulled mid-show and put back costs the engine nothing. S20's finding is kept as a rule the port layer obeys — **a desk that has merely gone quiet is never reopened** — and the 🔌 half, the gate over a *real* port, is a row in `ARCHITECTURE_SPEC.md` §14 with the recipe |
-| 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure, and now has it: S33's rig and S36's port are both `MachineConfig`'s, both reachable over the protocol, and three of the four panels need no protocol change at all. The fourth — show files — is the one that does. **Next** |
-| 11 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from |
+| 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure, and now has it: S33's rig and S36's port are both `MachineConfig`'s, both reachable over the protocol, and three of the four panels need no protocol change at all. The fourth — show files — is the one that does. **Done 2026-08-23** — see `PROGRESS.md` §2.39. It went further than the fourth panel: **every operational `prismd` flag is a setting now**, so a venue's desk is configured where an operator can see it rather than in a shortcut nobody opens, and the WebSocket listener is on by default because the settings window, the Web Remote and the whole end-to-end suite all speak it. Three decisions are worth carrying: a flag still wins for its run and the panel is *told which rows a flag is holding*; a value a client must not choose — a token, a desk identity — is asked for rather than sent; and a counter that moves faster than any delta is a **query with a cadence of the client's own**, which is the gap S33 named on its way out |
+| 11 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from. S37 built half of the profile half already: the Devices panel names the binding file and re-reads it, so what is left is the table itself. **Next** |
 | 12 | **S43** `ui` — cleanup and polish | After the last feature and before the first release, because that is the only moment the list is complete |
 | 13 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab |
 | 14 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC | Extended features, in whichever order the venue asks for them |

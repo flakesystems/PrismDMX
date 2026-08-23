@@ -95,8 +95,12 @@ fn output_snapshots(core: &Core) -> Vec<OutputSnapshot> {
 /// all hold one, and every one of them reaches the show through the same lock.
 pub struct Desk {
     core: Mutex<Core>,
-    /// The MIDI port the control surface is actually open on, as the run loop
-    /// last saw it — S36.
+    /// What the attached control surface is doing, as the run loop last saw it
+    /// — S36, widened in S37.
+    ///
+    /// It was the open port's name alone until S37; the Devices panel needs the
+    /// health, the counters and the binding table beside it, and all four come
+    /// from the same place at the same cadence.
     ///
     /// Here rather than on the `Core` because the *port* is the daemon's: a
     /// cable has a thread's worth of state and a `Core` is what a client's
@@ -105,6 +109,13 @@ pub struct Desk {
     /// settings window is told is at most half a second old — which is the right
     /// freshness for a fact that changes when a person moves a plug.
     open_surface: Mutex<Option<String>>,
+    /// The health, the counters and the binding table — S37.
+    ///
+    /// `None` means *no surface is attached at all*, which is a different fact
+    /// from one that is attached and `Disconnected`: a laptop with no port
+    /// configured has nothing to report, and a desk that is switched off has a
+    /// health and a set of counters that happen to be zero.
+    surface_status: Mutex<Option<prism_domain::SurfaceStatus>>,
 }
 
 impl Desk {
@@ -114,6 +125,7 @@ impl Desk {
         Self {
             core: Mutex::new(core),
             open_surface: Mutex::new(None),
+            surface_status: Mutex::new(None),
         }
     }
 
@@ -131,6 +143,28 @@ impl Desk {
     #[must_use]
     pub fn open_surface(&self) -> Option<String> {
         self.open_surface
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Records what the attached surface is doing — S37.
+    ///
+    /// Written by the run loop on its housekeeping tick and by nobody else,
+    /// which is [`Self::set_open_surface`]'s cadence and its reason: the surface
+    /// polls every millisecond, and a status panel half a second fresher is not
+    /// worth a lock and an allocation a thousand times a second.
+    pub fn set_surface_status(&self, status: Option<prism_domain::SurfaceStatus>) {
+        *self
+            .surface_status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = status;
+    }
+
+    /// What the attached surface is doing, as last recorded.
+    #[must_use]
+    pub fn surface_status(&self) -> Option<prism_domain::SurfaceStatus> {
+        self.surface_status
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -189,6 +223,13 @@ impl Desk {
             // asks (`Query::SearchLibrary`) rather than being sent a menu that
             // would not fit in a frame.
             fixture_library: u32::try_from(core.file.library.len()).unwrap_or(u32::MAX),
+            // S37's two panels that are not the rig. Both arrive with the world
+            // rather than being asked for, which is `outputs`' reason exactly:
+            // both are state the daemon owns, both change only when a command
+            // changes them, and a client that had to ask would draw an empty
+            // settings window for a round trip.
+            machine: core.machine_settings(),
+            show_file: core.show_file_info(),
         }
     }
 
@@ -279,8 +320,63 @@ impl Desk {
                         .collect(),
                     configured: core.surface_port().map(str::to_owned),
                     open: self.open_surface(),
+                    status: self.surface_status(),
                 }
             }
+            // S37. Derived from the patch and from the rig, which is exactly
+            // why it is a question: a client that intersected the two would be
+            // a second opinion about something `prism_core::dark_universes`
+            // already decides.
+            // S37, and the one thing S33 left with no channel: a **live** frame
+            // counter. Read here rather than mirrored, because it moves at the
+            // output's own cadence and only an open settings window is looking
+            // at it. The configuration is not repeated — that arrives whole in
+            // `Delta::OutputsChanged` whenever it moves.
+            Query::OutputStatus => {
+                let supervisor = core.outputs();
+                let elapsed = supervisor.elapsed();
+                Answer::OutputStatus {
+                    outputs: core
+                        .machine()
+                        .outputs()
+                        .iter()
+                        .map(|output| {
+                            let status = supervisor.status(output.id);
+                            let fault = status.and_then(|status| status.last_error(elapsed));
+                            prism_domain::OutputStatusInfo {
+                                id: output.id,
+                                health: status.map_or(prism_domain::OutputHealth::Disconnected, |status| {
+                                    status.health()
+                                }),
+                                frames_sent: status.map_or(0, |status| status.frames_sent()),
+                                last_error: fault.map(|fault| fault.error.to_string()),
+                                #[expect(
+                                    clippy::cast_possible_truncation,
+                                    reason = "a fault 584 million years ago is not the number that is wrong"
+                                )]
+                                last_error_ago_ms: fault.map(|fault| fault.ago.as_millis() as u64),
+                            }
+                        })
+                        .collect(),
+                }
+            }
+            // `filter_map` rather than a `match` with an unreachable arm:
+            // `dark_universes` answers with one variant of a nine-variant enum,
+            // and S21's rule is that a branch nothing can reach is **removed**
+            // rather than covered. What is left is a filter that would quietly
+            // drop a variant added later — which is the right failure for a
+            // *report*, and `crates/prismd/tests/settings.rs` asserts the count
+            // this answers with rather than trusting the shape.
+            Query::DarkUniverses => Answer::DarkUniverses {
+                universes: core
+                    .dark_universes()
+                    .into_iter()
+                    .filter_map(|issue| match issue {
+                        prism_core::ShowIssue::UniverseNotOutput { universe } => Some(universe),
+                        _ => None,
+                    })
+                    .collect(),
+            },
             Query::SearchLibrary { text, limit } => Answer::LibraryMatches {
                 matches: core
                     .file
@@ -404,6 +500,9 @@ mod tests {
                 path: Some(dir.join("machine.json")),
                 outputs,
                 surface_on_command_line: false,
+                data_dir: dir.to_path_buf(),
+                overrides: Vec::new(),
+                websocket_open: None,
             },
             store,
             engine,

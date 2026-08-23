@@ -143,6 +143,14 @@ pub struct Daemon {
     /// The binding table a surface attached to this daemon will use, read at
     /// startup so a broken profile is reported once rather than per surface.
     bindings: Bindings,
+    /// Where that table was read from, or `None` for the built-in one — S37.
+    ///
+    /// Kept beside the table rather than derived from it, because a profile
+    /// that was **not readable** produces the built-in table and a path that is
+    /// still worth showing: *this file is named and this is what is in force*
+    /// is exactly the pair the Devices panel has to draw, and it is S36's
+    /// `configured` and `open` one layer along.
+    profile: Option<PathBuf>,
     /// The control surface, once one has been attached. `None` is the ordinary
     /// state: **D2** says the daemon runs with no client, and it runs with no
     /// console just as happily.
@@ -168,7 +176,13 @@ impl Daemon {
     /// `LockError::AlreadyRunning`, which is not a fault: it is the shell being
     /// told to attach to the daemon that is already there (D9).
     pub async fn start(options: &Options) -> Result<Self, StartError> {
-        log::set_level(options.log_level);
+        // Whatever the command line said, before anything else — so that a
+        // `--log-level debug` is in force for the lines below it. The
+        // *configured* level is picked up a few lines further down, once the
+        // machine configuration has been read, which is the earliest it can be.
+        if let Some(level) = options.log_level {
+            log::set_level(level);
+        }
 
         // 1. The lock.
         let data_dir = match options.data_dir.clone() {
@@ -204,10 +218,34 @@ impl Daemon {
             );
         }
 
+        // 2a. What this run is actually set to — S37. The command line wins
+        // where it said anything, the machine configuration answers everywhere
+        // else, and `Resolved::overrides` is the list a settings window greys
+        // rows out from.
+        let settings = crate::cli::resolve(
+            options,
+            machine.settings(),
+            !options.outputs.is_empty(),
+            options.surface.is_some(),
+        );
+        log::set_level(settings.log_level);
+
         // 3. The show, the engine, the outputs.
+        //
+        // Which show: the flag, then the one this desk had open when it was last
+        // stopped (S37), then the default in the data directory. The middle one
+        // is what makes a desk start where it was left.
         let show_path = options
             .show
             .clone()
+            .or_else(|| {
+                machine
+                    .shows()
+                    .paths
+                    .first()
+                    .map(PathBuf::from)
+                    .filter(|path| path.is_file())
+            })
             .unwrap_or_else(|| paths::default_show_path(&data_dir));
         let (file, store) = open_show(&show_path)?;
         // **Off the critical path.** Reading the Open Fixture Library is 634
@@ -218,9 +256,9 @@ impl Daemon {
         // A desk's first duty is to put light on stage; a profile menu can wait
         // for the one client that might ask about it, and by then it has not
         // had to.
-        let loading = spawn_library_load(&data_dir, options.fixtures.clone());
+        let loading = spawn_library_load(&data_dir, settings.fixtures.clone());
         let layout =
-            Arc::new(crate::engine::frame_layout(options.universes).map_err(StartError::Layout)?);
+            Arc::new(crate::engine::frame_layout(settings.universes).map_err(StartError::Layout)?);
         // The channel back out of the tick (S34), built once and shared: a
         // rebuilt body inherits it, so the desk never loses sight of what its
         // playbacks are doing. Sized at `MAX_SOURCES`, which is the limit
@@ -289,13 +327,16 @@ impl Daemon {
         } else {
             MachineConfig::with_outputs(machine.desk_id(), rig.clone())
         };
-        let core = Core::new(
+        let mut core = Core::new(
             file,
             Machine {
                 config: machine,
                 path: machine_path,
                 outputs,
                 surface_on_command_line: options.surface.is_some(),
+                data_dir: data_dir.clone(),
+                overrides: settings.overrides.clone(),
+                websocket_open: None,
             },
             store,
             engine,
@@ -303,18 +344,22 @@ impl Daemon {
             report,
         )
         .map_err(StartError::Patch)?;
+        // A desk that starts where it was left has to write down where that is
+        // — S37. Recorded here rather than in `Core::open_show`, because the
+        // show a daemon starts with does not arrive through a command.
+        core.remember_show();
         let desk = Arc::new(Desk::new(core));
 
         // 4. The listeners, and only then their addresses.
         let server = Server::with_config(
             DeskHandler::new(Arc::clone(&desk)),
             ServerConfig {
-                token: options.token.clone(),
+                token: settings.token.clone(),
                 ..ServerConfig::default()
             },
         );
         let mut listeners = Vec::new();
-        if options.local {
+        if settings.local {
             let address = prism_ipc::local::daemon_address(&label_for(&data_dir));
             let mut listener = LocalListener::bind(&address)?;
             let endpoint = listener.endpoint();
@@ -332,20 +377,38 @@ impl Daemon {
                 }
             }));
         }
-        if let Some(address) = options.websocket {
-            let mut listener = WebSocketListener::bind(address).await?;
-            let endpoint = listener.endpoint();
-            lock.publish(&endpoint)?;
-            if let Some(token) = &options.token {
-                lock.publish_token(token)?;
-            }
-            log::info("ipc", &format!("listening on {endpoint}"));
-            let accepting = server.clone();
-            listeners.push(tokio::spawn(async move {
-                while let Some(wire) = listener.accept().await {
-                    drop(accepting.spawn(wire));
+        // **A listener that cannot bind is a warning and a daemon that starts**
+        // — S37, and it is the rule S36 wrote for a MIDI port that is not there
+        // rather than a new one. The WebSocket listener is *on by default* now,
+        // so the address is one two daemons on one machine will both ask for;
+        // refusing to start over it would mean one stray process makes a desk
+        // unstartable half an hour before a show. What the operator gets instead
+        // is a settings panel that says *configured here, listening nowhere*,
+        // which is the state `MachineSettings::websocket_open` exists to draw.
+        if let Some(address) = settings.websocket {
+            match WebSocketListener::bind(address).await {
+                Ok(mut listener) => {
+                    let endpoint = listener.endpoint();
+                    lock.publish(&endpoint)?;
+                    if let Some(token) = &settings.token {
+                        lock.publish_token(token)?;
+                    }
+                    log::info("ipc", &format!("listening on {endpoint}"));
+                    desk.core().set_websocket_open(Some(address));
+                    let accepting = server.clone();
+                    listeners.push(tokio::spawn(async move {
+                        while let Some(wire) = listener.accept().await {
+                            drop(accepting.spawn(wire));
+                        }
+                    }));
                 }
-            }));
+                Err(error) => log::warn(
+                    "ipc",
+                    &format!(
+                        "the WebSocket listener could not bind {address} ({error});                          the daemon is running without it"
+                    ),
+                ),
+            }
         }
 
         log::info(
@@ -367,12 +430,13 @@ impl Daemon {
             telemetry_started: false,
             layout,
             lock,
-            exit: options.exit,
+            exit: settings.exit,
             listeners,
-            bindings: match &options.surface_profile {
+            bindings: match &settings.surface_profile {
                 Some(path) => crate::surface::load_profile(path),
                 None => Bindings::defaults(),
             },
+            profile: settings.surface_profile.clone(),
             surface: None,
         };
 
@@ -454,6 +518,42 @@ impl Daemon {
                 );
                 self.surface = None;
             }
+        }
+    }
+
+    /// Re-reads the X-Touch binding table and redraws the surface with it —
+    /// S37.
+    ///
+    /// **Naming the profile again *is* the reload**, which is what the Devices
+    /// panel's *reload* button sends: a table edited beside a running daemon is
+    /// picked up by pointing at it a second time. There is no separate reload
+    /// command, because a second way of saying one thing is a second thing to
+    /// keep in step.
+    ///
+    /// A profile that is missing or malformed is reported and the **built-in
+    /// table stands** — S22's rule, and the reason this cannot fail: a broken
+    /// JSON file must never be the reason a desk stops answering its keys.
+    fn follow_profile_change(&mut self, path: Option<&Path>) {
+        self.profile = path.map(Path::to_path_buf);
+        self.bindings = match path {
+            Some(path) => {
+                log::info(
+                    "surface",
+                    &format!("reading the binding table from {}", path.display()),
+                );
+                crate::surface::load_profile(path)
+            }
+            None => {
+                log::info("surface", "the built-in binding table is in force");
+                Bindings::defaults()
+            }
+        };
+        // The table the attached surface is drawing with, replaced in place. The
+        // whole picture follows, because a new table can mean a different
+        // scribble strip on every one of the eight.
+        if let Some(surface) = self.surface.take() {
+            let port = surface.into_port();
+            self.attach_surface(port);
         }
     }
 
@@ -597,6 +697,21 @@ impl Daemon {
                     if let Some(port) = change {
                         self.follow_surface_change(port);
                     }
+                    // S37's two settings that this loop rather than the core has
+                    // to act on: the binding table a surface draws with, and
+                    // what the stage does when the daemon stops. Both are picked
+                    // up here rather than in `Core` for `surface_change`'s
+                    // reason exactly — the thing they change is the daemon's.
+                    let (profile, exit) = {
+                        let mut core = self.desk.core();
+                        (core.take_profile_change(), core.take_exit_change())
+                    };
+                    if let Some(path) = profile {
+                        self.follow_profile_change(path.as_deref());
+                    }
+                    if let Some(action) = exit {
+                        self.exit = Exit::from(action);
+                    }
                     // What a settings window is told about the desk: the port
                     // that is actually open, refreshed on this cadence rather
                     // than on the surface's. Half a second is the right
@@ -604,6 +719,17 @@ impl Daemon {
                     // plug, and it keeps the millisecond path free of a string.
                     self.desk
                         .set_open_surface(self.surface.as_ref().and_then(SurfaceLink::open_name));
+                    // …and what it is *doing*, which is S37's Devices panel:
+                    // the health, the counters, the reconnection count and the
+                    // binding table, on the same cadence and for the same
+                    // reason. `None` is *no surface at all*, which a panel draws
+                    // differently from one that is attached and disconnected.
+                    let profile = self.profile.clone();
+                    self.desk.set_surface_status(
+                        self.surface
+                            .as_ref()
+                            .map(|surface| surface.status(profile.as_deref())),
+                    );
                     for delta in self.desk.poll_autosave() {
                         self.server.broadcast(delta).await;
                     }
@@ -1048,10 +1174,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let daemon = Daemon::start(&crate::cli::Options {
             data_dir: Some(dir.path().to_path_buf()),
-            universes: 1,
+            universes: Some(1),
             outputs: vec![crate::cli::mock_output(1)],
-            local: false,
-            log_level: crate::log::Level::Warn,
+            local: Some(false),
+            log_level: Some(crate::log::Level::Warn),
             ..crate::cli::Options::default()
         })
         .await

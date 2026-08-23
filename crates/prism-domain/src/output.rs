@@ -357,6 +357,43 @@ impl OutputInstance {
     }
 }
 
+/// What one output's driver is **doing**, as a settings panel watches it — S37.
+///
+/// # Why this is an answer rather than a delta or a snapshot field
+///
+/// S33 carried this out of itself in as many words: *there is no channel for a
+/// live frame counter between snapshots — the counter moves at 44 Hz and a delta
+/// per frame is out of the question. S37 either asks (a `Query`) or accepts that
+/// the number is as old as the connection.*
+///
+/// Accepting was the wrong half. `OutputSnapshot` carries the counter with the
+/// world, so an output **added while a client is connected** would show zero
+/// frames for ever — and the row an operator has just made is exactly the row
+/// they are watching to see whether it works. So the panel asks, on a cadence of
+/// its own and only while it is open, which is `Query::MidiPorts`' shape one
+/// device along.
+///
+/// It is deliberately **not** `prism_ipc::OutputSnapshot`: that type carries the
+/// configured row as well, and the configuration arrives by
+/// [`crate::Delta::OutputsChanged`] whenever it moves. Sending it again with
+/// every counter reading would be a rig on the wire once a second.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct OutputStatusInfo {
+    /// Which output.
+    pub id: OutputId,
+    /// What its driver is doing.
+    pub health: OutputHealth,
+    /// Universes put on the wire, not datagrams.
+    pub frames_sent: u64,
+    /// The last thing that went wrong, or `None`.
+    pub last_error: Option<String>,
+    /// How long ago that was — an **age**, not a time, because the daemon and a
+    /// browser have no shared clock (S33).
+    pub last_error_ago_ms: Option<u64>,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

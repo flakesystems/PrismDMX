@@ -34,6 +34,7 @@ mod export;
 pub mod finite;
 mod ids;
 mod json;
+mod machine;
 mod midi;
 mod output;
 mod patch;
@@ -63,8 +64,13 @@ pub use ids::{
     WindowInstanceId,
 };
 pub use json::{JsonPatchOp, JsonValue};
-pub use midi::MidiPortInfo;
-pub use output::{ArtNetPort, OutputHealth, OutputInstance, OutputKind, SacnPort};
+pub use machine::{
+    ExitAction, LogLevel, MachineChange, MachineOverride, MachineSettings, ShowFileInfo,
+};
+pub use midi::{MidiPortInfo, SurfaceHealth, SurfaceStatus};
+pub use output::{
+    ArtNetPort, OutputHealth, OutputInstance, OutputKind, OutputStatusInfo, SacnPort,
+};
 pub use patch::{CHANNELS_PER_UNIVERSE, Fixture, Group, RgbColor, Vec3};
 pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetValue};

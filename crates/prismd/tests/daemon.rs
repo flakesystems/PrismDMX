@@ -39,13 +39,19 @@ fn options(dir: &Path) -> Options {
     Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
-        universes: 2,
+        universes: Some(2),
         outputs: vec![mock_output(1)],
         // The daemon under test opens the local transport; the tests that do
         // not need a client switch it off, because a pipe name is global to the
         // machine and two of these run at once under `cargo test`.
-        local: false,
-        log_level: prismd::log::Level::Warn,
+        local: Some(false),
+        // **No listener of any kind** — S37. Since the WebSocket listener is a
+        // *setting* and the setting is on, a test that said nothing would bind
+        // 127.0.0.1:7373, and the several daemon targets `cargo test` runs at
+        // once would each be asking for it. A suite must not open a socket it
+        // does not use.
+        websocket: prismd::cli::Listen::Off,
+        log_level: Some(prismd::log::Level::Warn),
         ..Options::default()
     }
 }
@@ -204,7 +210,7 @@ async fn a_client_connects_and_is_served_the_show_and_the_session() {
     common::write_show(&dir.path().join("aula.prism"));
 
     let mut options = options(dir.path());
-    options.local = true;
+    options.local = Some(true);
     let mut daemon = Daemon::start(&options).await.unwrap();
 
     // The daemon's own accept loop runs on the runtime, so the daemon has to be
@@ -323,7 +329,7 @@ async fn a_daemon_told_to_black_out_publishes_a_blackout_before_it_stops() {
         let dir = tempfile::tempdir().unwrap();
         common::write_show(&dir.path().join("aula.prism"));
         let mut options = options(dir.path());
-        options.exit = exit;
+        options.exit = Some(exit);
 
         // The mock output's recording, which outlives the daemon: what matters
         // is the frame that went out **last**, and that can only be read after

@@ -63,6 +63,20 @@ export interface DaemonOptions {
    * press one.
    */
   readonly mockSurface?: string;
+  /**
+   * Start the daemon the way a **venue** runs one — S37.
+   *
+   * No output flags at all and `--mock-devices`, so the rig comes out of this
+   * machine's configuration and the machine commands are reachable. A daemon
+   * whose outputs came off its command line refuses *every* machine command
+   * (`MachineError::ConfiguredOnTheCommandLine`), which is right — nothing is
+   * written down that run — and which means a settings test must not use
+   * `--mock-output`.
+   *
+   * The drivers are still doubles, so nothing is opened and no datagram leaves
+   * the machine: `CLAUDE.md`'s rule is untouched.
+   */
+  readonly configurable?: boolean;
 }
 
 /** Starts a daemon on `port`, in `dataDir` if one is given. */
@@ -77,7 +91,7 @@ export async function startDaemon(
     [
       "--data-dir",
       directory,
-      "--mock-output",
+      ...(options.configurable === true ? ["--mock-devices"] : ["--mock-output"]),
       "--websocket",
       `127.0.0.1:${port}`,
       "--no-local",

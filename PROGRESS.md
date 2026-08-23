@@ -111,7 +111,7 @@
 ### Phase 8 — Settings and the control editor
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
-| S37 | The settings window | ☐ | | Added 2026-08-14. Outputs, devices, show files, this machine — the window `WindowType::Settings` has reserved since S25 |
+| S37 | The settings window | ✅ | 2026-08-23 | Outputs, devices, show files, this machine — the window `WindowType::Settings` had reserved since S25. **Every operational `prismd` flag is a setting now**: the network exposure and its §2.1 token, the log level, the universe count, the exit action, the autostart flag, the fixture library and the surface profile all live in `prism_core::MachineConfig`, and the WebSocket listener is **on by default**. Five commands the show file needed (`SaveShowAs`, `OpenShow`, `NewShow`, `ExportShow`, `ImportShow`) and one for the machine (`ConfigureMachine`). See §2.39 |
 | S38 | The interactive control editor | ☐ | | Added 2026-08-14. The binding table edited at the desk, with Learn |
 
 ### Phase 9 — Extended features
@@ -2615,6 +2615,273 @@ first" and that is no longer what it buys.
 | Playwright | ✅ **28 tests**, telemetry **0.20 ms median, 0.50 ms p99** over 159 frames at 30.5 Hz |
 | Recordings | ✅ unchanged — no wire type moved, and the recorded script has no Go at the end of a list |
 
+### 2.39 S37 verification record
+
+Measured on 2026-08-23, all exit criteria from `IMPLEMENTATION_PLAN.md` S37 and
+the session prompt. The window `WindowType::Settings` had been reserving since
+S25, and the session in which **the command line stops being the only way to say
+what this machine is**.
+
+| Check | Result |
+|---|---|
+| **S33's worked example is built entirely from the interface, and the frames arrive** | ✅ `ui/e2e/settings.spec.ts::a venue's rig is built entirely from the settings window`, in Chromium against a real `prismd`. Five outputs of three kinds — two Open DMX adapters with serials, an sACN gateway on 3 and 4, an Art-Net node on 5–8 and another on 9–12 — typed into the window with **no flag anywhere in it**, and each row's universes read back off the table: `1`, `3, 4`, `5, 6, 7, 8`, `9, 10, 11, 12`. A browser cannot look at a wire, so *the frames arrive* is the per-driver counter, polled by the panel and asserted to pass 3 for **all five**. The daemon is the one a venue runs: no output flags, `--mock-devices`, so nothing is opened and nothing goes on the network |
+| **A show is saved, saved under a new name and reopened without a command line** | ✅ twice, in two languages. In Chromium: `default.prism` → *Save as* `panto.prism` → the panel reads `panto.prism` and *saved* → the recent list is clicked and `default.prism` is back → *Open* by name and `panto.prism` is back. In Rust, where the bytes can be read: `crates/prismd/tests/settings.rs::a_show_is_saved_under_a_new_name_and_opened_again` unpatches a fixture into the new file and finds **two** fixtures there and **three** in the old one |
+| **Changing one output does not interrupt the others** | ✅ in the same browser test: output 4 is re-addressed while 1, 2, 3 and 5 are watched, and every one of their counters is **greater than it was** afterwards. Then output 4's own counter moves again by itself. S33 asserts the same thing on the recorded frame sequence in Rust; this is it watched from outside the process, which is what the exit criterion asks for |
+| **Every panel is a reader over daemon state: closing and reopening shows the same thing, and a second client sees the change** | ✅ three ways. A **second tab** with no window of its own — because which windows are open is session state, so the first tab's settings window is already on its canvas — watches the universe count go 64 → 12 and the exit action change, without being told. Closing the window and opening another shows 12 again. In jsdom, the stronger form S25 used: a **second interface** that has never sent a command or seen a delta draws the same panels from the same snapshot |
+| **A panel with more rows than it has room for scrolls inside its window** | ✅ `ui/e2e/settings.spec.ts`, and the *inside* half is the one a check of zeros everywhere would miss: the window is dragged small by its corner, twelve outputs are added, and `scrollHeight − clientHeight` on the panel body reads **greater than zero** while the document element and the canvas read **0 on both axes** |
+| `cargo test --workspace` | ✅ exit 0 — **1 894 tests across 68 targets**, 20 ignored. **55 of them are this session's**: 14 in the new `crates/prism-core/tests/settings.rs`, 14 in the new `crates/prismd/tests/settings.rs`, and the rest in `prism-domain`'s round trips, `prism-core`'s three example lists and `prismd`'s two conversion round trips |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0, and **measured cold** — `cargo clean -p` on all six changed crates first, because S40's `unused_qualifications` and S33's three `unfulfilled_lint_expectations` only appear on a fresh compile. Three lints were met on the way: two `collapsible_if` in `prism-core::desk` and a `duplicate_macro_attributes` where a doc comment had been written between a `#[test]` and its function |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| `cargo check -p prism-domain --all-targets --target aarch64-unknown-linux-gnu` | ✅ exit 0. The wider check stops at `libsqlite3-sys`, which needs `gcc-aarch64-linux-gnu` — a missing cross toolchain rather than a portability break, and CI installs it. **`grep -rn "cfg(target_os" crates/` finds seven hits outside the four permitted places and every one of them is a comment**, unchanged from S36 |
+| `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **688 tests in 48 files** (675 before this session's last two files, 619 at S36); the build is **359 KB, 107 KB gzipped**, up 32 KB on S36 — and **this session adds no dependency** |
+| Playwright | ✅ **34 tests** (28 before), all green |
+| Coverage on what this session wrote | ✅ **99.28 % lines on the new `ui/src/settings/`** — `settings.ts` and `settingswindow.tsx` at **100 % on every column**, `devices.tsx` and `machine.tsx` at 100 % lines, `outputs.tsx` 99.03 %, `showfiles.tsx` 96.77 %. The two lines that are left were read rather than counted and are both a guard this interface cannot reach: an apply with no draft, and a submit with nothing typed. `prism-domain`'s new `machine.rs` is **100 % on every column** |
+| CI green on the pushed commit | ☐ recorded below after the push, per `IMPLEMENTATION_PLAN.md`'s session protocol |
+
+**What was built, and where the line is.** Four panels in one window, and the
+window is a **window**: it lives on the canvas, it can be dragged, it can be open
+on a second screen, the shipped profile has bound F4 to it since S22, and the
+show carries on behind it. `CLAUDE.md` forbids a modal over the canvas, and this
+is the easiest rule in the file to keep — what a settings window changes is
+machine or session state that **every** client sees, so there is nothing to lock.
+
+#### Three of the four panels needed no protocol change, and the fourth needed five commands
+
+S33's four output commands, S36's `SetSurfacePort` and `Query::MidiPorts`, and
+`MachineConfig` were already there; the *Show files* panel had `SaveShow` and
+nothing else. So the file an operator was working in was whatever `--show` had
+named at start-up, and renaming it, opening another or making a new one meant
+stopping the daemon.
+
+| Command | What it is careful about |
+|---|---|
+| `SaveShowAs` | The **new file first, the switch afterwards**: a daemon that adopted the path and then failed to write it would hold a show whose file does not exist, with the Save lamp lit over a name nothing is behind |
+| `OpenShow` | **Never creates.** `ShowStore::open` makes a file that is not there, which is right for a daemon starting up and wrong for an operator who mistyped — the show they meant would be on the disk beside the empty one they got |
+| `NewShow` | **Never replaces.** A *new* show over an existing one would be the most destructive command in `docs/IPC_PROTOCOL.md` §5 and would look like the least |
+| `ExportShow` | Changes nothing at all, the open file included |
+| `ImportShow` | Does **not** save. `Show::mark_dirty` exists for this one case, because a document read out of a JSON export arrives clean — and an import somebody did not mean to do must be one they can walk away from |
+
+A path is validated in **two places and they are different questions**.
+`prism_core::file::show_path` decides what a string can decide — not empty, names
+a file rather than a bare extension, and carries the extension of the format this
+command actually writes. Whether the file is *there* needs a disk and is
+`prismd`'s. The extension check is not cosmetic: a `.prism` is a SQLite database
+and a `.json` export is text.
+
+**None of the five is undoable, and three of them are why the other two are
+not.** `OpenShow`, `NewShow` and `ImportShow` replace the show, which empties the
+Oops journal — a record is an assertion about the show that was open a moment ago
+— and the other two change no show state at all.
+
+#### Every operational flag is a setting, and the interface says which ones a flag is holding
+
+`prism_core::Settings` is the third thing S33 predicted would land in
+`MachineConfig`, and the last of them: the local transport, the WebSocket
+address, the §2.1 token, the log level, the universe count, the exit action, the
+autostart flag (S29's), the fixture library's path and the surface binding
+profile. `Command::ConfigureMachine` is the sixth machine command and carries
+**one field**, which is `ConfigureOutput`'s rule.
+
+The half that is easy to leave out is the other one. A flag is still *the value
+for that run* — S33's rule for `--mock-output` and S36's for `--surface` — so
+`prismd::cli::resolve` puts the command line and the configuration together
+**once** and answers with both the value in force and the list of settings the
+command line is holding. `MachineSettings::overrides` carries that list to every
+client, and the panel draws a held row disabled with the flag named beside it.
+A box an operator can type into that does nothing is worse than a box that is not
+there, and the two answers cannot drift because one function produces both.
+
+**`MachineChange::needs_restart` is the domain's answer to what a running daemon
+cannot take back**, not a list in an interface. Four are made on the spot — the
+log level, the exit action, the autostart flag and the binding profile — and
+seven wait. **A new desk identity is deliberately among the seven**: an sACN
+source that changed its CID mid-show would be a *new* source fighting the old one
+until its 2.5 s network-data-loss timeout expires, so the right moment for it is a
+start. `ui/src/settings/settings.ts::needsRestart` mirrors the same seven and
+`settings.test.ts` names all eleven changes to hold the two together.
+
+#### The WebSocket listener is on by default, and a listener that cannot bind is a warning
+
+Until S37 it was opt-in, which meant a browser could not reach a desk nobody had
+passed a flag to — and the settings window, the Web Remote (S31) and the whole
+end-to-end suite all speak WebSocket. Loopback is what makes having it on safe:
+§2.1's rule is about reaching **off** the machine, and that still needs both an
+address and a token.
+
+What it costs is a rule, and it is S36's for a MIDI port one device along: **a
+listener that cannot bind is a warning and a daemon that starts.** Two daemons on
+one machine both want 7373, and refusing to start over it would let one stray
+process make a desk unstartable half an hour before a show. What an operator gets
+instead is the state a panel can draw — `MachineSettings::websocket` names the
+address and `websocketOpen` is `null`, which is *configured here, listening
+nowhere*. `crates/prismd/tests/settings.rs` produces the case rather than
+contriving it: a real socket is bound to the address first, and the daemon is
+then asserted to start, to draw that pair, and to drive the rig throughout.
+
+**It cost the test suite something too, and the cost is written into the
+targets.** Every daemon target in this repository now says `websocket:
+Listen::Off` out loud, because a target that said nothing would bind
+127.0.0.1:7373 — and the several that `cargo test` runs at once would each be
+asking for it. A suite must not open a socket it does not use.
+
+#### §2.1 is a refusal the daemon makes, and the token is one it generates
+
+A WebSocket address that is not loopback is refused unless a token is set
+(`MachineError::NoTokenForNetwork`), and it is refused in `prism-core` rather
+than discouraged in an interface: a second client could otherwise put an
+unauthenticated lighting console on a school's network, which is the exact thing
+§2.1 exists to prevent. **Clearing the token closes the same door from the other
+side** — the listener goes back to loopback on the port it was on, because a
+configuration with a public listener and no token is a state this desk will not
+be in, and a rule stated once would have missed that half.
+
+The token and the desk identity are the two changes that carry **no value**. Both
+need entropy, which `prism-core` is not allowed to have; and a *client* must not
+supply either, because one would be choosing this desk's password and the other
+would be able to give two desks one sACN CID. So `MachineConfig::apply` answers
+with an effect, `prismd::machine` makes the value, and §2.1's own sentence — *the
+daemon generates it and the UI displays it* — is what the protocol does rather
+than what it hopes. The token is twenty-six characters of Crockford base32, whose
+alphabet has no `I`, `L`, `O` or `U`: it has to be read off a screen and typed
+into a phone in an auditorium.
+
+#### Two questions the panels ask, and one of them closes S33's last gap
+
+S33 carried out of itself that there was **no channel for a live frame counter
+between snapshots** — the counter moves at 44 Hz and a delta per frame is out of
+the question — and left S37 to either ask or accept a number as old as the
+connection. Accepting was the wrong half: `OutputSnapshot` carries the counter
+with the world, so an output **added while a client is connected** would read zero
+frames for ever, and the row an operator has just made is exactly the row they are
+watching to see whether it works. `Query::OutputStatus` is the answer, asked once
+a second while the panel is open and never when it is closed. It carries the
+health, the counter and the last error with its **age**, and deliberately not the
+configuration: that arrives whole in `Delta::OutputsChanged` whenever it moves,
+and a rig on the wire once a second to carry a counter would be the wrong trade
+twice over.
+
+`Query::DarkUniverses` is the other, and it is S27's rule kept rather than S33's
+gap closed: which patched universes no output carries is **derived** from the
+patch and the rig together, and a client that intersected the two would be a
+second opinion about something `prism_core::dark_universes` already decides. The
+`Delta::Notice` S33 says it with is right for *the rig just changed and here is
+what that cost*; a settings window needs the same fact **standing**, because an
+operator opening the panel has to see that universe 7 goes nowhere without having
+changed anything to be told.
+
+`Answer::MidiPorts` grew a fourth field for the same reason one layer along:
+`SurfaceStatus` is the health, the six feedback counters, the reconnection count
+and the binding table, refreshed on the housekeeping tick and never on the
+surface's. **`null` is *no surface at all*, which is not the same fact as one that
+is attached and `Disconnected`** — a laptop with no port configured has nothing to
+report, and a desk that is switched off has a health and counters that happen to
+be zero. And the **remedy travels as words**, which is the one field worth arguing
+about: the obvious advice for a desk that has stopped sending is *reconnect*, and
+S20 established that reconnecting is the one thing that cannot recover it. A
+client that wrote its own sentence would eventually write that one.
+
+#### Two decoders were missing and nothing had noticed
+
+Reading the coverage report is not what found these; building the first panel
+that uses them is. `ui/src/ipc/protocol.ts`'s `readDelta` had no arm for
+`Delta::OutputsChanged` or `SurfaceChanged` — S33's and S36's — and `readAnswer`
+had none for `Answer::MidiPorts`. The store has handled `OutputsChanged` since
+S33; what it never had was a way through the door, so a daemon whose rig changed
+would have thrown a `ProtocolFault` and resynchronised the connection. Nothing
+had noticed because **nothing had ever changed a rig from a browser**, which is
+the sentence S37 exists to make false.
+
+The lesson is worth keeping: a delta or an answer with no *caller* is a decoder
+arm nobody writes, and the round-trip properties in `prism-domain` do not reach
+TypeScript. What would have caught it is a recording that contains one of those
+messages — and none of the six does, because until now nothing sent them.
+
+#### Naming the binding profile again is the reload
+
+There is no second command for it, because a second way of saying one thing is a
+second thing to keep in step. `MachineChange::SurfaceProfile` re-reads the file
+and the daemon swaps the table under the attached surface — **round the same
+port**, because a port holds an open connection and a count of how many times the
+cable has come out, and because reopening is the one thing S20 established cannot
+recover a desk that has gone quiet. The shadow model *is* thrown away, which is
+right: a new table can mean a different scribble strip on every strip, so §5.3's
+resync burst is the ordinary diff.
+
+A profile that is missing or malformed is reported and the **built-in table
+stands** — S22's rule — and `crates/prismd/tests/settings.rs` asserts it on the
+one control the file names rather than on a count, because a profile *overlays*
+the defaults and a count would be the same either way.
+
+#### The `Command` value tree hit the stack again, and now there is a budget
+
+`prism-core`'s `tests/oops.rs` overflowed a debug test thread for the third time
+in four sessions — S34 at the thirty-sixth variant, S40 at the forty-second, S37
+at the fifty-fourth. The remedy is the one those sessions wrote down and is
+`crate::arb::boxed`: boxing a **field's** strategy replaces its whole subtree with
+a pointer. What was missing was a way to find out before CI did.
+
+`crates/prism-domain/src/wire.rs::a_generated_command_fits_in_a_test_thread` is
+that: a 32 KiB budget on the size of one generated value tree, with both numbers
+measured rather than guessed. With `Copy`'s and `Move`'s `OverwriteMode`,
+`ExecutorGo`'s `GoDirection`, `SetSurfacePort`'s `Option<String>` and the five
+`Option<SequenceId>` fields unboxed the tree was **36 160 bytes** and `oops.rs`
+overflowed; with them boxed it is **30 992** and it does not. A session that fails
+that test boxes a field, and `RUST_MIN_STACK` moves the cliff in one crate rather
+than in the four that generate commands.
+
+#### `rmp-serde` is still not symmetric about a socket address
+
+S33's finding, met again within a minute of `MachineChange::Websocket` existing,
+and found by the same thing: `wire.rs`'s round-trip property. `prism_domain::socket`
+gained an `option` module for `Option<SocketAddr>`, and the two shrunk cases are
+in `proptest-regressions/wire.txt` — which is the shape of a finding that has now
+paid for the module twice.
+
+#### The six recordings, and every difference in them
+
+Regenerated as a set (`cargo test -p prismd --test ui_* -- --ignored`) and the
+diffs read **structurally** — a script that base64-decodes each blob, unpacks the
+MessagePack inside it and walks the two documents in parallel. **161 differing
+paths, and every one is one of five things**, three of which are classes S33 and
+S36 already named:
+
+| What differs | Occurrences | Why |
+|---|---|---|
+| `snapshot.machine` and `snapshot.showFile` | 64 | **S37's two new snapshot fields**, absent before and present now. The class S33 recorded when `OutputSnapshot` grew four |
+| `snapshot.health.tickHz` | 32 | A measured rate. Expected to differ between runs |
+| Where a `PlaybackState` lands in a step's delta list | 32 paths over **2** steps of `daemon-recording.json` | **S34's asynchronous readback**: the recorder stops at the `Ack` and the tick's answer arrives a poll later, so it falls in one step's list or the next. Verified as a **permutation** rather than assumed — the multiset of delta tags per step is identical, and the two steps are the only ones whose order moved |
+| `snapshot.outputs[].framesSent` | 31 | A driver's own counter over wall-clock time |
+| `telemetry-recording.json`'s frame sequence | 2 | The frame counter, and the payload differs in **exactly one byte, at offset 8** — asserted byte by byte, as in S36 |
+
+#### One measurement was thrown away, and this time the fix was a number
+
+`ui/src/App.test.tsx`'s command-line test timed out at the 5 s default under
+`--coverage`, twice, at 60 % and 93 % machine load. S36 recorded the same test
+hitting the same wall while `cargo llvm-cov` used half the machine and re-took the
+measurement; that was the right answer then and is not one now, because the suite
+is forty-eight files rather than forty-six and v8 instruments all of them. The
+test takes about two seconds idle and seven under coverage.
+
+So it has a **20 s timeout of its own**, with the reason beside it: nothing in it
+waits for anything — every step is a keystroke, a delivered message or an
+assertion — so a deadline there is measuring the machine rather than the desk, and
+a real regression would hang rather than take nineteen seconds.
+
+#### The numbers that had to stay where they were
+
+| Gate | Result |
+|---|---|
+| Zero allocations in the tick | ✅ **0 on all eight paths** — `crates/prism-engine/tests/tick_allocations.rs`, unchanged. Nothing this session went near the tick, which is the point: the engine is never told what this machine is set to |
+| Tick deadline | ✅ **0 missed ticks** across the rig being built, re-addressed and torn down from a browser — asserted inside `crates/prismd/tests/settings.rs` and `outputs.rs` rather than measured beside them |
+| Telemetry frame budget | ✅ **0.20 ms median, 1.00 ms p99** for decode and paint together, 64 universes at 30.4 Hz over 155 frames, against a budget of 8 ms |
+| Zero React commits | ✅ the `<Profiler>` gate is one of the 688 and it passed — with a settings window in the tree, which is the point of re-running it |
+| `cargo test --workspace` | ✅ **1 894 tests**, 68 targets, 0 failed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅, measured **cold** |
+| `cargo fmt --all --check` | ✅ |
+| `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **688 tests in 48 files**; 359 KB, 107 KB gzipped |
+| Playwright | ✅ **34 tests** |
+| CI green on the pushed commit | ☐ recorded below after the push |
+
 ---
 
 ## 3. Coverage tracking
@@ -2626,15 +2893,15 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 
 | Crate | Target | Measured | Date |
 |---|---|---|---|
-| `prism-domain` | ≥ 85 % | **99.65 % lines**, 98.37 % regions, **100 % functions** (S36, which added `MidiPortInfo`, `Command::SetSurfacePort`, `Delta::SurfaceChanged` and `Query`/`Answer::MidiPorts`) — the new `midi.rs` at **100 % on every column**, and `delta.rs`, `query.rs`, `output.rs`, `playback.rs`, `sequence.rs`, `session.rs` and `patch.rs` all at 100 % lines. **99.65 % lines**, 98.35 % regions, **100 % functions** (S33, which added `OutputInstance`, `OutputKind`, `ArtNetPort`, `SacnPort`, `OutputChange`, four commands, one delta and the `socket` module) — the new `output.rs` at **100 % on every column** and `socket.rs` at **100 % lines**; `delta.rs`, `playback.rs`, `sequence.rs`, `session.rs`, `query.rs` and `patch.rs` all at 100 % lines, `command.rs` 99.26 %. **99.59 % lines**, 98.23 % regions, **100 % functions** (S40, which added `PlaybackId`, `PlaybackTarget`, `ObjectRef`, `OverwriteMode`, eight commands and two `Sequence` fields, and removed five narrower commands) — the new `playback.rs` at **100 % on every column**, `command.rs` 99.17 %, `sequence.rs`, `session.rs`, `query.rs` and `delta.rs` all at 100 % lines. **99.61 % lines**, 97.99 % regions, 99.53 % functions (S39, which added `SequenceStoreMode`, `CueEdit`, two `Session` fields, four commands and two more of `StoreMode`) — `command.rs`, `query.rs` and `session.rs` at **100 % on every column**, `sequence.rs` 97.14 % before `CueEdit::is_of` got a test of its own and 100 % after. S34's measurement: **99.74 % lines**, 98.08 % regions, **100 % functions** (S34, which added `ExecutorButtonRef`, `Command::ExecutorButton`, `Executor::speed` and `SPEED_UNITY`); `executor.rs` reads **100 % on every column**, which needed one more test — an executor document written *before* `speed` existed, read back at unity. S28's measurement: **99.73 % lines**, 98.05 % regions, **100 % functions** (S28, which added five commands, `CueProperty`, `StoreTarget`, `StoreMode` and `StorePreview`); the new `query.rs` and `sequence.rs` read **100 % on every column**. S35's measurement: **97.96 % lines**, 99.72 % regions, **100 % functions** (S35, which added `RenameView`, `DeleteView` and `MoveView`); `session.rs` and `command.rs`'s own modules read 100 %. The half-point against S27 is the measurement artefact this row already records in both directions — three new enum variants change which `proptest_derive` lines a 64-case run reaches. S27's measurement: **98.02 % lines**, 96.80 % regions, 96.59 % functions (S27, which added the `Query`/`Answer` shape and three patch commands). The new `query.rs` reads **100 % on every column**; the figure went *up* half a point, and the reason is the same measurement artefact this row already records in the other direction — a new enum changes which `proptest_derive` lines a 64-case run reaches. S26's measurement: **97.52 % lines**, 96.18 % regions, 95.50 % functions (S26, which added `FeatureGroup::attributes` and the `FEATURE_GROUP_ATTRIBUTES` generator). The seventeen uncovered lines were read: three in `attribute.rs` that `llvm-cov` attributes to the `MergeMode` declaration — `proptest_derive` code mapped onto the line it was generated from, the same effect this row already records below — and fourteen in `export.rs`, which are the string-literal lines of a multi-line `String::from` and the `position()` miss in a search over the array being searched. No shipped path is uncovered. S25's measurement: **97.95 % lines**, 96.66 % regions, 96.72 % functions (S25, which added `Command::PlaceWindow` and `WindowType::DmxSheet`). **The figure went down and the reason was chased rather than assumed**: the same measurement at the previous commit reads 99.45 %, and the twenty-four newly uncovered lines are all *attribute and field lines* of `Command::PlaceWindow` and of `Session` — that is, code `proptest_derive::Arbitrary` generates and `llvm-cov` maps onto the declaration it came from. Adding a variant to an enum changes the shape of the generated union and therefore which of those lines a 64-case property run reaches. **No shipped path is uncovered**: both new items are serialised, deserialised and round-tripped by hand-written tests (`the_dmx_sheet_is_a_window_like_any_other`, `a_window_cannot_be_placed_at_a_coordinate_that_is_not_a_number`, `every_command_from_the_protocol_specification_exists`), and `export.rs`'s five are S23's known ones. A later session that wants the point and a half back should look at the case count in `wire.rs`'s `round_trip!` macro rather than at the domain types. S23's measurement: **99.52 % lines**, 97.46 % regions, 98.31 % functions (S23, re-measured because `export.rs` grew the run-time variant tables the interface narrows a decoded string with; `export.rs` reads 97.07 % lines / 91.71 % regions, and the seven uncovered lines are two `?` arms on file I/O, one acronym branch in the name converter that no type name reaches, and a `panic!` formatting inside a test that passes). S1's measurement: **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-20 (S34) |
+| `prism-domain` | ≥ 85 % | **99.63 % lines**, 98.36 % regions, 99.66 % functions (S37, which added `MachineChange`, `MachineSettings`, `MachineOverride`, `LogLevel`, `ExitAction`, `ShowFileInfo`, `SurfaceHealth`, `SurfaceStatus`, `OutputStatusInfo`, six commands, two deltas and two queries) — the new `machine.rs` at **100 % on every column**, and `midi.rs`, `output.rs`, `query.rs`, `delta.rs`, `playback.rs`, `sequence.rs`, `session.rs`, `patch.rs` and `json.rs` all at 100 % lines; `command.rs` 99.28 %, `socket.rs` 98.75 % with its new `option` module. **99.65 % lines**, 98.37 % regions, **100 % functions** (S36, which added `MidiPortInfo`, `Command::SetSurfacePort`, `Delta::SurfaceChanged` and `Query`/`Answer::MidiPorts`) — the new `midi.rs` at **100 % on every column**, and `delta.rs`, `query.rs`, `output.rs`, `playback.rs`, `sequence.rs`, `session.rs` and `patch.rs` all at 100 % lines. **99.65 % lines**, 98.35 % regions, **100 % functions** (S33, which added `OutputInstance`, `OutputKind`, `ArtNetPort`, `SacnPort`, `OutputChange`, four commands, one delta and the `socket` module) — the new `output.rs` at **100 % on every column** and `socket.rs` at **100 % lines**; `delta.rs`, `playback.rs`, `sequence.rs`, `session.rs`, `query.rs` and `patch.rs` all at 100 % lines, `command.rs` 99.26 %. **99.59 % lines**, 98.23 % regions, **100 % functions** (S40, which added `PlaybackId`, `PlaybackTarget`, `ObjectRef`, `OverwriteMode`, eight commands and two `Sequence` fields, and removed five narrower commands) — the new `playback.rs` at **100 % on every column**, `command.rs` 99.17 %, `sequence.rs`, `session.rs`, `query.rs` and `delta.rs` all at 100 % lines. **99.61 % lines**, 97.99 % regions, 99.53 % functions (S39, which added `SequenceStoreMode`, `CueEdit`, two `Session` fields, four commands and two more of `StoreMode`) — `command.rs`, `query.rs` and `session.rs` at **100 % on every column**, `sequence.rs` 97.14 % before `CueEdit::is_of` got a test of its own and 100 % after. S34's measurement: **99.74 % lines**, 98.08 % regions, **100 % functions** (S34, which added `ExecutorButtonRef`, `Command::ExecutorButton`, `Executor::speed` and `SPEED_UNITY`); `executor.rs` reads **100 % on every column**, which needed one more test — an executor document written *before* `speed` existed, read back at unity. S28's measurement: **99.73 % lines**, 98.05 % regions, **100 % functions** (S28, which added five commands, `CueProperty`, `StoreTarget`, `StoreMode` and `StorePreview`); the new `query.rs` and `sequence.rs` read **100 % on every column**. S35's measurement: **97.96 % lines**, 99.72 % regions, **100 % functions** (S35, which added `RenameView`, `DeleteView` and `MoveView`); `session.rs` and `command.rs`'s own modules read 100 %. The half-point against S27 is the measurement artefact this row already records in both directions — three new enum variants change which `proptest_derive` lines a 64-case run reaches. S27's measurement: **98.02 % lines**, 96.80 % regions, 96.59 % functions (S27, which added the `Query`/`Answer` shape and three patch commands). The new `query.rs` reads **100 % on every column**; the figure went *up* half a point, and the reason is the same measurement artefact this row already records in the other direction — a new enum changes which `proptest_derive` lines a 64-case run reaches. S26's measurement: **97.52 % lines**, 96.18 % regions, 95.50 % functions (S26, which added `FeatureGroup::attributes` and the `FEATURE_GROUP_ATTRIBUTES` generator). The seventeen uncovered lines were read: three in `attribute.rs` that `llvm-cov` attributes to the `MergeMode` declaration — `proptest_derive` code mapped onto the line it was generated from, the same effect this row already records below — and fourteen in `export.rs`, which are the string-literal lines of a multi-line `String::from` and the `position()` miss in a search over the array being searched. No shipped path is uncovered. S25's measurement: **97.95 % lines**, 96.66 % regions, 96.72 % functions (S25, which added `Command::PlaceWindow` and `WindowType::DmxSheet`). **The figure went down and the reason was chased rather than assumed**: the same measurement at the previous commit reads 99.45 %, and the twenty-four newly uncovered lines are all *attribute and field lines* of `Command::PlaceWindow` and of `Session` — that is, code `proptest_derive::Arbitrary` generates and `llvm-cov` maps onto the declaration it came from. Adding a variant to an enum changes the shape of the generated union and therefore which of those lines a 64-case property run reaches. **No shipped path is uncovered**: both new items are serialised, deserialised and round-tripped by hand-written tests (`the_dmx_sheet_is_a_window_like_any_other`, `a_window_cannot_be_placed_at_a_coordinate_that_is_not_a_number`, `every_command_from_the_protocol_specification_exists`), and `export.rs`'s five are S23's known ones. A later session that wants the point and a half back should look at the case count in `wire.rs`'s `round_trip!` macro rather than at the domain types. S23's measurement: **99.52 % lines**, 97.46 % regions, 98.31 % functions (S23, re-measured because `export.rs` grew the run-time variant tables the interface narrows a decoded string with; `export.rs` reads 97.07 % lines / 91.71 % regions, and the seven uncovered lines are two `?` arms on file I/O, one acronym branch in the name converter that no type name reaches, and a `panic!` formatting inside a test that passes). S1's measurement: **99.77 % lines**, 97.86 % regions, 100 % functions | 2026-08-20 (S34) |
 | `prism-engine` | **> 95 %** | **99.31 % lines**, 99.29 % regions, 99.07 % functions (S33, which gave `FramePublisher` a way to take a subscriber on and give one up while the tick runs) — `triple_buffer.rs` **98.28 %**, which is where all of that went; `merge.rs`, `encode.rs`, `clock.rs`, `stats.rs`, `cue.rs`, `master.rs` and `readback.rs` at **100 % lines**. **99.31 % lines**, 99.31 % regions, 98.89 % functions (S40, which rekeyed every playback from `ExecutorId` to `PlaybackId` and gave `CuePlayer` a `goto`) — `playback.rs` 99.35 %, `player.rs` 99.53 %, `cue.rs`, `merge.rs`, `encode.rs`, `master.rs`, `readback.rs`, `clock.rs` and `stats.rs` at **100 % lines**. **99.42 % lines**, 99.40 % regions, 98.87 % functions (S34, which added `readback.rs`, the flash layer, the accumulated player clock and four `TickCommand` variants) — `readback.rs` at **100 % lines**, `player.rs` 99.57 %, `body.rs` 99.47 %, `playback.rs` 99.35 %; `encode.rs`, `merge.rs`, `clock.rs`, `stats.rs` and `cue.rs` still at **100 % lines**. The two hundredths against S6's 99.61 % are on a crate two thousand lines larger. Measured with `cargo llvm-cov clean --workspace` between crates, per the caveat below. S6's measurement: **99.61 % lines**, 99.53 % regions, 99.22 % functions | 2026-08-20 (S34) |
-| `prism-core` | **> 95 %** (programmer) | **98.79 % lines**, 97.55 % regions, 98.10 % functions (S36, which put the surface port on `MachineConfig` and gave the machine applier a fifth command) — `outputs.rs` **99.82 % lines**, `desk.rs` 99.66 %, `mirror.rs` 99.70 %, `conflict.rs` 99.65 %, `command.rs` 99.50 %, `file.rs` 99.41 %. **98.78 % lines**, 97.51 % regions, 98.08 % functions (S33, which added `outputs.rs` — the third applier — and the rig on `MachineConfig`) — the new `outputs.rs` at **99.80 % lines**, 99.85 % regions and **100 % functions**; `desk.rs` 99.60 %, `conflict.rs` 99.65 %, `command.rs` 99.50 %, `mirror.rs` 99.70 %, `file.rs` 99.41 %, `programmer.rs` 97.65 %. **98.73 % lines**, 97.43 % regions, 97.97 % functions (S40, which added `objects.rs` and the four generic verbs) — the new `objects.rs` at **98.03 % lines**, 96.59 % regions and **100 % functions**; `command.rs` **99.50 %**, `file.rs` 99.41 %, `show.rs` 99.03 %, `session.rs` 98.86 %, `journal.rs` 98.67 %, `programmer.rs` 97.65 %. **98.93 % lines**, 97.70 % regions, 97.77 % functions (S39, which added the three store modes, `Programmer::sequence`, `Programmer::load_cue`, `Programmer::stored`, `ShowFile::follow_cue_edit` and two session fields) — `command.rs`, `mirror.rs` and `testkit.rs` at **100 % lines**, `file.rs` 99.47 %, `journal.rs` 99.54 %, `session.rs` 99.46 %, `programmer.rs` 98.81 %, `show.rs` 98.56 %. The first measurement of the session read 98.50 % and the gap was all in the paths `ShowFile` no longer takes — the store guards in `Programmer::apply`, which exist for a **direct** caller and now have a direct caller's tests. S34's measurement: **98.97 % lines**, 97.73 % regions, 97.83 % functions (S34, which added `apply_executor_button`, `apply_executor_fader` and `set_executor_speed`) — `command.rs` at **100 % lines**, and it took a change to get there: the `Empty` arm of the button match was dead, because an earlier `if` had already returned. **Removed rather than covered**, which is what S19 and S21 did with the same finding. `mirror.rs`, `desk.rs` and `testkit.rs` also at 100 % lines; `programmer.rs` 99.67 %. S28's measurement: **98.96 % lines**, 97.71 % regions, 97.82 % functions (S28, which added `Show::relink`, `create_sequence`, `set_cue_property`, `remove_cue`, `assign_executor`, `remove_executor`, `Programmer::preset`, `Programmer::stored_keys` and `ShowFile::preview_store`) — `command.rs` and `mirror.rs` at **100 % lines**, `programmer.rs` **99.67 %**, `journal.rs` 99.49 %, `file.rs` 99.20 %, `show.rs` 98.53 %. Measured with `cargo llvm-cov clean --workspace` between crates, per the caveat below. S35's measurement: **97.98 % lines**, 99.09 % regions, 97.81 % functions (S35, which added `rename_view`, `delete_view`, `move_view`, `neighbour` and `SessionError::LastView`) — `session.rs` **98.17 %**, above the crate's own average, which is what this row is for. Measured with `cargo llvm-cov clean --workspace` between crates, per the caveat below. S44's measurement: **99.13 % lines**, 97.97 % regions, 97.72 % functions (S44, which added the Open Fixture Library reader and the library itself) — `library/mod.rs` **98.61 %**, `library/ofl.rs` **97.24 %**, `command.rs`, `journal.rs` and `testkit.rs` at **100 % lines**. **A caveat that nearly went into this file as a regression:** `cargo llvm-cov` invoked twice in one shell merges the two runs' profile data and reported 92.32 % for this crate, with `show.rs` at 66 % and `session.rs` at 73 %. `cargo llvm-cov clean --workspace` between crates is what makes the figure reproducible. S27's measurement: **99.39 % lines**, 98.03 % regions, 98.40 % functions (S27, which added `library.rs`, `Show::preview_patch`, `Show::renumber_fixture`, two journal images and three command arms). The two files this session touched most read above the crate's own average — `library.rs` **99.34 %** and `conflict.rs` **99.58 %** — which is what this row is for. `command.rs` and `journal.rs` at **100 % lines**. S25's measurement: **99.47 % lines**, 98.07 % regions, 98.51 % functions (re-measured at S25, which routed `Command::PlaceWindow` into `SessionState::apply`; unchanged to two decimal places). S15's measurement and its reasoning: **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-20 (S34) |
+| `prism-core` | **> 95 %** (programmer) | **98.61 % lines**, 97.40 % regions, 98.04 % functions (S37, which added `Settings`, `RecentShows`, the path validators and the sixth machine command) — `desk.rs` **99.75 % lines** (up from 99.66), `file.rs` 99.53 %, `command.rs` 99.52 %, `mirror.rs` 99.70 %, `conflict.rs` 99.65 %, `outputs.rs` 97.20 %. The one uncovered line in `outputs.rs` was read rather than counted and is now gone: it was the sACN twin of the duplicate-port refusal the Art-Net branch already covered. **98.79 % lines**, 97.55 % regions, 98.10 % functions (S36, which put the surface port on `MachineConfig` and gave the machine applier a fifth command) — `outputs.rs` **99.82 % lines**, `desk.rs` 99.66 %, `mirror.rs` 99.70 %, `conflict.rs` 99.65 %, `command.rs` 99.50 %, `file.rs` 99.41 %. **98.78 % lines**, 97.51 % regions, 98.08 % functions (S33, which added `outputs.rs` — the third applier — and the rig on `MachineConfig`) — the new `outputs.rs` at **99.80 % lines**, 99.85 % regions and **100 % functions**; `desk.rs` 99.60 %, `conflict.rs` 99.65 %, `command.rs` 99.50 %, `mirror.rs` 99.70 %, `file.rs` 99.41 %, `programmer.rs` 97.65 %. **98.73 % lines**, 97.43 % regions, 97.97 % functions (S40, which added `objects.rs` and the four generic verbs) — the new `objects.rs` at **98.03 % lines**, 96.59 % regions and **100 % functions**; `command.rs` **99.50 %**, `file.rs` 99.41 %, `show.rs` 99.03 %, `session.rs` 98.86 %, `journal.rs` 98.67 %, `programmer.rs` 97.65 %. **98.93 % lines**, 97.70 % regions, 97.77 % functions (S39, which added the three store modes, `Programmer::sequence`, `Programmer::load_cue`, `Programmer::stored`, `ShowFile::follow_cue_edit` and two session fields) — `command.rs`, `mirror.rs` and `testkit.rs` at **100 % lines**, `file.rs` 99.47 %, `journal.rs` 99.54 %, `session.rs` 99.46 %, `programmer.rs` 98.81 %, `show.rs` 98.56 %. The first measurement of the session read 98.50 % and the gap was all in the paths `ShowFile` no longer takes — the store guards in `Programmer::apply`, which exist for a **direct** caller and now have a direct caller's tests. S34's measurement: **98.97 % lines**, 97.73 % regions, 97.83 % functions (S34, which added `apply_executor_button`, `apply_executor_fader` and `set_executor_speed`) — `command.rs` at **100 % lines**, and it took a change to get there: the `Empty` arm of the button match was dead, because an earlier `if` had already returned. **Removed rather than covered**, which is what S19 and S21 did with the same finding. `mirror.rs`, `desk.rs` and `testkit.rs` also at 100 % lines; `programmer.rs` 99.67 %. S28's measurement: **98.96 % lines**, 97.71 % regions, 97.82 % functions (S28, which added `Show::relink`, `create_sequence`, `set_cue_property`, `remove_cue`, `assign_executor`, `remove_executor`, `Programmer::preset`, `Programmer::stored_keys` and `ShowFile::preview_store`) — `command.rs` and `mirror.rs` at **100 % lines**, `programmer.rs` **99.67 %**, `journal.rs` 99.49 %, `file.rs` 99.20 %, `show.rs` 98.53 %. Measured with `cargo llvm-cov clean --workspace` between crates, per the caveat below. S35's measurement: **97.98 % lines**, 99.09 % regions, 97.81 % functions (S35, which added `rename_view`, `delete_view`, `move_view`, `neighbour` and `SessionError::LastView`) — `session.rs` **98.17 %**, above the crate's own average, which is what this row is for. Measured with `cargo llvm-cov clean --workspace` between crates, per the caveat below. S44's measurement: **99.13 % lines**, 97.97 % regions, 97.72 % functions (S44, which added the Open Fixture Library reader and the library itself) — `library/mod.rs` **98.61 %**, `library/ofl.rs` **97.24 %**, `command.rs`, `journal.rs` and `testkit.rs` at **100 % lines**. **A caveat that nearly went into this file as a regression:** `cargo llvm-cov` invoked twice in one shell merges the two runs' profile data and reported 92.32 % for this crate, with `show.rs` at 66 % and `session.rs` at 73 %. `cargo llvm-cov clean --workspace` between crates is what makes the figure reproducible. S27's measurement: **99.39 % lines**, 98.03 % regions, 98.40 % functions (S27, which added `library.rs`, `Show::preview_patch`, `Show::renumber_fixture`, two journal images and three command arms). The two files this session touched most read above the crate's own average — `library.rs` **99.34 %** and `conflict.rs` **99.58 %** — which is what this row is for. `command.rs` and `journal.rs` at **100 % lines**. S25's measurement: **99.47 % lines**, 98.07 % regions, 98.51 % functions (re-measured at S25, which routed `Command::PlaceWindow` into `SessionState::apply`; unchanged to two decimal places). S15's measurement and its reasoning: **99.47 % lines**, 98.07 % regions, 98.51 % functions — `command.rs`, `conflict.rs`, `journal.rs` and `testkit.rs` at **100 % on all three**, `desk.rs`, `mirror.rs` and `session.rs` at 100 % lines, `show.rs` 99.88 %, `file.rs` 99.75 %, `programmer.rs` 99.43 %, `store.rs` 97.27 %. The ten uncovered lines are the `#[ignore]`d regenerator of the frozen migration fixture (eight) and two `?` arms that no test can reach — see §2.16 | 2026-08-20 (S34) |
 | `prism-protocols` | **> 95 %** | **98.17 % lines**, 97.49 % regions, 97.35 % functions (S33, which gave `OutputStatus` a last-error record and made `DeviceDescriptor`'s serial owned) — and **99.77 % lines with the two Windows-only FTDI backends set aside**, which is what CI measures: `d2xx.rs` and `vcp.rs` are 470 of the 5 297 lines and 86 of the 97 missed, and neither is reachable without a cable. `output.rs`, `artnet.rs`, `sacn.rs`, `opendmx.rs`, `device.rs` and `ftdi.rs` are all at **100 % lines**; `runner.rs` 99.32 %. **98.43 % lines** (S18, re-measured because `MockOutput` grew a timestamped recording — `output.rs` is at **100 % lines, regions and functions**). S10's measurement, whose reasoning still holds: **98.41 % lines**, 97.65 % regions, 97.75 % functions without the adapter (what CI reproduces) — `sacn.rs` **100 % lines and functions**, `artnet.rs` **100 %**, `ftdi.rs` and `output.rs` 100 %, `udp.rs` 99.43 %. With the adapter attached S8 measured 99.30 % via `-- --include-ignored`; that figure was not re-measured since and the code it covers is unchanged. The gap between the two is the FFI, which no build server can execute | 2026-08-11 (S10) |
 | `prism-surface` | **> 95 %** | **99.24 % lines**, 98.61 % regions, 98.47 % functions (S33, re-measured; the crate did not change). **99.27 % lines**, 98.62 % regions, 98.47 % functions (S40, re-measured because `binding.rs` builds `PlaybackTarget` now). **99.24 % lines**, 98.62 % regions, 98.47 % functions (S34, with `SurfaceAction::ExecutorButton` and the release edge) — `binding.rs` **99.41 %**. S22's measurement: **99.30 % lines**, 98.68 % regions, 98.46 % functions (S22, with layer 3 and the bindings target) — `accel.rs`, `midi.rs`, `model.rs` and `control.rs` at **100 % lines**, `binding.rs` **99.85 %** / 98.72 % regions, `profile.rs` 99.39 %, `color.rs` 99.32 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. Three uncovered lines in the new module were found by reading the report — the `action()` arms for the two faders and the wheel, which every test had reached through `command()` instead — and became a test rather than an exception. S21's measurement: **99.20 % lines**, 98.66 % regions, 98.28 % functions (with layer 2 and two new targets) — `accel.rs`, `model.rs`, `control.rs` and `midi.rs` at **100 % lines**, `color.rs` 99.32 %, `profile.rs` 99.27 %, `feedback.rs` 99.01 %, `codec.rs` 98.71 %, `surface.rs` 98.39 %. The crate grew by about 1 500 lines and the figure moved by six hundredths of a point, which is the point of measuring it. The 33 uncovered lines are the *cannot happen* arms a crate that denies `panic!` has to write — `let Some(...) else { return … }` on an array the diff has already bounded — plus `panic!` arms in tests that pass; three genuinely unreachable branches found while reading the report were **removed** rather than covered (§2.22). S20's measurement: **99.26 % lines**, 98.62 % regions, 98.01 % functions (with the recorded-capture target added) — `control.rs` and `midi.rs` at **100 % lines**, `profile.rs` 98.94 %, `codec.rs` 98.71 %, `feedback.rs` 98.30 %. The 17 uncovered lines are `panic!` arms in tests that pass and derived implementations. S19 measured **99.24 % lines**, 98.58 % regions, 97.94 % functions; two unreachable branches found while reading that report were removed rather than covered — see §2.20. **The figure does not include `tools/xtouch-probe`**, which is not a workspace member and has no tests: it is the instrument, not the product | 2026-08-20 (S34) |
 | `prism-midi` | ≥ 85 % | **100 % lines on everything that is not the platform module** (S36, the crate itself) — `lib.rs`, `naming.rs` and `port.rs` at **100 % lines**, 99.58 % / 99.26 % regions and **100 % functions**; `system.rs`, which is the `#[cfg(target_os = …)]` and the `midir` calls under it, reads 51.49 % and the crate as a whole 90.52 %. That is the shape `prism-protocols` reports for its two FTDI backends and it is the same fact: **what is uncovered is the open-a-real-device path**, and `CLAUDE.md` forbids a test from reaching it. Two unreachable branches found while reading the report were removed rather than covered (S21's rule), and one thing that *was* only reachable through a device — the framing that delivers a message longer than the caller's buffer in pieces — was moved out of the platform module into `Inbox`, where a 63-byte SysEx read four bytes at a time is asserted byte for byte | 2026-08-22 |
-| `prism-ipc` | ≥ 85 % | **97.49 % lines**, 97.05 % regions, 99.20 % functions (S36, re-measured because the default `ServerHandler::query` answers a fifth question). **97.61 % lines**, 97.07 % regions, 99.20 % functions (S33, re-measured because `OutputSnapshot` grew from three fields to seven). **97.66 % lines**, 97.11 % regions, 99.20 % functions (S40, re-measured because the command set changed under it). **97.63 % lines**, 97.09 % regions, 99.20 % functions (S39, re-measured because the default `ServerHandler::query` echoes the mode it was asked about). S34's measurement: **97.66 % lines**, 97.11 % regions, 99.20 % functions (S34, re-measured because the command envelope grew a variant) — `message.rs` **99.65 %**. S28's measurement: **97.69 % lines**, 97.13 % regions, 99.20 % functions (S28, re-measured because the default `ServerHandler::query` grew an arm). S35's measurement: **97.15 % lines**, 98.02 % regions, 99.20 % functions (S35, re-measured because the command envelope grew three variants) — `message.rs` **99.11 %**. S27's measurement: **98.14 % lines**, 97.18 % regions, 99.20 % functions (S27, re-measured because the two envelopes grew `Query` and `Answer` and the snapshot grew `fixtureLibrary`) — `message.rs` **99.63 %**, `client.rs` **99.01 %**, `server.rs` 98.25 %. S18's measurement: **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-20 (S34) |
-| `prismd` | ≥ 85 % | **94.85 % lines**, 95.06 % regions, 97.33 % functions (S36, which added `RealSurfacePort`, the hot-plug edge, `--surface`, `--midi-ports` and the surface-change effect) — `surface.rs` **98.38 % lines** and 97.57 % regions, up from 96.94 % at S22; `cli.rs` 99.37 %, `outputs.rs` 97.72 %, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `core.rs` 94.39 %, `daemon.rs` 91.91 %. **The crate reads 0.15 points below S33's 95.00 % and `main.rs` is the whole of it**: it has no test target, it is 42 uncovered lines, and `--midi-ports` added two of them — which is why the *listing itself* was moved into `cli::midi_port_report`, where it has a test, leaving the binary the printing. **95.00 % lines**, 95.24 % regions, 96.79 % functions (S33, which added `outputs.rs` — the supervisor and the driver factory — and rewrote how the daemon opens an output) — the new `outputs.rs` at **97.72 % lines** and 98.20 % regions, `cli.rs` **99.52 %**, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `server.rs` 92.28 %, `daemon.rs` 92.03 %. `main.rs` is still 0 % and still 40 of the 229 uncovered lines; most of the rest are `else { panic!(…) }` arms in the test module that a passing test never takes. **94.74 % lines**, 94.86 % regions, 96.63 % functions (S40, re-measured because `Core::build_body` and `poll_playback` were rewritten around `PlaybackId`) — `main.rs` is still 0 % and still 40 of the uncovered lines. **94.90 % lines**, 94.95 % regions, 96.60 % functions (S39, re-measured because `Desk::query` passes the mode through). S34's measurement: **94.96 % lines**, 95.00 % regions, 96.60 % functions (S34, with `Core::poll_playback`, the five new effects and the `PlaybackReport` wiring) — `core.rs` **97.06 %**, `surface.rs` 97.34 %, `testkit.rs` 100 %, and `main.rs` still 0 % and still the honest part of the figure. S28's measurement: **94.55 % lines**, 94.54 % regions, 96.00 % functions (S28, with the `StorePreview` arm of `Desk::query`) — `surface.rs` **97.34 %**, `paths.rs` 99.21 %, `server.rs` 92.86 %, and `main.rs` still 0 % and still the honest part of the figure. S27's measurement: **94.94 % lines**, 95.03 % regions, 96.15 % functions (S27, with `Desk::query` and the profile library in the snapshot) — `server.rs` 93.26 %, and `main.rs` still 0 % and still the honest part of the figure. The query path is unit tested **in this crate** rather than only through `tests/ui_patch.rs`, whose non-ignored half reads a committed file and never starts a daemon. S26's measurement: **95.06 % lines**, 95.02 % regions, 96.37 % functions (S26, re-measured because `parameter_of` now resolves through `prism-domain`'s one table) — `surface.rs` **97.34 %**, and `main.rs` still 0 %, which is still the honest part of the figure. S25's measurement: **94.98 % lines**, 94.97 % regions, 96.37 % functions (S25, with `FileSurfacePort` and `--mock-surface`) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` **99.36 %**, `lock.rs` 98.48 %, `surface.rs` **97.30 %** (up from 96.94 % with a second port in it), `core.rs` 95.72 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 94.00 %, `daemon.rs` 93.85 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. Without `main.rs` the crate reads **95.6 %**. The five hundredths of a point below S22 are `daemon.rs`'s new *the surface file would not open* arm, which no test can reach without taking a directory away from the process. S22's measurement: **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-20 (S34) |
-| `ui` | ≥ 85 % | **98.95 % lines**, 93.98 % branches, **99.72 % functions**, 98.98 % statements (S40, 615 tests in 46 files) — the new `desk/exists.ts` and `show/grouppool.tsx` at **100 % lines**, `desk/console.ts` 99.72 %, `desk/shell.tsx` 97.77 %, `desk/consoleshell.ts` 93.33 %. **99.05 % lines**, 93.78 % branches, **99.68 % functions**, 99.09 % statements (S39, `vitest run --coverage`; **542 tests in 43 files**). `src/show` reads **99.68 % lines** with the mode chooser, the Edit key and the blinking Update in it — `cueviewer.tsx`, `presetpool.tsx`, `sequencesheet.tsx` and the new `storemode.tsx` all at **100 % lines**. Unchanged to two decimal places against S34 and S28 before it, on seven more tests. The end-to-end suite (Playwright, **24** tests) is **not** in this figure. S28's measurement: **99.05 % lines**, 93.68 % branches, **99.68 % functions**, 99.08 % statements (S28, `vitest run --coverage`; **533 tests in 43 files**). The new `show/` module reads **99.64 % lines**, 92.73 % branches and **100 % functions**: `looks.ts`, `store.ts`, `cueviewer.tsx` and `presetpool.tsx` at **100 % lines**, `sequencesheet.tsx` 98.98 %. The one uncovered line in it is the guard for a sequence chosen with no executor selected, which the interface cannot reach because the chips are disabled. The end-to-end suite (Playwright, **21** tests) is **not** in this figure. S35's measurement: **99.11 % lines**, 94.09 % branches, **99.81 % functions**, 99.14 % statements (S35, `vitest run --coverage`; **470 tests in 39 files**). Every file this session touched reads **100 % lines**: `canvas/viewbar.tsx`, `desk/encoderbar.tsx`, `desk/executorbar.tsx` and `desk/programmer.ts`. The end-to-end suite (Playwright, **18** tests, all green on CI) is **not** in this figure. S44's measurement: **99.07 % lines**, 94.01 % branches, **99.80 % functions**, 99.10 % statements (S44, `vitest run --coverage`; **441 tests in 39 files**). The `patch/` module reads **98.88 % lines** and **100 % functions** with the library search in it. The end-to-end suite (Playwright, **15** tests) is **not** in this figure. S27's measurement: **99.07 % lines**, 93.96 % branches, **99.79 % functions**, 99.09 % statements (S27, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **440 tests in 39 files**). The new `patch/` module reads **98.80 % lines**, 87.36 % branches and **100 % functions**: `patch.ts` and `preview.ts` at **100 % lines**, `live.ts` 98.64 %, `patchwindow.tsx` 98.73 %, `sheet.tsx` 97.05 %. The end-to-end suite (Playwright, **14** tests) is **not** in this figure. S26's measurement: **99.07 % lines**, 94.74 % branches, **100 % functions**, 99.10 % statements (S26, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **371 tests in 34 files**). The new `desk/` module reads **99.75 % lines**, 96.28 % branches and **100 % functions**: `level.ts`, `session.ts` and `valuedrag.ts` at **100 % on every column**, `console.ts`, `programmer.ts`, `encoderbar.tsx` and `executorbar.tsx` at **100 % lines**, `commandline.tsx` 97.56 %. The fifteen uncovered lines across the whole tree were read, not counted: S23's, S24's and S25's fourteen, plus the console mirror's clear-the-timer-on-unmount arm reached with nothing pending. The end-to-end suite (Playwright, **11** tests) is **not** in this figure. S25's measurement: **98.82 % lines**, 94.06 % branches, **100 % functions**, 98.86 % statements (S25, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **298 tests in 29 files**). The new `canvas/` module reads **99.39 % lines**, 95.49 % branches and **100 % functions**: `geometry.ts`, `drag.ts`, `windows.ts`, `window.tsx`, `content.tsx` and `viewbar.tsx` at **100 % lines**, `canvas.tsx` 91.66 %. The fourteen uncovered lines across the whole tree were read, not counted: S23's and S24's eleven, plus the canvas element being `null` when a drag asks for its box and three `documents === null` guards under a connection that is already *connected*. The end-to-end suite (Playwright, **6** tests) is **not** in this figure. S24's measurement: **98.91 % lines**, 94.08 % branches, **100 % functions**, 98.94 % statements (S24, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; 235 tests in 22 files). The new `telemetry/` module reads **99.45 % lines** and **100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The eleven uncovered lines across the whole tree were read, not counted: S23's nine *cannot happen* arms, plus a canvas ref that is `null` when the effect runs and the `typeof window === "undefined"` arm of the resize fallback. The end-to-end suite (Playwright, **3** tests) is **not** in this figure. S23's measurement: **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-20 (S34) |
+| `prism-ipc` | ≥ 85 % | **97.33 % lines**, 97.02 % regions, 99.20 % functions (S37, re-measured because the `Snapshot` grew `machine` and `showFile` and the default `ServerHandler::query` answers two more questions) — `message.rs` 99.69 %. **97.49 % lines**, 97.05 % regions, 99.20 % functions (S36, re-measured because the default `ServerHandler::query` answers a fifth question). **97.61 % lines**, 97.07 % regions, 99.20 % functions (S33, re-measured because `OutputSnapshot` grew from three fields to seven). **97.66 % lines**, 97.11 % regions, 99.20 % functions (S40, re-measured because the command set changed under it). **97.63 % lines**, 97.09 % regions, 99.20 % functions (S39, re-measured because the default `ServerHandler::query` echoes the mode it was asked about). S34's measurement: **97.66 % lines**, 97.11 % regions, 99.20 % functions (S34, re-measured because the command envelope grew a variant) — `message.rs` **99.65 %**. S28's measurement: **97.69 % lines**, 97.13 % regions, 99.20 % functions (S28, re-measured because the default `ServerHandler::query` grew an arm). S35's measurement: **97.15 % lines**, 98.02 % regions, 99.20 % functions (S35, re-measured because the command envelope grew three variants) — `message.rs` **99.11 %**. S27's measurement: **98.14 % lines**, 97.18 % regions, 99.20 % functions (S27, re-measured because the two envelopes grew `Query` and `Answer` and the snapshot grew `fixtureLibrary`) — `message.rs` **99.63 %**, `client.rs` **99.01 %**, `server.rs` 98.25 %. S18's measurement: **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-20 (S34) |
+| `prismd` | ≥ 85 % | **94.40 % lines**, 94.65 % regions, 96.60 % functions (S37, which added `cli::resolve` and `Listen`, the five file operations on `Core`, the machine settings and the two new answers) — `surface.rs` **98.31 % lines**, `cli.rs` 98.75 %, `outputs.rs` 97.72 %, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `log.rs` 94.39 %, `machine.rs` 95.93 %, `core.rs` 93.38 %, `daemon.rs` 91.62 %, `server.rs` 89.05 %. **The crate reads 95.1 % with `main.rs` set aside**, which is still 0 % and still the honest part of the figure; what is left in `server.rs` is the `DeskHandler::query` forwarder, which only a socket reaches and which `ui/e2e/settings.spec.ts` is what exercises. **94.85 % lines**, 95.06 % regions, 97.33 % functions (S36, which added `RealSurfacePort`, the hot-plug edge, `--surface`, `--midi-ports` and the surface-change effect) — `surface.rs` **98.38 % lines** and 97.57 % regions, up from 96.94 % at S22; `cli.rs` 99.37 %, `outputs.rs` 97.72 %, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `core.rs` 94.39 %, `daemon.rs` 91.91 %. **The crate reads 0.15 points below S33's 95.00 % and `main.rs` is the whole of it**: it has no test target, it is 42 uncovered lines, and `--midi-ports` added two of them — which is why the *listing itself* was moved into `cli::midi_port_report`, where it has a test, leaving the binary the printing. **95.00 % lines**, 95.24 % regions, 96.79 % functions (S33, which added `outputs.rs` — the supervisor and the driver factory — and rewrote how the daemon opens an output) — the new `outputs.rs` at **97.72 % lines** and 98.20 % regions, `cli.rs` **99.52 %**, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `server.rs` 92.28 %, `daemon.rs` 92.03 %. `main.rs` is still 0 % and still 40 of the 229 uncovered lines; most of the rest are `else { panic!(…) }` arms in the test module that a passing test never takes. **94.74 % lines**, 94.86 % regions, 96.63 % functions (S40, re-measured because `Core::build_body` and `poll_playback` were rewritten around `PlaybackId`) — `main.rs` is still 0 % and still 40 of the uncovered lines. **94.90 % lines**, 94.95 % regions, 96.60 % functions (S39, re-measured because `Desk::query` passes the mode through). S34's measurement: **94.96 % lines**, 95.00 % regions, 96.60 % functions (S34, with `Core::poll_playback`, the five new effects and the `PlaybackReport` wiring) — `core.rs` **97.06 %**, `surface.rs` 97.34 %, `testkit.rs` 100 %, and `main.rs` still 0 % and still the honest part of the figure. S28's measurement: **94.55 % lines**, 94.54 % regions, 96.00 % functions (S28, with the `StorePreview` arm of `Desk::query`) — `surface.rs` **97.34 %**, `paths.rs` 99.21 %, `server.rs` 92.86 %, and `main.rs` still 0 % and still the honest part of the figure. S27's measurement: **94.94 % lines**, 95.03 % regions, 96.15 % functions (S27, with `Desk::query` and the profile library in the snapshot) — `server.rs` 93.26 %, and `main.rs` still 0 % and still the honest part of the figure. The query path is unit tested **in this crate** rather than only through `tests/ui_patch.rs`, whose non-ignored half reads a committed file and never starts a daemon. S26's measurement: **95.06 % lines**, 95.02 % regions, 96.37 % functions (S26, re-measured because `parameter_of` now resolves through `prism-domain`'s one table) — `surface.rs` **97.34 %**, and `main.rs` still 0 %, which is still the honest part of the figure. S25's measurement: **94.98 % lines**, 94.97 % regions, 96.37 % functions (S25, with `FileSurfacePort` and `--mock-surface`) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` **99.36 %**, `lock.rs` 98.48 %, `surface.rs` **97.30 %** (up from 96.94 % with a second port in it), `core.rs` 95.72 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 94.00 %, `daemon.rs` 93.85 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. Without `main.rs` the crate reads **95.6 %**. The five hundredths of a point below S22 are `daemon.rs`'s new *the surface file would not open* arm, which no test can reach without taking a directory away from the process. S22's measurement: **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-20 (S34) |
+| `ui` | ≥ 85 % | **99.08 % lines**, 93.11 % branches, **99.77 % functions**, 99.11 % statements (S37, 688 tests in 48 files) — the new `settings/` module at **99.28 % lines**, with `settings.ts` and `settingswindow.tsx` at **100 % on every column**, `devices.tsx` and `machine.tsx` at 100 % lines, `outputs.tsx` 99.03 % and `showfiles.tsx` 96.77 %. The two lines left are a guard this interface cannot reach — an apply with no draft and a submit with nothing typed. **98.95 % lines**, 93.98 % branches, **99.72 % functions**, 98.98 % statements (S40, 615 tests in 46 files) — the new `desk/exists.ts` and `show/grouppool.tsx` at **100 % lines**, `desk/console.ts` 99.72 %, `desk/shell.tsx` 97.77 %, `desk/consoleshell.ts` 93.33 %. **99.05 % lines**, 93.78 % branches, **99.68 % functions**, 99.09 % statements (S39, `vitest run --coverage`; **542 tests in 43 files**). `src/show` reads **99.68 % lines** with the mode chooser, the Edit key and the blinking Update in it — `cueviewer.tsx`, `presetpool.tsx`, `sequencesheet.tsx` and the new `storemode.tsx` all at **100 % lines**. Unchanged to two decimal places against S34 and S28 before it, on seven more tests. The end-to-end suite (Playwright, **24** tests) is **not** in this figure. S28's measurement: **99.05 % lines**, 93.68 % branches, **99.68 % functions**, 99.08 % statements (S28, `vitest run --coverage`; **533 tests in 43 files**). The new `show/` module reads **99.64 % lines**, 92.73 % branches and **100 % functions**: `looks.ts`, `store.ts`, `cueviewer.tsx` and `presetpool.tsx` at **100 % lines**, `sequencesheet.tsx` 98.98 %. The one uncovered line in it is the guard for a sequence chosen with no executor selected, which the interface cannot reach because the chips are disabled. The end-to-end suite (Playwright, **21** tests) is **not** in this figure. S35's measurement: **99.11 % lines**, 94.09 % branches, **99.81 % functions**, 99.14 % statements (S35, `vitest run --coverage`; **470 tests in 39 files**). Every file this session touched reads **100 % lines**: `canvas/viewbar.tsx`, `desk/encoderbar.tsx`, `desk/executorbar.tsx` and `desk/programmer.ts`. The end-to-end suite (Playwright, **18** tests, all green on CI) is **not** in this figure. S44's measurement: **99.07 % lines**, 94.01 % branches, **99.80 % functions**, 99.10 % statements (S44, `vitest run --coverage`; **441 tests in 39 files**). The `patch/` module reads **98.88 % lines** and **100 % functions** with the library search in it. The end-to-end suite (Playwright, **15** tests) is **not** in this figure. S27's measurement: **99.07 % lines**, 93.96 % branches, **99.79 % functions**, 99.09 % statements (S27, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **440 tests in 39 files**). The new `patch/` module reads **98.80 % lines**, 87.36 % branches and **100 % functions**: `patch.ts` and `preview.ts` at **100 % lines**, `live.ts` 98.64 %, `patchwindow.tsx` 98.73 %, `sheet.tsx` 97.05 %. The end-to-end suite (Playwright, **14** tests) is **not** in this figure. S26's measurement: **99.07 % lines**, 94.74 % branches, **100 % functions**, 99.10 % statements (S26, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **371 tests in 34 files**). The new `desk/` module reads **99.75 % lines**, 96.28 % branches and **100 % functions**: `level.ts`, `session.ts` and `valuedrag.ts` at **100 % on every column**, `console.ts`, `programmer.ts`, `encoderbar.tsx` and `executorbar.tsx` at **100 % lines**, `commandline.tsx` 97.56 %. The fifteen uncovered lines across the whole tree were read, not counted: S23's, S24's and S25's fourteen, plus the console mirror's clear-the-timer-on-unmount arm reached with nothing pending. The end-to-end suite (Playwright, **11** tests) is **not** in this figure. S25's measurement: **98.82 % lines**, 94.06 % branches, **100 % functions**, 98.86 % statements (S25, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **298 tests in 29 files**). The new `canvas/` module reads **99.39 % lines**, 95.49 % branches and **100 % functions**: `geometry.ts`, `drag.ts`, `windows.ts`, `window.tsx`, `content.tsx` and `viewbar.tsx` at **100 % lines**, `canvas.tsx` 91.66 %. The fourteen uncovered lines across the whole tree were read, not counted: S23's and S24's eleven, plus the canvas element being `null` when a drag asks for its box and three `documents === null` guards under a connection that is already *connected*. The end-to-end suite (Playwright, **6** tests) is **not** in this figure. S24's measurement: **98.91 % lines**, 94.08 % branches, **100 % functions**, 98.94 % statements (S24, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; 235 tests in 22 files). The new `telemetry/` module reads **99.45 % lines** and **100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The eleven uncovered lines across the whole tree were read, not counted: S23's nine *cannot happen* arms, plus a canvas ref that is `null` when the effect runs and the `typeof window === "undefined"` arm of the resize fallback. The end-to-end suite (Playwright, **3** tests) is **not** in this figure. S23's measurement: **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-20 (S34) |
 
 ### Performance gates
 
@@ -2642,13 +2909,13 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 |---|---|---|---|
 | Tick jitter | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 588 µs, **0 of 26 401 ticks missed** — at the thread priority `ARCHITECTURE_SPEC.md` §3 specifies. See the note below | 2026-08-10 |
 | Tick jitter under 100 % CPU load | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 600 µs**, p50 100 µs, p99 200 µs, max 3.55 ms, **0 of 26 401 ticks missed**, 0 panics, 79 616 commands over 600.02 s — re-measured at S34 with the accumulated player clock, the flash layer and the readback all in the pipeline. **The first attempt failed and the harness was the reason, not the code:** run through `cargo test` the process gets no priority elevation, and the machine was compiling and running other suites at the time — 816 missed, p99.9 187 ms. In the configuration `realtime.rs` documents (release exe at High priority, one normal-priority burner per core, nothing else running) it is the figure above. S6's measurement: **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 464 µs, 0 of 26 401 missed. **The load has to come from outside the process** — see §3.1 and the decision log | 2026-08-20 (S34) |
-| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** on all **eight** paths, re-run at S36 and unchanged — nothing this session went near the tick, which is the point: `docs/MCU_MAPPING.md` §5.3's rule is that the engine is never told about a cable, and the hot-plug edge S36 added is asserted to cost **0 missed ticks** in both directions. **0 allocator calls** on all **eight** paths (S33, which added the eighth: a tick that **takes on four subscribers and gives up four** at once, then runs 100 more at 64 universes with twice the subscribers. That is hot output reconfiguration measured rather than argued, and the first attempt read **1** — the retirement vector's first `push`, on the tick thread, which `Vec::with_capacity(MAX_SUBSCRIBERS)` fixed. The seven S40 measured are unchanged): **0 allocator calls** on all **seven** paths (S40, re-measured after every playback was rekeyed from `ExecutorId` to `PlaybackId`, which is the change that could have cost it): a warm tick over 64 universes and 4 subscribers, the merge over 8 sources, the encoder over 768 slots, 8 cue lists fading, the programmer and the masters, the readback with S34's commands, and 44 ticks on the real system clock. **0 allocator calls** in 1 000 ticks with the **readback publishing and all four of S34's commands** — flash, speed, tap and crossfade — on top of 8 cue lists over 768 slots, the programmer filling and clearing and the grand master moving, with eight playbacks reported and every one of them on a cue afterwards, so it is not a measurement of a rig at rest; **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick; **0** in 1 000 ticks with **8 cue lists running** — every cue touching all 768 slots, ten-second fades, cues following on by themselves, Gos and on/off over the queue; and **0** in 1 000 ticks with the **programmer and the masters** as well — values arriving and being cleared on the tick, 16 group masters and the grand master moving | 2026-08-21 |
+| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** on all **eight** paths, re-run at S37 and unchanged — the engine is never told what this machine is set to, which is the whole of why a settings window costs the tick nothing. **0 allocator calls** on all **eight** paths, re-run at S36 and unchanged — nothing this session went near the tick, which is the point: `docs/MCU_MAPPING.md` §5.3's rule is that the engine is never told about a cable, and the hot-plug edge S36 added is asserted to cost **0 missed ticks** in both directions. **0 allocator calls** on all **eight** paths (S33, which added the eighth: a tick that **takes on four subscribers and gives up four** at once, then runs 100 more at 64 universes with twice the subscribers. That is hot output reconfiguration measured rather than argued, and the first attempt read **1** — the retirement vector's first `push`, on the tick thread, which `Vec::with_capacity(MAX_SUBSCRIBERS)` fixed. The seven S40 measured are unchanged): **0 allocator calls** on all **seven** paths (S40, re-measured after every playback was rekeyed from `ExecutorId` to `PlaybackId`, which is the change that could have cost it): a warm tick over 64 universes and 4 subscribers, the merge over 8 sources, the encoder over 768 slots, 8 cue lists fading, the programmer and the masters, the readback with S34's commands, and 44 ticks on the real system clock. **0 allocator calls** in 1 000 ticks with the **readback publishing and all four of S34's commands** — flash, speed, tap and crossfade — on top of 8 cue lists over 768 slots, the programmer filling and clearing and the grand master moving, with eight playbacks reported and every one of them on a cue afterwards, so it is not a measurement of a rig at rest; **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick; **0** in 1 000 ticks with **8 cue lists running** — every cue touching all 768 slots, ten-second fades, cues following on by themselves, Gos and on/off over the queue; and **0** in 1 000 ticks with the **programmer and the masters** as well — values arriving and being cleared on the tick, 16 group masters and the grand master moving | 2026-08-21 |
 | Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Frame determinism | identical input → byte-identical frames | three runs of the same 100-tick script compared byte for byte on the driver's frames, 8 command changes, > 20 distinct frames | 2026-08-11 |
 | Open DMX frame rate | measure real rate on SH-RS09B | **35.53 Hz** over 60 s through D2XX (2 132 frames), **38.35 Hz** through the virtual COM port. Both with the frame timing corrected; before the correction the same code reported 43.1 Hz, and that figure was the *symptom* — see the decision log. `DeviceProfile::SH_RS09B` now carries `verified: true` | 2026-08-11 (S8) |
-| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits** (S36, re-checked with `DeskState` carrying the configured surface port — a field that changes when an operator picks a desk and never at frame rate, which is why it costs nothing). **0 React commits** (S40, re-checked with every key on the desk routed through the console shell — a provider above the whole tree is exactly the shape that could have cost a commit per keystroke, and does not). **0 React commits over 300 frames** — re-checked at S34 with the cue index arriving from the tick, which moves the *show* document while a playback runs and would show up here if it reached the telemetry path. Re-checked at S35 with the two bars rebuilt into one band above the canvas, and with the encoder bar paging. **0 React commits over 300 frames** — re-checked at S27 with the Fixture Sheet's **second** canvas in the interface, which is what says the output column is outside React: a sheet that put a level into a `useState` would turn this red. Re-checked at S26 with the executor bar, the encoder bar and the command line on the screen as well, and at S25 with the panel **inside a window**, so the count is of an interface that has a canvas, a window frame and a View Selector Bar in it. Originally: **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-21 |
-| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.20 ms median, 1.10 ms p99 over 154 frames at 29.8 Hz (S36)**, re-measured because a surface poll now asks a port whether it is still there — once a second, not once a millisecond, which is the point of the figure being unchanged. Two frames lost, which is §8's coalescing; **zero dropped**, which is what is asserted. **0.10 ms mean, 0.30 ms p99 over 155 frames at 30.3 Hz (S40)**, re-measured with the console shell above the canvas. **0.20 ms median, 0.70 ms p99 over 153 frames at 30.1 Hz (S39)**, re-measured with the store bars asking a fourth kind of question and the cue sheet drawing two more keys per row. **0.20 ms median, 0.60 ms p99 over 164 frames at 30.4 Hz (S34)**, nothing lost and nothing dropped, with the readback moving the show document while a playback runs. **0.20 ms median, 1.50 ms p99 over 154 frames at 30.2 Hz (S35)**, with both bars rebuilt into one band above the canvas; three consecutive runs of the gate alone read **30.4 Hz with nothing lost**. **⚠ This gate is a throughput measurement on a desktop and it reads a busy machine as a code regression** — taken at 80–96 % CPU it reports 15–19 Hz with 138–152 frames lost, which is indistinguishable from a real fault. Check the load first: `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"` (the `Get-Counter` path is localised and fails on a German install). See the decision log. S44's measurement: **0.20 ms median, 0.50 ms p99 over 154 frames at 30.3 Hz (S44)**, with the fixture library in the daemon. S27's measurement: **0.20 ms median, 0.40 ms p99 over 160 frames at 30.0 Hz**, with the patch module built and a second telemetry loop in the interface. S26's measurement: **0.20 ms median, 0.40 ms p99 over 156 frames at 30.4 Hz**, re-measured with the executor bar and the encoder bar rendering above the canvas — two more bands in the same column, and the figure does not move. S25's measurement: **0.20 ms median, 0.50 ms p99 over 155 frames at 30.2 Hz**, with the DMX Sheet **opened through the interface** — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn, and a canvas sized by the window rather than by `34vh`. S24's measurement: **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-21 |
+| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits** (S37, re-checked with a settings window in the tree — a panel that polled its counters into `useState` at 1 Hz would not move this number, and one that put a *level* there would; the guard is what says the difference is understood). **0 React commits** (S36, re-checked with `DeskState` carrying the configured surface port — a field that changes when an operator picks a desk and never at frame rate, which is why it costs nothing). **0 React commits** (S40, re-checked with every key on the desk routed through the console shell — a provider above the whole tree is exactly the shape that could have cost a commit per keystroke, and does not). **0 React commits over 300 frames** — re-checked at S34 with the cue index arriving from the tick, which moves the *show* document while a playback runs and would show up here if it reached the telemetry path. Re-checked at S35 with the two bars rebuilt into one band above the canvas, and with the encoder bar paging. **0 React commits over 300 frames** — re-checked at S27 with the Fixture Sheet's **second** canvas in the interface, which is what says the output column is outside React: a sheet that put a level into a `useState` would turn this red. Re-checked at S26 with the executor bar, the encoder bar and the command line on the screen as well, and at S25 with the panel **inside a window**, so the count is of an interface that has a canvas, a window frame and a View Selector Bar in it. Originally: **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-21 |
+| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.20 ms median, 1.00 ms p99 over 155 frames at 30.4 Hz (S37)**, re-measured with the settings window built and its counter poll running. **0.20 ms median, 1.10 ms p99 over 154 frames at 29.8 Hz (S36)**, re-measured because a surface poll now asks a port whether it is still there — once a second, not once a millisecond, which is the point of the figure being unchanged. Two frames lost, which is §8's coalescing; **zero dropped**, which is what is asserted. **0.10 ms mean, 0.30 ms p99 over 155 frames at 30.3 Hz (S40)**, re-measured with the console shell above the canvas. **0.20 ms median, 0.70 ms p99 over 153 frames at 30.1 Hz (S39)**, re-measured with the store bars asking a fourth kind of question and the cue sheet drawing two more keys per row. **0.20 ms median, 0.60 ms p99 over 164 frames at 30.4 Hz (S34)**, nothing lost and nothing dropped, with the readback moving the show document while a playback runs. **0.20 ms median, 1.50 ms p99 over 154 frames at 30.2 Hz (S35)**, with both bars rebuilt into one band above the canvas; three consecutive runs of the gate alone read **30.4 Hz with nothing lost**. **⚠ This gate is a throughput measurement on a desktop and it reads a busy machine as a code regression** — taken at 80–96 % CPU it reports 15–19 Hz with 138–152 frames lost, which is indistinguishable from a real fault. Check the load first: `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"` (the `Get-Counter` path is localised and fails on a German install). See the decision log. S44's measurement: **0.20 ms median, 0.50 ms p99 over 154 frames at 30.3 Hz (S44)**, with the fixture library in the daemon. S27's measurement: **0.20 ms median, 0.40 ms p99 over 160 frames at 30.0 Hz**, with the patch module built and a second telemetry loop in the interface. S26's measurement: **0.20 ms median, 0.40 ms p99 over 156 frames at 30.4 Hz**, re-measured with the executor bar and the encoder bar rendering above the canvas — two more bands in the same column, and the figure does not move. S25's measurement: **0.20 ms median, 0.50 ms p99 over 155 frames at 30.2 Hz**, with the DMX Sheet **opened through the interface** — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn, and a canvas sized by the window rather than by `34vh`. S24's measurement: **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-21 |
 
 **Thread priority is part of the tick jitter figure.** The same ten-minute run at
 the shell's default priority missed 45 ticks and had a p99.9 of 54 ms. The engine
@@ -2958,6 +3225,7 @@ Every one is recorded as plain data so verification is a data update, not a refa
 | Item | Blocks | Status |
 |---|---|---|
 | ~~MCU note and CC numbers vs. real X-Touch~~ | — | ✅ **verified 2026-08-13 (S20)** — a Behringer X-Touch in **MC mode over USB, firmware V1.25, serial `0156406`**, worked control by control: all 40 strip notes, all 64 panel notes (60 of them in both directions at once, by lighting one LED and pressing the button that lit), all nine faders, all nine relative controls and every outbound message type. **Not one number was wrong** — the whole verification was three added profile fields, one corrected character mapping and a new test target, which is what holding the table as one constant was for. `prism_surface::X_TOUCH.verified` is `true` and the `const` assertion S19 planted was rewritten in the same edit. **The evidence is in the repository rather than in this table:** `crates/prism-surface/tests/captures/` holds four recordings of what the desk sent and `crates/prism-surface/tests/hardware_capture.rs` replays them in the ordinary suite, so a device-specific claim is checked on a build server with nothing plugged in. Six things no source had stated were corrected (§2.21) and one real fault was found: **the surface can stop transmitting while still receiving, and only a power cycle recovers it** — `docs/MCU_MAPPING.md` §2.7, and S21 designs around it. Two items are recorded ◻ untested rather than ticked: the foot switches need a pedal nobody had, and the cable-pull case belongs to S21 |
+| The settings window against a venue's real rig | nothing — S37 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a *daemon* can answer for is asserted with nothing plugged in: the five-output rig is built from the window against recording doubles and every counter is watched climbing, the MIDI enumeration answers and opens nothing, and a listener that cannot bind is produced by binding the address first. What only a venue can answer is whether the rig an installer types into this window is the rig their nodes receive — which is the Art-Net and sACN rows below, met from the other end. Verifying it is an afternoon in a hall with the panel open, not a code change. `ARCHITECTURE_SPEC.md` §14 |
 | The D11 gate over a **real** MIDI port | nothing — S36 is complete without it | ☐ unverified, and **deliberately not blocking**. S36 chose the backend, gave it a home (`prism-midi`, §10.1's fourth exception) and wired it: enumeration, a name that survives the platform's decoration, a doubling reconnect backoff to a five-second ceiling, both edges of a cable, and the rule that a desk which has merely gone *quiet* is never reopened. All of it is asserted with **nothing plugged in**, on a machine that has a real X-Touch attached. What only the desk can answer is whether `midir` produces exactly one disappearance and one reappearance for one real unplug and replug — which is `docs/MCU_MAPPING.md` §7's last ◻ row, open since S21 and now half closed, because the backend it was waiting to name is named. The recipe is two commands: `prismd --midi-ports` to read the name, then `prismd --surface "<name>" --mock-output`, press `Channel ▶` and F1, and look for the view and the window in a client's snapshot. `ARCHITECTURE_SPEC.md` §14 |
 | ALSA on the Raspberry Pi | nothing — Windows is the release target (D10) | ☐ unverified, and **it is a build rather than a measurement**. `midir` is target-gated so the ARM64 cross-check needs no `libasound2-dev`, which means the Linux MIDI path is compiled by nobody today; a Pi build is `--features prism-midi/alsa` with that package installed. What a Pi can answer, and only a Pi: that the build succeeds, that ALSA's port names go through `prism_midi::normalise` as `naming.rs` predicts — the ` 24:0` client address coming off — and that the client number really does change across a boot, which is the whole reason that rule exists. One build and one test. `ARCHITECTURE_SPEC.md` §14 |
 | Two Open DMX adapters told apart by their serials | nothing — S33 is complete without it | ☐ unverified, and **deliberately not blocking**. S33 made the rig data and `OutputKind::OpenDmx { serial }` is what pins one output to one physical cable. Everything short of a second cable is asserted: the serial reaches the descriptor the driver hands the backend (`opendmx.rs::a_serial_from_the_configuration_is_what_the_bus_is_asked_for`), and S8's matching rule is asserted against enumerated devices. What only **two** SH-RS09Bs can answer is whether the two outputs open the adapters an installer expects rather than both taking the first; this machine has one. Both halves are data — `DeviceDescriptor::serial` and the `machine.json` row — so verifying it is a data update and one test |
@@ -3397,10 +3665,113 @@ warning and a daemon that starts; a cable pulled mid-show is
 `SurfaceHealth::Disconnected` and one put back redraws the whole surface — and
 the engine hears about neither.
 
-**Begin S37** (the settings window — see §8 for the prompt that starts it, and
-the running order below). It is the first session that has everything it needs:
-S33 made the rig configurable, S36 made the desk configurable, and S27 built the
-patch sheet the fourth panel sits beside.
+**A desk is configured where an operator can see it.** `WindowType::Settings`
+draws four panels — the rig of S33, the MIDI ports of S36, the show file, and
+everything `prismd` used to be told on a command line. It is a **window**: on the
+canvas, draggable, on a second screen, behind an F-key, and every panel is a
+reader over daemon state, so closing it and opening it again shows the same thing
+and a second client sees the change.
+
+**Every operational flag is a setting.** `prism_core::Settings` holds the network
+exposure and the §2.1 token, the log level, the universe count, the exit action,
+the autostart flag, the fixture library's path and the surface binding profile,
+and `Command::ConfigureMachine` writes one field at a time. A flag is still the
+value for that run — and `MachineSettings::overrides` says which rows a command
+line is holding, so a panel greys them out and names the flag rather than
+offering a box that does nothing.
+
+**The WebSocket listener is on by default, on loopback**, and a listener that
+cannot bind is a warning and a daemon that starts. Two daemons on one machine
+both want 7373; one stray process must not make a desk unstartable half an hour
+before a show.
+
+**A show file can be opened.** `SaveShowAs`, `OpenShow`, `NewShow`, `ExportShow`
+and `ImportShow` — five commands the interface had no way to send, so the file an
+operator was working in was whatever `--show` had named at start-up. An open never
+creates, a new show never replaces, and an import never saves.
+
+**Begin S38** (the interactive control editor — see §8 for the prompt that starts
+it, and the running order below). It has what it waits for: S37's Devices panel
+already names the profile and re-reads it, so what is left is the table itself —
+read over the protocol, written from a picture of the surface, and learned by
+pressing a control.
+
+Carried out of S37:
+- **`prism_core::Settings` is where anything else about this machine goes**, and
+  the list S33 started is now closed: the desk identity, the rig, the surface
+  port, and the nine operational settings. Adding a tenth is one field with
+  `#[serde(default)]`, one arm in `MachineConfig::configure`, one variant of
+  `MachineChange`, one row in `cli::resolve` and one row in the panel — and a
+  decision about `needs_restart`, which is the only part that needs thought.
+- **A flag overriding a setting is decided once, in `prismd::cli::resolve`.**
+  It answers both the value in force and the list of held rows, so the two cannot
+  drift; written inline at each use it would have been fifteen places to get
+  wrong and a second list for the interface. **Any later flag that shadows a
+  setting adds a `MachineOverride` variant**, or the panel will offer a box that
+  does nothing.
+- **A value a client must not choose is asked for rather than sent.**
+  `MachineChange::NewToken` and `NewIdentity` carry nothing: both need entropy
+  `prism-core` may not have, and a client choosing either would be choosing this
+  desk's password or giving two desks one sACN CID. `Effect::NewToken` and
+  `Effect::NewDeskIdentity` are the shape — `Effect::EmbedProfile`'s, one layer
+  out — and anything else generated by the machine follows it.
+- **A rule that guards a door has to guard it from both sides.** §2.1 refuses a
+  listener off loopback with no token; taking the *token* away has to close the
+  same door, or the state the first rule forbids is reachable from behind. That
+  is `MachineConfig::close_network_listener`, and the general shape is worth
+  keeping: a validation on one field is half a rule when a second field can undo
+  it.
+- **`Effect` is `Clone` and no longer `Copy`**, because three of them carry a
+  path. It costs a `clone` at the two places the daemon matches on one; the
+  alternative was a second channel out of `Applied` for one string.
+- **A counter a panel watches is asked for, not pushed.** `Query::OutputStatus`
+  closes the gap S33 named on its way out. The rule it settles: **state that moves
+  at a rate nobody can broadcast is a query with a cadence of the client's own**,
+  and the answer carries only what moves — the configuration arrives by delta and
+  repeating it once a second would be a rig on the wire for the sake of a number.
+  `Query::MidiPorts`' `SurfaceStatus` is the same shape for the other device.
+- **A delta or an answer with no caller is a decoder arm nobody writes.**
+  `readDelta` had no `OutputsChanged` (S33) and no `SurfaceChanged` (S36), and
+  `readAnswer` had no `MidiPorts` (S36); a daemon that changed its rig would have
+  faulted a client and resynchronised the connection. Nothing had noticed because
+  nothing had ever changed a rig from a browser. **A session that adds a message
+  should add its reader and something that sends it in a recording**, because the
+  round-trip properties in `prism-domain` do not reach TypeScript.
+- **The `Command` value tree now has a budget, and it is a test.**
+  `wire.rs::a_generated_command_fits_in_a_test_thread` fails at 32 KiB, with both
+  numbers measured: 36 160 bytes overflows `prism-core`'s `tests/oops.rs` and
+  30 992 does not. Three sessions in four have met this; the remedy is always
+  `crate::arb::boxed` on a *field*, and never `RUST_MIN_STACK`.
+- **A test target that starts a daemon says `websocket: Listen::Off`.** The
+  listener is a setting now and the setting is on, so a target that said nothing
+  would bind 127.0.0.1:7373 — and several run at once. A suite must not open a
+  socket it does not use.
+- **A settings command is not a command-line word, and that is the test to
+  apply.** `ARCHITECTURE_SPEC.md` §4.5 asks *could a line say this?* — S40's
+  grammar has no noun for a file or for a log level, exactly as it has none for a
+  window type, so these are sent the way `OpenWindow` is. A later panel should ask
+  the same question rather than assume either answer.
+- **The data directory is the setting that cannot be a setting**, because the
+  settings live in it. The panel names it and the files under it and offers no
+  way to move it; a redirect would be a mechanism §10.3 does not describe, whose
+  failure mode is a desk that starts with somebody else's rig.
+- **A timeout in a test is a claim about the harness, and should say so.**
+  `App.test.tsx`'s command-line test has 20 s of its own because it asserts a
+  sequence of messages rather than a duration, and v8 instrumentation over
+  forty-eight files makes the 5 s default a measurement of the machine. S36 met
+  the same test and re-took the measurement; the second time is when it becomes a
+  number.
+- **The biggest thing S37 did not build is the fixture library's own panel.**
+  S27 predicted the *Show files* panel would be where a library import lands, and
+  it is not there: `Settings` names the library's **directory** and nothing more.
+  Importing, browsing and authoring a profile is still a session of its own, and
+  `ARCHITECTURE_SPEC.md` §9's `profiles/fixtures/` is still written by
+  `tools/fetch-fixtures` alone.
+- **And the autostart flag is written down and acted on by nobody.** S29's shell
+  is the one process that can add a start-up entry without administrator rights;
+  until it exists, the switch is a preference a desk records and reports. The
+  panel says so in as many words, because a switch that appears to do something
+  and does not is worse than one that explains itself.
 
 Carried out of S36:
 - **`prism-midi` is where a platform goes, and the rule is the manifest rather
@@ -4663,24 +5034,26 @@ it assumes no memory of this conversation and no knowledge of the project.
 ---
 
 ```
-PrismDMX — Session S37: `ui` — das Einstellungsfenster
+PrismDMX — Session S38: `ui` — der interaktive Control-Editor
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2, S18); das Pult
 bedient ihn ohne Oberfläche (D11, S22); die Oberfläche ist seit S23–S28, S44,
 S35, S34, S39 und S40 ein vollständiges Pult, dessen *eigentliche* Oberfläche
-die Kommandozeile ist. Und seit S33 und S36 ist beides, was diese **Maschine**
-ausmacht, Daten statt Kommandozeilen-Flags: der Ausgangs-Patch — mehrere
-Ausgänge dreier Bauarten, jeder mit den Universen, für die er verkabelt ist, im
-laufenden Betrieb umkonfigurierbar — und der MIDI-Port, auf dem das X-Touch
-hängt.
+die Kommandozeile ist (§4.5). Seit S33, S36 und S37 ist alles, was diese
+**Maschine** ausmacht, Daten statt Kommandozeilen-Flags — der Ausgangs-Patch, der
+MIDI-Port, die Netz-Freigabe mit ihrem Token, der Log-Level, die Universenzahl,
+das Verhalten beim Beenden, der Autostart, die Fixture-Bibliothek und der Pfad
+des Binding-Profils — und S37 hat das Fenster gebaut, in dem ein Operator das
+einstellt.
 
-**Was fehlt, ist der Ort, an dem ein Operator das einstellt.**
-`WindowType::Settings` ist seit S25 reserviert und öffnet bis heute nichts.
-Jedes Stück Zustand, das S33 und S36 einstellbar gemacht haben, ist nur über
-`Command`s erreichbar, die kein Fenster sendet, und über `Query`s, die kein
-Fenster stellt.
+**Was fehlt, ist die Tabelle selbst.**
+`prism_surface::Bindings` ist Schicht 3 und wird **einmal, aus einer Datei, beim
+Start** gelesen. S37 kann diese Datei *benennen* und damit neu einlesen — mehr
+nicht. Es gibt kein Kommando, das die Tabelle *in Kraft* liest, und keines, das
+eine schreibt. Wer eine Taste anders belegen will, editiert JSON neben dem
+Daemon.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
@@ -4691,126 +5064,141 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                   UI-Regel: **wie ein Geräte-Bildschirm, nichts
                                   scrollt außerhalb der Canvas**
 2. IMPLEMENTATION_PLAN.md       — Session-Protokoll und **die Definition von
-                                  S37**. Die vier Panels, die Deliverables und
-                                  die Exit-Kriterien dort sind die Anforderung,
+                                  S38**. Die fünf Deliverables und die fünf
+                                  Exit-Kriterien dort sind die Anforderung,
                                   wortwörtlich. Danach die Laufreihenfolge am
-                                  Ende: S37 ist Nummer 10 und **Next**
-3. ARCHITECTURE_SPEC.md         — §4.1 (**was Session-Zustand ist und was
-                                  Client-lokal**), §4.2, §4.5 (die Kommandozeile
-                                  ist *die* Oberfläche), §7.0 (der
-                                  Ausgangs-Patch), §10.1 (**wo Plattform-Code
-                                  stehen darf** — vier Ausnahmen seit S36),
-                                  §10.3 (Autostart, Datenverzeichnis,
-                                  Single-Instance), §2.1 (das Token) und §12
-                                  (Testtabelle)
-4. PROGRESS.md                  — §2.36 (S36, gerade fertig), §2.35 (S33: der
-                                  Ausgangs-Patch, `MachineConfig`, die drei
-                                  Applier), §2.26 (S25: Fenster, Canvas,
-                                  `PlaceWindow`), §2.28 (S27: das Patch-Fenster
-                                  als Vorbild für ein Panel mit Tabelle), §3
-                                  (Coverage- und Performance-Tabellen mit den
-                                  Zahlen, die weiter stimmen müssen), §5 (offene
-                                  Verifikationspunkte) und §7 mit **allen**
-                                  „Carried out of"-Listen; die aus S36, S33, S27
-                                  und S25 gehören unmittelbar zu dieser Session
-5. docs/IPC_PROTOCOL.md         — §4.1 (Snapshot), §5 (die Kommandos, besonders
-                                  die fünf Maschinen-Kommandos), §5.2 (Queries —
-                                  **warum eine Frage keine Spiegelung ist**, und
-                                  `MidiPorts`), §6 (Deltas: `OutputsChanged`,
-                                  `SurfaceChanged`) und §7 (Telemetrie)
-6. crates/prism-core/src/desk.rs — `MachineConfig`: Pult-Identität,
-   und outputs.rs                 Ausgangs-Patch, Surface-Port. Der dritte
-                                  Applier und **warum das nichts mit der Show zu
-                                  tun hat**
-7. crates/prism-midi/            — Port-Aufzählung und die Namensregel, die ein
-   und crates/prismd/src/surface.rs Aus- und Wiedereinstecken übersteht;
-                                  `SurfaceLink`, `SurfaceCounters`,
-                                  `SurfaceHealth`
-8. ui/src/windows/               — die Fenster, die es gibt, und
-   und ui/src/desk/                `PatchWindow` als das Muster für eine Tabelle
-                                  in einem Fenster; die Shell, die Canvas und
-                                  die Kommandozeile
-9. ui/e2e/patch.spec.ts          — wie ein Fenster gegen einen **echten** Daemon
-   und ui/e2e/desk.spec.ts         im Browser geprüft wird
+                                  Ende: S38 ist Nummer 11 und **Next**
+3. docs/MCU_MAPPING.md          — §2 (die Bytes, die das X-Touch sendet, und
+                                  §2.1s Notennummern), §2.3 (Farben auf den
+                                  Scribble-Strips), **§2.7** (was S20 gemessen
+                                  hat, und der Fehler, den nur ein Aus- und
+                                  Einschalten behebt), **§4** (die Bindungs-
+                                  Tabelle: §4.1 die Vorgabe, §4.2 das
+                                  Dateiformat, §4.2.1 die Abweichungen, **§4.3
+                                  die reservierte Taste** SMPTE/Beats und wem
+                                  welche Taste im kombinierten Xctl+MC-Modus
+                                  gehört), §5 (die Feedback-Regeln), §7 (die
+                                  offenen ◻-Zeilen)
+4. ARCHITECTURE_SPEC.md         — §4.4 (was die Konsole sendet), **§4.5 (die
+                                  Kommandozeile ist *die* Oberfläche — und was
+                                  ihre Ausnahmen sind)**, §4.1 (Session-Zustand),
+                                  §10.1 (wo Plattform-Code stehen darf),
+                                  §12 (Testtabelle) und §14
+5. PROGRESS.md                  — §2.39 (S37, gerade fertig), §2.36 (S36: der
+                                  echte MIDI-Port), §2.23 (S22: die Bindungen
+                                  und das D11-Gate), §2.21/§2.22 (S20 und S21:
+                                  was das Gerät wirklich tut und die vier
+                                  Feedback-Regeln), §2.32 (S34: die Executor-
+                                  Tasten), §3 (Coverage- und Performance-
+                                  Tabellen mit den Zahlen, die weiter stimmen
+                                  müssen), §5 (offene Verifikationspunkte) und §7
+                                  mit **allen** „Carried out of"-Listen; die aus
+                                  S37, S36, S22, S21 und S20 gehören unmittelbar
+                                  zu dieser Session
+6. docs/IPC_PROTOCOL.md         — §4.1 (Snapshot), §5 (die Kommandos; besonders
+                                  die sechs Maschinen-Kommandos und
+                                  `ConfigureMachine`), §5.2 (Queries — **warum
+                                  eine Frage keine Spiegelung ist**, und
+                                  `MidiPorts` mit seinem `SurfaceStatus`),
+                                  §6 (Deltas) und §9 (Testtabelle)
+7. crates/prism-surface/src/    — `Bindings`, `BoundControl`, `SurfaceAction`,
+   binding.rs und profile.rs      `X_TOUCH`. **Wie eine Tabelle heute geladen,
+                                  überlagert und validiert wird**, und warum
+                                  eine kaputte Datei nie etwas blockiert
+8. crates/prismd/src/surface.rs — `SurfaceLink`, `load_profile`,
+   und daemon.rs                  `follow_profile_change`, `into_port`. S37 hat
+                                  das Nachladen gebaut: **eine Tabelle wird
+                                  getauscht, ein Port nie neu geöffnet**
+9. ui/src/settings/             — das Einstellungsfenster von S37 und sein
+                                  Devices-Panel, das das Profil schon benennt;
+                                  `settings.ts` als Muster für Leser über
+                                  Daemon-Zustand
+10. ui/e2e/settings.spec.ts     — wie ein Fenster gegen einen **echten** Daemon
+    und ui/e2e/session.spec.ts    im Browser geprüft wird, und wie `pressConsole`
+                                  in `ui/e2e/daemon.ts` eine Taste drückt
 
-Aufgabe: Session S37 umsetzen — das Einstellungsfenster.
+Aufgabe: Session S38 umsetzen — der interaktive Control-Editor.
 
-**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S37 sind
-die Anforderung, vollständig und ohne Ausnahme.** Es sind vier Panels: Outputs,
-Devices, Show-Dateien und Diese Maschine.
+**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S38 sind
+die Anforderung, vollständig und ohne Ausnahme.**
 
 ## Randbedingungen
 
-- **Ein Einstellungsfenster ist ein Fenster, kein Modal.** Es lebt auf der
-  Canvas wie jedes andere (S25), kann auf einem zweiten Bildschirm offen sein,
-  ist über eine F-Taste erreichbar, und was es ändert, ist Maschinen- oder
-  Session-Zustand, den **jeder Client sieht**. `WindowType::Settings` existiert
-  seit S25 und öffnet bis heute nichts.
-- **Jedes Panel ist ein Leser über Daemon-Zustand.** Schließen und wieder öffnen
-  zeigt dasselbe; ein zweiter Client sieht die Änderung. Kein Panel hält eine
-  eigene Wahrheit — das ist D3, und `ui/src/mirror/` ist der einzige Weg.
-- **Was scrollt, scrollt *innerhalb* seines Fensters.** Nichts außerhalb der
-  Canvas scrollt, nie. S27s Patch-Sheet und S28s Cue-Sheet sind die zwei
-  Vorbilder, und beide haben einen Playwright-Test dafür.
-- **Drei der vier Panels haben ihr Protokoll schon.** Outputs: S33s vier
-  Kommandos, `OutputSnapshot` mit Art, Parametern, Universen, Health,
-  Frame-Zähler und letztem Fehler, `Delta::OutputsChanged`. Devices:
-  `Query::MidiPorts`, `Command::SetSurfacePort`, `Delta::SurfaceChanged` (S36).
-  Diese Maschine: `MachineConfig` und §2.1s Token. **Show-Dateien ist die
-  Ausnahme und ist eine Protokolländerung**: nur `SaveShow` existiert, also
-  fehlen `OpenShow`, `SaveShowAs` und `NewShow` mit ihren Tests in `prism-core`
-  *und* `prism-ipc`.
+- **Die Tabelle in Kraft ist heute nirgends abfragbar.** `Bindings` wird beim
+  Start aus einer Datei gelesen und lebt in `Daemon`, nicht im `Core` — weil ein
+  Port und eine Tabelle dem Daemon gehören und ein `Core` das ist, was ein
+  Kommando eines Clients erreicht. Ein Editor braucht beides: **lesen** (eine
+  `Query`, denn die Tabelle ist abgeleitet aus Datei + Vorgabe) und
+  **schreiben** (ein `Command`). Wo die geschriebene Tabelle *hingehört*, ist
+  die Entscheidung dieser Session: eine Datei neben dem Daemon, `MachineConfig`,
+  oder beides — und der Grund muss in `ARCHITECTURE_SPEC.md` stehen.
+- **S22s Regel bleibt: eine kaputte Tabelle blockiert nie etwas.** Eine Datei,
+  die fehlt oder nicht parst, wird gemeldet und die eingebaute Tabelle steht.
+  Das gilt auch für eine Tabelle, die über das Protokoll ankommt.
+- **Die reservierte Taste wird beim Namen genannt.** SMPTE/Beats gehört im
+  kombinierten Modus nie PrismDMX (`docs/MCU_MAPPING.md` §4.3); eine Tabelle, die
+  sie belegt, wird **vor** dem Speichern abgelehnt, mit der Taste im Text.
+  `prism-surface` weiß das bereits — die Ablehnung gehört dorthin, nicht in die
+  Oberfläche.
+- **Learn ist S20s Methodenregel rückwärts.** Nie die Profildatei fragen, welche
+  Note eine Taste sendet; die Taste drücken und lesen, was ankommt. Im Test ist
+  das `--mock-surface` und `pressConsole` mit von Hand geschriebenen Bytes aus
+  §2.1 — ein Test, der das Profil fragt, fragt den Prüfling.
 - **Ein neues Kommando braucht eine Heimat in allen drei Appliern** und in den
-  fest verdrahteten Zählungen: `crates/prism-domain/src/command.rs` (heute 48
+  fest verdrahteten Zählungen: `crates/prism-domain/src/command.rs` (heute 54
   Varianten), `crates/prism-core/tests/command_application.rs` und
-  `session_commands.rs` (heute **53** in den drei Beispiel-Listen zusammen),
+  `session_commands.rs` (heute **60** in den drei Beispiel-Listen zusammen),
   `crates/prism-core/src/file.rs`. Und es muss rückgängig zu machen sein — oder
-  ausdrücklich nicht, mit dem Grund in `ARCHITECTURE_SPEC.md` §6.1. Ein Kommando,
-  das eine Show *öffnet*, leert den Oops-Journal; das ist bereits so und der
-  Grund steht in `prism-core/src/journal.rs`.
-- **Eine `Command`-Variante kostet Stack im Property-Test.** Wenn eine neue
-  Variante ein Enum- oder Struct-Feld hat: **boxen** (`crate::arb::boxed()`),
-  nicht `RUST_MIN_STACK`.
+  ausdrücklich nicht, mit dem Grund in `ARCHITECTURE_SPEC.md` §6.1.
+- **Eine `Command`-Variante kostet Stack im Property-Test**, und es gibt jetzt
+  ein Budget dafür: `crates/prism-domain/src/wire.rs::a_generated_command_fits_in_a_test_thread`
+  fällt bei 32 KiB. Wer es reißt, **boxt ein Feld** (`crate::arb::boxed()`) und
+  greift nicht zu `RUST_MIN_STACK`.
+- **Eine neue Nachricht braucht ihren Leser in `ui/src/ipc/protocol.ts`.** S37
+  hat drei gefunden, die seit S33 und S36 fehlten, weil nichts sie je gesendet
+  hatte; die Round-Trip-Properties in `prism-domain` reichen nicht bis
+  TypeScript. Am besten sendet eine der sechs Aufzeichnungen die neue Nachricht.
 - **Ein neues Feld auf einem persistierten Typ braucht `#[serde(default)]`**,
-  sonst öffnet keine ältere Datei mehr — und ein `std`-Typ mit einer
-  `serde`-Implementierung, die sich unter `is_human_readable` anders verhält,
-  braucht ein eigenes Modul: `prism_domain::socket` ist S33s Beispiel, gefunden
-  von `wire.rs`s Round-Trip-Property.
-- **Ein Daemon, dessen Ausgänge auf der Kommandozeile standen, weist alle fünf
-  Maschinen-Kommandos zurück** (`MachineError::ConfiguredOnTheCommandLine`), und
-  einer mit `--surface` weist `SetSurfacePort` zurück
-  (`SurfaceOnTheCommandLine`). **Der Daemon dieser Session startet also *ohne*
-  Ausgangs-Flags**, mit `--mock-devices`, und baut seinen Rig mit `AddOutput` —
-  so machen es `crates/prismd/tests/outputs.rs` und `surface_port.rs`.
+  sonst öffnet keine ältere Datei mehr.
+- **Ein Daemon, dessen Ausgänge auf der Kommandozeile standen, weist alle sechs
+  Maschinen-Kommandos zurück**, und einer mit `--surface` weist `SetSurfacePort`
+  zurück. Ein Test-Target, das die Maschine konfiguriert, startet also **ohne**
+  Ausgangs-Flags, mit `--mock-devices` — so machen es
+  `crates/prismd/tests/outputs.rs`, `surface_port.rs` und `settings.rs`.
+- **Ein Test-Target, das einen Daemon startet, setzt `websocket:
+  Listen::Off`.** Der Listener ist seit S37 eine Einstellung und die Einstellung
+  ist *an*; ein Target, das nichts sagt, bindet 127.0.0.1:7373, und mehrere
+  laufen gleichzeitig.
 - **Kein Test darf ein Gerät berühren.** An dieser Maschine hängt ein echtes
   X-Touch (S20, Firmware V1.25, Seriennummer `0156406`) und ein echter
   SH-RS09B-Adapter; die Suite darf keines von beiden öffnen. Die Aufzählung
   antwortet auf einer Maschine ohne MIDI-Gerät mit einer **leeren Liste**, und
-  genau das führt CI aus. Ein Port-Name in einem Test ist einer, den nichts
-  heißen kann.
+  genau das führt CI aus.
 - **`ui/src/bindings/` wird aus Rust erzeugt** (`cargo test -p prism-domain`),
   nicht von Hand geschrieben.
 - **Vor Zeitmessungen die Systemlast prüfen**, sonst sieht eine beschäftigte
   Maschine aus wie eine Regression:
   `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"`
   — der `Get-Counter`-Weg ist lokalisiert und schlägt auf einer deutschen
-  Installation fehl. S36 hat genau diese Falle getroffen: ein Vitest-Test lief
-  in ein 5-Sekunden-Timeout, während nebenher `cargo llvm-cov` das halbe System
-  belegte; allein braucht er 2,3 s.
+  Installation fehl. S36 und S37 haben beide dieselbe Falle getroffen, und in
+  S37 ist daraus eine Zahl geworden: `App.test.tsx`s Kommandozeilen-Test hat
+  seither 20 s statt der 5 s-Vorgabe, weil er eine *Folge von Nachrichten*
+  prüft und keine Dauer.
 - **Eine Coverage-Messung ohne `cargo llvm-cov clean --workspace` davor ist keine
   Messung.** Ein alter Profildatensatz las `prism-core` in S40 mit 74,55 % statt
   97,95 %.
 - **Die sechs Recordings sind ein Satz.** Ändert sich das Protokoll, werden alle
   sechs neu erzeugt (`cargo test -p prismd --test ui_* -- --ignored`) und die
-  Diffs **strukturell** gelesen, nicht als Base64 — S36 hat dafür ein Skript
-  geschrieben, das die Base64-Blobs dekodiert, das MessagePack darin auspackt
-  und beide Dokumente parallel abläuft. Was sich außer `tickHz`, `framesSent`,
-  der Telemetrie-Sequenznummer und der Lage eines `PlaybackState` in einer
+  Diffs **strukturell** gelesen, nicht als Base64 — ein Skript, das die
+  Base64-Blobs dekodiert, das MessagePack darin auspackt und beide Dokumente
+  parallel abläuft. Was sich außer `tickHz`, `framesSent`, der
+  Telemetrie-Sequenznummer und der Lage eines `PlaybackState` in einer
   Delta-Liste unterscheidet, muss erklärbar sein.
 - **CI hat `channel = "stable"`**, also trifft sie jede neue Lint-Menge zuerst.
   Ein grüner *inkrementeller* `cargo clippy` ist kein Beweis — vor dem Messen
   `cargo clean -p` auf die geänderten Crates, sonst bleiben Lints unentdeckt,
-  die nur beim Kaltbau feuern. S36 hat so zwei gefunden, S40 eine, S33 drei.
+  die nur beim Kaltbau feuern. S36 hat so zwei gefunden, S40 eine, S33 drei,
+  S37 drei.
 
 ## Fragen
 
@@ -4823,17 +5211,18 @@ entscheiden kann.
 - Alle Gates grün: `cargo test --workspace`, `cargo clippy --workspace
   --all-targets -- -D warnings`, `cargo fmt --all --check`, und in `ui/`:
   `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build`, sowie
-  die Playwright-Tests (heute 28)
-- Die Zahlen aus S24–S28, S33, S34, S39, S40 und S36 müssen weiter stimmen: null
-  Allokationen im Tick (**acht** Pfade), das Tick-Deadline-Gate, null
+  die Playwright-Tests (heute 34)
+- Die Zahlen aus S24–S28, S33, S34, S39, S40, S36 und S37 müssen weiter stimmen:
+  null Allokationen im Tick (**acht** Pfade), das Tick-Deadline-Gate, null
   React-Commits, das Telemetrie-Frame-Budget
-- PROGRESS.md aktualisieren: S37-Status, ein §2.37-Verifikationsprotokoll mit
+- PROGRESS.md aktualisieren: S38-Status, ein §2.40-Verifikationsprotokoll mit
   **jeder gemessenen Zahl**, die Coverage- und Performance-Tabellen in §3, und in
-  §7 eine „Carried out of S37"-Liste — die strukturellen Entscheidungen gehören
+  §7 eine „Carried out of S38"-Liste — die strukturellen Entscheidungen gehören
   dort ausdrücklich hinein
-- `ARCHITECTURE_SPEC.md` §12 und §14 sowie `docs/IPC_PROTOCOL.md` nachziehen
+- `ARCHITECTURE_SPEC.md` §12 und §14, `docs/MCU_MAPPING.md` §4 sowie
+  `docs/IPC_PROTOCOL.md` nachziehen
 - PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt für die nächste
-  Session überschreiben (nach der Laufreihenfolge ist das S38)
+  Session überschreiben (nach der Laufreihenfolge ist das S29)
 - Mit einer Conventional-Commit-Nachricht committen, pushen, CI beobachten und
   das Ergebnis in PROGRESS.md festhalten
 ```

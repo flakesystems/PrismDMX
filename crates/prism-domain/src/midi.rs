@@ -56,6 +56,86 @@ impl MidiPortInfo {
     }
 }
 
+/// What is known about the surface at the other end — S37.
+///
+/// The domain's copy of `prism_surface::SurfaceHealth`, and the two are
+/// deliberately separate types for `crate::LogLevel`'s reason: that one is what
+/// a feedback layer switches on, this is what travels and what a settings panel
+/// draws. `prismd` converts between them in one place.
+///
+/// The order is the state machine's: nothing there, there and quiet, heard
+/// from, asked, and did not answer.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum SurfaceHealth {
+    /// No surface at all — the ordinary state of a laptop.
+    #[default]
+    Disconnected,
+    /// One is there and has said nothing yet, which is ordinary: an X-Touch
+    /// speaks only when it is touched.
+    Connected,
+    /// It has been heard from inside the silence window.
+    Live,
+    /// It has been quiet long enough to have been asked, once, whether it is
+    /// still there.
+    Probing,
+    /// It did not answer. **The port is still open and writes still land**;
+    /// what has stopped is the surface's transmitter — S20's finding, and the
+    /// one state whose remedy is not *reconnect*.
+    Unresponsive,
+}
+
+/// What the surface layers have done and not done — S37.
+///
+/// `prism_surface::SurfaceCounters` on the wire, plus the two facts that belong
+/// to the port under it rather than to the feedback model: how many times the
+/// cable has come back, and which binding table is in force.
+///
+/// # Why this is an answer and not a delta
+///
+/// It moves continuously — `sent` climbs whenever anything on the desk changes
+/// — so a delta per change would be a broadcast at feedback rates about
+/// something only an open settings window is looking at. `Query::MidiPorts` is
+/// asked when that window opens and again when the operator presses *rescan*,
+/// which is exactly the cadence a counter panel wants.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct SurfaceStatus {
+    /// What is known about the desk at the other end.
+    pub health: SurfaceHealth,
+    /// What to tell the operator, if anything — `SurfaceHealth::remedy`.
+    ///
+    /// Carried as words rather than worked out from `health` by a client,
+    /// because the wording of one of them is the whole point of the state: the
+    /// obvious advice for an unresponsive desk is *reconnect*, and S20
+    /// established that reconnecting is the one thing that cannot recover it.
+    pub remedy: Option<String>,
+    /// Messages handed to the port.
+    pub sent: u64,
+    /// Changes overwritten by a later change before either was sent — what
+    /// coalescing saved.
+    pub superseded: u64,
+    /// Changes to a fader that were not sent because a hand was on it.
+    pub touch_suppressed: u64,
+    /// Faders resynchronised after a release.
+    pub resyncs: u64,
+    /// Inbound events dropped because the control is reserved — SMPTE/Beats,
+    /// which is never PrismDMX's (`docs/MCU_MAPPING.md` §4.3).
+    pub reserved: u64,
+    /// Device queries sent. **At most one per silence**, so a number climbing
+    /// here would mean somebody had started polling the handshake.
+    pub probes: u64,
+    /// How many times a cable has been pulled out and put back.
+    pub reconnects: u64,
+    /// The binding profile in force, or `None` for the built-in table.
+    pub profile: Option<String>,
+    /// How many controls that table binds — `prism_surface::Bindings::bound`.
+    pub bound_controls: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::MidiPortInfo;

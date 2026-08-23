@@ -7,7 +7,7 @@
  * opens a `PhaserEditor` from an X-Touch F-key should find a window that says so
  * rather than an empty rectangle they will file a bug about.
  *
- * Six of the eleven are built. Three are about **light**, and S27 settled the
+ * Eight of the eleven are built. Three are about **light**, and S27 settled the
  * difference between them:
  *
  * - **Patch** is the *rig* — which fixtures exist and where their channels are.
@@ -32,6 +32,15 @@
  *   is what makes `Group 3` a selection. It replaced a plain list of names in
  *   **S40**, when the pool finally had commands behind it.
  *
+ * And one is about **the desk** rather than about the show at all — S37:
+ *
+ * - **Settings** is the *machine*: the output patch of S33, the MIDI ports of
+ *   S36, the show file this daemon has open, and everything `prismd` used to be
+ *   told on a command line. It is the first window in this interface that
+ *   configures the desk rather than what the desk is playing, and it is a
+ *   **window** and not a modal for the reason its own module documentation
+ *   gives.
+ *
  * # Scrolling
  *
  * `CLAUDE.md` forbids scrolling *outside* the canvas, and this is inside one. A
@@ -47,6 +56,7 @@ import { CueViewer } from "../show/cueviewer";
 import { GroupPool } from "../show/grouppool";
 import { PresetPool } from "../show/presetpool";
 import { SequenceSheet } from "../show/sequencesheet";
+import { SettingsWindow } from "../settings/settingswindow";
 import { TelemetryPanel } from "../telemetry/panel";
 import type { CanvasWindow } from "./windows";
 import { windowTitle } from "./windows";
@@ -78,10 +88,11 @@ export function WindowContent({
       return <CueViewer show={show} session={session} />;
     case "PresetPool":
       return <PresetPool show={show} programmer={programmer} />;
+    case "Settings":
+      return <SettingsWindow />;
     case "Viewer3D":
     case "PhaserEditor":
     case "ClockViewer":
-    case "Settings":
       return <NotBuiltYet window={instance} />;
   }
 }

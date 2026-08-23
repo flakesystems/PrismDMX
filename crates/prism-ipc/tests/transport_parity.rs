@@ -127,6 +127,8 @@ fn the_world() -> Snapshot {
             unsaved_changes: true,
         },
         fixture_library: 0,
+        machine: prism_domain::MachineSettings::default(),
+        show_file: prism_domain::ShowFileInfo::default(),
     }
 }
 

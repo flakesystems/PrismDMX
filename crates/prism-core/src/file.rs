@@ -74,6 +74,63 @@ use crate::programmer::{Programmer, ProgrammerError};
 use crate::session::{SessionError, SessionState};
 use crate::show::{Show, ShowError};
 
+/// The extension a show file has to have — S37.
+const SHOW_EXTENSION: &str = ".prism";
+
+/// The extension a JSON export has to have — S37.
+const EXPORT_EXTENSION: &str = ".json";
+
+/// Reads a `.prism` path out of a file command — S37.
+///
+/// # Why the check is here and why it is only this much
+///
+/// A path from a client is a string, and three things can be decided about one
+/// without touching a disk: that it is not empty, that it names a file rather
+/// than a directory, and that its extension is the one this command's format
+/// actually is. Everything else — whether it exists, whether it can be written,
+/// whether it is a show at all — needs the file system and is `prismd`'s.
+///
+/// A **relative** path is accepted and is deliberately not resolved here: a
+/// client and a daemon do not share a working directory, so which directory a
+/// bare `aula.prism` means is the daemon's answer (its data directory) and not
+/// this crate's.
+///
+/// # Errors
+///
+/// [`ShowError::NotAShowPath`].
+pub(crate) fn show_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
+    checked_path(path, SHOW_EXTENSION)
+}
+
+/// Reads a `.json` path out of an export or an import — S37.
+///
+/// # Errors
+///
+/// [`ShowError::NotAShowPath`].
+pub(crate) fn export_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
+    checked_path(path, EXPORT_EXTENSION)
+}
+
+/// The shared half of the two above.
+fn checked_path(path: &str, wanted: &'static str) -> Result<std::path::PathBuf, ShowError> {
+    let trimmed = path.trim();
+    let refuse = || ShowError::NotAShowPath {
+        path: path.to_owned(),
+        wanted,
+    };
+    if trimmed.is_empty() || !trimmed.to_ascii_lowercase().ends_with(wanted) {
+        return Err(refuse());
+    }
+    let candidate = std::path::PathBuf::from(trimmed);
+    // A file name of exactly the extension — `.prism` on its own — is a hidden
+    // file on one platform and a mistake on every one of them.
+    let named = candidate
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.len() > wanted.len());
+    if named { Ok(candidate) } else { Err(refuse()) }
+}
+
 /// Why a command could not be applied to a show file.
 ///
 /// One error type over all three appliers, so a caller can route a command
@@ -1042,6 +1099,15 @@ impl ShowFile {
             | Command::Oops
             | Command::Redo
             | Command::SaveShow
+            // S37's four file commands beside it, and for the same reason
+            // twice over: none of them is a show *edit*, and three of them
+            // replace the show outright — after which a record filed against
+            // the show that was open would describe a show that is gone.
+            | Command::SaveShowAs { .. }
+            | Command::OpenShow { .. }
+            | Command::NewShow { .. }
+            | Command::ExportShow { .. }
+            | Command::ImportShow { .. }
             | Command::SelectView { .. }
             | Command::StoreView { .. }
             | Command::OpenWindow { .. }
@@ -1067,6 +1133,7 @@ impl ShowFile {
             | Command::SetOutputEnabled { .. }
             // S36's, for the same reason: a port name is not show content.
             | Command::SetSurfacePort { .. }
+            | Command::ConfigureMachine { .. }
             => Vec::new(),
         }
     }

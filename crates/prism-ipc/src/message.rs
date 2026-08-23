@@ -44,8 +44,8 @@
 //! second channel discriminator in the framing, which §3 rules out.
 
 use prism_domain::{
-    Answer, Command, Delta, JsonValue, OutputHealth, OutputId, OutputInstance, ProgrammerState,
-    Query,
+    Answer, Command, Delta, JsonValue, MachineSettings, OutputHealth, OutputId, OutputInstance,
+    ProgrammerState, Query, ShowFileInfo,
 };
 use serde::{Deserialize, Serialize};
 
@@ -290,6 +290,22 @@ pub struct Snapshot {
     /// Zero is an ordinary state: it means this desk found no library and is
     /// offering the built-in profiles only, which the daemon logs on the way up.
     pub fixture_library: u32,
+    /// What **this machine** is set to — S37.
+    ///
+    /// The settings window's fourth panel arrives with the world rather than
+    /// being asked for, which is `outputs`' reason exactly: it is state the
+    /// daemon owns, it changes only when a command changes it, and a client that
+    /// had to ask would draw an empty panel for a round trip.
+    ///
+    /// `#[serde(default)]` for `OutputSnapshot`'s four fields' reason: a
+    /// snapshot is a message rather than a file, so a client one version behind
+    /// should meet a missing field rather than a decode error.
+    #[serde(default)]
+    pub machine: MachineSettings,
+    /// Which show file is open, what was open before it, and the autosave's
+    /// state — S37.
+    #[serde(default)]
+    pub show_file: ShowFileInfo,
 }
 
 /// One DMX output, as the status panel shows it.
@@ -437,6 +453,19 @@ mod tests {
                 unsaved_changes: true,
             },
             fixture_library: 2157,
+            machine: prism_domain::MachineSettings {
+                desk_id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8".to_owned(),
+                data_dir: "C:/ProgramData/PrismDMX".to_owned(),
+                universes: 64,
+                ..prism_domain::MachineSettings::default()
+            },
+            show_file: prism_domain::ShowFileInfo {
+                path: "D:/shows/aula.prism".to_owned(),
+                recent: vec!["D:/shows/panto.prism".to_owned()],
+                unsaved_changes: true,
+                recovery: false,
+                autosave_seconds: 30,
+            },
         }
     }
 
@@ -579,6 +608,11 @@ mod tests {
         assert_eq!(back.outputs[0].name, "Open DMX");
         assert_eq!(back.outputs[0].health, OutputHealth::Degraded);
         assert_eq!(back.fixture_library, 2157);
+        // S37's two, which a settings window draws and which therefore have to
+        // survive the wire as much as the rig does.
+        assert_eq!(back.machine.data_dir, "C:/ProgramData/PrismDMX");
+        assert_eq!(back.show_file.path, "D:/shows/aula.prism");
+        assert_eq!(back.show_file.recent.len(), 1);
         assert!((back.health.tick_hz - 44.0).abs() < f64::EPSILON);
         assert_eq!(back.health.missed_ticks, 2);
         assert!(back.health.unsaved_changes);

@@ -106,6 +106,41 @@ pub fn generate_desk_id() -> io::Result<DeskId> {
     Ok(DeskId::from_bytes(bytes))
 }
 
+/// A §2.1 access token, from the operating system's entropy — S37.
+///
+/// # Why the daemon makes it and not a client
+///
+/// `docs/IPC_PROTOCOL.md` §2.1: *enabling it requires a token, which the daemon
+/// generates and the UI displays*. A client that chose the token would be
+/// choosing this desk's password, and one that chose a weak one would be
+/// choosing it for everybody on the network. So the value is made here, beside
+/// [`generate_desk_id`] and out of the same entropy, and travels outward in
+/// `MachineSettings::token` for an operator to read off the screen and type into
+/// the phone in the auditorium.
+///
+/// Twenty-six characters of Crockford base32 over 128 bits, which is a token a
+/// person can read aloud without asking *was that a one or an ell*: the alphabet
+/// has no `I`, `L`, `O` or `U`.
+///
+/// # Errors
+///
+/// [`io::Error`] if the machine has no entropy, which is a machine that must not
+/// be allowed to invent a token by other means.
+pub fn generate_token() -> io::Result<String> {
+    const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes)
+        .map_err(|error| io::Error::other(format!("no entropy for an access token: {error}")))?;
+    let mut token = String::with_capacity(26);
+    let mut carry = u128::from_be_bytes(bytes);
+    for _ in 0..26 {
+        let index = usize::try_from(carry % 32).unwrap_or(0);
+        token.push(char::from(ALPHABET[index]));
+        carry /= 32;
+    }
+    Ok(token)
+}
+
 /// The desk identity as the sACN driver wants it.
 ///
 /// The two types hold the same sixteen bytes in the same order and are
@@ -118,7 +153,7 @@ pub fn cid_of(config: &MachineConfig) -> prism_protocols::Cid {
 
 #[cfg(test)]
 mod tests {
-    use super::{cid_of, generate_desk_id, load_or_create, write};
+    use super::{cid_of, generate_desk_id, generate_token, load_or_create, write};
     use prism_core::{DeskId, MachineConfig};
 
     #[test]
@@ -195,6 +230,28 @@ mod tests {
         assert!(created);
         assert!(path.is_file());
         assert!(config.is_configured());
+    }
+
+    /// The token an operator has to read off a screen and type into a phone —
+    /// S37.
+    ///
+    /// Two claims, and the second is the one that makes it a token rather than a
+    /// number: two of them differ, and the alphabet has none of the four
+    /// characters a person misreads.
+    #[test]
+    fn a_generated_token_is_readable_and_is_not_the_same_twice() {
+        let token = generate_token().unwrap();
+        assert_eq!(token.len(), 26);
+        assert!(
+            token
+                .chars()
+                .all(|character| character.is_ascii_uppercase() || character.is_ascii_digit()),
+            "{token}"
+        );
+        for confusable in ['I', 'L', 'O', 'U'] {
+            assert!(!token.contains(confusable), "{token} contains {confusable}");
+        }
+        assert_ne!(generate_token().unwrap(), token);
     }
 
     #[test]

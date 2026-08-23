@@ -40,10 +40,16 @@ fn options(dir: &Path) -> Options {
     Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
-        universes: 2,
+        universes: Some(2),
         outputs: vec![mock_output(1)],
-        local: false,
-        log_level: prismd::log::Level::Warn,
+        local: Some(false),
+        // **No listener of any kind** — S37. Since the WebSocket listener is a
+        // *setting* and the setting is on, a test that said nothing would bind
+        // 127.0.0.1:7373, and the several daemon targets `cargo test` runs at
+        // once would each be asking for it. A suite must not open a socket it
+        // does not use.
+        websocket: prismd::cli::Listen::Off,
+        log_level: Some(prismd::log::Level::Warn),
         ..Options::default()
     }
 }
@@ -84,7 +90,7 @@ async fn a_websocket_client_is_served_the_world_and_finds_the_daemon_by_its_lock
     let mut options = options(dir.path());
     // Port 0: the operating system chooses, and the lock file is how anybody
     // finds out which — which is exactly what §2.2 is for.
-    options.websocket = Some("127.0.0.1:0".parse().unwrap());
+    options.websocket = prismd::cli::Listen::At("127.0.0.1:0".parse().unwrap());
     options.token = Some("hunter2".to_owned());
     let mut daemon = Daemon::start(&options).await.unwrap();
 
@@ -150,7 +156,7 @@ async fn telemetry_reaches_a_connected_client_and_carries_the_patched_universes(
     let dir = tempfile::tempdir().unwrap();
     common::write_show(&dir.path().join("aula.prism"));
     let mut options = options(dir.path());
-    options.local = true;
+    options.local = Some(true);
     let mut daemon = Daemon::start(&options).await.unwrap();
 
     let address = common::local_address(dir.path());
@@ -212,7 +218,7 @@ async fn an_output_that_falls_over_is_reported_to_every_client() {
     let dir = tempfile::tempdir().unwrap();
     common::write_show(&dir.path().join("aula.prism"));
     let mut options = options(dir.path());
-    options.local = true;
+    options.local = Some(true);
     let mut daemon = Daemon::start(&options).await.unwrap();
 
     let address = common::local_address(dir.path());

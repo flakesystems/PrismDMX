@@ -41,6 +41,36 @@ pub enum Level {
     Off,
 }
 
+/// The domain's spelling of a level, and this crate's, converted in **one**
+/// place — S37.
+///
+/// Two types on purpose: `prism_domain::LogLevel` is what travels and what a
+/// settings window draws, and this one is what a logger switches on. They would
+/// be one type only if `prism-domain` were allowed to know what a logger is.
+impl From<prism_domain::LogLevel> for Level {
+    fn from(level: prism_domain::LogLevel) -> Self {
+        match level {
+            prism_domain::LogLevel::Debug => Self::Debug,
+            prism_domain::LogLevel::Info => Self::Info,
+            prism_domain::LogLevel::Warn => Self::Warn,
+            prism_domain::LogLevel::Error => Self::Error,
+            prism_domain::LogLevel::Off => Self::Off,
+        }
+    }
+}
+
+impl From<Level> for prism_domain::LogLevel {
+    fn from(level: Level) -> Self {
+        match level {
+            Level::Debug => Self::Debug,
+            Level::Info => Self::Info,
+            Level::Warn => Self::Warn,
+            Level::Error => Self::Error,
+            Level::Off => Self::Off,
+        }
+    }
+}
+
 impl Level {
     /// The five names, as they are written on a command line and in a line of
     /// output.
@@ -224,6 +254,27 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::{Level, civil_from_days, enabled, format_line, level, set_level, timestamp};
+
+    /// The domain's five levels and this crate's are the same five, converted in
+    /// one place — S37.
+    ///
+    /// A round trip rather than a table: the pair that matters is the one a
+    /// settings window writes and the logger switches on, and a conversion that
+    /// dropped a level would show up here as a level that came back as another.
+    #[test]
+    fn the_domains_levels_and_this_crates_are_the_same_five() {
+        for level in [
+            Level::Debug,
+            Level::Info,
+            Level::Warn,
+            Level::Error,
+            Level::Off,
+        ] {
+            let travelled: prism_domain::LogLevel = level.into();
+            assert_eq!(Level::from(travelled), level, "{level:?}");
+        }
+        assert_eq!(Level::from(prism_domain::LogLevel::default()), Level::Info);
+    }
 
     #[test]
     fn a_level_survives_its_own_name() {

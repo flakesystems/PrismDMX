@@ -53,10 +53,16 @@ fn options(dir: &Path) -> Options {
     Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
-        universes: 2,
+        universes: Some(2),
         mock_devices: true,
-        local: false,
-        log_level: prismd::log::Level::Warn,
+        local: Some(false),
+        // **No listener of any kind** — S37. Since the WebSocket listener is a
+        // *setting* and the setting is on, a test that said nothing would bind
+        // 127.0.0.1:7373, and the several daemon targets `cargo test` runs at
+        // once would each be asking for it. A suite must not open a socket it
+        // does not use.
+        websocket: prismd::cli::Listen::Off,
+        log_level: Some(prismd::log::Level::Warn),
         ..Options::default()
     }
 }
@@ -158,6 +164,7 @@ async fn the_ports_are_enumerated_and_the_configured_one_is_marked() {
         ports,
         configured,
         open,
+        status: _,
     } = daemon.desk().query(&Query::MidiPorts)
     else {
         panic!("Query::MidiPorts has to be answered with MidiPorts");
@@ -181,6 +188,7 @@ async fn the_ports_are_enumerated_and_the_configured_one_is_marked() {
         ports: again,
         configured,
         open,
+        status: _,
     } = daemon.desk().query(&Query::MidiPorts)
     else {
         panic!("Query::MidiPorts has to be answered with MidiPorts");

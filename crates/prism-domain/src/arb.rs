@@ -103,3 +103,15 @@ pub fn sockets(max: usize) -> impl Strategy<Value = Vec<std::net::SocketAddr>> {
         0..max,
     )
 }
+
+/// One socket address, or none.
+///
+/// [`sockets`]' reason, for the single address S37's WebSocket listener holds:
+/// `SocketAddr` has no `Arbitrary` and should not grow one, because what the
+/// domain carries is a lighting network's addresses rather than the shape of the
+/// type.
+pub fn maybe_socket() -> impl Strategy<Value = Option<std::net::SocketAddr>> {
+    proptest::option::of((any::<[u8; 4]>(), any::<u16>()).prop_map(|(octets, port)| {
+        std::net::SocketAddr::from((std::net::Ipv4Addr::from(octets), port))
+    }))
+}

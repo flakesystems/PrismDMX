@@ -82,8 +82,8 @@ sequenceDiagram
     alt version mismatch
         D-->>C: Reject { reason }
     else accepted
-        D-->>C: Snapshot { show, session, programmer, outputs, health, fixtureLibrary }
-        Note over C,D: fixtureLibrary is a *count* (S44)
+        D-->>C: Snapshot { show, session, programmer, outputs, health,<br/>fixtureLibrary, machine, showFile }
+        Note over C,D: fixtureLibrary is a *count* (S44);<br/>machine and showFile are S37's
         loop while connected
             C->>D: Command
             D-->>C: Delta
@@ -136,6 +136,69 @@ The show and the session travel as **documents** rather than as models, because 
 >
 > S27 carried the whole list here, which was right for the four built-in profiles and impossible for the two thousand S44 brought: the Open Fixture Library is 634 fixtures across 2 798 modes, which is several megabytes and would not fit in the 1 MiB frame §3 defines — and a menu of two thousand entries is not a menu. So the list is **searched** (§5.2's `SearchLibrary`) and this field is only what a client needs in order to say *2 157 profiles* beside the box. Zero is an ordinary state: it means no library is installed and the built-in profiles are all that is offered, which the daemon logs on the way up.
 
+> **The snapshot carries what this machine is set to, and which show it has
+> open** *(S37)*. `machine` is `MachineSettings` and `showFile` is
+> `ShowFileInfo`; both arrive with the world rather than being asked for, which
+> is `outputs`' reason exactly — both are state the daemon owns, both change only
+> when a command changes them, and a settings window that had to ask would draw
+> an empty panel for a round trip.
+>
+> ```typescript
+> interface MachineSettings {
+>   deskId: string;                 // the sACN CID, as canonical UUID text
+>   dataDir: string;                // read, never written — see below
+>   local: boolean;
+>   websocket: string | null;       // where it is configured
+>   websocketOpen: string | null;   // where it actually bound, or null
+>   token: string | null;           // §2.1's, shown rather than hidden
+>   logLevel: "Debug" | "Info" | "Warn" | "Error" | "Off";
+>   universes: number;
+>   exitAction: "Hold" | "Blackout";
+>   autostart: boolean;
+>   fixtureLibrary: string | null;
+>   surfaceProfile: string | null;
+>   overrides: MachineOverride[];   // which rows a flag is holding this run
+> }
+>
+> interface ShowFileInfo {
+>   path: string;
+>   recent: string[];               // most recent first, without this one
+>   unsavedChanges: boolean;
+>   recovery: boolean;              // a recovery copy is standing beside it
+>   autosaveSeconds: number;
+> }
+> ```
+>
+> **`websocket` and `websocketOpen` are two fields on purpose**, and it is S36's
+> `configured` and `open` for a MIDI port one device along: *configured here,
+> listening nowhere* is an ordinary state since S37, because a listener that
+> cannot bind is a warning and a daemon that starts. Two daemons on one machine
+> both want 7373, and refusing to start over it would let one stray process make a
+> desk unstartable half an hour before a show.
+>
+> **The token is carried rather than hidden**, because §2.1 says the daemon
+> generates it and the UI displays it: an operator who cannot read it cannot type
+> it into the phone in the auditorium, and a token nobody can read is a network
+> exposure nobody can use.
+>
+> **The data directory is read and never written.** The settings themselves are in
+> it, so a daemon told to move it would have to be told somewhere else —
+> `ARCHITECTURE_SPEC.md` §10.3 has the mechanism that would need and does not have
+> one.
+>
+> **There is no age in `ShowFileInfo`, deliberately.** S33's rule is that a status
+> a client reads carries an age rather than a time, because the daemon and a
+> browser have no shared clock; the rule one step further along is that a field
+> which would have to carry an age cannot travel in a *delta* at all, since the age
+> is stale the moment it is sent. What the autosave is really being asked is *is
+> there a recovery copy sitting beside my show*, and that is a fact rather than a
+> moment.
+>
+> Both are `#[serde(default)]`, for `OutputSnapshot`'s four S33 fields' reason: a
+> snapshot is a message rather than a file, so a client one version behind should
+> meet a missing field rather than a decode error. The interface's reader tolerates
+> the same absence from the other end.
+
 ### 4.2 Version negotiation
 
 `protocolVersion` is an integer incremented on any breaking change. A mismatch produces an explicit `Reject` with a human-readable reason, surfaced in the UI as "the interface and the engine are different versions". Undefined behaviour from a silent mismatch is unacceptable in software that controls a show.
@@ -177,7 +240,14 @@ type Command =
   | { t: "UnpatchFixture"; id: FixtureId }
   | { t: "RenumberFixture"; id: FixtureId; to: FixtureId }
   | { t: "EmbedFixtureType"; typeId: string }
-  | { t: "Oops" } | { t: "Redo" } | { t: "SaveShow" }
+  | { t: "Oops" } | { t: "Redo" }
+  // ---- The show file (S37) — only the first of the five existed before ----
+  | { t: "SaveShow" }
+  | { t: "SaveShowAs"; path: string }
+  | { t: "OpenShow"; path: string }
+  | { t: "NewShow"; path: string }
+  | { t: "ExportShow"; path: string }
+  | { t: "ImportShow"; path: string }
   // ---- Session and interface (D11) — issued by console and UI alike ----
   | { t: "SelectView"; viewId: number }
   | { t: "StoreView"; viewId: number; name: string }
@@ -198,7 +268,9 @@ type Command =
   | { t: "RemoveOutput"; id: OutputId }
   | { t: "SetOutputEnabled"; id: OutputId; enabled: boolean }
   // ---- This machine's own control surface (S36) ----
-  | { t: "SetSurfacePort"; port: string | null };
+  | { t: "SetSurfacePort"; port: string | null }
+  // ---- Everything else about this machine (S37) ----
+  | { t: "ConfigureMachine"; change: MachineChange };
 ```
 
 The second group is the concrete form of **D11**. The console and the UI draw on one vocabulary; there is no separate surface command set to keep in sync.
@@ -297,6 +369,127 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > The same rule `--mock-output` puts the four output commands under, and a
 > separate flag from it because the two are separate facts: a daemon may take its
 > rig from `machine.json` and its surface from a command line at the same time.
+
+> **Five commands for the show file, and only the first of them existed**
+> *(S37)*. `SaveShow` could write the file the daemon already had open, and
+> nothing else about a show file could be said from an interface at all: the file
+> an operator was working in was whatever `--show` had named at start-up, and
+> renaming it, opening another or making a new one meant stopping the daemon.
+>
+> ```typescript
+> | { t: "SaveShowAs"; path: string }
+> | { t: "OpenShow"; path: string }
+> | { t: "NewShow"; path: string }
+> | { t: "ExportShow"; path: string }
+> | { t: "ImportShow"; path: string }
+> ```
+>
+> **A path is validated in two places and they are different questions.**
+> `prism_core::file::show_path` decides what can be decided from the string — it
+> is not empty, it names a file rather than a bare extension, and its extension is
+> the format this command actually writes (`ShowError::NotAShowPath`). Whether the
+> file is *there*, whether it can be written and whether it is a show at all needs
+> a disk, and that is `prismd`'s. The extension check is not cosmetic: a `.prism`
+> file is a SQLite database and a `.json` export is text, so a path with the wrong
+> one would either fail obscurely or write one format under the other's name.
+>
+> **A relative path is resolved against the daemon's data directory**, and it is
+> resolved *there* rather than by a client: the two do not share a working
+> directory, and a browser on another machine has no idea what the daemon's is. An
+> absolute path is taken as it stands, which is how a show on a memory stick is
+> opened.
+>
+> Three of the five differ from each other in one careful way each:
+>
+> - **`OpenShow` never creates.** `ShowStore::open` makes a file that is not
+>   there, which is right for a daemon starting up and wrong for an operator who
+>   mistyped a name — the show they meant would still be on the disk beside the
+>   empty one they got. A path that names nothing is refused.
+> - **`NewShow` never replaces.** A *new* show over an existing one would be the
+>   most destructive command in this section and would look like the least.
+> - **`ImportShow` does not save.** The show is replaced in memory and the Save
+>   lamp is left **lit**, because an import somebody did not mean to do must be one
+>   they can walk away from.
+>
+> **None of the five is undoable**, and three of them are the reason the other two
+> are not either: `OpenShow`, `NewShow` and `ImportShow` replace the show, which
+> empties the Oops journal (`prism_core::journal` — a record is an assertion about
+> the show that was open a moment ago), and `SaveShowAs` and `ExportShow` change no
+> show state at all.
+>
+> They are **not** command-line words. `ARCHITECTURE_SPEC.md` §4.5 makes the
+> command line *the* interface and names the exceptions — the ones a line cannot
+> express — and these are in that company for `OpenWindow`'s reason: S40's grammar
+> has no noun for a file, and a path is not a word an operator types into a console
+> line.
+
+> **Everything else about this machine, and the command line stops being the
+> only way to say it** *(S37)*. S33 made the rig data and S36 made the surface
+> data; this is the rest of what `prismd` used to be told on a command line, and
+> it lands in `prism_core::MachineConfig` beside them for the same reason — a
+> school's caretaker does not edit a shortcut's arguments, and a setting that only
+> exists on a command line is one nobody can read back.
+>
+> ```typescript
+> type MachineChange =
+>   | { t: "Local"; local: boolean }
+>   | { t: "Websocket"; address: string | null }
+>   | { t: "Token"; token: string | null }
+>   | { t: "NewToken" }
+>   | { t: "LogLevel"; level: LogLevel }
+>   | { t: "Universes"; universes: number }
+>   | { t: "ExitAction"; action: "Hold" | "Blackout" }
+>   | { t: "Autostart"; autostart: boolean }
+>   | { t: "FixtureLibrary"; path: string | null }
+>   | { t: "SurfaceProfile"; path: string | null }
+>   | { t: "NewIdentity" };
+> ```
+>
+> **One field per command**, which is `OutputChange`'s rule and `CueProperty`'s
+> before it: a command carrying the whole of `MachineSettings` would make a client
+> read it, change one member and send the rest back, and two operators in two
+> settings windows would each undo the other.
+>
+> **Two of the variants carry no value, and that is the decision.** A token and a
+> desk identity both need entropy, which `prism-core` is not allowed to have — and
+> which a **client** must not supply: one would be choosing this desk's password
+> and the other would be able to give two desks one sACN CID. So the applier
+> answers with an effect, `prismd` makes the value, and §2.1's sentence — *the
+> daemon generates it and the UI displays it* — is what the protocol does rather
+> than what it hopes.
+>
+> **The listener off loopback is refused without a token**
+> (`MachineError::NoTokenForNetwork`), and it is refused by the *daemon* rather
+> than discouraged by an interface: a second client could otherwise put an
+> unauthenticated lighting console on a school's network, which is the exact thing
+> §2.1 exists to prevent. Taking the token away closes the same door from the other
+> side — the listener goes back to loopback on the port it was on, because a
+> configuration with a public listener and no token is a state this desk will not
+> be in.
+>
+> **A running daemon cannot make all of them**, and `MachineChange::needs_restart`
+> is the domain's answer to which: a listener is bound once and a frame layout is
+> built once. **A new desk identity is deliberately in that group** — an sACN
+> source that changed its CID mid-show would be a *new* source fighting the old one
+> until its 2.5 s network-data-loss timeout expires (`prism_core::desk`), so the
+> right moment for it is a start. Four are made on the spot: the log level, the
+> exit action, the autostart flag and the binding profile, where **naming the file
+> again is the reload**, so there is no second command for it.
+>
+> `Delta::MachineChanged` is what comes back, and it is built by **`prismd`**
+> rather than by the applier, unlike every other machine command's: half of what it
+> carries is the daemon's knowledge rather than the configuration's — where its
+> data directory is, what is actually listening, and which settings this run's
+> command line is holding.
+
+> **A flag is still the value for that run, and now the interface is told which**
+> *(S37)*. S33's rule for `--mock-output` and S36's for `--surface`, generalised
+> over every setting: a flag names the value for that run, the stored setting is
+> neither read nor written, and `MachineSettings.overrides` carries the list. A
+> settings window draws a held row, disables it and names the flag — because a box
+> an operator can type into that does nothing is worse than a box that is not
+> there. `prismd::cli::resolve` decides it once, so the value in force and the list
+> of held rows cannot disagree.
 
 > **A patched universe no output carries is reported, not refused**
 > (`prism_core::ShowIssue::UniverseNotOutput`): a rig is built over an afternoon,
@@ -511,7 +704,8 @@ type Query =
   | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number }
   | { t: "SearchLibrary"; text: string; limit: number }
   | { t: "StorePreview"; target: StoreTarget; mode: StoreMode }
-  | { t: "MidiPorts" };
+  | { t: "MidiPorts" }
+  | { t: "DarkUniverses" };
 
 type StoreTarget =
   | { t: "Cue"; sequenceId: SequenceId; cueNumber: string }
@@ -522,9 +716,19 @@ type Answer =
   | { t: "PatchPreview"; preview: PatchPreview }
   | { t: "LibraryMatches"; matches: LibraryEntry[]; total: number }
   | { t: "StorePreview"; preview: StorePreview }
-  | { t: "MidiPorts"; ports: MidiPortInfo[]; configured: string | null; open: string | null };
+  | { t: "MidiPorts"; ports: MidiPortInfo[]; configured: string | null;
+      open: string | null; status: SurfaceStatus | null }
+  | { t: "DarkUniverses"; universes: UniverseId[] };
 
 interface MidiPortInfo { name: string; input: boolean; output: boolean }
+
+interface SurfaceStatus {                 // S37 — what the desk is doing
+  health: "Disconnected" | "Connected" | "Live" | "Probing" | "Unresponsive";
+  remedy: string | null;                  // the daemon's words, not a client's
+  sent: number; superseded: number; touchSuppressed: number;
+  resyncs: number; reserved: number; probes: number; reconnects: number;
+  profile: string | null; boundControls: number;
+}
 
 interface StorePreview {
   accepted: boolean; refusal: string | null;
@@ -574,6 +778,40 @@ interface StorePreview {
 > build with no MIDI backend produce the same one, because from a client's side
 > they are the same fact.
 
+> **`DarkUniverses` is the variant S37 needed** *(S37)*. It is
+> `prism_core::ShowIssue::UniverseNotOutput` as a question rather than as the
+> `Delta::Notice` S33 says it with, and the two are for different moments: the
+> notice is *the rig just changed and here is what that cost*, and a settings
+> window needs the same fact **standing** — an operator opening the Outputs panel
+> has to see that universe 7 goes nowhere without having changed anything to be
+> told.
+>
+> It is a query rather than a field of the snapshot for §5.2's own rule: it is
+> **derived**, from the patch (which is the show's) and the rig (which is the
+> machine's), and a client that intersected the two would be a second opinion
+> about something `prism_core::dark_universes` already decides. That is exactly
+> the trap `PatchPreview` was built to avoid, one panel along.
+
+> **`MidiPorts` grew a fourth field** *(S37)*. `status` is what the attached desk
+> is *doing* — the health, the remedy in the daemon's own words, the six feedback
+> counters and the reconnection count, and which binding table is in force. It
+> belongs in an answer rather than in a delta because it moves continuously:
+> `sent` climbs whenever anything on the desk changes, so a delta per change would
+> be a broadcast at feedback rates about something only an open settings window is
+> looking at.
+>
+> `null` means **no surface is attached at all**, which is not the same fact as
+> one that is attached and `Disconnected`: a laptop with no port configured has
+> nothing to report, and a desk that is switched off has a health and a set of
+> counters that happen to be zero. A panel draws the two differently, so the
+> protocol tells them apart.
+>
+> The **remedy is carried as words** rather than derived from `health` by a
+> client, and that is the one field worth arguing about: the obvious advice for a
+> desk that has stopped sending is *reconnect*, and S20 established that
+> reconnecting is the one thing that cannot recover it (`docs/MCU_MAPPING.md`
+> §2.7). A client that wrote its own sentence would eventually write that one.
+
 Four rules, and the first three are what make it safe to ask one on a desk that
 is running a show:
 
@@ -608,6 +846,8 @@ type Delta =
   | { t: "PlaybackState"; playback: PlaybackId; isActive: boolean; cueIndex: number | null }
   | { t: "OutputsChanged"; outputs: OutputInstance[] }   // this machine's rig (S33)
   | { t: "SurfaceChanged"; port: string | null }  // this machine's desk (S36)
+  | { t: "MachineChanged"; settings: MachineSettings }  // its settings (S37)
+  | { t: "ShowFileChanged"; file: ShowFileInfo }        // its show file (S37)
   | { t: "OutputHealth"; outputId: OutputId; health: OutputHealth }
   | { t: "DirtyFlag"; unsavedChanges: boolean }   // drives the X-Touch Save LED
   | { t: "Notice"; level: "Info" | "Warn" | "Error"; message: string };
@@ -640,6 +880,24 @@ Deltas are ordered per connection. A client that has applied every delta since i
 > the show's. What it deliberately does **not** carry is the list of ports that
 > exist, which is `Query::MidiPorts`' answer (§5.2): a delta describes a change
 > the daemon made, and somebody plugging a desk in is not one.
+>
+> **`MachineChanged` and `ShowFileChanged` are the same shape for the rest of
+> the machine** *(S37)*: whole, because they are a handful of fields rather than a
+> document, and ignored by both mirrors because what this desk is set to and which
+> file it has open are no more show content than its cabling is.
+>
+> `MachineChanged` is built by the **daemon** rather than by
+> `MachineConfig::apply`, unlike every other machine command's delta, and the
+> reason is what it carries: the data directory, what is actually listening and
+> which settings this run's command line is holding are the daemon's knowledge and
+> not the configuration's.
+>
+> `ShowFileChanged` repeats the dirty flag that `DirtyFlag` also carries. That is
+> deliberate and it is one fact drawn in two places: the flag is what the
+> console's Save LED reads and it moves far more often, so it stays a delta of its
+> own; this one carries it so a panel that has just been told the file changed does
+> not draw a stale lamp for one round trip. A client keeps them level by letting
+> whichever arrives last win in the one place each is read.
 >
 > It says what the rig **is**; `OutputHealth` says what a driver is *doing*. A
 > row that has just arrived is `Disconnected` until its driver says otherwise,
@@ -703,4 +961,7 @@ A client is never a dependency of the engine. Disconnecting every client leaves 
 | **Queries change nothing (§5.2)** | Record a script of commands and questions off a running daemon; assert every question was answered, broadcast **no** deltas at all, and left the patch and the profiles exactly as the step before it did *(S27: `crates/prismd/tests/ui_patch.rs`. The same file asserts the harder half — that a preview is what the patch that follows it does: the address a preview called free is the address the fixture ends up at, and the overlap a preview named before the command is the overlap `Show::conflicts` reports afterwards)* |
 | **The output patch (S33)** | Twelve universes across five outputs of three kinds, configured entirely from commands against a running daemon, with **every driver a recording double** (`--mock-devices`) — each is asserted to have been given exactly the universes its row named and no others. Adding, removing and re-addressing one mid-show is asserted on the *captured frame sequence*: the outputs that did not change have no silence over 250 ms across the whole reconfiguration, which is S18's threshold. A driver that loses its device and then panics degrades alone, and the tick misses nothing over it *(S33: `crates/prismd/tests/outputs.rs`)* |
 | **A rig is not show content (S33)** | A show saved twice on a desk with a configured rig is read back as **bytes** and must not contain a node address, an adapter serial or an output name; the machine configuration beside it must contain all three, and a second start must find the rig where it left it *(S33: `crates/prism-core/tests/outputs.rs`, `crates/prismd/tests/outputs.rs`)*. The structural half is `desk.rs`'s `outputs_are_not_show_content`, written after `desk_id_is_not_show_content` |
+| **The settings, and the show file (S37)** | Every setting written from a command against a running daemon, read back out of `machine.json`, and then read back again by a **second** daemon started over the same data directory. A show saved, saved under a new name and reopened; a new show refused over a file that is there; an open refused for a file that is not; a JSON export read back over the running show with the Save lamp left lit *(S37: `crates/prismd/tests/settings.rs`, and `crates/prism-core/tests/settings.rs` for the half that needs no disk)*. The daemon these run against is the one a **venue** runs — no output flags, `--mock-devices`, the rig built with `AddOutput` — because a daemon whose outputs came off its command line refuses every machine command |
+| **A listener that cannot bind (S37)** | Bind a real socket to an address, start a daemon configured for it, and assert the daemon **runs**: `websocket` names it, `websocketOpen` is `null`, and the rig is driven throughout. The rule S36 wrote for a MIDI port that is not there, one device along, and it matters more because the listener is on by default *(S37: `crates/prismd/tests/settings.rs`)* |
+| **The settings window (S37)** | The four panels driven through the whole interface against a socket, asserting on what happens **before** the delta: a gesture, the bytes that went out, and the panel not having changed *(S37: `ui/src/settings/settingswindow.test.tsx`)*. In a browser against a real daemon: S33's five-output rig built from nothing but the window with the frame counters climbing, one output re-addressed while the other four keep sending, a show saved-as and reopened, a **second tab** seeing what the first changed, and a panel of twelve rows scrolling inside its window with the document and the canvas both reading zero *(S37: `ui/e2e/settings.spec.ts`)* |
 | Transport parity | Run the full suite over both named pipe / UDS and WebSocket; results must be identical *(S16: one suite, called three times — the third transport is the in-process duplex — plus a scripted session recorded over each and compared as bytes)* |

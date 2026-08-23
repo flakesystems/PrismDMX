@@ -134,6 +134,15 @@ pub trait ServerHandler: Send + Sync + 'static {
                 ports: Vec::new(),
                 configured: None,
                 open: None,
+                status: None,
+            },
+            // And no rig, so nothing is dark: a handler with no machine behind
+            // it has no patch to have left anywhere (S37).
+            Query::DarkUniverses => Answer::DarkUniverses {
+                universes: Vec::new(),
+            },
+            Query::OutputStatus => Answer::OutputStatus {
+                outputs: Vec::new(),
             },
             // The mode is **echoed**, not chosen: a handler with no show still
             // has to answer about the mode it was asked about, or a client
@@ -644,6 +653,8 @@ mod tests {
                     ..DaemonHealth::default()
                 },
                 fixture_library: 0,
+                machine: prism_domain::MachineSettings::default(),
+                show_file: prism_domain::ShowFileInfo::default(),
             }
         }
 

@@ -96,10 +96,14 @@ fn options(dir: &Path) -> Options {
     Options {
         data_dir: Some(dir.to_path_buf()),
         show: Some(dir.join("aula.prism")),
-        universes: 2,
+        universes: Some(2),
         outputs: vec![mock_output(1)],
-        local: true,
-        log_level: prismd::log::Level::Warn,
+        local: Some(true),
+        // No WebSocket listener: since S37 the *setting* opens one, and a
+        // recording target that said nothing would bind 127.0.0.1:7373 for the
+        // length of the run.
+        websocket: prismd::cli::Listen::Off,
+        log_level: Some(prismd::log::Level::Warn),
         ..Options::default()
     }
 }
@@ -598,7 +602,7 @@ async fn a_slow_client_loses_telemetry_and_no_commands_and_nobody_else_notices()
     common::write_wide_show(&dir.path().join("aula.prism"), common::WIDE_UNIVERSES);
 
     let mut options = options(dir.path());
-    options.universes = common::WIDE_UNIVERSES;
+    options.universes = Some(common::WIDE_UNIVERSES);
     let mut daemon = Daemon::start(&options).await.unwrap();
     let frames = daemon.recorded_outputs()[0].clone();
     let server = daemon.server().clone();

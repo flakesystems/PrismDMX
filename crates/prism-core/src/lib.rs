@@ -114,7 +114,10 @@ mod testkit;
 
 pub use command::{Applied, Effect, show_patch_ops};
 pub use conflict::{ShowIssue, dark_universes};
-pub use desk::{DeskId, InvalidDeskId, MachineConfig};
+pub use desk::{
+    DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, InvalidDeskId, MachineConfig, RECENT_SHOWS,
+    RecentShows, Settings,
+};
 pub use file::{ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
 pub use library::{DEFAULT_SEARCH_LIMIT, FixtureLibrary, MAX_SEARCH_LIMIT, generic_profiles};

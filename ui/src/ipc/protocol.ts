@@ -26,25 +26,35 @@ import type {
   Command,
   Delta,
   LibraryEntry,
+  MachineOverride,
+  MidiPortInfo,
+  MachineSettings,
   OutputHealth,
   OutputId,
   OutputInstance,
   OutputKind,
+  OutputStatusInfo,
   PatchConflict,
   PatchPreview,
   PlaybackId,
   ProgrammerState,
   Query,
+  ShowFileInfo,
+  SurfaceStatus,
   StoreMode,
   StorePreview,
 } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
+  EXIT_ACTION_VARIANTS,
   FEATURE_GROUP_VARIANTS,
+  LOG_LEVEL_VARIANTS,
+  MACHINE_OVERRIDE_VARIANTS,
   NOTICE_LEVEL_VARIANTS,
   OUTPUT_HEALTH_VARIANTS,
   PROGRAMMER_VALUE_SOURCE_VARIANTS,
   STORE_MODE_VARIANTS,
+  SURFACE_HEALTH_VARIANTS,
 } from "../bindings";
 import type { JsonPatchOp, JsonValue, ProgrammerEntry, ProgrammerValue } from "../bindings";
 import type { Payload } from "./shape";
@@ -212,6 +222,10 @@ export interface Snapshot {
    * *2 157 profiles* beside the box.
    */
   readonly fixtureLibrary: number;
+  /** What this machine is set to — S37's fourth panel. */
+  readonly machine: MachineSettings;
+  /** Which show file is open, and what the autosave is doing — S37. */
+  readonly showFile: ShowFileInfo;
 }
 
 /** Everything the daemon may send. */
@@ -374,6 +388,33 @@ export function readDelta(value: unknown, path: string): Delta {
         isActive: asBoolean(field(record, "isActive"), `${path}.isActive`),
         cueIndex: asNullable(field(record, "cueIndex"), `${path}.cueIndex`, asInteger),
       };
+    // **S33's two and S37's two, and the first pair were missing.** A daemon
+    // whose rig changed sent `OutputsChanged`, this decoder threw, and the
+    // connection resynchronised — which looked like nothing at all until S37
+    // built a panel that changes a rig from a browser. The store has handled
+    // this delta since S33; what it never had was a way through the door.
+    case "OutputsChanged":
+      return {
+        t: "OutputsChanged",
+        outputs: asArray(field(record, "outputs"), `${path}.outputs`).map((output, index) =>
+          readOutputInstance(output, `${path}.outputs[${index}]`),
+        ),
+      };
+    case "SurfaceChanged":
+      return {
+        t: "SurfaceChanged",
+        port: readOptionalString(field(record, "port"), `${path}.port`),
+      };
+    case "MachineChanged":
+      return {
+        t: "MachineChanged",
+        settings: readMachineSettings(field(record, "settings"), `${path}.settings`),
+      };
+    case "ShowFileChanged":
+      return {
+        t: "ShowFileChanged",
+        file: readShowFileInfo(field(record, "file"), `${path}.file`),
+      };
     case "OutputHealth":
       return {
         t: "OutputHealth",
@@ -491,9 +532,96 @@ export function readAnswer(value: unknown, path: string): Answer {
         ),
         total: asInteger(field(record, "total"), `${path}.total`),
       };
+    // **S36's and S37's, and the first was missing too.** `Query::MidiPorts`
+    // has existed since S36 and nothing in this interface had asked one until
+    // S37's Devices panel; an answer this decoder threw on would have looked
+    // like a daemon that sends nonsense, and the connection would have
+    // resynchronised rather than the panel drawing a list.
+    case "MidiPorts":
+      return {
+        t: "MidiPorts",
+        ports: asArray(field(record, "ports"), `${path}.ports`).map((port, index) =>
+          readMidiPortInfo(port, `${path}.ports[${index}]`),
+        ),
+        configured: readOptionalString(field(record, "configured"), `${path}.configured`),
+        open: readOptionalString(field(record, "open"), `${path}.open`),
+        status: readOptionalSurfaceStatus(field(record, "status"), `${path}.status`),
+      };
+    case "OutputStatus":
+      return {
+        t: "OutputStatus",
+        outputs: asArray(field(record, "outputs"), `${path}.outputs`).map((entry, index) =>
+          readOutputStatusInfo(entry, `${path}.outputs[${index}]`),
+        ),
+      };
+    case "DarkUniverses":
+      return {
+        t: "DarkUniverses",
+        universes: asArray(field(record, "universes"), `${path}.universes`).map(
+          (universe, index) => asInteger(universe, `${path}.universes[${index}]`),
+        ),
+      };
     default:
       throw new ProtocolFault(`${path}.t`, `an answer this build knows, not ${JSON.stringify(tag)}`);
   }
+}
+
+/**
+ * What one output's driver is doing — S37.
+ *
+ * The **configuration** is not in it and must not be: that arrives whole in
+ * `Delta::OutputsChanged` whenever it moves, and repeating a rig on the wire once
+ * a second to carry a counter would be the wrong trade twice over.
+ */
+function readOutputStatusInfo(value: unknown, path: string): OutputStatusInfo {
+  const record = asRecord(value, path);
+  return {
+    id: asInteger(field(record, "id"), `${path}.id`),
+    health: asVariant(field(record, "health"), `${path}.health`, OUTPUT_HEALTH_VARIANTS),
+    framesSent: asInteger(field(record, "framesSent"), `${path}.framesSent`),
+    lastError: readOptionalString(field(record, "lastError"), `${path}.lastError`),
+    lastErrorAgoMs: readOptionalInteger(
+      field(record, "lastErrorAgoMs"),
+      `${path}.lastErrorAgoMs`,
+    ),
+  };
+}
+
+/** One MIDI port, as the operating system offers it. */
+function readMidiPortInfo(value: unknown, path: string): MidiPortInfo {
+  const record = asRecord(value, path);
+  return {
+    name: asString(field(record, "name"), `${path}.name`),
+    input: asBoolean(field(record, "input"), `${path}.input`),
+    output: asBoolean(field(record, "output"), `${path}.output`),
+  };
+}
+
+/**
+ * What the attached surface is doing, or `null` when there is none.
+ *
+ * `null` and *disconnected* are different facts and the protocol keeps them
+ * apart: a laptop with no port configured has nothing to report, and a desk that
+ * is switched off has a health and a set of counters that happen to be zero.
+ */
+function readOptionalSurfaceStatus(value: unknown, path: string): SurfaceStatus | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const record = asRecord(value, path);
+  return {
+    health: asVariant(field(record, "health"), `${path}.health`, SURFACE_HEALTH_VARIANTS),
+    remedy: readOptionalString(field(record, "remedy"), `${path}.remedy`),
+    sent: asInteger(field(record, "sent"), `${path}.sent`),
+    superseded: asInteger(field(record, "superseded"), `${path}.superseded`),
+    touchSuppressed: asInteger(field(record, "touchSuppressed"), `${path}.touchSuppressed`),
+    resyncs: asInteger(field(record, "resyncs"), `${path}.resyncs`),
+    reserved: asInteger(field(record, "reserved"), `${path}.reserved`),
+    probes: asInteger(field(record, "probes"), `${path}.probes`),
+    reconnects: asInteger(field(record, "reconnects"), `${path}.reconnects`),
+    profile: readOptionalString(field(record, "profile"), `${path}.profile`),
+    boundControls: asInteger(field(record, "boundControls"), `${path}.boundControls`),
+  };
 }
 
 /** One profile of the desk's library, as a menu shows it. */
@@ -557,6 +685,94 @@ function readOptionalInteger(value: unknown, path: string): number | null {
   return value === undefined || value === null ? null : asInteger(value, path);
 }
 
+/**
+ * What this machine is set to — S37's fourth panel.
+ *
+ * Every field is checked rather than asserted, like every other reader here:
+ * `CLAUDE.md` forbids `any` and `as` is a claim rather than a check. The two
+ * addresses are strings on the wire (`prism_domain::socket`) and stay strings
+ * here, because what a panel does with one is print it.
+ */
+function readMachineSettings(value: unknown, path: string): MachineSettings {
+  const record = asRecord(value, path);
+  return {
+    deskId: asString(field(record, "deskId"), `${path}.deskId`),
+    dataDir: asString(field(record, "dataDir"), `${path}.dataDir`),
+    local: asBoolean(field(record, "local"), `${path}.local`),
+    websocket: readOptionalString(field(record, "websocket"), `${path}.websocket`),
+    websocketOpen: readOptionalString(field(record, "websocketOpen"), `${path}.websocketOpen`),
+    token: readOptionalString(field(record, "token"), `${path}.token`),
+    logLevel: asVariant(field(record, "logLevel"), `${path}.logLevel`, LOG_LEVEL_VARIANTS),
+    universes: asInteger(field(record, "universes"), `${path}.universes`),
+    exitAction: asVariant(
+      field(record, "exitAction"),
+      `${path}.exitAction`,
+      EXIT_ACTION_VARIANTS,
+    ),
+    autostart: asBoolean(field(record, "autostart"), `${path}.autostart`),
+    fixtureLibrary: readOptionalString(field(record, "fixtureLibrary"), `${path}.fixtureLibrary`),
+    surfaceProfile: readOptionalString(field(record, "surfaceProfile"), `${path}.surfaceProfile`),
+    // A row this build does not know is **left out** rather than refused, which
+    // is `canvas/windows.ts`'s rule for a window type: a daemon one version
+    // ahead should cost a greyed-out row, not a connection.
+    overrides: asArray(field(record, "overrides"), `${path}.overrides`).filter(
+      (entry): entry is MachineOverride =>
+        typeof entry === "string" &&
+        (MACHINE_OVERRIDE_VARIANTS as readonly string[]).includes(entry),
+    ),
+  };
+}
+
+/** The settings, or what a daemon that has none looks like. */
+function readOptionalMachineSettings(value: unknown, path: string): MachineSettings {
+  return value === undefined || value === null ? NO_MACHINE : readMachineSettings(value, path);
+}
+
+/** What a daemon one version behind says about itself, which is nothing. */
+const NO_MACHINE: MachineSettings = {
+  deskId: "",
+  dataDir: "",
+  local: false,
+  websocket: null,
+  websocketOpen: null,
+  token: null,
+  logLevel: "Info",
+  universes: 0,
+  exitAction: "Hold",
+  autostart: false,
+  fixtureLibrary: null,
+  surfaceProfile: null,
+  overrides: [],
+};
+
+/** The show file, or what a daemon that does not say looks like. */
+function readOptionalShowFileInfo(value: unknown, path: string): ShowFileInfo {
+  return value === undefined || value === null ? NO_SHOW_FILE : readShowFileInfo(value, path);
+}
+
+/** A daemon that says nothing about its show file. */
+const NO_SHOW_FILE: ShowFileInfo = {
+  path: "",
+  recent: [],
+  unsavedChanges: false,
+  recovery: false,
+  autosaveSeconds: 0,
+};
+
+/** Which show file is open, and what the autosave is doing — S37. */
+function readShowFileInfo(value: unknown, path: string): ShowFileInfo {
+  const record = asRecord(value, path);
+  return {
+    path: asString(field(record, "path"), `${path}.path`),
+    recent: asArray(field(record, "recent"), `${path}.recent`).map((entry, index) =>
+      asString(entry, `${path}.recent[${index}]`),
+    ),
+    unsavedChanges: asBoolean(field(record, "unsavedChanges"), `${path}.unsavedChanges`),
+    recovery: asBoolean(field(record, "recovery"), `${path}.recovery`),
+    autosaveSeconds: asInteger(field(record, "autosaveSeconds"), `${path}.autosaveSeconds`),
+  };
+}
+
 /** The daemon's own state. */
 function readDaemonHealth(value: unknown, path: string): DaemonHealth {
   const record = asRecord(value, path);
@@ -580,6 +796,13 @@ export function readSnapshot(value: unknown, path: string): Snapshot {
     ),
     health: readDaemonHealth(field(record, "health"), `${path}.health`),
     fixtureLibrary: asInteger(field(record, "fixtureLibrary"), `${path}.fixtureLibrary`),
+    // **Absent is a daemon one version behind, not a fault.** Both are
+    // `#[serde(default)]` on the Rust side for exactly that reason, and this is
+    // the same tolerance from the other end: a client that refused a snapshot
+    // over a settings panel would refuse to draw a desk it can otherwise drive.
+    // The rule is `OutputSnapshot`'s four S33 fields, one message out.
+    machine: readOptionalMachineSettings(field(record, "machine"), `${path}.machine`),
+    showFile: readOptionalShowFileInfo(field(record, "showFile"), `${path}.showFile`),
   };
 }
 

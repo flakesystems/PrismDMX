@@ -129,6 +129,12 @@ fn any_snapshot() -> impl Strategy<Value = Snapshot> {
             outputs,
             health,
             fixture_library: 0,
+            // Defaults rather than arbitrary values, and deliberately: the two
+            // S37 fields have round-trip properties of their own in
+            // `prism-domain`, and adding two more arbitrary trees to this
+            // strategy is what the stack budget in `wire.rs` is about.
+            machine: prism_domain::MachineSettings::default(),
+            show_file: prism_domain::ShowFileInfo::default(),
         })
 }
 

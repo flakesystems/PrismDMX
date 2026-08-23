@@ -814,6 +814,11 @@ impl Programmer {
             | Command::Oops
             | Command::Redo
             | Command::SaveShow
+            | Command::SaveShowAs { .. }
+            | Command::OpenShow { .. }
+            | Command::NewShow { .. }
+            | Command::ExportShow { .. }
+            | Command::ImportShow { .. }
             | Command::SelectView { .. }
             | Command::StoreView { .. }
             | Command::OpenWindow { .. }
@@ -831,7 +836,8 @@ impl Programmer {
             | Command::ConfigureOutput { .. }
             | Command::RemoveOutput { .. }
             | Command::SetOutputEnabled { .. }
-            | Command::SetSurfacePort { .. } => {
+            | Command::SetSurfacePort { .. }
+            | Command::ConfigureMachine { .. } => {
                 return Err(ProgrammerError::NotAProgrammerCommand);
             }
         };

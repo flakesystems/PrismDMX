@@ -46,7 +46,7 @@
 use core::fmt;
 use core::str::FromStr;
 
-use prism_domain::{Command, OutputId, OutputInstance};
+use prism_domain::{Command, ExitAction, LogLevel, MachineChange, OutputId, OutputInstance};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::command::Applied;
@@ -193,16 +193,158 @@ pub struct MachineConfig {
     /// surface rather than with an error.
     #[serde(default)]
     surface_port: Option<String>,
+    /// Everything `prismd` used to be told on a command line — S37.
+    ///
+    /// The third thing S33 predicted and the last of them: *a later session that
+    /// wants anything else about this building puts it here*. What is in it is
+    /// [`Settings`]; why it is here rather than in the show is the argument this
+    /// module has been making since S11.
+    ///
+    /// `#[serde(default)]` for the reason the two fields above it carry, and it
+    /// matters more here than it did there: a desk that had been running since
+    /// S11 would otherwise stop opening its own configuration on the day it was
+    /// updated.
+    #[serde(default)]
+    settings: Settings,
+    /// The `.prism` file this desk had open, and the ones before it — S37.
+    ///
+    /// Written when a show is opened, made or saved under a new name, so a desk
+    /// starts where it was left. Kept beside the settings rather than in them
+    /// because it is not something an operator *sets*: it is where they were.
+    #[serde(default)]
+    shows: RecentShows,
+}
+
+/// What `prismd` used to be told on its command line — S37.
+///
+/// Held as a struct of its own inside [`MachineConfig`] so that a settings file
+/// reads as three groups rather than as fifteen loose keys, and so that
+/// [`MachineConfig::apply`] has one place to write. Every field is
+/// `#[serde(default)]` by virtue of the whole struct being one, which is what
+/// lets a later session add a sixteenth without any existing desk noticing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Settings {
+    /// Whether the named pipe / Unix domain socket is opened. Default `true`.
+    pub local: bool,
+    /// Where the WebSocket listener binds, or `None` for not at all.
+    ///
+    /// **Default `Some(127.0.0.1:7373)`, and that is S37's decision.** Until
+    /// then the listener was opt-in, which meant a browser could not reach a
+    /// desk that nobody had passed a flag to — and the Web Remote (S31), the
+    /// end-to-end suite and the settings window this field is part of all speak
+    /// WebSocket. Loopback is what makes it safe to have on: `docs/IPC_PROTOCOL.md`
+    /// §2.1's rule is about reaching *off* the machine, and that still needs
+    /// both an address and a token.
+    #[serde(with = "prism_domain::socket::option")]
+    pub websocket: Option<std::net::SocketAddr>,
+    /// The §2.1 token a listener off loopback requires.
+    pub token: Option<String>,
+    /// How much the daemon logs.
+    pub log_level: LogLevel,
+    /// How many universes the frame layout carries, `1..=64`.
+    pub universes: u32,
+    /// What the stage does when the daemon is stopped on purpose.
+    pub exit_action: ExitAction,
+    /// Whether the desk starts with the machine — `ARCHITECTURE_SPEC.md` §10.3.
+    ///
+    /// Stored here and acted on by the shell (S29), which is the one process
+    /// that can write a `HKCU\…\Run` entry or a user unit. A daemon reads it
+    /// only to report it.
+    pub autostart: bool,
+    /// Where the installed fixture library is, or `None` to look beside the
+    /// executable.
+    pub fixture_library: Option<String>,
+    /// Which X-Touch binding profile is in force, or `None` for the built-in
+    /// table.
+    pub surface_profile: Option<String>,
+}
+
+impl Default for Settings {
+    /// What a desk that has never been configured runs as.
+    ///
+    /// Two of these are not zero values and both are decisions: the local
+    /// transport is **on**, because it is the one the desktop shell uses and it
+    /// touches no network at all; and the WebSocket listener is **on, on
+    /// loopback**, which is S37's change and is argued at
+    /// [`Settings::websocket`].
+    fn default() -> Self {
+        Self {
+            local: true,
+            websocket: Some(std::net::SocketAddr::from((
+                std::net::Ipv4Addr::LOCALHOST,
+                DEFAULT_WEBSOCKET_PORT,
+            ))),
+            token: None,
+            log_level: LogLevel::default(),
+            universes: DEFAULT_UNIVERSES,
+            exit_action: ExitAction::default(),
+            autostart: false,
+            fixture_library: None,
+            surface_profile: None,
+        }
+    }
+}
+
+/// The port the WebSocket listener binds unless it is told otherwise.
+pub const DEFAULT_WEBSOCKET_PORT: u16 = 7373;
+
+/// Universes the frame layout carries unless it is told otherwise — the desk's
+/// whole range.
+pub const DEFAULT_UNIVERSES: u32 = 64;
+
+/// How many shows are remembered.
+///
+/// A list an operator reads rather than an archive: eight is two more than fits
+/// on a menu without scrolling, which is the number a panel wants.
+pub const RECENT_SHOWS: usize = 8;
+
+/// The `.prism` files this desk has had open, most recent first — S37.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RecentShows {
+    /// Every show, most recent first, the current one included.
+    ///
+    /// One list rather than *the current one* and *the rest*, because the two
+    /// would have to be kept in step and the interesting question — *which shows
+    /// has this desk had open* — is answered by the list either way.
+    pub paths: Vec<String>,
+}
+
+impl RecentShows {
+    /// Puts `path` at the front, removing it from wherever it was.
+    ///
+    /// Compared as text rather than as a canonicalised path, deliberately: a
+    /// canonical form needs a file system, this crate has none, and two spellings
+    /// of one file in a menu is a smaller fault than a menu that needs a disk to
+    /// be drawn.
+    pub fn remember(&mut self, path: &str) {
+        self.paths.retain(|held| held != path);
+        self.paths.insert(0, path.to_owned());
+        self.paths.truncate(RECENT_SHOWS);
+    }
+
+    /// The shows other than `current`, most recent first.
+    #[must_use]
+    pub fn without(&self, current: &str) -> Vec<String> {
+        self.paths
+            .iter()
+            .filter(|held| held.as_str() != current)
+            .cloned()
+            .collect()
+    }
 }
 
 impl MachineConfig {
     /// A configuration for a desk that has an identity and no rig yet.
     #[must_use]
-    pub const fn new(desk_id: DeskId) -> Self {
+    pub fn new(desk_id: DeskId) -> Self {
         Self {
             desk_id,
             outputs: Vec::new(),
             surface_port: None,
+            settings: Settings::default(),
+            shows: RecentShows::default(),
         }
     }
 
@@ -247,6 +389,48 @@ impl MachineConfig {
         self.surface_port.as_deref()
     }
 
+    /// What this machine is set to — S37.
+    #[must_use]
+    pub const fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    /// The shows this desk has had open, most recent first — S37.
+    #[must_use]
+    pub const fn shows(&self) -> &RecentShows {
+        &self.shows
+    }
+
+    /// Records that a show was opened, made or saved under a new name — S37.
+    ///
+    /// Not a command and not on [`Self::apply`]'s path: which file is open is
+    /// the *daemon's* answer, because only it knows whether the path it was
+    /// given actually opened.
+    pub fn remember_show(&mut self, path: &str) {
+        self.shows.remember(path);
+    }
+
+    /// Gives this desk an identity — S37's `MachineChange::NewIdentity`,
+    /// carried out one layer up.
+    ///
+    /// `pub` rather than `pub(crate)`, unlike [`Self::set_surface_port`], and
+    /// the difference is where the value comes from: a port name travels in a
+    /// command and this does not exist until `prismd` has made it. The rule that
+    /// nothing reaches the configuration without having been a command still
+    /// holds — the command is `ConfigureMachine`, and this is the second half of
+    /// carrying it out.
+    pub fn set_desk_id(&mut self, desk_id: DeskId) {
+        self.desk_id = desk_id;
+    }
+
+    /// The §2.1 token, once `prismd` has made one — S37's
+    /// `MachineChange::NewToken`.
+    ///
+    /// [`Self::set_desk_id`]'s shape and its reason: a token needs entropy.
+    pub fn set_token(&mut self, token: &str) {
+        self.settings.token = Some(token.to_owned());
+    }
+
     /// Names the surface's port, or takes the name away.
     ///
     /// `pub(crate)` for [`Self::insert_output`]'s reason: [`Self::apply`] is the
@@ -259,6 +443,80 @@ impl MachineConfig {
             .map(str::trim)
             .filter(|name| !name.is_empty())
             .map(str::to_owned);
+    }
+
+    /// Applies one setting — S37, and [`Self::apply`] is the only door.
+    ///
+    /// # Errors
+    ///
+    /// [`MachineError`], and nothing is written after one: the two refusals are
+    /// a universe count outside the desk's range and a listener off loopback
+    /// with no token, which is `docs/IPC_PROTOCOL.md` §2.1.
+    pub(crate) fn configure(&mut self, change: &MachineChange) -> Result<(), MachineError> {
+        match change {
+            MachineChange::Local { local } => self.settings.local = *local,
+            MachineChange::Websocket { address } => {
+                // §2.1, and it is checked here rather than in an interface so a
+                // second client cannot open a school's network without one.
+                // Loopback is exempt because the rule is about reaching *off*
+                // the machine, and a token for a listener nothing outside the
+                // machine can reach would be a password on an inside door.
+                if let Some(address) = address
+                    && !address.ip().is_loopback()
+                    && self.settings.token.is_none()
+                {
+                    return Err(MachineError::NoTokenForNetwork(*address));
+                }
+                self.settings.websocket = *address;
+            }
+            // **Clearing the token closes the door it was holding open.** A
+            // configuration with a listener off loopback and no token is exactly
+            // the state the check above refuses to reach, so it must not be
+            // reachable from the other side either: the listener goes back to
+            // loopback and the operator is told by the delta that follows.
+            MachineChange::Token { token } => {
+                self.settings.token = token
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|token| !token.is_empty())
+                    .map(str::to_owned);
+                if self.settings.token.is_none() {
+                    self.close_network_listener();
+                }
+            }
+            // The daemon makes the token; nothing is written here. It is not an
+            // error and it is not a no-op — see `Effect::NewToken`.
+            MachineChange::NewToken | MachineChange::NewIdentity => {}
+            MachineChange::LogLevel { level } => self.settings.log_level = *level,
+            MachineChange::Universes { universes } => {
+                if *universes == 0 || *universes > DEFAULT_UNIVERSES {
+                    return Err(MachineError::UniverseCountOutOfRange(*universes));
+                }
+                self.settings.universes = *universes;
+            }
+            MachineChange::ExitAction { action } => self.settings.exit_action = *action,
+            MachineChange::Autostart { autostart } => self.settings.autostart = *autostart,
+            MachineChange::FixtureLibrary { path } => {
+                self.settings.fixture_library = blank_is_none(path.as_deref());
+            }
+            MachineChange::SurfaceProfile { path } => {
+                self.settings.surface_profile = blank_is_none(path.as_deref());
+            }
+        }
+        Ok(())
+    }
+
+    /// Puts the listener back on loopback when the token that was guarding it
+    /// has gone.
+    fn close_network_listener(&mut self) {
+        if let Some(address) = self.settings.websocket
+            && !address.ip().is_loopback()
+        {
+            self.settings.websocket = Some(std::net::SocketAddr::from((
+                std::net::Ipv4Addr::LOCALHOST,
+                address.port(),
+            )));
+        }
     }
 
     /// One output by number.
@@ -361,6 +619,18 @@ impl MachineConfig {
     }
 }
 
+/// A setting whose blank spelling means *not set at all*.
+///
+/// `MachineConfig::set_surface_port`'s rule, applied to the two paths: a
+/// settings window that cleared its box means *no profile*, and a stored `""`
+/// would be a path nothing can open that would still count as one.
+fn blank_is_none(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{DeskId, InvalidDeskId, MachineConfig};
@@ -427,16 +697,37 @@ mod tests {
     #[test]
     fn a_machine_configuration_is_readable_text() {
         let config = MachineConfig::new(DeskId::parse(TEXT).unwrap());
-        let json = serde_json::to_string(&config).unwrap();
-        assert_eq!(
-            json,
-            format!(r#"{{"deskId":"{TEXT}","outputs":[],"surfacePort":null}}"#)
-        );
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        // Read the way a technician reads it: the identity as a UUID, the
+        // settings as words, and the WebSocket address as an address rather
+        // than as a map of octets (`prism_domain::socket`).
+        for expected in [
+            &format!(r#""deskId": "{TEXT}""#),
+            r#""outputs": []"#,
+            r#""surfacePort": null"#,
+            r#""local": true"#,
+            r#""websocket": "127.0.0.1:7373""#,
+            r#""token": null"#,
+            r#""logLevel": "Info""#,
+            r#""universes": 64"#,
+            r#""exitAction": "Hold""#,
+            r#""autostart": false"#,
+        ] {
+            assert!(json.contains(expected), "{expected} missing from {json}");
+        }
         let back: MachineConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(back, config);
         assert_eq!(back.desk_id(), DeskId::parse(TEXT).unwrap());
         assert!(back.outputs().is_empty(), "a fresh desk has no rig yet");
         assert_eq!(back.surface_port(), None, "and no surface yet either");
+        // **The WebSocket listener is on by default, and that is S37's
+        // change.** Until then a browser could not reach a desk nobody had
+        // passed a flag to, which is not a default a school can use.
+        assert_eq!(
+            back.settings().websocket.map(|address| address.to_string()),
+            Some("127.0.0.1:7373".to_owned())
+        );
+        assert!(back.settings().local);
     }
 
     /// Every machine configuration written before S33 has no `outputs` key and

@@ -32,7 +32,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{FeatureGroup, FixtureId, MidiPortInfo, PresetId, SequenceId, UniverseId};
+use crate::{
+    FeatureGroup, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, SequenceId, SurfaceStatus,
+    UniverseId,
+};
 
 /// Two fixtures sharing DMX channels.
 ///
@@ -340,6 +343,27 @@ pub enum Query {
     /// [`crate::Delta::SurfaceChanged`] would be arithmetic to learn something
     /// the daemon can simply say.
     MidiPorts,
+    /// Which patched universes no output carries — S37.
+    ///
+    /// `prism_core::ShowIssue::UniverseNotOutput` as a question rather than as
+    /// the `Delta::Notice` S33 says it with. The notice is right for *the rig
+    /// just changed and here is what that cost*; a settings window needs the
+    /// same fact **standing** — an operator opening the Outputs panel has to
+    /// see that universe 7 goes nowhere without having changed anything to be
+    /// told.
+    ///
+    /// It is a query rather than a field of the snapshot for S27's rule: it is
+    /// **derived** — from the patch, which is the show's, and from the rig,
+    /// which is the machine's — and a client that intersected the two would be
+    /// a second opinion about something `prism_core::dark_universes` already
+    /// decides. That is the same trap `PatchPreview` was built to avoid.
+    DarkUniverses,
+    /// What each output's driver is **doing** — S37.
+    ///
+    /// See [`crate::OutputStatusInfo`] for why the counter is asked for rather
+    /// than mirrored: S33 left this as the one thing a settings window would
+    /// need and could not be told, and *asking* is the half it named.
+    OutputStatus,
 }
 
 /// The daemon's answer to a [`Query`].
@@ -400,6 +424,32 @@ pub enum Answer {
         /// `configured` in the one case that matters — the desk is named and is
         /// not there — and equal to it whenever all is well.
         open: Option<String>,
+        /// What the attached surface is doing — S37.
+        ///
+        /// `None` when no surface is attached at all, which is not the same
+        /// thing as one that is `Disconnected`: a daemon with no port
+        /// configured has nothing to report, and one whose configured desk is
+        /// switched off has a health and a set of counters that are all zero.
+        /// A panel draws the two differently, so the protocol tells them apart.
+        status: Option<SurfaceStatus>,
+    },
+    /// What each output's driver is doing, in output-number order — S37.
+    OutputStatus {
+        /// One row per **configured** output, running or not.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        outputs: Vec<OutputStatusInfo>,
+    },
+    /// The patched universes no output carries, in order — S37.
+    DarkUniverses {
+        /// Empty is the answer a correctly wired rig gives.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        universes: Vec<UniverseId>,
     },
 }
 
