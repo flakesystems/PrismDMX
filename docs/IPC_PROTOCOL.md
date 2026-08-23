@@ -442,7 +442,10 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 >   | { t: "Autostart"; autostart: boolean }
 >   | { t: "FixtureLibrary"; path: string | null }
 >   | { t: "SurfaceProfile"; path: string | null }
->   | { t: "NewIdentity" };
+>   | { t: "NewIdentity" }
+>   // ---- the control surface's table, control by control (S38) ----
+>   | { t: "SurfaceBinding"; control: BoundControl; action: SurfaceAction | null }
+>   | { t: "SurfaceLearn"; learning: boolean };
 > ```
 >
 > **One field per command**, which is `OutputChange`'s rule and `CueProperty`'s
@@ -481,6 +484,67 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > carries is the daemon's knowledge rather than the configuration's — where its
 > data directory is, what is actually listening, and which settings this run's
 > command line is holding.
+
+> **Layer 3 is edited at the desk, and it is a `MachineChange` rather than a
+> command of its own** *(S38)*. `docs/MCU_MAPPING.md` §4's binding table was read
+> once, from a file, at start-up; there was no command that read the table in
+> force and none that wrote one, so an operator who wanted a key to do something
+> else edited JSON beside the daemon and restarted it.
+>
+> It belongs in this enum **conceptually**: what this building's desk does is one
+> of this machine's settings, and `SurfaceProfile` — the *file* the table is read
+> from — has been sitting here since S37. It belongs here **structurally** as
+> well, and that half has a measurement behind it: `proptest_derive` builds one
+> `Command` value tree with a slot for every variant, and S38 measured that slot
+> at **560 bytes whatever the variant carries**, so two more commands would have
+> cost 1 120 bytes of a budget four sessions have already been surprised by.
+> `MachineChange` travels boxed inside `ConfigureMachine`, so variants here cost
+> that budget nothing. `prism_domain::wire` has the numbers.
+>
+> **One control at a time**, which is this enum's own rule and `OutputChange`'s
+> before it. A change carrying the whole table would make a client read it, alter
+> one row and send the other seventy-two back — and two operators with the editor
+> open would each undo the other. One row per change is what makes *two clients,
+> one table* a property of the protocol rather than a race nobody has run yet.
+>
+> `action: null` **unbinds** the control, and that is a state worth being able to
+> reach: §4.1 leaves the strip encoder and four of the F-keys deliberately empty.
+>
+> **The reserved control is refused** — §4.3's SMPTE/Beats, by name and with the
+> reason, before anything is written. It is refused in `prism-core` rather than
+> discouraged in an interface, for the same reason a network listener without a
+> token is: a second client must not be able to reach a state this desk will not
+> be in. Clearing it is always allowed, because unbound is the state §4.3 wants
+> it in.
+>
+> **`SurfaceLearn` is the one member of this enum that is written down nowhere.**
+> It arms the learn of `docs/MCU_MAPPING.md` §4.4 — the next control an operator
+> touches is *named* rather than obeyed — and a desk that restarted into learn
+> mode would be a desk whose keys do nothing. It is one shot, so the first
+> control disarms it and a client that went away mid-learn cannot leave the desk
+> in it.
+
+> **Where the table lives was S38's decision, and it is `MachineConfig`**
+> *(S38)*. Three places were possible — a file beside the daemon, the machine
+> configuration, or both — and `docs/MCU_MAPPING.md` §4.4 has the argument in
+> full. In short: it is the same kind of fact as the rig and the port, so a show
+> carried to another hall must not bring the last hall's F-keys; it is written by
+> one thread under one lock, which is what makes *two editors, one table*
+> structural rather than hopeful; and the shipped `profiles/surface/xtouch.json`
+> stays what a test since S22 says it is — the built-in defaults — which an
+> editor writing to it would not.
+>
+> So **a profile file is an import**. Naming one replaces the stored table;
+> `Settings::surfaceProfile` is the record of where the table came from rather
+> than where it lives. The alternative — the file winning at every start — has
+> one unacceptable consequence: an operator who rebound a key at the desk would
+> find it back the way it was the next morning.
+>
+> This splits S22's rule in two, and both halves are it. *A malformed profile
+> never blocks anything* now means **the table in force stands**, which for a
+> desk that has never been edited is the built-in default and for one that has is
+> its own — because throwing an operator's work away over a typo in a file would
+> be the one outcome worse than ignoring the file.
 
 > **A flag is still the value for that run, and now the interface is told which**
 > *(S37)*. S33's rule for `--mock-output` and S36's for `--surface`, generalised
@@ -705,7 +769,9 @@ type Query =
   | { t: "SearchLibrary"; text: string; limit: number }
   | { t: "StorePreview"; target: StoreTarget; mode: StoreMode }
   | { t: "MidiPorts" }
-  | { t: "DarkUniverses" };
+  | { t: "DarkUniverses" }
+  | { t: "OutputStatus" }
+  | { t: "SurfaceBindings" };
 
 type StoreTarget =
   | { t: "Cue"; sequenceId: SequenceId; cueNumber: string }
@@ -718,7 +784,17 @@ type Answer =
   | { t: "StorePreview"; preview: StorePreview }
   | { t: "MidiPorts"; ports: MidiPortInfo[]; configured: string | null;
       open: string | null; status: SurfaceStatus | null }
-  | { t: "DarkUniverses"; universes: UniverseId[] };
+  | { t: "DarkUniverses"; universes: UniverseId[] }
+  | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
+      profile: string | null; revision: number; learning: boolean };
+
+interface SurfaceControl {               // S38 — one row of the binding table
+  control: BoundControl;                 // which control
+  name: string;                          // §4.2's `control` string
+  action: SurfaceAction | null;          // what it does now
+  permanent: boolean;                    // §4.3: ours in the combined mode?
+  reserved: boolean;                     // §4.3: may never be bound
+}
 
 interface MidiPortInfo { name: string; input: boolean; output: boolean }
 
@@ -812,6 +888,29 @@ interface StorePreview {
 > reconnecting is the one thing that cannot recover it (`docs/MCU_MAPPING.md`
 > §2.7). A client that wrote its own sentence would eventually write that one.
 
+> **`SurfaceBindings` is the variant S38 needed** *(S38)*. It answers what a
+> desk's keys **do**, and it is a question for this section's own rule: the table
+> in force is **derived** — `docs/MCU_MAPPING.md` §4.1's built-in defaults, or a
+> profile read into this machine's rows, or the rows an operator has typed since
+> — and a client that layered those three for itself would be a second opinion
+> about something `prism_surface::Bindings` already decides. That is the trap
+> `PatchPreview` was built to avoid, one panel along.
+>
+> It is not a field of the snapshot for `SurfaceStatus`' reason: seventy-three
+> rows are only ever looked at by an open control editor, and a handshake that
+> carried them would pay for them on every connection.
+>
+> Each row carries **two facts the table does not have**, and they are the device
+> profile's: whether the control keeps reaching PrismDMX in the combined Xctl+MC
+> mode (§4.3), and whether it may be bound at all. A client holds no profile, and
+> an interface that guessed would tell an operator that a key is always in reach
+> when it is not — which is precisely the mistake §4.3 exists to prevent.
+>
+> `revision` is **echoed** from the daemon's own counter, exactly as
+> `StorePreview` echoes the mode it was asked about: it is what lets an editor
+> tell a current answer from one overtaken in flight, and what lets two clients
+> say out loud that they are holding the same table.
+
 Four rules, and the first three are what make it safe to ask one on a desk that
 is running a show:
 
@@ -846,6 +945,9 @@ type Delta =
   | { t: "PlaybackState"; playback: PlaybackId; isActive: boolean; cueIndex: number | null }
   | { t: "OutputsChanged"; outputs: OutputInstance[] }   // this machine's rig (S33)
   | { t: "SurfaceChanged"; port: string | null }  // this machine's desk (S36)
+  | { t: "SurfaceBindingsChanged"; revision: number }              // its table (S38)
+  | { t: "SurfaceLearnChanged"; learning: boolean;
+      control: BoundControl | null }                               // and its learn (S38)
   | { t: "MachineChanged"; settings: MachineSettings }  // its settings (S37)
   | { t: "ShowFileChanged"; file: ShowFileInfo }        // its show file (S37)
   | { t: "OutputHealth"; outputId: OutputId; health: OutputHealth }
@@ -881,6 +983,25 @@ Deltas are ordered per connection. A client that has applied every delta since i
 > exist, which is `Query::MidiPorts`' answer (§5.2): a delta describes a change
 > the daemon made, and somebody plugging a desk in is not one.
 >
+> **`SurfaceBindingsChanged` carries a change token rather than the table**
+> *(S38)*. `SurfaceChanged`'s shape for what the desk's keys *do*, and for that
+> delta's reason exactly: the table is seventy-three rows that only an open
+> editor is looking at, and it is derived, so it is **asked for**
+> (`Query::SurfaceBindings`) and this is what says asking again is worth it.
+>
+> The revision is what makes *two clients, one table* something a test can assert
+> rather than something a design hopes for: both editors are told the same
+> number, and an answer naming an older one has been overtaken.
+>
+> **`SurfaceLearnChanged` is broadcast, and that is the decision in it** *(S38)*.
+> There is one desk, so there is one learn: two editors must not both believe
+> they have armed it, and the operator standing at the console pressing a key has
+> no idea which browser asked. It is the argument `ARCHITECTURE_SPEC.md` §4 makes
+> for the active view, applied to a mode instead of a layout. The two moments are
+> one variant because they are one fact read at two times — arming is
+> `{ learning: true, control: null }` and a control being named is
+> `{ learning: false, control: … }`, because learn is one shot.
+
 > **`MachineChanged` and `ShowFileChanged` are the same shape for the rest of
 > the machine** *(S37)*: whole, because they are a handful of fields rather than a
 > document, and ignored by both mirrors because what this desk is set to and which

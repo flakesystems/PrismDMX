@@ -124,6 +124,15 @@ round_trip! {
     machine_settings => crate::MachineSettings,
     show_file_info => crate::ShowFileInfo,
 
+    strip_button => crate::StripButton,
+    global_button => crate::GlobalButton,
+    bound_control => crate::BoundControl,
+    executor_target => crate::ExecutorTarget,
+    step => crate::Step,
+    surface_action => crate::SurfaceAction,
+    surface_binding => crate::SurfaceBinding,
+    surface_control => crate::SurfaceControl,
+
     playback_id => crate::PlaybackId,
     playback_target => crate::PlaybackTarget,
     object_ref => crate::ObjectRef,
@@ -219,17 +228,96 @@ fn every_exported_type_has_a_round_trip_property() {
 /// **A session that fails this boxes a field.** `RUST_MIN_STACK` only moves the
 /// cliff a few variants along, and it moves it in one crate rather than in the
 /// four that generate commands.
+///
+/// # What S38 measured, and why `Command` was the wrong thing to watch
+///
+/// The cost is **560 bytes per variant, whatever the variant carries**: two bare
+/// unit variants added to `Command` took its tree from 32 144 to 33 264. So the
+/// tree grows with the *number* of alternatives and not with their payloads, and
+/// four sessions' remedy — box the fat field — buys nothing once every fat field
+/// is a pointer.
+///
+/// Two things follow, and the second is the one that bit.
+///
+/// **A new command is expensive and a new `MachineChange` is free.** S38 wanted
+/// to say two new things about the desk and put both in [`crate::MachineChange`],
+/// which travels boxed inside `Command::ConfigureMachine`: `Command`'s tree is
+/// unchanged at 30 992, and the protocol is better for it — what a desk's keys do
+/// is one of this machine's settings, beside the profile file they used to be
+/// read from.
+///
+/// **A wide unit enum is the expensive thing, and it is invisible from here.**
+/// `GlobalButton` is sixty-four buttons carrying nothing, and its derived tree
+/// was **36 064 bytes** — larger than the whole of `Command`. Everything holding
+/// one inherited it (`BoundControl` 41 200, `MachineChange` 81 440), and
+/// `prism-core`'s `tests/command_application.rs` and `tests/oops.rs` both
+/// overflowed a debug test thread with this test green and `Command` unmoved at
+/// 30 992. `crate::arb::boxed` cannot reach that: boxing a field replaces the
+/// subtree with a pointer but the subtree is still *built* as a local before the
+/// box takes it, so a 36 KB tree behind a pointer is a 36 KB frame at generation
+/// time.
+///
+/// What reaches it is **not having the tree**:
+/// `crate::arb::arbitrary_from_list` maps a range onto the enum's own `ALL`, and
+/// it is applied to every unit enum wide enough to matter. Measured, before and
+/// after: `GlobalButton` 36 064 → 16, `AttributeType` 8 464 → 16, `WindowType`
+/// 6 224 → 16, `ExecutorButtonFunction` 4 512 → 16, `FeatureGroup` 2 832 → 16,
+/// and with them `BoundControl` 41 200 → 3 392 and `ExecutorButtonRef`
+/// 5 120 → 1 152. **A session adding a unit enum with more than a handful of
+/// variants should reach for that macro**, and one adding a payload should still
+/// reach for `boxed`.
+///
+/// # The budget is the measured figure since S38, not a round number above it
+///
+/// S37 set it at 32 KiB, which sat **above** the largest tree that had ever been
+/// shown to be safe: the two numbers it measured were 36 160 (overflows) and
+/// 30 992 (does not), and 32 768 is in the gap between them where nothing had
+/// been tried. S38 landed in that gap — a `Command` tree of **32 144** bytes,
+/// this test green, and `prism-core`'s `tests/command_application.rs`
+/// overflowing exactly as before. A budget above the demonstrated ceiling is a
+/// budget that reports a pass for a build that does not run.
+///
+/// So it is 30 992 now: the largest tree this repository has ever *run* the
+/// whole suite on. A session that fails by a few hundred bytes has genuinely
+/// used up the headroom and has to box a field, which is the outcome this test
+/// exists to force.
+///
+/// # It watches all four wire enums since S38
+///
+/// S37 wrote it for `Command` and `Delta`, which were the two that had ever
+/// overflowed. S38 added a control editor and `Answer` went over the cliff
+/// *while this test was green* — the offender was
+/// `Answer::SurfaceBindings`'s `Vec<SurfaceControl>`, whose element carries a
+/// `BoundControl` and therefore a sixty-four-variant `GlobalButton`. A budget
+/// that watches two of the four things that can break is a budget that reports
+/// half the problem, so it watches all four now and names the one that is over.
 #[test]
-fn a_generated_command_fits_in_a_test_thread() {
-    const BUDGET: usize = 32 * 1024;
-    let command = size_of::<<<crate::Command as Arbitrary>::Strategy as Strategy>::Tree>();
-    let delta = size_of::<<<crate::Delta as Arbitrary>::Strategy as Strategy>::Tree>();
-    assert!(
-        command <= BUDGET,
-        "a Command value tree is {command} bytes, over the {BUDGET}-byte budget:          box a field's strategy with crate::arb::boxed"
-    );
-    assert!(
-        delta <= BUDGET,
-        "a Delta value tree is {delta} bytes, over the {BUDGET}-byte budget"
-    );
+fn a_generated_wire_value_fits_in_a_test_thread() {
+    // Measured rather than rounded — see above. 36 160 overflows `prism-core`'s
+    // `tests/command_application.rs`; 30 992 is what the whole suite runs on.
+    const BUDGET: usize = 30_992;
+    let sizes = [
+        (
+            "Command",
+            size_of::<<<crate::Command as Arbitrary>::Strategy as Strategy>::Tree>(),
+        ),
+        (
+            "Delta",
+            size_of::<<<crate::Delta as Arbitrary>::Strategy as Strategy>::Tree>(),
+        ),
+        (
+            "Query",
+            size_of::<<<crate::Query as Arbitrary>::Strategy as Strategy>::Tree>(),
+        ),
+        (
+            "Answer",
+            size_of::<<<crate::Answer as Arbitrary>::Strategy as Strategy>::Tree>(),
+        ),
+    ];
+    for (name, size) in sizes {
+        assert!(
+            size <= BUDGET,
+            "a {name} value tree is {size} bytes, over the {BUDGET}-byte budget:              box a field's strategy with crate::arb::boxed"
+        );
+    }
 }

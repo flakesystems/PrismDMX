@@ -267,6 +267,28 @@ pub enum Effect {
     /// [`Self::NewDeskIdentity`]'s reason exactly, and one more: a **client**
     /// that chose the token would be choosing this desk's password.
     NewToken,
+    /// One control of the surface should do something else — S38.
+    ///
+    /// [`Self::NewToken`]'s shape and its reason one value along: the answer has
+    /// to be made somewhere this crate cannot reach. A token needs entropy; a
+    /// binding **table** needs `docs/MCU_MAPPING.md` §4.1's built-in defaults,
+    /// which live in `prism_surface::Bindings` — a MIDI codec, and the show model
+    /// may not depend on one. So `prism-core` refuses what it can refuse (the
+    /// reserved control, `prism_domain::RESERVED_BUTTONS`), answers with this,
+    /// and `prismd` puts the row on the table in force and writes the whole of it
+    /// back through `MachineConfig::set_surface_bindings`.
+    SurfaceBinding {
+        /// Which control.
+        control: prism_domain::BoundControl,
+        /// What it should do, or nothing at all.
+        action: Option<prism_domain::SurfaceAction>,
+    },
+    /// Learn was armed or given up on — S38.
+    ///
+    /// Carries no configuration change at all, and that is the point: a desk that
+    /// restarted into learn mode would be a desk with no keys. The mode belongs
+    /// to the run, so the daemon holds it and `machine.json` never hears of it.
+    SurfaceLearn(bool),
 }
 
 /// What applying a command produced.

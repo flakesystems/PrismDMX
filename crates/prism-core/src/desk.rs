@@ -46,7 +46,9 @@
 use core::fmt;
 use core::str::FromStr;
 
-use prism_domain::{Command, ExitAction, LogLevel, MachineChange, OutputId, OutputInstance};
+use prism_domain::{
+    Command, ExitAction, LogLevel, MachineChange, OutputId, OutputInstance, SurfaceBinding,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::command::Applied;
@@ -206,6 +208,31 @@ pub struct MachineConfig {
     /// updated.
     #[serde(default)]
     settings: Settings,
+    /// What this building's control surface's keys **do** — S38.
+    ///
+    /// Layer 3 of `docs/MCU_MAPPING.md` §4, stored here for the port's reason
+    /// one step along: the desk in the rack belongs to the building, and so does
+    /// what somebody has made its keys do. A show carried to another hall on a
+    /// stick must not arrive with the last hall's F-keys on it.
+    ///
+    /// `None` is *this desk has never been told* — the built-in defaults, or
+    /// whatever profile file the settings name, are what is in force. It is not
+    /// the same as `Some(vec![])`, which is a table an operator has deliberately
+    /// emptied, and a desk whose keys do nothing is a legitimate thing to ask
+    /// for.
+    ///
+    /// **A file is an import rather than a live source**, and that is S38's
+    /// decision. Naming a profile reads it *into* this field; from then on this
+    /// is the table and `Settings::surface_profile` is only the record of where
+    /// it came from. The alternative — the file winning at every start — would
+    /// mean an operator who rebound a key at the desk found it back the way it
+    /// was the next morning, which is the one outcome an editor may not have.
+    ///
+    /// `#[serde(default)]` for the three fields above it's reason: every
+    /// machine configuration written before S38 has no such key, and one of them
+    /// must open with no table rather than with an error.
+    #[serde(default)]
+    surface_bindings: Option<Vec<SurfaceBinding>>,
     /// The `.prism` file this desk had open, and the ones before it — S37.
     ///
     /// Written when a show is opened, made or saved under a new name, so a desk
@@ -344,6 +371,7 @@ impl MachineConfig {
             outputs: Vec::new(),
             surface_port: None,
             settings: Settings::default(),
+            surface_bindings: None,
             shows: RecentShows::default(),
         }
     }
@@ -445,6 +473,26 @@ impl MachineConfig {
             .map(str::to_owned);
     }
 
+    /// What this building's surface's keys do, or `None` for *never told* — S38.
+    #[must_use]
+    pub fn surface_bindings(&self) -> Option<&[SurfaceBinding]> {
+        self.surface_bindings.as_deref()
+    }
+
+    /// Writes the whole table down — S38.
+    ///
+    /// `pub` rather than `pub(crate)`, unlike [`Self::insert_output`], and for
+    /// [`Self::set_token`]'s reason exactly: the value has to be made somewhere
+    /// this crate cannot reach. A token needs entropy; a **table** needs the
+    /// built-in defaults of `docs/MCU_MAPPING.md` §4.1, and those live in
+    /// `prism_surface::Bindings` — a MIDI codec, which the show model must never
+    /// depend on. So `Command::SetSurfaceBinding` is validated here, answers with
+    /// [`crate::Effect::SurfaceBinding`], and `prismd` puts the row on the table
+    /// in force and hands the whole of it back through this door.
+    pub fn set_surface_bindings(&mut self, rows: Vec<SurfaceBinding>) {
+        self.surface_bindings = Some(rows);
+    }
+
     /// Applies one setting — S37, and [`Self::apply`] is the only door.
     ///
     /// # Errors
@@ -502,6 +550,19 @@ impl MachineConfig {
             MachineChange::SurfaceProfile { path } => {
                 self.settings.surface_profile = blank_is_none(path.as_deref());
             }
+            // S38, and both write **nothing here** — see `crate::outputs::apply`,
+            // which turns them into effects the daemon carries out. What this arm
+            // is for is the one thing that can be decided without the built-in
+            // table: **the reserved control is refused before anything is
+            // written**, by name and with the reason. Clearing it is allowed,
+            // because unbound is the state `docs/MCU_MAPPING.md` §4.3 wants it
+            // in.
+            MachineChange::SurfaceBinding { control, action } => {
+                if let (Some(button), Some(_)) = (control.reserved(), action) {
+                    return Err(MachineError::ReservedControl(button));
+                }
+            }
+            MachineChange::SurfaceLearn { .. } => {}
         }
         Ok(())
     }

@@ -26,7 +26,6 @@ pub const SPEED_UNITY: u16 = 1_024;
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
 )]
-#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 pub enum ExecutorButtonFunction {
     /// Nothing assigned.
     #[default]
@@ -373,3 +372,24 @@ mod tests {
         );
     }
 }
+
+impl ExecutorButtonFunction {
+    /// Every function a key can be given, so a test — and the control editor's
+    /// chooser — walks the whole set rather than the ones somebody remembered.
+    ///
+    /// Added in S38, and it is also this enum's proptest strategy
+    /// (`crate::arb::arbitrary_from_list`).
+    pub const ALL: [Self; 8] = [
+        Self::Empty,
+        Self::GoForward,
+        Self::GoBack,
+        Self::LearnSpeed,
+        Self::Off,
+        Self::On,
+        Self::Flash,
+        Self::Toggle,
+    ];
+}
+
+#[cfg(any(test, feature = "proptest"))]
+crate::arb::arbitrary_from_list!(ExecutorButtonFunction);

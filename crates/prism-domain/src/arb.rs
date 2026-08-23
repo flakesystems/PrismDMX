@@ -77,6 +77,122 @@ where
     any::<T>().boxed()
 }
 
+/// A unit enum's strategy as an **index into its own list**, rather than as an
+/// N-way union.
+///
+/// # This is a stack budget, and it is a bigger one than [`boxed`] can reach
+///
+/// `proptest_derive` builds one value tree with a slot for **every** variant,
+/// and S38 measured that slot at **560 bytes whatever the variant carries** — a
+/// bare unit variant costs the same as one with a payload. That makes a wide
+/// enum of *nothing* the most expensive thing in the crate: `GlobalButton` is
+/// sixty-four buttons carrying no data and its derived tree was **36 064
+/// bytes**, larger than the whole of [`crate::Command`].
+///
+/// Everything holding one inherits it, and [`boxed`] cannot help: boxing a field
+/// replaces that field's subtree with a pointer, but the subtree is still
+/// **built** — `new_tree` constructs it as a local before the box takes it — so a
+/// 36 KB tree behind a pointer is still a 36 KB frame at generation time. What
+/// reaches it is not having the tree.
+///
+/// It is also the **better generator**, which is worth saying so it does not read
+/// as a workaround: the derive weights variants equally by construction and so
+/// does this, and a variant added to the enum joins the strategy by joining
+/// `ALL` rather than by being remembered.
+///
+/// **Applied to every unit enum wide enough to matter**, so the budget in
+/// `crate::wire` stops being a cliff a session can walk off by adding a name.
+macro_rules! arbitrary_from_list {
+    ($ty:ty) => {
+        #[cfg(any(test, feature = "proptest"))]
+        impl proptest::arbitrary::Arbitrary for $ty {
+            type Parameters = ();
+            type Strategy = proptest::strategy::BoxedStrategy<Self>;
+
+            fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
+                use proptest::strategy::Strategy as _;
+                (0..<$ty>::ALL.len())
+                    .prop_map(|index| <$ty>::ALL[index])
+                    .boxed()
+            }
+        }
+    };
+}
+
+pub(crate) use arbitrary_from_list;
+
+/// One of the surface's controls, as an index into [`crate::BoundControl::all`].
+///
+/// [`arbitrary_from_list`]'s trick for a type that is **not** a unit enum: the
+/// list is not the variants, it is the seventy-three controls a desk has, and
+/// indexing it is a `u32` tree rather than a nest of unions. Coverage is
+/// unchanged — every control is reachable — and `crate::wire`'s
+/// `bound_control` property still walks the type's own full space.
+pub fn a_control() -> BoxedStrategy<crate::BoundControl> {
+    let controls = crate::BoundControl::all();
+    (0..controls.len())
+        .prop_map(move |index| controls[index])
+        .boxed()
+}
+
+/// One thing a control can be made to do, or nothing.
+///
+/// **Narrowed on purpose, and this is the trade.** `SurfaceAction` is seventeen
+/// variants and its derived value tree is 16 176 bytes; built inside
+/// `Command::ConfigureMachine`'s subtree it is enough to tip `prism-core`'s
+/// `tests/oops.rs` over a debug test thread's stack — S38 measured exactly that,
+/// twice. This list carries **every variant** with one representative payload,
+/// so what is narrowed is the *combinations* rather than the vocabulary, and
+/// `crate::wire`'s `surface_action` property still walks the type's own full
+/// space with nothing else on the frame.
+pub fn an_action() -> BoxedStrategy<Option<crate::SurfaceAction>> {
+    use crate::SurfaceAction as A;
+    use crate::{ExecutorTarget, Step};
+    const ACTIONS: [Option<A>; 18] = [
+        None,
+        Some(A::ExecutorMaster {
+            target: ExecutorTarget::Strip,
+        }),
+        Some(A::ExecutorGo {
+            target: ExecutorTarget::Selected,
+            direction: crate::GoDirection::Next,
+        }),
+        Some(A::ExecutorOff {
+            target: ExecutorTarget::Strip,
+        }),
+        Some(A::ExecutorButton {
+            target: ExecutorTarget::Strip,
+            button: crate::ExecutorButtonRef::Slot { index: 0 },
+        }),
+        Some(A::SelectExecutor {
+            target: ExecutorTarget::Strip,
+        }),
+        Some(A::ClearProgrammer),
+        Some(A::ExecutorPage { delta: -1 }),
+        Some(A::SelectView {
+            view: crate::ViewId::new(1),
+        }),
+        Some(A::StepView {
+            direction: Step::Next,
+        }),
+        Some(A::ProgrammerPage { delta: 1 }),
+        Some(A::SelectProgrammerParam {
+            direction: crate::ParamDirection::Prev,
+        }),
+        Some(A::AdjustParameter),
+        Some(A::SetEncoderBank {
+            group: crate::FeatureGroup::Color,
+        }),
+        Some(A::OpenWindow {
+            window: crate::WindowType::Patch,
+        }),
+        Some(A::SaveShow),
+        Some(A::Oops),
+        Some(A::Redo),
+    ];
+    (0..ACTIONS.len()).prop_map(|index| ACTIONS[index]).boxed()
+}
+
 /// A map of between one and `max` arbitrary entries.
 ///
 /// For nested maps whose inner map must not be empty — see the invariant on

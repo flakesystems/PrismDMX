@@ -144,6 +144,16 @@ pub trait ServerHandler: Send + Sync + 'static {
             Query::OutputStatus => Answer::OutputStatus {
                 outputs: Vec::new(),
             },
+            // And no surface, so no table. An empty list is the same shape a
+            // desk with a table gives and is the honest answer for a handler
+            // that has never had one (S38).
+            Query::SurfaceBindings => Answer::SurfaceBindings {
+                controls: Vec::new(),
+                device: String::new(),
+                profile: None,
+                revision: 0,
+                learning: false,
+            },
             // The mode is **echoed**, not chosen: a handler with no show still
             // has to answer about the mode it was asked about, or a client
             // would draw a refusal beside a word nobody typed (S39).

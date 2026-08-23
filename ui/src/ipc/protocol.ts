@@ -23,8 +23,11 @@
 
 import type {
   Answer,
+  BoundControl,
   Command,
   Delta,
+  ExecutorButtonRef,
+  ExecutorTarget,
   LibraryEntry,
   MachineOverride,
   MidiPortInfo,
@@ -40,21 +43,31 @@ import type {
   ProgrammerState,
   Query,
   ShowFileInfo,
+  SurfaceAction,
+  SurfaceControl,
   SurfaceStatus,
   StoreMode,
   StorePreview,
 } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
+  EXECUTOR_BUTTON_FUNCTION_VARIANTS,
+  EXECUTOR_TARGET_VARIANTS,
   EXIT_ACTION_VARIANTS,
   FEATURE_GROUP_VARIANTS,
+  GLOBAL_BUTTON_VARIANTS,
+  GO_DIRECTION_VARIANTS,
   LOG_LEVEL_VARIANTS,
   MACHINE_OVERRIDE_VARIANTS,
   NOTICE_LEVEL_VARIANTS,
   OUTPUT_HEALTH_VARIANTS,
+  PARAM_DIRECTION_VARIANTS,
   PROGRAMMER_VALUE_SOURCE_VARIANTS,
+  STEP_VARIANTS,
   STORE_MODE_VARIANTS,
+  STRIP_BUTTON_VARIANTS,
   SURFACE_HEALTH_VARIANTS,
+  WINDOW_TYPE_VARIANTS,
 } from "../bindings";
 import type { JsonPatchOp, JsonValue, ProgrammerEntry, ProgrammerValue } from "../bindings";
 import type { Payload } from "./shape";
@@ -405,6 +418,23 @@ export function readDelta(value: unknown, path: string): Delta {
         t: "SurfaceChanged",
         port: readOptionalString(field(record, "port"), `${path}.port`),
       };
+    // **S38's two, and S37 is why they are written the same day the panel is.**
+    // A delta with no caller is a decoder arm nobody writes: `readDelta` had no
+    // `OutputsChanged` and no `SurfaceChanged` until a browser could change a
+    // rig, and a daemon that sent one would have faulted the connection. So the
+    // control editor's two arrive with the editor, and `ui_session` sends both
+    // in a recording.
+    case "SurfaceBindingsChanged":
+      return {
+        t: "SurfaceBindingsChanged",
+        revision: asInteger(field(record, "revision"), `${path}.revision`),
+      };
+    case "SurfaceLearnChanged":
+      return {
+        t: "SurfaceLearnChanged",
+        learning: asBoolean(field(record, "learning"), `${path}.learning`),
+        control: readOptionalBoundControl(field(record, "control"), `${path}.control`),
+      };
     case "MachineChanged":
       return {
         t: "MachineChanged",
@@ -561,9 +591,172 @@ export function readAnswer(value: unknown, path: string): Answer {
           (universe, index) => asInteger(universe, `${path}.universes[${index}]`),
         ),
       };
+    // S38. The table in force, one row per control the surface has - see
+    // `readSurfaceControl` for the two fields on each row that are the device
+    // profile's rather than the table's.
+    case "SurfaceBindings":
+      return {
+        t: "SurfaceBindings",
+        controls: asArray(field(record, "controls"), `${path}.controls`).map((entry, index) =>
+          readSurfaceControl(entry, `${path}.controls[${index}]`),
+        ),
+        device: asString(field(record, "device"), `${path}.device`),
+        profile: readOptionalString(field(record, "profile"), `${path}.profile`),
+        revision: asInteger(field(record, "revision"), `${path}.revision`),
+        learning: asBoolean(field(record, "learning"), `${path}.learning`),
+      };
     default:
       throw new ProtocolFault(`${path}.t`, `an answer this build knows, not ${JSON.stringify(tag)}`);
   }
+}
+
+/**
+ * One control of the surface, as the control editor draws it — S38.
+ *
+ * `permanent` and `reserved` are **not** derived here and must not be: both are
+ * properties of the device profile (`docs/MCU_MAPPING.md` §4.3) and this client
+ * holds none. Telling an operator that a key is always in reach while the desk
+ * is showing the sound console is exactly the mistake that section exists to
+ * prevent, so the daemon is asked.
+ *
+ * The `action` is decoded rather than trusted: it arrives as a tagged union with
+ * as many shapes as the vocabulary has, and `CLAUDE.md` forbids `as`.
+ */
+function readSurfaceControl(value: unknown, path: string): SurfaceControl {
+  const record = asRecord(value, path);
+  return {
+    control: readBoundControl(field(record, "control"), `${path}.control`),
+    name: asString(field(record, "name"), `${path}.name`),
+    action: readOptionalSurfaceAction(field(record, "action"), `${path}.action`),
+    permanent: asBoolean(field(record, "permanent"), `${path}.permanent`),
+    reserved: asBoolean(field(record, "reserved"), `${path}.reserved`),
+  };
+}
+
+/** Which control a binding names — `docs/MCU_MAPPING.md` §4.2's control list. */
+function readBoundControl(value: unknown, path: string): BoundControl {
+  const record = asRecord(value, path);
+  const tag = asString(field(record, "t"), `${path}.t`);
+  switch (tag) {
+    case "StripFader":
+    case "StripEncoder":
+    case "MainFader":
+    case "Jog":
+      return { t: tag };
+    case "StripButton":
+      return {
+        t: "StripButton",
+        button: asVariant(field(record, "button"), `${path}.button`, STRIP_BUTTON_VARIANTS),
+      };
+    case "Global":
+      return {
+        t: "Global",
+        button: asVariant(field(record, "button"), `${path}.button`, GLOBAL_BUTTON_VARIANTS),
+      };
+    default:
+      throw new ProtocolFault(`${path}.t`, `a control this build knows, not ${JSON.stringify(tag)}`);
+  }
+}
+
+/** What a control does, or nothing at all. */
+function readOptionalSurfaceAction(value: unknown, path: string): SurfaceAction | null {
+  return value === null || value === undefined ? null : readSurfaceAction(value, path);
+}
+
+/**
+ * What a control does — the whole vocabulary of `docs/MCU_MAPPING.md` §4.
+ *
+ * Written out arm by arm rather than cast, for the reason every decoder in this
+ * file is: what arrives off a socket is `unknown`, and a union with seventeen
+ * shapes is seventeen chances for a daemon one version ahead to hand this build
+ * a field it does not have.
+ */
+function readSurfaceAction(value: unknown, path: string): SurfaceAction {
+  const record = asRecord(value, path);
+  const tag = asString(field(record, "t"), `${path}.t`);
+  const target = (): ExecutorTarget =>
+    asVariant(field(record, "target"), `${path}.target`, EXECUTOR_TARGET_VARIANTS);
+  switch (tag) {
+    case "ExecutorMaster":
+    case "ExecutorOff":
+    case "SelectExecutor":
+      return { t: tag, target: target() };
+    case "ExecutorGo":
+      return {
+        t: "ExecutorGo",
+        target: target(),
+        direction: asVariant(field(record, "direction"), `${path}.direction`, GO_DIRECTION_VARIANTS),
+      };
+    case "ExecutorButton":
+      return {
+        t: "ExecutorButton",
+        target: target(),
+        button: readExecutorButtonRef(field(record, "button"), `${path}.button`),
+      };
+    case "ClearProgrammer":
+    case "AdjustParameter":
+    case "SaveShow":
+    case "Oops":
+    case "Redo":
+      return { t: tag };
+    case "ExecutorPage":
+    case "ProgrammerPage":
+      return { t: tag, delta: asInteger(field(record, "delta"), `${path}.delta`) };
+    case "SelectView":
+      return { t: "SelectView", view: asInteger(field(record, "view"), `${path}.view`) };
+    case "StepView":
+      return {
+        t: "StepView",
+        direction: asVariant(field(record, "direction"), `${path}.direction`, STEP_VARIANTS),
+      };
+    case "SelectProgrammerParam":
+      return {
+        t: "SelectProgrammerParam",
+        direction: asVariant(
+          field(record, "direction"),
+          `${path}.direction`,
+          PARAM_DIRECTION_VARIANTS,
+        ),
+      };
+    case "SetEncoderBank":
+      return {
+        t: "SetEncoderBank",
+        group: asVariant(field(record, "group"), `${path}.group`, FEATURE_GROUP_VARIANTS),
+      };
+    case "OpenWindow":
+      return {
+        t: "OpenWindow",
+        window: asVariant(field(record, "window"), `${path}.window`, WINDOW_TYPE_VARIANTS),
+      };
+    default:
+      throw new ProtocolFault(`${path}.t`, `an action this build knows, not ${JSON.stringify(tag)}`);
+  }
+}
+
+/** Which of an executor's buttons — a hardware slot, or a named function. */
+function readExecutorButtonRef(value: unknown, path: string): ExecutorButtonRef {
+  const record = asRecord(value, path);
+  const tag = asString(field(record, "t"), `${path}.t`);
+  switch (tag) {
+    case "Slot":
+      return { t: "Slot", index: asInteger(field(record, "index"), `${path}.index`) };
+    case "Function":
+      return {
+        t: "Function",
+        function: asVariant(
+          field(record, "function"),
+          `${path}.function`,
+          EXECUTOR_BUTTON_FUNCTION_VARIANTS,
+        ),
+      };
+    default:
+      throw new ProtocolFault(`${path}.t`, `a button this build knows, not ${JSON.stringify(tag)}`);
+  }
+}
+
+/** The control learn just named, if this delta is that moment. */
+function readOptionalBoundControl(value: unknown, path: string): BoundControl | null {
+  return value === null || value === undefined ? null : readBoundControl(value, path);
 }
 
 /**

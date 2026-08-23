@@ -30,8 +30,21 @@ import type {
   SurfaceStatus,
 } from "../bindings";
 
-/** The four panels, in the order `IMPLEMENTATION_PLAN.md` S37 lists them. */
-export const PANELS = ["Outputs", "Devices", "Show files", "This machine"] as const;
+/**
+ * The panels, in the order the window draws them.
+ *
+ * Four from S37 and **Controls** from S38, and it sits next to *Devices* on
+ * purpose: that panel names the desk's MIDI port and the file its table was read
+ * from, and this one is what that table says. An operator who has just chosen a
+ * port is one click from what its keys do.
+ */
+export const PANELS = [
+  "Outputs",
+  "Devices",
+  "Controls",
+  "Show files",
+  "This machine",
+] as const;
 
 /** Which panel is being looked at. */
 export type Panel = (typeof PANELS)[number];

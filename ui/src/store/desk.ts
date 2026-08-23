@@ -32,6 +32,7 @@
 
 import type {
   Answer,
+  BoundControl,
   Command,
   Delta,
   MachineSettings,
@@ -88,6 +89,34 @@ export interface DeskState {
    * than the daemon's state.
    */
   readonly surfacePort: string | null;
+  /**
+   * How many times this daemon's binding table has moved (S38).
+   *
+   * A **change token**, not the table: what a desk's keys do is derived from the
+   * built-in defaults, a profile file and this machine's own rows, so it is
+   * asked for with `Query::SurfaceBindings` and this is what tells an open
+   * editor that asking again is worth it. Two clients read the same number,
+   * which is what makes *two editors, one table* something a test can assert.
+   */
+  readonly surfaceBindings: number;
+  /**
+   * Whether learn is armed on the desk (S38).
+   *
+   * One desk, one learn, so it is broadcast: two editors must not both believe
+   * they have armed it, and the operator pressing a key has no idea which
+   * browser asked.
+   */
+  readonly surfaceLearning: boolean;
+  /**
+   * The control learn last named, or `null` (S38).
+   *
+   * A **moment** rather than a state, kept because a panel can only act on
+   * state: the editor's job when the operator presses a key is to put them in
+   * front of that key's row, and a React panel cannot do that from an event it
+   * was not holding. Two editors both moving to the row is right — they both
+   * watched the same press.
+   */
+  readonly surfaceLearned: BoundControl | null;
   /** How the daemon is doing, or `null` when not connected. */
   readonly health: DaemonHealth | null;
   /**
@@ -130,6 +159,9 @@ export const INITIAL_STATE: DeskState = {
   documents: null,
   outputs: null,
   surfacePort: null,
+  surfaceBindings: 0,
+  surfaceLearning: false,
+  surfaceLearned: null,
   health: null,
   fixtureLibrary: null,
   machine: null,
@@ -405,6 +437,21 @@ export class DeskStore {
       // rather than the show's, for the reason the rig above it is.
       case "SurfaceChanged":
         return { ...state, surfacePort: delta.port };
+      // S38: the binding table moved, and the **token** rather than the table is
+      // what travels. Seventy-three rows only an open control editor is looking
+      // at is the same trade `SurfaceStatus` records one field along, so the
+      // table is asked for (`Query::SurfaceBindings`) and this says asking again
+      // is worth it. Two clients holding the same revision is what *two editors,
+      // one table* looks like from outside the daemon.
+      case "SurfaceBindingsChanged":
+        return { ...state, surfaceBindings: delta.revision };
+      // And whether learn is armed, which is broadcast rather than answered
+      // because there is one desk: two editors must not both believe they have
+      // armed it, and the operator at the console has no idea which browser
+      // asked. The control it named is not kept here - it is a moment rather
+      // than a state, and the panel that armed learn is the one that acts on it.
+      case "SurfaceLearnChanged":
+        return { ...state, surfaceLearning: delta.learning, surfaceLearned: delta.control };
       // S37: this machine's settings and the show file it has open. Both arrive
       // whole, for `OutputsChanged`'s reason: they are a handful of fields
       // rather than a document, and a panel that had to diff a JSON patch to

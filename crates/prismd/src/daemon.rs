@@ -327,6 +327,11 @@ impl Daemon {
         } else {
             MachineConfig::with_outputs(machine.desk_id(), rig.clone())
         };
+        // What this desk's keys do, in the order S38 decided - see
+        // `starting_bindings`. The flag first, then this machine's own table,
+        // then the profile it names, then the built-in defaults.
+        let (bindings, adopt) =
+            starting_bindings(options, &machine, settings.surface_profile.as_deref());
         let mut core = Core::new(
             file,
             Machine {
@@ -334,6 +339,7 @@ impl Daemon {
                 path: machine_path,
                 outputs,
                 surface_on_command_line: options.surface.is_some(),
+                profile_on_command_line: options.surface_profile.is_some(),
                 data_dir: data_dir.clone(),
                 overrides: settings.overrides.clone(),
                 websocket_open: None,
@@ -342,8 +348,17 @@ impl Daemon {
             engine,
             Arc::clone(&layout),
             report,
+            bindings,
         )
         .map_err(StartError::Patch)?;
+        // A desk that has never been told writes down what it started with, so
+        // that the first edit is a change to a table rather than the creation of
+        // one - and so that `machine.json` says what the keys do even before
+        // anybody has touched them. Not done when a flag is holding the table:
+        // that run neither reads the stored one nor writes it.
+        if adopt {
+            drop(core.adopt_bindings(bindings));
+        }
         // A desk that starts where it was left has to write down where that is
         // — S37. Recorded here rather than in `Core::open_show`, because the
         // show a daemon starts with does not arrive through a command.
@@ -432,10 +447,7 @@ impl Daemon {
             lock,
             exit: settings.exit,
             listeners,
-            bindings: match &settings.surface_profile {
-                Some(path) => crate::surface::load_profile(path),
-                None => Bindings::defaults(),
-            },
+            bindings,
             profile: settings.surface_profile.clone(),
             surface: None,
         };
@@ -535,22 +547,54 @@ impl Daemon {
     /// JSON file must never be the reason a desk stops answering its keys.
     fn follow_profile_change(&mut self, path: Option<&Path>) {
         self.profile = path.map(Path::to_path_buf);
-        self.bindings = match path {
+        let table = match path {
             Some(path) => {
                 log::info(
                     "surface",
                     &format!("reading the binding table from {}", path.display()),
                 );
-                crate::surface::load_profile(path)
+                // **A file that will not parse leaves the table in force exactly
+                // where it was** - S38, and it is S22's rule met from a new
+                // direction. S22 said a malformed profile falls back to the
+                // built-in defaults, about a desk starting up with nothing else
+                // to fall back on; a desk that has a table of its own has
+                // something better than the defaults to keep, and throwing an
+                // operator's edits away over a typo in a file would be worse
+                // than ignoring the file. `load_profile` still cannot fail and
+                // still warns.
+                match crate::surface::read_profile(path) {
+                    Some(table) => table,
+                    None => return,
+                }
             }
             None => {
                 log::info("surface", "the built-in binding table is in force");
                 Bindings::defaults()
             }
         };
+        // Through the `Core`, because the table lives there since S38: an import
+        // is a change to this machine's own table and is written down like any
+        // other. The deltas are dropped rather than broadcast because this
+        // arrives *from* a command whose deltas the caller is already sending.
+        drop(self.desk.core().replace_bindings(table));
+        self.bindings = table;
         // The table the attached surface is drawing with, replaced in place. The
         // whole picture follows, because a new table can mean a different
         // scribble strip on every one of the eight.
+        if let Some(surface) = self.surface.take() {
+            let port = surface.into_port();
+            self.attach_surface(port);
+        }
+    }
+
+    /// Puts a table the `Core` has just accepted under the attached surface - S38.
+    ///
+    /// [`Self::follow_profile_change`]'s last two steps on their own, for the
+    /// ordinary case: an operator changed one control in the editor, the `Core`
+    /// applied it, and the desk has to draw with it. The port is kept and the
+    /// shadow model is thrown away, which is `into_port`'s whole argument.
+    fn follow_binding_change(&mut self, bindings: Bindings) {
+        self.bindings = bindings;
         if let Some(surface) = self.surface.take() {
             let port = surface.into_port();
             self.attach_surface(port);
@@ -690,7 +734,7 @@ impl Daemon {
                     // (a CI runner) as well as on a desk. Three acquisitions of
                     // the `Core` mutex to learn that nothing has changed is
                     // twice as much contention as one, for no answer.
-                    let (change, profile, exit) = {
+                    let (change, profile, exit, table) = {
                         let mut core = self.desk.core();
                         (
                             // S36's other door, and it is here because the
@@ -712,6 +756,11 @@ impl Daemon {
                             // change is the daemon's.
                             core.take_profile_change(),
                             core.take_exit_change(),
+                            // S38's, and it is here rather than on the surface
+                            // tick because a binding is a gesture nobody makes
+                            // twice a second - the same cost decision the three
+                            // above it record.
+                            core.take_binding_change(),
                         )
                     };
                     if let Some(port) = change {
@@ -722,6 +771,9 @@ impl Daemon {
                     }
                     if let Some(action) = exit {
                         self.exit = Exit::from(action);
+                    }
+                    if let Some(table) = table {
+                        self.follow_binding_change(table);
                     }
                     // What a settings window is told about the desk: the port
                     // that is actually open, refreshed on this cadence rather
@@ -753,9 +805,21 @@ impl Daemon {
                     // the poll, so the very next poll is the new port's and the
                     // resync burst starts a millisecond after the command
                     // rather than a frame after it.
-                    let change = self.desk.core().take_surface_change();
+                    let (change, table) = {
+                        let mut core = self.desk.core();
+                        (core.take_surface_change(), core.take_binding_change())
+                    };
                     if let Some(port) = change {
                         self.follow_surface_change(port);
+                    }
+                    // S38, and it is on **this** tick rather than only on the
+                    // housekeeping one for the port's reason exactly: a key
+                    // rebound in the editor should do the new thing when the
+                    // operator presses it, not up to half a second later. The
+                    // housekeeping tick takes it too, because a daemon with no
+                    // surface attached never runs this arm at all.
+                    if let Some(table) = table {
+                        self.follow_binding_change(table);
                     }
                     // A press becomes a command, the command reaches the
                     // daemon's own state, and the delta goes to whoever is
@@ -1049,6 +1113,57 @@ fn label_for(data_dir: &Path) -> String {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("{hash:016x}")
+}
+
+/// The binding table this run starts with, and whether to write it down - S38.
+///
+/// Four sources in order, and the order **is** S38's storage decision:
+///
+/// 1. **`--surface-profile <path>`**, which is the table for that run. S33's
+///    rule for `--mock-output` and S36's for `--surface`: a flag names the value,
+///    the stored one is neither read nor written, and `SurfaceBinding` is refused
+///    with that flag named.
+/// 2. **This machine's own table**, out of `machine.json`. A desk that has been
+///    edited starts as it was left, which is the whole point of an editor.
+/// 3. **The profile file the settings name**, for a desk that has a path and has
+///    never been edited - the state every desk is in the first time it runs.
+/// 4. **The built-in defaults** of `docs/MCU_MAPPING.md` section 4.1.
+///
+/// Two and three are in that order and not the other way round, and that is the
+/// decision worth arguing. A file that won at every start would mean an operator
+/// who rebound a key at the desk found it back the way it was the next morning -
+/// so a file is an **import**: naming one reads it into this machine's table
+/// (`Core::replace_bindings`) and `Settings::surface_profile` is the record of
+/// where the table came from rather than where it lives.
+///
+/// The second half of the answer is whether to write the table down as it
+/// stands. A desk that has never been told adopts what it started with, so that
+/// the first edit is a change to a table rather than the creation of one, and so
+/// that `machine.json` says what the keys do before anybody has touched them.
+fn starting_bindings(
+    options: &Options,
+    machine: &MachineConfig,
+    profile: Option<&Path>,
+) -> (Bindings, bool) {
+    if let Some(path) = &options.surface_profile {
+        return (crate::surface::load_profile(path), false);
+    }
+    if let Some(rows) = machine.surface_bindings() {
+        let (table, problem) = Bindings::from_rows(rows, &prism_surface::X_TOUCH);
+        if let Some(error) = problem {
+            log::warn(
+                "surface",
+                &format!(
+                    "this desk's stored binding table was not used: {error}.                      The built-in bindings are in force"
+                ),
+            );
+        }
+        return (table, false);
+    }
+    match profile {
+        Some(path) => (crate::surface::load_profile(path), true),
+        None => (Bindings::defaults(), true),
+    }
 }
 
 /// Which rig this run uses, and whether it is this machine's to change — S33.

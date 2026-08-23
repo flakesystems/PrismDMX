@@ -13,10 +13,13 @@
 //! brings the cabling.
 
 use prism_core::{
-    DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, MachineConfig, MachineError, RECENT_SHOWS,
-    Show, ShowError, ShowFile,
+    DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, Effect, MachineConfig, MachineError,
+    RECENT_SHOWS, Show, ShowError, ShowFile,
 };
-use prism_domain::{Command, ExitAction, LogLevel, MachineChange};
+use prism_domain::{
+    BoundControl, Command, ExitAction, GlobalButton, LogLevel, MachineChange, SurfaceAction,
+    SurfaceBinding,
+};
 
 mod common;
 
@@ -320,10 +323,7 @@ fn a_token_and_an_identity_are_asked_for_rather_than_sent() {
         .unwrap();
     assert_eq!(
         applied.effects,
-        vec![
-            prism_core::Effect::NewDeskIdentity,
-            prism_core::Effect::Machine
-        ]
+        vec![Effect::NewDeskIdentity, Effect::Machine]
     );
     assert!(applied.deltas.is_empty(), "the daemon says what changed");
     assert_eq!(config.desk_id(), identity, "and nothing has changed yet");
@@ -333,10 +333,7 @@ fn a_token_and_an_identity_are_asked_for_rather_than_sent() {
             change: MachineChange::NewToken,
         })
         .unwrap();
-    assert_eq!(
-        applied.effects,
-        vec![prism_core::Effect::NewToken, prism_core::Effect::Machine]
-    );
+    assert_eq!(applied.effects, vec![Effect::NewToken, Effect::Machine]);
     assert_eq!(config.settings().token, None);
 
     // And the second half, which is the daemon's: the value arrives through a
@@ -362,7 +359,7 @@ fn a_setting_change_leaves_the_delta_to_the_daemon() {
         })
         .unwrap();
     assert!(applied.deltas.is_empty());
-    assert_eq!(applied.effects, vec![prism_core::Effect::Machine]);
+    assert_eq!(applied.effects, vec![Effect::Machine]);
 }
 
 /// S33's and S36's claim, made for the third time and on the same evidence: a
@@ -622,4 +619,169 @@ fn no_file_command_is_journalled() {
         file.apply(&command).unwrap();
         assert_eq!(file.journal.len(), depth, "{command:?} filed a step");
     }
+}
+
+// ------------------------------------------------------------------- S38
+
+/// **What a desk's keys do is one of this machine's settings** — S38.
+///
+/// `MachineChange::SurfaceBinding` names one control, and the row is stored
+/// where the rig and the port are: a show carried to another hall on a stick
+/// must not arrive with the last hall's F-keys on it.
+///
+/// The applier itself writes **nothing**, which is `MachineChange::NewToken`'s
+/// shape and its reason one value along: applying a row needs
+/// `docs/MCU_MAPPING.md` §4.1's built-in table, and that lives in a MIDI codec
+/// this crate may not depend on. So what is asserted here is the half this crate
+/// owns — the refusal, and the effect it answers with.
+#[test]
+fn a_binding_answers_with_an_effect_and_writes_nothing_itself() {
+    let mut config = configured();
+    let before = serde_json::to_vec(&config).unwrap();
+
+    let applied = config
+        .apply(&Command::ConfigureMachine {
+            change: MachineChange::SurfaceBinding {
+                control: BoundControl::Global {
+                    button: GlobalButton::F5,
+                },
+                action: Some(SurfaceAction::SaveShow),
+            },
+        })
+        .expect("a binding on a free key");
+
+    assert!(applied.deltas.is_empty(), "the daemon says what changed");
+    assert_eq!(
+        applied.effects,
+        vec![Effect::SurfaceBinding {
+            control: BoundControl::Global {
+                button: GlobalButton::F5
+            },
+            action: Some(SurfaceAction::SaveShow),
+        }]
+    );
+    // **Nothing was written**, on the bytes rather than on the claim: the table
+    // is the daemon's to build and hand back.
+    assert_eq!(serde_json::to_vec(&config).unwrap(), before);
+    assert_eq!(config.surface_bindings(), None);
+}
+
+/// **The reserved control is refused by name, and nothing is written** — §4.3.
+///
+/// Asserted on the **wording** rather than on the variant, as S22 did for a
+/// profile file: the refusal exists for the person who believes they have bound
+/// it, so what it says is the feature.
+#[test]
+fn binding_the_reserved_control_is_refused_and_clearing_it_is_not() {
+    let mut config = configured();
+    let before = serde_json::to_vec(&config).unwrap();
+    let smpte = BoundControl::Global {
+        button: GlobalButton::SmpteBeats,
+    };
+
+    let refusal = config
+        .apply(&Command::ConfigureMachine {
+            change: MachineChange::SurfaceBinding {
+                control: smpte,
+                action: Some(SurfaceAction::Oops),
+            },
+        })
+        .expect_err("SMPTE/Beats must never be bindable");
+    assert_eq!(
+        refusal,
+        MachineError::ReservedControl(GlobalButton::SmpteBeats)
+    );
+    let said = refusal.to_string();
+    assert!(said.contains("Global.SmpteBeats"), "{said}");
+    assert!(said.contains("Xctl+MC"), "{said}");
+    assert!(
+        said.contains("switches the desk between the two hosts"),
+        "{said}"
+    );
+    assert!(said.contains("Leave it unbound"), "{said}");
+    assert_eq!(serde_json::to_vec(&config).unwrap(), before);
+
+    // Clearing it is allowed: unbound is the state §4.3 wants it in, and a rule
+    // that refused that would make the one safe state unreachable.
+    config
+        .apply(&Command::ConfigureMachine {
+            change: MachineChange::SurfaceBinding {
+                control: smpte,
+                action: None,
+            },
+        })
+        .expect("clearing the reserved control");
+}
+
+/// **Learn writes nothing at all, and that is the decision** — S38.
+///
+/// A desk that restarted into learn mode would be a desk whose keys do nothing,
+/// so it is the one member of `MachineChange` that never reaches `machine.json`.
+#[test]
+fn arming_learn_changes_no_configuration() {
+    let mut config = configured();
+    let before = serde_json::to_vec(&config).unwrap();
+    for learning in [true, false] {
+        let applied = config
+            .apply(&Command::ConfigureMachine {
+                change: MachineChange::SurfaceLearn { learning },
+            })
+            .expect("arming learn");
+        assert!(applied.deltas.is_empty());
+        assert_eq!(applied.effects, vec![Effect::SurfaceLearn(learning)]);
+        assert_eq!(serde_json::to_vec(&config).unwrap(), before);
+    }
+    // And it is not a setting: `needs_restart` is about settings, and this is a
+    // mode for the run.
+    assert!(!MachineChange::SurfaceLearn { learning: true }.needs_restart());
+    assert!(
+        !MachineChange::SurfaceBinding {
+            control: BoundControl::Jog,
+            action: None
+        }
+        .needs_restart(),
+        "a rebinding is made on the spot"
+    );
+}
+
+/// **The table survives being written down and read back** — which is what makes
+/// a desk start with the keys it was left with.
+#[test]
+fn a_stored_table_survives_the_configuration_file() {
+    let mut config = configured();
+    let rows = vec![
+        SurfaceBinding {
+            control: BoundControl::Global {
+                button: GlobalButton::F5,
+            },
+            action: Some(SurfaceAction::SaveShow),
+        },
+        SurfaceBinding {
+            control: BoundControl::StripFader,
+            action: None,
+        },
+    ];
+    config.set_surface_bindings(rows.clone());
+
+    let text = serde_json::to_string_pretty(&config).unwrap();
+    assert!(text.contains("surfaceBindings"), "{text}");
+    let read: MachineConfig = serde_json::from_str(&text).unwrap();
+    assert_eq!(read.surface_bindings(), Some(rows.as_slice()));
+}
+
+/// **A configuration written before S38 still opens**, and opens with no table
+/// of its own rather than with an error.
+///
+/// `#[serde(default)]`'s reason, and the same one the three fields before it
+/// carry: every machine configuration written so far has no such key.
+#[test]
+fn a_configuration_without_a_table_opens_and_has_none() {
+    let text = r#"{"deskId":"6ba7b810-9dad-11d1-80b4-00c04fd430c8"}"#;
+    let config: MachineConfig = serde_json::from_str(text).unwrap();
+    assert_eq!(config.surface_bindings(), None);
+    // *Never told* is not the same as *told nothing*: a desk whose keys have all
+    // been cleared is a legitimate thing to ask for.
+    let mut cleared = config;
+    cleared.set_surface_bindings(Vec::new());
+    assert_eq!(cleared.surface_bindings(), Some(&[][..]));
 }

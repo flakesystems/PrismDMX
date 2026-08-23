@@ -327,7 +327,12 @@ fn the_cursor_cluster_pages_the_programmer_and_walks_its_parameters() {
             direction: ParamDirection::Next,
         })
     );
-    assert_eq!(table.action(BoundControl::Global(GlobalButton::Zoom)), None);
+    assert_eq!(
+        table.action(BoundControl::Global {
+            button: GlobalButton::Zoom
+        }),
+        None
+    );
 }
 
 #[test]
@@ -368,7 +373,9 @@ fn the_encoder_assign_section_switches_the_encoder_bank() {
         );
     }
     assert_eq!(
-        table.action(BoundControl::Global(GlobalButton::AssignInstrument)),
+        table.action(BoundControl::Global {
+            button: GlobalButton::AssignInstrument
+        }),
         None
     );
 }
@@ -401,13 +408,19 @@ fn the_eight_function_keys_are_free_and_four_of_them_open_a_window() {
         GlobalButton::F7,
         GlobalButton::F8,
     ] {
-        assert_eq!(table.action(BoundControl::Global(key)), None, "{key}");
+        assert_eq!(
+            table.action(BoundControl::Global { button: key }),
+            None,
+            "{key}"
+        );
     }
     // And "free" is a claim about the table rather than about the defaults: any
     // of the eight takes any action.
     let mut edited = Bindings::defaults();
     edited.set(
-        BoundControl::Global(GlobalButton::F8),
+        BoundControl::Global {
+            button: GlobalButton::F8,
+        },
         Some(SurfaceAction::SelectView {
             view: ViewId::new(2),
         }),
@@ -472,7 +485,7 @@ fn nothing_else_on_the_panel_is_bound_by_default() {
         GlobalButton::CursorRight,
     ];
     for button in GlobalButton::ALL {
-        let action = table.action(BoundControl::Global(button));
+        let action = table.action(BoundControl::Global { button });
         assert_eq!(
             action.is_some(),
             bound.contains(&button),
@@ -492,7 +505,9 @@ fn the_reserved_button_is_unbound_in_the_defaults_as_well() {
     // says which one it is checking.
     let table = Bindings::defaults();
     assert_eq!(
-        table.action(BoundControl::Global(GlobalButton::SmpteBeats)),
+        table.action(BoundControl::Global {
+            button: GlobalButton::SmpteBeats
+        }),
         None
     );
     assert!(X_TOUCH.is_reserved(GlobalButton::SmpteBeats));
@@ -500,7 +515,9 @@ fn the_reserved_button_is_unbound_in_the_defaults_as_well() {
     // still leave it alone, because a control with no feedback is a poor place
     // for an operating function (§2.7).
     assert_eq!(
-        table.action(BoundControl::Global(GlobalButton::NameValue)),
+        table.action(BoundControl::Global {
+            button: GlobalButton::NameValue
+        }),
         None
     );
     assert!(!X_TOUCH.is_reserved(GlobalButton::NameValue));
@@ -640,15 +657,170 @@ fn the_step_and_target_vocabularies_read_the_way_the_document_spells_them() {
     ]}"#;
     let table = Bindings::parse(text, &X_TOUCH).expect("the documented spellings");
     assert_eq!(
-        table.action(BoundControl::Global(GlobalButton::F5)),
+        table.action(BoundControl::Global {
+            button: GlobalButton::F5
+        }),
         Some(SurfaceAction::StepView {
             direction: Step::Prev
         })
     );
     assert_eq!(
-        table.action(BoundControl::Global(GlobalButton::F6)),
+        table.action(BoundControl::Global {
+            button: GlobalButton::F6
+        }),
         Some(SurfaceAction::ExecutorMaster {
             target: ExecutorTarget::Selected
         })
     );
+}
+
+// ------------------------------------------------------------------- S38
+
+/// **Every control the surface has has a row, and the list is the whole desk.**
+///
+/// The count is written out rather than computed from the same constants the
+/// code uses: 1 strip fader + 1 strip encoder + 5 strip buttons + 1 main fader +
+/// 1 jog wheel + 64 panel buttons, which is `docs/MCU_MAPPING.md` §2.1's panel
+/// added up by hand. A test that said `BoundControl::all().len()` on both sides
+/// would pass for any list at all, including one missing the jog wheel.
+#[test]
+fn the_table_has_a_row_for_every_control_and_the_rows_are_the_whole_desk() {
+    assert_eq!(BoundControl::all().len(), 1 + 1 + 5 + 1 + 1 + 64);
+    let controls = BoundControl::all();
+    // No repeats, which is what makes `rows` a table rather than a list.
+    let mut seen = controls.clone();
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(seen.len(), controls.len(), "a control appears once");
+    // And every one of them round-trips through the name a profile spells it
+    // with, so the editor's column and the file's `control` key are one thing.
+    for control in controls {
+        assert_eq!(BoundControl::from_name(&control.to_string()), Some(control));
+    }
+}
+
+/// **The whole table survives being taken apart and put back together.**
+///
+/// `rows` is what the editor draws and what a machine configuration stores;
+/// `from_rows` is what the next start reads. The two have to compose to the
+/// identity or a desk would come back in the morning with different keys, which
+/// is the failure S38's storage decision exists to prevent.
+#[test]
+fn a_table_survives_being_written_out_as_rows_and_read_back() {
+    let table = Bindings::defaults();
+    let (back, problem) = Bindings::from_rows(&table.rows(), &X_TOUCH);
+    assert_eq!(problem, None);
+    assert_eq!(back, table);
+    assert_eq!(back.bound(), table.bound());
+
+    // And an empty table is not the defaults: a desk whose keys have all been
+    // cleared is a legitimate thing to ask for, and a round trip that quietly
+    // restored §4.1 would be the editor undoing an operator's work.
+    let (empty, problem) = Bindings::from_rows(&Bindings::empty().rows(), &X_TOUCH);
+    assert_eq!(problem, None);
+    assert_eq!(empty.bound(), 0);
+    assert_ne!(empty, Bindings::defaults());
+}
+
+/// **A binding on the reserved control is refused, by name and with the
+/// reason** — `docs/MCU_MAPPING.md` §4.3, and the same words a file gets.
+///
+/// The wording is asserted rather than the variant, as the profile test above
+/// does: the refusal exists for the person who believes they have bound it.
+#[test]
+fn binding_the_reserved_control_is_refused_and_clearing_it_is_not() {
+    let mut table = Bindings::defaults();
+    let smpte = BoundControl::Global {
+        button: GlobalButton::SmpteBeats,
+    };
+    let error = table
+        .bind(smpte, Some(SurfaceAction::Oops), &X_TOUCH)
+        .expect_err("SMPTE/Beats must never be bindable");
+    let said = error.to_string();
+    assert!(said.contains("Global.SmpteBeats"), "{said}");
+    assert!(said.contains("Xctl+MC"), "{said}");
+    assert!(
+        said.contains("switches the desk between the two hosts"),
+        "{said}"
+    );
+    assert!(said.contains("Leave it unbound"), "{said}");
+    assert_eq!(table, Bindings::defaults(), "and nothing was written");
+
+    // Clearing it is allowed: unbound is the state §4.3 wants it in, and a rule
+    // that refused that would make the one safe state unreachable.
+    table
+        .bind(smpte, None, &X_TOUCH)
+        .expect("clearing is allowed");
+    assert_eq!(table.action(smpte), None);
+
+    // Every other panel button is bindable, so the refusal is about *this*
+    // button rather than about panel buttons.
+    for button in GlobalButton::ALL {
+        let control = BoundControl::Global { button };
+        let allowed = table
+            .bind(control, Some(SurfaceAction::Oops), &X_TOUCH)
+            .is_ok();
+        assert_eq!(
+            allowed,
+            button != GlobalButton::SmpteBeats,
+            "{button} should {} be bindable",
+            if button == GlobalButton::SmpteBeats {
+                "not"
+            } else {
+                ""
+            }
+        );
+    }
+}
+
+/// **A stored table that names the reserved control falls back, and cannot
+/// block a desk** — S22's rule for a table that arrives over the protocol.
+///
+/// A `machine.json` written by an older build, or edited by hand, is exactly as
+/// capable of naming SMPTE/Beats as a profile file is, so `from_rows` has
+/// `load`'s guarantee rather than `parse`'s: it answers with a working table
+/// whatever it is given.
+#[test]
+fn a_stored_table_that_names_the_reserved_control_falls_back_to_the_defaults() {
+    let rows = vec![
+        prism_domain::SurfaceBinding {
+            control: BoundControl::Global {
+                button: GlobalButton::F5,
+            },
+            action: Some(SurfaceAction::Oops),
+        },
+        prism_domain::SurfaceBinding {
+            control: BoundControl::Global {
+                button: GlobalButton::SmpteBeats,
+            },
+            action: Some(SurfaceAction::SaveShow),
+        },
+    ];
+    let (table, problem) = Bindings::from_rows(&rows, &X_TOUCH);
+    assert!(matches!(
+        problem,
+        Some(ProfileError::ReservedControl(GlobalButton::SmpteBeats))
+    ));
+    assert_eq!(
+        table,
+        Bindings::defaults(),
+        "the built-in table stands, so the desk answers its keys"
+    );
+}
+
+/// **The reserved list is stated once**, and this is the assertion that says so.
+///
+/// `prism_domain::RESERVED_BUTTONS` is the array and `McuProfile::reserved_buttons`
+/// points at it rather than copying it — so there is no pair to keep in step.
+/// Written out by hand from §4.3 on the third side, because a test that compared
+/// the two would pass for any pair of equal wrong answers.
+#[test]
+fn the_reserved_list_is_smpte_beats_and_nothing_else() {
+    assert_eq!(prism_domain::RESERVED_BUTTONS, [GlobalButton::SmpteBeats]);
+    assert_eq!(X_TOUCH.reserved_buttons, &[GlobalButton::SmpteBeats]);
+    assert!(X_TOUCH.is_reserved(GlobalButton::SmpteBeats));
+    // Name/Value has no LED either (§2.7) and is *not* reserved: a control with
+    // no feedback is a poor place for an operating function, which is why the
+    // default profile leaves it alone — not a rule that it may not be bound.
+    assert!(!X_TOUCH.is_reserved(GlobalButton::NameValue));
 }

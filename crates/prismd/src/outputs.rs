@@ -82,6 +82,16 @@ pub struct Machine {
     /// is trying a desk out. `MachineError::SurfaceOnTheCommandLine` is what a
     /// `SetSurfacePort` is refused with, and it names the right flag.
     pub surface_on_command_line: bool,
+    /// The X-Touch binding table was named with `--surface-profile`, so what its
+    /// keys do is not the machine configuration's to change either — S38.
+    ///
+    /// A **third** flag rather than a third meaning for either of the other two,
+    /// and for the reason that split them: `--surface-profile` and `--surface`
+    /// are independent — a daemon may be given one and not the other — and an
+    /// operator told the wrong flag would go looking in the wrong place.
+    /// `MachineError::BindingsOnTheCommandLine` is what a `SurfaceBinding` is
+    /// refused with, and it names the right one.
+    pub profile_on_command_line: bool,
     /// Where the lock file, the machine configuration and the default show are
     /// — S37.
     ///

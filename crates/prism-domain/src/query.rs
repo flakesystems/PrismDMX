@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    FeatureGroup, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, SequenceId, SurfaceStatus,
-    UniverseId,
+    FeatureGroup, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, SequenceId, SurfaceControl,
+    SurfaceStatus, UniverseId,
 };
 
 /// Two fixtures sharing DMX channels.
@@ -364,6 +364,26 @@ pub enum Query {
     /// than mirrored: S33 left this as the one thing a settings window would
     /// need and could not be told, and *asking* is the half it named.
     OutputStatus,
+    /// The binding table **in force**, control by control — S38.
+    ///
+    /// A question rather than a field of the snapshot, and the reason is this
+    /// section's own rule: it is **derived**. What a desk's keys do is the
+    /// built-in defaults of `docs/MCU_MAPPING.md` §4.1, or a table read out of a
+    /// profile file, or the rows this machine has been told to store — and a
+    /// client that layered those three for itself would be a second opinion
+    /// about something `prism_surface::Bindings` already decides, which is
+    /// exactly the trap `PatchPreview` was built to avoid one panel along.
+    ///
+    /// It also carries two facts about each control that live on the **device
+    /// profile** rather than in the table: whether the control keeps reaching
+    /// PrismDMX in the combined Xctl+MC mode (§4.3) and whether it may be bound
+    /// at all. See [`crate::SurfaceControl`].
+    ///
+    /// Asked when the editor opens and asked again whenever
+    /// [`crate::Delta::SurfaceBindingsChanged`] says the table moved — which is
+    /// `Query::MidiPorts` and `Delta::SurfaceChanged`'s shape one layer along,
+    /// and what makes two editors on two screens draw one table.
+    SurfaceBindings,
 }
 
 /// The daemon's answer to a [`Query`].
@@ -450,6 +470,40 @@ pub enum Answer {
             proptest(strategy = "crate::arb::small_vec(3)")
         )]
         universes: Vec<UniverseId>,
+    },
+    /// The binding table in force, one row per control — S38.
+    SurfaceBindings {
+        /// **Every** control the surface has, bound or not, in the order an
+        /// editor draws them (`crate::BoundControl::all`). A list that left the
+        /// unbound ones out would be a picture of the desk with the empty keys
+        /// missing, and the empty keys are the ones an operator is looking for.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        controls: Vec<SurfaceControl>,
+        /// Which surface this table is for, as a person reads it.
+        device: String,
+        /// The profile file this table was last read from, or `None` for one
+        /// that has only ever been the built-in defaults and whatever the desk
+        /// has been told since.
+        ///
+        /// A **record of where it came from** rather than where it lives: since
+        /// S38 the table in force is this machine's own, and reading a file is
+        /// what *replaces* it. A table an operator edited at the desk must not be
+        /// silently overwritten by a file at the next start.
+        profile: Option<String>,
+        /// How many times this table has moved since the daemon started.
+        ///
+        /// Echoed from the daemon's own counter, exactly as `StorePreview` echoes
+        /// the mode it was asked about: it is what lets an editor tell an answer
+        /// that is current from one that was overtaken while it was in flight,
+        /// and what lets two clients say out loud that they are holding the same
+        /// table.
+        revision: u32,
+        /// Whether learn is armed — the next control touched will be named
+        /// rather than obeyed (`crate::Command::SetSurfaceLearn`).
+        learning: bool,
     },
 }
 

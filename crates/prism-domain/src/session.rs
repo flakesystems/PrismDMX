@@ -21,7 +21,6 @@ use crate::{
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
 )]
-#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 pub enum WindowType {
     /// Live values per fixture and attribute.
     #[default]
@@ -384,3 +383,28 @@ mod tests {
         );
     }
 }
+
+impl WindowType {
+    /// Every kind of window, so a test — and the control editor's chooser —
+    /// walks the whole set rather than the ones somebody remembered.
+    ///
+    /// Added in S38, which needed the list twice: an *open this window* binding
+    /// offers it at run time, and it is this enum's proptest strategy
+    /// (`crate::arb::arbitrary_from_list`).
+    pub const ALL: [Self; 11] = [
+        Self::FixtureSheet,
+        Self::DmxSheet,
+        Self::SequenceSheet,
+        Self::Groups,
+        Self::Viewer3D,
+        Self::PhaserEditor,
+        Self::ClockViewer,
+        Self::CueViewer,
+        Self::PresetPool,
+        Self::Patch,
+        Self::Settings,
+    ];
+}
+
+#[cfg(any(test, feature = "proptest"))]
+crate::arb::arbitrary_from_list!(WindowType);

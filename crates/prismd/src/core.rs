@@ -156,6 +156,33 @@ pub struct Core {
     /// A new exit action nobody has acted on yet — S37, and the same shape one
     /// field along: what the stage does when the daemon stops is `Daemon`'s.
     exit_change: Option<prism_domain::ExitAction>,
+    /// The binding table **in force** — S38.
+    ///
+    /// It lives here rather than in `Daemon`, and moving it was S38's first
+    /// structural decision. A table read once at start-up could live wherever
+    /// the port did; a table a **command** edits has to live where a command
+    /// arrives, which is this type. `Daemon` still owns the `SurfaceLink` and
+    /// still gets the table handed to it — see [`Self::take_binding_change`] —
+    /// but it is no longer the thing that holds it, so two clients editing
+    /// cannot produce two tables.
+    bindings: prism_surface::Bindings,
+    /// How many times the table has moved since this daemon started — S38.
+    ///
+    /// The change token `Delta::SurfaceBindingsChanged` carries and
+    /// `Answer::SurfaceBindings` echoes. Not persisted: it answers *has the
+    /// table moved under me*, which is a question about this run.
+    binding_revision: u32,
+    /// Whether learn is armed — S38.
+    ///
+    /// One desk, one learn, and it is **not** written down anywhere: a desk that
+    /// restarted into learn mode would be a desk whose keys do nothing. One
+    /// shot, so the first control the surface reports clears it.
+    learning: bool,
+    /// A binding table the surface has not been given yet — S38.
+    ///
+    /// [`Self::profile_change`]'s shape and its reason: the `SurfaceLink` that
+    /// draws with it is `Daemon`'s. `None` is *nothing to do*.
+    binding_change: Option<prism_surface::Bindings>,
 }
 
 impl Core {
@@ -177,6 +204,7 @@ impl Core {
         engine: EngineThread,
         layout: Arc<FrameLayout>,
         report: Arc<PlaybackReport>,
+        bindings: prism_surface::Bindings,
     ) -> Result<Self, PatchError> {
         let plan = MergePlan::build(
             file.show
@@ -203,6 +231,10 @@ impl Core {
             recovery: false,
             profile_change: None,
             exit_change: None,
+            bindings,
+            binding_revision: 0,
+            learning: false,
+            binding_change: None,
         })
     }
 
@@ -300,6 +332,21 @@ impl Core {
                 && self.machine.surface_on_command_line
             {
                 return Err(CoreError::Machine(MachineError::SurfaceOnTheCommandLine));
+            }
+            // S38's, and it is a third question for S36's reason: the *table* and
+            // the *port* are named by two different flags, a daemon may be given
+            // one and not the other, and an operator told the wrong one would go
+            // looking in the wrong place. Learn is deliberately **not** under
+            // it, because it writes nothing down: a command line holding the
+            // table has nothing to say about arming it.
+            if matches!(
+                command,
+                Command::ConfigureMachine {
+                    change: prism_domain::MachineChange::SurfaceBinding { .. }
+                }
+            ) && self.machine.profile_on_command_line
+            {
+                return Err(CoreError::Machine(MachineError::BindingsOnTheCommandLine));
             }
             self.machine
                 .config
@@ -519,6 +566,15 @@ impl Core {
                 Effect::NewDeskIdentity => deltas.extend(self.new_desk_identity()),
                 Effect::NewToken => deltas.extend(self.new_token()),
                 Effect::Machine => deltas.extend(self.carry_out_machine()),
+                // S38's two. The first is the half `prism-core` could not do -
+                // it needs `docs/MCU_MAPPING.md` section 4.1's built-in table,
+                // which lives in a MIDI codec the show model may not depend on -
+                // and the second is a mode that is deliberately written down
+                // nowhere.
+                Effect::SurfaceBinding { control, action } => {
+                    deltas.extend(self.carry_out_binding(*control, *action));
+                }
+                Effect::SurfaceLearn(on) => deltas.push(self.set_learning(*on)),
             }
         }
 
@@ -628,6 +684,152 @@ impl Core {
 
         let mut deltas = vec![Delta::MachineChanged {
             settings: self.machine_settings(),
+        }];
+        deltas.extend(self.write_machine());
+        deltas
+    }
+
+    /// The binding table in force - S38.
+    #[must_use]
+    pub const fn bindings(&self) -> &prism_surface::Bindings {
+        &self.bindings
+    }
+
+    /// How many times the table has moved since this daemon started - S38.
+    #[must_use]
+    pub const fn binding_revision(&self) -> u32 {
+        self.binding_revision
+    }
+
+    /// Whether learn is armed - S38.
+    #[must_use]
+    pub const fn is_learning(&self) -> bool {
+        self.learning
+    }
+
+    /// A table the surface has not been given yet, once - S38.
+    ///
+    /// [`Self::take_profile_change`]'s shape: the `SurfaceLink` drawing with it
+    /// is `Daemon`'s, because a port has a thread's worth of state and a cable
+    /// that can come out.
+    pub const fn take_binding_change(&mut self) -> Option<prism_surface::Bindings> {
+        self.binding_change.take()
+    }
+
+    /// Arms or disarms learn, and says so - S38.
+    fn set_learning(&mut self, learning: bool) -> Delta {
+        self.learning = learning;
+        log::debug(
+            "surface",
+            if learning {
+                "learn is armed: the next control is named rather than obeyed"
+            } else {
+                "learn is off"
+            },
+        );
+        Delta::SurfaceLearnChanged {
+            learning,
+            control: None,
+        }
+    }
+
+    /// Names the control an operator has just touched, and disarms - S38.
+    ///
+    /// **One shot**, which is what stops a client that went away mid-learn
+    /// leaving a desk whose keys do nothing. Called by the surface poll rather
+    /// than by a command, because the whole point is that it comes from the desk.
+    pub fn learned(&mut self, control: prism_domain::BoundControl) -> Vec<Delta> {
+        if !self.learning {
+            return Vec::new();
+        }
+        self.learning = false;
+        log::info("surface", &format!("learn named {control}"));
+        vec![Delta::SurfaceLearnChanged {
+            learning: false,
+            control: Some(control),
+        }]
+    }
+
+    /// Answers `Effect::SurfaceBinding`: puts the row on the table in force,
+    /// writes the whole table down, and hands it to the surface - S38.
+    ///
+    /// The refusal has already happened (`prism_core::MachineConfig::configure`
+    /// refuses the reserved control before anything is written), so a failure
+    /// here would be a table and a validator that disagree. It is still not a
+    /// panic - `CLAUDE.md`'s zero-crash invariant does not make exceptions for
+    /// lines that cannot happen - it is a notice, and the table is left where it
+    /// was.
+    fn carry_out_binding(
+        &mut self,
+        control: prism_domain::BoundControl,
+        action: Option<prism_domain::SurfaceAction>,
+    ) -> Vec<Delta> {
+        if let Err(error) = self.bindings.bind(control, action, &prism_surface::X_TOUCH) {
+            log::warn("surface", &error.to_string());
+            return vec![Delta::Notice {
+                level: NoticeLevel::Warn,
+                message: error.to_string(),
+            }];
+        }
+        self.record_bindings()
+    }
+
+    /// Replaces the whole table - S38, and this is what reading a profile does.
+    ///
+    /// **A file is an import rather than a live source.** Naming a profile reads
+    /// it into this machine's own configuration; from then on that is the table
+    /// and the path is only the record of where it came from. The alternative -
+    /// the file winning at every start - would mean an operator who rebound a key
+    /// at the desk found it back the way it was the next morning.
+    ///
+    /// A table that could not be read leaves the one in force **exactly where it
+    /// was**, which is S22's rule met from a new direction: S22 said a malformed
+    /// profile falls back to the built-in defaults, and it said so about a desk
+    /// starting up with nothing else to fall back on. A desk that has a table of
+    /// its own has something better to fall back on than the defaults, and
+    /// overwriting an operator's edits because of a typo in a file would be the
+    /// one outcome worse than ignoring the file.
+    pub fn replace_bindings(&mut self, bindings: prism_surface::Bindings) -> Vec<Delta> {
+        self.bindings = bindings;
+        self.record_bindings()
+    }
+
+    /// Writes down the table this daemon **started** with, changing nothing —
+    /// S38.
+    ///
+    /// [`Self::replace_bindings`] without the two things that make it a
+    /// *change*: no revision, and **no hand-off to the surface**. A desk that
+    /// has never been told adopts what it started with so that the first edit is
+    /// a change to a table rather than the creation of one — but nothing has
+    /// moved, so a client has nothing to be told and the surface has nothing to
+    /// redraw.
+    ///
+    /// Handing it over would be worse than pointless. Swapping a table rebuilds
+    /// the `SurfaceLink` round its port, which throws the shadow model away on
+    /// purpose — and with it the feedback counters a settings panel draws.
+    /// `surface_gate.rs::pressing_smpte_beats_does_nothing_at_all_and_is_counted`
+    /// is the test that noticed: it read a `reserved` count of 0 where it had
+    /// pressed the button twice, because the housekeeping tick had rebuilt the
+    /// surface underneath it.
+    pub fn adopt_bindings(&mut self, bindings: prism_surface::Bindings) -> Vec<Delta> {
+        self.bindings = bindings;
+        self.machine
+            .config
+            .set_surface_bindings(self.bindings.rows());
+        self.write_machine()
+    }
+
+    /// Writes the table down, counts the change and hands it to the surface.
+    fn record_bindings(&mut self) -> Vec<Delta> {
+        self.machine
+            .config
+            .set_surface_bindings(self.bindings.rows());
+        self.binding_revision = self.binding_revision.saturating_add(1);
+        // The surface is `Daemon`'s, so the new table is left here for the run
+        // loop exactly as a profile change is.
+        self.binding_change = Some(self.bindings);
+        let mut deltas = vec![Delta::SurfaceBindingsChanged {
+            revision: self.binding_revision,
         }];
         deltas.extend(self.write_machine());
         deltas
@@ -1299,6 +1501,7 @@ mod tests {
                     },
                 ),
                 surface_on_command_line: false,
+                profile_on_command_line: false,
                 data_dir: dir.to_path_buf(),
                 overrides: Vec::new(),
                 websocket_open: None,
@@ -1307,6 +1510,7 @@ mod tests {
             engine,
             layout,
             report,
+            prism_surface::Bindings::defaults(),
         )
         .unwrap();
         (core, frames, driver)

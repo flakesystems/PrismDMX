@@ -14,7 +14,6 @@ use ts_rs::TS;
 /// `#[non_exhaustive]`: the TypeScript union must stay exhaustive so the UI gets
 /// a compile error when a new attribute appears.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
-#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 pub enum AttributeType {
     /// Intensity. The one attribute that merges HTP.
     Dimmer,
@@ -101,7 +100,6 @@ impl AttributeType {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
 )]
-#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 pub enum FeatureGroup {
     /// Intensity.
     #[default]
@@ -434,3 +432,8 @@ mod tests {
         assert_eq!(MergeMode::inline(&cfg), "\"HTP\" | \"LTP\"");
     }
 }
+
+#[cfg(any(test, feature = "proptest"))]
+crate::arb::arbitrary_from_list!(AttributeType);
+#[cfg(any(test, feature = "proptest"))]
+crate::arb::arbitrary_from_list!(FeatureGroup);

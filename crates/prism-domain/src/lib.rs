@@ -45,6 +45,7 @@ mod query;
 mod sequence;
 mod session;
 pub mod socket;
+mod surface;
 #[cfg(test)]
 mod wire;
 
@@ -83,3 +84,7 @@ pub use query::{
 };
 pub use sequence::{Cue, CueEdit, CuePart, CueProperty, CueTrigger, Sequence};
 pub use session::{Session, View, WindowInstance, WindowType};
+pub use surface::{
+    BoundControl, ExecutorTarget, GlobalButton, RESERVED_BUTTONS, RESERVED_REASON, Step,
+    StripButton, SurfaceAction, SurfaceBinding, SurfaceControl,
+};

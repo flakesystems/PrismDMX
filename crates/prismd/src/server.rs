@@ -332,6 +332,35 @@ impl Desk {
             // output's own cadence and only an open settings window is looking
             // at it. The configuration is not repeated — that arrives whole in
             // `Delta::OutputsChanged` whenever it moves.
+            // S38, and it is a question for §5.2's own rule: the table in
+            // force is **derived** — the built-in defaults, or a profile read
+            // into this machine's own rows, or the rows an operator has typed —
+            // and a client that layered those for itself would be a second
+            // opinion about something `prism_surface::Bindings` already decides.
+            //
+            // The two flags on each row are the **device profile's** rather than
+            // the table's: which controls stay PrismDMX's while the surface is
+            // also driving a sound console (`docs/MCU_MAPPING.md` §4.3), and
+            // which may never be bound. A client holds no profile, so it is told.
+            Query::SurfaceBindings => {
+                let bindings = core.bindings();
+                Answer::SurfaceBindings {
+                    controls: prism_domain::BoundControl::all()
+                        .into_iter()
+                        .map(|control| prism_domain::SurfaceControl {
+                            name: control.to_string(),
+                            action: bindings.action(control),
+                            permanent: crate::surface::is_permanent(control),
+                            reserved: control.reserved().is_some(),
+                            control,
+                        })
+                        .collect(),
+                    device: prism_surface::X_TOUCH.name.to_owned(),
+                    profile: core.machine().settings().surface_profile.clone(),
+                    revision: core.binding_revision(),
+                    learning: core.is_learning(),
+                }
+            }
             Query::OutputStatus => {
                 let supervisor = core.outputs();
                 let elapsed = supervisor.elapsed();
@@ -500,6 +529,7 @@ mod tests {
                 path: Some(dir.join("machine.json")),
                 outputs,
                 surface_on_command_line: false,
+                profile_on_command_line: false,
                 data_dir: dir.to_path_buf(),
                 overrides: Vec::new(),
                 websocket_open: None,
@@ -508,6 +538,7 @@ mod tests {
             engine,
             layout,
             report,
+            prism_surface::Bindings::defaults(),
         )
         .unwrap();
         Arc::new(Desk::new(core))

@@ -487,7 +487,16 @@ it with a counting allocator, the way S19 measured the codec.
 
 ## 4. Layer 3 — binding table
 
-Shipped as `profiles/surface/xtouch.json`, validated against a JSON schema on load. A malformed profile falls back to the built-in default and raises a warning — it never prevents startup.
+Shipped as `profiles/surface/xtouch.json`, validated on load. A malformed profile falls back and raises a warning — it never prevents startup.
+
+> **Since S38 the table is edited at the desk, and the file is an *import***
+> (§4.4). What a desk's keys do lives in `prism_core::MachineConfig` beside its
+> rig and its port; naming a profile reads that file **into** it, and
+> `Settings::surfaceProfile` is the record of where the table came from rather
+> than where it lives. What "falls back" means therefore split in two, and both
+> halves are S22's rule: a file that will not parse leaves **the table in force**
+> standing, which for a desk that has never been edited is the built-in default
+> and for one that has is its own.
 
 ### 4.1 Default bindings (from `XTouch.txt`)
 
@@ -717,6 +726,115 @@ button the firmware reserves for itself is a button it would have no reason to
 give a host-controllable lamp. That is a consistent story rather than a
 demonstrated one — Name/Value has no LED either and switches nothing — but it is
 one more reason not to build anything on top of it.
+
+
+### 4.4 The control editor *(S38)*
+
+**The table is data an operator edits, not a file an installer writes.** Until
+S38 `prism_surface::Bindings` was layer 3 whole and it was read **once, from a
+path, at start-up**: there was no command that read the table in force and none
+that wrote one, so an operator who wanted a key to do something else edited JSON
+beside the daemon and restarted it. S37 could *name* the file and thereby re-read
+it, and that was all.
+
+#### Where the table lives, and why it is not the file
+
+Three places were possible — a file beside the daemon, `MachineConfig`, or both
+— and the answer is **`MachineConfig`**, for three reasons in descending order of
+force:
+
+1. **It is the same kind of fact as the rig and the port.** S33 put the venue's
+   cabling there and said in as many words that *a later session that wants
+   anything else about this building puts it here*; S36 put the desk's MIDI port
+   there; what somebody has made that desk's keys do belongs to the building for
+   exactly the same reason. A show carried to another hall on a stick must not
+   arrive with the last hall's F-keys on it.
+2. **It is what makes *two editors, one table* structural.** `machine.json` is
+   written by one thread under one lock, and every edit is one
+   `MachineChange::SurfaceBinding` naming **one control** — so two operators
+   changing two keys cannot undo each other. A command carrying the whole table
+   would have made that a race; §4.2's file format is a whole table because a
+   *document* is written by one person at a time, and a protocol is not.
+3. **The shipped profile stays what a test says it is.** S22 asserts that
+   `profiles/surface/xtouch.json` **is** `Bindings::defaults()`; an editor that
+   wrote to it would change the defaults, and it would write into an installation
+   directory a school's account often cannot.
+
+**A file is therefore an import.** Naming one replaces the stored table with what
+the file says; the path is kept so the panel can say where the table came from
+and offer to read it again. The alternative — the file winning at every start —
+was rejected because it has one unacceptable consequence: an operator who rebound
+a key at the desk would find it back the way it was the next morning.
+
+#### What travels
+
+| Shape | What it is for |
+|---|---|
+| `Query::SurfaceBindings` | The table **in force**, one row per control the surface has. A question rather than a snapshot field because it is *derived* — the built-in defaults, a profile read into this machine's rows, and the rows typed since — and because seventy-three rows are only ever looked at by an open editor |
+| `Delta::SurfaceBindingsChanged { revision }` | The change **token**, not the table: `Delta::SurfaceChanged`'s shape for a port, one device along. Both editors are told the same number, which is what makes *one table* something a test can assert |
+| `MachineChange::SurfaceBinding { control, action }` | **One control at a time**, which is `OutputChange`'s rule and `CueProperty`'s before it |
+| `MachineChange::SurfaceLearn { learning }` | Arms learn. The one member of `MachineChange` that is written down nowhere |
+| `Delta::SurfaceLearnChanged { learning, control }` | Both edges of learn, **broadcast**: there is one desk, so there is one learn, and the operator pressing a key has no idea which browser asked |
+
+Each row carries two facts that are the **device profile's** rather than the
+table's, because a client holds no profile: whether the control keeps reaching
+PrismDMX in the combined mode (§4.3) and whether it may be bound at all.
+
+#### Learn is §2.7's method rule, run backwards
+
+S20 established that the way to find out what a control sends is to **press it
+and read what arrives**, never to ask the profile. An editor has the same
+question about the same desk, so it gets the same answer: the operator presses
+the key they mean and the daemon names it, rather than hunting for
+`Global.AssignPlugin` in a list of sixty-four.
+
+Two things about it are worth stating because they are what the code is for:
+
+- **While learn is armed the control does not fire.** An operator finding out
+  what the Record key is called would otherwise clear their programmer to find
+  out, and one learning a transport key would start a cue on a stage. The
+  *release* of a learned button is swallowed with it, because layer 3 forwards
+  both edges of an `ExecutorButton` and a `Flash` released without ever having
+  been held is a master put back that was never taken.
+- **It is one shot.** The first control disarms it, so a client that went away
+  mid-learn cannot leave a desk whose keys do nothing.
+
+And it can never name the reserved control, for a reason that is not the
+editor's: layer 2 drops SMPTE/Beats' presses and counts them, so they do not
+reach layer 3 at all.
+
+#### The reserved control is refused three times over
+
+§4.3 says PrismDMX never binds SMPTE/Beats. That is now enforced in three places
+and the wording is stated **once**, as `prism_domain::RESERVED_REASON`:
+
+| Where | What it refuses |
+|---|---|
+| `prism_surface::Bindings::parse` (S22) | A profile **file** that names it |
+| `prism_core::MachineConfig::configure` (S38) | A **command** that names it, before anything is written |
+| `prism_surface::Bindings::from_rows` (S38) | A **stored** table that names it — a `machine.json` from an older build, or edited by hand — which falls back to the defaults rather than blocking a desk |
+
+`prism_domain::RESERVED_BUTTONS` is the array and `McuProfile::reserved_buttons`
+points at it rather than carrying a copy, so a device profile and the protocol
+cannot come to disagree about which control an operator is forbidden to spend.
+
+#### The vocabulary moved to `prism-domain`, and the note map did not
+
+`BoundControl`, `SurfaceAction`, `ExecutorTarget`, `Step`, `GlobalButton` and
+`StripButton` are `prism-domain`'s since S38 and are re-exported from
+`prism-surface`. The reason is that they **travel**: a `MachineChange` carries
+one, an editor draws one, and the interface's copy of each type is generated from
+the domain. `IMPLEMENTATION_PLAN.md` S32 predicted the split from the other side
+— an OSC control that fires a command belongs in the same editor rather than in a
+second mapping system — and a vocabulary that is not MCU-specific cannot live in
+the MCU crate.
+
+**§2.1's note and CC numbers did not move and must not**, which is the promise
+that section makes in as many words: they are `prism_surface::profile::X_TOUCH`
+and nowhere else. So are the shadow model, the codec, and the resolution of an
+action into a `Command` — which needs an event and a session, and the domain has
+neither. The split is *names* against *meaning*, and it is the same line §4.2.1
+has drawn since S22.
 
 ---
 

@@ -40,8 +40,8 @@
 use core::fmt;
 
 use prism_domain::{
-    ArtNetPort, Command, Delta, MachineChange, OutputChange, OutputId, OutputInstance, OutputKind,
-    SacnPort, UniverseId,
+    ArtNetPort, Command, Delta, GlobalButton, MachineChange, OutputChange, OutputId,
+    OutputInstance, OutputKind, RESERVED_REASON, SacnPort, UniverseId,
 };
 
 use crate::command::{Applied, Effect};
@@ -111,6 +111,25 @@ pub enum MachineError {
     ZeroHopLimit,
     /// A universe count outside the desk's `1..=64` — S37.
     UniverseCountOutOfRange(u32),
+    /// This daemon's binding table was named on its command line, so what its
+    /// keys do is not the machine configuration's to change — S38.
+    ///
+    /// [`Self::SurfaceOnTheCommandLine`] one layer along, and a **third** flag
+    /// rather than a third meaning for either of the other two, for the reason
+    /// that split them: `--surface-profile` and `--surface` are independent, a
+    /// daemon may be given one and not the other, and an operator told the wrong
+    /// flag would go looking in the wrong place.
+    BindingsOnTheCommandLine,
+    /// A binding named the one control PrismDMX must never take — S38.
+    ///
+    /// `docs/MCU_MAPPING.md` §4.3's SMPTE/Beats. Refused **here**, before
+    /// anything is written, rather than discouraged in an interface: layer 2
+    /// already drops its presses so the binding could never have fired, and this
+    /// refusal exists for the person who believes they have bound it. The
+    /// wording is `prism_domain::RESERVED_REASON`, which is also what
+    /// `prism_surface::ProfileError` says about a *file* that names it — one
+    /// rule has to sound like one rule.
+    ReservedControl(GlobalButton),
     /// A WebSocket listener asked for an address that is **not** loopback,
     /// while this desk has no §2.1 token — S37.
     ///
@@ -133,6 +152,13 @@ impl fmt::Display for MachineError {
                 "this daemon's outputs were named on its command line; \
                  start it without them to configure the rig from an interface"
             ),
+            Self::BindingsOnTheCommandLine => write!(
+                f,
+                "this daemon's binding table was named on its command line;                  start it without --surface-profile to edit the controls from an interface"
+            ),
+            Self::ReservedControl(button) => {
+                write!(f, "Global.{button} must not be bound: {RESERVED_REASON}")
+            }
             Self::SurfaceOnTheCommandLine => write!(
                 f,
                 "this daemon's control surface was named on its command line;                  start it without --surface to configure the port from an interface"
@@ -338,6 +364,29 @@ pub(crate) fn apply(
         // and `prismd` says what changed.
         Command::ConfigureMachine { change } => {
             config.configure(change)?;
+            // S38's two are the only members of this enum that do **not** end in
+            // `Effect::Machine`, and each has its own reason. A binding row needs
+            // `docs/MCU_MAPPING.md` §4.1's built-in defaults to be applied to,
+            // and those live in `prism_surface` — a MIDI codec, which the show
+            // model may not depend on — so `configure` above has already refused
+            // what it can refuse and the daemon does the rest. Learn writes
+            // nothing at all, deliberately: a desk that restarted into learn mode
+            // would be a desk with no keys.
+            if let MachineChange::SurfaceBinding { control, action } = change {
+                return Ok(Applied {
+                    deltas: Vec::new(),
+                    effects: vec![Effect::SurfaceBinding {
+                        control: *control,
+                        action: *action,
+                    }],
+                });
+            }
+            if let MachineChange::SurfaceLearn { learning } = change {
+                return Ok(Applied {
+                    deltas: Vec::new(),
+                    effects: vec![Effect::SurfaceLearn(*learning)],
+                });
+            }
             let mut effects = Vec::new();
             match change {
                 MachineChange::NewIdentity => effects.push(Effect::NewDeskIdentity),

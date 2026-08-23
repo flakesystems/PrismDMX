@@ -111,6 +111,47 @@ pub enum Delta {
         /// The configured port, or `None` for no surface at all.
         port: Option<String>,
     },
+    /// The binding table moved — S38.
+    ///
+    /// [`Self::SurfaceChanged`]'s shape for what the desk's keys *do*, and it
+    /// carries a change token rather than the table for that delta's reason
+    /// exactly: the table is seventy-three rows that only an open control editor
+    /// is looking at, and it is **derived** (§4.1's defaults, a profile file, and
+    /// this machine's own rows), so it is asked for —
+    /// [`crate::Query::SurfaceBindings`] — and this is what says asking again is
+    /// worth it.
+    ///
+    /// The revision is what makes *two clients, one table* something a test can
+    /// assert rather than something a design hopes for: both editors are told the
+    /// same number, and an answer that names an older one has been overtaken.
+    SurfaceBindingsChanged {
+        /// How many times the table has moved since the daemon started.
+        revision: u32,
+    },
+    /// Learn was armed, gave up, or has just named a control — S38.
+    ///
+    /// Broadcast rather than answered to the one client that asked, and that is
+    /// the decision in this variant: **there is one desk**, so there is one
+    /// learn. Two editors open on two screens must not both believe they have
+    /// armed it, and the operator standing at the console pressing a key has no
+    /// idea which browser asked. It is the same argument `ARCHITECTURE_SPEC.md`
+    /// §4 makes for the active view, applied to a mode instead of a layout.
+    ///
+    /// The two moments are one variant because they are one fact — *what is
+    /// learn doing* — read at two times: arming is `{ learning: true, control:
+    /// None }`, and a control being named is `{ learning: false, control:
+    /// Some(_) }`, because learn is one shot.
+    SurfaceLearnChanged {
+        /// Whether learn is armed **after** this event.
+        learning: bool,
+        /// The control the operator just touched, if this is the moment one was
+        /// named.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        control: Option<crate::BoundControl>,
+    },
     /// One of **this machine's** settings changed — S37.
     ///
     /// [`Self::OutputsChanged`]'s shape for the rest of the machine, and the

@@ -189,6 +189,79 @@ pub enum MachineChange {
     ///
     /// See the module documentation for why it waits for a restart.
     NewIdentity,
+    /// Say what one control of the surface does — S38.
+    ///
+    /// Layer 3 of `docs/MCU_MAPPING.md` §4, made editable at the desk. Until S38
+    /// the binding table was read **once, from a file, at start-up**: an operator
+    /// who wanted a key to do something else edited JSON beside the daemon and
+    /// restarted it.
+    ///
+    /// **It is a `MachineChange` rather than a `Command` of its own, and that is
+    /// a decision with a measurement behind it.** Conceptually it belongs here:
+    /// what this building's desk does is one of this machine's settings, and
+    /// [`Self::SurfaceProfile`] — the *file* the table is read from — has been
+    /// sitting in this enum since S37. Structurally it has to be here:
+    /// `proptest_derive` builds one `Command` value tree holding a slot for every
+    /// variant, and S38 measured that slot at **560 bytes whatever the variant
+    /// carries** — a bare unit variant costs the same as one with a payload — so
+    /// the four sessions' remedy of boxing a field cannot buy another command.
+    /// `crate::wire::a_generated_wire_value_fits_in_a_test_thread` has the
+    /// numbers. This enum is already boxed inside `Command::ConfigureMachine`, so
+    /// variants here cost that budget nothing.
+    ///
+    /// **One control at a time**, which is this enum's own rule: a change
+    /// carrying the whole table would make a client read it, change one row and
+    /// send the other seventy-two back, and two operators with the editor open
+    /// would each undo the other. One row per change is what makes *two clients,
+    /// one table* a property of the protocol rather than a race nobody has run
+    /// yet.
+    ///
+    /// `None` unbinds the control, and that is a state worth being able to
+    /// reach: §4.1 leaves the strip encoder and four of the F-keys deliberately
+    /// empty, and an operator has to be able to put one back.
+    ///
+    /// **The reserved control is refused** — §4.3's SMPTE/Beats, by name and with
+    /// the reason, before anything is written ([`crate::RESERVED_BUTTONS`]).
+    /// Clearing it is always allowed, because unbound is the state it is supposed
+    /// to be in.
+    SurfaceBinding {
+        /// Which control.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::a_control()")
+        )]
+        control: crate::BoundControl,
+        /// What it should do, or nothing at all.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::an_action()")
+        )]
+        action: Option<crate::SurfaceAction>,
+    },
+    /// Arm **learn**: the next control an operator touches is named rather than
+    /// obeyed — S38.
+    ///
+    /// S20's method rule run in the other direction. That session established
+    /// that the way to find out what a control sends is to *press it and read
+    /// what arrives*, never to ask the profile; an editor has the same question
+    /// about the same desk and the same answer is right — so the operator presses
+    /// the key they mean and the daemon names it, rather than hunting for
+    /// `Global.AssignPlugin` in a list of sixty-four.
+    ///
+    /// **While it is armed the control does not fire.** That is the half worth
+    /// stating: an operator learning the Record key would otherwise clear their
+    /// programmer to find out what it is called, and one learning a transport key
+    /// would start a cue. [`crate::Delta::SurfaceLearnChanged`] reports both
+    /// edges.
+    ///
+    /// It is **one shot**: the first control disarms it, so a client that went
+    /// away mid-learn cannot leave a desk whose keys do nothing. It is also the
+    /// one member of this enum that is **not written down** — a desk that
+    /// restarted into learn mode would be a desk with no keys.
+    SurfaceLearn {
+        /// `true` to arm, `false` to give up on it.
+        learning: bool,
+    },
 }
 
 impl MachineChange {

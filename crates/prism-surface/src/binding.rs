@@ -50,154 +50,42 @@
 //! presses and counts them, so a binding on it could never fire — but a profile
 //! that names it is a person who believes they have bound it, so the loader
 //! refuses the profile and says why. Belt and braces, and the braces are the
-//! sentence the person reads.
+//! sentence the person reads. Since S38 the same refusal guards
+//! [`Bindings::bind`], which is the door an editor comes through: a table that
+//! is typed has to be refused in the same words a table that is read is.
+//!
+//! # The vocabulary is the domain's and the resolution is this crate's (S38)
+//!
+//! [`BoundControl`], [`SurfaceAction`], [`ExecutorTarget`] and [`Step`] are
+//! defined in `prism-domain` and re-exported here. The reason is that they now
+//! travel: a `Command::SetSurfaceBinding` carries one, an editor draws one, and
+//! the interface's copy of the type is generated from the domain. What stayed is
+//! everything that needs a device or a session — the note map, the shadow model,
+//! [`Bindings`] itself, and the [`Resolve`] that turns an action into a
+//! `Command`.
 
 use core::fmt;
 
 use prism_domain::{
     AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId, FeatureGroup,
-    GoDirection, ParamDirection, PlaybackTarget, ViewId, WindowType,
+    GlobalButton, ParamDirection, PlaybackTarget, RESERVED_REASON, StripButton, SurfaceBinding,
+    ViewId, WindowType,
 };
-use serde::{Deserialize, Serialize};
+// Layer 3's vocabulary moved to `prism-domain` in S38 and is re-exported here
+// for `GlobalButton`'s reason: what a control is called is the protocol's, what
+// it *comes out as* is this crate's, and a caller wants one name for both.
+pub use prism_domain::{BoundControl, ExecutorTarget, Step, SurfaceAction};
+use serde::Deserialize;
 
 use crate::control::ButtonId;
 use crate::model::{STRIP_BUTTONS, SurfaceEvent};
-use crate::profile::{Fader, GlobalButton, McuProfile, StripButton};
+use crate::profile::{Fader, McuProfile};
 
 /// The profile format this crate reads — `profileVersion` in the JSON.
 pub const PROFILE_VERSION: u32 = 1;
 
 /// Panel buttons a table has one slot for each of.
 const GLOBAL_SLOTS: usize = GlobalButton::ALL.len();
-
-/// Which executor an action acts on.
-///
-/// Two answers, because `docs/MCU_MAPPING.md` §4.1 has two kinds of row: a
-/// strip's own controls act on the executor under that strip, and the transport
-/// section, the Flip button and the main fader act on the one that is
-/// *selected*.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum ExecutorTarget {
-    /// The executor on the strip the event came from: `executorPage * 8 + index`
-    /// (**D7**). Nothing at all when the control is not a strip's.
-    Strip,
-    /// The executor the session has selected. Nothing when none is.
-    Selected,
-}
-
-/// Which way a relative move goes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub enum Step {
-    /// Backwards — `Channel ◀`.
-    Prev,
-    /// Forwards — `Channel ▶`.
-    Next,
-}
-
-/// What a control does.
-///
-/// A vocabulary of its own rather than a `Command` with holes in it: a binding
-/// is written before there is an event, and half of `Command`'s fields are
-/// answers only an event and a session have. The variants that need nothing are
-/// still their own variant rather than a `Command`, so the table has one shape.
-///
-/// **Every one of these resolves to a command that already exists.** S22 wrote
-/// that down as a constraint and recorded the three rows of §4.1 it could not
-/// then satisfy; S34 gave the protocol the command they were waiting for, and
-/// [`Self::ExecutorButton`] is how they are satisfied now. The constraint is
-/// unchanged: a name in a user-editable file that nothing answers is worse than
-/// a row this table cannot express.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "t")]
-pub enum SurfaceAction {
-    /// Move an executor's master — a fader, or an encoder.
-    ExecutorMaster {
-        /// Whose master.
-        target: ExecutorTarget,
-    },
-    /// Step an executor's sequence.
-    ExecutorGo {
-        /// Which executor.
-        target: ExecutorTarget,
-        /// Which way.
-        direction: GoDirection,
-    },
-    /// Stop an executor.
-    ExecutorOff {
-        /// Which executor.
-        target: ExecutorTarget,
-    },
-    /// Press one of an executor's buttons, and let the executor decide what that
-    /// means — `docs/MCU_MAPPING.md` §4.1's strip-button and transport rows.
-    ///
-    /// The **only** action here that forwards a release as well as a press: a
-    /// `Flash` is momentary and its release is half the gesture. Layer 3 does
-    /// not know which function it is sending to, which is the point — the
-    /// executor knows, and `prism_core::Show::apply` is where a release that
-    /// means nothing is dropped.
-    ExecutorButton {
-        /// Which executor.
-        target: ExecutorTarget,
-        /// Which of its buttons — a hardware position for a strip key, a named
-        /// function for a panel key this profile has assigned outright.
-        button: ExecutorButtonRef,
-    },
-    /// Make an executor the selected one, which is what the transport section
-    /// and the main fader then act on.
-    SelectExecutor {
-        /// Which executor.
-        target: ExecutorTarget,
-    },
-    /// Advance the three-stage Clear.
-    ClearProgrammer,
-    /// Page the fader bank — **D7**, eight executors to a page.
-    ExecutorPage {
-        /// How many pages, signed. Saturates at page 0 rather than wrapping.
-        delta: i32,
-    },
-    /// Jump to a stored view by number.
-    SelectView {
-        /// Which view.
-        view: ViewId,
-    },
-    /// Move to the neighbouring stored view — **D8**, `Channel ◀▶`.
-    ///
-    /// Which view that *is* comes from [`SurfaceContext`]: the view library
-    /// belongs to the session, and this crate does not hold one.
-    StepView {
-        /// Which way.
-        direction: Step,
-    },
-    /// Page the programmer.
-    ProgrammerPage {
-        /// How many pages, signed. Saturates at page 0.
-        delta: i32,
-    },
-    /// Move the programmer parameter the jog wheel turns.
-    SelectProgrammerParam {
-        /// Which way.
-        direction: ParamDirection,
-    },
-    /// Change the selected programmer parameter by the steps the control
-    /// reported — the jog wheel's row in §4.1.
-    AdjustParameter,
-    /// Switch the encoder bank.
-    SetEncoderBank {
-        /// Which feature group.
-        group: FeatureGroup,
-    },
-    /// Open a window on the canvas.
-    OpenWindow {
-        /// Which window.
-        window: WindowType,
-    },
-    /// Write the show to disk.
-    SaveShow,
-    /// Undo.
-    Oops,
-    /// Redo.
-    Redo,
-}
 
 /// What the session knows and this crate does not.
 ///
@@ -269,17 +157,23 @@ enum Origin {
     Panel,
 }
 
-impl ExecutorTarget {
-    /// The executor this target names, given where the event came from.
-    fn resolve(self, origin: Origin, context: &SurfaceContext) -> Option<ExecutorId> {
-        match (self, origin) {
-            (Self::Strip, Origin::Strip(strip)) => Some(ExecutorId::from_page_and_slot(
-                context.executor_page,
-                u32::from(strip),
-            )),
-            (Self::Strip, Origin::Panel) => None,
-            (Self::Selected, _) => context.selected_executor,
-        }
+/// Which executor a target names, given where the event came from.
+///
+/// A free function for [`Resolve`]'s reason: [`ExecutorTarget`] is the domain's
+/// since S38, and *which executor is under strip 4* is a question about a
+/// session.
+fn executor_of(
+    target: ExecutorTarget,
+    origin: Origin,
+    context: &SurfaceContext,
+) -> Option<ExecutorId> {
+    match (target, origin) {
+        (ExecutorTarget::Strip, Origin::Strip(strip)) => Some(ExecutorId::from_page_and_slot(
+            context.executor_page,
+            u32::from(strip),
+        )),
+        (ExecutorTarget::Strip, Origin::Panel) => None,
+        (ExecutorTarget::Selected, _) => context.selected_executor,
     }
 }
 
@@ -297,47 +191,47 @@ const fn step_page(page: u32, delta: i32) -> u32 {
     }
 }
 
-impl SurfaceAction {
-    /// Whether this action wants the release of a button as well as the press.
-    ///
-    /// Only [`Self::ExecutorButton`], and it always does: layer 3 cannot know
-    /// whether the executor has a `Flash` on that key, so it forwards both
-    /// edges and lets the executor decide. Everything else is an instruction
-    /// rather than a gesture, and an instruction has one edge.
-    #[must_use]
-    pub const fn is_momentary(self) -> bool {
-        matches!(self, Self::ExecutorButton { .. })
-    }
-
+/// What an action *means*, which needs an event and a session.
+///
+/// A trait rather than an inherent `impl` because [`SurfaceAction`] belongs to
+/// `prism-domain` since S38: the vocabulary travels on the wire and is drawn by
+/// an interface, so its **names** are the protocol's. What one comes out as is
+/// still this crate's, because it needs an [`Origin`], an [`Input`] and a
+/// [`SurfaceContext`] — an event and a session — and the domain has none of the
+/// three. The split is the point rather than a consequence of it.
+trait Resolve {
     /// The command this action means, or nothing.
-    ///
-    /// Nothing when the action needs an answer the context has not got — no
-    /// executor is selected, no parameter is on the jog wheel, no view lies
-    /// beyond the active one — and nothing when it is bound to a control that
-    /// cannot drive it, such as a master on a button. Both are ordinary: an
-    /// operator turning the jog wheel with nothing selected has done nothing,
-    /// and a profile that binds a level to a button is a mistake that should
-    /// cost nothing at run time.
+    fn resolve(self, origin: Origin, input: Input, context: &SurfaceContext) -> Option<Command>;
+}
+
+impl Resolve for SurfaceAction {
+    // Nothing when the action needs an answer the context has not got — no
+    // executor is selected, no parameter is on the jog wheel, no view lies
+    // beyond the active one — and nothing when it is bound to a control that
+    // cannot drive it, such as a master on a button. Both are ordinary: an
+    // operator turning the jog wheel with nothing selected has done nothing,
+    // and a table that binds a level to a button is a mistake that should cost
+    // nothing at run time.
     fn resolve(self, origin: Origin, input: Input, context: &SurfaceContext) -> Option<Command> {
         Some(match self {
             Self::ExecutorMaster { target } => Command::SetExecutorMaster {
-                executor_id: target.resolve(origin, context)?,
+                executor_id: executor_of(target, origin, context)?,
                 level: input.level()?,
             },
             Self::ExecutorGo { target, direction } => Command::ExecutorGo {
-                target: PlaybackTarget::of_executor(target.resolve(origin, context)?),
+                target: PlaybackTarget::of_executor(executor_of(target, origin, context)?),
                 direction,
             },
             Self::ExecutorOff { target } => Command::ExecutorOff {
-                target: PlaybackTarget::of_executor(target.resolve(origin, context)?),
+                target: PlaybackTarget::of_executor(executor_of(target, origin, context)?),
             },
             Self::ExecutorButton { target, button } => Command::ExecutorButton {
-                executor_id: target.resolve(origin, context)?,
+                executor_id: executor_of(target, origin, context)?,
                 button,
                 pressed: input.pressed()?,
             },
             Self::SelectExecutor { target } => Command::SelectExecutor {
-                executor_id: target.resolve(origin, context)?,
+                executor_id: executor_of(target, origin, context)?,
             },
             Self::ClearProgrammer => Command::ClearProgrammer,
             Self::ExecutorPage { delta } => Command::SetExecutorPage {
@@ -370,61 +264,6 @@ impl SurfaceAction {
             Self::Oops => Command::Oops,
             Self::Redo => Command::Redo,
         })
-    }
-}
-
-/// A control a binding can name.
-///
-/// The `Strip[*]` of §4.2 is one entry rather than eight: a strip's binding is
-/// the same on every strip and the strip index is what fills in the executor.
-/// A profile that wanted strip 3 to differ would be describing a desk whose
-/// faders are not a bank, which **D7** says they are.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum BoundControl {
-    /// `Strip[*].Fader`.
-    StripFader,
-    /// `Strip[*].Encoder`.
-    StripEncoder,
-    /// `Strip[*].Button.<name>`.
-    StripButton(StripButton),
-    /// `Main.Fader`.
-    MainFader,
-    /// `Global.<name>`.
-    Global(GlobalButton),
-    /// `Global.Jog`.
-    Jog,
-}
-
-impl BoundControl {
-    /// The control a profile's `control` string names.
-    #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "Strip[*].Fader" => Some(Self::StripFader),
-            "Strip[*].Encoder" => Some(Self::StripEncoder),
-            "Main.Fader" => Some(Self::MainFader),
-            "Global.Jog" => Some(Self::Jog),
-            _ => {
-                if let Some(button) = name.strip_prefix("Strip[*].Button.") {
-                    StripButton::from_name(button).map(Self::StripButton)
-                } else {
-                    GlobalButton::from_name(name.strip_prefix("Global.")?).map(Self::Global)
-                }
-            }
-        }
-    }
-}
-
-impl fmt::Display for BoundControl {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::StripFader => f.write_str("Strip[*].Fader"),
-            Self::StripEncoder => f.write_str("Strip[*].Encoder"),
-            Self::StripButton(button) => write!(f, "Strip[*].Button.{button}"),
-            Self::MainFader => f.write_str("Main.Fader"),
-            Self::Global(button) => write!(f, "Global.{button}"),
-            Self::Jog => f.write_str("Global.Jog"),
-        }
     }
 }
 
@@ -479,12 +318,14 @@ impl fmt::Display for ProfileError {
             Self::DuplicateControl(control) => {
                 write!(f, "{control} is bound twice; a control has one binding")
             }
-            Self::ReservedControl(button) => write!(
-                f,
-                "Global.{button} must not be bound: on a surface shared with a sound console \
-                 (Xctl+MC) it is the button that switches the desk between the two hosts, so a \
-                 binding on it strands the operator away from their sound desk. Leave it unbound",
-            ),
+            // The sentence itself is `prism_domain::RESERVED_REASON` since S38,
+            // because `prism_core` refuses a *command* that binds this button
+            // and has to say the same thing. An operator who met one wording in
+            // a log and another in a window would reasonably conclude they were
+            // two different rules.
+            Self::ReservedControl(button) => {
+                write!(f, "Global.{button} must not be bound: {RESERVED_REASON}")
+            }
         }
     }
 }
@@ -790,7 +631,7 @@ impl Bindings {
                 return Err(ProfileError::DuplicateControl(control));
             }
             seen.push(control);
-            if let (BoundControl::Global(button), Some(_)) = (control, entry.action)
+            if let (BoundControl::Global { button }, Some(_)) = (control, entry.action)
                 && profile.is_reserved(button)
             {
                 return Err(ProfileError::ReservedControl(button));
@@ -814,14 +655,86 @@ impl Bindings {
         }
     }
 
+    /// Puts an action on a control, **refusing the reserved one** — S38.
+    ///
+    /// [`set`](Self::set) with §4.3's rule in front of it, and the door an
+    /// editor comes through: a table that is *typed* has to be refused in the
+    /// same words a table that is *read* is, or the two are two rules. Clearing
+    /// a control is always allowed — `None` on the reserved button is the state
+    /// it is supposed to be in.
+    ///
+    /// # Errors
+    ///
+    /// [`ProfileError::ReservedControl`], naming the button and saying why.
+    pub fn bind(
+        &mut self,
+        control: BoundControl,
+        action: Option<SurfaceAction>,
+        profile: &McuProfile,
+    ) -> Result<(), ProfileError> {
+        if let (BoundControl::Global { button }, Some(_)) = (control, action)
+            && profile.is_reserved(button)
+        {
+            return Err(ProfileError::ReservedControl(button));
+        }
+        self.set(control, action);
+        Ok(())
+    }
+
+    /// The whole table, one row per control the surface has — S38.
+    ///
+    /// **Every** control, bound or not, in [`BoundControl::all`]'s order: this
+    /// is what an editor draws and what a machine configuration stores, and a
+    /// list that left the unbound ones out would be a picture of the desk with
+    /// the empty keys missing. It is the same pair `docs/MCU_MAPPING.md` §4.2's
+    /// file writes, which is what makes a table read out of one and a table
+    /// typed into the other the same thing.
+    #[must_use]
+    pub fn rows(&self) -> Vec<SurfaceBinding> {
+        BoundControl::all()
+            .into_iter()
+            .map(|control| SurfaceBinding {
+                control,
+                action: self.action(control),
+            })
+            .collect()
+    }
+
+    /// A table from stored rows, and **it cannot fail** — S38.
+    ///
+    /// [`load`](Self::load)'s guarantee for a table that arrives over the
+    /// protocol rather than out of a file, and it is the same guarantee for the
+    /// same reason: S22's rule is that a table nobody can read never stops a
+    /// desk answering its keys, and a `machine.json` written by an older build —
+    /// or edited by hand — is exactly as capable of naming the reserved button
+    /// as a profile is. So a bad row answers with the built-in defaults and the
+    /// reason, and the caller has nothing to decide.
+    ///
+    /// Rows are applied in order and a row may name a control twice; the last
+    /// one stands, because these arrive as a *table* rather than as a document
+    /// somebody wrote by hand, and §4.2's duplicate check is about the second.
+    #[must_use]
+    pub fn from_rows(
+        rows: &[SurfaceBinding],
+        profile: &McuProfile,
+    ) -> (Self, Option<ProfileError>) {
+        let mut table = Self::empty();
+        for row in rows {
+            if let Err(error) = table.bind(row.control, row.action, profile) {
+                return (Self::defaults(), Some(error));
+            }
+        }
+        (table, None)
+    }
+
     /// Puts an action on a control.
     pub fn set(&mut self, control: BoundControl, action: Option<SurfaceAction>) {
         match control {
             BoundControl::StripFader => self.strip_fader = action,
             BoundControl::StripEncoder => self.strip_encoder = action,
-            BoundControl::StripButton(button) => self.set_strip_button(button, action),
+            BoundControl::StripButton { button } => self.set_strip_button(button, action),
             BoundControl::MainFader => self.main_fader = action,
-            BoundControl::Global(button) => self.set_global(button, action),
+            BoundControl::Global { button } => self.set_global(button, action),
             BoundControl::Jog => self.jog = action,
         }
     }
@@ -832,11 +745,11 @@ impl Bindings {
         match control {
             BoundControl::StripFader => self.strip_fader,
             BoundControl::StripEncoder => self.strip_encoder,
-            BoundControl::StripButton(button) => {
+            BoundControl::StripButton { button } => {
                 self.strip_buttons.get(button.index()).copied().flatten()
             }
             BoundControl::MainFader => self.main_fader,
-            BoundControl::Global(button) => self.global.get(button.index()).copied().flatten(),
+            BoundControl::Global { button } => self.global.get(button.index()).copied().flatten(),
             BoundControl::Jog => self.jog,
         }
     }
@@ -867,11 +780,11 @@ impl Bindings {
             SurfaceEvent::Button { button, pressed } => {
                 let (action, origin) = match button {
                     ButtonId::Strip { strip, button } => (
-                        self.action(BoundControl::StripButton(button))?,
+                        self.action(BoundControl::StripButton { button })?,
                         Origin::Strip(strip),
                     ),
                     ButtonId::Global(button) => {
-                        (self.action(BoundControl::Global(button))?, Origin::Panel)
+                        (self.action(BoundControl::Global { button })?, Origin::Panel)
                     }
                 };
                 // A press is the event and the release ends it, so a release
@@ -1136,13 +1049,17 @@ mod tests {
         // profile wrong that must cost nothing at run time.
         let mut table = Bindings::empty();
         table.set(
-            BoundControl::Global(GlobalButton::F5),
+            BoundControl::Global {
+                button: GlobalButton::F5,
+            },
             Some(SurfaceAction::ExecutorMaster {
                 target: ExecutorTarget::Strip,
             }),
         );
         table.set(
-            BoundControl::Global(GlobalButton::F6),
+            BoundControl::Global {
+                button: GlobalButton::F6,
+            },
             Some(SurfaceAction::AdjustParameter),
         );
         assert_eq!(table.command(press(GlobalButton::F5), &context()), None);
@@ -1211,14 +1128,18 @@ mod tests {
         );
         assert_eq!(table.action(BoundControl::StripEncoder), None);
         assert_eq!(
-            table.action(BoundControl::StripButton(StripButton::Select)),
+            table.action(BoundControl::StripButton {
+                button: StripButton::Select
+            }),
             Some(SurfaceAction::ExecutorButton {
                 target: ExecutorTarget::Strip,
                 button: ExecutorButtonRef::Slot { index: 3 },
             })
         );
         assert_eq!(
-            table.action(BoundControl::Global(GlobalButton::Save)),
+            table.action(BoundControl::Global {
+                button: GlobalButton::Save
+            }),
             Some(SurfaceAction::SaveShow)
         );
         // And every one of them can be replaced, which is what "user-editable"
@@ -1244,8 +1165,8 @@ mod tests {
             BoundControl::MainFader,
             BoundControl::Jog,
         ];
-        controls.extend(StripButton::ALL.map(BoundControl::StripButton));
-        controls.extend(GlobalButton::ALL.map(BoundControl::Global));
+        controls.extend(StripButton::ALL.map(|button| BoundControl::StripButton { button }));
+        controls.extend(GlobalButton::ALL.map(|button| BoundControl::Global { button }));
         for control in controls {
             let name = control.to_string();
             assert_eq!(
@@ -1338,7 +1259,9 @@ mod tests {
                     r#"{"control":"Global.F1","action":{"t":"SaveShow"}},
                        {"control":"Global.F1","action":{"t":"Oops"}}"#,
                 ),
-                ProfileError::DuplicateControl(BoundControl::Global(GlobalButton::F1)),
+                ProfileError::DuplicateControl(BoundControl::Global {
+                    button: GlobalButton::F1,
+                }),
             ),
         ];
         for (text, want) in cases {
@@ -1483,7 +1406,12 @@ mod tests {
         ];
         for (action, want) in cases {
             let mut table = Bindings::empty();
-            table.set(BoundControl::Global(GlobalButton::F7), Some(action));
+            table.set(
+                BoundControl::Global {
+                    button: GlobalButton::F7,
+                },
+                Some(action),
+            );
             assert_eq!(
                 table.command(press(GlobalButton::F7), &context),
                 Some(want),
@@ -1533,24 +1461,32 @@ mod tests {
         );
         let table = Bindings::parse(&text, &X_TOUCH).expect("the documented shape");
         assert_eq!(
-            table.action(BoundControl::Global(GlobalButton::F1)),
+            table.action(BoundControl::Global {
+                button: GlobalButton::F1
+            }),
             Some(SurfaceAction::OpenWindow {
                 window: WindowType::PresetPool
             })
         );
         assert_eq!(
-            table.action(BoundControl::Global(GlobalButton::F2)),
+            table.action(BoundControl::Global {
+                button: GlobalButton::F2
+            }),
             Some(SurfaceAction::ExecutorGo {
                 target: ExecutorTarget::Strip,
                 direction: GoDirection::Prev
             })
         );
         assert_eq!(
-            table.action(BoundControl::Global(GlobalButton::F3)),
+            table.action(BoundControl::Global {
+                button: GlobalButton::F3
+            }),
             Some(SurfaceAction::ExecutorPage { delta: -1 })
         );
         assert_eq!(
-            table.action(BoundControl::Global(GlobalButton::F4)),
+            table.action(BoundControl::Global {
+                button: GlobalButton::F4
+            }),
             Some(SurfaceAction::StepView {
                 direction: Step::Next
             })

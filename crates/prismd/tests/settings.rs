@@ -691,9 +691,24 @@ async fn the_outputs_panel_asks_what_the_drivers_are_doing_and_what_goes_nowhere
 /// **Naming a binding profile again is the reload** — S37, and the Devices
 /// panel's third row.
 ///
-/// A profile that is missing or malformed is reported and the **built-in table
+/// A profile that is missing or malformed is reported and **the table in force
 /// stands**, which is S22's rule: a broken JSON file beside a daemon must never
 /// be the reason a desk stops answering its keys.
+///
+/// # S38 split two things this test used to be able to say in one sentence
+///
+/// S22 said *a malformed profile falls back to the built-in defaults*, and it
+/// said so about a desk starting up with nothing else to fall back on — so until
+/// S38 *the table it had* and *the built-in table* were the same table and this
+/// test could assert either. They are not the same once the table is editable: a
+/// desk that has a table of its own has something better to keep than the
+/// defaults, and throwing an operator's work away over a typo in a file would be
+/// the one outcome worse than ignoring the file.
+///
+/// So the claim is now the stronger one the sentence always made — **the keys it
+/// had** — and both readings are asserted: a broken file leaves a desk that has
+/// read a good one on the good one, and leaves a desk that has never read one on
+/// the built-in table.
 #[tokio::test]
 async fn a_binding_profile_is_read_by_naming_it_and_a_broken_one_never_stops_the_desk() {
     let _turn = common::one_daemon_at_a_time();
@@ -706,13 +721,17 @@ async fn a_binding_profile_is_read_by_naming_it_and_a_broken_one_never_stops_the
     // and re-reading a profile must not throw any of that away.
     let (port, _handle) = prismd::surface::MockSurfacePort::new();
     daemon.attach_surface(Box::new(port));
-    let f1 = prism_surface::BoundControl::Global(prism_surface::GlobalButton::F1);
+    let f1 = prism_surface::BoundControl::Global {
+        button: prism_surface::GlobalButton::F1,
+    };
     let built_in = daemon.bindings().action(f1);
     assert!(built_in.is_some(), "F1 is bound out of the box");
 
-    // A profile **overlays** the built-in table rather than replacing it (S22),
-    // so *the table changed* is asserted on the one control the file names
-    // rather than on a count — a count would be the same either way.
+    // A profile is the **whole** table and not an overlay — `Bindings::parse`
+    // starts from `Bindings::empty` — which is S22's *a profile is refused whole,
+    // not row by row* seen from the other side: a table half of which came from a
+    // file would be a desk doing some of what its author intended. So the file
+    // below binds F1 and unbinds everything else, and both halves are asserted.
     let profile = dir.path().join("xtouch.json");
     std::fs::write(
         &profile,
@@ -737,8 +756,20 @@ async fn a_binding_profile_is_read_by_naming_it_and_a_broken_one_never_stops_the
         Some(prism_surface::SurfaceAction::Oops),
         "the named table is in force"
     );
+    assert_eq!(
+        daemon
+            .bindings()
+            .action(prism_surface::BoundControl::Global {
+                button: prism_surface::GlobalButton::F2
+            }),
+        None,
+        "a profile is the whole table: what it does not name is not bound"
+    );
 
-    // A file that is not there: reported, and the built-in table stands.
+    // A file that is not there: reported, and **the table in force stands**.
+    // That is the half S38 changed, and this desk has a table of its own by now,
+    // so *the keys it had* is the profile's `Oops` rather than the built-in
+    // `OpenWindow`.
     daemon
         .desk()
         .core()
@@ -753,8 +784,30 @@ async fn a_binding_profile_is_read_by_naming_it_and_a_broken_one_never_stops_the
         .await;
     assert_eq!(
         daemon.bindings().action(f1),
-        built_in,
+        Some(prism_surface::SurfaceAction::Oops),
         "a broken profile leaves the desk with the keys it had"
+    );
+
+    // And one that will not parse, which is the other way a file can be
+    // unusable: same answer, and the whole table is still the good one's.
+    let broken = dir.path().join("broken.json");
+    std::fs::write(&broken, b"{ this is not JSON").unwrap();
+    daemon
+        .desk()
+        .core()
+        .apply(&Command::ConfigureMachine {
+            change: MachineChange::SurfaceProfile {
+                path: Some(broken.display().to_string()),
+            },
+        })
+        .unwrap();
+    daemon
+        .run(Some(Duration::from_millis(700)), std::future::pending())
+        .await;
+    assert_eq!(
+        daemon.bindings().action(f1),
+        Some(prism_surface::SurfaceAction::Oops),
+        "a profile that will not parse leaves the desk with the keys it had"
     );
 
     // And back to the built-in one by name, which is what a cleared box means.

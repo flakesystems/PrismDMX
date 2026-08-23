@@ -38,6 +38,13 @@ use core::fmt;
 
 use crate::control::{ButtonId, FADER_MAX};
 use crate::model::{Control, SurfaceMode};
+use prism_domain::RESERVED_BUTTONS;
+// The panel's names moved to `prism-domain` in S38 — see that crate's `surface`
+// module for why a vocabulary that travels on the wire is the domain's. They are
+// re-exported here so `prism_surface::GlobalButton` still names the same type: a
+// caller of this crate is asking about a surface, and where the type is defined
+// is not their business.
+pub use prism_domain::{GlobalButton, StripButton};
 
 /// Mackie's three-byte manufacturer ID, which every MCU SysEx carries.
 ///
@@ -68,67 +75,6 @@ pub const SYSEX_METER_MODE: u8 = 0x21;
 /// this device is bought for, undocumented by Behringer, firmware ≥ 1.22.
 pub const SYSEX_LCD_COLOR: u8 = 0x72;
 
-/// Which button on a channel strip.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum StripButton {
-    /// Rec / Arm, the top button of the strip.
-    Rec,
-    /// Solo.
-    Solo,
-    /// Mute.
-    Mute,
-    /// Select.
-    Select,
-    /// Pushing the V-Pot in. A button, not a rotation — see
-    /// [`ControlEvent::VPot`](crate::ControlEvent::VPot) for the turn.
-    VPotPush,
-}
-
-impl StripButton {
-    /// Every strip button, so a test can walk the whole set rather than the
-    /// ones somebody remembered.
-    pub const ALL: [Self; 5] = [
-        Self::Rec,
-        Self::Solo,
-        Self::Mute,
-        Self::Select,
-        Self::VPotPush,
-    ];
-
-    /// This button's position in [`ALL`](Self::ALL), which is how layer 2's
-    /// shadow model indexes a strip's LEDs.
-    #[must_use]
-    pub const fn index(self) -> usize {
-        self as usize
-    }
-
-    /// What a binding profile calls this button, as `docs/MCU_MAPPING.md` §3
-    /// spells it: `Strip[*].Button.Select`.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Rec => "Rec",
-            Self::Solo => "Solo",
-            Self::Mute => "Mute",
-            Self::Select => "Select",
-            Self::VPotPush => "VPotPush",
-        }
-    }
-
-    /// The button a control name refers to — the inverse of
-    /// [`name`](Self::name).
-    #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|button| button.name() == name)
-    }
-}
-
-impl fmt::Display for StripButton {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
-    }
-}
-
 /// One row of the strip button table: a button and the note number **strip 0**
 /// uses for it. Strip *n* is that note plus *n*.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,323 +83,6 @@ pub struct StripButtonRow {
     pub button: StripButton,
     /// The note number the leftmost strip sends for it.
     pub first_note: u8,
-}
-
-/// Every button on the panel that does not belong to a channel strip.
-///
-/// The names are the ones printed on the surface, which is deliberate: this
-/// layer knows MIDI and topology, and nothing about what PrismDMX does when one
-/// is pressed. `Play` is a note number here; that it starts an executor is
-/// layer 3's opinion (`docs/MCU_MAPPING.md` §4.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum GlobalButton {
-    /// Encoder Assign: Track.
-    AssignTrack,
-    /// Encoder Assign: Send.
-    AssignSend,
-    /// Encoder Assign: Pan/Surround.
-    AssignPan,
-    /// Encoder Assign: Plug-in.
-    AssignPlugin,
-    /// Encoder Assign: EQ.
-    AssignEq,
-    /// Encoder Assign: Instrument.
-    AssignInstrument,
-    /// Fader bank left — executor page down (D7).
-    BankLeft,
-    /// Fader bank right — executor page up (D7).
-    BankRight,
-    /// Channel left — previous UI view (D8).
-    ChannelLeft,
-    /// Channel right — next UI view (D8).
-    ChannelRight,
-    /// Flip.
-    Flip,
-    /// Global View.
-    GlobalView,
-    /// Display: Name/Value.
-    NameValue,
-    /// Display: SMPTE/Beats.
-    SmpteBeats,
-    /// Function key 1.
-    F1,
-    /// Function key 2.
-    F2,
-    /// Function key 3.
-    F3,
-    /// Function key 4.
-    F4,
-    /// Function key 5.
-    F5,
-    /// Function key 6.
-    F6,
-    /// Function key 7.
-    F7,
-    /// Function key 8.
-    F8,
-    /// Global View group: MIDI Tracks.
-    ViewMidiTracks,
-    /// Global View group: Inputs.
-    ViewInputs,
-    /// Global View group: Audio Tracks.
-    ViewAudioTracks,
-    /// Global View group: Audio Instruments.
-    ViewAudioInstruments,
-    /// Global View group: Aux.
-    ViewAux,
-    /// Global View group: Busses.
-    ViewBusses,
-    /// Global View group: Outputs.
-    ViewOutputs,
-    /// Global View group: User.
-    ViewUser,
-    /// Modifier: Shift. Held, not latched.
-    ModShift,
-    /// Modifier: Option. Held, not latched.
-    ModOption,
-    /// Modifier: Control. Held, not latched.
-    ModControl,
-    /// Modifier: Alt. Held, not latched.
-    ModAlt,
-    /// Automation: Read/Off.
-    AutoRead,
-    /// Automation: Write.
-    AutoWrite,
-    /// Automation: Trim.
-    AutoTrim,
-    /// Automation: Touch. Not the fader touch sensor — that is
-    /// [`ControlEvent::Touch`](crate::ControlEvent::Touch).
-    AutoTouch,
-    /// Automation: Latch.
-    AutoLatch,
-    /// Automation: Group.
-    AutoGroup,
-    /// Utility: Save.
-    Save,
-    /// Utility: Undo.
-    Undo,
-    /// Utility: Cancel.
-    Cancel,
-    /// Utility: Enter.
-    Enter,
-    /// Upper transport row: Markers.
-    Markers,
-    /// Upper transport row: Nudge.
-    Nudge,
-    /// Upper transport row: Cycle.
-    Cycle,
-    /// Upper transport row: Drop.
-    Drop,
-    /// Upper transport row: Replace.
-    Replace,
-    /// Upper transport row: Click.
-    Click,
-    /// Upper transport row: Solo. The global one that clears solos, not a
-    /// strip's — see [`StripButton::Solo`].
-    SoloClear,
-    /// Transport: Rewind.
-    Rewind,
-    /// Transport: Fast forward.
-    FastForward,
-    /// Transport: Stop.
-    Stop,
-    /// Transport: Play.
-    Play,
-    /// Transport: Record.
-    Record,
-    /// Cursor: up.
-    CursorUp,
-    /// Cursor: down.
-    CursorDown,
-    /// Cursor: left.
-    CursorLeft,
-    /// Cursor: right.
-    CursorRight,
-    /// Cursor cluster: Zoom.
-    Zoom,
-    /// Cursor cluster: Scrub.
-    Scrub,
-    /// Foot switch 1.
-    FootSwitch1,
-    /// Foot switch 2.
-    FootSwitch2,
-}
-
-impl GlobalButton {
-    /// Every global button.
-    ///
-    /// Kept beside [`X_TOUCH`]'s note table rather than derived from it, so
-    /// that the two have to agree — and a test asserts they do, in both
-    /// directions. A button added here without a note, or a note added there
-    /// without a button, turns that test red.
-    pub const ALL: [Self; 64] = [
-        Self::AssignTrack,
-        Self::AssignSend,
-        Self::AssignPan,
-        Self::AssignPlugin,
-        Self::AssignEq,
-        Self::AssignInstrument,
-        Self::BankLeft,
-        Self::BankRight,
-        Self::ChannelLeft,
-        Self::ChannelRight,
-        Self::Flip,
-        Self::GlobalView,
-        Self::NameValue,
-        Self::SmpteBeats,
-        Self::F1,
-        Self::F2,
-        Self::F3,
-        Self::F4,
-        Self::F5,
-        Self::F6,
-        Self::F7,
-        Self::F8,
-        Self::ViewMidiTracks,
-        Self::ViewInputs,
-        Self::ViewAudioTracks,
-        Self::ViewAudioInstruments,
-        Self::ViewAux,
-        Self::ViewBusses,
-        Self::ViewOutputs,
-        Self::ViewUser,
-        Self::ModShift,
-        Self::ModOption,
-        Self::ModControl,
-        Self::ModAlt,
-        Self::AutoRead,
-        Self::AutoWrite,
-        Self::AutoTrim,
-        Self::AutoTouch,
-        Self::AutoLatch,
-        Self::AutoGroup,
-        Self::Save,
-        Self::Undo,
-        Self::Cancel,
-        Self::Enter,
-        Self::Markers,
-        Self::Nudge,
-        Self::Cycle,
-        Self::Drop,
-        Self::Replace,
-        Self::Click,
-        Self::SoloClear,
-        Self::Rewind,
-        Self::FastForward,
-        Self::Stop,
-        Self::Play,
-        Self::Record,
-        Self::CursorUp,
-        Self::CursorDown,
-        Self::CursorLeft,
-        Self::CursorRight,
-        Self::Zoom,
-        Self::Scrub,
-        Self::FootSwitch1,
-        Self::FootSwitch2,
-    ];
-
-    /// This button's position in [`ALL`](Self::ALL), which is how layer 2's
-    /// shadow model indexes the panel's LEDs.
-    ///
-    /// The note number would be the obvious index and is the wrong one: it is a
-    /// property of *this* surface, and the shadow model is layer 2's, where a
-    /// device with a different note map still has these sixty-four buttons.
-    #[must_use]
-    pub const fn index(self) -> usize {
-        self as usize
-    }
-
-    /// What a binding profile calls this button, after the `Global.` prefix
-    /// (`docs/MCU_MAPPING.md` §4.2).
-    ///
-    /// The variant's own spelling, deliberately: a profile is written by a
-    /// person against this list, and a second vocabulary — the legend printed on
-    /// the panel, say, with its slashes and spaces — would be a second thing to
-    /// keep in step. A test asserts the sixty-four names are distinct and that
-    /// [`from_name`](Self::from_name) reverses every one.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::AssignTrack => "AssignTrack",
-            Self::AssignSend => "AssignSend",
-            Self::AssignPan => "AssignPan",
-            Self::AssignPlugin => "AssignPlugin",
-            Self::AssignEq => "AssignEq",
-            Self::AssignInstrument => "AssignInstrument",
-            Self::BankLeft => "BankLeft",
-            Self::BankRight => "BankRight",
-            Self::ChannelLeft => "ChannelLeft",
-            Self::ChannelRight => "ChannelRight",
-            Self::Flip => "Flip",
-            Self::GlobalView => "GlobalView",
-            Self::NameValue => "NameValue",
-            Self::SmpteBeats => "SmpteBeats",
-            Self::F1 => "F1",
-            Self::F2 => "F2",
-            Self::F3 => "F3",
-            Self::F4 => "F4",
-            Self::F5 => "F5",
-            Self::F6 => "F6",
-            Self::F7 => "F7",
-            Self::F8 => "F8",
-            Self::ViewMidiTracks => "ViewMidiTracks",
-            Self::ViewInputs => "ViewInputs",
-            Self::ViewAudioTracks => "ViewAudioTracks",
-            Self::ViewAudioInstruments => "ViewAudioInstruments",
-            Self::ViewAux => "ViewAux",
-            Self::ViewBusses => "ViewBusses",
-            Self::ViewOutputs => "ViewOutputs",
-            Self::ViewUser => "ViewUser",
-            Self::ModShift => "ModShift",
-            Self::ModOption => "ModOption",
-            Self::ModControl => "ModControl",
-            Self::ModAlt => "ModAlt",
-            Self::AutoRead => "AutoRead",
-            Self::AutoWrite => "AutoWrite",
-            Self::AutoTrim => "AutoTrim",
-            Self::AutoTouch => "AutoTouch",
-            Self::AutoLatch => "AutoLatch",
-            Self::AutoGroup => "AutoGroup",
-            Self::Save => "Save",
-            Self::Undo => "Undo",
-            Self::Cancel => "Cancel",
-            Self::Enter => "Enter",
-            Self::Markers => "Markers",
-            Self::Nudge => "Nudge",
-            Self::Cycle => "Cycle",
-            Self::Drop => "Drop",
-            Self::Replace => "Replace",
-            Self::Click => "Click",
-            Self::SoloClear => "SoloClear",
-            Self::Rewind => "Rewind",
-            Self::FastForward => "FastForward",
-            Self::Stop => "Stop",
-            Self::Play => "Play",
-            Self::Record => "Record",
-            Self::CursorUp => "CursorUp",
-            Self::CursorDown => "CursorDown",
-            Self::CursorLeft => "CursorLeft",
-            Self::CursorRight => "CursorRight",
-            Self::Zoom => "Zoom",
-            Self::Scrub => "Scrub",
-            Self::FootSwitch1 => "FootSwitch1",
-            Self::FootSwitch2 => "FootSwitch2",
-        }
-    }
-
-    /// The button a control name refers to — the inverse of
-    /// [`name`](Self::name).
-    #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|button| button.name() == name)
-    }
-}
-
-impl fmt::Display for GlobalButton {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
-    }
 }
 
 /// One row of the global button table.
@@ -762,20 +391,6 @@ const X_TOUCH_PERMANENT: [Control; 6] = [
     Control::Jog,
 ];
 
-/// Buttons PrismDMX must never drive, bind or claim.
-///
-/// One of them, and `docs/MCU_MAPPING.md` §4.3 is emphatic about why:
-/// **SMPTE/Beats is the button that switches the surface between the two hosts**
-/// in the combined mode. It is the operator's way back to the sound desk, and a
-/// console that steals it is a console somebody has to power-cycle to get out
-/// of.
-///
-/// Reserved in **every** mode rather than only in the shared one, deliberately,
-/// so that one profile is safe on a desk whose mode nobody has checked. Layer 2
-/// drops its inbound events (and counts them); S22's loader should refuse a
-/// binding that names it rather than merely defaulting away from it.
-const X_TOUCH_RESERVED_BUTTONS: [GlobalButton; 1] = [GlobalButton::SmpteBeats];
-
 /// The strip button rows of `docs/MCU_MAPPING.md` §2.1.
 const X_TOUCH_STRIP_BUTTONS: [StripButtonRow; 5] = [
     StripButtonRow {
@@ -898,7 +513,23 @@ pub struct McuProfile {
     ///
     /// SMPTE/Beats on this surface: in the combined Xctl+MC mode it is what
     /// switches the desk between the two hosts, so binding it strands the
-    /// operator away from their sound console (§4.3).
+    /// operator away from their sound console (§4.3). Reserved in **every** mode
+    /// rather than only in the shared one, deliberately, so that one profile is
+    /// safe on a desk whose mode nobody has checked.
+    ///
+    /// **The array is `prism_domain::RESERVED_BUTTONS` and this points at it** —
+    /// S38. Until then the rule was stated in this file, which was right while
+    /// this crate was the only thing that could refuse a binding; it stopped
+    /// being right when a *command* could bind one, because the applier that has
+    /// to refuse that (`prism_core::MachineConfig::configure`) must never depend
+    /// on a MIDI codec. One array with two readers is a rule; two arrays would be
+    /// a pair to keep in step, and the copy that drifted would be the one an
+    /// operator relied on.
+    ///
+    /// Three layers refuse it and all three say
+    /// `prism_domain::RESERVED_REASON`: layer 2 drops its inbound events and
+    /// counts them, S22's loader refuses a profile file that names it, and S38
+    /// refuses a command and a stored table that do.
     pub reserved_buttons: &'static [GlobalButton],
     /// Whether the numbers above have been read off a real device.
     ///
@@ -1181,7 +812,7 @@ impl McuProfile {
         fader_step: 4,
         unlit_buttons: &X_TOUCH_UNLIT_BUTTONS,
         permanent: &X_TOUCH_PERMANENT,
-        reserved_buttons: &X_TOUCH_RESERVED_BUTTONS,
+        reserved_buttons: &RESERVED_BUTTONS,
         verified: true,
     };
 }

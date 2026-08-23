@@ -35,6 +35,7 @@
 
 import { useState } from "react";
 
+import { ControlsPanel } from "./controls";
 import { DevicesPanel } from "./devices";
 import { MachinePanel } from "./machine";
 import { OutputsPanel } from "./outputs";
@@ -63,9 +64,10 @@ export function SettingsWindow() {
           </button>
         ))}
       </nav>
-      <div className="settings-body">
+      <div className="settings-body" data-testid="settings-body">
         {panel === "Outputs" ? <OutputsPanel /> : null}
         {panel === "Devices" ? <DevicesPanel /> : null}
+        {panel === "Controls" ? <ControlsPanel /> : null}
         {panel === "Show files" ? <ShowFilesPanel /> : null}
         {panel === "This machine" ? <MachinePanel /> : null}
       </div>

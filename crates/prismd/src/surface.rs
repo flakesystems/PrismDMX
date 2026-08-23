@@ -57,9 +57,9 @@ use std::time::{Duration, Instant};
 use prism_domain::{AttributeType, Delta, EXECUTORS_PER_PAGE, ExecutorId, NoticeLevel, ViewId};
 use prism_ipc::CommandOutcome;
 use prism_surface::{
-    Bindings, ButtonId, DisplayLine, Fader, GlobalButton, LedState, MAX_MESSAGE_BYTES, MAX_STRIPS,
-    StripButton, StripColor, SurfaceController, SurfaceCounters, SurfaceEvent, SurfaceHealth,
-    SurfaceTiming, X_TOUCH,
+    Bindings, ButtonId, Control, DisplayLine, Fader, GlobalButton, LedState, MAX_MESSAGE_BYTES,
+    MAX_STRIPS, StripButton, StripColor, SurfaceController, SurfaceCounters, SurfaceEvent,
+    SurfaceHealth, SurfaceTiming, X_TOUCH,
 };
 
 use crate::core::Core;
@@ -197,6 +197,13 @@ pub struct SurfaceLink {
     next_paint: Duration,
     /// The health last reported to the operator.
     reported: SurfaceHealth,
+    /// A button whose **release** is still to be eaten - S38's learn.
+    ///
+    /// Learn is one shot, so the press that named a control disarmed it and the
+    /// release arrives with learn already off. A release is not nothing: layer 3
+    /// forwards both edges of an `ExecutorButton`, so letting it through would
+    /// release a `Flash` that was never held. See [`SurfaceLink::learn`].
+    swallow: Option<ButtonId>,
 }
 
 impl core::fmt::Debug for SurfaceLink {
@@ -242,6 +249,7 @@ impl SurfaceLink {
             text: String::new(),
             next_paint: Duration::ZERO,
             reported,
+            swallow: None,
         }
     }
 
@@ -398,10 +406,25 @@ impl SurfaceLink {
     }
 
     /// Turns this poll's events into commands and applies them.
+    ///
+    /// **Unless learn is armed**, in which case the first event that names a
+    /// control names it and fires nothing - S38. See [`Self::learn`].
     fn apply(&mut self, desk: &Desk) -> Vec<Delta> {
         let context = context_of(&desk.core());
         let mut deltas = Vec::new();
-        for event in &self.events {
+        let mut learning = desk.core().is_learning();
+        // The events are taken rather than borrowed, because learning writes to
+        // `self`. `std::mem::take` on a reused buffer costs the allocation the
+        // reuse was for, so the vector is swapped out and swapped back — the
+        // capacity is the same one on the way out as on the way in.
+        let mut events = core::mem::take(&mut self.events);
+        for event in &events {
+            if learning || self.swallow.is_some() {
+                let (learned, still) = self.learn(*event, learning, desk);
+                deltas.extend(learned);
+                learning = still;
+                continue;
+            }
             let Some(command) = self.bindings.command(*event, &context) else {
                 continue;
             };
@@ -416,7 +439,73 @@ impl SurfaceLink {
                 }
             }
         }
+        // Back where it came from, so the next poll writes into the same
+        // capacity: `tests/surface_allocations.rs` asserts a busy desk costs no
+        // allocation and this is one of the two buffers that promise is about.
+        events.clear();
+        self.events = events;
         deltas
+    }
+
+    /// Names the control an operator touched instead of obeying it - S38.
+    ///
+    /// # Why a press must not fire while learn is armed
+    ///
+    /// This is the half of learn that is worth the code. An operator finding out
+    /// what the Record key is called would otherwise clear their programmer to
+    /// find out, and one learning a transport key would start a cue on a stage.
+    /// So while learn is armed nothing this poll produces reaches
+    /// `Desk::command` at all.
+    ///
+    /// # And the release has to go with the press
+    ///
+    /// Learn is **one shot**: the press names the control and disarms. The
+    /// button's *release* arrives on a later poll with learn already off, and a
+    /// release on its own is not nothing - `SurfaceAction::is_momentary` forwards
+    /// both edges of an `ExecutorButton`, so a `Flash` would be released without
+    /// ever having been held. [`Self::swallow`] is that one button, remembered
+    /// until its release has been eaten.
+    ///
+    /// Touch is deliberately not learnable. A hand landing on a fader is layer
+    /// 2's business and produces no command of its own (`Bindings::command`
+    /// answers `None` for it), and the `Moved` that follows names the same
+    /// fader, so learning from touch would name a control twice and disarm on
+    /// the half of the gesture that means least.
+    fn learn(&mut self, event: SurfaceEvent, learning: bool, desk: &Desk) -> (Vec<Delta>, bool) {
+        let control = match event {
+            SurfaceEvent::Button { button, pressed } => {
+                if self.swallow == Some(button) && !pressed {
+                    self.swallow = None;
+                    return (Vec::new(), learning);
+                }
+                if !pressed {
+                    return (Vec::new(), learning);
+                }
+                match button {
+                    ButtonId::Strip { button, .. } => {
+                        prism_domain::BoundControl::StripButton { button }
+                    }
+                    ButtonId::Global(button) => prism_domain::BoundControl::Global { button },
+                }
+            }
+            SurfaceEvent::Moved { fader, .. } => match fader {
+                Fader::Strip(_) => prism_domain::BoundControl::StripFader,
+                Fader::Main => prism_domain::BoundControl::MainFader,
+            },
+            SurfaceEvent::Encoder { .. } => prism_domain::BoundControl::StripEncoder,
+            SurfaceEvent::Jog { .. } => prism_domain::BoundControl::Jog,
+            SurfaceEvent::Touch { .. } => return (Vec::new(), learning),
+        };
+        if !learning {
+            // The tail of a gesture whose head was learned, and nothing else
+            // reaches here: the press disarmed learn and this poll is still
+            // walking the events it arrived with.
+            return (Vec::new(), learning);
+        }
+        if let SurfaceEvent::Button { button, .. } = event {
+            self.swallow = Some(button);
+        }
+        (desk.core().learned(control), false)
     }
 
     /// Puts what the show wants shown into the picture.
@@ -900,6 +989,87 @@ impl SurfacePort for FileSurfacePort {
 /// permission, bad JSON, a binding on the reserved button — produces the
 /// built-in defaults and a warning in the log, never a daemon that will not
 /// start.
+/// Whether a bound control keeps reaching PrismDMX while the surface is also
+/// driving a sound console — `docs/MCU_MAPPING.md` §4.3, and S38's *ownership
+/// shown*.
+///
+/// The answer is `McuProfile::permanent`'s, asked through the layer-2 vocabulary
+/// that holds it: a `BoundControl` is what a *table* names and a `Control` is
+/// what the shadow model owns, and the two are the same desk seen from either
+/// side of layer 3. It is answered here rather than by a client because a client
+/// holds no device profile — telling an operator that a key is always in reach
+/// when it is not is precisely the mistake §4.3 exists to prevent.
+///
+/// A strip row is asked about **strip 0**, and that is exact rather than a
+/// sample: `Strip[*]` is one binding for all eight strips (**D7**), and the
+/// permanent set contains no strip control at all, so the eight cannot disagree.
+#[must_use]
+pub fn is_permanent(control: prism_domain::BoundControl) -> bool {
+    use prism_domain::BoundControl;
+    let control = match control {
+        BoundControl::StripFader => Control::Fader(Fader::Strip(0)),
+        BoundControl::StripEncoder => Control::Encoder(0),
+        BoundControl::StripButton { button } => {
+            Control::Button(ButtonId::Strip { strip: 0, button })
+        }
+        BoundControl::MainFader => Control::Fader(Fader::Main),
+        BoundControl::Global { button } => Control::Button(ButtonId::Global(button)),
+        BoundControl::Jog => Control::Jog,
+    };
+    X_TOUCH.holds(control, prism_surface::SurfaceMode::Shared)
+}
+
+/// Reads a binding profile from disk, or answers `None` — S38.
+///
+/// [`load_profile`]'s other half, and the difference is what a caller has to
+/// fall back **on**. `load_profile` answers with the built-in defaults, which is
+/// right for a desk starting up with nothing else; this answers with nothing,
+/// which is right for a desk that already has a table of its own. S22's rule is
+/// *a malformed profile never blocks anything* — it is not *a malformed profile
+/// replaces what an operator has been working on*, and once the table is
+/// editable those two come apart.
+///
+/// It warns for the same reasons and in the same words, so a person reading the
+/// log cannot tell which of the two the caller used, which is correct: the file
+/// was not usable either way.
+#[must_use]
+pub fn read_profile(path: &Path) -> Option<Bindings> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) => {
+            log::warn(
+                "surface",
+                &format!(
+                    "{} could not be read ({error}); the binding table in force is unchanged",
+                    path.display()
+                ),
+            );
+            return None;
+        }
+    };
+    match Bindings::load(&text, &X_TOUCH) {
+        (_, Some(error)) => {
+            log::warn(
+                "surface",
+                &format!(
+                    "{} was not used: {error}. The binding table in force is unchanged",
+                    path.display()
+                ),
+            );
+            None
+        }
+        (bindings, None) => {
+            log::info(
+                "surface",
+                &format!("{} loaded: {} controls bound", path.display(), {
+                    bindings.bound()
+                }),
+            );
+            Some(bindings)
+        }
+    }
+}
+
 #[must_use]
 pub fn load_profile(path: &Path) -> Bindings {
     let text = match std::fs::read_to_string(path) {

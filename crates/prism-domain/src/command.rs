@@ -1376,6 +1376,14 @@ impl Command {
     /// node would move light on a stage while somebody was driving it — which is
     /// §6.1's rule for playback actions, met by another road.
     ///
+    /// **Still six after S38**, and that is worth a sentence. S38 made the
+    /// binding table of `docs/MCU_MAPPING.md` §4 editable at the desk, which
+    /// wanted two new things said — *this control does that* and *arm learn* —
+    /// and neither is a new command: both are [`MachineChange`] variants that
+    /// travel in [`Self::ConfigureMachine`], because what a desk's keys do is one
+    /// of this machine's settings and `MachineChange` is where one of those goes.
+    /// The measured cost of the alternative is in `crate::wire`.
+    ///
     /// **Six since S37**, which put everything else `prismd` used to be told on
     /// a command line here as well — the network exposure and its token, the log
     /// level, the universe count, the exit action, the autostart flag, the

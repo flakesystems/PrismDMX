@@ -120,9 +120,10 @@ impl ShowMirror {
     /// bar, and a mirror that ignored it would drift on exactly those fields.
     /// Every other delta describes something that is not show state
     /// (`SessionPatch`, which is [`SessionMirror`]'s, `ProgrammerChanged`,
-    /// `OutputsChanged` and `SurfaceChanged` — S33's rig and S36's surface port,
-    /// which belong to the *machine* and must never be written into a document
-    /// a client thinks is the show — `OutputHealth`, `DirtyFlag`, `Notice`) and
+    /// `OutputsChanged`, `SurfaceChanged`, `SurfaceBindingsChanged` and
+    /// `SurfaceLearnChanged` — S33's rig, S36's surface port and S38's binding
+    /// table, which belong to the *machine* and must never be written into a
+    /// document a client thinks is the show — `OutputHealth`, `DirtyFlag`, `Notice`) and
     /// is ignored here.
     ///
     /// # Errors
@@ -161,6 +162,8 @@ impl ShowMirror {
             | Delta::ProgrammerChanged { .. }
             | Delta::OutputsChanged { .. }
             | Delta::SurfaceChanged { .. }
+            | Delta::SurfaceBindingsChanged { .. }
+            | Delta::SurfaceLearnChanged { .. }
             | Delta::MachineChanged { .. }
             | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }
@@ -248,6 +251,8 @@ impl SessionMirror {
             | Delta::ProgrammerChanged { .. }
             | Delta::OutputsChanged { .. }
             | Delta::SurfaceChanged { .. }
+            | Delta::SurfaceBindingsChanged { .. }
+            | Delta::SurfaceLearnChanged { .. }
             | Delta::MachineChanged { .. }
             | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }
