@@ -2941,7 +2941,7 @@ stops needing one**.
 | `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **715 tests in 50 files** (688 in 48 at S37); the build is **374 KB, 110.5 KB gzipped**, up 15 KB on S37 — and **this session adds no dependency** |
 | Playwright | ✅ **39 tests** (34 before), all green |
 | Coverage on what this session wrote | ✅ `ui/src/settings/` at **99.54 % lines**, with `controls.tsx`, `actions.ts` and `settings.ts` all at **100 % lines, statements and functions**. `prism_domain::surface` at **100 % on every column**. `prism-domain` **99.67 % lines** — *higher* than S37's 99.63 %, which took a detour worth recording below |
-| CI green on the pushed commit | see below |
+| CI green on the pushed commit | ✅ run **32649175306** on `863ac04` — all five jobs on the **first attempt**: Windows full build and test 12 m 58 s, Linux platform-neutral 4 m 46 s, UI end-to-end against a daemon 2 m 51 s, UI typecheck/lint/test/build 2 m 24 s, ARM64 cross-check 55 s. The Linux job is the interesting one again: `controls.rs` runs there too, over a **Unix domain socket** rather than a named pipe, so a key is rebound and learned on a machine that has never seen an X-Touch — and the five control-editor end-to-end tests passed on a Linux runner, which is a browser rebinding a key at a console nobody has ever plugged in |
 
 **What was built, and where the line is.** A fifth panel in the settings window,
 beside *Devices* on purpose: that panel names the desk's MIDI port and the file
@@ -3158,8 +3158,10 @@ property S37 wanted; the recording was one way to get it and not the only one.
 | `cargo fmt --all --check` | ✅ |
 | `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build` | ✅ **715 tests in 50 files**; 374 KB, 110.5 KB gzipped |
 | Playwright | ✅ **39 tests** |
+| CI green on the pushed commit | ✅ run **32649175306** on `863ac04`, all five jobs on the **first attempt** |
 
 ---
+
 ## 3. Coverage tracking
 
 Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and protocols. Record **measured** figures only — leave blank until a run produces a number.
