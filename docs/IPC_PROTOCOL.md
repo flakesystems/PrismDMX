@@ -696,6 +696,33 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > `null` **keeps** the colour that is there, so a relabel through the command line
 > cannot throw away something an operator chose with a picker.
 
+> **`PatchFixture` gained one field in S43, and `Command::StorePreset` gained a
+> pool it did not have** *(S43)*.
+>
+> `softwareDimmer: boolean` says whether the desk supplies this fixture's
+> intensity when its profile has none. It travels with the rest of the patch form
+> rather than as a command of its own, for the reason the name and the address do
+> — the form sends what the row **is**, and a second command for one checkbox
+> would be a second way for the row and the show to disagree. It is
+> `#[serde(default)]` and the default is **true**, which is the safe answer: a
+> colour-only fixture without one comes up lit, because a colour rests open
+> (`docs/DMX_MERGE.md` §5.1). It says nothing about a fixture whose profile has a
+> dimmer of its own.
+>
+> `StorePreset::pool` is `PresetPool` rather than `FeatureGroup`: seven banks and
+> **`Multi`**, which takes every value the programmer holds across the banks. The
+> two are separate types on purpose and both conversions are exhaustive, so a
+> bank added to `FeatureGroup` is a compile error here rather than a pool that
+> silently cannot be stored into. `None` still means `Session::encoderBank`.
+>
+> Two session fields arrived with them and are documented in
+> `ARCHITECTURE_SPEC.md` §4.1: `commandLineRun`, a **counter** that asks the
+> focused client to run the line (a stop-gap S49 removes), and `windowPicker`,
+> which is session state because an X-Touch key opens the chooser. `ProgrammerState`
+> gained `selectedGroups` and `manualSelection`, both `#[serde(default)]`, because
+> *why* a fixture is in the selection is the fact a group deselect needs and
+> cannot recover from the selection alone.
+
 > **Three commands the patch needed** *(S27)*. `PatchFixture` alone can only ever *add* to a rig, so a patch nobody could correct was the state the interface was in until S27. `UnpatchFixture` takes one out, and does **not** cascade into groups, presets or cues — a show outlives the rig it was written on (S11), and `Show::issues` reports what now dangles rather than deleting an operator's stored looks. `RenumberFixture` is one command and not an unpatch plus a patch, because the number is the key the patch is filed under: doing it in two steps leaves the rig without that fixture in between, and leaves it deleted if the second step is refused. `EmbedFixtureType` carries **a key and nothing else**, resolved by the daemon against `prism_core::library` — the same rule `PatchFixture` follows in carrying no channels, since a client that sent a whole `FixtureType` would be authoring show content for the daemon to validate. Without it a brand-new show, which carries no profiles at all, could not be patched from an interface.
 
 > **Five commands a show needed** *(S28)*. Before them the protocol could store a cue and apply a preset, and nothing else about a show could be written from an interface: there was no way to make a sequence to store into, no way to put one on an executor so it could be fired, no way to correct a cue that had been stored, and no way to make a preset for `ApplyPreset` to apply. So a show could only ever be written by hand, in a file, somewhere else.

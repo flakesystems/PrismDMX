@@ -168,6 +168,8 @@ interface Session {
   programmerPage: number;              // Zoom ▲▼ — pages the encoder bar (S35)
   programmerParamIndex: number;        // Zoom ◀▶ — what the jog wheel turns
   commandLine: string;                 // contents of the console line
+  commandLineRun: number;              // a counter, bumped when a line is to be run (S43)
+  windowPicker: boolean;               // whether the window chooser is up (S43)
 }
 ```
 
@@ -184,6 +186,14 @@ Sessions are persisted with the show file: reopening a show restores the console
 > **The selected sequence is a field of its own, and that was S39's decision** *(S39)*. Until it existed the cue sheet followed the sequence on `selectedExecutor`, and S28 marked that as an assumption rather than making it permanent — §4.4 named S39 as the session that would settle it. It is settled by adding the field, for two reasons the executor reading cannot meet: `Store Cue 5` typed with **no executor selected** has to mean something, and a cue list nobody has put on a fader has to be editable without occupying a playback slot to reach it.
 >
 > It is deliberately **not** coupled to `selectedExecutor`. An operator programming cue list 7 while executor 3 plays the show is the ordinary case on a console, not the edge case, and a desk that moved this every time a fader was selected would store into whatever was last touched. The two are separate selections and the interface draws both: the cue sheet follows this one and the transport line follows the executor.
+
+> **`commandLineRun` is a counter and not a flag, and it is here under protest** *(S43)*. An X-Touch key that means *run the line* has to reach a **parser**, and the parser lives in the interface — so the daemon asks the focused client to run what is already in `commandLine`. A flag could not say *again*: two Enters on the same text are two commands, and a boolean that was already true would swallow the second. Only a client with the keyboard focus obeys it, so a rig of screens does not run the line five times.
+>
+> It is a **stop-gap with a session named against it**. S49 moves the parser into the daemon, at which point the key becomes an ordinary command and this field goes. It is written down here rather than left as a surprise, because a field that exists to work around where a component lives is exactly the kind of thing that quietly becomes permanent.
+
+> **`windowPicker` is session state because the console opens it** *(S43)*. Whether a chooser is up looks like client-local state by §4.2's rule, and it is not: an X-Touch key opens it, and a key that opened a chooser on one screen and not the others would be a desk in two states. It is cleared by anything that empties the canvas, because it names windows to open on *this* view.
+
+> **The programmer carries the provenance of a selection** *(S43)*. `ProgrammerState` gained `selectedGroups` and `manualSelection`, both `#[serde(default)]`. Selecting a group used to **toggle** its fixtures, so a lamp already on went off; it now only ever adds, and deselecting releases only what no other selected group and no manual pick still holds. That question cannot be answered from the selection alone — *why* a fixture is in it is the missing fact — so the daemon keeps it, and it keeps it rather than the client because two clients working it out separately would disagree the first time one of them missed a delta.
 
 > **`editingCue` is the update state, and it is here rather than in the programmer** *(S39)*. It is what makes an Update key blink — `editingCue !== null && editingCue.modified` — and every attached client has to blink the same key, which is precisely what §4's opening paragraph is about. A client that worked it out from its own mirror of the programmer would have to know which cue that programmer came from, and that is the fact this field carries. It is cleared when the programmer is cleared, when the cue is deleted, and when a different cue is loaded; a renumber of the cue being edited **carries it**, because otherwise an Update would recreate the cue at the number it used to have.
 
@@ -284,6 +294,57 @@ grammar has no noun for a file or for a setting, exactly as it has none for a
 window type, so those commands are sent the way `OpenWindow` is. The test is the
 same one in every case: *could a line say this?* — and where it could, the line
 is what the screen writes. Everything else is the line.
+
+### 4.6 The screen an operator sees *(S43)*
+
+The owner's drawing is `design/skeleton/` — a Penpot export in two boards,
+`main-layout.pdf` and `programmer.pdf`. It states **arrangement and flow** and
+deliberately no detail: no pixels, no type sizes, no colour values, no wording.
+What it states holds; what it leaves open this session decided, and the decisions
+are written down here so that a later session can tell a choice from an accident.
+
+**The shape.** A header, a **canvas**, the command line, and the programmer band.
+Nothing else is fixed furniture. The executor strip, the console's keys and the
+status readings had been bands around the canvas since S25–S26; the drawing has
+no band for any of them, so they are **windows an operator opens** and the canvas
+got the room back. `WindowType` is the list of what can be opened and it is
+generated from `prism_domain`, so a window added in Rust appears in the chooser
+without a second list being edited.
+
+**The canvas lays itself out, in the daemon.** `OpenWindow` carries no geometry
+and never has (§4.4). A new window takes the first free place searched from the
+top left, at the default size, shrinking to
+`MIN_WINDOW_WIDTH × MIN_WINDOW_HEIGHT` before it is refused out loud; a **move**
+is accepted when it overlaps no more windows than the one it replaces, so a
+layout stacked at the origin by an older build can still be taken apart while a
+clean one cannot be spoiled. The arithmetic is `prism_core::layout`, and it is
+the daemon's for §4.1's reason: two clients offsetting their own windows would
+race.
+
+**The pools are keys.** §4.5 said *every key writes a line*; S43 finished the
+thought — a tile in a pool is a key too. With a verb standing in the line, a
+click on a sequence, group, preset, fixture, cue or executor **appends its
+words** rather than performing a selection, and sends the line when it has become
+a whole command. `ui/src/desk/consoleshell.ts::pickOnto` is the rule and it is a
+pure function. Two carve-outs, both deliberate: a line whose first word is not a
+verb is a fixture selection, so `1 thru` plus a click is a range being built and
+not a group being named; and `Label` and `Color` are **never** sent by a click,
+because both are valid without a last word and both *remove* something.
+
+#### Departures from the drawing, and why
+
+| The drawing | What was built | Why |
+|---|---|---|
+| A `<` `>` pair beside the encoders **and** a page stepper | One stepper, for the **page** | The band has room for four encoders with their readings and one two-button control. The parameter highlight is reachable directly — **clicking an encoder selects it** — and `Zoom ◀▶` still sends `SelectProgrammerParam`, so nothing was lost but a redundant pair of arrows |
+| A programmer band of roughly a third of the height | About a fifth | Everything the drawing puts in the band fits, and `CLAUDE.md`'s rule that nothing scrolls outside the canvas is the binding constraint at 1280 × 720. A third would have been taken from the canvas, which is the part that holds the show |
+| Seven encoder banks, one of them `Control` | Seven, and `Control` has **no X-Touch Assign key** | The surface has six Encoder Assign buttons and §4.3 will not spend a reserved one. `Control` is reached from the band and from the command line. It is the row of lamp-on, reset and fan that is touched once a show and never during one, so it is the right bank to leave off the surface |
+| Status readings not drawn at all | A `Status` window | They were a strip along the bottom. The drawing has no strip, and a reading nobody looks at during a show does not deserve permanent height |
+
+The seven banks are themselves a change the drawing forced: `FeatureGroup` had
+five, with gobo, prism, iris, zoom, shutter and control on one `Beam` bank — six
+knobs, which is two pages of four and a lamp-control channel filed behind a
+shutter. The drawing names seven, and the split is the one a person makes
+standing at a desk.
 
 ---
 

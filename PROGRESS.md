@@ -97,7 +97,7 @@
 | S34 | Executor functions and the tick readback | ✅ | 2026-08-20 | All exit criteria verified, CI green on run **32325628021** — see §2.32. **Every one of the eight `ExecutorButtonFunction` values does what its name says, checked on the frames a mock output received; and the tick answers back, so the desk shows a cue number for the first time.** `Command::ExecutorButton` carries *which button* and the executor decides; `Flash` is a layer over the master and never a write into it; `Toggle` is resolved against `isActive` by the daemon and by nobody else. Speed masters and the tap that learns one exist at last — `docs/DMX_MERGE.md` §4 item 3 had named them since S3. `docs/MCU_MAPPING.md` §4.1's three unbindable rows are bound as written and the shipped profile's `deviationsFromSection41` block is **empty** |
 | S39 | Store modes, cue editing, the update state | ✅ | 2026-08-20 | All exit criteria verified, CI green on run **32412552879** — see §2.33. **A store on top of something that is already there now does what the operator asked for**: Merge, Override and Remove on `StoreCue` and `StorePreset`, Append / Override / Merge on the new `StoreSequence`, each asserted on the **stored cue** rather than on the command being accepted. `EditCue` loads a cue back into the programmer with every `presetRef` kept and `Update` puts it down byte-identically; `Session::editingCue` is what makes an Update key blink and it clears on a Clear, a delete and another load. The selected sequence was **decided** and it went the other way from S28's assumption: `Session::selectedSequence` is a field of its own, because `Store Cue 5` with no executor selected has to mean something. The two tests written to go red did, and both are turned round. 542 UI tests, coverage **99.05 % lines**; 1 645 in the workspace |
 | S40 | The console shell | ✅ | 2026-08-21 | All exit criteria verified, CI green on run **32510091387** — see §2.34. **The command line is the interface** (`ARCHITECTURE_SPEC.md` §4.5): every key on the desk writes a word into `Session::commandLine` and none of them acts on its own, so what a gesture means is what the line means. The whole S40 vocabulary is built and each line is held to the commands a real daemon accepted for it. It was a protocol session as well: `ObjectRef` and four generic verbs (`Delete`, `Copy`, `Move`, `Label`) replaced seven narrower commands, `Goto` and `ExecutorOn` arrived, and `PlaybackTarget` made a playback addressable by **sequence** — so a cue list nobody has put on a fader can be played. 43 command variants, 28 e2e tests green |
-| S43 | The punch list, the skeleton, and the first pre-release | ☐ | | Added 2026-08-14; **grew on 2026-08-24** from *interface cleanup and polish*. The §7 *carried out of* lists gone through one entry at a time, **plus** the owner's own fault list (`docs/PRERELEASE_PUNCHLIST.md`), the interface rebuilt along the owner's drawing (`design/skeleton/`, a Penpot export of flow and arrangement), and the windows that are a morning's work — `ClockViewer`. The **first interactive session**: agreed before it is built, driven by hand before it is called done, and anything too big for an afternoon becomes a session of its own rather than a dropped line |
+| S43 | The punch list, the skeleton, and the first pre-release | ▶ | | **In progress — see §2.41.** Built and green on CI run **33209652373** (`fcb884d`): the interface rebuilt along `design/skeleton/`, three rounds of the owner's hand-testing answered as `docs/PRERELEASE_PUNCHLIST.md` B1–B34, 1 967 Rust tests, 775 in jsdom, 41 end-to-end. **Open**: the owner has not yet called it fit for a pre-release, and the §7 *carried out of* lists have not been gone through. Added 2026-08-14; **grew on 2026-08-24** from *interface cleanup and polish*. The §7 *carried out of* lists gone through one entry at a time, **plus** the owner's own fault list (`docs/PRERELEASE_PUNCHLIST.md`), the interface rebuilt along the owner's drawing (`design/skeleton/`, a Penpot export of flow and arrangement), and the windows that are a morning's work — `ClockViewer`. The **first interactive session**: agreed before it is built, driven by hand before it is called done, and anything too big for an afternoon becomes a session of its own rather than a dropped line |
 | S29 | `prism-app` Tauri shell | ☐ | | Needs MSVC Build Tools |
 
 *Listed in running order; the numbers are identity rather than sequence — see `IMPLEMENTATION_PLAN.md`, Conventions.*
@@ -3162,6 +3162,128 @@ property S37 wanted; the recording was one way to get it and not the only one.
 
 ---
 
+### 2.41 S43 verification record
+
+Measured on 2026-08-28. **This record is open**: S43 is the first *interactive*
+session and its third movement ends when the owner says the interface is fit for
+a pre-release, which they have not yet said. What is written here is what has
+been built and measured; the exit criteria that depend on the owner's own
+judgement are marked as such rather than ticked.
+
+The session has three movements and a fourth still to come: the questions before
+building, the building, the owner driving it by hand, and the tests brought back
+to `CLAUDE.md` standard. Three rounds of hand-testing have happened and every
+item of all three is answered — `docs/PRERELEASE_PUNCHLIST.md` B1–B34 is the
+list, one entry per fault, each with what was wrong, how to see it, and what was
+done.
+
+| Check | Result |
+|---|---|
+| **The interface follows the owner's drawing** (`design/skeleton/`) | ✅ built, with every departure written down and reasoned — `ARCHITECTURE_SPEC.md` §4.6. The bands are gone: the executor strip, the console's keys and the status readings are windows, and what is left outside the canvas is a header, the command line and a programmer band of `clamp(9rem, 20vh, 13rem)` |
+| **Nothing scrolls outside the canvas** | ✅ measured in Chromium at 1280 × 720 **and** at 4K, on a rig of forty fixtures and a cue list of four hundred rows: `document.documentElement`, `[data-testid="canvas"]` and `[data-testid="programmer-band"]` all report `[0, 0]` of overflow, and the sheet's own body reports more than zero — a check of zeros everywhere would pass for a sheet that had clipped its rows |
+| **Zero React commits under telemetry** | ✅ the `<Profiler>` gate is one of the 784 and it passed over the rebuilt tree |
+| **The canvas lays itself out** | ✅ `prism_core::layout` — a new window takes the first free place and shrinks before it is refused; a move is accepted only when it overlaps no more windows than the one it replaces, so a layout stacked at the origin by an older build can still be taken apart and a clean one cannot be spoiled |
+| **The window chooser is reachable three ways** | ✅ `Insert` (ignored inside a text field, deliberately), a right-click on the canvas, and an X-Touch key. Measured live at 1152 px: six columns, one key per `WindowType`, each with a sentence saying what the window is for |
+| **The fixture library is a table** | ✅ B23. Measured live against the installed library: `14 shown of 2161 profiles`, five columns — manufacturer, fixture, mode, channel count, and whether the show already carries it |
+| **Group selection adds rather than toggles** | ✅ B27, and the provenance is the daemon's (`selectedGroups`, `manualSelection`). Measured live: `2` → `2+3` → `2+3+1` → back to `2+3`, with fixture 1 released and everything two groups still hold kept |
+| **The pools append to the command line** | ✅ B33, `consoleshell.ts::pickOnto`. Measured live over all six sources: `Store` plus a group tile gives `Store Group 2` and the console's own mode question; `Copy` is two clicks; `Assign Sequence 1` plus an executor strip puts *Act one* on executor 2; `Delete` plus a cue row removes the cue; `Label` plus a group is **left standing**, because a click that deletes a name is the worst kind of shortcut |
+| **The store bars are gone** | ✅ B32, both pools, and nothing was lost: the bar built a line and sent it, and could do **less** than the line it built |
+| **A rig comes up dark** | ✅ B34, and this one is a fault the tests found and the eye had missed. Read off the telemetry canvas rather than argued: three RGBW PARs stood at 255 on twelve channels at rest, 1672 pixels of meter at full, unchanged by every programmer command. B1 had given colour channels a home value of full, and a fixture with no dimmer has nothing to hold them down. The desk supplies the missing channel — `docs/DMX_MERGE.md` §5.1 |
+| `cargo test --workspace` | ✅ exit 0 — **1 967 tests**, 0 failed (1 927 at S38) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ exit 0 |
+| `cargo fmt --all --check` | ✅ exit 0 |
+| `ui`: `npx tsc -b --force`, `npm run lint`, `npm run test` | ✅ **784 tests in 54 files** (715 in 50 at S38) |
+| Playwright | ✅ **41 tests** (39 at S38), all green against a real `prismd` in mock-output mode |
+| Coverage | ✅ **97.47 % lines** over the workspace (target ≥ 85 % global) and **97.66 %** on `ui/src`; engine 99.29 %, programmer 97.57 %, protocols 97.49 %, all three above `CLAUDE.md`'s stricter target — §3. Two files of this session's own came in under the house norm and were closed rather than recorded: the preset pool's context menu had no test at all (59.25 %) and the Clock Viewer had no test file (78.57 %); both read **100 % lines** now |
+| CI green on the pushed commit | ✅ run **33209652373** on `fcb884d`, 13 m 02 s |
+| **The owner calls it fit for a pre-release** | ☐ **not yet given.** Movement 3 is not finished |
+| **The §7 *carried out of* lists, one entry at a time** | ☐ **outstanding** — S23–S40, each entry needing one of the three outcomes |
+
+#### What the hand-testing found that the building did not
+
+Three rounds, and their value is in what they caught rather than in what they
+confirmed.
+
+**Round one** was nine items and most were what they looked like: a fixture field
+that was *sehr unübersichtlich*, a window chooser that was one long column, sixty
+-odd unstyled buttons, a Controls page where nothing lined up. Two were more than
+appearance. The Cue Viewer became a cue per row and an attribute per column, and
+the three pools became grids with one shared context menu — which changes what
+the windows **are**: the Sequence Sheet is a pure selection surface now and every
+cue edit happens in the Cue Viewer.
+
+**Round two** was two sentences and it finished `ARCHITECTURE_SPEC.md` §4.5
+rather than extending it. The store bars went, and every data source now offers
+its click to the command line first. The rule had already been *every key writes
+a line*; what was missing is that a pool is a key.
+
+**Round three** was the owner's answer to a question this session had to ask —
+below.
+
+#### The fault the eye could not see
+
+The last two end-to-end failures did not look like a fault at all. A test that
+counted pixels of *full* on the telemetry canvas and expected zero was getting
+1672, and the count did not move when the programmer did. Reading the canvas
+directly — a throwaway Playwright spec that dumped the colour histogram and the
+lit columns — said the picture was **identical before and after `red at 100`**,
+because those channels were already at full.
+
+Twelve channels: three RGBW PARs of four. Punch-list **B1**, from round one, had
+given colour channels a home value of full on the owner's own argument that a
+colour starts open and the dimmer decides whether any of it is seen — and an RGBW
+PAR has no dimmer, so *colour open* and *lamp at full* are the same eight bits. A
+rig of them came up white the moment the daemon started.
+
+`design/skeleton/README.md` says in as many words that a mismatch of this kind is
+a question and not a decision, so it was asked. The owner's answer: **fixtures
+without a dimmer get a software-controlled one, switchable off per fixture in the
+patch.** Built as a merge slot with no DMX channel that rests at nought and
+scales the fixture's colour on the way out — which, for a fixture whose only
+output is its colour, *is* its intensity.
+
+Two things fell out of it worth recording. A profile that files its dimmer on the
+**colour** bank still has one, and a desk that supplied it a second would name
+the same attribute twice — `MergeError::DuplicateAttribute`, which is a rig that
+will not patch at all. A unit test carrying exactly that profile caught it, and
+the predicate now asks about the attribute rather than about the bank. And the
+price is real and is the right one: on a colour-only fixture `1 red at 100`
+colours and `1 at 100` makes light, exactly as on a fixture with a dimmer of its
+own. Three end-to-end tests were bringing no dimmer up and have been pulled
+along.
+
+#### And a bug the end-to-end suite found in the control editor
+
+`surfaceLearned` is described in the store as *a moment rather than a state* and
+was kept as a value. The daemon broadcasts the control learn named to **every**
+client, so it was still standing there when the next row armed learn — and the
+arming bound it, before anybody had pressed anything, from a screen that had
+nothing to do with the press. Two operators are where it bites: the second one's
+Learn silently takes the first one's key. Found by
+`ui/e2e/controls.spec.ts::two editors change two keys and there is one table`,
+which is the test written for exactly that pair and had been passing for a
+different reason. `ControlsPanel` now remembers what was in force when it armed
+and ignores it; the regression test is `does not bind the key the last learn
+named when a row arms`.
+
+#### Two stop-gaps, and both say so
+
+**The send-it checkbox** (B25). A custom key can write a line or write and send
+it. Sending it means *running* it, and the parser lives in the interface — so the
+daemon bumps `Session::commandLineRun` and the client holding the keyboard focus
+runs what is already in `commandLine`. A counter and not a flag, because two
+Enters on the same text are two commands. **S49** exists in
+`IMPLEMENTATION_PLAN.md` to move the parser into the daemon and take the field
+away.
+
+**The OS file dialogues** (B31). Moved to **S29** on the owner's own stated
+condition, and the reason is not convenience: `showOpenFilePicker` hands a
+browser a *handle*, never a path, and the daemon is what opens the file. The
+control map is the exception and is done (B26) — a key table belongs to the
+machine the operator is sitting at, not to the one running the show.
+
+---
+
 ## 3. Coverage tracking
 
 Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and protocols. Record **measured** figures only — leave blank until a run produces a number.
@@ -3179,7 +3301,39 @@ Command: `cargo llvm-cov -p <crate> --summary-only`.
 | `prism-midi` | ≥ 85 % | **100 % lines on everything that is not the platform module** (S36, the crate itself) — `lib.rs`, `naming.rs` and `port.rs` at **100 % lines**, 99.58 % / 99.26 % regions and **100 % functions**; `system.rs`, which is the `#[cfg(target_os = …)]` and the `midir` calls under it, reads 51.49 % and the crate as a whole 90.52 %. That is the shape `prism-protocols` reports for its two FTDI backends and it is the same fact: **what is uncovered is the open-a-real-device path**, and `CLAUDE.md` forbids a test from reaching it. Two unreachable branches found while reading the report were removed rather than covered (S21's rule), and one thing that *was* only reachable through a device — the framing that delivers a message longer than the caller's buffer in pieces — was moved out of the platform module into `Inbox`, where a 63-byte SysEx read four bytes at a time is asserted byte for byte | 2026-08-22 |
 | `prism-ipc` | ≥ 85 % | **97.33 % lines**, 97.02 % regions, 99.20 % functions (S37, re-measured because the `Snapshot` grew `machine` and `showFile` and the default `ServerHandler::query` answers two more questions) — `message.rs` 99.69 %. **97.49 % lines**, 97.05 % regions, 99.20 % functions (S36, re-measured because the default `ServerHandler::query` answers a fifth question). **97.61 % lines**, 97.07 % regions, 99.20 % functions (S33, re-measured because `OutputSnapshot` grew from three fields to seven). **97.66 % lines**, 97.11 % regions, 99.20 % functions (S40, re-measured because the command set changed under it). **97.63 % lines**, 97.09 % regions, 99.20 % functions (S39, re-measured because the default `ServerHandler::query` echoes the mode it was asked about). S34's measurement: **97.66 % lines**, 97.11 % regions, 99.20 % functions (S34, re-measured because the command envelope grew a variant) — `message.rs` **99.65 %**. S28's measurement: **97.69 % lines**, 97.13 % regions, 99.20 % functions (S28, re-measured because the default `ServerHandler::query` grew an arm). S35's measurement: **97.15 % lines**, 98.02 % regions, 99.20 % functions (S35, re-measured because the command envelope grew three variants) — `message.rs` **99.11 %**. S27's measurement: **98.14 % lines**, 97.18 % regions, 99.20 % functions (S27, re-measured because the two envelopes grew `Query` and `Answer` and the snapshot grew `fixtureLibrary`) — `message.rs` **99.63 %**, `client.rs` **99.01 %**, `server.rs` 98.25 %. S18's measurement: **98.46 % lines**, 97.51 % regions, 99.46 % functions (S18, re-measured because `ServerHandle` grew `clients()`; `server.rs` 99.50 % → 99.53 %). S16's measurement: **98.43 % lines**, 97.43 % regions, 99.45 % functions — `backpressure.rs`, `memory.rs` and `scan.rs` at **100 % lines**, `message.rs` 99.55 %, `frame.rs` 99.51 %, `server.rs` 99.50 %, `telemetry.rs` 99.48 %, `client.rs` 99.15 %, `stream.rs` 97.27 %, `local.rs` 93.33 %, `websocket.rs` 92.23 %. The 47 uncovered lines are `?` arms, `panic!` arms in tests that pass, the `#[cfg(unix)]` half of `local.rs` (which only the Linux job can reach) and the client WebSocket pump's error arms — see §2.17 | 2026-08-20 (S34) |
 | `prismd` | ≥ 85 % | **94.16 % lines**, 94.54 % regions, 96.68 % functions (S38, which put the table in force on `Core`, added learn to the surface poll and answered a seventh query) — `surface.rs` **97.62 % lines**, `core.rs` 92.97 %, `daemon.rs` 91.27 %, `server.rs` 89.47 %. **94.40 % lines**, 94.65 % regions, 96.60 % functions (S37, which added `cli::resolve` and `Listen`, the five file operations on `Core`, the machine settings and the two new answers) — `surface.rs` **98.31 % lines**, `cli.rs` 98.75 %, `outputs.rs` 97.72 %, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `log.rs` 94.39 %, `machine.rs` 95.93 %, `core.rs` 93.38 %, `daemon.rs` 91.62 %, `server.rs` 89.05 %. **The crate reads 95.1 % with `main.rs` set aside**, which is still 0 % and still the honest part of the figure; what is left in `server.rs` is the `DeskHandler::query` forwarder, which only a socket reaches and which `ui/e2e/settings.spec.ts` is what exercises. **94.85 % lines**, 95.06 % regions, 97.33 % functions (S36, which added `RealSurfacePort`, the hot-plug edge, `--surface`, `--midi-ports` and the surface-change effect) — `surface.rs` **98.38 % lines** and 97.57 % regions, up from 96.94 % at S22; `cli.rs` 99.37 %, `outputs.rs` 97.72 %, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `core.rs` 94.39 %, `daemon.rs` 91.91 %. **The crate reads 0.15 points below S33's 95.00 % and `main.rs` is the whole of it**: it has no test target, it is 42 uncovered lines, and `--midi-ports` added two of them — which is why the *listing itself* was moved into `cli::midi_port_report`, where it has a test, leaving the binary the printing. **95.00 % lines**, 95.24 % regions, 96.79 % functions (S33, which added `outputs.rs` — the supervisor and the driver factory — and rewrote how the daemon opens an output) — the new `outputs.rs` at **97.72 % lines** and 98.20 % regions, `cli.rs` **99.52 %**, `paths.rs` 99.21 %, `lock.rs` 98.48 %, `server.rs` 92.28 %, `daemon.rs` 92.03 %. `main.rs` is still 0 % and still 40 of the 229 uncovered lines; most of the rest are `else { panic!(…) }` arms in the test module that a passing test never takes. **94.74 % lines**, 94.86 % regions, 96.63 % functions (S40, re-measured because `Core::build_body` and `poll_playback` were rewritten around `PlaybackId`) — `main.rs` is still 0 % and still 40 of the uncovered lines. **94.90 % lines**, 94.95 % regions, 96.60 % functions (S39, re-measured because `Desk::query` passes the mode through). S34's measurement: **94.96 % lines**, 95.00 % regions, 96.60 % functions (S34, with `Core::poll_playback`, the five new effects and the `PlaybackReport` wiring) — `core.rs` **97.06 %**, `surface.rs` 97.34 %, `testkit.rs` 100 %, and `main.rs` still 0 % and still the honest part of the figure. S28's measurement: **94.55 % lines**, 94.54 % regions, 96.00 % functions (S28, with the `StorePreview` arm of `Desk::query`) — `surface.rs` **97.34 %**, `paths.rs` 99.21 %, `server.rs` 92.86 %, and `main.rs` still 0 % and still the honest part of the figure. S27's measurement: **94.94 % lines**, 95.03 % regions, 96.15 % functions (S27, with `Desk::query` and the profile library in the snapshot) — `server.rs` 93.26 %, and `main.rs` still 0 % and still the honest part of the figure. The query path is unit tested **in this crate** rather than only through `tests/ui_patch.rs`, whose non-ignored half reads a committed file and never starts a daemon. S26's measurement: **95.06 % lines**, 95.02 % regions, 96.37 % functions (S26, re-measured because `parameter_of` now resolves through `prism-domain`'s one table) — `surface.rs` **97.34 %**, and `main.rs` still 0 %, which is still the honest part of the figure. S25's measurement: **94.98 % lines**, 94.97 % regions, 96.37 % functions (S25, with `FileSurfacePort` and `--mock-surface`) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` **99.36 %**, `lock.rs` 98.48 %, `surface.rs` **97.30 %** (up from 96.94 % with a second port in it), `core.rs` 95.72 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 94.00 %, `daemon.rs` 93.85 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. Without `main.rs` the crate reads **95.6 %**. The five hundredths of a point below S22 are `daemon.rs`'s new *the surface file would not open* arm, which no test can reach without taking a directory away from the process. S22's measurement: **95.03 % lines**, 95.04 % regions, 96.31 % functions (S22, with the `surface` module and its gate target) — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.34 %, `lock.rs` 98.48 %, `surface.rs` **96.94 %**, `core.rs` 95.72 %, `machine.rs` 95.88 %, `daemon.rs` 95.24 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. The new module is above the crate's own average rather than below it, which is what the coverage row is for. S18's measurement: **94.73 % lines**, 94.81 % regions, 96.36 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `machine.rs` 95.88 %, `daemon.rs` 95.18 %, `engine.rs` 94.87 %, `log.rs` 93.45 %, `server.rs` 92.50 %, and **`main.rs` at 0 %**. Unchanged in substance from S17's figure below — 146 uncovered lines against 144, on six more lines of code, and the movement is in test bodies rather than in the crate. **Without `main.rs` the crate reads 96.16 %.** S17's measurement and the reasoning behind every uncovered line: **94.80 % lines**, 94.83 % regions, 96.35 % functions — `paths.rs` and `testkit.rs` at **100 %**, `cli.rs` 99.33 %, `lock.rs` 98.48 %, `core.rs` 95.58 %, `daemon.rs` 95.15 %, `machine.rs` 95.88 %, `engine.rs` 94.87 %, `server.rs` 93.50 %, `log.rs` 93.45 %, and **`main.rs` at 0 %**. The last is the honest part of the figure rather than a hole in it: `main.rs` is the process entry point — `--help`, `--version`, the two messages a person sees when a daemon will not start, and `ctrl_c` — and a binary target has no tests, which is why the daemon is a library. **Without it the crate reads 96.19 % lines.** What else is uncovered is four kinds: the Open DMX arm (no test may open a real adapter — `CLAUDE.md`), the sACN multicast destination (no test may send multicast — S10), error arms no input can reach, and the `Err` half of raising the tick thread's priority, which this machine does not take. See §2.18 and §2.19 | 2026-08-20 (S34) |
-| `ui` | ≥ 85 % | **98.83 % lines**, 92.95 % branches, **99.78 % functions**, 98.87 % statements (S38, 715 tests in 50 files) — the new `settings/controls.tsx` and `settings/actions.ts` at **100 % lines, statements and functions**, and `settings/` as a whole at 99.54 % lines. **99.08 % lines**, 93.11 % branches, **99.77 % functions**, 99.11 % statements (S37, 688 tests in 48 files) — the new `settings/` module at **99.28 % lines**, with `settings.ts` and `settingswindow.tsx` at **100 % on every column**, `devices.tsx` and `machine.tsx` at 100 % lines, `outputs.tsx` 99.03 % and `showfiles.tsx` 96.77 %. The two lines left are a guard this interface cannot reach — an apply with no draft and a submit with nothing typed. **98.95 % lines**, 93.98 % branches, **99.72 % functions**, 98.98 % statements (S40, 615 tests in 46 files) — the new `desk/exists.ts` and `show/grouppool.tsx` at **100 % lines**, `desk/console.ts` 99.72 %, `desk/shell.tsx` 97.77 %, `desk/consoleshell.ts` 93.33 %. **99.05 % lines**, 93.78 % branches, **99.68 % functions**, 99.09 % statements (S39, `vitest run --coverage`; **542 tests in 43 files**). `src/show` reads **99.68 % lines** with the mode chooser, the Edit key and the blinking Update in it — `cueviewer.tsx`, `presetpool.tsx`, `sequencesheet.tsx` and the new `storemode.tsx` all at **100 % lines**. Unchanged to two decimal places against S34 and S28 before it, on seven more tests. The end-to-end suite (Playwright, **24** tests) is **not** in this figure. S28's measurement: **99.05 % lines**, 93.68 % branches, **99.68 % functions**, 99.08 % statements (S28, `vitest run --coverage`; **533 tests in 43 files**). The new `show/` module reads **99.64 % lines**, 92.73 % branches and **100 % functions**: `looks.ts`, `store.ts`, `cueviewer.tsx` and `presetpool.tsx` at **100 % lines**, `sequencesheet.tsx` 98.98 %. The one uncovered line in it is the guard for a sequence chosen with no executor selected, which the interface cannot reach because the chips are disabled. The end-to-end suite (Playwright, **21** tests) is **not** in this figure. S35's measurement: **99.11 % lines**, 94.09 % branches, **99.81 % functions**, 99.14 % statements (S35, `vitest run --coverage`; **470 tests in 39 files**). Every file this session touched reads **100 % lines**: `canvas/viewbar.tsx`, `desk/encoderbar.tsx`, `desk/executorbar.tsx` and `desk/programmer.ts`. The end-to-end suite (Playwright, **18** tests, all green on CI) is **not** in this figure. S44's measurement: **99.07 % lines**, 94.01 % branches, **99.80 % functions**, 99.10 % statements (S44, `vitest run --coverage`; **441 tests in 39 files**). The `patch/` module reads **98.88 % lines** and **100 % functions** with the library search in it. The end-to-end suite (Playwright, **15** tests) is **not** in this figure. S27's measurement: **99.07 % lines**, 93.96 % branches, **99.79 % functions**, 99.09 % statements (S27, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **440 tests in 39 files**). The new `patch/` module reads **98.80 % lines**, 87.36 % branches and **100 % functions**: `patch.ts` and `preview.ts` at **100 % lines**, `live.ts` 98.64 %, `patchwindow.tsx` 98.73 %, `sheet.tsx` 97.05 %. The end-to-end suite (Playwright, **14** tests) is **not** in this figure. S26's measurement: **99.07 % lines**, 94.74 % branches, **100 % functions**, 99.10 % statements (S26, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **371 tests in 34 files**). The new `desk/` module reads **99.75 % lines**, 96.28 % branches and **100 % functions**: `level.ts`, `session.ts` and `valuedrag.ts` at **100 % on every column**, `console.ts`, `programmer.ts`, `encoderbar.tsx` and `executorbar.tsx` at **100 % lines**, `commandline.tsx` 97.56 %. The fifteen uncovered lines across the whole tree were read, not counted: S23's, S24's and S25's fourteen, plus the console mirror's clear-the-timer-on-unmount arm reached with nothing pending. The end-to-end suite (Playwright, **11** tests) is **not** in this figure. S25's measurement: **98.82 % lines**, 94.06 % branches, **100 % functions**, 98.86 % statements (S25, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **298 tests in 29 files**). The new `canvas/` module reads **99.39 % lines**, 95.49 % branches and **100 % functions**: `geometry.ts`, `drag.ts`, `windows.ts`, `window.tsx`, `content.tsx` and `viewbar.tsx` at **100 % lines**, `canvas.tsx` 91.66 %. The fourteen uncovered lines across the whole tree were read, not counted: S23's and S24's eleven, plus the canvas element being `null` when a drag asks for its box and three `documents === null` guards under a connection that is already *connected*. The end-to-end suite (Playwright, **6** tests) is **not** in this figure. S24's measurement: **98.91 % lines**, 94.08 % branches, **100 % functions**, 98.94 % statements (S24, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; 235 tests in 22 files). The new `telemetry/` module reads **99.45 % lines** and **100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The eleven uncovered lines across the whole tree were read, not counted: S23's nine *cannot happen* arms, plus a canvas ref that is `null` when the effect runs and the `typeof window === "undefined"` arm of the resize fallback. The end-to-end suite (Playwright, **3** tests) is **not** in this figure. S23's measurement: **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-20 (S34) |
+| `ui` | ≥ 85 % | **97.66 % lines**, 91.56 % branches, 98.23 % functions, 97.74 % statements (S43, **784 tests in 54 files**) — the session rebuilt most of the interface, so the figure is a whole-suite one rather than a delta. Two files of this session's own came in under the house norm and were **closed rather than recorded**: `show/presetpool.tsx` read 59.25 % lines because the context menu the owner asked for had no test at all, and `show/clock.tsx` 78.57 % because the window had no test file; both read **100 % lines** now, and the nine tests that did it are the menu's five lines and the clock's alignment, teardown and page-following. `desk/consoleshell.ts`, `chrome/`, `settings/controlfile.ts` and `canvas/geometry.ts` — the session's other new modules — were written with their tests. **98.83 % lines**, 92.95 % branches, **99.78 % functions**, 98.87 % statements (S38, 715 tests in 50 files) — the new `settings/controls.tsx` and `settings/actions.ts` at **100 % lines, statements and functions**, and `settings/` as a whole at 99.54 % lines. **99.08 % lines**, 93.11 % branches, **99.77 % functions**, 99.11 % statements (S37, 688 tests in 48 files) — the new `settings/` module at **99.28 % lines**, with `settings.ts` and `settingswindow.tsx` at **100 % on every column**, `devices.tsx` and `machine.tsx` at 100 % lines, `outputs.tsx` 99.03 % and `showfiles.tsx` 96.77 %. The two lines left are a guard this interface cannot reach — an apply with no draft and a submit with nothing typed. **98.95 % lines**, 93.98 % branches, **99.72 % functions**, 98.98 % statements (S40, 615 tests in 46 files) — the new `desk/exists.ts` and `show/grouppool.tsx` at **100 % lines**, `desk/console.ts` 99.72 %, `desk/shell.tsx` 97.77 %, `desk/consoleshell.ts` 93.33 %. **99.05 % lines**, 93.78 % branches, **99.68 % functions**, 99.09 % statements (S39, `vitest run --coverage`; **542 tests in 43 files**). `src/show` reads **99.68 % lines** with the mode chooser, the Edit key and the blinking Update in it — `cueviewer.tsx`, `presetpool.tsx`, `sequencesheet.tsx` and the new `storemode.tsx` all at **100 % lines**. Unchanged to two decimal places against S34 and S28 before it, on seven more tests. The end-to-end suite (Playwright, **24** tests) is **not** in this figure. S28's measurement: **99.05 % lines**, 93.68 % branches, **99.68 % functions**, 99.08 % statements (S28, `vitest run --coverage`; **533 tests in 43 files**). The new `show/` module reads **99.64 % lines**, 92.73 % branches and **100 % functions**: `looks.ts`, `store.ts`, `cueviewer.tsx` and `presetpool.tsx` at **100 % lines**, `sequencesheet.tsx` 98.98 %. The one uncovered line in it is the guard for a sequence chosen with no executor selected, which the interface cannot reach because the chips are disabled. The end-to-end suite (Playwright, **21** tests) is **not** in this figure. S35's measurement: **99.11 % lines**, 94.09 % branches, **99.81 % functions**, 99.14 % statements (S35, `vitest run --coverage`; **470 tests in 39 files**). Every file this session touched reads **100 % lines**: `canvas/viewbar.tsx`, `desk/encoderbar.tsx`, `desk/executorbar.tsx` and `desk/programmer.ts`. The end-to-end suite (Playwright, **18** tests, all green on CI) is **not** in this figure. S44's measurement: **99.07 % lines**, 94.01 % branches, **99.80 % functions**, 99.10 % statements (S44, `vitest run --coverage`; **441 tests in 39 files**). The `patch/` module reads **98.88 % lines** and **100 % functions** with the library search in it. The end-to-end suite (Playwright, **15** tests) is **not** in this figure. S27's measurement: **99.07 % lines**, 93.96 % branches, **99.79 % functions**, 99.09 % statements (S27, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **440 tests in 39 files**). The new `patch/` module reads **98.80 % lines**, 87.36 % branches and **100 % functions**: `patch.ts` and `preview.ts` at **100 % lines**, `live.ts` 98.64 %, `patchwindow.tsx` 98.73 %, `sheet.tsx` 97.05 %. The end-to-end suite (Playwright, **14** tests) is **not** in this figure. S26's measurement: **99.07 % lines**, 94.74 % branches, **100 % functions**, 99.10 % statements (S26, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **371 tests in 34 files**). The new `desk/` module reads **99.75 % lines**, 96.28 % branches and **100 % functions**: `level.ts`, `session.ts` and `valuedrag.ts` at **100 % on every column**, `console.ts`, `programmer.ts`, `encoderbar.tsx` and `executorbar.tsx` at **100 % lines**, `commandline.tsx` 97.56 %. The fifteen uncovered lines across the whole tree were read, not counted: S23's, S24's and S25's fourteen, plus the console mirror's clear-the-timer-on-unmount arm reached with nothing pending. The end-to-end suite (Playwright, **11** tests) is **not** in this figure. S25's measurement: **98.82 % lines**, 94.06 % branches, **100 % functions**, 98.86 % statements (S25, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; **298 tests in 29 files**). The new `canvas/` module reads **99.39 % lines**, 95.49 % branches and **100 % functions**: `geometry.ts`, `drag.ts`, `windows.ts`, `window.tsx`, `content.tsx` and `viewbar.tsx` at **100 % lines**, `canvas.tsx` 91.66 %. The fourteen uncovered lines across the whole tree were read, not counted: S23's and S24's eleven, plus the canvas element being `null` when a drag asks for its box and three `documents === null` guards under a connection that is already *connected*. The end-to-end suite (Playwright, **6** tests) is **not** in this figure. S24's measurement: **98.91 % lines**, 94.08 % branches, **100 % functions**, 98.94 % statements (S24, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded; 235 tests in 22 files). The new `telemetry/` module reads **99.45 % lines** and **100 % functions**: `driver.ts` and `context.ts` at **100 % on every column**, `frame.ts`, `painter.ts` and `stats.ts` at **100 % lines**, `panel.tsx` 95.45 %. The eleven uncovered lines across the whole tree were read, not counted: S23's nine *cannot happen* arms, plus a canvas ref that is `null` when the effect runs and the `typeof window === "undefined"` arm of the resize fallback. The end-to-end suite (Playwright, **3** tests) is **not** in this figure. S23's measurement: **98.60 % lines**, 96.06 % branches, **100 % functions**, 98.64 % statements (S23, `vitest run --coverage`, v8 provider, over `ui/src` with the generated `bindings/`, `main.tsx` and the test scenery excluded). At **100 % lines**: `log/logger.ts`, `ipc/protocol.ts`, `ipc/endpoint.ts`, `ipc/telemetry.ts`, `ipc/codec.ts`, `mirror/mirror.ts`, `mirror/select.ts`, `store/hooks.ts`, `store/context.tsx`, `status.ts`, `desk.ts`. Then `ipc/connection.ts` 99.35 %, `mirror/patch.ts` 99.20 %, `App.tsx` 97.05 %, `store/desk.ts` 95.52 %, `ipc/shape.ts` 95.00 %. **The nine uncovered lines were read, not counted**, and each is an arm that cannot be reached from inside this interface: the `SharedArrayBuffer` branch of `overArrayBuffer`, a re-throw for a fault that is not a `MirrorFault`, a retry scheduled on a connection that has been stopped, the store set to the state it already holds, a non-`Error` cause in the decoder's `catch`, and a `return null` in a panel that only renders when the documents exist. 158 tests in 15 files; the end-to-end suite (Playwright, 2 tests) is **not** in this figure — it runs against a real daemon and measures the same code from outside | 2026-08-20 (S34) |
+
+#### S43: one workspace run, and why it is not in the column above
+
+The figures above are per crate — `cargo llvm-cov -p <crate> --summary-only` —
+and mixing a workspace run into that series would break it: a workspace run
+attributes a crate's coverage from *every* target that exercises it, so the two
+numbers answer different questions and only one of them is comparable with the
+history in each cell. S43 measured the workspace in one run instead, after
+`cargo llvm-cov clean --workspace`, because it changed nine crates and the
+question worth asking was `CLAUDE.md`'s global one.
+
+**Workspace total: 97.47 % lines, 97.97 % regions, 97.96 % functions** — against
+a target of ≥ 85 % global. Rolled up per crate from the same run:
+
+| Crate | Lines | Regions | Functions |
+|---|---|---|---|
+| `prism-engine` | **99.29 %** | 99.30 % | 99.08 % |
+| `prism-domain` | **98.74 %** | 99.76 % | 99.76 % |
+| `prism-surface` | **98.47 %** | 99.08 % | 98.45 % |
+| `prism-core` | **97.57 %** | 98.74 % | 98.26 % |
+| `prism-protocols` | **97.49 %** | 98.17 % | 97.35 % |
+| `prism-ipc` | **96.96 %** | 97.06 % | 99.20 % |
+| `prismd` | **94.56 %** | 94.12 % | 96.68 % |
+| `prism-midi` | **89.55 %** | 90.09 % | 85.57 % |
+| `prism-app` | 0.00 % | 0.00 % | 0.00 % |
+
+The three `CLAUDE.md` names its stricter target for are all above it: the engine
+at 99.29 %, the programmer — which lives in `prism-core` — at 97.57 %, and the
+protocols at 97.49 %. `prism-midi` and `prism-protocols` carry the same known
+shape they have carried since S36 and S10: what is uncovered is the
+open-a-real-device path, which `CLAUDE.md` forbids a test from reaching.
+`prism-app` is the empty Tauri crate S29 fills.
 
 ### Performance gates
 
@@ -4275,6 +4429,52 @@ Carried out of S33:
   the question. S37 either asks (a `Query`, §5.2) or accepts that the number is as
   old as the connection; the second is what a status panel usually wants and the
   first is one variant away.
+
+Carried out of S43 *(the session is still open — see §2.41)*:
+- **A home value is a statement about the rig, not about a knob.** Punch-list B1
+  moved colour channels to a home of full, and the reasoning was entirely about
+  what an *encoder* should read when the programmer is empty. It is the same
+  number the bottom of the merge holds, so it also decided what a fixture puts on
+  stage with nothing programmed — and for a fixture with no dimmer those are the
+  same eight bits. **A session changing `AttributeDef::default_value` is changing
+  the output**, and the question to ask is what the fixture does at rest, not
+  what the knob says.
+- **The picture is the instrument, and it will answer a question the readouts
+  cannot.** Two end-to-end failures looked like drift in the tests. What settled
+  it was a throwaway Playwright spec that dumped the telemetry canvas's colour
+  histogram and the x-range of the lit pixels: the picture was identical before
+  and after `red at 100`, which no readout was going to say. **Twelve minutes of
+  scaffolding beat an hour of reasoning**, and the spec was deleted afterwards.
+- **A predicate that means *intensity* and a predicate that means *has a dimmer
+  channel* are different, and the difference is a crash.** `FeatureGroup::Dimmer`
+  is what the masters scale; `AttributeType::Dimmer` is what would collide. A
+  profile that files its dimmer on the colour bank has the second without the
+  first, and supplying it a software dimmer names the same attribute twice —
+  `MergeError::DuplicateAttribute`, a rig that will not patch. A unit test
+  carrying exactly that odd profile is what caught it.
+- **A value the store keeps but the documentation calls *a moment* is a bug
+  waiting for a second client.** `surfaceLearned` is broadcast to every client
+  and was kept as state; arming learn anywhere then bound whatever the last learn
+  had named, from a screen that had nothing to do with the press. **Look for the
+  same shape wherever a delta carries an event rather than a fact** — and note
+  that the two-editor end-to-end test had been passing for a different reason,
+  which is what made it worth writing.
+- **`Insert` is ignored inside a text field, and a test that wants the chooser
+  must leave the field.** Six e2e failures were one rule being enforced. The
+  helper blurs first, which is what an operator's hand does; asserting the rule
+  away would have been the easy fix and the wrong one.
+- **A test id that no longer exists is not always a rename.** Half of this
+  session's e2e failures were behaviour that had moved (readings into a window,
+  a store bar into another window) and half were claims that had **stopped being
+  true**: `patch-no-profiles` went with the toolbar's library search, and the
+  overflow probe on `executor-bar` and `encoder-bar` had been measuring `null`
+  and reading `[0, 0]` as a pass ever since those bands became windows. **A
+  vacuous green is the expensive kind.**
+- **Coverage below the house norm in this session's own new files is a gap, not
+  a number.** `presetpool.tsx` read 59 % because the context menu the owner asked
+  for had no test at all, and `clock.tsx` 78 % because the window had no test
+  file. Both are 100 % lines now. The global figure was 97 % throughout and would
+  have hidden both.
 
 Carried out of S40:
 - **A field mirrored into shared state must not adopt the echo of its own

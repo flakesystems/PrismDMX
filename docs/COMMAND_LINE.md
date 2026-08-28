@@ -86,6 +86,8 @@ desk says so rather than guessing.
 | `Store Sequence 5 Cue 3` | into a cue of a named sequence |
 | `Store Sequence 4` | stores into cue list 4, and makes it if the number is free |
 | `Store Preset 1` | stores into preset 1, in the bank the encoders are showing |
+| `Store Preset 1 Color` | into a **named** pool, whatever the encoders are on |
+| `Store Preset 1 Multi "The look"` | into the `Multi` pool, which takes every value the programmer holds across the banks — S43 |
 | `Store Group 3` | stores the **selection** as group 3 |
 | `Store View 2 "Programmer"` | stores the canvas as view 2 |
 
@@ -159,6 +161,40 @@ The **up and down arrows** walk back through the lines you have typed. Both are
 client-local (`ARCHITECTURE_SPEC.md` §4.2): the line you are typing is shared,
 and what you typed *before* is not — two operators on two screens each have
 their own train of thought.
+
+---
+
+## 3.1 A pool is a key — S43
+
+`ARCHITECTURE_SPEC.md` §4.5 has said since S40 that every key on the desk writes
+a word into the line. S43 finished the thought: the tiles in the Sequence Sheet,
+the Fixture List, the Cue Viewer, the Group Pool, the Preset Pool and the
+executor strip are keys too.
+
+**With a verb standing in the line, a click appends its words instead of
+selecting.** `Store` and a click on sequence 2 gives `Store Sequence 2`, and
+sends it, because the pointer has supplied the argument the line was waiting for.
+With nothing typed, the same click is a list pick and does what the box has
+always done.
+
+`ui/src/desk/consoleshell.ts::pickOnto` is the whole rule and it is a pure
+function of the line and the words. Two things it deliberately does **not** do:
+
+- **It does not read the grammar's argument table.** *Which* nouns a verb takes
+  is the parser's business, so `Store Fixture 5` is appended and left standing
+  with the parser's own complaint under it, rather than the typed `Store` being
+  quietly discarded and a fixture selected. Discarding what the operator typed is
+  the behaviour this rule exists to remove.
+- **It never sends `Label` or `Color`.** Both are valid commands without a last
+  word and both *take something away* — a name, a colour. A click that deletes a
+  name is the worst kind of shortcut, so those two are appended and left for
+  Enter. `CLEARING_VERBS` is the list, and it is two long.
+
+A line whose first word is **not** a verb is a fixture selection being built, so
+`1 thru` plus a click on a group tile is a range in progress rather than a group
+being named, and the tile does its own thing. `VERB_WORDS` is the head words of
+the parser's own `switch`, and `partitions every word the console knows` is the
+test that stops a verb entering the grammar without entering the table.
 
 ---
 

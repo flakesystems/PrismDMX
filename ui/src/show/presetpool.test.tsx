@@ -13,7 +13,7 @@ import { act } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "../App";
-import type { Answer, Command } from "../bindings";
+import type { Answer, Command, JsonValue } from "../bindings";
 import { Connection } from "../ipc/connection";
 import type { Snapshot } from "../ipc/protocol";
 import { TelemetrySink } from "../ipc/telemetry";
@@ -167,6 +167,50 @@ beforeEach(() => {
   setLogSink(nullSink);
 });
 
+/** Two presets in the Colour pool, so the free number the menu offers is 3. */
+const MENU_SHOW: JsonValue = {
+  presets: {
+    "1": { pool: "Color", name: "Warm", color: null, values: [] },
+    "2": { pool: "Color", name: "", color: null, values: [] },
+  },
+};
+
+/** The session document the window reads its line out of. */
+const MENU_SESSION: JsonValue = { session: { commandLine: "" }, views: {} };
+
+/**
+ * The window on its own, with a way to read the lines it sent.
+ *
+ * The same shape as `grouppool.test.tsx`'s, and for the same reason: what the
+ * menu does is write lines, so a test of it is a test of the traffic.
+ */
+function menu() {
+  const store = new DeskStore();
+  const sent: Command[] = [];
+  store.attach(
+    (command) => {
+      sent.push(command);
+      return sent.length;
+    },
+    () => null,
+  );
+  render(
+    <Shell store={store} session={MENU_SESSION} show={MENU_SHOW}>
+      <PresetPool show={MENU_SHOW} />
+    </Shell>,
+  );
+  return {
+    /** Everything but the line being typed. */
+    acted: (): Command[] => sent.filter((command) => command.t !== "CommandLineInput"),
+    /** The last line a *write* key left standing. */
+    line: (): string => {
+      const written = sent.filter((command) => command.t === "CommandLineInput");
+      const last = written.at(-1);
+      return last === undefined || last.t !== "CommandLineInput" ? "" : last.text;
+    },
+  };
+}
+
 describe("the preset pools", () => {
   it("says a pool is empty rather than drawing nothing", async () => {
     await desk();
@@ -260,6 +304,100 @@ describe("the preset pools", () => {
     await applyStep(...A_PRESET);
     fireEvent.click(screen.getByTestId("preset-1"));
     expect(acted().at(-1)).toEqual({ t: "ApplyPreset", presetId: 1 });
+  });
+
+  /**
+   * **The smaller actions are a right-click** — S43, the owner's rebuild: *alle
+   * kleineren Group bzw. Preset bezogenen Aktionen sollen über Rechtsklick
+   * ausgeführt werden*. The box is only the apply key now, and every line the
+   * menu writes is one an operator could have typed.
+   */
+  describe("the menu over a preset", () => {
+    it("renames, copies and deletes with the lines every pool shares", () => {
+      const { acted } = menu();
+      expect(screen.queryByTestId("preset-menu")).toBeNull();
+
+      fireEvent.contextMenu(screen.getByTestId("preset-1"));
+      expect(screen.getByTestId("preset-menu").dataset["subject"]).toBe("1");
+      fireEvent.click(screen.getByTestId("preset-copy"));
+      // The free number is the pool's own arithmetic and 2 is taken, so the
+      // copy lands on 3 — and the line names both ends, as `Copy` requires.
+      expect(acted().at(-1)).toEqual({
+        t: "Copy",
+        from: { t: "Preset", presetId: 1 },
+        to: { t: "Preset", presetId: 3 },
+        mode: "Merge",
+      });
+
+      fireEvent.contextMenu(screen.getByTestId("preset-1"));
+      fireEvent.click(screen.getByTestId("preset-rename"));
+      fireEvent.change(screen.getByTestId("preset-rename-input"), {
+        target: { value: "Deep red" },
+      });
+      fireEvent.submit(
+        screen.getByTestId("preset-rename-input").closest("form") as HTMLFormElement,
+      );
+      expect(acted().at(-1)).toEqual({
+        t: "Label",
+        target: { t: "Preset", presetId: 1 },
+        name: "Deep red",
+      });
+
+      fireEvent.contextMenu(screen.getByTestId("preset-2"));
+      fireEvent.click(screen.getByTestId("preset-delete"));
+      expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "Preset", presetId: 2 } });
+    });
+
+    /**
+     * **A preset can be given a colour, and that is a gap this session closed.**
+     *
+     * `Preset::color` has been on the wire since S11 with nothing able to set
+     * it. The line writes *only* the colour: a store is what changes a preset's
+     * values, and a colour that took the programmer with it would make an
+     * operator choose between re-colouring a preset and keeping what is in it.
+     * An empty answer takes the colour off, which is `Label`'s rule one verb
+     * along.
+     */
+    it("sets a colour without touching the values, and clears it with nothing", () => {
+      const { acted } = menu();
+      fireEvent.contextMenu(screen.getByTestId("preset-1"));
+      fireEvent.click(screen.getByTestId("preset-colour"));
+      fireEvent.change(screen.getByTestId("preset-colour-input"), {
+        target: { value: "red" },
+      });
+      fireEvent.submit(
+        screen.getByTestId("preset-colour-input").closest("form") as HTMLFormElement,
+      );
+      expect(acted().at(-1)).toEqual({
+        t: "Color",
+        target: { t: "Preset", presetId: 1 },
+        color: { r: 255, g: 0, b: 0 },
+      });
+
+      fireEvent.contextMenu(screen.getByTestId("preset-1"));
+      fireEvent.click(screen.getByTestId("preset-colour"));
+      fireEvent.submit(
+        screen.getByTestId("preset-colour-input").closest("form") as HTMLFormElement,
+      );
+      expect(acted().at(-1)).toEqual({
+        t: "Color",
+        target: { t: "Preset", presetId: 1 },
+        color: null,
+      });
+    });
+
+    /**
+     * A move is §4.5's **second** shape: the line is written and left standing,
+     * because the destination is the argument the operator still has to type.
+     * Nothing is sent.
+     */
+    it("writes a move line and sends nothing", () => {
+      const { acted, line } = menu();
+      fireEvent.contextMenu(screen.getByTestId("preset-1"));
+      fireEvent.click(screen.getByTestId("preset-move"));
+      expect(line()).toBe("Move Preset 1 Preset ");
+      expect(acted()).toEqual([]);
+    });
   });
 
   it("draws a box with no colour as a plain one rather than as black", () => {
