@@ -28,9 +28,9 @@ use prism_core::{
 use prism_domain::{
     AttributeType, Command, Cue, CuePart, CueTrigger, Delta, Executor, ExecutorButtonFunction,
     ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FeatureGroup, Fixture, FixtureId,
-    FixtureType, Group, GroupId, JsonValue, ParamDirection, Preset, PresetId, PresetValue,
-    RgbColor, SelectionMode, Sequence, SequenceId, UniverseId, Vec3, ViewId, WindowInstanceId,
-    WindowType,
+    FixtureType, Group, GroupId, JsonValue, ParamDirection, Preset, PresetId, PresetPool,
+    PresetValue, RgbColor, SelectionMode, Sequence, SequenceId, UniverseId, Vec3, ViewId,
+    WindowInstanceId, WindowType,
 };
 use proptest::prelude::*;
 
@@ -74,6 +74,7 @@ fn head_type() -> FixtureType {
 /// none of which is a default.
 fn hung(id: u32, type_id: &str, universe: u32, address: u16, x: f64) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Head {id}"),
         type_id: type_id.to_owned(),
@@ -128,7 +129,7 @@ fn saveable_file() -> ShowFile {
     file.show
         .store_preset(Preset {
             id: PresetId::new(12),
-            pool: FeatureGroup::Color,
+            pool: PresetPool::Color,
             name: "Aula Warm".to_owned(),
             color: Some(RgbColor {
                 r: 255,
@@ -263,12 +264,17 @@ fn saveable_file() -> ShowFile {
         },
         Command::CommandLineInput {
             text: "1 thru 4 at full".to_owned(),
+            run: false,
         },
     ] {
         file.apply(&command).unwrap();
     }
+    // Fractional coordinates, so the file has to carry them exactly — and a
+    // place that does not bury the second window, which **S43** made a rule
+    // (`prism_core::layout`, punch-list B10): the daemon opens the two side by
+    // side now, so a move back over the neighbour changes nothing at all.
     file.session
-        .place_window(WindowInstanceId::new(1), 120.0, 64.0, 800.5, 512.25)
+        .place_window(WindowInstanceId::new(1), 120.0, 500.0, 800.5, 512.25)
         .unwrap();
     file
 }
@@ -414,7 +420,7 @@ fn a_saved_show_comes_back_byte_identical() {
     let placed = reopened.session.window(WindowInstanceId::new(1)).unwrap();
     assert_eq!(
         (placed.x, placed.y, placed.w, placed.h),
-        (120.0, 64.0, 800.5, 512.25)
+        (120.0, 500.0, 800.5, 512.25)
     );
 }
 
@@ -987,7 +993,7 @@ proptest! {
             }
         }
         file.show.store_sequence(sequence).unwrap();
-        file.session.set_command_line(&line).unwrap();
+        file.session.set_command_line(&line, false).unwrap();
 
         let expected = bytes(&file);
         let mut store = ShowStore::open(&path).unwrap();

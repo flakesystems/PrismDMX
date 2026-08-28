@@ -133,6 +133,7 @@ fn desk_show() -> ShowFile {
 
     for (id, address) in [(1_u32, 1_u16), (2, 2), (3, 3), (4, 4)] {
         show.patch_fixture(Fixture {
+            software_dimmer: true,
             id: FixtureId::new(id),
             name: format!("Dimmer {id}"),
             type_id: "generic.dimmer.dark".to_owned(),
@@ -146,6 +147,7 @@ fn desk_show() -> ShowFile {
         .expect("the address is free");
     }
     show.patch_fixture(Fixture {
+        software_dimmer: true,
         id: FixtureId::new(5),
         name: "Head 5".to_owned(),
         type_id: "generic.movinghead".to_owned(),
@@ -532,6 +534,7 @@ fn script() -> Vec<Scripted> {
             None,
             Command::CommandLineInput {
                 text: "1 thru 4 at ".to_owned(),
+                run: false,
             },
         ),
         (
@@ -1488,14 +1491,19 @@ fn the_recording_is_of_a_desk_being_used() {
         attributes.len() >= 2,
         "only {attributes:?} was ever touched"
     );
+    // **The Clear key reaches every stage it has** — and there are four since
+    // S43, because the stage says what the *next* press would clear rather than
+    // what the last one did: nothing, the values, the selection, or the rest.
+    // The script reaches all four, which is what makes it a recording of the
+    // key being used rather than of it being pressed.
     let stages: std::collections::BTreeSet<u8> = steps
         .iter()
         .map(|step| step.programmer.clear_stage)
         .collect();
     assert_eq!(
         stages,
-        [0, 1, 2].into_iter().collect(),
-        "the Clear button never went all the way round"
+        [0, 1, 2, 3].into_iter().collect(),
+        "the Clear key never offered every one of its four stages"
     );
     assert!(
         steps

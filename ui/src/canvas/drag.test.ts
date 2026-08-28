@@ -18,8 +18,15 @@ import type { Rect } from "./geometry";
 /** Where a window starts. */
 const ORIGIN: Rect = { x: 100, y: 100, w: 640, h: 480 };
 
-/** A drag that records what it sent, with one canvas unit per pixel. */
-function drag(kind: "move" | "resize" = "move") {
+/**
+ * A drag that records what it sent, with one canvas unit per pixel.
+ *
+ * `neighbours` defaults to an empty canvas, which is what every test about
+ * *pacing* wants: the S43 rule that a drag stops against other windows is
+ * `geometry.test.ts`'s, and mixing it in here would make every assertion about
+ * how often a command goes out also an assertion about where it goes.
+ */
+function drag(kind: "move" | "resize" = "move", neighbours: readonly Rect[] = []) {
   const sent: Rect[] = [];
   const subject = new WindowDrag({
     instanceId: 7,
@@ -28,6 +35,7 @@ function drag(kind: "move" | "resize" = "move") {
     from: { x: 500, y: 400 },
     place: (rect) => sent.push(rect),
     scale: (dx, dy) => ({ x: dx, y: dy }),
+    neighbours,
   });
   return { subject, sent };
 }
@@ -120,8 +128,61 @@ describe("a drag", () => {
       place: (rect) => sent.push(rect),
       // A canvas half the width of the coordinate space: one pixel, two units.
       scale: (dx, dy) => ({ x: dx * 2, y: dy }),
+      neighbours: [],
     });
     subject.to({ x: 10, y: 10 }, 0);
     expect(sent).toEqual([{ x: 120, y: 110, w: 640, h: 480 }]);
+  });
+});
+
+describe("a drag against the windows already on the canvas", () => {
+  /**
+   * **S43, punch-list B10 second half.** The daemon has refused an overlapping
+   * placement since B10; what an operator saw was the window crossing its
+   * neighbour and then being pulled back. It stops at the edge now, the way it
+   * has always stopped at the canvas edge — which is what makes two windows
+   * placeable side by side by pushing one against the other.
+   */
+  it("stops where it meets one instead of crossing it and being pulled back", () => {
+    // A wall at x = 900, so a window 640 wide starting at 100 can reach 260.
+    const { subject, sent } = drag("move", [{ x: 900, y: 100, w: 300, h: 480 }]);
+    subject.to({ x: 1200, y: 400 }, 0);
+    expect(subject.rect).toEqual({ x: 260, y: 100, w: 640, h: 480 });
+    // And what went out is where it stopped, not where the pointer is: the
+    // command the daemon would have refused is never sent at all.
+    expect(sent).toEqual([{ x: 260, y: 100, w: 640, h: 480 }]);
+  });
+
+  it("slides along the one it is pressed against", () => {
+    // Pushed right and down at once, against a wall to the right: the x stops
+    // and the y carries on, which is the gesture rather than a dead stop.
+    const { subject } = drag("move", [{ x: 900, y: 0, w: 300, h: 1080 }]);
+    subject.to({ x: 1200, y: 500 }, 0);
+    expect(subject.rect).toEqual({ x: 260, y: 200, w: 640, h: 480 });
+  });
+
+  it("lets a window that is already buried be dragged out from under", () => {
+    // `may_place`'s rule, kept in step: overlap may only shrink. A layout saved
+    // before B10 — or hand-edited — has stacked windows in it, and a window that
+    // could not be moved because it is already overlapping is one an operator
+    // cannot recover.
+    const { subject } = drag("move", [{ x: 100, y: 100, w: 640, h: 480 }]);
+    subject.to({ x: 700, y: 400 }, 0);
+    expect(subject.rect).toEqual({ x: 300, y: 100, w: 640, h: 480 });
+  });
+
+  it("stops a resize at the neighbour as well", () => {
+    // The corner had the same fault: it grew over the window beside it and
+    // snapped back. 900 - 100 is as wide as this one may be made.
+    const { subject } = drag("resize", [{ x: 900, y: 100, w: 300, h: 480 }]);
+    subject.to({ x: 900, y: 500 }, 0);
+    expect(subject.rect).toEqual({ x: 100, y: 100, w: 800, h: 580 });
+  });
+
+  it("ignores a neighbour that is beside it rather than in front of it", () => {
+    // A window on another row cannot stop a sideways move, however close it is.
+    const { subject } = drag("move", [{ x: 900, y: 700, w: 300, h: 300 }]);
+    subject.to({ x: 1200, y: 400 }, 0);
+    expect(subject.rect).toEqual({ x: 800, y: 100, w: 640, h: 480 });
   });
 });

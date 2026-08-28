@@ -71,6 +71,7 @@ pub fn par_type() -> FixtureType {
 #[must_use]
 pub fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),
@@ -132,7 +133,7 @@ pub fn group(id: u32, fixtures: &[u32]) -> Group {
 pub fn preset(id: u32, fixture: u32, attribute: AttributeType, value: u16) -> Preset {
     Preset {
         id: PresetId::new(id),
-        pool: attribute.feature_group(),
+        pool: attribute.feature_group().into(),
         name: format!("Preset {id}"),
         color: None,
         values: vec![PresetValue {
@@ -177,8 +178,17 @@ pub fn show() -> Show {
     show.embed_fixture_type(par_type()).unwrap();
     show.patch_fixture(fixture(1, "generic.dimmer", 1, 1))
         .unwrap();
-    show.patch_fixture(fixture(2, "generic.rgbw.par", 1, 10))
-        .unwrap();
+    // **The PAR's colour channels are driven directly here** — S43. A fixture
+    // with no dimmer of its own is given one by the desk, resting at nought and
+    // scaling its colour (`Fixture::software_dimmer`); this rig switches that
+    // off, because the tests in this crate are about the journal, the wire and
+    // the session, and a supplied dimmer would put a multiplier between every
+    // one of them and the byte they assert on. Where the supplied dimmer itself
+    // is asserted is `prism-engine`, which owns the arithmetic, and the
+    // end-to-end suite, which owns the rig an operator patches.
+    let mut par = fixture(2, "generic.rgbw.par", 1, 10);
+    par.software_dimmer = false;
+    show.patch_fixture(par).unwrap();
     show.patch_fixture(fixture(4, "generic.dimmer.dark", 1, 5))
         .unwrap();
     show.store_group(group(1, &[1, 2])).unwrap();
@@ -198,7 +208,9 @@ pub fn session() -> SessionState {
     let mut session = SessionState::new();
     session.set_executor_page(3).unwrap();
     session.set_programmer_page(2).unwrap();
-    session.set_command_line("fixture 1 at full").unwrap();
+    session
+        .set_command_line("fixture 1 at full", false)
+        .unwrap();
     session.mark_saved();
     session
 }

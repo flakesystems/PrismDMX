@@ -462,7 +462,12 @@ pub enum Step {
 /// [`Self::ExecutorButton`] is how they are satisfied now. The constraint is
 /// unchanged: a name in a user-editable file that nothing answers is worse than
 /// a row this table cannot express.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// **No longer `Copy` since S43**, because [`Self::WriteCommandLine`] carries a
+/// line. That is `prism_core::Effect`'s history repeating (S37): the moment a
+/// vocabulary can name something an operator wrote, it stops fitting in a
+/// register. It costs a `clone` at the handful of places that matched on one by
+/// value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(tag = "t", rename_all_fields = "camelCase")]
 pub enum SurfaceAction {
@@ -547,6 +552,67 @@ pub enum SurfaceAction {
         /// Which window.
         window: WindowType,
     },
+    /// Open the window chooser, so the operator picks which.
+    ///
+    /// **S43**, and the counterpart to [`Self::OpenWindow`] rather than a
+    /// replacement for it: a key bound to a *particular* window is what an
+    /// operator sets up for a show, and a key that opens the chooser is what
+    /// they reach for when they have not. The punch list asks for both (B9).
+    ///
+    /// Resolves to `Command::SetWindowPicker { open: true }`. That the chooser
+    /// is a *panel* and this is a *daemon* is the whole reason
+    /// `Session::window_picker` is session state — see its documentation.
+    OpenWindowPicker,
+    /// Put a line into the command line, ready to be run.
+    ///
+    /// **S43, punch-list entry B4** — the one action an operator writes the
+    /// contents of, which is why the control editor calls these *custom* rows
+    /// and lets a desk have as many as it needs.
+    ///
+    /// # It writes, and it runs only if the operator said so
+    ///
+    /// `docs/COMMAND_LINE.md` §1 is the design this starts from: *a key writes a
+    /// word into the line, it does not act*. Every key on the screen behaves
+    /// this way and so does every one on the desk that names a word. A bound
+    /// line is the same gesture with more than one word in it, so an operator
+    /// sees what is about to happen and presses Enter — or corrects it, which a
+    /// key that fired straight away would not allow.
+    ///
+    /// **S43's rebuild adds the other half**, because the owner asked for it and
+    /// the reason is good: *bei Send Command soll es eine Option geben, den Text
+    /// nur in die Konsole zu schreiben, oder zu schreiben und direkt
+    /// abzusenden*. A key bound to `Go Executor 1` that needs Enter afterwards
+    /// is not a Go key. So [`Self::submit`] is the operator's answer, per
+    /// binding, and the default is the old behaviour.
+    ///
+    /// # Who runs it, since the daemon cannot
+    ///
+    /// **The parser lives in the interface** (`ui/src/desk/console.ts`), not in
+    /// `prismd`, so a daemon handed a line has nothing to turn it into a command
+    /// with. Running one is therefore not something this action can do by
+    /// itself: it sets `Session::command_line` and bumps
+    /// `Session::command_line_run`, and the client that has the **keyboard
+    /// focus** parses the line and sends what it means. That is the same client
+    /// that would have run it if the operator had pressed Enter, and picking it
+    /// by focus is what stops two screens each sending the commands once — a
+    /// doubled Go being the failure worth designing against.
+    ///
+    /// It is a stop-gap and it is written down as one: moving the parser into
+    /// the daemon is `IMPLEMENTATION_PLAN.md` S49, after which the daemon runs
+    /// the line itself and no client is involved. Two focused screens on two
+    /// machines is the case this does not cover.
+    ///
+    /// Resolves to `Command::CommandLineInput`.
+    WriteCommandLine {
+        /// The line to write, exactly as it would be typed.
+        line: String,
+        /// Run it as well, rather than leaving it for Enter.
+        ///
+        /// `#[serde(default)]` so a profile written before S43 reads as *write
+        /// only*, which is what those bindings did.
+        #[serde(default)]
+        submit: bool,
+    },
     /// Write the show to disk.
     SaveShow,
     /// Undo.
@@ -626,8 +692,11 @@ impl SurfaceAction {
     /// whether the executor has a `Flash` on that key, so it forwards both
     /// edges and lets the executor decide. Everything else is an instruction
     /// rather than a gesture, and an instruction has one edge.
+    ///
+    /// Takes `&self` since S43: [`Self::WriteCommandLine`] made this enum
+    /// non-`Copy`, and a `const fn` may not drop one.
     #[must_use]
-    pub const fn is_momentary(self) -> bool {
+    pub const fn is_momentary(&self) -> bool {
         matches!(self, Self::ExecutorButton { .. })
     }
 }
@@ -698,7 +767,7 @@ impl BoundControl {
 /// `{ "control": …, "action": … }`, in the shape a command and a machine
 /// configuration carry it. `None` is a control deliberately left alone, which
 /// the file format has always distinguished from one nobody wrote down.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "camelCase")]
 pub struct SurfaceBinding {

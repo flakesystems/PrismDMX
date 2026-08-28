@@ -19,8 +19,8 @@ use common::{cue, executor, populated_show, preset, sequence};
 use prism_core::{Effect, Show, ShowError, ShowFile, ShowFileError};
 use prism_domain::{
     AttributeType, Command, CueProperty, CueTrigger, ExecutorButtonFunction, ExecutorFaderFunction,
-    ExecutorId, FeatureGroup, FixtureId, GoDirection, ObjectRef, OverwriteMode, PlaybackTarget,
-    PresetId, RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, StoreTarget,
+    ExecutorId, FixtureId, GoDirection, ObjectRef, OverwriteMode, PlaybackTarget, PresetId,
+    PresetPool, RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, StoreTarget,
 };
 
 /// The show as bytes, so "nothing changed" can be asserted rather than claimed.
@@ -111,7 +111,7 @@ fn editing_a_preset_changes_the_cues_that_reference_it() {
     let applied = file
         .apply(&Command::StorePreset {
             preset_id: PresetId::new(4),
-            pool: Some(FeatureGroup::Color),
+            pool: Some(PresetPool::Color),
             name: "Half red".to_owned(),
             color: Some(RgbColor { r: 128, g: 0, b: 0 }),
             mode: StoreMode::Merge,
@@ -160,7 +160,7 @@ fn editing_a_preset_leaves_the_values_that_are_not_linked_to_it() {
     dial(&mut file, &[1], AttributeType::Red, 111);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: Some(FeatureGroup::Color),
+        pool: Some(PresetPool::Color),
         name: "Dim red".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -201,7 +201,7 @@ fn a_link_to_a_value_the_preset_does_not_carry_survives_untouched() {
     dial(&mut file, &[2], AttributeType::Green, 200);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: Some(FeatureGroup::Color),
+        pool: Some(PresetPool::Color),
         name: "Preset 4".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -237,7 +237,7 @@ fn an_oops_over_a_preset_edit_puts_the_cues_back_too() {
     dial(&mut file, &[1], AttributeType::Red, 1000);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: Some(FeatureGroup::Color),
+        pool: Some(PresetPool::Color),
         name: "Nearly off".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -266,7 +266,7 @@ fn a_preset_stores_the_values_of_its_own_pool_only() {
 
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(9),
-        pool: Some(FeatureGroup::Color),
+        pool: Some(PresetPool::Color),
         name: "Reds".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -276,7 +276,7 @@ fn a_preset_stores_the_values_of_its_own_pool_only() {
     let stored = file.show.preset(PresetId::new(9)).expect("preset 9");
     assert_eq!(stored.values.len(), 1);
     assert_eq!(stored.values[0].attribute, AttributeType::Red);
-    assert_eq!(stored.pool, FeatureGroup::Color);
+    assert_eq!(stored.pool, PresetPool::Color);
 }
 
 /// A store into a pool the programmer has nothing for is refused when the
@@ -288,7 +288,7 @@ fn an_empty_store_creates_nothing_and_relabels_what_is_there() {
     let before = bytes(&file.show);
     let refusal = file.apply(&Command::StorePreset {
         preset_id: PresetId::new(9),
-        pool: Some(FeatureGroup::Position),
+        pool: Some(PresetPool::Position),
         name: "Nowhere".to_owned(),
         color: None,
         mode: StoreMode::Merge,
@@ -302,7 +302,7 @@ fn an_empty_store_creates_nothing_and_relabels_what_is_there() {
     // Preset 4 exists, so the same empty programmer is a rename.
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(4),
-        pool: Some(FeatureGroup::Color),
+        pool: Some(PresetPool::Color),
         name: "Renamed".to_owned(),
         color: Some(RgbColor { r: 1, g: 2, b: 3 }),
         mode: StoreMode::Merge,
@@ -447,11 +447,11 @@ fn a_store_preview_writes_nothing_at_all() {
         },
         StoreTarget::Preset {
             preset_id: PresetId::new(4),
-            pool: FeatureGroup::Color,
+            pool: PresetPool::Color,
         },
         StoreTarget::Preset {
             preset_id: PresetId::new(77),
-            pool: FeatureGroup::Beam,
+            pool: PresetPool::Beam,
         },
     ] {
         let _ = file.preview_store(&target, StoreMode::Merge);
@@ -471,7 +471,7 @@ fn a_preset_preview_counts_only_the_values_of_its_pool() {
     let colour = file.preview_store(
         &StoreTarget::Preset {
             preset_id: PresetId::new(4),
-            pool: FeatureGroup::Color,
+            pool: PresetPool::Color,
         },
         StoreMode::Merge,
     );
@@ -481,7 +481,7 @@ fn a_preset_preview_counts_only_the_values_of_its_pool() {
     let dimmer = file.preview_store(
         &StoreTarget::Preset {
             preset_id: PresetId::new(4),
-            pool: FeatureGroup::Dimmer,
+            pool: PresetPool::Dimmer,
         },
         StoreMode::Merge,
     );

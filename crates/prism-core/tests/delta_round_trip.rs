@@ -472,6 +472,7 @@ fn a_scripted_session_is_reproduced_command_by_command() {
     });
     pair.apply(&Command::CommandLineInput {
         text: "1 thru 4 at full".to_owned(),
+        run: false,
     });
 
     // Storing over a view, which is a replace rather than an add.
@@ -541,7 +542,7 @@ proptest! {
     /// and they must produce no session delta at all.
     #[test]
     fn session_deltas_reproduce_the_session_they_came_from(
-        commands in proptest::collection::vec(any::<Command>(), 1..24)
+        commands in proptest::collection::vec(prism_domain::arb::command(), 1..24)
     ) {
         let mut session = populated_session();
         let mut mirror = SessionMirror::new(session.to_json().unwrap());
@@ -562,7 +563,7 @@ proptest! {
 
         // A run in which nothing was ever accepted would assert nothing, so the
         // property is closed with an edit that cannot be refused.
-        for delta in &session.apply(&Command::CommandLineInput { text: "go".to_owned() }).unwrap().deltas {
+        for delta in &session.apply(&Command::CommandLineInput { text: "go".to_owned(), run: false }).unwrap().deltas {
             mirror.apply_delta(delta).unwrap();
         }
         applied += 1;
@@ -749,7 +750,7 @@ proptest! {
     /// **every** command, accepted or refused.
     #[test]
     fn one_delta_stream_reproduces_all_three_documents(
-        commands in proptest::collection::vec(any::<Command>(), 1..24)
+        commands in proptest::collection::vec(prism_domain::arb::command(), 1..24)
     ) {
         let mut pair = FilePair::new();
         for command in commands {

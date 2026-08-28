@@ -47,8 +47,13 @@ fn a_show_built_through_the_model_becomes_a_running_engine() {
         .unwrap();
 
     let mut body = body(&show, 4).unwrap();
-    // One slot per fixture and attribute: two PARs of four attributes each.
-    assert_eq!(body.plan().slot_count(), 8);
+    // One slot per fixture and attribute: two PARs of four attributes each, and
+    // **an intensity apiece that the desk supplies** — S43. A PAR's profile has
+    // no dimmer channel, so `Fixture::has_software_dimmer` is true for both and
+    // `MergePlan::build` gives each one a `Dimmer` slot with no channel behind
+    // it. Ten, and this assertion is one of the places that would notice if the
+    // two crates stopped agreeing about which fixtures get one.
+    assert_eq!(body.plan().slot_count(), 10);
 
     // The three set-up doors, driven from the show's own pools.
     body.load_groups(&show.groups().cloned().collect::<Vec<_>>());

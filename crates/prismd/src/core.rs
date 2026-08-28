@@ -206,11 +206,16 @@ impl Core {
         report: Arc<PlaybackReport>,
         bindings: prism_surface::Bindings,
     ) -> Result<Self, PatchError> {
-        let plan = MergePlan::build(
-            file.show
-                .patched()
-                .map(|(fixture, fixture_type)| (fixture.id, fixture_type)),
-        )
+        let plan = MergePlan::build(file.show.patched().map(|(fixture, fixture_type)| {
+            // **The patch's own answer** — S43: a fixture whose profile has no
+            // intensity gets one from the desk unless the operator switched it
+            // off in the patch window.
+            (
+                fixture.id,
+                fixture_type,
+                fixture.has_software_dimmer(fixture_type),
+            )
+        }))
         .map_err(PatchError::Plan)?;
         let patch_revision = file.show.patch_revision();
         let engine_programmer = file.programmer.state().clone();
@@ -572,7 +577,7 @@ impl Core {
                 // and the second is a mode that is deliberately written down
                 // nowhere.
                 Effect::SurfaceBinding { control, action } => {
-                    deltas.extend(self.carry_out_binding(*control, *action));
+                    deltas.extend(self.carry_out_binding(*control, action.clone()));
                 }
                 Effect::SurfaceLearn(on) => deltas.push(self.set_learning(*on)),
             }
@@ -827,7 +832,7 @@ impl Core {
         self.binding_revision = self.binding_revision.saturating_add(1);
         // The surface is `Daemon`'s, so the new table is left here for the run
         // loop exactly as a profile change is.
-        self.binding_change = Some(self.bindings);
+        self.binding_change = Some(self.bindings.clone());
         let mut deltas = vec![Delta::SurfaceBindingsChanged {
             revision: self.binding_revision,
         }];
@@ -1582,6 +1587,7 @@ mod tests {
         // and S11's second half of `Effect::Repatch` is what has to blank it.
         let swaps = core.engine().health().swaps();
         core.apply(&Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(1),
             name: "Fixture 1".to_owned(),
             type_id: "generic.dimmer".to_owned(),
@@ -1620,6 +1626,7 @@ mod tests {
 
         // Patching a *second* fixture in front of it moves the dimmer's slot.
         core.apply(&Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(3),
             name: "Fixture 3".to_owned(),
             type_id: "generic.dimmer".to_owned(),
@@ -1646,6 +1653,7 @@ mod tests {
         until("the grand master", || channel(&frames, 1) == Some(128));
 
         core.apply(&Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(3),
             name: "Fixture 3".to_owned(),
             type_id: "generic.dimmer".to_owned(),
@@ -1732,6 +1740,7 @@ mod tests {
         let (mut core, _frames, driver) = desk(dir.path());
 
         core.apply(&Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(3),
             name: "Fixture 3".to_owned(),
             type_id: "generic.dimmer".to_owned(),
@@ -1829,6 +1838,7 @@ mod tests {
         assert!(!core.store().has_recovery());
 
         core.apply(&Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(3),
             name: "Fixture 3".to_owned(),
             type_id: "generic.dimmer".to_owned(),
@@ -1877,6 +1887,7 @@ mod tests {
         // And a rebuild reads it back out of the show rather than from a second
         // copy that could disagree (S14: an executor master *is* show state).
         core.apply(&Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(3),
             name: "Fixture 3".to_owned(),
             type_id: "generic.dimmer".to_owned(),
@@ -2000,6 +2011,7 @@ mod tests {
         std::fs::create_dir(core.store().recovery_path()).unwrap();
 
         core.apply(&Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(3),
             name: "Fixture 3".to_owned(),
             type_id: "generic.dimmer".to_owned(),

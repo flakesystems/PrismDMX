@@ -356,6 +356,10 @@ impl Desk {
                         })
                         .collect(),
                     device: prism_surface::X_TOUCH.name.to_owned(),
+                    // The two an **export** needs, which are the profile's own
+                    // constants rather than a client's copy of them — S43.
+                    device_key: prism_surface::X_TOUCH.key.to_owned(),
+                    profile_version: prism_surface::PROFILE_VERSION,
                     profile: core.machine().settings().surface_profile.clone(),
                     revision: core.binding_revision(),
                     learning: core.is_learning(),
@@ -659,6 +663,7 @@ mod tests {
         assert!(!desk.snapshot().health.unsaved_changes);
 
         desk.command(Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(3),
             name: "Fixture 3".to_owned(),
             type_id: "generic.dimmer".to_owned(),

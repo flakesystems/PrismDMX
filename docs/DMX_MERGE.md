@@ -132,6 +132,28 @@ The final step converts resolved attribute values (`0..65535`, always 16-bit int
 | 16-bit attribute | coarse = `value >> 8`, fine = `value & 0xFF`, written at `coarseOffset` and `fineOffset` |
 | `invert == true` | applied to the attribute value **before** splitting: `value = 65535 - value` |
 | Pan/tilt inversion per fixture | `Fixture.invertPan` / `invertTilt` — applied on top of the attribute-level invert, so a fixture hung upside down is corrected without editing the fixture type |
+| Desk-supplied intensity (S43) | Every **colour** channel of a fixture with one is scaled by its `Dimmer` slot before the invert: `value = value * dimmer / 65535` |
+
+### 5.1 The desk-supplied intensity
+
+A fixture whose profile has no `Dimmer` attribute gets one from the desk, unless
+the operator switches it off in the patch (`Fixture.softwareDimmer`). It is an
+ordinary merge slot — playbacks write it, the masters scale it because it is
+`FeatureGroup::Dimmer`, the programmer takes it over — and the one thing it has
+not got is a channel. What it does instead is the row above: it scales the
+fixture's colour on the way out, which for a fixture whose only output is colour
+*is* its intensity.
+
+It rests at **nought**, and that is the point of it. Punch-list B1 gave colour
+channels a home value of full, because a colour starts open on a desk and the
+dimmer decides whether any of it is seen; an RGBW PAR has no dimmer, so *colour
+open* and *lamp at full* are the same eight bits and a rig of them came up white
+the moment the daemon started. The supplied intensity is what puts the second
+half of B1 back.
+
+The scaling is exact at both ends — `scaled(v, 65535) == v` and
+`scaled(v, 0) == 0` — so a fixture whose supplied dimmer is at full is written
+byte for byte as it would be with no dimmer at all.
 
 Working in 16-bit internally regardless of the patched resolution keeps fades smooth: an 8-bit dimmer fading over 10 seconds still interpolates in 16-bit and only quantises at the final write, avoiding visible stepping.
 

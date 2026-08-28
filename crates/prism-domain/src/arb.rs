@@ -22,6 +22,15 @@
 //!   large enough to make shrinking useless.
 
 use proptest::prelude::*;
+use proptest::strategy::BoxedStrategy;
+
+use crate::Command as C;
+use crate::{
+    AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId,
+    GoDirection, GroupId, MachineChange, ObjectRef, OutputChange, OutputId, OutputInstance,
+    OverwriteMode, ParamDirection, PlaybackTarget, PresetId, PresetPool, RgbColor, SelectionMode,
+    SequenceId, SequenceStoreMode, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+};
 
 /// Decimal places generated floats are limited to.
 const SCALE: f64 = 1000.0;
@@ -148,21 +157,21 @@ pub fn a_control() -> BoxedStrategy<crate::BoundControl> {
 pub fn an_action() -> BoxedStrategy<Option<crate::SurfaceAction>> {
     use crate::SurfaceAction as A;
     use crate::{ExecutorTarget, Step};
-    const ACTIONS: [Option<A>; 18] = [
+    const ACTIONS: [Option<A>; 19] = [
         None,
         Some(A::ExecutorMaster {
             target: ExecutorTarget::Strip,
         }),
         Some(A::ExecutorGo {
             target: ExecutorTarget::Selected,
-            direction: crate::GoDirection::Next,
+            direction: GoDirection::Next,
         }),
         Some(A::ExecutorOff {
             target: ExecutorTarget::Strip,
         }),
         Some(A::ExecutorButton {
             target: ExecutorTarget::Strip,
-            button: crate::ExecutorButtonRef::Slot { index: 0 },
+            button: ExecutorButtonRef::Slot { index: 0 },
         }),
         Some(A::SelectExecutor {
             target: ExecutorTarget::Strip,
@@ -170,27 +179,36 @@ pub fn an_action() -> BoxedStrategy<Option<crate::SurfaceAction>> {
         Some(A::ClearProgrammer),
         Some(A::ExecutorPage { delta: -1 }),
         Some(A::SelectView {
-            view: crate::ViewId::new(1),
+            view: ViewId::new(1),
         }),
         Some(A::StepView {
             direction: Step::Next,
         }),
         Some(A::ProgrammerPage { delta: 1 }),
         Some(A::SelectProgrammerParam {
-            direction: crate::ParamDirection::Prev,
+            direction: ParamDirection::Prev,
         }),
         Some(A::AdjustParameter),
         Some(A::SetEncoderBank {
-            group: crate::FeatureGroup::Color,
+            group: FeatureGroup::Color,
         }),
         Some(A::OpenWindow {
-            window: crate::WindowType::Patch,
+            window: WindowType::Patch,
         }),
+        Some(A::OpenWindowPicker),
         Some(A::SaveShow),
         Some(A::Oops),
         Some(A::Redo),
     ];
-    (0..ACTIONS.len()).prop_map(|index| ACTIONS[index]).boxed()
+    // `WriteCommandLine` is the one action carrying a value an operator wrote,
+    // so it is generated rather than picked from the list: a fixed line would
+    // leave the only `String` on this enum untested through the codec.
+    prop_oneof![
+        19 => (0..ACTIONS.len()).prop_map(|index| ACTIONS[index].clone()),
+        1 => (".{0,24}", any::<bool>())
+            .prop_map(|(line, submit)| Some(A::WriteCommandLine { line, submit })),
+    ]
+    .boxed()
 }
 
 /// A map of between one and `max` arbitrary entries.
@@ -230,4 +248,324 @@ pub fn maybe_socket() -> impl Strategy<Value = Option<std::net::SocketAddr>> {
     proptest::option::of((any::<[u8; 4]>(), any::<u16>()).prop_map(|(octets, port)| {
         std::net::SocketAddr::from((std::net::Ipv4Addr::from(octets), port))
     }))
+}
+
+// ---- the whole command vocabulary, in groups ------------------------------
+
+/// Every [`Command`] there is, generated **in groups** so the value tree stays
+/// small — S43.
+///
+/// # Why this is written out rather than derived
+///
+/// `Command` still derives `Arbitrary`, and that derive is what
+/// [`the_grouped_strategy_reaches_every_variant_the_derive_does`] checks this
+/// against. What it is no longer used *for* is generating values, and the reason
+/// is a measurement rather than a preference.
+///
+/// `proptest_derive` builds one `TupleUnion` holding a slot per variant, and a
+/// slot costs about **576 bytes whatever the variant carries** — S38 found this
+/// for a unit enum and S43 measured it again from the other end: boxing a field
+/// of a `Command` variant does not move the total by a single byte, because the
+/// payload was never what was being paid for. So the tree grew linearly with the
+/// number of commands and nothing could be done about it from inside a variant.
+/// At fifty-five variants it was 30 992 bytes, which is what a test thread on
+/// Windows will just bear; at fifty-seven it was 32 144, and
+/// `prism-core`'s `tests/oops.rs` died with `STATUS_STACK_OVERFLOW`. **The
+/// protocol had run out of room to grow**, which is not a state a vocabulary
+/// should ever be in.
+///
+/// A `prop_oneof!` of *boxed groups* costs one slot per **group**: six groups of
+/// ten measure a few hundred bytes held, and only the group that is chosen is
+/// ever built. The measurement is in `crate::wire`, which is where the budget
+/// lives.
+///
+/// # What a session adding a command does
+///
+/// Add the variant, then add one arm to whichever group has room — and nothing
+/// else. `the_grouped_strategy_reaches_every_variant_the_derive_does` fails
+/// until you do, by name, so a forgotten arm is a red test rather than a
+/// property test that quietly stopped covering something.
+/// The type [`command`] returns, so `crate::wire`'s budget can name it.
+pub type BoxedCommand = BoxedStrategy<crate::Command>;
+
+pub fn command() -> BoxedCommand {
+    prop_oneof![
+        command_group_1(),
+        command_group_2(),
+        command_group_3(),
+        command_group_4(),
+        command_group_5(),
+        command_group_6(),
+    ]
+    .boxed()
+}
+
+/// Group 1 of 6 — see [`command`].
+fn command_group_1() -> BoxedStrategy<crate::Command> {
+    prop_oneof![
+        (small_vec(4), any::<SelectionMode>())
+            .prop_map(|(ids, mode)| C::SelectFixtures { ids, mode }),
+        (any::<AttributeType>(), any::<i32>(), any::<bool>()).prop_map(
+            |(attribute, value, relative)| C::SetAttribute {
+                attribute,
+                value,
+                relative
+            }
+        ),
+        (any::<GroupId>(), any::<SelectionMode>())
+            .prop_map(|(group_id, mode)| C::SelectGroup { group_id, mode }),
+        any::<PresetId>().prop_map(|preset_id| C::ApplyPreset { preset_id }),
+        Just(C::ClearProgrammer),
+        (
+            any::<Option<SequenceId>>(),
+            any::<String>(),
+            any::<StoreMode>()
+        )
+            .prop_map(|(sequence_id, cue_number, mode)| C::StoreCue {
+                sequence_id,
+                cue_number,
+                mode
+            }),
+        (
+            any::<PresetId>(),
+            any::<Option<PresetPool>>(),
+            any::<String>(),
+            any::<Option<RgbColor>>(),
+            any::<StoreMode>()
+        )
+            .prop_map(|(preset_id, pool, name, color, mode)| C::StorePreset {
+                preset_id,
+                pool,
+                name,
+                color,
+                mode
+            }),
+        (
+            any::<SequenceId>(),
+            any::<String>(),
+            any::<SequenceStoreMode>()
+        )
+            .prop_map(|(sequence_id, name, mode)| C::StoreSequence {
+                sequence_id,
+                name,
+                mode
+            }),
+        (any::<GroupId>(), any::<String>(), any::<OverwriteMode>()).prop_map(
+            |(group_id, name, mode)| C::StoreGroup {
+                group_id,
+                name,
+                mode
+            }
+        ),
+        (any::<Option<SequenceId>>(), any::<String>()).prop_map(|(sequence_id, cue_number)| {
+            C::EditCue {
+                sequence_id,
+                cue_number,
+            }
+        }),
+    ]
+    .boxed()
+}
+
+/// Group 2 of 6 — see [`command`].
+fn command_group_2() -> BoxedStrategy<crate::Command> {
+    prop_oneof![
+        Just(C::Update),
+        (
+            any::<Option<SequenceId>>(),
+            any::<String>(),
+            any::<CueProperty>()
+        )
+            .prop_map(|(sequence_id, cue_number, property)| C::SetCueProperty {
+                sequence_id,
+                cue_number,
+                property
+            }),
+        any::<ObjectRef>().prop_map(|target| C::Delete { target }),
+        (
+            any::<ObjectRef>(),
+            any::<ObjectRef>(),
+            any::<OverwriteMode>()
+        )
+            .prop_map(|(from, to, mode)| C::Copy { from, to, mode }),
+        (
+            any::<ObjectRef>(),
+            any::<ObjectRef>(),
+            any::<OverwriteMode>()
+        )
+            .prop_map(|(from, to, mode)| C::Move { from, to, mode }),
+        (any::<ObjectRef>(), any::<String>()).prop_map(|(target, name)| C::Label { target, name }),
+        (any::<ObjectRef>(), any::<Option<RgbColor>>())
+            .prop_map(|(target, color)| C::Color { target, color }),
+        (any::<PlaybackTarget>(), any::<String>())
+            .prop_map(|(target, cue_number)| C::Goto { target, cue_number }),
+        any::<PlaybackTarget>().prop_map(|target| C::ExecutorOn { target }),
+        (any::<ExecutorId>(), any::<Option<SequenceId>>()).prop_map(
+            |(executor_id, sequence_id)| C::AssignExecutor {
+                executor_id,
+                sequence_id
+            }
+        ),
+    ]
+    .boxed()
+}
+
+/// Group 3 of 6 — see [`command`].
+fn command_group_3() -> BoxedStrategy<crate::Command> {
+    prop_oneof![
+        (any::<PlaybackTarget>(), any::<GoDirection>())
+            .prop_map(|(target, direction)| C::ExecutorGo { target, direction }),
+        any::<PlaybackTarget>().prop_map(|target| C::ExecutorOff { target }),
+        (
+            any::<ExecutorId>(),
+            any::<ExecutorButtonRef>(),
+            any::<bool>()
+        )
+            .prop_map(|(executor_id, button, pressed)| C::ExecutorButton {
+                executor_id,
+                button,
+                pressed
+            }),
+        (any::<ExecutorId>(), any::<u16>())
+            .prop_map(|(executor_id, level)| C::SetExecutorMaster { executor_id, level }),
+        (
+            any::<FixtureId>(),
+            any::<String>(),
+            any::<String>(),
+            any::<UniverseId>(),
+            any::<u16>()
+        )
+            .prop_map(|(id, name, type_id, universe, address)| C::PatchFixture {
+                software_dimmer: true,
+                id,
+                name,
+                type_id,
+                universe,
+                address
+            }),
+        any::<FixtureId>().prop_map(|id| C::UnpatchFixture { id }),
+        (any::<FixtureId>(), any::<FixtureId>()).prop_map(|(id, to)| C::RenumberFixture { id, to }),
+        any::<String>().prop_map(|type_id| C::EmbedFixtureType { type_id }),
+        Just(C::Oops),
+        Just(C::Redo),
+    ]
+    .boxed()
+}
+
+/// Group 4 of 6 — see [`command`].
+fn command_group_4() -> BoxedStrategy<crate::Command> {
+    prop_oneof![
+        Just(C::SaveShow),
+        any::<String>().prop_map(|path| C::SaveShowAs { path }),
+        any::<String>().prop_map(|path| C::OpenShow { path }),
+        any::<String>().prop_map(|path| C::NewShow { path }),
+        any::<String>().prop_map(|path| C::ExportShow { path }),
+        any::<String>().prop_map(|path| C::ImportShow { path }),
+        any::<ViewId>().prop_map(|view_id| C::SelectView { view_id }),
+        (any::<ViewId>(), any::<String>())
+            .prop_map(|(view_id, name)| C::StoreView { view_id, name }),
+        (any::<ViewId>(), any::<String>()).prop_map(|(view_id, name)| C::NewView { view_id, name }),
+        any::<bool>().prop_map(|open| C::SetWindowPicker { open }),
+    ]
+    .boxed()
+}
+
+/// Group 5 of 6 — see [`command`].
+fn command_group_5() -> BoxedStrategy<crate::Command> {
+    prop_oneof![
+        (any::<WindowType>(), proptest::option::of(small_map(2)))
+            .prop_map(|(window, params)| C::OpenWindow { window, params }),
+        any::<WindowInstanceId>().prop_map(|instance_id| C::CloseWindow { instance_id }),
+        any::<WindowInstanceId>().prop_map(|instance_id| C::FocusWindow { instance_id }),
+        (
+            any::<WindowInstanceId>(),
+            finite_f64(),
+            finite_f64(),
+            finite_f64(),
+            finite_f64()
+        )
+            .prop_map(|(instance_id, x, y, w, h)| C::PlaceWindow {
+                instance_id,
+                x,
+                y,
+                w,
+                h
+            }),
+        any::<u32>().prop_map(|page| C::SetExecutorPage { page }),
+        any::<ExecutorId>().prop_map(|executor_id| C::SelectExecutor { executor_id }),
+        any::<SequenceId>().prop_map(|sequence_id| C::SelectSequence { sequence_id }),
+        any::<FeatureGroup>().prop_map(|group| C::SetEncoderBank { group }),
+        any::<u32>().prop_map(|page| C::SetProgrammerPage { page }),
+        any::<ParamDirection>().prop_map(|direction| C::SelectProgrammerParam { direction }),
+    ]
+    .boxed()
+}
+
+/// Group 6 of 6 — see [`command`].
+fn command_group_6() -> BoxedStrategy<crate::Command> {
+    prop_oneof![
+        (any::<String>(), any::<bool>()).prop_map(|(text, run)| C::CommandLineInput { text, run }),
+        any::<OutputInstance>().prop_map(|output| C::AddOutput { output }),
+        (any::<OutputId>(), any::<OutputChange>())
+            .prop_map(|(id, change)| C::ConfigureOutput { id, change }),
+        any::<OutputId>().prop_map(|id| C::RemoveOutput { id }),
+        (any::<OutputId>(), any::<bool>())
+            .prop_map(|(id, enabled)| C::SetOutputEnabled { id, enabled }),
+        any::<Option<String>>().prop_map(|port| C::SetSurfacePort { port }),
+        any::<MachineChange>().prop_map(|change| C::ConfigureMachine { change }),
+    ]
+    .boxed()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command;
+    use proptest::prelude::*;
+    use proptest::strategy::ValueTree;
+    use proptest::test_runner::TestRunner;
+    use std::collections::BTreeSet;
+
+    /// Which variant a command is, by the tag `Command` puts on the wire.
+    fn tag(command: &crate::Command) -> String {
+        let value = serde_json::to_value(command).expect("a command serialises");
+        value["t"].as_str().expect("a tagged command").to_owned()
+    }
+
+    /// The variants a strategy reaches, over enough samples to reach them all.
+    fn reached<S: Strategy<Value = crate::Command>>(strategy: &S) -> BTreeSet<String> {
+        let mut runner = TestRunner::deterministic();
+        let mut seen = BTreeSet::new();
+        for _ in 0..3_000 {
+            let tree = strategy.new_tree(&mut runner).expect("a value");
+            seen.insert(tag(&tree.current()));
+        }
+        seen
+    }
+
+    /// **The guard that replaces the compiler's exhaustiveness check.**
+    ///
+    /// [`command`] is written out by hand, so a variant added to `Command`
+    /// without an arm would be a variant no property test ever generated —
+    /// silently, which is the one failure mode this arrangement has. `Command`'s
+    /// own derive is exhaustive by construction, so comparing what the two reach
+    /// turns that silence into a named failure.
+    ///
+    /// The derived strategy is only *constructed* here, one value at a time,
+    /// which is what a proptest run does anyway; it is never the thing a
+    /// property is run over. See `crate::wire`'s budget for why.
+    #[test]
+    fn the_grouped_strategy_reaches_every_variant_the_derive_does() {
+        let grouped = reached(&command());
+        let derived = reached(&any::<crate::Command>());
+        let missing: Vec<&String> = derived.difference(&grouped).collect();
+        assert!(
+            missing.is_empty(),
+            "crate::arb::command has no arm for {missing:?} — add one to a group"
+        );
+        let extra: Vec<&String> = grouped.difference(&derived).collect();
+        assert!(
+            extra.is_empty(),
+            "crate::arb::command generates {extra:?}, which Command does not have"
+        );
+    }
 }

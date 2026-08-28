@@ -348,7 +348,7 @@ impl Daemon {
             engine,
             Arc::clone(&layout),
             report,
-            bindings,
+            bindings.clone(),
         )
         .map_err(StartError::Patch)?;
         // A desk that has never been told writes down what it started with, so
@@ -357,7 +357,7 @@ impl Daemon {
         // anybody has touched them. Not done when a flag is holding the table:
         // that run neither reads the stored one nor writes it.
         if adopt {
-            drop(core.adopt_bindings(bindings));
+            drop(core.adopt_bindings(bindings.clone()));
         }
         // A desk that starts where it was left has to write down where that is
         // — S37. Recorded here rather than in `Core::open_show`, because the
@@ -576,7 +576,7 @@ impl Daemon {
         // is a change to this machine's own table and is written down like any
         // other. The deltas are dropped rather than broadcast because this
         // arrives *from* a command whose deltas the caller is already sending.
-        drop(self.desk.core().replace_bindings(table));
+        drop(self.desk.core().replace_bindings(table.clone()));
         self.bindings = table;
         // The table the attached surface is drawing with, replaced in place. The
         // whole picture follows, because a new table can mean a different
@@ -619,7 +619,7 @@ impl Daemon {
                 self.bindings.bound()
             ),
         );
-        self.surface = Some(SurfaceLink::attach(port, self.bindings));
+        self.surface = Some(SurfaceLink::attach(port, self.bindings.clone()));
     }
 
     /// The attached surface, for a status panel or a test.

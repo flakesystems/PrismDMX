@@ -468,6 +468,16 @@ something:
   `JogAcceleration` reads the *interval since the last message*, because the
   wheel raises its rate and never its magnitude. Both are data, because how much
   a detent is worth is taste rather than measurement.
+- **And both are denominated in attribute units** — S43, punch-list B20. The
+  number a curve answers with is added to a 16-bit parameter by
+  `SetAttribute { relative: true }` and nothing scales it on the way. Written as
+  abstract *steps* they were worth one part in 65 535 each, so a careful V-Pot
+  click moved a parameter by 0.0015 % and a full turn of the wheel by about 1 %,
+  which is what the owner reported. `prism_surface::COARSE` is the unit that
+  fixed it: 257, one DMX step of an 8-bit channel, and the smallest move that is
+  visible on the least precise fixture in a rig. A V-Pot click is one of those;
+  the wheel's slowest row is finer, because the wheel is the control an operator
+  reaches for to trim.
 - **Colour quantisation lives here** (`prism_surface::quantize`), hue-first per
   §2.3: greys to white, and **only an exactly black colour to black**, because a
   strip that rounded itself onto an unlit backlight is an executor whose name
@@ -542,8 +552,8 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 ### 4.2.1 As built (S22), and the three rows closed in S34
 
 `prism_surface::Bindings` is layer 3 whole, and it is a table lookup with no
-arithmetic in it: a fader arrives as a level and a detent as a parameter step,
-both already worked out one layer down. Five things it decides that §4 did not
+arithmetic in it: a fader arrives as a level and a detent as a distance to move
+a parameter, both already worked out one layer down. Five things it decides that §4 did not
 say:
 
 - **Loading cannot fail.** `Bindings::load(text, profile)` answers with the

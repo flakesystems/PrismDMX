@@ -528,7 +528,10 @@ impl Show {
                 type_id,
                 universe,
                 address,
-            } => self.apply_patch_fixture(*id, name, type_id, *universe, *address),
+                software_dimmer,
+            } => {
+                self.apply_patch_fixture(*id, name, type_id, *universe, *address, *software_dimmer)
+            }
             Command::UnpatchFixture { id } => {
                 let ops = self.unpatch_fixture(*id)?;
                 Ok(Applied {
@@ -583,6 +586,8 @@ impl Show {
             // rejection at run time.
             Command::SelectView { .. }
             | Command::StoreView { .. }
+            | Command::NewView { .. }
+            | Command::SetWindowPicker { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
@@ -622,6 +627,7 @@ impl Show {
         type_id: &str,
         universe: prism_domain::UniverseId,
         address: u16,
+        software_dimmer: bool,
     ) -> Result<Applied, ShowError> {
         let (position, rotation, invert_pan, invert_tilt) =
             self.fixture(id)
@@ -634,6 +640,7 @@ impl Show {
                     )
                 });
         let ops = self.patch_fixture(Fixture {
+            software_dimmer,
             id,
             name: name.to_owned(),
             type_id: type_id.to_owned(),
@@ -983,6 +990,7 @@ mod tests {
 
     fn patch_command(id: u32, universe: u32, address: u16) -> Command {
         Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(id),
             name: format!("Fixture {id}"),
             type_id: "generic.rgbw.par".to_owned(),

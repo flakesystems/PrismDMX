@@ -62,6 +62,7 @@ use prism_domain::{
 use serde::{Deserialize, Serialize};
 
 use crate::command::Applied;
+use crate::layout::{Rect, free_place, may_place};
 use crate::show::{pointer, project};
 
 /// Wire name of the session itself within the session document.
@@ -92,6 +93,11 @@ const PROGRAMMER_PARAM_INDEX: &str = "programmerParamIndex";
 /// Wire name of `Session::command_line`.
 const COMMAND_LINE: &str = "commandLine";
 
+/// Where the counter of bound lines that asked to be run lives — S43.
+const COMMAND_LINE_RUN: &str = "commandLineRun";
+/// Wire name of `Session::window_picker`.
+const WINDOW_PICKER: &str = "windowPicker";
+
 /// Where a window opened from the console appears, and how big it is.
 ///
 /// `OpenWindow` carries no geometry — §4.4's command opens a window, it does not
@@ -120,6 +126,14 @@ const CLIENT_LOCAL_PARAM_KEYS: [&str; 7] = [
 pub enum SessionError {
     /// A view number that has never been stored.
     UnknownView(ViewId),
+    /// There is nowhere left on the canvas to put a window — S43, B10.
+    ///
+    /// Reached only when even the smallest window this interface allows
+    /// ([`prism_domain::MIN_WINDOW_WIDTH`] by
+    /// [`prism_domain::MIN_WINDOW_HEIGHT`]) has no free place. Said out loud
+    /// rather than answered by opening the window underneath something, which is
+    /// the behaviour the punch list objected to in the first place.
+    NoRoomOnTheCanvas,
     /// The only stored view cannot be deleted.
     ///
     /// `activeViewId` names a view from the first moment ([`SessionState::new`])
@@ -175,6 +189,10 @@ impl fmt::Display for SessionError {
                 "window parameter {key:?} is client-local state, which the session does not carry"
             ),
             Self::NoWindowNumberLeft => write!(f, "no window number is free"),
+            Self::NoRoomOnTheCanvas => write!(
+                f,
+                "there is no room left on this view for another window: close one, or switch to                  another view"
+            ),
             Self::NotASessionCommand => write!(f, "this is a show command, not a session command"),
             Self::NotRepresentable(reason) => {
                 write!(f, "the session cannot be encoded: {reason}")
@@ -327,6 +345,8 @@ impl SessionState {
         let ops = match command {
             Command::SelectView { view_id } => self.select_view(*view_id)?,
             Command::StoreView { view_id, name } => self.store_view(*view_id, name)?,
+            Command::NewView { view_id, name } => self.new_view(*view_id, name)?,
+            Command::SetWindowPicker { open } => self.set_window_picker(*open)?,
             // S40's four generic verbs, for the one of their six targets that
             // is session state. `Command::is_session_command` reads the target
             // and routes them here; anything else in them is the show's, and
@@ -367,7 +387,7 @@ impl SessionState {
             Command::SelectProgrammerParam { direction } => {
                 self.select_programmer_param(*direction)?
             }
-            Command::CommandLineInput { text } => self.set_command_line(text)?,
+            Command::CommandLineInput { text, run } => self.set_command_line(text, *run)?,
             // The twenty-four show commands, named rather than caught by a wildcard,
             // so this match is exhaustive and a command added to the protocol
             // is a compile error here as well as in `Show::apply`.
@@ -472,6 +492,66 @@ impl SessionState {
         self.views.insert(id, view);
         self.dirty = true;
         Ok(vec![op])
+    }
+
+    /// Makes a view with nothing on it and switches to it — S43, B11.
+    ///
+    /// The opposite of [`store_view`](Self::store_view), and the punch list is
+    /// what asked for it: creating a view used to mean *keep the canvas*, so a
+    /// new one arrived full of the last one's windows and had to be emptied by
+    /// hand. Both meanings are wanted, so both are commands.
+    ///
+    /// Writes the empty view **and** makes it active, because the two halves of
+    /// the gesture are one thing to an operator: a new view that had to be
+    /// selected afterwards would leave the canvas showing the old one, which is
+    /// the fault this fixes. The view being left is untouched — a stored view
+    /// keeps its own copy of its windows, so nothing about it depends on what is
+    /// on the canvas now.
+    ///
+    /// Overwrites a view that is already at `id`, exactly as `store_view` does;
+    /// the two commands agree about what a number means.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::NotRepresentable`] if the view cannot be encoded.
+    pub fn new_view(&mut self, id: ViewId, name: &str) -> Result<Vec<JsonPatchOp>, SessionError> {
+        let view = View {
+            id,
+            name: name.to_owned(),
+            windows: Vec::new(),
+        };
+        let existed = self.views.contains_key(&id);
+        let op = put(pointer(VIEWS, &id.to_string()), &view, existed)?;
+        self.views.insert(id, view);
+        self.dirty = true;
+        let mut next = self.session.clone();
+        next.active_view_id = id;
+        next.open_windows = Vec::new();
+        next.focused_window = None;
+        // The chooser cannot survive a canvas being emptied: it names windows
+        // to open on *this* view.
+        next.window_picker = false;
+        let mut ops = vec![op];
+        ops.extend(self.commit(next)?);
+        Ok(ops)
+    }
+
+    /// Opens or closes the window chooser — S43, B9.
+    ///
+    /// Session state rather than a client's own, because a surface key opens it
+    /// and a surface key is resolved by a daemon with no screen. See
+    /// [`prism_domain::Session::window_picker`].
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::NotRepresentable`] if the session cannot be encoded.
+    pub fn set_window_picker(&mut self, open: bool) -> Result<Vec<JsonPatchOp>, SessionError> {
+        if self.session.window_picker == open {
+            return Ok(Vec::new());
+        }
+        let mut next = self.session.clone();
+        next.window_picker = open;
+        self.commit(next)
     }
 
     /// Renames a stored view, leaving its windows exactly as they are.
@@ -736,14 +816,22 @@ impl SessionState {
         for key in params.keys() {
             check_param_key(key)?;
         }
-        let (x, y, w, h) = DEFAULT_WINDOW;
+        let (_, _, w, h) = DEFAULT_WINDOW;
+        // **The daemon places it** — S43, punch-list B10. Until this session
+        // every window opened at the origin on top of the last, and a client
+        // could not fix that without writing session state on its own
+        // initiative (S25). `crate::layout` has the two rules and the argument.
+        let taken: Vec<Rect> = self.session.open_windows.iter().map(Rect::of).collect();
+        let Some(place) = free_place(&taken, w, h) else {
+            return Err(SessionError::NoRoomOnTheCanvas);
+        };
         let instance = WindowInstance {
             instance_id: self.next_instance_id()?,
             window_type: window,
-            x,
-            y,
-            w,
-            h,
+            x: place.x,
+            y: place.y,
+            w: place.w,
+            h: place.h,
             params,
         };
         let mut next = self.session.clone();
@@ -821,14 +909,49 @@ impl SessionState {
         w: f64,
         h: f64,
     ) -> Result<Vec<JsonPatchOp>, SessionError> {
+        // **Refused for not being a rectangle before it is refused for being in
+        // the way.** The overlap rule below compares coordinates, and every
+        // comparison against a NaN is false — so a rectangle that cannot be
+        // encoded would be judged by a rule that cannot see it, and an infinitely
+        // wide one would be *correctly* refused for burying its neighbours,
+        // which is the wrong sentence to hand an operator. The last thing that
+        // can fail in an edit is the encoding (S11); this is the first.
+        if !(x.is_finite() && y.is_finite() && w.is_finite() && h.is_finite()) {
+            return Err(SessionError::NotRepresentable(
+                "a window's position and size must be finite numbers".to_owned(),
+            ));
+        }
         let mut next = self.session.clone();
-        let Some(window) = next
+        let Some(position) = next
             .open_windows
-            .iter_mut()
-            .find(|window| window.instance_id == id)
+            .iter()
+            .position(|window| window.instance_id == id)
         else {
             return Err(SessionError::UnknownWindow(id));
         };
+        // **A window may not be dropped on top of another** — S43, B10. The
+        // rule is *overlap may only shrink* rather than *no overlap*, and
+        // `crate::layout` says why: every layout written before this session has
+        // its windows piled at the origin, and a stricter rule would make those
+        // piles permanent.
+        //
+        // A refused placement is **not an error**. A drag sends one every 33 ms
+        // (S25), so a refusal would be a stream of notices for an ordinary
+        // gesture; changing nothing leaves the client's local rectangle to be
+        // dropped when the button comes up, and the window springs back to where
+        // the daemon has it.
+        let from = Rect::of(&next.open_windows[position]);
+        let to = Rect { x, y, w, h };
+        let neighbours: Vec<Rect> = next
+            .open_windows
+            .iter()
+            .filter(|window| window.instance_id != id)
+            .map(Rect::of)
+            .collect();
+        if !may_place(&from, &to, &neighbours) {
+            return Ok(Vec::new());
+        }
+        let window = &mut next.open_windows[position];
         window.x = x;
         window.y = y;
         window.w = w;
@@ -999,14 +1122,29 @@ impl SessionState {
     /// field as the contents of the console line, and an append-only reading
     /// would leave no way to backspace or to clear it. **S19/S26 requirement:**
     /// the console and the command line widget send the line as it now reads,
-    /// and clearing it is `CommandLineInput { text: "" }`.
+    /// and clearing it is `CommandLineInput { text: "", run: false }`.
     ///
     /// # Errors
     ///
     /// [`SessionError::NotRepresentable`] only.
-    pub fn set_command_line(&mut self, text: &str) -> Result<Vec<JsonPatchOp>, SessionError> {
+    pub fn set_command_line(
+        &mut self,
+        text: &str,
+        run: bool,
+    ) -> Result<Vec<JsonPatchOp>, SessionError> {
         let mut next = self.session.clone();
         next.command_line = text.to_owned();
+        // **The counter is the edge a client watches for** — S43. A *bound* line
+        // that said *write and send* bumps it, and the client with the keyboard
+        // focus parses the line and sends what it means. A keystroke does not:
+        // an operator typing is not asking for anything to happen yet.
+        //
+        // Saturating rather than wrapping, which is the difference between a
+        // desk that stops running bound lines after four billion presses and one
+        // that runs the next one twice.
+        if run {
+            next.command_line_run = next.command_line_run.saturating_add(1);
+        }
         self.commit(next)
     }
 
@@ -1059,6 +1197,18 @@ impl SessionState {
         }
         if next.command_line != current.command_line {
             ops.push(replace(COMMAND_LINE, &next.command_line)?);
+        }
+        // **Its own comparison, not the line's** — S43. A bound line that asks
+        // to be run can carry the text that is already there (an operator
+        // pressing the same key twice), so a counter folded into the line's
+        // `if` would move in the session and not in the delta, and every mirror
+        // would sit one behind. `delta_round_trip.rs`'s property found exactly
+        // that within a minute of the field existing.
+        if next.command_line_run != current.command_line_run {
+            ops.push(replace(COMMAND_LINE_RUN, &next.command_line_run)?);
+        }
+        if next.window_picker != current.window_picker {
+            ops.push(replace(WINDOW_PICKER, &next.window_picker)?);
         }
         self.session = next;
         Ok(ops)
@@ -1203,7 +1353,7 @@ mod tests {
         );
         assert!(session.set_executor_page(0).unwrap().is_empty());
         assert!(session.set_programmer_page(0).unwrap().is_empty());
-        assert!(session.set_command_line("").unwrap().is_empty());
+        assert!(session.set_command_line("", false).unwrap().is_empty());
         assert!(session.select_executor(None).unwrap().is_empty());
         // A jog wheel turned left at the first parameter.
         assert!(
@@ -1871,13 +2021,14 @@ mod tests {
     #[test]
     fn the_command_line_carries_the_whole_line() {
         let mut session = session();
-        session.set_command_line("1 thru 4 at ").unwrap();
+        session.set_command_line("1 thru 4 at ", false).unwrap();
         // A backspace is the shorter line, not a second command.
-        session.set_command_line("1 thru 4 at").unwrap();
+        session.set_command_line("1 thru 4 at", false).unwrap();
         assert_eq!(session.session().command_line, "1 thru 4 at");
         session
             .apply(&Command::CommandLineInput {
                 text: String::new(),
+                run: false,
             })
             .unwrap();
         assert!(session.session().command_line.is_empty());

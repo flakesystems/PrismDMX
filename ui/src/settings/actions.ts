@@ -10,7 +10,7 @@
  *
  * # Why there is a list of *kinds* at all
  *
- * `SurfaceAction` is seventeen variants and four of them carry a direction, so
+ * `SurfaceAction` is nineteen variants and four of them carry a direction, so
  * the vocabulary an operator picks from is not the same shape as the one that
  * travels: *Go+* and *Go−* are one variant with a field, and a dropdown with a
  * second dropdown inside it for the sign would be a worse way to say the same
@@ -25,12 +25,26 @@
  * would have to be un-flattened again to make it. What is generated is the thing
  * that would actually drift — the executor button functions, the window types
  * and the feature groups, which the panel reads out of `variants.ts`.
+ *
+ * # The list became the panel — S43, punch-list B3
+ *
+ * S38 drew the table the way `prism_surface::Bindings` stores it: a row per
+ * *control*, and a chooser of actions inside each row. The owner's entry says
+ * that is backwards, and it is — an operator does not arrive wanting to know
+ * what F5 does, they arrive wanting **Go on the selected executor** and needing
+ * a key for it. So the rows are the vocabulary now, {@link ACTION_GROUPS} is
+ * the order they are read in, and the key comes from pressing it.
+ *
+ * The kinds did not have to change for that, which is the useful part: the same
+ * flattening that made a dropdown readable makes a list of rows readable, and
+ * {@link actionOfKind} still builds what travels.
  */
 
 import type {
   BoundControl,
   ExecutorButtonFunction,
   FeatureGroup,
+  StripButton,
   SurfaceAction,
   WindowType,
 } from "../bindings";
@@ -76,6 +90,8 @@ export const ACTION_KINDS = [
   "Adjust parameter",
   "Encoder bank",
   "Open window",
+  "Choose a window",
+  "Type a command",
   "Save show",
   "Oops",
   "Redo",
@@ -84,8 +100,145 @@ export const ACTION_KINDS = [
 /** One entry of {@link ACTION_KINDS}. */
 export type ActionKind = (typeof ACTION_KINDS)[number];
 
+/**
+ * The kinds in the order and the grouping the panel lists them — S43, B3, and
+ * re-grouped for the owner's rebuild.
+ *
+ * *Es sollte eingeteilt werden in Executorbereich, Programmerbereich, Andere
+ * Interne Befehle und Custom Befehle.* The first three sections are these; the
+ * fourth is {@link CUSTOM_KINDS}, and it is a different shape on purpose — see
+ * there.
+ *
+ * *Nothing* is not here: it is the absence of a binding, and *unbind* is a
+ * button on the key rather than an action to learn a key onto. Every other kind
+ * appears exactly once **across the four tables**, which `actions.test.ts`
+ * holds — a kind that fell out would be a piece of the vocabulary an operator
+ * could no longer reach from the panel, and nothing else would notice.
+ */
+export const ACTION_GROUPS: readonly {
+  readonly title: string;
+  readonly kinds: readonly ActionKind[];
+}[] = [
+  {
+    title: "Executors",
+    kinds: [
+      "Executor master",
+      "Executor go +",
+      "Executor go −",
+      "Executor off",
+      "Executor button",
+      "Select executor",
+      "Executor page −",
+      "Executor page +",
+    ],
+  },
+  {
+    title: "The programmer",
+    kinds: [
+      "Clear programmer",
+      "Adjust parameter",
+      "Previous parameter",
+      "Next parameter",
+      "Programmer page −",
+      "Programmer page +",
+      "Encoder bank",
+    ],
+  },
+  {
+    title: "Other internal commands",
+    kinds: ["Previous view", "Next view", "Choose a window", "Save show", "Oops", "Redo"],
+  },
+];
+
+/**
+ * The kinds an operator adds one at a time — the **custom** section.
+ *
+ * # Why these three are not rows like the rest
+ *
+ * The first three sections are the desk's fixed vocabulary: *Go on the selected
+ * executor* is one thing, it is either bound or it is not, and the row is the
+ * thing. These three are not. *Open window* is fourteen different bindings, and
+ * *type a command* is as many as an operator can think of — so the row is not
+ * the action, the **key** is, and each key carries its own answer.
+ *
+ * That is the shape the owner asked for: *in der Custom Befehle Sektion sollte
+ * es einen Keybind hinzufügen (oder einfach +) Knopf geben. Dort kann dann der
+ * Typ ausgewählt werden: Send Command / Open Window / Jump to View / Execute
+ * Macro.*
+ *
+ * The fourth type, **Execute macro**, is not here and is drawn as *a later
+ * session* by the panel: there is no `SurfaceAction` for it and no macro to run,
+ * and a chooser entry that bound nothing would be worse than one that says why.
+ * `IMPLEMENTATION_PLAN.md` has the session.
+ */
+export const CUSTOM_KINDS: readonly ActionKind[] = [
+  "Type a command",
+  "Open window",
+  "Jump to view",
+];
+
+/** Whether a kind is one an operator adds a key at a time. */
+export function isCustom(kind: ActionKind): boolean {
+  return CUSTOM_KINDS.includes(kind);
+}
+
+/**
+ * Which of a strip's five keys a **control** is, from zero — S43, B3.
+ *
+ * {@link slotOf}'s twin, and it exists because the two halves of the panel now
+ * arrive from different directions: S38 knew the row's *name* and read the
+ * position off it, and learn hands over a `BoundControl` instead. §2.1's order
+ * is written down once, in {@link STRIP_KEYS}, so the two cannot drift.
+ *
+ * Anything that is not a strip key is 0, which is what a panel key bound to a
+ * slot would mean anyway.
+ */
+export function slotOfControl(control: BoundControl): number {
+  if (control.t !== "StripButton") {
+    return 0;
+  }
+  const index = STRIP_KEYS.findIndex((entry) => entry === control.button);
+  return index < 0 ? 0 : index;
+}
+
+/** §2.1's order of a strip's five keys. */
+const STRIP_KEYS: readonly StripButton[] = ["Rec", "Solo", "Mute", "Select", "VPotPush"];
+
 /** Which executor an action acts on. */
 export type Target = "Strip" | "Selected";
+
+/**
+ * The detail an already-bound action carries, as the editor's boxes hold it.
+ *
+ * The inverse of the `detail` argument {@link actionOfKind} takes, and the
+ * custom section needs it: a row there is a **key that is already bound**, and
+ * an operator changing the line has to see the line that is on it. The fixed
+ * sections do not — {@link kindOf} answers the kind and the panel re-asks,
+ * because a chooser that pre-filled *Open window: Patch* and then sent
+ * *FixtureSheet* because nobody touched the second box would be worse than one
+ * that asks again.
+ */
+export function detailOf(action: SurfaceAction): string {
+  switch (action.t) {
+    case "WriteCommandLine":
+      return action.line;
+    case "OpenWindow":
+      return action.window;
+    case "SelectView":
+      return String(action.view);
+    case "SetEncoderBank":
+      return action.group;
+    case "ExecutorButton":
+      return action.button.t === "Function" ? action.button.function : "";
+    default:
+      return "";
+  }
+}
+
+/** Whether an already-bound line runs itself. */
+export function submitOf(action: SurfaceAction): boolean {
+  return action.t === "WriteCommandLine" && action.submit;
+}
 
 /**
  * Which kind an action is, or `"Nothing"` for a control that is not bound.
@@ -129,6 +282,10 @@ export function kindOf(action: SurfaceAction | null): ActionKind {
       return "Encoder bank";
     case "OpenWindow":
       return "Open window";
+    case "OpenWindowPicker":
+      return "Choose a window";
+    case "WriteCommandLine":
+      return "Type a command";
     case "SaveShow":
       return "Save show";
     case "Oops":
@@ -158,6 +315,16 @@ export function actionOfKind(
   target: Target,
   detail: string,
   slot = 0,
+  /**
+   * Whether a bound line runs itself — S43, and the owner's *Kästchen*.
+   *
+   * Only **Type a command** reads it. A key bound to `Go Executor 1` that needs
+   * Enter afterwards is not a Go key; a key that writes `Store Cue ` for the
+   * operator to finish is exactly right. Both are wanted, so the binding
+   * carries the answer. See `SurfaceAction::WriteCommandLine` for who actually
+   * runs it, which is not the daemon.
+   */
+  submit = false,
 ): SurfaceAction | null {
   switch (kind) {
     case "Nothing":
@@ -211,6 +378,15 @@ export function actionOfKind(
       const window = oneOf<WindowType>(detail, WINDOW_TYPE_VARIANTS);
       return window === null ? null : { t: "OpenWindow", window };
     }
+    case "Choose a window":
+      return { t: "OpenWindowPicker" };
+    // **The custom row** — S43, punch-list B4. The detail is the line itself, so
+    // this is the one kind whose detail is free text rather than a name picked
+    // from a generated table, and the one an operator adds as many of as they
+    // need. An empty line is not a binding: a key that writes nothing into the
+    // command line is a key that does nothing, said obscurely.
+    case "Type a command":
+      return detail.trim() === "" ? null : { t: "WriteCommandLine", line: detail, submit };
     case "Save show":
       return { t: "SaveShow" };
     case "Oops":
@@ -274,6 +450,12 @@ export function actionText(action: SurfaceAction | null): string {
       return `encoder bank: ${action.group}`;
     case "OpenWindow":
       return `open ${action.window}`;
+    case "OpenWindowPicker":
+      return "choose a window to open";
+    case "WriteCommandLine":
+      return action.submit
+        ? `type ${JSON.stringify(action.line)} into the command line and send it`
+        : `type ${JSON.stringify(action.line)} into the command line`;
     case "SaveShow":
       return "save the show";
     case "Oops":
@@ -315,8 +497,10 @@ export function sameControl(left: BoundControl, right: BoundControl): boolean {
  * what a panel key bound to a slot would mean anyway.
  */
 export function slotOf(name: string): number {
-  const index = ["Rec", "Solo", "Mute", "Select", "VPotPush"].indexOf(
-    name.replace("Strip[*].Button.", ""),
-  );
+  // Compared rather than asserted into the type — the same rule `oneOf` above
+  // follows. A name that is not a strip key answers -1 and therefore 0, which
+  // is what the doc comment above promises.
+  const key = name.replace("Strip[*].Button.", "");
+  const index = STRIP_KEYS.findIndex((entry) => entry === key);
   return index < 0 ? 0 : index;
 }

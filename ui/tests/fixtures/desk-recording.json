@@ -6,10 +6,7 @@
     "Beam": [
       "Iris",
       "Zoom",
-      "Gobo",
-      "Prism",
-      "Shutter",
-      "Control"
+      "Shutter"
     ],
     "Color": [
       "Red",
@@ -18,18 +15,25 @@
       "White",
       "Amber"
     ],
+    "Control": [
+      "Control"
+    ],
     "Dimmer": [
       "Dimmer"
     ],
     "Focus": [
       "Focus"
     ],
+    "Gobo": [
+      "Gobo",
+      "Prism"
+    ],
     "Position": [
       "Pan",
       "Tilt"
     ]
   },
-  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnODoTCJr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26mTWFzdGVyrWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWzN//+qc2VxdWVuY2VJZAGlc3BlZWTNBAChMomvYnV0dG9uRnVuY3Rpb25zlKVGbGFzaKZUb2dnbGWiT26qTGVhcm5TcGVlZK9jdXJyZW50Q3VlSW5kZXjAr2VuY29kZXJGdW5jdGlvbqVTcGVlZK1mYWRlckZ1bmN0aW9upVhGYWRlomlkAqhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWwAqnNlcXVlbmNlSWQCpXNwZWVkzQQAoTmJr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqVFbXB0eaJpZAmoaXNBY3RpdmXCq21hc3RlckxldmVszYAAqnNlcXVlbmNlSWTApXNwZWVkzQQArGZpeHR1cmVUeXBlc4KzZ2VuZXJpYy5kaW1tZXIuZGFya4aqYXR0cmlidXRlc5GJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludAGiaWSzZ2VuZXJpYy5kaW1tZXIuZGFya6xtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrJnZW5lcmljLm1vdmluZ2hlYWSGqmF0dHJpYnV0ZXOXialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0BaxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50B6JpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM3Y2ikbmFtZatNb3ZpbmcgSGVhZKhmaXh0dXJlc4WhMYmnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEyiadhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqERpbW1lciAyqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlks2dlbmVyaWMuZGltbWVyLmRhcmuodW5pdmVyc2UBoTOJp2FkZHJlc3MDomlkA6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWoRGltbWVyIDOocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNImnYWRkcmVzcwSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgNKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaE1iadhZGRyZXNzC6JpZAWpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpkhlYWQgNahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLJnZW5lcmljLm1vdmluZ2hlYWSodW5pdmVyc2UBpmdyb3Vwc4CncHJlc2V0c4Cpc2VxdWVuY2VzgqExh6Vjb2xvcsCkY3Vlc5GIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWlQ3VlIDGmbnVtYmVyoTGlcGFydHORhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUBqXByZXNldFJlZsCldmFsdWXN//+ndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCpG5hbWWpV2FybSBXYXNooTKHpWNvbG9ywKRjdWVzkYilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaVDdWUgMaZudW1iZXKhMaVwYXJ0c5GEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQKpcHJlc2V0UmVmwKV2YWx1Zc3//6d0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkAqhpc0FjdGl2ZcKkbG9vcMKkbmFtZalDb2xkIFdhc2inc2Vzc2lvboKnc2Vzc2lvbo2sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKEqXNlbGVjdGlvbpCyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UAp291dHB1dHORh6JpZAGkbmFtZatNb2NrIG91dHB1dKZoZWFsdGiiT2umb3V0cHV0haJpZAGkbmFtZatNb2NrIG91dHB1dKRraW5kgaF0pE1vY2updW5pdmVyc2VzkQGnZW5hYmxlZMOqZnJhbWVzU2VudGGpbGFzdEVycm9ywK5sYXN0RXJyb3JBZ29Nc8CmaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestARhhCk2JZKKttaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPCrmZpeHR1cmVMaWJyYXJ5zQhxp21hY2hpbmWNpmRlc2tJZNkkYzE0ZjdlZGEtMzRjYy00NzBjLThkZTItZWFkOThkNzkzZmM1p2RhdGFEaXLZLEM6XFVzZXJzXE1pbGFuXEFwcERhdGFcTG9jYWxcVGVtcFwudG1wbXB4Q1FXpWxvY2Fsw6l3ZWJzb2NrZXSuMTI3LjAuMC4xOjczNzOtd2Vic29ja2V0T3BlbsCldG9rZW7AqGxvZ0xldmVspEluZm+pdW5pdmVyc2VzQKpleGl0QWN0aW9upEhvbGSpYXV0b3N0YXJ0wq5maXh0dXJlTGlicmFyecCuc3VyZmFjZVByb2ZpbGXAqW92ZXJyaWRlc5WnT3V0cHV0c6VMb2NhbKlXZWJzb2NrZXSpVW5pdmVyc2VzqExvZ0xldmVsqHNob3dGaWxlhaRwYXRo2TdDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcG1weENRV1xkZXNrLnByaXNtpnJlY2VudJCudW5zYXZlZENoYW5nZXPCqHJlY292ZXJ5wq9hdXRvc2F2ZVNlY29uZHMe",
+  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnODoTCJr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26mTWFzdGVyrWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWzN//+qc2VxdWVuY2VJZAGlc3BlZWTNBAChMomvYnV0dG9uRnVuY3Rpb25zlKVGbGFzaKZUb2dnbGWiT26qTGVhcm5TcGVlZK9jdXJyZW50Q3VlSW5kZXjAr2VuY29kZXJGdW5jdGlvbqVTcGVlZK1mYWRlckZ1bmN0aW9upVhGYWRlomlkAqhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWwAqnNlcXVlbmNlSWQCpXNwZWVkzQQAoTmJr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqVFbXB0eaJpZAmoaXNBY3RpdmXCq21hc3RlckxldmVszYAAqnNlcXVlbmNlSWTApXNwZWVkzQQArGZpeHR1cmVUeXBlc4KzZ2VuZXJpYy5kaW1tZXIuZGFya4aqYXR0cmlidXRlc5GJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludAGiaWSzZ2VuZXJpYy5kaW1tZXIuZGFya6xtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrJnZW5lcmljLm1vdmluZ2hlYWSGqmF0dHJpYnV0ZXOXialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0BaxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50B6JpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM3Y2ikbmFtZatNb3ZpbmcgSGVhZKhmaXh0dXJlc4WhMYqnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhMoqnYWRkcmVzcwKiaWQCqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhM4qnYWRkcmVzcwOiaWQDqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNIqnYWRkcmVzcwSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgNKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNYqnYWRkcmVzcwuiaWQFqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaZIZWFkIDWocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQGmZ3JvdXBzgKdwcmVzZXRzgKlzZXF1ZW5jZXOCoTGHpWNvbG9ywKRjdWVzkYilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaVDdWUgMaZudW1iZXKhMaVwYXJ0c5GEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQGpcHJlc2V0UmVmwKV2YWx1Zc3//6d0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkAahpc0FjdGl2ZcKkbG9vcMKkbmFtZalXYXJtIFdhc2ihMoelY29sb3LApGN1ZXORiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqlwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQCqGlzQWN0aXZlwqRsb29wwqRuYW1lqUNvbGQgV2FzaKdzZXNzaW9ugqdzZXNzaW9uj6xhY3RpdmVWaWV3SWQBq2NvbW1hbmRMaW5loK5jb21tYW5kTGluZVJ1bgCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKx3aW5kb3dQaWNrZXLCpXZpZXdzgaExg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5CqcHJvZ3JhbW1lcoapc2VsZWN0aW9ukK5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50SqlsYXN0RXJyb3LArmxhc3RFcnJvckFnb01zwKZoZWFsdGiEr3Byb3RvY29sVmVyc2lvbgGmdGlja0h6y0BGNJihybymq21pc3NlZFRpY2tzAK51bnNhdmVkQ2hhbmdlc8KuZml4dHVyZUxpYnJhcnnNCHGnbWFjaGluZY2mZGVza0lk2SRjMjExZmViNC1kYWMyLTQ1MDgtYjFhMy01Yjc0MjYyZjlmM2SnZGF0YURpctksQzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBRMkFtVTWlbG9jYWzDqXdlYnNvY2tldK4xMjcuMC4wLjE6NzM3M613ZWJzb2NrZXRPcGVuwKV0b2tlbsCobG9nTGV2ZWykSW5mb6l1bml2ZXJzZXNAqmV4aXRBY3Rpb26kSG9sZKlhdXRvc3RhcnTCrmZpeHR1cmVMaWJyYXJ5wK5zdXJmYWNlUHJvZmlsZcCpb3ZlcnJpZGVzladPdXRwdXRzpUxvY2FsqVdlYnNvY2tldKlVbml2ZXJzZXOoTG9nTGV2ZWyoc2hvd0ZpbGWFpHBhdGjZN0M6XFVzZXJzXE1pbGFuXEFwcERhdGFcTG9jYWxcVGVtcFwudG1wUTJBbVU1XGRlc2sucHJpc22mcmVjZW50kK51bnNhdmVkQ2hhbmdlc8KocmVjb3ZlcnnCr2F1dG9zYXZlU2Vjb25kcx4=",
   "steps": [
     {
       "what": "page the fader bank up: the eight strips are a different eight",
@@ -1141,7 +1145,7 @@
       "typedLine": 5,
       "client": "g6F0p0NvbW1hbmSjc2VxCqdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5IBAqRtb2Rlo1NldA==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26SAQKyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UA"
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26SAQKuc2VsZWN0ZWRHcm91cHOQr21hbnVhbFNlbGVjdGlvbpIBArJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQI="
       ],
       "refused": false,
       "strips": [
@@ -1251,7 +1255,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -1269,7 +1273,7 @@
       "typedLine": 6,
       "client": "g6F0p0NvbW1hbmSjc2VxC6djb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAg=="
       ],
       "refused": false,
       "strips": [
@@ -1380,7 +1384,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -1398,7 +1402,7 @@
       "typedLine": 6,
       "client": "g6F0p0NvbW1hbmSjc2VxDKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWmRGltbWVypXZhbHVlzX//qHJlbGF0aXZlwg==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAQ=="
       ],
       "refused": false,
       "strips": [
@@ -1528,7 +1532,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -1676,7 +1680,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -1696,7 +1700,7 @@
       "typedLine": 9,
       "client": "g6F0p0NvbW1hbmSjc2VxDqdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5EFpG1vZGWjU2V0",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5ODp2ZpeHR1cmUBqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQKpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCqY2xlYXJTdGFnZQA="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RBa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQWyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOTg6dmaXh0dXJlAalhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQOpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UB"
       ],
       "refused": false,
       "strips": [
@@ -1824,7 +1828,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -1844,7 +1848,7 @@
       "typedLine": 9,
       "client": "g6F0p0NvbW1hbmSjc2VxD6djb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWjUGFupXZhbHVlzT//qHJlbGF0aXZlwg==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzlIOnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQWpYXR0cmlidXRlo1BhbqV2YWx1ZYOldmFsdWXNP/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UA"
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RBa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQWyYWN0aXZlRmVhdHVyZUdyb3VwqFBvc2l0aW9upnZhbHVlc5SDp2ZpeHR1cmUBqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQKpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUFqWF0dHJpYnV0ZaNQYW6ldmFsdWWDpXZhbHVlzT//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAQ=="
       ],
       "refused": false,
       "strips": [
@@ -1978,7 +1982,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer",
           "Position"
@@ -1999,7 +2003,7 @@
       "typedLine": null,
       "client": "g6F0p0NvbW1hbmSjc2VxEKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWjUGFupXZhbHVlzQKPqHJlbGF0aXZlww==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzlIOnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQWpYXR0cmlidXRlo1BhbqV2YWx1ZYOldmFsdWXNQo6mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UA"
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RBa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQWyYWN0aXZlRmVhdHVyZUdyb3VwqFBvc2l0aW9upnZhbHVlc5SDp2ZpeHR1cmUBqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQKpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUFqWF0dHJpYnV0ZaNQYW6ldmFsdWWDpXZhbHVlzUKOpnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAQ=="
       ],
       "refused": false,
       "strips": [
@@ -2133,7 +2137,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer",
           "Position"
@@ -2154,7 +2158,7 @@
       "typedLine": null,
       "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWjUGFupXZhbHVl0v//FaCocmVsYXRpdmXD",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzlIOnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQWpYXR0cmlidXRlo1BhbqV2YWx1ZYOldmFsdWUApnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RBa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQWyYWN0aXZlRmVhdHVyZUdyb3VwqFBvc2l0aW9upnZhbHVlc5SDp2ZpeHR1cmUBqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzX//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQKpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNf/+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc1//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUFqWF0dHJpYnV0ZaNQYW6ldmFsdWWDpXZhbHVlAKZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCqY2xlYXJTdGFnZQE="
       ],
       "refused": false,
       "strips": [
@@ -2288,7 +2292,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer",
           "Position"
@@ -2443,7 +2447,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer",
           "Position"
@@ -2596,7 +2600,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer",
           "Position"
@@ -2615,7 +2619,7 @@
       "what": "the line as it is being typed, which every client sees",
       "typed": null,
       "typedLine": null,
-      "client": "g6F0p0NvbW1hbmSjc2VxFKdjb21tYW5kgqF0sENvbW1hbmRMaW5lSW5wdXSkdGV4dKwxIHRocnUgNCBhdCA=",
+      "client": "g6F0p0NvbW1hbmSjc2VxFKdjb21tYW5kg6F0sENvbW1hbmRMaW5lSW5wdXSkdGV4dKwxIHRocnUgNCBhdCCjcnVuwg==",
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vY29tbWFuZExpbmWldmFsdWWsMSB0aHJ1IDQgYXQg"
       ],
@@ -2751,7 +2755,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer",
           "Position"
@@ -2772,7 +2776,7 @@
       "typedLine": 11,
       "client": "g6F0p0NvbW1hbmSjc2VxFadjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26RBbJhY3RpdmVGZWF0dXJlR3JvdXCoUG9zaXRpb26mdmFsdWVzkKpjbGVhclN0YWdlAQ=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RBa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQWyYWN0aXZlRmVhdHVyZUdyb3VwqFBvc2l0aW9upnZhbHVlc5CqY2xlYXJTdGFnZQI="
       ],
       "refused": false,
       "strips": [
@@ -2881,7 +2885,7 @@
         ],
         "activeFeatureGroup": "Position",
         "values": [],
-        "clearStage": 1,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -2899,7 +2903,7 @@
       "typedLine": 12,
       "client": "g6F0p0NvbW1hbmSjc2VxFqdjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKhQb3NpdGlvbqZ2YWx1ZXOQqmNsZWFyU3RhZ2UC",
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKhQb3NpdGlvbqZ2YWx1ZXOQqmNsZWFyU3RhZ2UD",
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi9L3Nlc3Npb24vcHJvZ3JhbW1lclBhcmFtSW5kZXildmFsdWUA"
       ],
       "refused": false,
@@ -3007,7 +3011,7 @@
         "selection": [],
         "activeFeatureGroup": "Position",
         "values": [],
-        "clearStage": 2,
+        "clearStage": 3,
         "touchedBanks": []
       },
       "session": {
@@ -3025,7 +3029,7 @@
       "typedLine": 13,
       "client": "g6F0p0NvbW1hbmSjc2VxF6djb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAA=="
       ],
       "refused": false,
       "strips": [
@@ -3275,7 +3279,7 @@
       "typedLine": 15,
       "client": "g6F0p0NvbW1hbmSjc2VxGadjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAg=="
       ],
       "refused": false,
       "strips": [
@@ -3386,7 +3390,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -3515,7 +3519,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -3532,7 +3536,9 @@
       "typed": "group 1",
       "typedLine": 17,
       "client": "g6F0p0NvbW1hbmSjc2VxG6djb21tYW5kg6F0q1NlbGVjdEdyb3Vwp2dyb3VwSWQBpG1vZGWjU2V0",
-      "deltas": [],
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkQGvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQI="
+      ],
       "refused": false,
       "strips": [
         {
@@ -3642,7 +3648,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -3771,7 +3777,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -3900,7 +3906,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -4029,7 +4035,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -4046,7 +4052,9 @@
       "typed": "1 thru 3 at 60",
       "typedLine": 21,
       "client": "g6F0p0NvbW1hbmSjc2VxH6djb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
-      "deltas": [],
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAg=="
+      ],
       "refused": false,
       "strips": [
         {
@@ -4156,7 +4164,7 @@
         ],
         "activeFeatureGroup": "Dimmer",
         "values": [],
-        "clearStage": 0,
+        "clearStage": 2,
         "touchedBanks": []
       },
       "session": {
@@ -4174,7 +4182,7 @@
       "typedLine": 21,
       "client": "g6F0p0NvbW1hbmSjc2VxIKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWmRGltbWVypXZhbHVlzZmZqHJlbGF0aXZlwg==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAQ=="
       ],
       "refused": false,
       "strips": [
@@ -4304,7 +4312,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -4454,7 +4462,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -4474,7 +4482,7 @@
       "typedLine": 23,
       "client": "g6F0p0NvbW1hbmSjc2VxIqdjb21tYW5kg6F0p0VkaXRDdWWqc2VxdWVuY2VJZMCpY3VlTnVtYmVyoTI=",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZahSZWNhbGxlZKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WoUmVjYWxsZWSpcHJlc2V0UmVmwKpjbGVhclN0YWdlAA==",
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZahSZWNhbGxlZKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WoUmVjYWxsZWSpcHJlc2V0UmVmwKpjbGVhclN0YWdlAQ==",
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGizL3Nlc3Npb24vZWRpdGluZ0N1ZaV2YWx1ZYOpY3VlTnVtYmVyoTKobW9kaWZpZWTCqnNlcXVlbmNlSWQC"
       ],
       "refused": false,
@@ -4605,7 +4613,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -4755,7 +4763,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -4905,7 +4913,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -5056,7 +5064,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -5206,7 +5214,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -5356,7 +5364,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -5506,7 +5514,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -5656,7 +5664,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -5810,7 +5818,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -5960,7 +5968,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -6110,7 +6118,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -6261,7 +6269,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -6411,7 +6419,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -6561,7 +6569,7 @@
             "Recalled"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -6581,7 +6589,7 @@
       "typedLine": 36,
       "client": "g6F0p0NvbW1hbmSjc2VxMKdjb21tYW5kgqF0q0FwcGx5UHJlc2V0qHByZXNldElkAQ==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAapjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAapjbGVhclN0YWdlAQ=="
       ],
       "refused": false,
       "strips": [
@@ -6711,7 +6719,7 @@
             "Preset"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -6861,7 +6869,7 @@
             "Preset"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7011,7 +7019,7 @@
             "Preset"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7161,7 +7169,7 @@
             "Preset"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7181,7 +7189,7 @@
       "typedLine": 40,
       "client": "g6F0p0NvbW1hbmSjc2VxNKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWmRGltbWVypXZhbHVlzf//qHJlbGF0aXZlwg==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXN//+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc3//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzf//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXN//+mc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc3//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzf//pnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwKpjbGVhclN0YWdlAQ=="
       ],
       "refused": false,
       "strips": [
@@ -7311,7 +7319,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7459,7 +7467,7 @@
             "Manual"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7479,7 +7487,7 @@
       "typedLine": 42,
       "client": "g6F0p0NvbW1hbmSjc2VxNqdjb21tYW5kgaF0pE9vcHM=",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhKlzZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAapjbGVhclN0YWdlAA=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAapjbGVhclN0YWdlAQ=="
       ],
       "refused": false,
       "strips": [
@@ -7609,7 +7617,7 @@
             "Preset"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7759,7 +7767,7 @@
             "Preset"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7909,7 +7917,7 @@
             "Preset"
           ]
         ],
-        "clearStage": 0,
+        "clearStage": 1,
         "touchedBanks": [
           "Dimmer"
         ]
@@ -7924,5 +7932,5 @@
       }
     }
   ],
-  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOCoTCJr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26mTWFzdGVyrWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWzNgACqc2VxdWVuY2VJZAGlc3BlZWTNBAChMomvYnV0dG9uRnVuY3Rpb25zlKVGbGFzaKZUb2dnbGWiT26qTGVhcm5TcGVlZK9jdXJyZW50Q3VlSW5kZXjAr2VuY29kZXJGdW5jdGlvbqVTcGVlZK1mYWRlckZ1bmN0aW9upVhGYWRlomlkAqhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWwAqnNlcXVlbmNlSWQCpXNwZWVkzQQArGZpeHR1cmVUeXBlc4KzZ2VuZXJpYy5kaW1tZXIuZGFya4aqYXR0cmlidXRlc5GJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludAGiaWSzZ2VuZXJpYy5kaW1tZXIuZGFya6xtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrJnZW5lcmljLm1vdmluZ2hlYWSGqmF0dHJpYnV0ZXOXialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0BaxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50B6JpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM3Y2ikbmFtZatNb3ZpbmcgSGVhZKhmaXh0dXJlc4WhMYmnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEyiadhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqERpbW1lciAyqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlks2dlbmVyaWMuZGltbWVyLmRhcmuodW5pdmVyc2UBoTOJp2FkZHJlc3MDomlkA6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWoRGltbWVyIDOocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNImnYWRkcmVzcwSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgNKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaE1iadhZGRyZXNzC6JpZAWpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpkhlYWQgNahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLJnZW5lcmljLm1vdmluZ2hlYWSodW5pdmVyc2UBpmdyb3Vwc4GhMYOoZml4dHVyZXOTAQIDomlkAaRuYW1lpUZyb250p3ByZXNldHOBoTGFpWNvbG9ywKJpZAGkbmFtZaRXYXJtpHBvb2ymRGltbWVypnZhbHVlc5ODqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQGldmFsdWXNmZmDqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQKldmFsdWXNmZmDqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQOldmFsdWXNmZmpc2VxdWVuY2VzhKExh6Vjb2xvcoOhYgChZwChcsz/pGN1ZXORiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAalwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqRuYW1lqVdhcm0gV2FzaKEyh6Vjb2xvcoOhYgChZ8yIoXLM/6RjdWVzkoilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaVDdWUgMaZudW1iZXKhMaVwYXJ0c5GEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQKpcHJlc2V0UmVmwKV2YWx1Zc3//6d0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwIilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZalCbHVlIHdhc2imbnVtYmVyoTOlcGFydHOThKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUBqXByZXNldFJlZsCldmFsdWXNmZmEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQKpcHJlc2V0UmVmwKV2YWx1Zc2ZmYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlA6lwcmVzZXRSZWbApXZhbHVlzZmZp3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQCqGlzQWN0aXZlwqRsb29wwqRuYW1lqUNvbGQgV2FzaKE0h6Vjb2xvcsCkY3Vlc5GIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzk4SpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAalwcmVzZXRSZWbApXZhbHVlzZmZhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUCqXByZXNldFJlZsCldmFsdWXNmZmEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQOpcHJlc2V0UmVmwKV2YWx1Zc2Zmad0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkBKhpc0FjdGl2ZcKkbG9vcMKkbmFtZapTZXF1ZW5jZSA0oTaHpWNvbG9ywKRjdWVzkYilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaVDdWUgMaZudW1iZXKhMaVwYXJ0c5GEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQGpcHJlc2V0UmVmwKV2YWx1Zc3//6d0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkBqhpc0FjdGl2ZcKkbG9vcMKkbmFtZalXYXJtIFdhc2inc2Vzc2lvboKnc2Vzc2lvbo2sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZawxIHRocnUgNCBhdCCqZWRpdGluZ0N1ZYOpY3VlTnVtYmVyoTOobW9kaWZpZWTDqnNlcXVlbmNlSWQCq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcgKwc2VsZWN0ZWRTZXF1ZW5jZQSldmlld3OBoTGDomlkAaRuYW1lqlByb2dyYW1tZXKnd2luZG93c5CqcHJvZ3JhbW1lcoSpc2VsZWN0aW9ukwECA7JhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5ODp2ZpeHR1cmUBqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAYOnZml4dHVyZQKpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlA6lhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50zQIYqWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEX/wFpkhoirbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzw65maXh0dXJlTGlicmFyec0IcadtYWNoaW5ljaZkZXNrSWTZJGMxNGY3ZWRhLTM0Y2MtNDcwYy04ZGUyLWVhZDk4ZDc5M2ZjNadkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcG1weENRV6Vsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOVp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbKhzaG93RmlsZYWkcGF0aNk3QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBtcHhDUVdcZGVzay5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2Vzw6hyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg=="
+  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOCoTCJr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26mTWFzdGVyrWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWzNgACqc2VxdWVuY2VJZAGlc3BlZWTNBAChMomvYnV0dG9uRnVuY3Rpb25zlKVGbGFzaKZUb2dnbGWiT26qTGVhcm5TcGVlZK9jdXJyZW50Q3VlSW5kZXjAr2VuY29kZXJGdW5jdGlvbqVTcGVlZK1mYWRlckZ1bmN0aW9upVhGYWRlomlkAqhpc0FjdGl2ZcKrbWFzdGVyTGV2ZWwAqnNlcXVlbmNlSWQCpXNwZWVkzQQArGZpeHR1cmVUeXBlc4KzZ2VuZXJpYy5kaW1tZXIuZGFya4aqYXR0cmlidXRlc5GJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludAGiaWSzZ2VuZXJpYy5kaW1tZXIuZGFya6xtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrJnZW5lcmljLm1vdmluZ2hlYWSGqmF0dHJpYnV0ZXOXialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0BaxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50B6JpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM3Y2ikbmFtZatNb3ZpbmcgSGVhZKhmaXh0dXJlc4WhMYqnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhMoqnYWRkcmVzcwKiaWQCqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhM4qnYWRkcmVzcwOiaWQDqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNIqnYWRkcmVzcwSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZahEaW1tZXIgNKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSzZ2VuZXJpYy5kaW1tZXIuZGFya6h1bml2ZXJzZQGhNYqnYWRkcmVzcwuiaWQFqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaZIZWFkIDWocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQGmZ3JvdXBzgaExg6hmaXh0dXJlc5MBAgOiaWQBpG5hbWWlRnJvbnSncHJlc2V0c4GhMYWlY29sb3LAomlkAaRuYW1lpFdhcm2kcG9vbKZEaW1tZXKmdmFsdWVzk4OpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAaV2YWx1Zc2ZmYOpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqV2YWx1Zc2ZmYOpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlA6V2YWx1Zc2ZmalzZXF1ZW5jZXOEoTGHpWNvbG9yg6FiAKFnAKFyzP+kY3Vlc5GIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWlQ3VlIDGmbnVtYmVyoTGlcGFydHORhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUBqXByZXNldFJlZsCldmFsdWXN//+ndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCpG5hbWWpV2FybSBXYXNooTKHpWNvbG9yg6FiAKFnzIihcsz/pGN1ZXOSiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqlwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lqUJsdWUgd2FzaKZudW1iZXKhM6VwYXJ0c5OEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQGpcHJlc2V0UmVmwKV2YWx1Zc2ZmYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqlwcmVzZXRSZWbApXZhbHVlzZmZhKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUDqXByZXNldFJlZsCldmFsdWXNmZmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAKoaXNBY3RpdmXCpGxvb3DCpG5hbWWpQ29sZCBXYXNooTSHpWNvbG9ywKRjdWVzkYilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaCmbnVtYmVyoTGlcGFydHOThKlhdHRyaWJ1dGWmRGltbWVyp2ZpeHR1cmUBqXByZXNldFJlZsCldmFsdWXNmZmEqWF0dHJpYnV0ZaZEaW1tZXKnZml4dHVyZQKpcHJlc2V0UmVmwKV2YWx1Zc2ZmYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlA6lwcmVzZXRSZWbApXZhbHVlzZmZp3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQEqGlzQWN0aXZlwqRsb29wwqRuYW1lqlNlcXVlbmNlIDShNoelY29sb3LApGN1ZXORiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAalwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQGqGlzQWN0aXZlwqRsb29wwqRuYW1lqVdhcm0gV2FzaKdzZXNzaW9ugqdzZXNzaW9uj6xhY3RpdmVWaWV3SWQBq2NvbW1hbmRMaW5lrDEgdGhydSA0IGF0IK5jb21tYW5kTGluZVJ1bgCqZWRpdGluZ0N1ZYOpY3VlTnVtYmVyoTOobW9kaWZpZWTDqnNlcXVlbmNlSWQCq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcgKwc2VsZWN0ZWRTZXF1ZW5jZQSsd2luZG93UGlja2VywqV2aWV3c4GhMYOiaWQBpG5hbWWqUHJvZ3JhbW1lcqd3aW5kb3dzkKpwcm9ncmFtbWVyhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzk4OnZml4dHVyZQGpYXR0cmlidXRlpkRpbW1lcqV2YWx1ZYOldmFsdWXNmZmmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlAqlhdHRyaWJ1dGWmRGltbWVypXZhbHVlg6V2YWx1Zc2ZmaZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaZEaW1tZXKldmFsdWWDpXZhbHVlzZmZpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAapjbGVhclN0YWdlAadvdXRwdXRzkYeiaWQBpG5hbWWrTW9jayBvdXRwdXSmaGVhbHRook9rpm91dHB1dIWiaWQBpG5hbWWrTW9jayBvdXRwdXSka2luZIGhdKRNb2NrqXVuaXZlcnNlc5EBp2VuYWJsZWTDqmZyYW1lc1NlbnTNAfipbGFzdEVycm9ywK5sYXN0RXJyb3JBZ29Nc8CmaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestARgZzABlFe6ttaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPDrmZpeHR1cmVMaWJyYXJ5zQhxp21hY2hpbmWNpmRlc2tJZNkkYzIxMWZlYjQtZGFjMi00NTA4LWIxYTMtNWI3NDI2MmY5ZjNkp2RhdGFEaXLZLEM6XFVzZXJzXE1pbGFuXEFwcERhdGFcTG9jYWxcVGVtcFwudG1wUTJBbVU1pWxvY2Fsw6l3ZWJzb2NrZXSuMTI3LjAuMC4xOjczNzOtd2Vic29ja2V0T3BlbsCldG9rZW7AqGxvZ0xldmVspEluZm+pdW5pdmVyc2VzQKpleGl0QWN0aW9upEhvbGSpYXV0b3N0YXJ0wq5maXh0dXJlTGlicmFyecCuc3VyZmFjZVByb2ZpbGXAqW92ZXJyaWRlc5WnT3V0cHV0c6VMb2NhbKlXZWJzb2NrZXSpVW5pdmVyc2VzqExvZ0xldmVsqHNob3dGaWxlhaRwYXRo2TdDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcFEyQW1VNVxkZXNrLnByaXNtpnJlY2VudJCudW5zYXZlZENoYW5nZXPDqHJlY292ZXJ5wq9hdXRvc2F2ZVNlY29uZHMe"
 }

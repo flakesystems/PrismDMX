@@ -313,6 +313,7 @@ fn patch(layout: &FrameLayout, fixture_type: &FixtureType, count: u32) -> Vec<Fi
     let per_universe = (UNIVERSE_CHANNELS as u32) / footprint;
     (0..count)
         .map(|index| Fixture {
+            software_dimmer: true,
             id: FixtureId::new(index + 1),
             name: String::new(),
             type_id: fixture_type.id.clone(),

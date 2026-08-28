@@ -351,11 +351,16 @@ fn plans(
     layout: &FrameLayout,
     fixtures: &[(&Fixture, &FixtureType)],
 ) -> Result<(MergePlan, ChannelPlan), PatchError> {
-    let plan = MergePlan::build(
-        fixtures
-            .iter()
-            .map(|(fixture, fixture_type)| (fixture.id, *fixture_type)),
-    )?;
+    let plan = MergePlan::build(fixtures.iter().map(|(fixture, fixture_type)| {
+        // **The patch decides, not the engine.** Whether the desk supplies this
+        // fixture's intensity is a field on the fixture and a property of its
+        // type, and both are read here rather than guessed at — S43.
+        (
+            fixture.id,
+            *fixture_type,
+            fixture.has_software_dimmer(fixture_type),
+        )
+    }))?;
     let channels = ChannelPlan::build(&plan, layout, fixtures.iter().copied())?;
     Ok((plan, channels))
 }
@@ -1157,8 +1162,9 @@ mod tests {
         let head = moving_head();
         let one = patch(1);
         let two = patch(2);
-        let plan = MergePlan::build(two.iter().map(|fixture| (fixture.id, &head))).unwrap();
-        let narrow = MergePlan::build(one.iter().map(|fixture| (fixture.id, &head))).unwrap();
+        let plan = MergePlan::build(two.iter().map(|fixture| (fixture.id, &head, false))).unwrap();
+        let narrow =
+            MergePlan::build(one.iter().map(|fixture| (fixture.id, &head, false))).unwrap();
         let channels = ChannelPlan::build(
             &narrow,
             &layout(),

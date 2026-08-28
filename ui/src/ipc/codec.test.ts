@@ -22,12 +22,12 @@ describe("encoding", () => {
     const payload = encodeClientMessage({
       t: "Command",
       seq: 3,
-      command: { t: "CommandLineInput", text: "fixture 1 at full" },
+      command: { t: "CommandLineInput", text: "fixture 1 at full", run: false },
     });
     expect(decode(payload)).toEqual({
       t: "Command",
       seq: 3,
-      command: { t: "CommandLineInput", text: "fixture 1 at full" },
+      command: { t: "CommandLineInput", text: "fixture 1 at full", run: false },
     });
   });
 
@@ -49,7 +49,7 @@ describe("encoding", () => {
       encodeClientMessage({
         t: "Command",
         seq: 0,
-        command: { t: "CommandLineInput", text: "x".repeat(MAX_FRAME_BYTES + 1) },
+        command: { t: "CommandLineInput", text: "x".repeat(MAX_FRAME_BYTES + 1), run: false },
       }),
     ).toThrow(ProtocolFault);
   });

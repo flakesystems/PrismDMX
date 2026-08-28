@@ -11,7 +11,8 @@
  * 1. **A binding changed in the interface takes effect without restarting the
  *    daemon**, observed through `--mock-surface`.
  * 2. **Learn names the control that was pressed** — and does not fire it.
- * 3. **The reserved control cannot be bound**, and the row says why.
+ * 3. **The reserved control cannot be bound** — not from the panel, and not by
+ *    pressing it while learn is armed.
  * 4. **Two clients with the editor open do not produce two tables.**
  * 5. **The list scrolls inside its window**, and nothing outside the canvas
  *    scrolls.
@@ -48,6 +49,17 @@ const F1 = 54;
 /** F5, note 58 — the same row, four along. §4.1 leaves it free. */
 const F5 = 58;
 
+/** F6, note 59 — the next one along, also free. */
+const F6 = 59;
+
+/**
+ * SMPTE/Beats, note 53 — §4.3's reserved key.
+ *
+ * Written out by hand from §2.1 like the rest: asking the profile which note to
+ * send would be asking the code under test what to press.
+ */
+const SMPTE_BEATS = 53;
+
 let daemon: Daemon | null = null;
 
 test.beforeAll(() => {
@@ -68,7 +80,11 @@ async function desk(page: Page, port: number): Promise<{ dataDir: string; keys: 
   daemon = await startDaemon(port, undefined, { configurable: true, mockSurface: keys });
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
-  await page.getByTestId("open-window").selectOption("Settings");
+  // **S43, B9**: the dropdown is gone. A window is opened from the chooser now,
+  // which Insert opens — the keyboard route, because a console is operated in
+  // the dark.
+  await page.keyboard.press("Insert");
+  await page.getByTestId("picker-Settings").click();
   await expect(page.getByTestId("settings")).toBeVisible();
   await page.getByTestId("settings-tab-controls").click();
   await expect(page.getByTestId("settings-controls")).toBeVisible();
@@ -88,9 +104,15 @@ test("a key rebound in the window does the new thing at the console", async ({ p
   // daemon's words rather than this file's.
   await expect(page.getByTestId("controls-device")).toHaveText("Behringer X-Touch (MC mode)");
 
-  // §4.1 out of the box, read off the window rather than assumed.
-  await expect(page.getByTestId("control-does-Global.F1")).toHaveText("open FixtureSheet");
-  await expect(page.getByTestId("control-does-Global.F5")).toHaveText("—");
+  // §4.1 out of the box, read off the window rather than assumed — and read
+  // along the axis S43's punch-list B3 turned the panel onto: the row is the
+  // action, and the keys that reach it are listed in it.
+  await expect(page.getByTestId("action-keys-Save show")).toContainText("Global.Save");
+  await expect(page.getByTestId("action-keys-Clear programmer")).toContainText("Global.Record");
+  // **F1 is a *custom* key** since the rebuild (B24): *open window* is fourteen
+  // bindings rather than one action, so there the key is the row and carries
+  // its own answer. That is where an operator finds it and changes it.
+  await expect(page.getByTestId("custom-Global.F1")).toContainText("FixtureSheet");
 
   // The press before: F1 opens a Fixture Sheet.
   pressConsole(keys, F1);
@@ -102,15 +124,22 @@ test("a key rebound in the window does the new thing at the console", async ({ p
   await page.getByTestId(`close-${String(sheetId)}`).click();
   await expect(sheet).toHaveCount(0);
 
-  // One control, one command, no restart.
-  await page.getByTestId("control-choose-Global.F5").click();
-  await expect(page.getByTestId("control-editor-name")).toHaveText("Global.F5");
-  await page.getByTestId("control-action").selectOption("Open window");
-  await page.getByTestId("control-detail").selectOption("Patch");
-  await page.getByTestId("control-apply").click();
+  // One control, one command, no restart — and the gesture is the one B3 asked
+  // for: say what you want, then press the key you want it on. The key is a
+  // **real one**, appended to a file by a process that is neither this browser
+  // nor this daemon.
+  //
+  // It goes through the **custom** section since B24, which is the `+` an
+  // operator uses for a key of their own: choose the type, answer it, Learn.
+  await page.getByTestId("custom-kind").selectOption("Open window");
+  await page.getByTestId("custom-new-detail").selectOption("Patch");
+  await page.getByTestId("custom-learn").click();
+  await expect(page.getByTestId("controls-learning")).toBeVisible();
+  pressConsole(keys, F5);
 
-  // The table moved, and the window is drawing what the daemon answered.
-  await expect(page.getByTestId("control-does-Global.F5")).toHaveText("open Patch");
+  // The table moved, and the window is drawing what the daemon answered — a
+  // row of its own for the key that now has a job.
+  await expect(page.getByTestId("custom-Global.F5")).toContainText("Patch");
 
   // **The press after.** Three bytes appended to a file by a process that is
   // neither this browser nor this daemon, on a key that did nothing a moment
@@ -131,43 +160,62 @@ test("a key rebound in the window does the new thing at the console", async ({ p
 test("learn names the key that was pressed, and does not fire it", async ({ page }) => {
   const { dataDir, keys } = await desk(page, PORT + 1);
 
-  await page.getByTestId("controls-learn").click();
+  await page.getByTestId("action-learn-Oops").click();
   await expect(page.getByTestId("controls-learning")).toBeVisible();
-  await expect(page.getByTestId("controls-learn")).toHaveText("Press a control…");
+  await expect(page.getByTestId("action-learn-Oops")).toHaveText("Press a key…");
 
   const windowsBefore = await page.locator("[data-window-type]").count();
   pressConsole(keys, F1);
 
-  // The editor is now in front of the key the operator pressed.
-  await expect(page.getByTestId("control-editor-name")).toHaveText("Global.F1");
+  // The key the operator pressed is now listed under the row that armed it —
+  // which is the whole gesture, in one assertion: press Learn, press the key.
+  await expect(page.getByTestId("action-keys-Oops")).toContainText("Global.F1");
   // One shot: it disarms itself, so a client that went away cannot leave a desk
   // whose keys do nothing.
   await expect(page.getByTestId("controls-learning")).toHaveCount(0);
-  await expect(page.getByTestId("controls-learn")).toHaveText("Learn");
-  // And nothing happened on the canvas — F1 opens a Fixture Sheet when it is
+  await expect(page.getByTestId("action-learn-Oops")).toHaveText("Learn");
+  // And nothing happened on the canvas — F1 opened a Fixture Sheet when it was
   // obeyed, and it was not.
   expect(await page.locator("[data-window-type]").count()).toBe(windowsBefore);
 
-  // The key still works afterwards, which is what says learn was a mode and not
-  // a change.
+  // The key works afterwards, which is what says learn was a mode and not a
+  // failure — and it now does what it was *taught*, not what it did before.
   pressConsole(keys, F1);
-  await expect(page.locator('[data-window-type="FixtureSheet"]')).toHaveCount(1);
+  await expect(page.locator('[data-window-type="FixtureSheet"]')).toHaveCount(0);
 
   await done(dataDir);
 });
 
 /**
- * **Exit criterion 3.**
+ * **Exit criterion 3**, re-aimed by B3.
  *
- * Drawn rather than hidden, because an operator looking for SMPTE/Beats has to
- * find out *why* it is not theirs rather than conclude the list is incomplete.
+ * A reserved control has no row of its own to be greyed out in any more — the
+ * rows are actions, and a key appears under whatever it is bound to. What must
+ * still be true is that it cannot be bound *at all*, and the place that is now
+ * visible is the desk: arm learn, press SMPTE/Beats, and nothing is written.
  */
-test("the reserved control is drawn, named and cannot be chosen", async ({ page }) => {
-  const { dataDir } = await desk(page, PORT + 2);
-  const reserved = page.getByTestId("control-choose-Global.SmpteBeats");
-  await expect(reserved).toHaveText("Reserved");
-  await expect(reserved).toBeDisabled();
-  await expect(page.getByTestId("control-does-Global.SmpteBeats")).toHaveText("—");
+test("the reserved control cannot be learned onto anything", async ({ page }) => {
+  const { dataDir, keys } = await desk(page, PORT + 2);
+  const revision = await page.getByTestId("controls-revision").innerText();
+  // **What the row says before**, rather than a dash. The panel lists the keys
+  // that reach an action including the ones the shipped profile puts there, so
+  // Oops starts with the X-Touch's own Undo on it — which is B24's point: a
+  // default an operator wants to change is a default they can see.
+  const before = await page.getByTestId("action-keys-Oops").innerText();
+  expect(before).toContain("Global.Undo");
+
+  await page.getByTestId("action-learn-Oops").click();
+  await expect(page.getByTestId("controls-learning")).toBeVisible();
+  pressConsole(keys, SMPTE_BEATS);
+
+  // It never reaches learn: §4.3 keeps it for the switch between hosts, so the
+  // desk does not report it and the table does not move.
+  await expect(page.getByTestId("action-keys-Oops")).not.toContainText("Global.SmpteBeats");
+  // On substance rather than on layout: the chips are a list, so the text has
+  // line breaks in it that `toHaveText` normalises and `innerText` does not.
+  await expect(page.getByTestId("action-keys-Oops")).toContainText("Global.Undo");
+  await expect(page.getByTestId("action-keys-Oops").locator("li")).toHaveCount(1);
+  await expect(page.getByTestId("controls-revision")).toHaveText(revision);
   await done(dataDir);
 });
 
@@ -179,7 +227,7 @@ test("the reserved control is drawn, named and cannot be chosen", async ({ page 
  * looks like from a browser.
  */
 test("two editors change two keys and there is one table", async ({ page, context }) => {
-  const { dataDir } = await desk(page, PORT + 3);
+  const { dataDir, keys } = await desk(page, PORT + 3);
   const url = daemon?.url ?? "";
 
   // A second tab. It has no window of its own to open, because which windows
@@ -194,21 +242,19 @@ test("two editors change two keys and there is one table", async ({ page, contex
   const revision = await page.getByTestId("controls-revision").innerText();
   await expect(second.getByTestId("controls-revision")).toHaveText(revision);
 
-  // The first operator binds F5.
-  await page.getByTestId("control-choose-Global.F5").click();
-  await page.getByTestId("control-action").selectOption("Save show");
-  await page.getByTestId("control-apply").click();
-  await expect(page.getByTestId("control-does-Global.F5")).toHaveText("save the show");
+  // The first operator binds F5 to *Save show*, by pressing it.
+  await page.getByTestId("action-learn-Save show").click();
+  pressConsole(keys, F5);
+  await expect(page.getByTestId("action-keys-Save show")).toContainText("Global.F5");
   // The second tab is **told**: it asked for nothing.
-  await expect(second.getByTestId("control-does-Global.F5")).toHaveText("save the show");
+  await expect(second.getByTestId("action-keys-Save show")).toContainText("Global.F5");
 
   // The second operator binds F6, and the first one's edit is still standing.
-  await second.getByTestId("control-choose-Global.F6").click();
-  await second.getByTestId("control-action").selectOption("Oops");
-  await second.getByTestId("control-apply").click();
-  await expect(second.getByTestId("control-does-Global.F6")).toHaveText("oops");
-  await expect(page.getByTestId("control-does-Global.F6")).toHaveText("oops");
-  await expect(page.getByTestId("control-does-Global.F5")).toHaveText("save the show");
+  await second.getByTestId("action-learn-Oops").click();
+  pressConsole(keys, F6);
+  await expect(second.getByTestId("action-keys-Oops")).toContainText("Global.F6");
+  await expect(page.getByTestId("action-keys-Oops")).toContainText("Global.F6");
+  await expect(page.getByTestId("action-keys-Save show")).toContainText("Global.F5");
 
   // One table: the same revision on both screens.
   const after = await page.getByTestId("controls-revision").innerText();
@@ -223,18 +269,24 @@ test("two editors change two keys and there is one table", async ({ page, contex
  * **Exit criterion 5**, and `CLAUDE.md`'s rule checked in a browser rather than
  * reviewed in a stylesheet.
  *
- * The *inside* half is what a check of zeros everywhere would miss: the list has
- * seventy-three rows and must scroll **within** the window, while the document
- * and the canvas read zero on both axes.
+ * The *inside* half is what a check of zeros everywhere would miss: the list is
+ * longer than any window and must scroll **within** it, while the document and
+ * the canvas read zero on both axes.
+ *
+ * **S43 turned the panel round** (punch-list B3), so the list is twenty-four
+ * actions rather than seventy-three controls — shorter, still longer than a
+ * window, and the claim is unchanged. The row that is asserted to be drawn is
+ * the last of the last group, because a list that stopped rendering halfway
+ * would satisfy a scroll check and fail an operator.
  */
-test("seventy-three rows scroll inside the window and nothing outside the canvas does", async ({
+test("the whole action list scrolls inside the window and nothing outside the canvas does", async ({
   page,
 }) => {
   const { dataDir } = await desk(page, PORT + 4);
-  // No resizing: seventy-three rows are taller than any window on a 1280 × 720
-  // viewport, so the case this is about is the ordinary one rather than one a
-  // drag has to produce.
-  await expect(page.getByTestId("control-choose-Global.FootSwitch2")).toHaveCount(1);
+  // No resizing: the list is taller than any window on a 1280 × 720 viewport,
+  // so the case this is about is the ordinary one rather than one a drag has to
+  // produce.
+  await expect(page.getByTestId("action-Redo")).toHaveCount(1);
 
   // **The window's own body is the scroller**, which is S37's design and not
   // this panel's: one `overflow` per window, so a settings window never nests

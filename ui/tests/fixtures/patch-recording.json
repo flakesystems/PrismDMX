@@ -49,11 +49,11 @@
       "id": "generic.movinghead",
       "manufacturer": "Generic",
       "name": "Moving Head",
-      "mode": "11ch",
-      "footprint": 11
+      "mode": "13ch",
+      "footprint": 13
     }
   ],
-  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4KuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysGdlbmVyaWMucmdidy5wYXKGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlR3JlZW6sY29hcnNlT2Zmc2V0AaxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRCbHVlrGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlV2hpdGWsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLBnZW5lcmljLnJnYncucGFyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjNGNopG5hbWWoUkdCVyBQQVKoZml4dHVyZXODoTGJp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiadhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZK5nZW5lcmljLmRpbW1lcqh1bml2ZXJzZQGhNYmnYWRkcmVzcxSiaWQFqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDWocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGmZ3JvdXBzgKdwcmVzZXRzgKlzZXF1ZW5jZXOAp3Nlc3Npb26Cp3Nlc3Npb26NrGFjdGl2ZVZpZXdJZAGrY29tbWFuZExpbmWgqmVkaXRpbmdDdWXAq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZcCldmlld3OBoTGDomlkAaRuYW1lplZpZXcgMad3aW5kb3dzkKpwcm9ncmFtbWVyhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAKdvdXRwdXRzkYeiaWQBpG5hbWWrTW9jayBvdXRwdXSmaGVhbHRook9rpm91dHB1dIWiaWQBpG5hbWWrTW9jayBvdXRwdXSka2luZIGhdKRNb2NrqXVuaXZlcnNlc5EBp2VuYWJsZWTDqmZyYW1lc1NlbnQAqWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQFzLUZOwVK6rbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzwq5maXh0dXJlTGlicmFyeQenbWFjaGluZY2mZGVza0lk2SRiMTE2MzQzNy01ZjRhLTRmNWQtYjBlOS0zNTczZGZkYjc2MzinZGF0YURpctksQzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBTS1ZpUWmlbG9jYWzDqXdlYnNvY2tldK4xMjcuMC4wLjE6NzM3M613ZWJzb2NrZXRPcGVuwKV0b2tlbsCobG9nTGV2ZWykSW5mb6l1bml2ZXJzZXNAqmV4aXRBY3Rpb26kSG9sZKlhdXRvc3RhcnTCrmZpeHR1cmVMaWJyYXJ5wK5zdXJmYWNlUHJvZmlsZcCpb3ZlcnJpZGVzlqdPdXRwdXRzpUxvY2FsqVdlYnNvY2tldKlVbml2ZXJzZXOoTG9nTGV2ZWyuRml4dHVyZUxpYnJhcnmoc2hvd0ZpbGWFpHBhdGjZOEM6XFVzZXJzXE1pbGFuXEFwcERhdGFcTG9jYWxcVGVtcFwudG1wU0tWaVFpXHBhdGNoLnByaXNtpnJlY2VudJCudW5zYXZlZENoYW5nZXPCqHJlY292ZXJ5wq9hdXRvc2F2ZVNlY29uZHMe",
+  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4KuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysGdlbmVyaWMucmdidy5wYXKGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQCrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlV2hpdGWsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksGdlbmVyaWMucmdidy5wYXKsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM0Y2ikbmFtZahSR0JXIFBBUqhmaXh0dXJlc4OhMYqnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiqdhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UBoTWKp2FkZHJlc3MUomlkBalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA1qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo+sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCuY29tbWFuZExpbmVSdW4AqmVkaXRpbmdDdWXAq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZcCsd2luZG93UGlja2VywqV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKGqXNlbGVjdGlvbpCuc2VsZWN0ZWRHcm91cHOQr21hbnVhbFNlbGVjdGlvbpCyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UAp291dHB1dHORh6JpZAGkbmFtZatNb2NrIG91dHB1dKZoZWFsdGiiT2umb3V0cHV0haJpZAGkbmFtZatNb2NrIG91dHB1dKRraW5kgaF0pE1vY2updW5pdmVyc2VzkQGnZW5hYmxlZMOqZnJhbWVzU2VudACpbGFzdEVycm9ywK5sYXN0RXJyb3JBZ29Nc8CmaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestAZ76uUS6XhattaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPCrmZpeHR1cmVMaWJyYXJ5B6dtYWNoaW5ljaZkZXNrSWTZJDg4NDRkZjljLWM2OWYtNDMxMC05ZDUyLTk0MTgzMGU1ZjAwMKdkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcFZRWHFUaaVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOWp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbK5GaXh0dXJlTGlicmFyeahzaG93RmlsZYWkcGF0aNk4QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBWUVhxVGlccGF0Y2gucHJpc22mcmVjZW50kK51bnNhdmVkQ2hhbmdlc8KocmVjb3ZlcnnCr2F1dG9zYXZlU2Vjb25kcx4=",
   "steps": [
     {
       "what": "what overlaps in the rig as it stands: nothing",
@@ -70,7 +70,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -79,7 +80,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -88,7 +90,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -97,14 +100,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -123,7 +128,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -132,7 +138,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -141,7 +148,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -150,23 +158,25 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
     {
       "what": "patch it there",
-      "client": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5khqF0rFBhdGNoRml4dHVyZaJpZAakbmFtZaVQQVIgNqZ0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcx4=",
+      "client": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAakbmFtZaVQQVIgNqZ0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcx6uc29mdHdhcmVEaW1tZXLD",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvNqV2YWx1ZYmnYWRkcmVzcx6iaWQGqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaVQQVIgNqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAQ==",
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvNqV2YWx1ZYqnYWRkcmVzcx6iaWQGqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaVQQVIgNqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQE=",
         "gqF0pURlbHRhpWRlbHRhgqF0qURpcnR5RmxhZ651bnNhdmVkQ2hhbmdlc8M="
       ],
       "answer": null,
@@ -179,7 +189,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -188,7 +199,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -197,7 +209,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -206,7 +219,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -215,14 +229,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -241,7 +257,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -250,7 +267,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -259,7 +277,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -268,7 +287,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -277,23 +297,25 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
     {
       "what": "patch it anyway: cloning a fixture onto another is an ordinary technique",
-      "client": "g6F0p0NvbW1hbmSjc2VxBadjb21tYW5khqF0rFBhdGNoRml4dHVyZaJpZAekbmFtZaVQQVIgN6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcyA=",
+      "client": "g6F0p0NvbW1hbmSjc2VxBadjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAekbmFtZaVQQVIgN6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcyCuc29mdHdhcmVEaW1tZXLD",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvN6V2YWx1ZYmnYWRkcmVzcyCiaWQHqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaVQQVIgN6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAQ==",
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvN6V2YWx1ZYqnYWRkcmVzcyCiaWQHqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaVQQVIgN6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQE=",
         "gqF0pURlbHRhpWRlbHRhg6F0pk5vdGljZaVsZXZlbKRXYXJup21lc3NhZ2XZOGZpeHR1cmVzIDYgYW5kIDcgc2hhcmUgdW5pdmVyc2UgMSBjaGFubmVscyAzMi0zMzsgNyB3aW5z"
       ],
       "answer": null,
@@ -306,7 +328,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -315,7 +338,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -324,7 +348,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -333,7 +358,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -342,7 +368,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -351,14 +378,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -377,7 +406,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -386,7 +416,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -395,7 +426,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -404,7 +436,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -413,7 +446,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -422,14 +456,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -448,7 +484,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -457,7 +494,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -466,7 +504,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -475,7 +514,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -484,7 +524,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -493,14 +534,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -519,7 +562,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -528,7 +572,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -537,7 +582,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -546,7 +592,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -555,7 +602,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -564,14 +612,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -590,7 +640,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -599,7 +650,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -608,7 +660,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -617,7 +670,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -626,7 +680,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -635,14 +690,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -661,7 +718,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -670,7 +728,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -679,7 +738,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -688,7 +748,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -697,7 +758,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -706,14 +768,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -732,7 +796,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -741,7 +806,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -750,7 +816,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -759,7 +826,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -768,7 +836,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -777,14 +846,16 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         }
       ]
     },
@@ -793,7 +864,7 @@
       "client": "g6F0p0NvbW1hbmSjc2VxDKdjb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlksXJvYmUvd2FzaC03cTUvNGNo",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aNkhL2ZpeHR1cmVUeXBlcy9yb2JlfjF3YXNoLTdxNX4xNGNopXZhbHVlhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAcOAAAAAAAKpwaHlzaWNhbFRvy0Bw4AAAAAAAialhdHRyaWJ1dGWkVGlsdKxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAVoAAAAAAAKpwaHlzaWNhbFRvy0BWgAAAAAAAialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQDrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksXJvYmUvd2FzaC03cTUvNGNorG1hbnVmYWN0dXJlcqRSb2JlpG1vZGWjNGNopG5hbWWoV2FzaCA3UTU="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aNkhL2ZpeHR1cmVUeXBlcy9yb2JlfjF3YXNoLTdxNX4xNGNopXZhbHVlhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAcOAAAAAAAKpwaHlzaWNhbFRvy0Bw4AAAAAAAialhdHRyaWJ1dGWkVGlsdKxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAVoAAAAAAAKpwaHlzaWNhbFRvy0BWgAAAAAAAialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQDrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludASiaWSxcm9iZS93YXNoLTdxNS80Y2isbWFudWZhY3R1cmVypFJvYmWkbW9kZaM0Y2ikbmFtZahXYXNoIDdRNQ=="
       ],
       "answer": null,
       "refused": false,
@@ -805,7 +876,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -814,7 +886,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -823,7 +896,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -832,7 +906,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -841,7 +916,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -850,30 +926,33 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
     {
       "what": "patch it: the channels are the manufacturer's, not this desk's",
-      "client": "g6F0p0NvbW1hbmSjc2VxDadjb21tYW5khqF0rFBhdGNoRml4dHVyZaJpZAukbmFtZadXYXNoIDExpnR5cGVJZLFyb2JlL3dhc2gtN3E1LzRjaKh1bml2ZXJzZQKnYWRkcmVzc2Q=",
+      "client": "g6F0p0NvbW1hbmSjc2VxDadjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAukbmFtZadXYXNoIDExpnR5cGVJZLFyb2JlL3dhc2gtN3E1LzRjaKh1bml2ZXJzZQKnYWRkcmVzc2Suc29mdHdhcmVEaW1tZXLD",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKwvZml4dHVyZXMvMTGldmFsdWWJp2FkZHJlc3NkomlkC6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWnV2FzaCAxMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLFyb2JlL3dhc2gtN3E1LzRjaKh1bml2ZXJzZQI="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKwvZml4dHVyZXMvMTGldmFsdWWKp2FkZHJlc3NkomlkC6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWnV2FzaCAxMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSxcm9iZS93YXNoLTdxNS80Y2iodW5pdmVyc2UC"
       ],
       "answer": null,
       "refused": false,
@@ -885,7 +964,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -894,7 +974,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -903,7 +984,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -912,7 +994,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -921,7 +1004,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -930,7 +1014,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -939,21 +1024,24 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -962,7 +1050,7 @@
       "client": "g6F0p0NvbW1hbmSjc2VxDqdjb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZA==",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aNkgL2ZpeHR1cmVUeXBlcy9nZW5lcmljLm1vdmluZ2hlYWSldmFsdWWGqmF0dHJpYnV0ZXOZialhdHRyaWJ1dGWjUGFurGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0AaZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bw4AAAAAAAqnBoeXNpY2FsVG/LQHDgAAAAAACJqWF0dHJpYnV0ZaRUaWx0rGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0A6ZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bg4AAAAAAAqnBoeXNpY2FsVG/LQGDgAAAAAACJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0BKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWnU2h1dHRlcqxjb2Fyc2VPZmZzZXQFrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpEJlYW2qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlR3JlZW6sY29hcnNlT2Zmc2V0B6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRCbHVlrGNvYXJzZU9mZnNldAisZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkWm9vbaxjb2Fyc2VPZmZzZXQJrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpEJlYW2qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlRm9jdXOsY29hcnNlT2Zmc2V0CqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVGb2N1c6pmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50C6JpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaQxMWNopG5hbWWrTW92aW5nIEhlYWQ="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aNkgL2ZpeHR1cmVUeXBlcy9nZW5lcmljLm1vdmluZ2hlYWSldmFsdWWGqmF0dHJpYnV0ZXObialhdHRyaWJ1dGWjUGFurGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0AaZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bw4AAAAAAAqnBoeXNpY2FsVG/LQHDgAAAAAACJqWF0dHJpYnV0ZaRUaWx0rGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0A6ZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bg4AAAAAAAqnBoeXNpY2FsVG/LQGDgAAAAAACJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0BKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWnU2h1dHRlcqxjb2Fyc2VPZmZzZXQFrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpEJlYW2qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQHrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQIrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkWm9vbaxjb2Fyc2VPZmZzZXQJrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpEJlYW2qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlRm9jdXOsY29hcnNlT2Zmc2V0CqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVGb2N1c6pmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRHb2JvrGNvYXJzZU9mZnNldAusZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkR29ib6pmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZadDb250cm9srGNvYXJzZU9mZnNldAysZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCnQ29udHJvbKpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50DaJpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaQxM2NopG5hbWWrTW92aW5nIEhlYWQ="
       ],
       "answer": null,
       "refused": false,
@@ -974,7 +1062,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -983,7 +1072,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -992,7 +1082,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1001,7 +1092,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -1010,7 +1102,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1019,7 +1112,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1028,28 +1122,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1058,7 +1156,7 @@
       "client": "g6F0pVF1ZXJ5o3NlcQ+lcXVlcnmFoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAadhZGRyZXNzZA==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEPpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4WoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludAurbGFzdEFkZHJlc3NuqWNvbmZsaWN0c5A=",
+      "answer": "g6F0pkFuc3dlcqNzZXEPpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4WoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludA2rbGFzdEFkZHJlc3NwqWNvbmZsaWN0c5A=",
       "refused": false,
       "rows": [
         {
@@ -1068,7 +1166,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -1077,7 +1176,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1086,7 +1186,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1095,7 +1196,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -1104,7 +1206,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1113,7 +1216,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1122,37 +1226,41 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
     {
       "what": "patch a moving head",
-      "client": "g6F0p0NvbW1hbmSjc2VxEKdjb21tYW5khqF0rFBhdGNoRml4dHVyZaJpZAikbmFtZaZIZWFkIDimdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQKnYWRkcmVzcwE=",
+      "client": "g6F0p0NvbW1hbmSjc2VxEKdjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAikbmFtZaZIZWFkIDimdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQKnYWRkcmVzcwGuc29mdHdhcmVEaW1tZXLD",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvOKV2YWx1ZYmnYWRkcmVzcwGiaWQIqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaZIZWFkIDiocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAg=="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvOKV2YWx1ZYqnYWRkcmVzcwGiaWQIqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaZIZWFkIDiocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQI="
       ],
       "answer": null,
       "refused": false,
@@ -1164,7 +1272,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -1173,7 +1282,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1182,7 +1292,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1191,7 +1302,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -1200,7 +1312,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 32,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1209,7 +1322,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1218,7 +1332,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1227,37 +1342,41 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
     {
       "what": "correct a name and an address in one go: a repatch, not a new fixture",
-      "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5khqF0rFBhdGNoRml4dHVyZaJpZAekbmFtZa1QQVIgNyAobW92ZWQppnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAadhZGRyZXNzKA==",
+      "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAekbmFtZa1QQVIgNyAobW92ZWQppnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAadhZGRyZXNzKK5zb2Z0d2FyZURpbW1lcsM=",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGirL2ZpeHR1cmVzLzeldmFsdWWJp2FkZHJlc3MoomlkB6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWtUEFSIDcgKG1vdmVkKahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAQ=="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGirL2ZpeHR1cmVzLzeldmFsdWWKp2FkZHJlc3MoomlkB6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWtUEFSIDcgKG1vdmVkKahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQE="
       ],
       "answer": null,
       "refused": false,
@@ -1269,7 +1388,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -1278,7 +1398,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1287,7 +1408,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1296,7 +1418,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -1305,7 +1428,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1314,7 +1438,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1323,7 +1448,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1332,28 +1458,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1372,7 +1502,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -1381,7 +1512,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1390,7 +1522,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1399,7 +1532,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 7,
@@ -1408,7 +1542,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1417,7 +1552,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1426,7 +1562,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1435,28 +1572,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1465,7 +1606,7 @@
       "client": "g6F0p0NvbW1hbmSjc2VxE6djb21tYW5kg6F0r1JlbnVtYmVyRml4dHVyZaJpZAeidG9G",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHOSgqJvcKZyZW1vdmWkcGF0aKsvZml4dHVyZXMvN4Oib3CjYWRkpHBhdGisL2ZpeHR1cmVzLzcwpXZhbHVliadhZGRyZXNzKKJpZEapaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lrVBBUiA3IChtb3ZlZCmocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQE="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHOSgqJvcKZyZW1vdmWkcGF0aKsvZml4dHVyZXMvN4Oib3CjYWRkpHBhdGisL2ZpeHR1cmVzLzcwpXZhbHVliqdhZGRyZXNzKKJpZEapaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lrVBBUiA3IChtb3ZlZCmocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksGdlbmVyaWMucmdidy5wYXKodW5pdmVyc2UB"
       ],
       "answer": null,
       "refused": false,
@@ -1477,7 +1618,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -1486,7 +1628,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1495,7 +1638,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1504,7 +1648,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1513,7 +1658,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1522,7 +1668,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 70,
@@ -1531,7 +1678,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1540,28 +1688,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1580,7 +1732,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -1589,7 +1742,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1598,7 +1752,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1607,7 +1762,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1616,7 +1772,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1625,7 +1782,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 70,
@@ -1634,7 +1792,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1643,28 +1802,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1685,7 +1848,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1694,7 +1858,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1703,7 +1868,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1712,7 +1878,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1721,7 +1888,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 70,
@@ -1730,7 +1898,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1739,28 +1908,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1779,7 +1952,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1788,7 +1962,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1797,7 +1972,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1806,7 +1982,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1815,7 +1992,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 70,
@@ -1824,7 +2002,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1833,28 +2012,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1873,7 +2056,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1882,7 +2066,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1891,7 +2076,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -1900,7 +2086,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -1909,7 +2096,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 70,
@@ -1918,7 +2106,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -1927,28 +2116,32 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     },
@@ -1957,7 +2150,7 @@
       "client": "g6F0p0NvbW1hbmSjc2VxGKdjb21tYW5kgaF0pE9vcHM=",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvMqV2YWx1ZYmnYWRkcmVzcwKiaWQCqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDKocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UB"
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvMqV2YWx1ZYqnYWRkcmVzcwKiaWQCqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDKocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAQ=="
       ],
       "answer": null,
       "refused": false,
@@ -1969,7 +2162,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 1,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 2,
@@ -1978,7 +2172,8 @@
           "typeName": "Dimmer",
           "universe": 1,
           "address": 2,
-          "footprint": 1
+          "footprint": 1,
+          "softwareDimmer": true
         },
         {
           "id": 5,
@@ -1987,7 +2182,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 20,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 6,
@@ -1996,7 +2192,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 30,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 8,
@@ -2005,7 +2202,8 @@
           "typeName": "Moving Head",
           "universe": 2,
           "address": 1,
-          "footprint": 11
+          "footprint": 13,
+          "softwareDimmer": true
         },
         {
           "id": 11,
@@ -2014,7 +2212,8 @@
           "typeName": "Wash 7Q5",
           "universe": 2,
           "address": 100,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         },
         {
           "id": 70,
@@ -2023,7 +2222,8 @@
           "typeName": "RGBW PAR",
           "universe": 1,
           "address": 40,
-          "footprint": 4
+          "footprint": 4,
+          "softwareDimmer": true
         }
       ],
       "profiles": [
@@ -2032,31 +2232,35 @@
           "manufacturer": "Generic",
           "name": "Dimmer",
           "mode": "1ch",
-          "footprint": 1
+          "footprint": 1,
+          "hasIntensity": true
         },
         {
           "id": "generic.movinghead",
           "manufacturer": "Generic",
           "name": "Moving Head",
-          "mode": "11ch",
-          "footprint": 11
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
         },
         {
           "id": "generic.rgbw.par",
           "manufacturer": "Generic",
           "name": "RGBW PAR",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": false
         },
         {
           "id": "robe/wash-7q5/4ch",
           "manufacturer": "Robe",
           "name": "Wash 7Q5",
           "mode": "4ch",
-          "footprint": 4
+          "footprint": 4,
+          "hasIntensity": true
         }
       ]
     }
   ],
-  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4SuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysmdlbmVyaWMubW92aW5naGVhZIaqYXR0cmlidXRlc5mJqWF0dHJpYnV0ZaNQYW6sY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQBpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwHDgAAAAAACqcGh5c2ljYWxUb8tAcOAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQDpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwGDgAAAAAACqcGh5c2ljYWxUb8tAYOAAAAAAAImpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpkRpbW1lcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNIVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZadTaHV0dGVyrGNvYXJzZU9mZnNldAWsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0BqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQHrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0CKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAmsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVGb2N1c6xjb2Fyc2VPZmZzZXQKrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUZvY3VzqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQLomlksmdlbmVyaWMubW92aW5naGVhZKxtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlpDExY2ikbmFtZatNb3ZpbmcgSGVhZLBnZW5lcmljLnJnYncucGFyhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpUdyZWVurGNvYXJzZU9mZnNldAGsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQCrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpVdoaXRlrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludASiaWSwZ2VuZXJpYy5yZ2J3LnBhcqxtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozRjaKRuYW1lqFJHQlcgUEFSsXJvYmUvd2FzaC03cTUvNGNohqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAcOAAAAAAAKpwaHlzaWNhbFRvy0Bw4AAAAAAAialhdHRyaWJ1dGWkVGlsdKxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAVoAAAAAAAKpwaHlzaWNhbFRvy0BWgAAAAAAAialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQDrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksXJvYmUvd2FzaC03cTUvNGNorG1hbnVmYWN0dXJlcqRSb2JlpG1vZGWjNGNopG5hbWWoV2FzaCA3UTWoZml4dHVyZXOHoTGJp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaIxMYmnYWRkcmVzc2SiaWQLqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZadXYXNoIDExqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlksXJvYmUvd2FzaC03cTUvNGNoqHVuaXZlcnNlAqEyiadhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZK5nZW5lcmljLmRpbW1lcqh1bml2ZXJzZQGhNYmnYWRkcmVzcxSiaWQFqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDWocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKZ0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGhNomnYWRkcmVzcx6iaWQGqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaVQQVIgNqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaI3MImnYWRkcmVzcyiiaWRGqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZa1QQVIgNyAobW92ZWQpqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlksGdlbmVyaWMucmdidy5wYXKodW5pdmVyc2UBoTiJp2FkZHJlc3MBomlkCKlpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWmSGVhZCA4qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQKmZ3JvdXBzgKdwcmVzZXRzgKlzZXF1ZW5jZXOAp3Nlc3Npb26Cp3Nlc3Npb26NrGFjdGl2ZVZpZXdJZAGrY29tbWFuZExpbmWgqmVkaXRpbmdDdWXAq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZcCldmlld3OBoTGDomlkAaRuYW1lplZpZXcgMad3aW5kb3dzkKpwcm9ncmFtbWVyhKlzZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAKdvdXRwdXRzkYeiaWQBpG5hbWWrTW9jayBvdXRwdXSmaGVhbHRook9rpm91dHB1dIWiaWQBpG5hbWWrTW9jayBvdXRwdXSka2luZIGhdKRNb2NrqXVuaXZlcnNlc5EBp2VuYWJsZWTDqmZyYW1lc1NlbnQQqWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEcY7yjhH0urbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzw65maXh0dXJlTGlicmFyeQenbWFjaGluZY2mZGVza0lk2SRiMTE2MzQzNy01ZjRhLTRmNWQtYjBlOS0zNTczZGZkYjc2MzinZGF0YURpctksQzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBTS1ZpUWmlbG9jYWzDqXdlYnNvY2tldK4xMjcuMC4wLjE6NzM3M613ZWJzb2NrZXRPcGVuwKV0b2tlbsCobG9nTGV2ZWykSW5mb6l1bml2ZXJzZXNAqmV4aXRBY3Rpb26kSG9sZKlhdXRvc3RhcnTCrmZpeHR1cmVMaWJyYXJ5wK5zdXJmYWNlUHJvZmlsZcCpb3ZlcnJpZGVzlqdPdXRwdXRzpUxvY2FsqVdlYnNvY2tldKlVbml2ZXJzZXOoTG9nTGV2ZWyuRml4dHVyZUxpYnJhcnmoc2hvd0ZpbGWFpHBhdGjZOEM6XFVzZXJzXE1pbGFuXEFwcERhdGFcTG9jYWxcVGVtcFwudG1wU0tWaVFpXHBhdGNoLnByaXNtpnJlY2VudJCudW5zYXZlZENoYW5nZXPDqHJlY292ZXJ5wq9hdXRvc2F2ZVNlY29uZHMe"
+  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4SuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysmdlbmVyaWMubW92aW5naGVhZIaqYXR0cmlidXRlc5uJqWF0dHJpYnV0ZaNQYW6sY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQBpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwHDgAAAAAACqcGh5c2ljYWxUb8tAcOAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQDpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwGDgAAAAAACqcGh5c2ljYWxUb8tAYOAAAAAAAImpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpkRpbW1lcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNIVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZadTaHV0dGVyrGNvYXJzZU9mZnNldAWsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0BqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpUdyZWVurGNvYXJzZU9mZnNldAesZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRCbHVlrGNvYXJzZU9mZnNldAisZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAmsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVGb2N1c6xjb2Fyc2VPZmZzZXQKrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUZvY3VzqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEdvYm+sY29hcnNlT2Zmc2V0C6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKRHb2JvqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlp0NvbnRyb2ysY29hcnNlT2Zmc2V0DKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKdDb250cm9sqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQNomlksmdlbmVyaWMubW92aW5naGVhZKxtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlpDEzY2ikbmFtZatNb3ZpbmcgSGVhZLBnZW5lcmljLnJnYncucGFyhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlR3JlZW6sY29hcnNlT2Zmc2V0AaxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpVdoaXRlrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLBnZW5lcmljLnJnYncucGFyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjNGNopG5hbWWoUkdCVyBQQVKxcm9iZS93YXNoLTdxNS80Y2iGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUGFurGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bw4AAAAAAAqnBoeXNpY2FsVG/LQHDgAAAAAACJqWF0dHJpYnV0ZaRUaWx0rGNvYXJzZU9mZnNldAGsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8BWgAAAAAAAqnBoeXNpY2FsVG/LQFaAAAAAAACJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLFyb2JlL3dhc2gtN3E1LzRjaKxtYW51ZmFjdHVyZXKkUm9iZaRtb2RlozRjaKRuYW1lqFdhc2ggN1E1qGZpeHR1cmVzh6ExiqdhZGRyZXNzAaJpZAGpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UBojExiqdhZGRyZXNzZKJpZAupaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lp1dhc2ggMTGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksXJvYmUvd2FzaC03cTUvNGNoqHVuaXZlcnNlAqEyiqdhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UBoTWKp2FkZHJlc3MUomlkBalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA1qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaE2iqdhZGRyZXNzHqJpZAapaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpVBBUiA2qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaI3MIqnYWRkcmVzcyiiaWRGqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZa1QQVIgNyAobW92ZWQpqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaE4iqdhZGRyZXNzAaJpZAipaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpkhlYWQgOKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo+sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCuY29tbWFuZExpbmVSdW4AqmVkaXRpbmdDdWXAq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZcCsd2luZG93UGlja2VywqV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKGqXNlbGVjdGlvbpCuc2VsZWN0ZWRHcm91cHOQr21hbnVhbFNlbGVjdGlvbpCyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UAp291dHB1dHORh6JpZAGkbmFtZatNb2NrIG91dHB1dKZoZWFsdGiiT2umb3V0cHV0haJpZAGkbmFtZatNb2NrIG91dHB1dKRraW5kgaF0pE1vY2updW5pdmVyc2VzkQGnZW5hYmxlZMOqZnJhbWVzU2VudAmpbGFzdEVycm9ywK5sYXN0RXJyb3JBZ29Nc8CmaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestARleUMVtyyqttaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPDrmZpeHR1cmVMaWJyYXJ5B6dtYWNoaW5ljaZkZXNrSWTZJDg4NDRkZjljLWM2OWYtNDMxMC05ZDUyLTk0MTgzMGU1ZjAwMKdkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcFZRWHFUaaVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOWp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbK5GaXh0dXJlTGlicmFyeahzaG93RmlsZYWkcGF0aNk4QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBWUVhxVGlccGF0Y2gucHJpc22mcmVjZW50kK51bnNhdmVkQ2hhbmdlc8OocmVjb3ZlcnnCr2F1dG9zYXZlU2Vjb25kcx4="
 }

@@ -61,6 +61,23 @@ use prism_domain::{
 };
 
 /// An 8-bit attribute at an offset, filed under its own feature group.
+/// A colour channel at **full** — punch-list B1.
+///
+/// The owner's complaint was that a fixture selected in the programmer showed
+/// its colours at 0 %, so mixing a colour started by turning three knobs *up*
+/// before turning any down. On every desk they have used, colour starts open and
+/// you subtract; the dimmer is what decides whether any of it is seen.
+///
+/// This is the **home value**, so it is what the bottom of the merge holds and
+/// what an encoder reads when the programmer is empty — a rig at home now sits
+/// at white with the dimmer down rather than at black twice over. It is a
+/// property of the *profile*, so it is set here and in the OFL converter
+/// (`crate::library::ofl`) and nowhere else: `AttributeDef::default_value` is
+/// the one answer, and a rule in the engine that overrode it would be a second.
+fn colour(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
+    eight_bit(attribute, coarse_offset, u16::MAX)
+}
+
 fn eight_bit(attribute: AttributeType, coarse_offset: u16, default_value: u16) -> AttributeDef {
     AttributeDef {
         attribute,
@@ -118,9 +135,9 @@ fn rgb_par() -> FixtureType {
         mode: "3ch".to_owned(),
         footprint: 3,
         attributes: vec![
-            eight_bit(AttributeType::Red, 0, 0),
-            eight_bit(AttributeType::Green, 1, 0),
-            eight_bit(AttributeType::Blue, 2, 0),
+            colour(AttributeType::Red, 0),
+            colour(AttributeType::Green, 1),
+            colour(AttributeType::Blue, 2),
         ],
     }
 }
@@ -134,36 +151,45 @@ fn rgbw_par() -> FixtureType {
         mode: "4ch".to_owned(),
         footprint: 4,
         attributes: vec![
-            eight_bit(AttributeType::Red, 0, 0),
-            eight_bit(AttributeType::Green, 1, 0),
-            eight_bit(AttributeType::Blue, 2, 0),
-            eight_bit(AttributeType::White, 3, 0),
+            colour(AttributeType::Red, 0),
+            colour(AttributeType::Green, 1),
+            colour(AttributeType::Blue, 2),
+            colour(AttributeType::White, 3),
         ],
     }
 }
 
-/// An eleven-channel moving head with 16-bit pan and tilt.
+/// A thirteen-channel moving head with 16-bit pan and tilt.
 ///
 /// The profile that makes the *rest* of the desk reachable from a fresh show:
-/// it has attributes on all five encoder banks, so an operator who patches one
-/// has something to turn on every one of them.
+/// it has attributes on **all seven** encoder banks, so an operator who patches
+/// one has something to turn on every one of them.
+///
+/// **Eleven channels until S43**, when the banks became seven: a head with no
+/// gobo wheel and no lamp-control channel could no longer reach all of them, and
+/// the honest fix is the one a real moving head takes — it *has* a gobo wheel.
+/// `the_moving_head_has_something_on_every_bank` is what holds this, and it is
+/// the reason a bank added later cannot quietly become unreachable from a fresh
+/// show.
 fn moving_head() -> FixtureType {
     FixtureType {
         id: "generic.movinghead".to_owned(),
         manufacturer: "Generic".to_owned(),
         name: "Moving Head".to_owned(),
-        mode: "11ch".to_owned(),
-        footprint: 11,
+        mode: "13ch".to_owned(),
+        footprint: 13,
         attributes: vec![
             sixteen_bit(AttributeType::Pan, 0, -270.0, 270.0),
             sixteen_bit(AttributeType::Tilt, 2, -135.0, 135.0),
             eight_bit(AttributeType::Dimmer, 4, 0),
             eight_bit(AttributeType::Shutter, 5, 0),
-            eight_bit(AttributeType::Red, 6, 0),
-            eight_bit(AttributeType::Green, 7, 0),
-            eight_bit(AttributeType::Blue, 8, 0),
+            colour(AttributeType::Red, 6),
+            colour(AttributeType::Green, 7),
+            colour(AttributeType::Blue, 8),
             eight_bit(AttributeType::Zoom, 9, 0),
             eight_bit(AttributeType::Focus, 10, 0),
+            eight_bit(AttributeType::Gobo, 11, 0),
+            eight_bit(AttributeType::Control, 12, 0),
         ],
     }
 }
@@ -630,6 +656,49 @@ mod tests {
                 "{} leaves a channel of its footprint unused",
                 fixture_type.id
             );
+        }
+    }
+
+    /// **Colour rests open** — punch-list B1.
+    ///
+    /// The owner's complaint was that a fixture selected in the programmer
+    /// showed its colours at 0 %, so mixing started by turning three knobs *up*.
+    /// Colour starts open on every desk they have used and the dimmer decides
+    /// whether any of it is seen, so the home value is full — which is what the
+    /// bottom of the merge holds and what an encoder reads when the programmer
+    /// is empty.
+    ///
+    /// Asserted over **every** generic profile rather than one, so a profile
+    /// added later cannot quietly go back to black; the OFL converter takes the
+    /// same rule and `ofl::default_value` is where it is written for a file.
+    #[test]
+    fn a_colour_channel_rests_open_and_nothing_else_does() {
+        for profile in generic_profiles() {
+            for def in &profile.attributes {
+                match def.attribute.feature_group() {
+                    FeatureGroup::Color => assert_eq!(
+                        def.default_value,
+                        u16::MAX,
+                        "{} {:?} does not rest open",
+                        profile.id,
+                        def.attribute
+                    ),
+                    // Pan and tilt rest centred, for their own reason: a head
+                    // that is patched and never touched should point at the
+                    // middle of its travel rather than at an end stop.
+                    FeatureGroup::Position => {
+                        assert_eq!(def.default_value, 32768, "{} is not centred", profile.id);
+                    }
+                    // Everything else rests at zero — most importantly the
+                    // dimmer, which is what makes a rig at home dark rather
+                    // than white.
+                    _ => assert_eq!(
+                        def.default_value, 0,
+                        "{} {:?} does not rest at zero",
+                        profile.id, def.attribute
+                    ),
+                }
+            }
         }
     }
 

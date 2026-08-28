@@ -150,7 +150,7 @@ mod model;
 pub mod profile;
 mod surface;
 
-pub use accel::{JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
+pub use accel::{COARSE, JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
 pub use binding::{
     Bindings, BoundControl, ExecutorTarget, PROFILE_VERSION, ProfileError, Step, SurfaceAction,
     SurfaceContext,

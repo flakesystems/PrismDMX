@@ -38,11 +38,11 @@
  * nobody would notice until a show.
  */
 
-import type { AttributeType, CueTrigger, FeatureGroup, JsonValue, RgbColor } from "../bindings";
+import type { AttributeType, CueTrigger, JsonValue, PresetPool, RgbColor } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
   CUE_TRIGGER_VARIANTS,
-  FEATURE_GROUP_VARIANTS,
+  PRESET_POOL_VARIANTS,
 } from "../bindings/variants";
 import { isArray, isObject } from "../mirror/patch";
 import { booleanAt, numberAt, stringAt, valueAt } from "../mirror/select";
@@ -100,6 +100,14 @@ export interface SequenceRow {
   readonly id: number;
   /** What it is called. */
   readonly name: string;
+  /**
+   * The scribble-strip colour, or `null`.
+   *
+   * `Sequence::color` has been on the wire since S11 and nothing on the screen
+   * drew it until S43, when the pool became a grid of boxes and the colour
+   * became the thing that tells two of them apart at two metres.
+   */
+  readonly color: RgbColor | null;
   /** Whether the last cue wraps back to the first. */
   readonly looping: boolean;
   /** Its cues, in playback order — the order the document holds them in. */
@@ -110,8 +118,14 @@ export interface SequenceRow {
 export interface PresetRow {
   /** The preset number. Unique across pools, so `ApplyPreset` is unambiguous. */
   readonly id: number;
-  /** Which pool it is filed in. */
-  readonly pool: FeatureGroup;
+  /**
+   * Which pool it is filed in.
+   *
+   * A `PresetPool` and not a `FeatureGroup` since S43: **Multi** is a pool that
+   * is not a bank — a preset across the categories, which is the one an
+   * operator files a finished look in. See `prism_domain::PresetPool`.
+   */
+  readonly pool: PresetPool;
   /** What it is called. */
   readonly name: string;
   /** The scribble-strip colour, or `null`. */
@@ -153,6 +167,7 @@ export function sequenceRows(show: JsonValue | null): readonly SequenceRow[] {
     rows.push({
       id,
       name: stringAt(entry, "/name") ?? "",
+      color: colorOf(valueAt(entry, "/color")),
       looping: booleanAt(entry, "/loop") ?? false,
       cues: cueRowsOf(entry),
     });
@@ -291,7 +306,7 @@ export function presetRows(show: JsonValue | null): readonly PresetRow[] {
     }
     rows.push({
       id,
-      pool: featureGroupOf(stringAt(entry, "/pool")),
+      pool: presetPoolOf(stringAt(entry, "/pool")),
       name: stringAt(entry, "/name") ?? "",
       color: colorOf(valueAt(entry, "/color")),
       values: lengthOf(valueAt(entry, "/values")),
@@ -301,8 +316,25 @@ export function presetRows(show: JsonValue | null): readonly PresetRow[] {
 }
 
 /** The presets of one pool, in number order. */
-export function poolRows(show: JsonValue | null, pool: FeatureGroup): readonly PresetRow[] {
+export function poolRows(show: JsonValue | null, pool: PresetPool): readonly PresetRow[] {
   return presetRows(show).filter((row) => row.pool === pool);
+}
+
+/**
+ * Which groups the programmer has switched **on** — S43, B27.
+ *
+ * A group is a switch now rather than a per-fixture toggle, so a pool has to be
+ * able to light the ones that are down. The list is the *programmer's*
+ * (`ProgrammerState::selectedGroups`), which is what makes the X-Touch and the
+ * screen agree about it without either being told.
+ *
+ * A `null` programmer — before the first snapshot — lights nothing, which is
+ * the honest answer rather than a guess.
+ */
+export function selectedGroups(
+  programmer: { readonly selectedGroups: readonly number[] } | null,
+): ReadonlySet<number> {
+  return new Set(programmer?.selectedGroups ?? []);
 }
 
 /**
@@ -507,9 +539,22 @@ function triggerOf(value: string | null): CueTrigger {
   return value !== null && isCueTrigger(value) ? value : "Go";
 }
 
-/** A pool this build knows, or `Dimmer` — `FeatureGroup`'s own default. */
-function featureGroupOf(value: string | null): FeatureGroup {
-  return value !== null && isFeatureGroup(value) ? value : "Dimmer";
+/**
+ * A pool name out of the document, or the bank a preset falls back to.
+ *
+ * Narrowed against the **generated** table rather than asserted, which is S26's
+ * rule for every string that comes off the wire. A pool this build does not know
+ * reads as `Dimmer` and shows up in that tab rather than in none — a preset
+ * filed nowhere would be a preset an operator cannot find, and the show still
+ * holds it.
+ */
+function presetPoolOf(value: string | null): PresetPool {
+  return value !== null && isPresetPool(value) ? value : "Dimmer";
+}
+
+/** Whether a string is one of the pools this build knows. */
+function isPresetPool(value: string): value is PresetPool {
+  return (PRESET_POOL_VARIANTS as readonly string[]).includes(value);
 }
 
 /** Whether a string is one of the triggers this build knows. */
@@ -517,10 +562,6 @@ function isCueTrigger(value: string): value is CueTrigger {
   return (CUE_TRIGGER_VARIANTS as readonly string[]).includes(value);
 }
 
-/** Whether a string is one of the feature groups this build knows. */
-function isFeatureGroup(value: string): value is FeatureGroup {
-  return (FEATURE_GROUP_VARIANTS as readonly string[]).includes(value);
-}
 
 /** Whether a string is one of the attributes this build knows. */
 function isAttributeType(value: string): value is AttributeType {

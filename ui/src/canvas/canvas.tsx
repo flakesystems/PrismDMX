@@ -50,10 +50,20 @@ export interface CanvasProps {
   readonly onFocus: (instanceId: number) => void;
   /** Sends a `CloseWindow`. */
   readonly onClose: (instanceId: number) => void;
+  /** Sends a `SetWindowPicker` — a right-click on an empty part opens it. */
+  readonly onPicker: (open: boolean) => void;
 }
 
 /** The whole canvas. */
-export function Canvas({ session, show, programmer, onPlace, onFocus, onClose }: CanvasProps) {
+export function Canvas({
+  session,
+  show,
+  programmer,
+  onPlace,
+  onFocus,
+  onClose,
+  onPicker,
+}: CanvasProps) {
   const surface = useRef<HTMLDivElement>(null);
   const windows = openWindows(session);
   const focused = focusedWindow(session);
@@ -75,7 +85,22 @@ export function Canvas({ session, show, programmer, onPlace, onFocus, onClose }:
   }, []);
 
   return (
-    <div className="canvas" ref={surface} data-testid="canvas" data-windows={windows.length}>
+    <div
+      className="canvas"
+      ref={surface}
+      data-testid="canvas"
+      data-windows={windows.length}
+      // **A right-click on an empty part opens the window chooser** — S43, B9.
+      // `event.target === event.currentTarget` is what *empty* means: a click
+      // over a window is that window's business, and a browser context menu on
+      // top of a console is nobody's.
+      onContextMenu={(event) => {
+        if (event.target === event.currentTarget) {
+          event.preventDefault();
+          onPicker(true);
+        }
+      }}
+    >
       {windows.length === 0 ? <EmptyCanvas /> : null}
       {windows.map((instance: CanvasWindow) => (
         <WindowFrame
@@ -83,6 +108,11 @@ export function Canvas({ session, show, programmer, onPlace, onFocus, onClose }:
           window={instance}
           focused={instance.instanceId === focused}
           box={box}
+          // Every window but this one, so a drag stops against them the way it
+          // stops against the canvas edges (S43, B10). It is the session's own
+          // list, which is what makes it a prediction of the daemon's rule
+          // rather than a second opinion about the layout.
+          neighbours={windows.filter((other) => other.instanceId !== instance.instanceId)}
           onPlace={onPlace}
           onFocus={onFocus}
           onClose={onClose}
@@ -108,7 +138,8 @@ export function Canvas({ session, show, programmer, onPlace, onFocus, onClose }:
 function EmptyCanvas() {
   return (
     <p className="canvas-empty" data-testid="canvas-empty">
-      No windows are open in this view. Add one above, or press F1&ndash;F8 on the console.
+      No windows are open in this view. Right-click here, press Insert, or use an F-key on the
+      console.
     </p>
   );
 }

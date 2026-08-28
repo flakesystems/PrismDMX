@@ -260,6 +260,24 @@ impl Resolve for SurfaceAction {
                 window,
                 params: None,
             },
+            Self::OpenWindowPicker => Command::SetWindowPicker { open: true },
+            // **Writes the line, does not run it** — see the variant's own
+            // documentation. `pressed()?` is what makes a key act on the press
+            // and stay quiet on the release, the way every non-momentary action
+            // here does; without it a bound line would be written twice.
+            Self::WriteCommandLine { line, submit } => {
+                if !input.pressed().unwrap_or(true) {
+                    return None;
+                }
+                // `run` carries the operator's answer through unchanged — S43.
+                // What it does at the far end is bump `Session::command_line_run`
+                // so the focused client parses the line; nothing here can, and
+                // the action's own documentation says why.
+                Command::CommandLineInput {
+                    text: line,
+                    run: submit,
+                }
+            }
             Self::SaveShow => Command::SaveShow,
             Self::Oops => Command::Oops,
             Self::Redo => Command::Redo,
@@ -334,10 +352,16 @@ impl core::error::Error for ProfileError {}
 
 /// The binding table: one action per control, or none.
 ///
-/// Fixed-size and [`Copy`], like everything else this crate holds, so a
-/// controller that reloads a profile mid-show swaps one value for another and
-/// allocates nothing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Fixed-size, so a controller that reloads a profile mid-show swaps one value
+/// for another and grows nothing.
+///
+/// **No longer `Copy` since S43**, because `SurfaceAction::WriteCommandLine`
+/// carries the line an operator wrote (B4). The table is still built and
+/// replaced whole; what changed is that replacing it is a move or a `clone`
+/// rather than a register copy, and that a bound *line* is one allocation the
+/// table now owns. Nothing on the tick path reads one: layer 3 runs on the
+/// surface thread, not in `prism-engine`.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bindings {
     strip_fader: Option<SurfaceAction>,
     strip_encoder: Option<SurfaceAction>,
@@ -352,10 +376,20 @@ pub struct Bindings {
 /// A list of pairs rather than sixty-four array slots in declaration order: the
 /// array is indexed by [`GlobalButton::index`], and a table written out by
 /// position is one where inserting a button silently moves everything after it.
-const DEFAULT_GLOBAL: [(GlobalButton, SurfaceAction); 25] = [
-    // Encoder Assign — five feature groups on the first five buttons. The sixth
-    // (Instrument) is left alone rather than doubled up, because a button that
-    // repeats its neighbour teaches an operator that it is broken.
+const DEFAULT_GLOBAL: [(GlobalButton, SurfaceAction); 26] = [
+    // Encoder Assign — six feature groups on the six buttons.
+    //
+    // **There are seven banks since S43 and the surface has six keys**, so one
+    // bank has no key of its own and it is `Control`: it is the row a fixture is
+    // struck and reset from, touched once before a show and never during one,
+    // while every other bank is touched while light is on stage. The five that
+    // were bound before S43 kept their keys — an operator who has learned that
+    // *Pan* is Colour must not find it somewhere else — and `Gobo`, the bank the
+    // split created, took the sixth key that had deliberately been left empty.
+    //
+    // `Control` is reachable from the screen, and from any key an operator binds
+    // to it themselves: the table is editable at the desk since S38, which is
+    // exactly the case it was built for.
     (
         GlobalButton::AssignTrack,
         SurfaceAction::SetEncoderBank {
@@ -384,6 +418,12 @@ const DEFAULT_GLOBAL: [(GlobalButton, SurfaceAction); 25] = [
         GlobalButton::AssignEq,
         SurfaceAction::SetEncoderBank {
             group: FeatureGroup::Focus,
+        },
+    ),
+    (
+        GlobalButton::AssignInstrument,
+        SurfaceAction::SetEncoderBank {
+            group: FeatureGroup::Gobo,
         },
     ),
     // Faderbank ◀▶ — executor page down and up (D7).
@@ -526,9 +566,9 @@ impl Bindings {
         Self {
             strip_fader: None,
             strip_encoder: None,
-            strip_buttons: [None; STRIP_BUTTONS],
+            strip_buttons: [const { None }; STRIP_BUTTONS],
             main_fader: None,
-            global: [None; GLOBAL_SLOTS],
+            global: [const { None }; GLOBAL_SLOTS],
             jog: None,
         }
     }
@@ -631,7 +671,7 @@ impl Bindings {
                 return Err(ProfileError::DuplicateControl(control));
             }
             seen.push(control);
-            if let (BoundControl::Global { button }, Some(_)) = (control, entry.action)
+            if let (BoundControl::Global { button }, Some(_)) = (control, &entry.action)
                 && profile.is_reserved(button)
             {
                 return Err(ProfileError::ReservedControl(button));
@@ -672,7 +712,7 @@ impl Bindings {
         action: Option<SurfaceAction>,
         profile: &McuProfile,
     ) -> Result<(), ProfileError> {
-        if let (BoundControl::Global { button }, Some(_)) = (control, action)
+        if let (BoundControl::Global { button }, Some(_)) = (control, &action)
             && profile.is_reserved(button)
         {
             return Err(ProfileError::ReservedControl(button));
@@ -720,7 +760,7 @@ impl Bindings {
     ) -> (Self, Option<ProfileError>) {
         let mut table = Self::empty();
         for row in rows {
-            if let Err(error) = table.bind(row.control, row.action, profile) {
+            if let Err(error) = table.bind(row.control, row.action.clone(), profile) {
                 return (Self::defaults(), Some(error));
             }
         }
@@ -740,17 +780,21 @@ impl Bindings {
     }
 
     /// What a control does, if anything.
+    ///
+    /// Clones rather than copies since S43 — `SurfaceAction` carries a line
+    /// now (B4). Every variant but that one is still plain data, so the clone
+    /// allocates only for a bound command line, which is the one the caller is
+    /// about to consume anyway. This runs on the surface thread and never on
+    /// the tick.
     #[must_use]
     pub fn action(&self, control: BoundControl) -> Option<SurfaceAction> {
         match control {
-            BoundControl::StripFader => self.strip_fader,
-            BoundControl::StripEncoder => self.strip_encoder,
-            BoundControl::StripButton { button } => {
-                self.strip_buttons.get(button.index()).copied().flatten()
-            }
-            BoundControl::MainFader => self.main_fader,
-            BoundControl::Global { button } => self.global.get(button.index()).copied().flatten(),
-            BoundControl::Jog => self.jog,
+            BoundControl::StripFader => self.strip_fader.clone(),
+            BoundControl::StripEncoder => self.strip_encoder.clone(),
+            BoundControl::StripButton { button } => self.strip_buttons.get(button.index())?.clone(),
+            BoundControl::MainFader => self.main_fader.clone(),
+            BoundControl::Global { button } => self.global.get(button.index())?.clone(),
+            BoundControl::Jog => self.jog.clone(),
         }
     }
 
@@ -799,21 +843,25 @@ impl Bindings {
             }
             SurfaceEvent::Touch { .. } => None,
             SurfaceEvent::Moved { fader, level } => match fader {
-                Fader::Strip(strip) => {
-                    self.strip_fader?
-                        .resolve(Origin::Strip(strip), Input::Level(level), context)
-                }
+                Fader::Strip(strip) => self.strip_fader.clone()?.resolve(
+                    Origin::Strip(strip),
+                    Input::Level(level),
+                    context,
+                ),
                 Fader::Main => {
-                    self.main_fader?
+                    self.main_fader
+                        .clone()?
                         .resolve(Origin::Panel, Input::Level(level), context)
                 }
             },
-            SurfaceEvent::Encoder { strip, steps } => {
-                self.strip_encoder?
-                    .resolve(Origin::Strip(strip), Input::Steps(steps), context)
-            }
+            SurfaceEvent::Encoder { strip, steps } => self.strip_encoder.clone()?.resolve(
+                Origin::Strip(strip),
+                Input::Steps(steps),
+                context,
+            ),
             SurfaceEvent::Jog { steps } => {
-                self.jog?
+                self.jog
+                    .clone()?
                     .resolve(Origin::Panel, Input::Steps(steps), context)
             }
         }
@@ -1144,7 +1192,7 @@ mod tests {
         );
         // And every one of them can be replaced, which is what "user-editable"
         // means for the controls that are not buttons.
-        let mut edited = table;
+        let mut edited = table.clone();
         for control in [
             BoundControl::StripFader,
             BoundControl::MainFader,
@@ -1410,7 +1458,7 @@ mod tests {
                 BoundControl::Global {
                     button: GlobalButton::F7,
                 },
-                Some(action),
+                Some(action.clone()),
             );
             assert_eq!(
                 table.command(press(GlobalButton::F7), &context),

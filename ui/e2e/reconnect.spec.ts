@@ -15,7 +15,7 @@
 import { expect, test } from "@playwright/test";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, startDaemon } from "./daemon.ts";
+import { buildDaemon, forget, openWindow, startDaemon } from "./daemon.ts";
 
 /** A port of this suite's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7381;
@@ -40,8 +40,16 @@ test("the interface follows a real daemon, loses it, and comes back with nothing
 
     // 1. The handshake, over a WebSocket, with MessagePack the daemon encoded.
     await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+    // **S43 made the readings a window.** Protocol, tick rate and outputs were
+    // a band along the bottom of the desk; the owner's skeleton has none, so
+    // they are a `Status` window an operator opens. The handshake being read
+    // off it is the same handshake.
+    await openWindow(page, "Status");
     await expect(page.getByTestId("protocol")).toHaveText("1");
-    await expect(page.getByTestId("output-1")).toContainText("Mock");
+    // The reading is the output's **health**; which driver it is names the row
+    // beside it, which is where the Status window puts it.
+    await expect(page.getByTestId("output-1")).toHaveText("Ok");
+    await expect(page.getByTestId("status-window")).toContainText("Mock");
     // The engine is running behind it, with this window as a spectator.
     await expect(page.getByTestId("tick-hz")).not.toHaveText("0.0 Hz");
 

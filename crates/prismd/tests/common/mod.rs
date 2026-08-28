@@ -62,6 +62,7 @@ pub fn dimmer_type(id: &str, home: u16) -> FixtureType {
 
 pub fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),
@@ -133,7 +134,9 @@ pub fn show_file() -> ShowFile {
 
     let mut session = SessionState::new();
     session.set_executor_page(3).unwrap();
-    session.set_command_line("fixture 1 at full").unwrap();
+    session
+        .set_command_line("fixture 1 at full", false)
+        .unwrap();
 
     ShowFile {
         show,

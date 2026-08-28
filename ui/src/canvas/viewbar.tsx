@@ -1,6 +1,5 @@
 /**
- * The View Selector Bar, the one control that opens a window, and the menu that
- * manages a view.
+ * The View Selector Bar, and the menu that manages a view.
  *
  * `ARCHITECTURE_SPEC.md` §4.1 calls `activeViewId` "canvas layout from the View
  * Selector Bar", and **D8** makes the X-Touch's `Channel ◀▶` the same thing:
@@ -12,7 +11,16 @@
  * Which view is lit is read from the session, so a view switched at the console
  * lights up here without this component being told anything.
  *
- * # Storing a view
+ * # Storing a view, and making an empty one
+ *
+ * Two buttons and two commands, which **S43** separated for punch-list B11.
+ * `Store View` overwrites the numbered view with the canvas as it now is;
+ * `New View` makes an empty one and switches to it. The button labelled *New*
+ * used to send the first, so a new view arrived full of the last one's windows —
+ * which is the fault B11 describes. Giving `Store View` the second meaning would
+ * have been the smaller change and wrong twice over: the name would no longer
+ * describe it, and an F-key bound to `Store View 4` would quietly do something
+ * else than it did the day before.
  *
  * `StoreView` overwrites the numbered view with the canvas as it now is, and it
  * is the **one** session command that lights the Save lamp (`prism-core`:
@@ -41,13 +49,24 @@
  * The **menu's own** state — whether it is open, over which view, and at which
  * corner of the screen — is §4.2 client-local, the same category as hover and
  * drag state. The console cannot open a menu and does not need to.
+ *
+ * # The menu itself moved out — S43, the owner's rebuild
+ *
+ * It was built here in S35 and it is `chrome/menu.tsx` now, because the rebuild
+ * asks the sequence, group and preset pools to reach their smaller actions the
+ * same way. Everything about the behaviour is unchanged — the two ways out, the
+ * subject that closes its own menu when it goes, the items that send and close
+ * — and this file went first through the shared component rather than a fifth
+ * copy of it being written. The test ids are untouched: `view-menu` and every
+ * item under it is a contract.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 
-import type { JsonValue, WindowType } from "../bindings";
-import { WINDOW_TYPE_VARIANTS } from "../bindings/variants";
-import { activeViewId, storedViews, windowTitle } from "./windows";
+import type { JsonValue } from "../bindings";
+import { ContextMenu, MenuField, MenuItem } from "../chrome/menu";
+import { useMenuAt } from "../chrome/menuat";
+import { activeViewId, storedViews } from "./windows";
 import type { StoredView } from "./windows";
 
 /** What the bar needs. */
@@ -64,15 +83,15 @@ export interface ViewBarProps {
   readonly onDeleteView: (viewId: number) => void;
   /** Sends a `MoveView`. */
   readonly onMoveView: (viewId: number, toViewId: number) => void;
-  /** Sends an `OpenWindow`. */
-  readonly onOpenWindow: (type: WindowType) => void;
-}
-
-/** Where a menu is open, and over which view. */
-interface MenuAt {
-  readonly viewId: number;
-  readonly x: number;
-  readonly y: number;
+  /**
+   * Sends a `NewView` — an empty view, selected, canvas cleared.
+   *
+   * **S43, punch-list B11.** The button used to send `Store View`, which means
+   * *keep what is on the canvas*, so a "new" view arrived carrying the last
+   * one's windows and had to be emptied by hand. The two meanings are both
+   * wanted, so there are two commands and two buttons.
+   */
+  readonly onNewView: (viewId: number, name: string) => void;
 }
 
 /** The bar. */
@@ -83,25 +102,19 @@ export function ViewBar({
   onRenameView,
   onDeleteView,
   onMoveView,
-  onOpenWindow,
+  onNewView,
 }: ViewBarProps) {
   const views = storedViews(session);
   const active = activeViewId(session);
-  const [menu, setMenu] = useState<MenuAt | null>(null);
-
-  const close = useCallback(() => {
-    setMenu(null);
-  }, []);
-
   // A view that has gone — deleted here, or on another screen — takes its menu
-  // with it. Without this the menu would be open over a number that is no
-  // longer on the bar, and every one of its items would be refused.
-  const openOver = menu === null ? undefined : views.find((view) => view.id === menu.viewId);
-  useEffect(() => {
-    if (menu !== null && openOver === undefined) {
-      setMenu(null);
-    }
-  }, [menu, openOver]);
+  // with it, which is what `present` is for. Without it the menu would stand
+  // open over a number no longer on the bar, every item of it refused.
+  const present = useCallback(
+    (viewId: number) => views.some((view) => view.id === viewId),
+    [views],
+  );
+  const { menu, openMenu, closeMenu } = useMenuAt(present);
+  const openOver = menu === null ? undefined : views.find((view) => view.id === menu.subject);
 
   return (
     <nav className="viewbar" data-testid="viewbar" aria-label="Views and windows">
@@ -117,10 +130,7 @@ export function ViewBar({
           onClick={() => {
             onSelectView(view.id);
           }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setMenu({ viewId: view.id, x: event.clientX, y: event.clientY });
-          }}
+          onContextMenu={openMenu(view.id)}
         >
           <span className="view-number">{view.id}</span>
           <span className="view-name">{view.name}</span>
@@ -144,49 +154,21 @@ export function ViewBar({
         type="button"
         className="view-store"
         data-testid="new-view"
-        title="Store the canvas as a new view"
+        title="Make an empty view and switch to it"
         onClick={() => {
           const next = nextViewId(views);
-          onStoreView(next, `View ${String(next)}`);
+          onNewView(next, `View ${String(next)}`);
         }}
       >
         New
       </button>
-
-      <span className="viewbar-label viewbar-windows">Add window</span>
-      {/*
-        Every window type there is, from the generated table rather than from a
-        list written here — S23's finding: a view that hand-writes one of these
-        reintroduces exactly the drift `bindings/variants.ts` removes.
-      */}
-      <select
-        className="window-picker"
-        data-testid="open-window"
-        aria-label="Open a window"
-        // A picker with no value: it is an action, not a setting, and what is
-        // open is the session's business rather than this element's.
-        value=""
-        onChange={(event) => {
-          const chosen = event.target.value;
-          if (isWindowType(chosen)) {
-            onOpenWindow(chosen);
-          }
-        }}
-      >
-        <option value="">Open…</option>
-        {WINDOW_TYPE_VARIANTS.map((type) => (
-          <option key={type} value={type}>
-            {windowTitle(type)}
-          </option>
-        ))}
-      </select>
 
       {menu !== null && openOver !== undefined ? (
         <ViewMenu
           at={menu}
           view={openOver}
           views={views}
-          onClose={close}
+          onClose={closeMenu}
           onStoreView={onStoreView}
           onRenameView={onRenameView}
           onDeleteView={onDeleteView}
@@ -214,7 +196,7 @@ function ViewMenu({
   onDeleteView,
   onMoveView,
 }: {
-  readonly at: MenuAt;
+  readonly at: { readonly x: number; readonly y: number };
   readonly view: StoredView;
   readonly views: readonly StoredView[];
   readonly onClose: () => void;
@@ -223,123 +205,59 @@ function ViewMenu({
   readonly onDeleteView: (viewId: number) => void;
   readonly onMoveView: (viewId: number, toViewId: number) => void;
 }) {
-  const [renaming, setRenaming] = useState(false);
-  const [typed, setTyped] = useState(view.name);
-  const box = useRef<HTMLDivElement | null>(null);
-
-  // Escape closes, and so does a click anywhere else. Both are on the document
-  // because a menu that could only be dismissed by choosing something is a menu
-  // an operator is trapped in.
-  useEffect(() => {
-    const key = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    const away = (event: MouseEvent): void => {
-      if (box.current !== null && !box.current.contains(event.target as Node)) {
-        onClose();
-      }
-    };
-    globalThis.addEventListener("keydown", key);
-    globalThis.addEventListener("pointerdown", away);
-    return () => {
-      globalThis.removeEventListener("keydown", key);
-      globalThis.removeEventListener("pointerdown", away);
-    };
-  }, [onClose]);
-
   const at_first = views[0]?.id === view.id;
   const at_last = views.at(-1)?.id === view.id;
   const only = views.length === 1;
 
   return (
-    <div
-      ref={box}
-      className="view-menu"
-      data-testid="view-menu"
-      data-view={view.id}
-      role="menu"
-      aria-label={`Manage view ${String(view.id)}`}
-      style={{ left: `${String(at.x)}px`, top: `${String(at.y)}px` }}
+    <ContextMenu
+      at={at}
+      title={`${String(view.id)} · ${view.name}`}
+      label={`Manage view ${String(view.id)}`}
+      testId="view-menu"
+      subject={String(view.id)}
+      onClose={onClose}
     >
-      <p className="view-menu-title">
-        {view.id} · {view.name}
-      </p>
+      <MenuField
+        testId="view-rename"
+        label="Rename…"
+        verb="Rename"
+        initial={view.name}
+        onClose={onClose}
+        onSubmit={(text) => {
+          const name = text.trim();
+          if (name !== "") {
+            onRenameView(view.id, name);
+          }
+        }}
+      />
 
-      {renaming ? (
-        // What has been typed is local and is dropped when this closes; the name
-        // is the daemon's until `RenameView` comes back as a patch. D3, in the
-        // shape `desk/commandline.tsx` writes it down.
-        <form
-          className="view-menu-rename"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const name = typed.trim();
-            if (name !== "") {
-              onRenameView(view.id, name);
-            }
-            onClose();
-          }}
-        >
-          <input
-            type="text"
-            data-testid="view-rename-input"
-            aria-label={`New name for view ${String(view.id)}`}
-            value={typed}
-            autoFocus
-            onChange={(event) => {
-              setTyped(event.target.value);
-            }}
-          />
-          <button type="submit" data-testid="view-rename-apply">
-            Rename
-          </button>
-        </form>
-      ) : (
-        <button
-          type="button"
-          role="menuitem"
-          data-testid="view-rename"
-          onClick={() => {
-            setTyped(view.name);
-            setRenaming(true);
-          }}
-        >
-          Rename…
-        </button>
-      )}
-
-      <button
-        type="button"
-        role="menuitem"
-        data-testid="view-overwrite"
+      <MenuItem
+        testId="view-overwrite"
+        onClose={onClose}
         title="Replace this view's layout with the canvas as it is now"
-        onClick={() => {
+        onChoose={() => {
           onStoreView(view.id, view.name);
-          onClose();
         }}
       >
         Store canvas here
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        data-testid="view-store-new"
+      </MenuItem>
+      <MenuItem
+        testId="view-store-new"
+        onClose={onClose}
         // At the end, and not between this view and the next one. Under S35's
         // decision the number *is* the position, so inserting between two
         // consecutive numbers would renumber every view above — which would
         // silently change what an F-key bound to `SelectView 4` reaches. One
         // command that always works, then Move to place it.
         title="Store the canvas as a new view at the end of the bar"
-        onClick={() => {
+        onChoose={() => {
           const next = nextViewId(views);
           onStoreView(next, `View ${String(next)}`);
-          onClose();
         }}
       >
         Store canvas as new view
-      </button>
+      </MenuItem>
 
       {/*
         **The bar knows its neighbour's number and writes the line** — S40.
@@ -349,42 +267,37 @@ function ViewMenu({
         `ARCHITECTURE_SPEC.md` §4.5 entire: the key builds a line an operator
         could have typed.
       */}
-      <button
-        type="button"
-        role="menuitem"
-        data-testid="view-move-prev"
+      <MenuItem
+        testId="view-move-prev"
+        onClose={onClose}
         disabled={at_first}
-        onClick={() => {
+        onChoose={() => {
           const before = neighbour(views, view.id, -1);
           if (before !== null) {
             onMoveView(view.id, before);
           }
-          onClose();
         }}
       >
         Move left
-      </button>
-      <button
-        type="button"
-        role="menuitem"
-        data-testid="view-move-next"
+      </MenuItem>
+      <MenuItem
+        testId="view-move-next"
+        onClose={onClose}
         disabled={at_last}
-        onClick={() => {
+        onChoose={() => {
           const after = neighbour(views, view.id, 1);
           if (after !== null) {
             onMoveView(view.id, after);
           }
-          onClose();
         }}
       >
         Move right
-      </button>
+      </MenuItem>
 
-      <button
-        type="button"
-        role="menuitem"
-        className="view-menu-danger"
-        data-testid="view-delete"
+      <MenuItem
+        testId="view-delete"
+        onClose={onClose}
+        danger
         // The daemon refuses this too (`SessionError::LastView`) — the session
         // must always have a view for `activeViewId` to name. Disabled here as
         // well so the refusal is not the first an operator hears of it.
@@ -394,14 +307,13 @@ function ViewMenu({
             ? "The last view cannot be deleted"
             : "Delete this view. What the canvas then shows is the daemon's answer."
         }
-        onClick={() => {
+        onChoose={() => {
           onDeleteView(view.id);
-          onClose();
         }}
       >
         Delete
-      </button>
-    </div>
+      </MenuItem>
+    </ContextMenu>
   );
 }
 
@@ -437,7 +349,3 @@ function nextViewId(views: readonly { readonly id: number }[]): number {
   return views.reduce((highest, view) => Math.max(highest, view.id), 0) + 1;
 }
 
-/** Whether a string is one of the window types this build knows. */
-function isWindowType(value: string): value is WindowType {
-  return (WINDOW_TYPE_VARIANTS as readonly string[]).includes(value);
-}

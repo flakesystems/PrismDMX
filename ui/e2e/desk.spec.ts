@@ -34,14 +34,7 @@ import { expect, test } from "@playwright/test";
 import { join } from "node:path";
 
 import type { Daemon } from "./daemon.ts";
-import {
-  buildDaemon,
-  forget,
-  pressConsole,
-  showFixture,
-  startDaemon,
-  turnConsoleWheel,
-} from "./daemon.ts";
+import { buildDaemon, forget, openWindow, pressConsole, showFixture, startDaemon, turnConsoleWheel } from "./daemon.ts";
 
 /** A port of this spec's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7393;
@@ -57,9 +50,6 @@ const ASSIGN_COLOR = 42;
 
 /** Cursor ▶, note 99 — `XTouch.txt`'s `Zoom ▶`: the next programmer parameter. */
 const CURSOR_RIGHT = 99;
-
-/** Encoder Assign / Plug-in, note 43 — the default profile's Beam bank. */
-const ASSIGN_BEAM = 43;
 
 /** Cursor ▲, note 96 — `Zoom ▲`: the previous programmer page (§4.1). */
 const ZOOM_UP = 96;
@@ -112,10 +102,15 @@ test("**paging agrees**: the console and the executor bar move one page number",
   daemon = started.daemon;
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // **S43 moved these into windows.** The executor strip, the console's
+  // keys and the readings were bands around the canvas; the owner's
+  // skeleton has none, so they are windows an operator opens.
+  await openWindow(page, "Status");
+  await openWindow(page, "Executors");
 
   // The rig's page 0: executor 0 plays "Warm Wash" and executor 2 plays
   // "Cold Wash". Eight strips, whatever is on them.
-  await expect(page.getByTestId("executor-bar").locator("[data-executor]")).toHaveCount(8);
+  await expect(page.getByTestId("executor-window").locator("[data-executor]")).toHaveCount(8);
   await expect(page.getByTestId("page-number")).toHaveText("0");
   await expect(page.getByTestId("name-0")).toHaveText("Warm Wash");
   await expect(page.getByTestId("name-2")).toHaveText("Cold Wash");
@@ -131,13 +126,13 @@ test("**paging agrees**: the console and the executor bar move one page number",
   // Executor 9 is assigned with no sequence on it, so it shows a dash rather
   // than a name, and the other seven slots are empty.
   await expect(page.getByTestId("name-1")).toHaveText("—");
-  await expect(page.getByTestId("executor-bar").locator('[data-assigned="yes"]')).toHaveCount(1);
+  await expect(page.getByTestId("executor-window").locator('[data-assigned="yes"]')).toHaveCount(1);
 
   // Now the *interface* pages, and the console's next press carries on from
   // where the browser left it — which is the criterion: one page number.
   await page.getByTestId("page-up").click();
   await expect(page.getByTestId("page-number")).toHaveText("2");
-  await expect(page.getByTestId("executor-bar").locator('[data-assigned="yes"]')).toHaveCount(0);
+  await expect(page.getByTestId("executor-window").locator('[data-assigned="yes"]')).toHaveCount(0);
 
   pressConsole(started.keys, BANK_LEFT);
   await expect(page.getByTestId("page-number")).toHaveText("1");
@@ -155,6 +150,11 @@ test("**the wheel turns what is highlighted**: the encoder bar follows the conso
   daemon = started.daemon;
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // **S43 moved these into windows.** The executor strip, the console's
+  // keys and the readings were bands around the canvas; the owner's
+  // skeleton has none, so they are windows an operator opens.
+  await openWindow(page, "Status");
+  await openWindow(page, "Executors");
 
   // Select the moving head, which is the only fixture with colour on it.
   await page.getByTestId("command-input").fill("5");
@@ -175,7 +175,12 @@ test("**the wheel turns what is highlighted**: the encoder bar follows the conso
   pressConsole(started.keys, CURSOR_RIGHT);
   await expect(page.getByTestId("encoder-Green")).toHaveAttribute("data-selected", "yes");
   await expect(page.getByTestId("param-index")).toHaveText("1");
-  await expect(page.getByTestId("value-Green")).toHaveText("—");
+  // **Untouched is a mark, not a dash** — S43, punch-list B1. An encoder used to
+  // read `—` when the programmer held nothing; it reads the attribute's
+  // **resting value** now (a colour rests open, so Green reads 0 %), and *is
+  // this one mine?* is `data-overriding` instead. The claim is unchanged: the
+  // programmer holds nothing on Green yet.
+  await expect(page.getByTestId("encoder-Green")).toHaveAttribute("data-overriding", "no");
 
   // **The wheel.** Ten detents clockwise, one message each, into the parameter
   // the interface says is highlighted. If the two orders disagreed, Red would
@@ -183,8 +188,8 @@ test("**the wheel turns what is highlighted**: the encoder bar follows the conso
   for (let detent = 0; detent < 10; detent += 1) {
     turnConsoleWheel(started.keys, 1);
   }
-  await expect(page.getByTestId("value-Green")).not.toHaveText("—");
-  await expect(page.getByTestId("value-Red")).toHaveText("—");
+  await expect(page.getByTestId("encoder-Green")).toHaveAttribute("data-overriding", "yes");
+  await expect(page.getByTestId("encoder-Red")).toHaveAttribute("data-overriding", "no");
   await expect(page.getByTestId("bank-Color")).toHaveAttribute("data-touched", "yes");
 });
 
@@ -195,10 +200,15 @@ test("**an encoder change reaches the programmer and the output within a tick**"
   daemon = started.daemon;
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // **S43 moved these into windows.** The executor strip, the console's
+  // keys and the readings were bands around the canvas; the owner's
+  // skeleton has none, so they are windows an operator opens.
+  await openWindow(page, "Status");
+  await openWindow(page, "Executors");
 
   // The picture of the rig, which is what "in the output" means. The rig is
   // dark at home, so nothing on it is lit before this test lights it.
-  await page.getByTestId("open-window").selectOption("DmxSheet");
+  await openWindow(page, "DmxSheet");
   await expect(page.getByTestId("telemetry")).toBeVisible();
   await expect(page.getByTestId("telemetry-stats")).toContainText("universes", {
     timeout: 20_000,
@@ -258,6 +268,11 @@ test("the console line is the session's, and a syntax error is a message", async
   daemon = started.daemon;
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // **S43 moved these into windows.** The executor strip, the console's
+  // keys and the readings were bands around the canvas; the owner's
+  // skeleton has none, so they are windows an operator opens.
+  await openWindow(page, "Status");
+  await openWindow(page, "Executors");
 
   // Typed text reaches the session, so every other client and the scribble
   // strips see it. It is *not* executed until Enter.
@@ -294,6 +309,11 @@ test("**paging the encoders agrees**: the console's `Zoom ▲▼` and the bar mo
   daemon = started.daemon;
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // **S43 moved these into windows.** The executor strip, the console's
+  // keys and the readings were bands around the canvas; the owner's
+  // skeleton has none, so they are windows an operator opens.
+  await openWindow(page, "Status");
+  await openWindow(page, "Executors");
 
   // Dimmer has one parameter, so there is one page and nowhere to go.
   await expect(page.getByTestId("bank-Dimmer")).toHaveAttribute("data-active", "yes");
@@ -302,32 +322,38 @@ test("**paging the encoders agrees**: the console's `Zoom ▲▼` and the bar mo
   await expect(page.getByTestId("encoder-page-up")).toBeDisabled();
 
   // **The press.** Three bytes appended to a file by a process that is neither
-  // this browser nor this daemon: Encoder Assign / Plug-in, which the default
-  // profile binds to the Beam bank.
-  pressConsole(started.keys, ASSIGN_BEAM);
-  await expect(page.getByTestId("bank-Beam")).toHaveAttribute("data-active", "yes");
+  // this browser nor this daemon: Encoder Assign / Pan, which the default
+  // profile binds to the Colour bank.
+  //
+  // **It was the Beam bank until S43**, which is the bank the owner's drawing
+  // took apart: `Beam` was six knobs — gobo, prism, iris, zoom, shutter and
+  // control — and is three now, with `Gobo` and `Control` banks of their own
+  // (`AttributeType::feature_group`). Three knobs is one page and no paging to
+  // observe, so the second page this test needs is Colour's: five parameters,
+  // four drawn and one over.
+  pressConsole(started.keys, ASSIGN_COLOR);
+  await expect(page.getByTestId("bank-Color")).toHaveAttribute("data-active", "yes");
 
-  // Beam has six parameters, so four are drawn and there is a second page.
+  // Colour has five parameters, so four are drawn and there is a second page.
   await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(4);
-  await expect(page.getByTestId("encoder-Iris")).toBeVisible();
-  await expect(page.getByTestId("encoder-Prism")).toBeVisible();
-  await expect(page.getByTestId("encoder-Shutter")).toHaveCount(0);
+  await expect(page.getByTestId("encoder-Red")).toBeVisible();
+  await expect(page.getByTestId("encoder-White")).toBeVisible();
+  await expect(page.getByTestId("encoder-Amber")).toHaveCount(0);
   await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
   await expect(page.getByTestId("encoder-page-down")).toBeEnabled();
 
   // **`Zoom ▼` on the console pages the browser.**
   pressConsole(started.keys, ZOOM_DOWN);
   await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
-  await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(2);
-  await expect(page.getByTestId("encoder-Shutter")).toBeVisible();
-  await expect(page.getByTestId("encoder-Control")).toBeVisible();
-  await expect(page.getByTestId("encoder-Iris")).toHaveCount(0);
+  await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(1);
+  await expect(page.getByTestId("encoder-Amber")).toBeVisible();
+  await expect(page.getByTestId("encoder-Red")).toHaveCount(0);
 
   // Now the *interface* pages, and the console's next press carries on from
   // where the browser left it — which is the criterion: **one page number**.
   await page.getByTestId("encoder-page-up").click();
   await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
-  await expect(page.getByTestId("encoder-Iris")).toBeVisible();
+  await expect(page.getByTestId("encoder-Red")).toBeVisible();
 
   pressConsole(started.keys, ZOOM_DOWN);
   await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
@@ -336,38 +362,94 @@ test("**paging the encoders agrees**: the console's `Zoom ▲▼` and the bar mo
   await expect(page.getByTestId("encoder-page-up")).toBeDisabled();
 });
 
-test("the screen is still a device screen with both bars on it", async ({ page }) => {
-  // `CLAUDE.md`, and S25's check with two more bands in the column: the bars
-  // take their height from the same column as the canvas, so the canvas is
-  // what shrinks and the *page* is still exactly the height of the window.
-  const started = await deskDaemon(PORT + 4);
-  daemon = started.daemon;
-  await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
-  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
-  for (const type of ["DmxSheet", "Patch", "Settings", "Groups"]) {
-    await page.getByTestId("open-window").selectOption(type);
-  }
-  await expect(page.getByTestId("open-windows")).toHaveText("4");
-  await expect(page.getByTestId("executor-bar")).toBeVisible();
-  await expect(page.getByTestId("encoder-bar")).toBeVisible();
+/**
+ * **`CLAUDE.md`'s device screen, and S43's punch-list B7** — rewritten twice
+ * over.
+ *
+ * S25 checked the page and the canvas with two bands beside them. S43 took the
+ * bands away: the executor strip, the console's keys and the readings are
+ * windows now, and the screen is a header, a canvas, the command line and the
+ * programmer band. So the shape of the check moved with it — what is asserted
+ * is the same sentence it always was, *nothing scrolls outside the canvas*, over
+ * an interface that has almost nothing outside the canvas left.
+ *
+ * The entry itself is about the **programmer**: parts of it ran off the edge of
+ * the screen and were cut off, on the menu bar and on the colour and beam menus.
+ * A band that overflows is a band with a scrollbar or a band with something
+ * unreachable in it, and both read zero here.
+ *
+ * **Every window type at once**, which is the session's own exit criterion, and
+ * at two sizes: 1280 x 720 is the smallest screen this is meant for, and 4K is
+ * where a layout in percentages can go wrong in the other direction.
+ */
+for (const viewport of [
+  { name: "1280 x 720", width: 1280, height: 720 },
+  { name: "4K", width: 3840, height: 2160 },
+]) {
+  test(`the screen is a device screen at ${viewport.name}, with every window open`, async ({
+    page,
+  }) => {
+    const started = await deskDaemon(PORT + 4);
+    daemon = started.daemon;
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
+    await expect(page.getByTestId("connection-status")).toHaveText("Connected");
 
-  const overflow = await page.evaluate(() => {
-    const scroll = (element: Element | null) =>
-      element === null
-        ? [0, 0]
-        : [element.scrollWidth - element.clientWidth, element.scrollHeight - element.clientHeight];
-    return {
-      page: scroll(document.documentElement),
-      canvas: scroll(document.querySelector('[data-testid="canvas"]')),
-      executors: scroll(document.querySelector('[data-testid="executor-bar"]')),
-      encoders: scroll(document.querySelector('[data-testid="encoder-bar"]')),
-    };
+    // **Every type the build has**, out of the chooser rather than out of a list
+    // written down here: `WINDOW_TYPE_VARIANTS` is generated from
+    // `prism_domain::WindowType`, so a type added later is covered by this test
+    // the day it exists. The daemon places them (B10) and refuses the ones there
+    // is no room for, which is itself the answer to *does this fit*.
+    await page.keyboard.press("Insert");
+    const types = await page.locator('[data-testid^="picker-"]').evaluateAll((nodes) =>
+      nodes
+        .map((node) => node.getAttribute("data-testid") ?? "")
+        .filter((id) => id !== "picker-cancel")
+        .map((id) => id.replace("picker-", "")),
+    );
+    expect(types.length).toBeGreaterThan(10);
+    for (const type of types) {
+      await page.keyboard.press("Insert");
+      const key = page.getByTestId(`picker-${type}`);
+      if ((await key.count()) > 0) {
+        await key.click();
+      }
+    }
+    await expect(page.locator("[data-window-type]").first()).toBeVisible();
+
+    const overflow = await page.evaluate(() => {
+      const scroll = (element: Element | null) =>
+        element === null
+          ? null
+          : [element.scrollWidth - element.clientWidth, element.scrollHeight - element.clientHeight];
+      const bodies = [...document.querySelectorAll("[data-window-type]")].map((element) => ({
+        type: element.getAttribute("data-window-type") ?? "",
+        overflow: scroll(element),
+      }));
+      return {
+        page: scroll(document.documentElement),
+        body: scroll(document.body),
+        canvas: scroll(document.querySelector('[data-testid="canvas"]')),
+        programmer: scroll(document.querySelector('[data-testid="programmer-band"]')),
+        line: scroll(document.querySelector('[data-testid="command-line-panel"]')),
+        windows: bodies,
+      };
+    });
+
+    // Nothing outside the canvas scrolls, in either direction.
+    expect(overflow.page).toEqual([0, 0]);
+    expect(overflow.body).toEqual([0, 0]);
+    expect(overflow.canvas).toEqual([0, 0]);
+    // **B7**: the programmer band, which is the one the entry is about.
+    expect(overflow.programmer).toEqual([0, 0]);
+    expect(overflow.line).toEqual([0, 0]);
+    // And a window frame does not scroll either — what scrolls is the body
+    // *inside* it, one scroller per window, which is the rule S37 wrote down.
+    for (const window of overflow.windows) {
+      expect(window.overflow, `${window.type} scrolls in its frame`).toEqual([0, 0]);
+    }
   });
-  expect(overflow.page).toEqual([0, 0]);
-  expect(overflow.canvas).toEqual([0, 0]);
-  expect(overflow.executors).toEqual([0, 0]);
-  expect(overflow.encoders).toEqual([0, 0]);
-});
+}
 
 /**
  * How many pixels of the telemetry canvas are exactly this colour.

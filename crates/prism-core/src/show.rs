@@ -295,7 +295,7 @@ impl fmt::Display for ShowError {
             Self::SameObject(what) => write!(f, "{what} is already where it is"),
             Self::NotColourable(noun) => write!(
                 f,
-                "a {noun} has no colour: a colour belongs to a sequence, or to the                  sequence on an executor"
+                "a {noun} has no colour: a colour belongs to a sequence, a preset, or to \n                 the sequence on an executor"
             ),
             Self::NoSelectedSequence => {
                 write!(
@@ -337,6 +337,30 @@ pub struct Show {
     #[serde(skip)]
     dirty: bool,
 }
+
+/// The intensity the desk supplies for a fixture whose profile has none — S43.
+///
+/// **It has no channel, and the offsets say nothing about one.** Nothing derives
+/// a DMX address from an `AttributeDef` reached through
+/// [`Show::attribute_def`]; addresses come from `FixtureType::attributes`, which
+/// this is deliberately not in, and `prism_engine::ChannelPlan` builds from that
+/// list alone. What this definition is for is the three questions the programmer
+/// asks — may a value exist, where does a relative move start, and which bank is
+/// it on — and the answers are yes, nought, and intensity.
+///
+/// Nought is the answer that matters: it is what makes a rig of colour-only
+/// fixtures dark at home now that colour rests open (punch-list B1).
+static SOFTWARE_DIMMER: prism_domain::AttributeDef = prism_domain::AttributeDef {
+    attribute: prism_domain::AttributeType::Dimmer,
+    feature_group: prism_domain::FeatureGroup::Dimmer,
+    coarse_offset: 0,
+    fine_offset: None,
+    default_value: 0,
+    merge_mode: prism_domain::MergeMode::Htp,
+    invert: false,
+    physical_from: 0.0,
+    physical_to: 100.0,
+};
 
 impl Show {
     /// An empty show: no profiles, no patch, nothing stored.
@@ -492,6 +516,13 @@ impl Show {
     /// could be written. `None` means the fixture is not patched, or its
     /// profile has no such attribute, which are the same answer to "may this
     /// value exist": no.
+    ///
+    /// **A fixture whose intensity the desk supplies has a `Dimmer` here that
+    /// its profile has not** — S43. It is [`SOFTWARE_DIMMER`], and it is the
+    /// same answer the merge gives (`prism_engine::MergePlan::build` adds the
+    /// matching slot): a value on it may exist, it rests at nought, and it is
+    /// filed under the intensity bank, so the programmer, the encoders and the
+    /// command line all reach it exactly as they reach a real one.
     #[must_use]
     pub fn attribute_def(
         &self,
@@ -499,8 +530,13 @@ impl Show {
         attribute: prism_domain::AttributeType,
     ) -> Option<&prism_domain::AttributeDef> {
         let fixture = self.fixtures.get(&fixture)?;
-        self.fixture_types
-            .get(&fixture.type_id)?
+        let fixture_type = self.fixture_types.get(&fixture.type_id)?;
+        if attribute == prism_domain::AttributeType::Dimmer
+            && fixture.has_software_dimmer(fixture_type)
+        {
+            return Some(&SOFTWARE_DIMMER);
+        }
+        fixture_type
             .attributes
             .iter()
             .find(|def| def.attribute == attribute)
@@ -617,6 +653,7 @@ impl Show {
         address: u16,
     ) -> Result<(), ShowError> {
         self.check_fixture(&Fixture {
+            software_dimmer: true,
             id,
             name: String::new(),
             type_id: type_id.to_owned(),
@@ -1615,6 +1652,71 @@ mod tests {
         UniverseId, Vec3,
     };
 
+    /// **A colour-only fixture has a dimmer the programmer can reach** — S43.
+    ///
+    /// The desk supplies it, so `attribute_def` answers for it: a value on it
+    /// may exist, it rests at nought, and it is on the intensity bank. Without
+    /// that answer `Programmer::set_attribute` would skip every fixture in a rig
+    /// of PARs and `1 at 50` would do nothing at all.
+    #[test]
+    fn a_colour_only_fixture_has_an_intensity_the_programmer_can_reach() {
+        let mut show = Show::new();
+        show.embed_fixture_type(par_type()).unwrap();
+        show.embed_fixture_type(dimmer_type()).unwrap();
+        show.patch_fixture(fixture(1, "generic.rgbw.par", 1, 1))
+            .unwrap();
+        show.patch_fixture(fixture(2, "generic.dimmer", 1, 20))
+            .unwrap();
+
+        let supplied = show
+            .attribute_def(FixtureId::new(1), AttributeType::Dimmer)
+            .expect("the desk supplies one for a PAR with no intensity");
+        assert_eq!(supplied.default_value, 0, "dark at home");
+        assert_eq!(supplied.feature_group, prism_domain::FeatureGroup::Dimmer);
+        // The colour it sits over is unchanged: where a colour rests is the
+        // **profile's** answer (punch-list B1 set the library's to full) and
+        // supplying an intensity does not touch it.
+        assert!(
+            show.fixture_type("generic.rgbw.par")
+                .unwrap()
+                .attributes
+                .contains(
+                    show.attribute_def(FixtureId::new(1), AttributeType::Red)
+                        .unwrap()
+                ),
+            "red is still the profile's own definition"
+        );
+
+        // A fixture with a real dimmer keeps the profile's own definition, and
+        // that is the one with a channel behind it.
+        let real = show
+            .attribute_def(FixtureId::new(2), AttributeType::Dimmer)
+            .expect("the profile has one");
+        assert!(
+            show.fixture_type("generic.dimmer")
+                .unwrap()
+                .attributes
+                .contains(real),
+            "the profile's own definition, not the supplied one"
+        );
+    }
+
+    /// Switched off in the patch, the desk supplies nothing and the fixture has
+    /// no intensity at all — which is what an operator asks for when the PAR is
+    /// on a dimmer pack.
+    #[test]
+    fn a_fixture_with_the_supplied_intensity_switched_off_has_none() {
+        let mut show = Show::new();
+        show.embed_fixture_type(par_type()).unwrap();
+        let mut patched = fixture(1, "generic.rgbw.par", 1, 1);
+        patched.software_dimmer = false;
+        show.patch_fixture(patched).unwrap();
+        assert!(
+            show.attribute_def(FixtureId::new(1), AttributeType::Dimmer)
+                .is_none()
+        );
+    }
+
     #[test]
     fn a_value_that_cannot_be_encoded_is_refused_and_stored_nowhere() {
         // `prism-domain` refuses non-finite floats in both directions (S1), so
@@ -1852,6 +1954,58 @@ mod tests {
         assert!(show.mark_saved());
         assert!(!show.is_dirty());
         assert!(!show.mark_saved());
+    }
+
+    /// **Embedding a key the show already carries replaces it** — and this is
+    /// how a show is brought up to date after the library is corrected.
+    ///
+    /// A show embeds the profiles it uses (S11) so that it opens the same on a
+    /// desk with a different library. The cost is that a copy embedded before a
+    /// library fix goes on being used, and S43 found what that costs: punch-list
+    /// B1 gave colour channels a home value of full, and an existing rig went on
+    /// resting them at nought because nothing replaced its copy. The interface's
+    /// half of that fault was skipping the embed when the key was already
+    /// present; this is the daemon's half, and it was never asserted either.
+    #[test]
+    fn embedding_a_profile_again_replaces_the_copy_the_show_was_carrying() {
+        // Two copies of one key, differing only in where the colours rest.
+        // Written out here rather than taken from the library: what is asserted
+        // is the **replacement**, and a test that read the library's values
+        // would be asserting two things and reporting one.
+        let mut open = par_type();
+        for def in &mut open.attributes {
+            if def.feature_group == prism_domain::FeatureGroup::Color {
+                def.default_value = u16::MAX;
+            }
+        }
+        let mut show = Show::new();
+        show.embed_fixture_type(par_type()).unwrap();
+        show.patch_fixture(fixture(1, "generic.rgbw.par", 1, 1))
+            .unwrap();
+        let home = |show: &Show| {
+            show.fixture_type("generic.rgbw.par")
+                .expect("it is embedded")
+                .attributes
+                .iter()
+                .find(|def| def.attribute == AttributeType::Red)
+                .expect("it is red")
+                .default_value
+        };
+        assert_eq!(home(&show), 0, "the show starts on the stale copy");
+
+        // The corrected profile, embedded over it.
+        let ops = show.embed_fixture_type(open).unwrap();
+        assert_eq!(home(&show), u16::MAX, "the copy was replaced, not kept");
+        // A **replace** rather than an add, so a client's mirror follows it.
+        assert!(
+            matches!(ops.as_slice(), [JsonPatchOp::Replace { path, .. }]
+                if path == "/fixtureTypes/generic.rgbw.par"),
+            "{ops:?}"
+        );
+        // And the fixture standing on it is untouched — it is the same profile
+        // key, so the patch does not move.
+        assert_eq!(show.fixtures().count(), 1);
+        assert_eq!(show.fixture(FixtureId::new(1)).unwrap().address, 1);
     }
 
     #[test]

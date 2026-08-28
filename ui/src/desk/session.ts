@@ -67,6 +67,12 @@ export const PROGRAMMER_PARAM_INDEX = "/session/programmerParamIndex";
 /** Where the console line lives. */
 export const COMMAND_LINE = "/session/commandLine";
 
+/** Where the counter of bound lines that asked to run lives — S43. */
+export const COMMAND_LINE_RUN = "/session/commandLineRun";
+
+/** Where the window chooser's open flag lives. */
+export const WINDOW_PICKER = "/session/windowPicker";
+
 /** One strip of the executor bar. */
 export interface ExecutorStrip {
   /** Which of the eight it is, from the left. */
@@ -143,6 +149,35 @@ export function programmerParamIndex(session: JsonValue | null): number {
 /** The console line **as the daemon holds it** — never what has been typed. */
 export function commandLine(session: JsonValue | null): string {
   return stringAt(session, COMMAND_LINE) ?? "";
+}
+
+/**
+ * How many times a **bound** line has asked to be run — S43.
+ *
+ * `Session::command_line_run`, and it exists because the command-line parser is
+ * in this interface rather than in the daemon: a key on the X-Touch bound to a
+ * line the operator marked *send* writes the line and bumps this, and the client
+ * with the keyboard focus is what turns it into commands. See
+ * `SurfaceAction::WriteCommandLine` for the whole argument and for the session
+ * that removes the arrangement.
+ *
+ * A counter and not a flag, because what a client watches for is the *edge*: two
+ * keys bound to the same line have to run it twice.
+ */
+export function commandLineRun(session: JsonValue | null): number {
+  return numberAt(session, COMMAND_LINE_RUN) ?? 0;
+}
+
+/**
+ * Whether the window chooser is standing open — S43, B9.
+ *
+ * Session state rather than this screen's, and the reason is the owner's rule
+ * for this desk: a key on the X-Touch opens the chooser, a key on the X-Touch is
+ * resolved by a daemon with no screen, and the desk and the interface are never
+ * allowed to be out of step. See `prism_domain::Session::window_picker`.
+ */
+export function windowPickerOpen(session: JsonValue | null): boolean {
+  return valueAt(session, WINDOW_PICKER) === true;
 }
 
 /** The executor number in a slot of a page. D7's arithmetic, in one place. */

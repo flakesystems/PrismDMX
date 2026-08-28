@@ -12,6 +12,17 @@
  * The browser half is `ui/e2e/controls.spec.ts`, which is the one that removes
  * the doubt: a real `prismd`, a real binding table and a real console pressing a
  * real key.
+ *
+ * # **S43 turned the panel round, and every test here with it** — punch-list B3
+ *
+ * The rows were controls and are actions. Every claim below was written against
+ * the control-first table and is re-aimed rather than deleted: the gestures are
+ * different, what they must *produce* is not — one `MachineChange` naming one
+ * control, a panel that does not move until it is told, a reserved control that
+ * cannot be bound, and one learn on one desk.
+ *
+ * The two that could not survive the turn say so where they stand: there is no
+ * *chooser* to open and close any more, because the chooser is the list.
  */
 
 import { decode } from "@msgpack/msgpack";
@@ -107,6 +118,8 @@ function table(overrides: Partial<Extract<Answer, { t: "SurfaceBindings" }>> = {
     t: "SurfaceBindings",
     controls: [...CONTROLS],
     device: "Behringer X-Touch",
+    deviceKey: "behringer-x-touch",
+    profileVersion: 1,
     profile: null,
     revision: 3,
     learning: false,
@@ -208,10 +221,17 @@ describe("the table is asked for", () => {
     await answerQuery("SurfaceBindings", table());
     expect(screen.getByTestId("controls-device").textContent).toBe("Behringer X-Touch");
     expect(screen.getByTestId("controls-revision").textContent).toBe("rev 3");
-    // Three of the eight rows carry an action.
+    // Three of the eight controls carry an action.
     expect(screen.getByTestId("controls-bound").textContent).toBe("3 bound");
-    expect(screen.getByTestId("control-does-Global.F1").textContent).toBe("open FixtureSheet");
-    expect(screen.getByTestId("control-does-Global.F5").textContent).toBe("—");
+    // **And the reading runs the other way now** (B3): the row is the action and
+    // the keys are what is written in it. Nothing opens the window chooser, so
+    // that row is empty.
+    expect(screen.getByTestId("action-keys-Choose a window").textContent).toBe("—");
+    // **`Global.F1` opens the fixture sheet, and *Open window* is a custom
+    // kind** since the rebuild — fourteen windows is fourteen bindings, not one
+    // row — so the key is its own row in the custom section rather than a chip
+    // under an action. See `actions.ts::CUSTOM_KINDS`.
+    expect(screen.getByTestId("custom-Global.F1").textContent).toContain("FixtureSheet");
   });
 
   /**
@@ -239,21 +259,57 @@ describe("the table is asked for", () => {
       }),
     );
     expect(screen.getByTestId("controls-revision").textContent).toBe("rev 4");
-    expect(screen.getByTestId("control-does-Global.F5").textContent).toBe("save the show");
+    expect(screen.getByTestId("action-keys-Save show").textContent).toContain("Global.F5");
+  });
+
+  /**
+   * **Several keys on one action, which is the shape the turn made possible.**
+   *
+   * Under the control-first table this fact was spread over as many rows as
+   * there were keys and could only be seen by reading all of them. It is one row
+   * now, and an operator who has put Go on three keys sees three keys.
+   */
+  it("lists every key that reaches one action, not just the first", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery(
+      "SurfaceBindings",
+      table({
+        controls: CONTROLS.map((entry) =>
+          entry.name === "Global.F5" || entry.name === "Main.Fader"
+            ? { ...entry, action: { t: "SaveShow" } }
+            : entry,
+        ),
+      }),
+    );
+    const keys = screen.getByTestId("action-keys-Save show").textContent ?? "";
+    expect(keys).toContain("Global.F5");
+    expect(keys).toContain("Main.Fader");
   });
 });
 
 describe("changing what a control does", () => {
-  it("sends one command naming one control, and does not move until it is told", async () => {
+  it("learns a key onto a row, sends one command, and does not move until it is told", async () => {
     const { answerQuery, commands, deliver, queries } = await desk();
     await answerQuery("SurfaceBindings", table());
 
-    fireEvent.click(screen.getByTestId("control-choose-Global.F5"));
-    expect(screen.getByTestId("control-editor-name").textContent).toBe("Global.F5");
+    // The gesture an operator makes: choose the bank on the *Encoder bank* row,
+    // press Learn, press the key. Arming goes to the daemon — one desk, one
+    // learn — and nothing is bound until the desk names a control.
+    fireEvent.change(screen.getByTestId("action-detail-Encoder bank"), {
+      target: { value: "Beam" },
+    });
+    fireEvent.click(screen.getByTestId("action-learn-Encoder bank"));
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: { t: "SurfaceLearn", learning: true },
+    });
 
-    fireEvent.change(screen.getByTestId("control-action"), { target: { value: "Open window" } });
-    fireEvent.change(screen.getByTestId("control-detail"), { target: { value: "Patch" } });
-    fireEvent.click(screen.getByTestId("control-apply"));
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "Global", button: "F5" },
+    });
 
     // **One control, one command** — `MachineChange`'s rule, and what stops two
     // operators undoing each other.
@@ -262,11 +318,11 @@ describe("changing what a control does", () => {
       change: {
         t: "SurfaceBinding",
         control: { t: "Global", button: "F5" },
-        action: { t: "OpenWindow", window: "Patch" },
+        action: { t: "SetEncoderBank", group: "Beam" },
       },
     });
     // And the panel has **not** moved: it holds no truth of its own.
-    expect(screen.getByTestId("control-does-Global.F5").textContent).toBe("—");
+    expect(screen.getByTestId("action-keys-Encoder bank").textContent).not.toContain("Global.F5");
 
     await deliver({ t: "SurfaceBindingsChanged", revision: 4 });
     await answerQuery(
@@ -275,20 +331,78 @@ describe("changing what a control does", () => {
         revision: 4,
         controls: CONTROLS.map((entry) =>
           entry.name === "Global.F5"
-            ? { ...entry, action: { t: "OpenWindow", window: "Patch" } }
+            ? { ...entry, action: { t: "SetEncoderBank", group: "Beam" } }
             : entry,
         ),
       }),
     );
-    expect(screen.getByTestId("control-does-Global.F5").textContent).toBe("open Patch");
+    expect(screen.getByTestId("action-keys-Encoder bank").textContent).toContain("Global.F5");
     expect(queries().filter((query) => query.t === "SurfaceBindings")).toHaveLength(2);
   });
 
-  it("unbinds a control with an action of nothing", async () => {
+  /**
+   * **A row that has not been told which window cannot be learned onto.**
+   *
+   * The daemon would otherwise be asked to guess, and an operator would find a
+   * key bound to something they never picked — which is what `actionOfKind`
+   * answering `null` has always been for. What is new is that the panel has to
+   * say so *before* the key is pressed rather than when Apply is.
+   */
+  it("will not arm a row whose second box is unanswered", async () => {
     const { answerQuery, commands } = await desk();
     await answerQuery("SurfaceBindings", table());
-    fireEvent.click(screen.getByTestId("control-choose-Global.F1"));
-    fireEvent.click(screen.getByTestId("control-clear"));
+    const learn = screen.getByTestId("action-learn-Encoder bank");
+    expect(learn.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(learn);
+    expect(commands()).toHaveLength(0);
+
+    fireEvent.change(screen.getByTestId("action-detail-Encoder bank"), {
+      target: { value: "Beam" },
+    });
+    expect(screen.getByTestId("action-learn-Encoder bank").hasAttribute("disabled")).toBe(false);
+  });
+
+  /**
+   * **A control named while this panel is not arming is left alone.**
+   *
+   * Learn is one desk's, so a second client can arm it; acting on that here
+   * would bind a key somebody else pressed to whichever row this operator last
+   * touched.
+   */
+  it("binds nothing when the desk names a control this panel did not ask for", async () => {
+    const { answerQuery, commands, deliver } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    fireEvent.change(screen.getByTestId("action-detail-Encoder bank"), {
+      target: { value: "Beam" },
+    });
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "Global", button: "F5" },
+    });
+    expect(commands()).toHaveLength(0);
+  });
+
+  it("unbinds a control with an action of nothing", async () => {
+    // The unbind is on the **key** now rather than on a chooser: it is the key
+    // that stops doing something, and the row it was listed under is still
+    // there for the next key. `Global.Play` is bound to an executor button,
+    // which is one of the fixed rows, so its unbind is a chip's.
+    const { answerQuery, commands } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    fireEvent.click(screen.getByTestId("action-unbind-Global.Play"));
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "Play" },
+        action: null,
+      },
+    });
+
+    // And a custom key's *Remove* is the same command one row-shape along.
+    fireEvent.click(screen.getByTestId("custom-unbind-Global.F1"));
     expect(commands().at(-1)).toEqual<Command>({
       t: "ConfigureMachine",
       change: {
@@ -303,14 +417,23 @@ describe("changing what a control does", () => {
     // `ExecutorButtonRef::Slot` — the executor decides what its second key does,
     // and a client that resolved that would be deciding what a show's own
     // setting means (**D3**).
-    const { answerQuery, commands } = await desk();
+    //
+    // **And the position now comes from the key that was pressed**, which is the
+    // one thing an action-first row cannot know about itself: `slotOfControl`
+    // reads it off the `BoundControl` learn handed over, where S38 read it off
+    // the row's name. Solo is §2.1's second key, so index 1.
+    const { answerQuery, commands, deliver } = await desk();
     await answerQuery("SurfaceBindings", table());
-    fireEvent.click(screen.getByTestId("control-choose-Strip[*].Button.Solo"));
-    fireEvent.change(screen.getByTestId("control-action"), {
-      target: { value: "Executor button" },
+    fireEvent.change(screen.getByTestId("action-target-Executor button"), {
+      target: { value: "Strip" },
     });
-    fireEvent.change(screen.getByTestId("control-target"), { target: { value: "Strip" } });
-    fireEvent.click(screen.getByTestId("control-apply"));
+    fireEvent.click(screen.getByTestId("action-learn-Executor button"));
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "StripButton", button: "Solo" },
+    });
     expect(commands().at(-1)).toEqual<Command>({
       t: "ConfigureMachine",
       change: {
@@ -335,14 +458,24 @@ describe("the reserved control", () => {
    * incomplete — and `reserved` is the daemon's answer rather than a rule this
    * file repeats.
    */
-  it("is shown, named and not editable", async () => {
+  it("cannot be unbound, wherever it is listed", async () => {
+    // **Re-aimed rather than dropped** (B3). A reserved control has no row of
+    // its own to be greyed out in any more — it is a key like any other and it
+    // appears under whatever it is bound to. What must still be true is that
+    // this panel cannot take it away from the desk switch, so its unbind is
+    // dead. `reserved` is the daemon's answer, not a rule this file repeats.
     const { answerQuery, commands } = await desk();
-    await answerQuery("SurfaceBindings", table());
-    const button = screen.getByTestId("control-choose-Global.SmpteBeats");
-    expect(button.textContent).toBe("Reserved");
-    expect(button.hasAttribute("disabled")).toBe(true);
-    fireEvent.click(button);
-    expect(screen.queryByTestId("control-editor")).toBeNull();
+    await answerQuery(
+      "SurfaceBindings",
+      table({
+        controls: CONTROLS.map((entry) =>
+          entry.name === "Global.SmpteBeats" ? { ...entry, action: { t: "SaveShow" } } : entry,
+        ),
+      }),
+    );
+    const unbind = screen.getByTestId("action-unbind-Global.SmpteBeats");
+    expect(unbind.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(unbind);
     expect(commands()).toHaveLength(0);
   });
 });
@@ -354,15 +487,19 @@ describe("ownership in the combined Xctl+MC mode", () => {
    * Which controls stay PrismDMX's while the surface is also driving a sound
    * console is a property of the device profile, and this client holds none.
    */
-  it("says of every control whether it is always ours or follows the switch", async () => {
+  it("marks a key that follows the switch, and leaves a permanent one unmarked", async () => {
+    // The fact moved from a column of its own to the key chip when the rows
+    // became actions (B3) — it is a property of the *key*, and the key is no
+    // longer the row. A star and a tooltip rather than a sentence per row:
+    // twenty-four rows with a repeated column would be a column of noise.
     const { answerQuery } = await desk();
     await answerQuery("SurfaceBindings", table());
-    expect(screen.getByTestId("control-owned-Global.Play").textContent).toBe("always ours");
-    expect(screen.getByTestId("control-owned-Global.Jog").textContent).toBe("always ours");
-    expect(screen.getByTestId("control-owned-Global.F1").textContent).toBe("follows the switch");
-    expect(screen.getByTestId("control-owned-Strip[*].Fader").textContent).toBe(
-      "follows the switch",
-    );
+    // `Global.Play` is permanently ours (§4.3's transport section), so no star.
+    expect(screen.getByTestId("action-keys-Executor button").textContent).toContain("Global.Play");
+    expect(screen.getByTestId("action-keys-Executor button").textContent).not.toContain("*");
+    // `Global.F1` is not, so it carries one — on its custom row, which is where
+    // a key that is its own row wears the fact.
+    expect(screen.getByTestId("custom-Global.F1").textContent).toContain("Global.F1 *");
   });
 });
 
@@ -371,7 +508,7 @@ describe("learn", () => {
     const { answerQuery, commands, deliver } = await desk();
     await answerQuery("SurfaceBindings", table());
 
-    fireEvent.click(screen.getByTestId("controls-learn"));
+    fireEvent.click(screen.getByTestId("action-learn-Oops"));
     expect(commands().at(-1)).toEqual<Command>({
       t: "ConfigureMachine",
       change: { t: "SurfaceLearn", learning: true },
@@ -382,12 +519,16 @@ describe("learn", () => {
 
     await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
     expect(screen.getByTestId("controls-learning")).toBeTruthy();
-    expect(screen.getByTestId("controls-learn").textContent).toBe("Press a control…");
+    expect(screen.getByTestId("action-learn-Oops").textContent).toBe("Press a key…");
+    // And the message names the row that is waiting, because a desk with two
+    // people at it has to say *what* the next key is about to become.
+    expect(screen.getByTestId("controls-learning").textContent).toContain("oops");
   });
 
   it("stops saying it is armed when the desk names a control", async () => {
     const { answerQuery, deliver } = await desk();
     await answerQuery("SurfaceBindings", table());
+    fireEvent.click(screen.getByTestId("action-learn-Oops"));
     await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
     expect(screen.getByTestId("controls-learning")).toBeTruthy();
 
@@ -398,7 +539,53 @@ describe("learn", () => {
       control: { t: "Global", button: "Play" },
     });
     expect(screen.queryByTestId("controls-learning")).toBeNull();
-    expect(screen.getByTestId("controls-learn").textContent).toBe("Learn");
+    expect(screen.getByTestId("action-learn-Oops").textContent).toBe("Learn");
+  });
+
+  /**
+   * **A key another client learned is not bound by arming a row here.**
+   *
+   * The control learn named is broadcast to every client and kept in the store,
+   * so it is still standing there when the next row arms learn — on this screen
+   * or on anybody's. Arming acted on it, which bound a key nobody had pressed,
+   * to a row that had merely been armed. Found by `e2e/controls.spec.ts`'s two
+   * editors, where the second one's Learn silently took the first one's key.
+   */
+  it("does not bind the key the last learn named when a row arms", async () => {
+    const { answerQuery, deliver, commands } = await desk();
+    await answerQuery("SurfaceBindings", table());
+
+    // Somebody else's learn, complete: the control arrives here as a fact.
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "Global", button: "F5" },
+    });
+    expect(commands()).toHaveLength(0);
+
+    // Now a row here arms learn. The only command that may go out is the arming
+    // itself — no binding, because nothing has been pressed since.
+    fireEvent.click(screen.getByTestId("action-learn-Oops"));
+    expect(commands()).toEqual<Command[]>([
+      { t: "ConfigureMachine", change: { t: "SurfaceLearn", learning: true } },
+    ]);
+
+    // And the key that *is* pressed afterwards is the one that binds.
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "Global", button: "F6" },
+    });
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "F6" },
+        action: { t: "Oops" },
+      },
+    });
   });
 
   it("follows a second client arming it, without being told twice", async () => {
@@ -407,6 +594,9 @@ describe("learn", () => {
     // Nobody pressed anything here. The delta is somebody else's gesture.
     await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
     expect(screen.getByTestId("controls-learning")).toBeTruthy();
+    // And it says whose it is, rather than telling this operator to press a key
+    // for a row they never armed.
+    expect(screen.getByTestId("controls-learning").textContent).toContain("another client");
     expect(commands()).toHaveLength(0);
   });
 });
@@ -425,23 +615,40 @@ describe("a command line holding the table", () => {
     });
     await answerQuery("SurfaceBindings", table());
     expect(screen.getByTestId("controls-held").textContent).toContain("--surface-profile");
-    expect(screen.getByTestId("controls-learn").hasAttribute("disabled")).toBe(true);
-    fireEvent.click(screen.getByTestId("controls-learn"));
+    const learn = screen.getByTestId("action-learn-Oops");
+    expect(learn.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(learn);
+    // And the boxes with it: a select an operator can change that binds nothing
+    // is the same fault one control further along.
+    expect(screen.getByTestId("action-detail-Encoder bank").hasAttribute("disabled")).toBe(true);
+    // The custom section is held too, both the rows that exist and the `+`.
+    expect(screen.getByTestId("custom-kind").hasAttribute("disabled")).toBe(true);
+    expect(screen.getByTestId("custom-unbind-Global.F1").hasAttribute("disabled")).toBe(true);
     expect(commands()).toHaveLength(0);
   });
 });
 
-describe("the chooser's other answers", () => {
+describe("the rows that need a second answer", () => {
+  /** Learns a key onto `kind` and answers with `control`. */
+  async function learnOnto(
+    deliver: (...deltas: Delta[]) => Promise<void>,
+    kind: string,
+    control: BoundControl,
+  ): Promise<void> {
+    fireEvent.click(screen.getByTestId(`action-learn-${kind}`));
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({ t: "SurfaceLearnChanged", learning: false, control });
+  }
+
   it("offers an encoder bank, a view number and a window, and sends each", async () => {
-    const { answerQuery, commands } = await desk();
+    const { answerQuery, commands, deliver } = await desk();
     await answerQuery("SurfaceBindings", table());
 
-    fireEvent.click(screen.getByTestId("control-choose-Global.F5"));
-
-    // An encoder bank: the five feature groups, out of the generated table.
-    fireEvent.change(screen.getByTestId("control-action"), { target: { value: "Encoder bank" } });
-    fireEvent.change(screen.getByTestId("control-detail"), { target: { value: "Beam" } });
-    fireEvent.click(screen.getByTestId("control-apply"));
+    // An encoder bank: the seven feature groups, out of the generated table.
+    fireEvent.change(screen.getByTestId("action-detail-Encoder bank"), {
+      target: { value: "Beam" },
+    });
+    await learnOnto(deliver, "Encoder bank", { t: "Global", button: "F5" });
     expect(commands().at(-1)).toEqual<Command>({
       t: "ConfigureMachine",
       change: {
@@ -451,26 +658,12 @@ describe("the chooser's other answers", () => {
       },
     });
 
-    // A view number, which is typed rather than chosen.
-    fireEvent.change(screen.getByTestId("control-action"), { target: { value: "Jump to view" } });
-    fireEvent.change(screen.getByTestId("control-detail"), { target: { value: "4" } });
-    fireEvent.click(screen.getByTestId("control-apply"));
-    expect(commands().at(-1)).toEqual<Command>({
-      t: "ConfigureMachine",
-      change: {
-        t: "SurfaceBinding",
-        control: { t: "Global", button: "F5" },
-        action: { t: "SelectView", view: 4 },
-      },
-    });
-
     // A named executor-button function on a panel key — §4.1's transport row,
     // which is the desk's own configuration written by a person.
-    fireEvent.change(screen.getByTestId("control-action"), {
-      target: { value: "Executor button" },
+    fireEvent.change(screen.getByTestId("action-detail-Executor button"), {
+      target: { value: "LearnSpeed" },
     });
-    fireEvent.change(screen.getByTestId("control-detail"), { target: { value: "LearnSpeed" } });
-    fireEvent.click(screen.getByTestId("control-apply"));
+    await learnOnto(deliver, "Executor button", { t: "Global", button: "F5" });
     expect(commands().at(-1)).toEqual<Command>({
       t: "ConfigureMachine",
       change: {
@@ -488,20 +681,219 @@ describe("the chooser's other answers", () => {
   it("has no second box for a kind that needs no answer", async () => {
     const { answerQuery } = await desk();
     await answerQuery("SurfaceBindings", table());
-    fireEvent.click(screen.getByTestId("control-choose-Global.F5"));
-    fireEvent.change(screen.getByTestId("control-action"), { target: { value: "Oops" } });
-    expect(screen.queryByTestId("control-detail")).toBeNull();
+    expect(screen.queryByTestId("action-detail-Oops")).toBeNull();
     // And no *On* box either: an Oops acts on no executor.
-    expect(screen.queryByTestId("control-target")).toBeNull();
+    expect(screen.queryByTestId("action-target-Oops")).toBeNull();
+    // While one that does have both, has both.
+    expect(screen.getByTestId("action-target-Executor button")).toBeTruthy();
+    expect(screen.getByTestId("action-detail-Executor button")).toBeTruthy();
   });
 
-  it("closes the chooser when the same row is clicked again", async () => {
+  it("disarms when the same row's Learn is pressed again", async () => {
+    // The way out for an operator who armed the wrong row: the desk is left
+    // unarmed rather than waiting for a key nobody is going to press.
+    const { answerQuery, commands } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    fireEvent.click(screen.getByTestId("action-learn-Oops"));
+    fireEvent.click(screen.getByTestId("action-learn-Oops"));
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: { t: "SurfaceLearn", learning: false },
+    });
+  });
+});
+
+/**
+ * **The custom section** — S43, the owner's rebuild.
+ *
+ * *In der Custom Befehle Sektion sollte es einen Keybind hinzufügen (oder
+ * einfach +) Knopf geben. Dort kann dann der Typ ausgewählt werden: Send
+ * Command / Open Window / Jump to View / Execute Macro.*
+ *
+ * The shape is what makes it a section of its own: the **key** is the row, not
+ * the action, because *open window* is fourteen bindings and *type a command* is
+ * as many as an operator can think of.
+ */
+describe("custom keys", () => {
+  it("adds one with a type, an answer and a key", async () => {
+    const { answerQuery, commands, deliver } = await desk();
+    await answerQuery("SurfaceBindings", table());
+
+    // Empty, it is not a binding: a key that writes nothing into the line is a
+    // key that does nothing, said obscurely.
+    expect(screen.getByTestId("custom-learn").hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByTestId("custom-new-detail"), {
+      target: { value: "Go Executor 3" },
+    });
+    expect(screen.getByTestId("custom-learn").hasAttribute("disabled")).toBe(false);
+
+    fireEvent.click(screen.getByTestId("custom-learn"));
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    // The message names what the next key is about to become, in the words the
+    // chooser used — a desk with two people at it has to say so.
+    expect(screen.getByTestId("controls-learning").textContent).toContain("send command");
+
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "Global", button: "F5" },
+    });
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "F5" },
+        action: { t: "WriteCommandLine", line: "Go Executor 3", submit: false },
+      },
+    });
+  });
+
+  /**
+   * **The box the owner asked for**: *den Text nur in die Konsole schreiben,
+   * oder schreiben und direkt absenden, umschaltbar mit einem Kästchen.*
+   *
+   * A key bound to `Go Executor 1` that needs Enter afterwards is not a Go key;
+   * a key that writes `Store Cue ` for the operator to finish is exactly right.
+   * Both are wanted, so the binding carries the answer.
+   */
+  it("carries the send box on the binding, both ways", async () => {
+    const { answerQuery, commands, deliver } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    fireEvent.change(screen.getByTestId("custom-new-detail"), {
+      target: { value: "Go Executor 3" },
+    });
+    fireEvent.click(screen.getByTestId("custom-new-submit"));
+    fireEvent.click(screen.getByTestId("custom-learn"));
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "Global", button: "F5" },
+    });
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "F5" },
+        action: { t: "WriteCommandLine", line: "Go Executor 3", submit: true },
+      },
+    });
+  });
+
+  /** The box is only offered where it means something. */
+  it("offers the send box for a line and for nothing else", async () => {
     const { answerQuery } = await desk();
     await answerQuery("SurfaceBindings", table());
-    fireEvent.click(screen.getByTestId("control-choose-Global.F5"));
-    expect(screen.getByTestId("control-editor")).toBeTruthy();
-    fireEvent.click(screen.getByTestId("control-choose-Global.F5"));
-    expect(screen.queryByTestId("control-editor")).toBeNull();
+    expect(screen.getByTestId("custom-new-submit")).toBeTruthy();
+    fireEvent.change(screen.getByTestId("custom-kind"), { target: { value: "Open window" } });
+    expect(screen.queryByTestId("custom-new-submit")).toBeNull();
+    // And the answer is dropped with the type: a window name is not a view
+    // number, and sending it would be asking the daemon to read one as the
+    // other.
+    fireEvent.change(screen.getByTestId("custom-kind"), { target: { value: "Jump to view" } });
+    const detail = screen.getByTestId("custom-new-detail");
+    expect(detail instanceof HTMLInputElement ? detail.value : "?").toBe("");
+  });
+
+  /**
+   * **A custom row is the binding, so it is edited in place.**
+   *
+   * That is the half a fixed row cannot give: changing the line on an existing
+   * key would otherwise mean unbinding it and learning it again.
+   */
+  it("edits a key that is already bound, without a second Learn", async () => {
+    const { answerQuery, commands } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    fireEvent.change(screen.getByTestId("custom-detail-Global.F1"), {
+      target: { value: "Patch" },
+    });
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "F1" },
+        action: { t: "OpenWindow", window: "Patch" },
+      },
+    });
+    // And the row has not moved: the table is the daemon's.
+    expect(screen.getByTestId("custom-Global.F1").textContent).toContain("FixtureSheet");
+  });
+
+  it("says so when there are no custom keys, rather than drawing an empty list", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery(
+      "SurfaceBindings",
+      table({ controls: CONTROLS.map((entry) => ({ ...entry, action: null })) }),
+    );
+    expect(screen.getByTestId("custom-empty")).toBeTruthy();
+    // The `+` is there all the same: it is how the section stops being empty.
+    expect(screen.getByTestId("custom-new")).toBeTruthy();
+  });
+});
+
+/**
+ * **Export and import** — S43: *die Controls sollen exportiert und importiert
+ * werden können.*
+ *
+ * What travels is a **profile file**, the same document
+ * `prism_surface::Bindings::parse` reads, so an export is also a file the daemon
+ * can be pointed at. `controlfile.test.ts` holds the document itself; what is
+ * asserted here is the panel's half — that an import becomes one
+ * `SurfaceBinding` per control, and that a file this desk cannot use is a
+ * sentence rather than a silence.
+ */
+describe("the table as a file", () => {
+  it("reads a profile back as one binding per control", async () => {
+    const { answerQuery, commands } = await desk();
+    await answerQuery("SurfaceBindings", table());
+
+    const profile = JSON.stringify({
+      profileVersion: 1,
+      device: "behringer-x-touch",
+      bindings: [
+        { control: "Global.F5", action: { t: "Oops" } },
+        { control: "Main.Fader", action: null },
+      ],
+    });
+    await importFile(profile);
+
+    // **Every control the surface has**, not only the two the file names: an
+    // import is *this table becomes that table*, and a merge would leave
+    // whatever was bound in the gaps — the state neither file describes.
+    const bindings = commands().filter(
+      (command) => command.t === "ConfigureMachine" && command.change.t === "SurfaceBinding",
+    );
+    expect(bindings).toHaveLength(CONTROLS.length);
+    expect(bindings).toContainEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "F5" },
+        action: { t: "Oops" },
+      },
+    });
+    // `Global.F1` opened the fixture sheet and the file does not mention it, so
+    // it is unbound rather than left standing.
+    expect(bindings).toContainEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "F1" },
+        action: null,
+      },
+    });
+    expect(screen.getByTestId("controls-note").textContent).toContain("2 bindings read");
+  });
+
+  it("says which wrong thing a file is, rather than doing nothing", async () => {
+    const { answerQuery, commands } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    await importFile(
+      JSON.stringify({ profileVersion: 1, device: "some-other-desk", bindings: [] }),
+    );
+    expect(commands()).toHaveLength(0);
+    expect(screen.getByTestId("controls-note").textContent).toContain("some-other-desk");
   });
 });
 
@@ -522,3 +914,19 @@ describe("where the table came from", () => {
     expect(screen.getByTestId("controls-source").textContent).toContain("built-in bindings");
   });
 });
+
+/**
+ * Hands the panel a file, the way the browser's own dialogue would.
+ *
+ * `File.text()` is a promise, so the assertion has to be after it settles —
+ * which is what the extra `act` is for.
+ */
+async function importFile(text: string): Promise<void> {
+  const picker = screen.getByTestId("controls-file");
+  const file = new File([text], "controls.json", { type: "application/json" });
+  await act(async () => {
+    fireEvent.change(picker, { target: { files: [file] } });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}

@@ -18,6 +18,7 @@ import { decode } from "@msgpack/msgpack";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AttributeType, FeatureGroup } from "../bindings";
+import { FEATURE_GROUP_VARIANTS } from "../bindings";
 import { readServerMessage } from "../ipc/protocol";
 import type { Snapshot } from "../ipc/protocol";
 import { nullSink, setLogSink } from "../log/logger";
@@ -216,7 +217,12 @@ describe("the readers, against a daemon's answers", () => {
    */
   it("orders each bank's parameters the way the jog wheel walks them", () => {
     const banks = Object.entries(recording.encoderBanks);
-    expect(banks.length).toBe(5);
+    // **Seven since S43**, when Gobo and Control came out of Beam and got banks
+    // of their own — one per Encoder Assign key on the X-Touch, which is what
+    // makes every bank reachable in one press. The count is written out rather
+    // than read off the recording for the reason this whole file exists: a
+    // number that came from the thing under test proves nothing.
+    expect(banks.length).toBe(7);
     for (const [bank, attributes] of banks) {
       expect(bankParameters(groupOf(bank))).toEqual(attributes);
     }
@@ -368,8 +374,14 @@ function bankNames(): {
       }
       throw new Error(`${name} is not an attribute this build knows`);
     },
+    // **Out of the generated table since S43**, which is what the paragraph
+    // above already asked for and this half was not doing: it was five names
+    // written by hand, so the day Gobo and Control became banks of their own the
+    // recording carried seven and this threw. A generated list cannot go stale
+    // that way — and it still narrows rather than asserts, so a name the build
+    // has never heard of is a failure and not a cast.
     groups: (name) => {
-      for (const group of ["Dimmer", "Position", "Color", "Beam", "Focus"] as const) {
+      for (const group of FEATURE_GROUP_VARIANTS) {
         if (group === name) {
           return group;
         }

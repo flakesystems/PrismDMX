@@ -377,7 +377,7 @@ pub(crate) fn apply(
                     deltas: Vec::new(),
                     effects: vec![Effect::SurfaceBinding {
                         control: *control,
-                        action: *action,
+                        action: action.clone(),
                     }],
                 });
             }

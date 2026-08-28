@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    FeatureGroup, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, SequenceId, SurfaceControl,
+    FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, PresetPool, SequenceId, SurfaceControl,
     SurfaceStatus, UniverseId,
 };
 
@@ -158,8 +158,9 @@ pub enum StoreTarget {
         /// The pool, which is **what decides which programmer values are
         /// taken**: a colour preset stores the colour values and nothing else,
         /// and which bank an attribute is on is the *profile's* answer rather
-        /// than the attribute name's.
-        pool: FeatureGroup,
+        /// than the attribute name's. [`PresetPool::Multi`] takes every value
+        /// there is, so the count this answers with is the whole programmer.
+        pool: PresetPool,
     },
 }
 
@@ -484,6 +485,20 @@ pub enum Answer {
         controls: Vec<SurfaceControl>,
         /// Which surface this table is for, as a person reads it.
         device: String,
+        /// The same surface as a **profile file** names it — S43.
+        ///
+        /// `McuProfile::key`, which is what `Bindings::parse` checks the file's
+        /// `device` against. It is carried rather than known by the client for
+        /// the reason [`crate::SurfaceControl::name`] is: the alternative is a
+        /// second copy of a constant that already exists, and an export written
+        /// against a stale copy is a file the daemon then refuses.
+        device_key: String,
+        /// The `profileVersion` a profile file must carry — S43.
+        ///
+        /// `prism_surface::PROFILE_VERSION`, carried for `device_key`'s reason:
+        /// an exported table is a profile file, and a client that guessed the
+        /// version would write one this build cannot read back.
+        profile_version: u32,
         /// The profile file this table was last read from, or `None` for one
         /// that has only ever been the built-in defaults and whatever the desk
         /// has been told since.
@@ -510,7 +525,7 @@ pub enum Answer {
 #[cfg(test)]
 mod tests {
     use super::{Answer, PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget};
-    use crate::{FeatureGroup, FixtureId, PresetId, SequenceId, SequenceStoreMode, UniverseId};
+    use crate::{FixtureId, PresetId, PresetPool, SequenceId, SequenceStoreMode, UniverseId};
 
     fn conflict() -> PatchConflict {
         PatchConflict {
@@ -644,7 +659,7 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&StoreTarget::Preset {
                 preset_id: PresetId::new(4),
-                pool: FeatureGroup::Color,
+                pool: PresetPool::Color,
             })
             .unwrap(),
             r#"{"t":"Preset","presetId":4,"pool":"Color"}"#

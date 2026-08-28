@@ -70,16 +70,25 @@ impl AttributeType {
     /// The encoder bank this attribute appears on by default.
     ///
     /// A fixture type may override it per attribute — see [`AttributeDef`].
+    ///
+    /// **Seven banks since S43**, and the change is the owner's: the drawing in
+    /// `design/skeleton/programmer.pdf` names seven, and what had been one
+    /// `Beam` bank of six knobs is three. The split is the one a person makes
+    /// standing at a desk — the gobo wheel and the prism are one thing you
+    /// reach for, the size of the beam is another, and `Control` is the row of
+    /// lamp-on, reset and fan that you touch once a show and never during one.
+    /// Six knobs on one bank meant two pages of `Beam` and a `Control` channel
+    /// filed behind the shutter.
     #[must_use]
     pub const fn feature_group(self) -> FeatureGroup {
         match self {
             Self::Dimmer => FeatureGroup::Dimmer,
             Self::Pan | Self::Tilt => FeatureGroup::Position,
+            Self::Gobo | Self::Prism => FeatureGroup::Gobo,
             Self::Red | Self::Green | Self::Blue | Self::White | Self::Amber => FeatureGroup::Color,
-            Self::Iris | Self::Zoom | Self::Gobo | Self::Prism | Self::Shutter | Self::Control => {
-                FeatureGroup::Beam
-            }
+            Self::Iris | Self::Zoom | Self::Shutter => FeatureGroup::Beam,
             Self::Focus => FeatureGroup::Focus,
+            Self::Control => FeatureGroup::Control,
         }
     }
 
@@ -96,7 +105,17 @@ impl AttributeType {
     }
 }
 
-/// The five encoder banks. Also the pool kinds presets are filed under.
+/// The seven encoder banks. Also the pool kinds presets are filed under.
+///
+/// # Seven since S43, and the order is the owner's drawing
+///
+/// It was five, with everything that was not intensity, position, colour or
+/// sharpness on one `Beam` bank — six knobs, which is two pages of four and a
+/// `Control` channel filed behind a shutter. `design/skeleton/programmer.pdf`
+/// names seven, in two columns, and the order below is that drawing read across
+/// and down: Dimmer and Position, Gobo and Color, Beam and Focus, then Control.
+/// The interface draws the keys straight out of this array, so the arrangement
+/// on the screen *is* this order rather than a second copy of it.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
 )]
@@ -106,22 +125,28 @@ pub enum FeatureGroup {
     Dimmer,
     /// Pan and tilt.
     Position,
+    /// Gobo wheels and the prism — the pattern in the beam.
+    Gobo,
     /// Colour mixing and colour wheels.
     Color,
-    /// Gobo, prism, iris, zoom, shutter.
+    /// The size and shape of the beam: iris, zoom, shutter.
     Beam,
     /// Beam sharpness.
     Focus,
+    /// Lamp control — the channel a fixture is reset and struck from.
+    Control,
 }
 
 impl FeatureGroup {
     /// Every feature group, in encoder-bank order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 7] = [
         Self::Dimmer,
         Self::Position,
+        Self::Gobo,
         Self::Color,
         Self::Beam,
         Self::Focus,
+        Self::Control,
     ];
 
     /// The attributes on this encoder bank, in [`AttributeType::ALL`]'s order.
@@ -155,15 +180,14 @@ impl FeatureGroup {
                 AttributeType::White,
                 AttributeType::Amber,
             ],
+            Self::Gobo => &[AttributeType::Gobo, AttributeType::Prism],
             Self::Beam => &[
                 AttributeType::Iris,
                 AttributeType::Zoom,
-                AttributeType::Gobo,
-                AttributeType::Prism,
                 AttributeType::Shutter,
-                AttributeType::Control,
             ],
             Self::Focus => &[AttributeType::Focus],
+            Self::Control => &[AttributeType::Control],
         }
     }
 
@@ -258,6 +282,33 @@ pub struct FixtureType {
     pub attributes: Vec<AttributeDef>,
 }
 
+impl FixtureType {
+    /// Whether this mode has a dimmer channel of its own.
+    ///
+    /// The question [`crate::Fixture::has_software_dimmer`] asks, and the reason
+    /// it is here rather than written out at each call site.
+    ///
+    /// # It asks about the attribute and not about the bank
+    ///
+    /// *Intensity* elsewhere in this project means [`FeatureGroup::Dimmer`] —
+    /// `plan.rs`'s `is_intensity` says so, and it is right about what the
+    /// masters may scale. This is a different question with a different answer,
+    /// and the difference is a profile that files its dimmer channel somewhere
+    /// odd: a head whose intensity is on the colour bank still **has** a
+    /// [`AttributeType::Dimmer`], and a desk that supplied it a second one would
+    /// name the same attribute twice — which is `MergeError::DuplicateAttribute`
+    /// and a rig that will not patch at all.
+    ///
+    /// So the test is the attribute, which is the thing that would collide, and
+    /// which is also what an operator means by *it has a dimmer channel*.
+    #[must_use]
+    pub fn has_dimmer(&self) -> bool {
+        self.attributes
+            .iter()
+            .any(|def| def.attribute == AttributeType::Dimmer)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
@@ -302,7 +353,19 @@ mod tests {
         assert_eq!(AttributeType::Pan.feature_group(), FeatureGroup::Position);
         assert_eq!(AttributeType::Tilt.feature_group(), FeatureGroup::Position);
         assert_eq!(AttributeType::Red.feature_group(), FeatureGroup::Color);
-        assert_eq!(AttributeType::Gobo.feature_group(), FeatureGroup::Beam);
+        // **S43 moved three of them.** The gobo wheel and the prism are one
+        // thing an operator reaches for and the size of the beam is another, so
+        // `Beam`'s six knobs are three banks now — and `Control`, which is
+        // touched once a show, is no longer filed behind the shutter.
+        assert_eq!(AttributeType::Gobo.feature_group(), FeatureGroup::Gobo);
+        assert_eq!(AttributeType::Prism.feature_group(), FeatureGroup::Gobo);
+        assert_eq!(AttributeType::Iris.feature_group(), FeatureGroup::Beam);
+        assert_eq!(AttributeType::Zoom.feature_group(), FeatureGroup::Beam);
+        assert_eq!(AttributeType::Shutter.feature_group(), FeatureGroup::Beam);
+        assert_eq!(
+            AttributeType::Control.feature_group(),
+            FeatureGroup::Control
+        );
         assert_eq!(AttributeType::Focus.feature_group(), FeatureGroup::Focus);
     }
 
@@ -324,12 +387,28 @@ mod tests {
     }
 
     #[test]
-    fn feature_groups_are_the_five_encoder_banks() {
-        assert_eq!(FeatureGroup::ALL.len(), 5);
+    fn feature_groups_are_the_seven_encoder_banks() {
+        // Seven since S43 — the owner's `design/skeleton/programmer.pdf`, whose
+        // left-hand box names seven and is drawn straight out of `ALL`.
+        assert_eq!(FeatureGroup::ALL.len(), 7);
         assert_eq!(
             serde_json::to_string(&FeatureGroup::Position).unwrap(),
             "\"Position\""
         );
+        // **`Beam` fits on one page of encoders now**, which is what the split
+        // was for: it had six knobs against `ENCODERS_PER_PAGE`'s four, so
+        // reaching a shutter meant paging. `Color` still has five and still
+        // pages — five is what an RGBWA fixture *has*, and no arrangement of
+        // banks makes it four.
+        assert_eq!(FeatureGroup::Beam.attributes().len(), 3);
+        assert_eq!(FeatureGroup::Gobo.attributes().len(), 2);
+        assert_eq!(FeatureGroup::Control.attributes().len(), 1);
+        // And the split moved knobs about rather than inventing or losing any.
+        let banked: usize = FeatureGroup::ALL
+            .iter()
+            .map(|group| group.attributes().len())
+            .sum();
+        assert_eq!(banked, AttributeType::ALL.len());
     }
 
     /// The written-out table is exactly the filter, so it cannot drift from
@@ -427,7 +506,7 @@ mod tests {
         );
         assert_eq!(
             FeatureGroup::inline(&cfg),
-            "\"Dimmer\" | \"Position\" | \"Color\" | \"Beam\" | \"Focus\""
+            "\"Dimmer\" | \"Position\" | \"Gobo\" | \"Color\" | \"Beam\" | \"Focus\" | \"Control\""
         );
         assert_eq!(MergeMode::inline(&cfg), "\"HTP\" | \"LTP\"");
     }

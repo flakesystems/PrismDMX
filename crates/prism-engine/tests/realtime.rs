@@ -468,6 +468,7 @@ fn stress_patch(layout: &FrameLayout, fixture_type: &FixtureType) -> Vec<Fixture
     let count = per_universe * layout.universe_count() as u32;
     (0..count)
         .map(|index| Fixture {
+            software_dimmer: true,
             id: FixtureId::new(index + 1),
             name: String::new(),
             type_id: fixture_type.id.clone(),

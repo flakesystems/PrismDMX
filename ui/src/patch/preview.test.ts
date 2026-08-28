@@ -128,7 +128,15 @@ describe("what the operator is told before they commit", () => {
     expect(previewAt("a profile the show has not got").accepted).toBe(false);
     expect(previewAt("a profile the show has not got").footprint).toBe(0);
     expect(previewAt("the same question again").accepted).toBe(true);
-    expect(previewText(previewAt("the same question again"), 7)).toContain("11 channels");
+    // Thirteen, not the eleven this line used to say: **B1** gave the moving
+    // head a gobo wheel and a control channel on its way to giving every colour
+    // channel a home value, so the profile in the recording is two channels
+    // wider than it was. The number is read off the recording rather than
+    // written down twice — what is asserted is that the sentence carries the
+    // footprint the daemon answered with.
+    const answered = previewAt("the same question again");
+    expect(previewText(answered, 7)).toContain(`${String(answered.footprint)} channels`);
+    expect(answered.footprint).toBe(13);
   });
 
   it("has nothing to say before the daemon has answered", () => {

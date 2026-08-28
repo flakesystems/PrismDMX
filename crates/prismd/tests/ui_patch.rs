@@ -83,6 +83,7 @@ fn patch_show() -> ShowFile {
         (5, "generic.rgbw.par", 1, 20),
     ] {
         show.patch_fixture(prism_domain::Fixture {
+            software_dimmer: true,
             id: FixtureId::new(id),
             name: format!("Fixture {id}"),
             type_id: type_id.to_owned(),
@@ -180,6 +181,13 @@ struct RecordedRow {
     address: u16,
     /// How wide it is, or 0 when the show cannot say.
     footprint: u16,
+    /// Whether the desk supplies this fixture's intensity — S43.
+    ///
+    /// **Absent means supplied**, which is the daemon's own serde default, so a
+    /// recording made from a show written before S43 records `true` and the
+    /// interface reading it draws the switch on. Both ends read the document
+    /// the same way, which is the whole point of the recording.
+    software_dimmer: bool,
 }
 
 /// One embedded profile, as the type menu has to produce it.
@@ -191,6 +199,12 @@ struct RecordedProfile {
     name: String,
     mode: String,
     footprint: u16,
+    /// Whether the mode has a dimmer channel of its own — S43.
+    ///
+    /// What decides whether the patch form offers the software-dimmer switch at
+    /// all, so the recording carries it: the interface must reach the same
+    /// answer from the same document.
+    has_intensity: bool,
 }
 
 /// One step: either a command that changed the show, or a question that did not.
@@ -282,6 +296,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Do(
             "patch it there",
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(6),
                 name: "PAR 6".to_owned(),
                 type_id: "generic.rgbw.par".to_owned(),
@@ -297,6 +312,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Do(
             "patch it anyway: cloning a fixture onto another is an ordinary technique",
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(7),
                 name: "PAR 7".to_owned(),
                 type_id: "generic.rgbw.par".to_owned(),
@@ -351,6 +367,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Do(
             "patch it: the channels are the manufacturer's, not this desk's",
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(11),
                 name: "Wash 11".to_owned(),
                 type_id: "robe/wash-7q5/4ch".to_owned(),
@@ -376,6 +393,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Do(
             "patch a moving head",
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(8),
                 name: "Head 8".to_owned(),
                 type_id: "generic.movinghead".to_owned(),
@@ -386,6 +404,7 @@ fn script() -> Vec<Scripted> {
         Scripted::Do(
             "correct a name and an address in one go: a repatch, not a new fixture",
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(7),
                 name: "PAR 7 (moved)".to_owned(),
                 type_id: "generic.rgbw.par".to_owned(),
@@ -638,6 +657,10 @@ fn rows_of(show: &JsonValue) -> Vec<RecordedRow> {
                         _ => None,
                     })
                     .unwrap_or(0),
+                software_dimmer: !matches!(
+                    mirror.get(&format!("/fixtures/{key}/softwareDimmer")),
+                    Ok(JsonValue::Bool(false))
+                ),
                 type_id,
             }
         })
@@ -669,6 +692,12 @@ fn profiles_of(show: &JsonValue) -> Vec<RecordedProfile> {
             name: string_at(value, "name"),
             mode: string_at(value, "mode"),
             footprint: u16::try_from(int_at(value, "footprint")).unwrap_or(0),
+            has_intensity: match member(value, "attributes") {
+                Some(JsonValue::Array(defs)) => defs.iter().any(|def| {
+                    matches!(member(def, "attribute"), Some(JsonValue::String(name)) if name == "Dimmer")
+                }),
+                _ => false,
+            },
         })
         .collect();
     profiles.sort_by(|left, right| left.id.cmp(&right.id));
@@ -970,8 +999,12 @@ fn a_preview_says_what_the_patch_that_follows_it_does() {
     assert_eq!(missing.footprint, 0);
     let embedded = preview("the same question again");
     assert!(embedded.accepted);
-    assert_eq!(embedded.footprint, 11);
-    assert_eq!(embedded.last_address, Some(110));
+    // The generic moving head, which **S43 grew from eleven channels to
+    // thirteen**: the encoder banks became seven and a head with no gobo wheel
+    // and no lamp-control channel could no longer reach all of them. See
+    // `prism_core::library::moving_head`.
+    assert_eq!(embedded.footprint, 13);
+    assert_eq!(embedded.last_address, Some(112));
 }
 
 /// **A search is answered out of the desk's library, and the answer is small.**

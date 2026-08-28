@@ -27,7 +27,7 @@
  */
 
 import type { JsonValue } from "../bindings";
-import { isObject } from "../mirror/patch";
+import { isArray, isObject } from "../mirror/patch";
 import { numberAt, pointerToken, stringAt, valueAt } from "../mirror/select";
 
 /** Where the patch lives in the show document. */
@@ -59,6 +59,16 @@ export interface PatchRow {
   readonly address: number;
   /** How many channels it occupies, or 0 when the profile is missing. */
   readonly footprint: number;
+  /**
+   * Whether the desk supplies this fixture's intensity when its profile has
+   * none — S43.
+   *
+   * The operator's switch, as the show holds it. It says nothing on its own:
+   * see {@link ProfileRow.hasIntensity} for the other half, and
+   * `prism_domain::Fixture::has_software_dimmer` for the question they answer
+   * together.
+   */
+  readonly softwareDimmer: boolean;
 }
 
 /** One profile, whether embedded in the show or offered by the desk. */
@@ -73,6 +83,14 @@ export interface ProfileRow {
   readonly mode: string;
   /** How many channels one of them takes. */
   readonly footprint: number;
+  /**
+   * Whether the profile has an intensity channel of its own — S43.
+   *
+   * What decides whether the patch form offers the software-dimmer switch at
+   * all: a fixture with a dimmer already has one, and a checkbox that did
+   * nothing would be worse than no checkbox.
+   */
+  readonly hasIntensity: boolean;
 }
 
 /**
@@ -102,6 +120,9 @@ export function patchRows(show: JsonValue | null): readonly PatchRow[] {
       universe: numberAt(entry, "/universe") ?? 0,
       address: numberAt(entry, "/address") ?? 0,
       footprint: footprintOf(show, typeId),
+      // **Absent means supplied**, which is the daemon's own serde default and
+      // the safe answer: a colour-only fixture without one comes up lit.
+      softwareDimmer: valueAt(entry, "/softwareDimmer") !== false,
     });
   }
   return rows.sort((left, right) => left.id - right.id);
@@ -124,6 +145,7 @@ export function embeddedProfiles(show: JsonValue | null): readonly ProfileRow[] 
       name: stringAt(entry, "/name") ?? key,
       mode: stringAt(entry, "/mode") ?? "",
       footprint: numberAt(entry, "/footprint") ?? 0,
+      hasIntensity: hasIntensity(valueAt(entry, "/attributes")),
     });
   }
   return rows.sort((left, right) => left.id.localeCompare(right.id));
@@ -164,4 +186,22 @@ export function profileLabel(profile: ProfileRow): string {
   }
   parts.push(`${String(profile.footprint)} ch`);
   return parts.join(" · ");
+}
+
+/**
+ * Whether a profile's attribute list carries an intensity — S43.
+ *
+ * The **attribute** and not the bank, which is the same rule
+ * `prism_domain::FixtureType::has_dimmer` applies one crate along and for the
+ * same reason: a profile that files its dimmer channel on the colour bank still
+ * has one, and a desk that supplied it a second would name the same attribute
+ * twice — which is a rig that will not patch.
+ */
+function hasIntensity(attributes: JsonValue | null): boolean {
+  if (attributes === null || !isArray(attributes)) {
+    return false;
+  }
+  return attributes.some(
+    (entry) => isObject(entry) && stringAt(entry, "/attribute") === "Dimmer",
+  );
 }

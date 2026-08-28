@@ -354,9 +354,11 @@ fn the_jog_wheel_changes_the_selected_programmer_parameter() {
 
 #[test]
 fn the_encoder_assign_section_switches_the_encoder_bank() {
-    // §4.1 row 14: "Encoder Assign section | switch encoder bank - Dimmer /
-    // Position / Color / Beam / Focus | Session". Five groups, six buttons; the
-    // sixth is left alone.
+    // §4.1 row 14. **Seven groups since S43 and six buttons**, so one bank has
+    // no key of its own — see `prism_surface::binding`'s `DEFAULT_GLOBAL` for
+    // why it is `Control` and not one of the others. The five that were bound
+    // before S43 kept their buttons, because an operator who has learned that
+    // *Pan* is Colour must not find it somewhere else.
     let table = Bindings::defaults();
     let context = context();
     for (button, group) in [
@@ -365,6 +367,7 @@ fn the_encoder_assign_section_switches_the_encoder_bank() {
         (GlobalButton::AssignPan, FeatureGroup::Color),
         (GlobalButton::AssignPlugin, FeatureGroup::Beam),
         (GlobalButton::AssignEq, FeatureGroup::Focus),
+        (GlobalButton::AssignInstrument, FeatureGroup::Gobo),
     ] {
         assert_eq!(
             table.command(press(button), &context),
@@ -372,12 +375,20 @@ fn the_encoder_assign_section_switches_the_encoder_bank() {
             "{button}"
         );
     }
-    assert_eq!(
-        table.action(BoundControl::Global {
-            button: GlobalButton::AssignInstrument
-        }),
-        None
-    );
+    // The one bank the surface cannot reach directly. It is reachable from the
+    // screen and from any key an operator binds to it themselves (S38), and it
+    // is `Control` because that is the bank a fixture is struck and reset from —
+    // touched before a show and never during one.
+    let bound: Vec<FeatureGroup> = GlobalButton::ALL
+        .into_iter()
+        .filter_map(|button| table.action(BoundControl::Global { button }))
+        .filter_map(|action| match action {
+            SurfaceAction::SetEncoderBank { group } => Some(group),
+            _ => None,
+        })
+        .collect();
+    assert!(!bound.contains(&FeatureGroup::Control));
+    assert_eq!(bound.len(), FeatureGroup::ALL.len() - 1);
 }
 
 #[test]
@@ -462,6 +473,9 @@ fn nothing_else_on_the_panel_is_bound_by_default() {
         GlobalButton::AssignPan,
         GlobalButton::AssignPlugin,
         GlobalButton::AssignEq,
+        // S43: the sixth Assign key, which had deliberately been left empty
+        // while there were five banks and six buttons.
+        GlobalButton::AssignInstrument,
         GlobalButton::BankLeft,
         GlobalButton::BankRight,
         GlobalButton::ChannelLeft,
@@ -533,6 +547,52 @@ fn the_shipped_profile_is_the_built_in_default_table() {
     // opposite of what falling back is for.
     let table = Bindings::parse(SHIPPED, &X_TOUCH).expect("the profile this repository ships");
     assert_eq!(table, Bindings::defaults());
+}
+
+/// **What the control editor exports is a profile this reader takes back.**
+///
+/// S43 gave the editor an Export (`ui/src/settings/controlfile.ts`), and what it
+/// writes is deliberately not a format of its own: it is `docs/MCU_MAPPING.md`
+/// §4.2's file, so an exported table can be handed to a daemon with
+/// `--surface-profile`, named in *Devices*, or carried to another desk.
+///
+/// That claim spans two languages, so each side tests its half against the shape
+/// written down in both. `controlfile.test.ts` asserts the client writes exactly
+/// `{profileVersion, device, documentation, bindings: [{control, action}]}`;
+/// this asserts **that** document parses, and parses back to the table it came
+/// from. The failure it exists to catch is silent and expensive: an export
+/// nobody can read, discovered by an operator at another desk.
+///
+/// The document is built here from `Bindings::defaults().rows()` rather than
+/// from a frozen file, because a frozen copy of a table is the second copy this
+/// whole module exists to avoid — and a table is exactly what an export is.
+#[test]
+fn a_table_written_the_way_the_editor_exports_it_reads_back_unchanged() {
+    let table = Bindings::defaults();
+    let rows: Vec<serde_json::Value> = table
+        .rows()
+        .into_iter()
+        .map(|row| {
+            serde_json::json!({
+                "control": row.control.to_string(),
+                "action": row.action,
+            })
+        })
+        .collect();
+    let document = serde_json::json!({
+        "profileVersion": 1,
+        "device": X_TOUCH.key,
+        // The editor writes a line of prose too. The document tolerates unknown
+        // keys on purpose (a *row* does not), and this is the key that proves
+        // it: an export that had to be stripped before it could be read would
+        // not be a profile file.
+        "documentation": "Exported from the PrismDMX control editor.",
+        "bindings": rows,
+    });
+
+    let read = Bindings::parse(&document.to_string(), &X_TOUCH)
+        .expect("the editor's own export is a profile");
+    assert_eq!(read, table);
 }
 
 #[test]

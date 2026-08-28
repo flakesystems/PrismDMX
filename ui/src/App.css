@@ -2,15 +2,35 @@
  * The desk, dark and dense.
  *
  * A lighting console is operated in a dark room beside a stage, so the surface
- * is dark and the readings are the bright thing on it. Three bands: a header
- * that names the desk and holds the View Selector Bar, a canvas that takes
- * every remaining pixel, and a footer that is the command line and one strip of
- * readings.
+ * is dark and the readings are the bright thing on it.
+ *
+ * **S43 rebuilt the arrangement along the owner's drawing** —
+ * `design/skeleton/main-layout.pdf`. Four bands, and the canvas is the one that
+ * gives:
+ *
+ *   header      the title and its light, the View Selector Bar, Clear
+ *   canvas      every remaining pixel
+ *   command     the command line, which is *the* interface
+ *   programmer  the banks, the encoders and the selected cue list
+ *
+ * The executor strip, the encoder bar and the status strip are windows now, so
+ * three bands' worth of height came back to the canvas and one band went out.
  *
  * Nothing outside a window scrolls. `min-height: 0` appears on the flex
  * children for that reason and not for tidiness: a flex item's default minimum
- * is its content, so without it a long fixture sheet pushes the footer off the
+ * is its content, so without it a long fixture sheet pushes the bands off the
  * bottom of the screen instead of scrolling inside its own window.
+ *
+ * # Read at two metres in a dark room
+ *
+ * `CLAUDE.md` asks for fast recognition of sections before aesthetics, and S43
+ * is the session that took that as a measurement rather than a mood. What it
+ * cost: a **section is a panel with an edge** rather than a change of spacing,
+ * because at two metres spacing is invisible and a line is not; the smallest
+ * type in the interface is 0.62 rem and nothing below it carries a *value*, only
+ * a label beside one; and the three states that matter at a glance — lit, held,
+ * running — are a colour **and** a second signal (an edge weight, a marker),
+ * because a dark room and a tired operator are not a colour-matching exercise.
  */
 
 :root {
@@ -37,6 +57,124 @@
     font: 13px/1.45 ui-monospace, "Cascadia Mono", "Consolas", monospace;
 }
 
+/* ---- the controls: one look for every key, box and chooser --------------
+ *
+ * **S43, punch-list B22.** Until this rule there was no base style for a
+ * `<button>`, so a key that had not been given a class of its own came out as
+ * the browser's own control: a pale rounded box with a system font, on a desk
+ * that is otherwise dark and monospaced. The owner's word for the result was
+ * that there were still *many unstyled buttons*, and there were — about sixty
+ * of them, across the store bars, the settings panels and every window's
+ * toolbar.
+ *
+ * # Why this is an element rule wrapped in `:where`
+ *
+ * `:where(.desk)` contributes **no specificity**, so these rules sit at the very
+ * bottom of the cascade: `.linkish`, `.picker-key`, `.pool-tab` and every other
+ * named control still wins without needing `!important` or a longer selector,
+ * and a key that is given a class later stops being generic the moment it is.
+ * The alternative — giving every button a class — is the same style written
+ * sixty times, and the sixty-first would be forgotten.
+ *
+ * # The three signals, which are the same three the rest of the desk uses
+ *
+ * Lit, held and unavailable are each a colour **and** a second signal, because a
+ * dark room is not a colour-matching exercise: hover and focus move the border
+ * as well as the ink, the pressed state carries a filled ground, and a disabled
+ * key loses its border weight rather than only fading. Focus is
+ * `:focus-visible` so a pointer does not leave a ring behind it, and the ring is
+ * an `outline` rather than a border so nothing moves when it appears.
+ */
+
+:where(.desk) button {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    line-height: 1.3;
+    text-align: center;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+:where(.desk) button:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+:where(.desk) button:active:not(:disabled) {
+    background: var(--edge);
+}
+
+:where(.desk) button:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+}
+
+:where(.desk) button:disabled {
+    border-color: var(--edge);
+    color: var(--ink-dim);
+    cursor: default;
+}
+
+/*
+ * A key that is *the* answer of its form — Apply, Patch, Store. One per form,
+ * and it is the accent's edge rather than a filled block: a console with a
+ * bright rectangle on every panel is a console where nothing stands out.
+ */
+:where(.desk) button[type="submit"]:not(:disabled) {
+    border-color: var(--edge-lit);
+    color: var(--accent);
+}
+
+:where(.desk) input,
+:where(.desk) select,
+:where(.desk) textarea {
+    padding: 0.2rem 0.35rem;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+}
+
+:where(.desk) input:focus-visible,
+:where(.desk) select:focus-visible,
+:where(.desk) textarea:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 0;
+    border-color: var(--accent);
+}
+
+:where(.desk) input:disabled,
+:where(.desk) select:disabled {
+    color: var(--ink-dim);
+    cursor: default;
+}
+
+/*
+ * A destructive key — delete, unpatch, remove. Warm rather than red at rest,
+ * because red at rest is a key an operator stops reading; it goes red when the
+ * pointer is on it, which is the moment the warning is worth anything.
+ */
+:where(.desk) button.key-danger {
+    color: var(--warn);
+}
+
+:where(.desk) button.key-danger:hover:not(:disabled) {
+    border-color: var(--bad);
+    color: var(--bad);
+}
+
+/* A key that is one glyph — a close cross, a step arrow. Square, so a row of
+   them lines up whatever is in them. */
+:where(.desk) button.key-glyph {
+    padding: 0.15rem;
+    min-width: 1.5rem;
+}
+
 /* ---- header ------------------------------------------------------------- */
 
 .desk-header {
@@ -50,6 +188,10 @@
 }
 
 .desk-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
     margin: 0;
     font-size: 0.85rem;
     letter-spacing: 0.16em;
@@ -57,24 +199,47 @@
     color: var(--ink);
 }
 
+/*
+ * The connection, as a light and a word.
+ *
+ * The one reading that did not become a window (S43): it says whether anything
+ * else on the screen means anything, so it must be true without a window having
+ * been opened. A dot **and** a word rather than a dot alone — a single coloured
+ * spot is exactly the signal a dark room and a tired operator read wrongly.
+ */
 .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     margin: 0;
-    padding: 0.1rem 0.55rem;
-    border: 1px solid var(--edge-lit);
-    border-radius: 999px;
     white-space: nowrap;
+    letter-spacing: 0;
+    text-transform: none;
+    font-size: 0.7rem;
     color: var(--ink-dim);
 }
 
+.status-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: currentcolor;
+}
+
 .status-connected {
-    border-color: var(--ok);
     color: var(--ok);
 }
 
 .status-disconnected,
 .status-incompatible {
-    border-color: var(--bad);
     color: var(--bad);
+}
+
+/* The bar takes the middle, so Clear is hard against the right edge. */
+.viewbar,
+.viewbar-gap {
+    flex: 1 1 auto;
+    justify-content: center;
 }
 
 /* ---- the View Selector Bar ---------------------------------------------- */
@@ -94,13 +259,8 @@
     color: var(--ink-dim);
 }
 
-.viewbar-windows {
-    margin-left: 0.75rem;
-}
-
 .view-button,
-.view-store,
-.window-picker {
+.view-store {
     padding: 0.2rem 0.55rem;
     border: 1px solid var(--edge-lit);
     border-radius: 3px;
@@ -145,6 +305,11 @@
     background-size: 3.125% 5.55%;
 }
 
+/*
+ * The note on an empty canvas. Drawn *through*: a right-click on an empty canvas
+ * has to reach the canvas, and this is a child of it covering the whole thing
+ * (S43, B9).
+ */
 .canvas-empty {
     position: absolute;
     inset: 0;
@@ -155,6 +320,7 @@
     padding: 1rem;
     text-align: center;
     color: var(--ink-dim);
+    pointer-events: none;
 }
 
 /*
@@ -367,64 +533,171 @@
 }
 
 /*
- * The library search (S44). The desk knows two thousand profiles, so what is
- * offered is what was asked for: a box, and the daemon's answer under it.
+ * The desk-supplied intensity (S43). A checkbox with the reason beside it,
+ * because it is the one field in this form whose answer is not obvious from the
+ * label: an operator has to be told that the desk is inventing a channel and
+ * when they would not want it to. It spans the form's grid rather than sitting
+ * in a column, so the sentence has room to be a sentence.
  */
-.patch-embed {
-    position: relative;
+.patch-check {
+    grid-column: 1 / -1;
     display: flex;
-    align-items: center;
-    gap: 0.3rem;
+    align-items: start;
+    gap: 0.45rem;
+    color: var(--ink);
+}
+
+.patch-check input {
+    margin-top: 0.15rem;
+    flex: 0 0 auto;
+}
+
+.patch-check-note {
+    display: block;
     color: var(--ink-dim);
-}
-
-.patch-embed label {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
-.patch-embed input {
-    width: 14rem;
-    font: inherit;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    max-width: 42ch;
 }
 
 /*
- * Over the table rather than pushing it down: a list that moved the rows every
- * time a letter was typed would be a list nobody could aim at.
+ * The library search (S44). The desk knows two thousand profiles, so what is
+ * offered is what was asked for: a box, and the daemon's answer under it.
  */
-.library-matches {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    z-index: 1;
-    max-height: 14rem;
-    overflow-y: auto;
-    margin: 0.2rem 0 0;
-    padding: 0.2rem;
-    list-style: none;
-    min-width: 20rem;
-    background: var(--panel);
-    border: 1px solid var(--edge);
-}
-
-.library-matches li {
-    padding: 0.1rem 0.2rem;
-}
-
-.library-matches button {
-    width: 100%;
-    text-align: left;
-    text-decoration: none;
-}
-
-.library-matches button:disabled {
+/*
+ * The Type field of the patch form: a search box, what is chosen under it, and
+ * the matches over the top of everything (S43, B19). It was `.patch-embed` in
+ * the toolbar and it is in the form now, where the profile is chosen.
+ */
+/*
+ * The Type row: a label, the answer, and the key that opens the library. One
+ * line rather than a column since S43 — the search box that used to live here
+ * moved into the panel, and what is left is a reading, which reads across.
+ */
+.patch-type {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
     color: var(--ink-dim);
-    cursor: default;
+}
+
+/*
+ * What the row is set to, and the key that opens the library. Full ink against
+ * the dimmed label beside it, because it is an answer and not a prompt.
+ */
+.patch-type-chosen {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--ink);
+}
+
+.patch-type-label {
+    flex: 0 0 auto;
+    color: var(--ink-dim);
+}
+
+/*
+ * ---- the fixture library, as a panel (S43, B23) --------------------------
+ *
+ * It was a dropdown under a text box: four rows of run-together text floating
+ * over the patch table it was covering, which is what the owner called
+ * *unübersichtlich*. A library of two thousand profiles is a table, and a table
+ * needs room, so it is a wide modal now and the columns are the order an
+ * operator narrows in — make, model, mode, width.
+ */
+.library-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+}
+
+.library-search-label {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--ink-dim);
+}
+
+.library-search-label input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.library-count {
+    flex: 0 0 auto;
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The width of a column is set here and not left to the content: a mode called
+ * *8ch* beside one called *Extended 16-bit DMX mode* would otherwise move every
+ * column each time a letter is typed, which is a list nobody can aim at.
+ */
+.library-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.library-table th:nth-child(1),
+.library-table td:nth-child(1) {
+    width: 24%;
+}
+
+.library-table th:nth-child(2),
+.library-table td:nth-child(2) {
+    width: 32%;
+}
+
+.library-table th:nth-child(3),
+.library-table td:nth-child(3) {
+    width: 20%;
+}
+
+.library-table th:nth-child(4),
+.library-table td:nth-child(4) {
+    width: 4rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.library-table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.library-table td button {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Marked, not hidden — and picking it re-reads it, which the cell says. */
+.library-held {
+    color: var(--ink-dim);
 }
 
 .library-empty {
     color: var(--ink-dim);
+}
+
+/* The recent-shows list, which is still a list and is still short. */
+.library-matches {
+    margin: 0.2rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.library-matches li {
+    padding: 0.1rem 0.2rem;
 }
 
 /*
@@ -535,26 +808,29 @@
 }
 
 /*
- * The fixture sheet's two halves: the table, which scrolls, and the canvas the
- * output column is drawn on, which does not. The canvas is a *sibling* of the
- * scroll container rather than a child of it, so it stays the size of the
- * window however many rows there are — the loop reads `scrollTop` off the
- * container each frame instead. A canvas as tall as four hundred rows would be
- * nine thousand pixels of bitmap for the twenty a person can see.
+ * The fixture sheet's body. It was two halves until **S43** — a table and a
+ * canvas of live levels drawn beside it — and punch-list B8 took the canvas out:
+ * its scaling was wrong, and *what is on the cable* is what the `DMX Sheet`
+ * window is for, channel by channel and with no fixtures in the way.
  */
 .sheet-live {
     display: flex;
     flex: 1 1 auto;
     min-height: 0;
-    gap: 0.4rem;
 }
 
-.sheet-canvas {
-    flex: 0 0 8rem;
-    align-self: stretch;
-    min-height: 0;
-    background: var(--panel-deep, #0b0e13);
-    border-left: 1px solid var(--edge);
+/* A row is the pick (B16), so it has to look like one. */
+.sheet-pick {
+    cursor: pointer;
+}
+
+.sheet-pick:hover td {
+    background: var(--edge);
+}
+
+.sheet-pick:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
 .pool {
@@ -704,84 +980,131 @@
  * every time an executor was assigned.
  */
 /*
- * The band under the canvas: the encoders and the executors side by side (S35).
+ * ---- the programmer band (S43) ------------------------------------------
  *
- * S26 gave each a full-width band, which took two bands of height off the canvas
- * and left the encoders 3.1 rem for five banks, six parameters and a readout.
- * One band is 6.8 rem — a little more than the executor bar alone used to be,
- * and 2.7 rem back for the canvas.
+ * The owner's `design/skeleton/programmer.pdf`: the feature groups in two
+ * columns, a page stepper, four encoders, and the selected cue list on the
+ * right.
  *
- * The height is **fixed** rather than taken from the contents, which is S26's
- * rule and still the important one: a band that grew when an executor was
- * assigned would move every window on the screen. Both halves therefore have to
- * fit inside it, and `e2e/desk.spec.ts` is what checks they do — it reads
- * `scrollWidth − clientWidth` and `scrollHeight − clientHeight` off the
- * document, the canvas and both bars and demands eight zeros. A split too tight
- * for the encoders shows up there rather than in a screenshot.
+ * **The height is fixed and it is 20 % rather than the drawing's 30 %.** At
+ * 1280 × 720 the drawing would leave the canvas about 400 px, which is two
+ * windows' worth of nothing; `ARCHITECTURE_SPEC.md` §4.6 records the departure
+ * with this reason. Fixed rather than sized by its contents for S26's reason: a
+ * band that grew when a cue list was selected would move every window on the
+ * screen.
  *
- * The encoders sit on the left at a fixed width, the executors take what is
- * left: eight strips share whatever the screen has, which is what they did when
- * they had a band of their own.
+ * `clamp` rather than a percentage so it is a band on a laptop and a band on a
+ * 4K desk — a share of a 2160-pixel screen would be a programmer you could read
+ * from the car park.
  */
-.deskband {
+.progband {
     flex: 0 0 auto;
+    height: clamp(9rem, 20vh, 13rem);
     display: flex;
     align-items: stretch;
-    gap: 0.4rem;
-    height: 6.8rem;
-    padding: 0.25rem 0.6rem;
+    gap: 0.5rem;
+    padding: 0.4rem 0.6rem;
     border-top: 1px solid var(--edge);
     background: var(--panel);
 }
 
-.encbar {
-    flex: 0 0 27rem;
-    min-width: 0;
+/* The seven feature groups, two to a row — the drawing's left-hand box. */
+.progband-groups {
+    flex: 0 0 auto;
     display: grid;
-    grid-template-rows: auto 1fr;
-    grid-template-columns: 1fr auto;
-    gap: 0.25rem 0.4rem;
-    padding-right: 0.6rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
+    gap: 0.25rem;
+    padding-right: 0.5rem;
     border-right: 1px solid var(--edge);
 }
 
-.encbar-banks,
-.encbar-encoders,
-.encbar-param,
-.encbar-page {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-}
-
-.encbar-banks {
-    grid-row: 1;
-    grid-column: 1;
-    min-width: 0;
-}
-
-.encbar-encoders {
-    grid-row: 2;
-    grid-column: 1;
-    min-width: 0;
-    overflow: hidden;
-}
-
-/* The two step controls, stacked: the parameter the wheel turns, and the page. */
-.encbar-steps {
-    grid-row: 2;
-    grid-column: 2;
+/* The drawing's `>` over `<`. */
+.progband-pager {
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    align-items: center;
+    justify-content: center;
     gap: 0.2rem;
 }
 
-
-.encbar-page-number {
+.progband-page-number {
     font-variant-numeric: tabular-nums;
     font-size: 0.62rem;
+    color: var(--accent);
+}
+
+/*
+ * The four boxes — a **fixed** grid of four, not a row that stretches.
+ *
+ * `ENCODERS_PER_PAGE` is four, and a bank with two parameters draws two boxes in
+ * the first two places rather than two half-width boxes filling the row. That is
+ * the owner's correction and it is the right one for a console: an encoder is a
+ * *place*, and a place that moves and changes size depending on what is on the
+ * bank is a place you cannot learn. Dimmer's one box now sits where Colour's
+ * first box sits.
+ *
+ * `grid-template-columns` with four explicit tracks is the whole of it —
+ * `auto-fit` or a flex row would both collapse the empty places, which is
+ * exactly what must not happen.
+ */
+.progband-encoders {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.35rem;
+}
+
+/* The empty-bank note is a sentence rather than an encoder, so it spans. */
+.progband-encoders .window-note {
+    grid-column: 1 / -1;
+    align-self: center;
+}
+
+/*
+ * The right-hand column: the selected sequence over its cue list.
+ *
+ * One scroller, in the body — the shape S37/S38 settled and S39's finding about
+ * a flex scroll area needing a floor rather than only `min-height: 0`.
+ */
+.progband-sequence {
+    flex: 0 0 clamp(12rem, 22%, 20rem);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--edge);
+}
+
+.progband-sequence h3 {
+    flex: 0 0 auto;
+    margin: 0 0 0.25rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progband-cues {
+    flex: 1 1 auto;
+    min-height: 3rem;
+    overflow: auto;
+}
+
+/* The row a playback is standing on. A bar down the left as well as a colour:
+   at two metres a colour alone is a guess. */
+.row-playing > td:first-child {
+    box-shadow: inset 0.18rem 0 0 var(--accent);
+}
+
+.row-playing td {
     color: var(--accent);
 }
 
@@ -833,14 +1156,49 @@
     user-select: none;
 }
 
-/* The one the jog wheel turns — `programmerParamIndex`. */
+/* The one the jog wheel turns — `programmerParamIndex`. Two signals, for the
+   dark room: the edge and a rule down the left. */
 .encoder-selected {
     border-color: var(--accent);
+    box-shadow: inset 0.18rem 0 0 var(--accent);
 }
 
 .encoder-absent {
     color: var(--ink-dim);
     cursor: default;
+}
+
+/*
+ * **Overriding, and not overriding** — S43, the owner's fourth point.
+ *
+ * Both encoders show a number now (see `desk/programmer.ts`), so the mark is
+ * what carries the difference an operator has to be sure of: *is this value
+ * going out whatever the playbacks say?*
+ *
+ * It is deliberately not colour alone. `CLAUDE.md` asks for a console read at
+ * two metres in a dark room, and by people who do not all see colour the same
+ * way — so an overridden encoder is brighter, has a solid bar down its right
+ * edge and carries full-weight digits, while a resting one is dimmed. Three
+ * signals, any one of which is enough.
+ */
+.encoder:not(.encoder-overriding) .encoder-value {
+    color: var(--ink-dim);
+    font-weight: 400;
+}
+
+.encoder-overriding {
+    box-shadow: inset -0.22rem 0 0 var(--accent);
+}
+
+.encoder-overriding .encoder-value {
+    font-weight: 700;
+}
+
+/* Selected *and* overriding: a bar on each side, and they must not merge. */
+.encoder-selected.encoder-overriding {
+    box-shadow:
+        inset 0.18rem 0 0 var(--accent),
+        inset -0.22rem 0 0 var(--accent);
 }
 
 .encoder-name {
@@ -854,36 +1212,54 @@
     color: var(--accent);
 }
 
+/* The value is the thing an operator reads across a room, so it is the biggest
+   type on the band. */
 .encoder-value {
     font-variant-numeric: tabular-nums;
+    font-size: 1.35rem;
+    line-height: 1.1;
 }
 
-.encoder-count {
+.encoder-foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.4rem;
+    width: 100%;
+}
+
+.encoder-count,
+.encoder-source {
     font-size: 0.6rem;
     color: var(--ink-dim);
 }
 
-.encbar-readout {
-    grid-row: 1;
-    grid-column: 2;
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin: 0;
-}
-
+/*
+ * Clear, top right — where the drawing puts it.
+ *
+ * **It says what it would clear** (S43, B2): the stage is derived from the
+ * programmer's contents now, so stage 0 means *there is nothing to clear* and
+ * the key is dark and disabled rather than cycling on regardless.
+ */
 .clear-button {
-    padding: 0.2rem 0.6rem;
+    flex: 0 0 auto;
+    padding: 0.25rem 0.9rem;
     border: 1px solid var(--edge-lit);
     border-radius: 3px;
     background: var(--ground);
     color: var(--ink);
     font: inherit;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     cursor: pointer;
 }
 
-/* The three-stage Clear says which stage it is at, because the next press
-   does something different at each one. */
+.clear-button:disabled {
+    color: var(--edge-lit);
+    border-color: var(--edge);
+    cursor: default;
+}
+
 .clear-stage-1 {
     border-color: var(--warn);
     color: var(--warn);
@@ -894,7 +1270,27 @@
     color: var(--bad);
 }
 
-/* ---- the executor bar --------------------------------------------------- */
+/* Everything, including the bank — the most destructive of the three, so it is
+   filled rather than outlined. */
+.clear-stage-3 {
+    border-color: var(--bad);
+    background: var(--bad);
+    color: var(--ground);
+}
+
+/* ---- the Executors window (S43) ----------------------------------------- */
+
+/*
+ * The strip, in a window rather than a band. It fills the window body, so eight
+ * strips share whatever the operator gave the window — which is the same rule
+ * they had in a band, with the width now under the operator's control instead of
+ * the screen's.
+ */
+.executor-window {
+    height: 100%;
+    display: flex;
+    min-height: 0;
+}
 
 .execbar {
     flex: 1 1 auto;
@@ -1080,29 +1476,32 @@
     cursor: not-allowed;
 }
 
-/* ---- footer ------------------------------------------------------------- */
+/* ---- the command line --------------------------------------------------- */
 
-.desk-footer {
+.desk-command {
     flex: 0 0 auto;
     border-top: 1px solid var(--edge);
     background: var(--panel);
 }
 
 /*
- * The command line, since S40: an input, the question it may be holding, what
- * the line would do, the words that are legal here, and the keypad.
+ * The command line: an input, the question it may be holding, what the line
+ * would do, and what the engine has.
  *
- * It is a **column** rather than the row S26 had, because there are five things
- * in it now and a row of five would push the canvas up. `flex: 0 0 auto` on the
- * footer keeps the canvas the thing that shrinks (`CLAUDE.md`: no scrolling
- * outside the canvas), and every row inside it is one line high.
+ * **Four rows since S43, not six.** The row of completions went (B13) and the
+ * keypad became a window (B12), which is what the owner's drawing shows: the
+ * line is *the* interface (§4.5) and it was being crowded by things that
+ * explained it.
+ *
+ * A **column**, because the rows are a line each and a row of four would push
+ * the canvas up. `flex: 0 0 auto` keeps the canvas the thing that shrinks
+ * (`CLAUDE.md`: no scrolling outside the canvas).
  */
 .command-line {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.2rem;
     padding: 0.3rem 0.6rem;
-    border-bottom: 1px solid var(--edge);
 }
 
 .command-line form {
@@ -1129,16 +1528,6 @@
     border: 1px solid var(--warn, var(--edge-lit));
     border-radius: 3px;
     background: var(--ground);
-}
-
-/* The words that are legal at this point in the line. */
-.command-words {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--ink-dim);
 }
 
 /*
@@ -1220,17 +1609,44 @@
 }
 
 /*
- * The status strip's readings. Named `.status-strip` and not `.strip`: it shared
- * that class with the executor strip, and being the later rule it was quietly
- * deciding the executor strip's `display`, `gap`, `margin` and `padding` — so
- * the eight strips have never used the grid their own rule sets up.
+ * ---- the Status window (S43) --------------------------------------------
+ *
+ * The readings that were a strip along the bottom. Grouped into four titled
+ * panels rather than run together in one line: at two metres a change of
+ * spacing is invisible and an edge is not, so a *section* is a box.
  */
-.status-strip {
+.status-window {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    align-content: start;
+    gap: 0.5rem;
+    padding: 0.1rem;
+}
+
+.status-section {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    background: var(--ground);
+}
+
+.status-section h3 {
+    margin: 0 0 0.3rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+
+.status-readings {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0 1.1rem;
+    flex-direction: column;
+    gap: 0.1rem;
     margin: 0;
-    padding: 0.25rem 0.6rem;
+}
+
+.status-readings .reading {
+    justify-content: space-between;
 }
 
 .reading {
@@ -1330,12 +1746,46 @@
     pointer-events: none;
 }
 
+/*
+ * **Why `min-width` and `overflow-wrap` are load-bearing** — S43, punch-list B5,
+ * second attempt.
+ *
+ * A flex item's automatic minimum size is its *min-content* width, and the
+ * message of a successful export is an absolute path with no spaces in it. So
+ * this item refused to shrink below the width of that path, pushed the close
+ * button past `.notice-wrapper`'s edge, and `overflow: hidden` cut it off —
+ * measured at 1 px outside the box, which is a button that exists in the DOM,
+ * answers the keyboard, and cannot be seen or aimed at.
+ *
+ * An error message is a sentence with spaces in it, so it wrapped, this item
+ * stayed narrow and the button survived. That is the whole of *some* messages
+ * cannot be closed.
+ */
 .notice-content {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
-/* The close button, which is only ink until it is under the pointer. */
+/*
+ * The close button.
+ *
+ * **`--ink`, not `inherit`** — S43, punch-list B5. The owner reported that some
+ * notices could not be closed; every one of them has had this button since it
+ * was written, and what was actually wrong is that it *inherited* `.notices ul`'s
+ * dim ink. On a `Warn` or an `Error` the level's colour overrode that and the
+ * cross stood out; on an `Info` — a successful export, say — it was mid-grey on
+ * near-black and invisible. A control an operator cannot see is a control they
+ * have not got.
+ */
 .notice-close {
+    /*
+     * **Never gives up its size.** The pair with `.notice-content`'s
+     * `min-width: 0` above: one of the two has to be told it may shrink and the
+     * other that it may not, or a long message decides which of them the
+     * operator gets to see.
+     */
+    flex-shrink: 0;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -1344,8 +1794,12 @@
     justify-content: center;
     padding: 0.25rem;
     border-radius: 4px;
-    color: inherit;
+    color: var(--ink);
     transition: background-color 0.2s ease;
+}
+
+.notice-close:focus-visible {
+    outline: 2px solid var(--accent);
 }
 
 .notice-close:hover {
@@ -1392,8 +1846,12 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* One sequence in the pool, and one of the five preset-pool tabs. */
-.pool-chip,
+/*
+ * One of the eight preset-pool tabs.
+ *
+ * The sequence pool used to share this rule; it is a grid of `.pool-box` since
+ * S43, and a tab is the only chip left.
+ */
 .pool-tab {
     display: inline-flex;
     align-items: baseline;
@@ -1407,7 +1865,6 @@
     font: inherit;
 }
 
-.pool-chip-current,
 .pool-tab-current {
     border-color: var(--accent);
     color: var(--accent);
@@ -1537,19 +1994,41 @@
     .update-key.update-blinking {
         animation: none;
     }
+
+    /*
+     * **And a notice goes at once rather than collapsing** — S43, B5. The
+     * component reads this duration off the element, so turning the transition
+     * off here dismisses immediately instead of leaving a message on the screen
+     * that nothing can take away.
+     */
+    .notice,
+    .notices {
+        transition-duration: 0s;
+    }
 }
 
-/* The preset pool proper: boxes, as a console draws them. */
+/*
+ * ---- the pools, as grids of boxes (S43, the owner's rebuild) -------------
+ *
+ * Sequences, groups and presets are three pools and they are drawn one way:
+ * *auch das Group Sheet und das Preset Sheet sollen ein Grid werden*. A box is
+ * the number, the name, one note and — where the object has one — the colour
+ * the scribble strips show. Everything else about the object is a right-click.
+ *
+ * The columns are `auto-fill` over a minimum rather than a fixed count, so the
+ * same pool is four across in a narrow window and twelve across on a 4K screen
+ * without either being told which it is.
+ */
 .pool-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
     gap: 0.3rem;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.preset-box {
+.pool-box {
     display: grid;
     grid-template-columns: 0.9rem 2.2rem 1fr;
     grid-template-areas:
@@ -1558,14 +2037,28 @@
     align-items: center;
     gap: 0.1rem 0.35rem;
     width: 100%;
-    text-align: left;
+    padding: 0.25rem 0.35rem;
     background: var(--panel);
-    color: inherit;
-    border: 1px solid var(--edge);
-    border-radius: 3px;
-    padding: 0.2rem 0.3rem;
-    cursor: pointer;
-    font: inherit;
+    text-align: left;
+    white-space: normal;
+}
+
+/*
+ * **A switched-on group, and the cue list being edited.** Both are *lit*, and
+ * lit is a colour **and** an edge weight: `CLAUDE.md` asks for fast recognition
+ * of state at two metres in a dark room, and a dark room is not a
+ * colour-matching exercise. The left edge is the second signal, because a whole
+ * border thickening moves the box.
+ */
+.pool-box-on,
+.pool-box-current {
+    border-color: var(--accent);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.pool-box-on .pool-number,
+.pool-box-current .pool-number {
+    color: var(--accent);
 }
 
 .preset-swatch {
@@ -1575,18 +2068,18 @@
     background: var(--edge);
 }
 
-.preset-box .pool-number {
+.pool-box .pool-number {
     grid-area: number;
 }
 
-.preset-box .pool-name {
+.pool-box .pool-name {
     grid-area: name;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.preset-box .pool-note {
+.pool-box .pool-note {
     grid-area: note;
 }
 
@@ -1616,8 +2109,16 @@
     min-height: 0;
 }
 
+/*
+ * The five panel names. **Wrapping**, since S43: the settings window opens about
+ * 430 px wide and five tabs do not fit on one line at that width, so the strip
+ * pushed the window body sideways — measured at 24 px, which is a scrollbar
+ * under a panel that has nothing to scroll. A second line of tabs is what an
+ * operator expects; a horizontal scroll to reach *Show files* is not.
+ */
 .settings-tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.25rem;
     flex: 0 0 auto;
     border-bottom: 1px solid var(--edge);
@@ -1645,7 +2146,23 @@
     overflow: auto;
 }
 
+/*
+ * **A panel is a container**, so what is inside it can lay itself out from the
+ * width it actually has rather than from the screen's — S43. That is the
+ * difference between a device screen and a web page: a panel opened at 400 px
+ * and the same panel dragged out to 1200 px are the same panel, and a media
+ * query cannot tell them apart. The Controls rows are the first thing to use
+ * it; see `.control-row`.
+ *
+ * It sits on the **panel** rather than on `.window-body`, which would also
+ * work: the panel is the box whose width the rows are laying out against, and
+ * containment on the element that is actually being queried is one less thing
+ * for a later reader to trace. `container-type` also brings `contain: layout
+ * style`, so the narrower the element it is put on, the less of the page is
+ * being told to keep to itself.
+ */
 .settings-panel {
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
@@ -1788,4 +2305,447 @@
 
 .output-disconnected {
     color: var(--bad);
+}
+
+/*
+ * ---- the cue grid (S43) --------------------------------------------------
+ *
+ * One row per cue and one column per attribute. The columns are as narrow as a
+ * percentage needs and no narrower, and the numbers are tabular so a column of
+ * them reads as a column rather than as text.
+ */
+.cue-grid td,
+.cue-grid th {
+    white-space: nowrap;
+}
+
+.cue-value {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/*
+ * **The dash is the reading the window exists for** — *this cue leaves that
+ * attribute alone* — so it is dimmed rather than absent: an empty cell reads as
+ * a table that failed to load.
+ */
+.cue-untouched {
+    color: var(--ink-dim);
+    text-align: right;
+}
+
+/*
+ * A value that follows a preset. An underline rather than a colour on its own,
+ * because a cue grid is already carrying *running* and *untouched* in colour and
+ * a third would be one more than a tired operator can tell apart.
+ */
+.cue-linked {
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+
+/*
+ * ---- the modal panel (S43) ----------------------------------------------
+ *
+ * `chrome/modal.tsx`. Two callers: the window chooser (B9) and the fixture
+ * library (B23), and it exists because the second one was a dropdown inside a
+ * form field — a single column of run-together text over the table it was
+ * covering — and a library of two thousand profiles wants columns and room.
+ *
+ * It sits over the canvas and **not** over the whole desk: the command line and
+ * the programmer stay reachable behind it, which is the same property the
+ * command line's prompt bar has (S40) and the reason neither is a modal in the
+ * sense `CLAUDE.md` objects to.
+ */
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgb(8 9 12 / 72%);
+}
+
+.modal {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 100%;
+    width: min(48rem, 100%);
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 4px;
+    background: var(--panel);
+    box-shadow: 0 1rem 3rem rgb(0 0 0 / 45%);
+}
+
+/*
+ * The wide one — the library and the window chooser. It is a **percentage of
+ * the screen** rather than a fixed width, because the desk runs at 1280x720 and
+ * at 4K and the same rem count is a cramped panel on one and a stripe on the
+ * other. `e2e/desk.spec.ts` opens every window at both sizes.
+ */
+.modal-wide {
+    width: min(72rem, 100%);
+}
+
+.modal h2 {
+    flex: 0 0 auto;
+    margin: 0 0 0.7rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+
+/* The one thing in a modal that scrolls, exactly as a window body is. */
+.modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.modal-foot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+}
+
+.modal-cancel {
+    margin-left: auto;
+    color: var(--ink-dim);
+}
+
+/*
+ * The window chooser's keys — S43, and wider since the owner's rebuild.
+ *
+ * *Das Modal zum Fenster öffnen darf gerne auch breiter sein und mehrere Knöpfe
+ * nebeneinander haben, anstelle einer langen Liste.* It was a grid already, but
+ * inside a panel narrow enough that `auto-fill` gave it two columns; the width
+ * is what fixes that, and the minimum below is what stops a 4K screen drawing
+ * fifteen columns of two words each.
+ */
+.picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: 0.4rem;
+}
+
+.picker-key {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.55rem 0.6rem;
+    background: var(--ground);
+    text-align: left;
+    white-space: normal;
+}
+
+.picker-key .picker-note {
+    color: var(--ink-dim);
+    font-size: 0.68rem;
+}
+
+.picker-key:hover:not(:disabled) .picker-note {
+    color: inherit;
+}
+
+/*
+ * ---- the pop-up menu (S43) ----------------------------------------------
+ *
+ * `chrome/menu.tsx`. A right-click on a view, a sequence, a group or a preset.
+ * S35 built it for the view bar; the owner's rebuild made the pools grids whose
+ * smaller actions all come off a right-click, so it became one component.
+ */
+.menu {
+    position: fixed;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    min-width: 14rem;
+    padding: 0.25rem;
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    background: var(--panel);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 45%);
+}
+
+.menu-title {
+    margin: 0;
+    padding: 0.2rem 0.45rem 0.3rem;
+    border-bottom: 1px solid var(--edge);
+    color: var(--ink-dim);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.menu > button {
+    padding: 0.3rem 0.45rem;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    font-size: 0.74rem;
+    text-align: left;
+}
+
+.menu > button:hover:not(:disabled) {
+    background: var(--ground);
+    color: var(--ink);
+}
+
+.menu > button:disabled {
+    color: var(--edge-lit);
+}
+
+.menu-danger:not(:disabled) {
+    color: var(--bad);
+}
+
+.menu-field {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem 0.45rem;
+}
+
+.menu-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/*
+ * ---- the Clock Viewer (S43) ---------------------------------------------
+ *
+ * The face is the largest type in the interface on purpose: this is the one
+ * window whose whole job is to be read from the back of the room.
+ */
+.clock {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: 0.2rem;
+}
+
+.clock-face {
+    margin: 0;
+    font-size: clamp(2rem, 14cqw, 5rem);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    text-align: center;
+}
+
+.clock-date {
+    margin: 0 0 0.4rem;
+    text-align: center;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+
+.clock-running {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+
+/*
+ * ---- the Controls panel (S43, B3 and the owner's rebuild) ----------------
+ *
+ * *Die Controls Seite ist sehr unstrukturiert und unübersichtlich und alles hat
+ * verschiedene Längen und Breiten.* Both halves of that were true and both are
+ * fixed here.
+ *
+ * **The widths**: the sections were four `<table>`s, and a table sizes its own
+ * columns, so *Action* was one width under one heading and another width under
+ * the next — four little tables rather than one list. They are one grid now, and
+ * the column template is on the **row**, so every row of every section has the
+ * same four columns and the eye can run straight down them.
+ *
+ * `minmax(0, ...)` on the two flexible columns rather than `1fr` alone: a bound
+ * command line can be sixty characters, and a grid track's default minimum is
+ * its content, which would let one long line push the Learn key off the panel.
+ */
+.control-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.control-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 12rem) minmax(0, 1.4fr) minmax(0, 1fr) 6rem;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.3rem;
+    border-radius: 3px;
+}
+
+/*
+ * **Narrow: two lines instead of four squeezed columns** — and this is a
+ * container query rather than a media query, because what is too narrow is the
+ * *window*, not the screen. Measured: the settings window opens at about 430 px,
+ * and at that width four columns leave the two flexible ones at 45 px and 32 px
+ * — which is the *verschiedene Breiten* complaint arriving from the other
+ * direction, a layout that is uniform and unreadable.
+ *
+ * So under 34 rem the action and its answer take the first line and the keys and
+ * the Learn take the second. Nothing scrolls sideways, which is the rule this
+ * desk is built on; the columns still line up down the panel, because every row
+ * folds the same way.
+ */
+@container (width < 34rem) {
+    .control-row {
+        grid-template-columns: minmax(0, 1fr) 6rem;
+        grid-template-areas:
+            "name detail"
+            "keys learn";
+        row-gap: 0.15rem;
+        padding-bottom: 0.3rem;
+        border-bottom: 1px solid var(--edge);
+    }
+
+    .control-row > :nth-child(1) {
+        grid-area: name;
+    }
+
+    .control-row > :nth-child(2) {
+        grid-area: detail;
+    }
+
+    .control-row > :nth-child(3) {
+        grid-area: keys;
+    }
+
+    .control-row > :nth-child(4) {
+        grid-area: learn;
+    }
+
+    /* The headings say nothing once the row is two lines: each cell is beside
+       the thing it names, and a heading row of four words over two lines is
+       worse than none. */
+    .control-headings {
+        display: none;
+    }
+}
+
+.control-row:nth-child(even) {
+    background: rgb(255 255 255 / 2.5%);
+}
+
+/*
+ * The headings. Dimmed, small, and repeated per section — a list four sections
+ * long with one heading at the top is a list an operator has to scroll back up
+ * to read.
+ */
+.control-headings {
+    color: var(--ink-dim);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: none;
+    border-bottom: 1px solid var(--edge);
+}
+
+.control-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.control-detail {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+/* Every chooser in the column is the width of the column, not of its longest
+   option: that is the *verschiedene Breiten* the owner was reading. */
+.control-detail select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.control-line {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.control-kind {
+    flex: 0 0 auto;
+    color: var(--ink-dim);
+}
+
+.control-check {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    color: var(--ink-dim);
+    white-space: nowrap;
+}
+
+/* The row whose Learn is armed, so it is obvious which key the next press
+   lands on — the one thing on this panel that is genuinely modal. */
+.control-arming {
+    background: var(--edge);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.control-new {
+    margin-top: 0.3rem;
+    border-top: 1px dashed var(--edge-lit);
+    padding-top: 0.35rem;
+}
+
+.settings-file {
+    display: flex;
+    gap: 0.3rem;
+    margin-left: auto;
+}
+
+/*
+ * The keys bound to one action, in the Controls panel — S43, B3. Chips rather
+ * than a comma-separated string: each one carries its own unbind, and a key
+ * that follows the shared-mode switch is marked with a star rather than a
+ * second column, because the column now belongs to the action.
+ */
+.key-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.key-chips li {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    border: 1px solid var(--edge);
+    padding: 0 0.15rem;
+}
+
+.key-chip {
+    font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Reserved: it switches the desk between hosts, so it is drawn as a warning and
+ * its unbind is disabled. §4.3 — the fact is the daemon's, not this file's.
+ */
+.key-chip-reserved {
+    color: var(--warn, #ffd479);
+}
+
+.settings-none {
+    color: var(--ink-dim);
 }

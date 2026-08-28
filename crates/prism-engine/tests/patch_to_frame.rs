@@ -81,6 +81,7 @@ fn fixture_type(id: &str, footprint: u16, attributes: Vec<AttributeDef>) -> Fixt
 
 fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),
@@ -201,6 +202,47 @@ fn the_home_layer_reaches_the_wire_as_bytes() {
     );
     // The par is at home too, and its home is dark.
     assert_eq!(rig.tick().channel(1, 100), Some(0));
+}
+
+/// **A colour channel rests open at the wire** — punch-list B1, and the half of
+/// it the owner asked for in as many words: *auch im DMX-Ausgang*.
+///
+/// The library sets the home value (`prism_core::library::colour` and the OFL
+/// converter) and this is where it is asserted to *arrive*: nothing running,
+/// nothing in the programmer, and the par's three emitters carry 255 while its
+/// dimmer carries nought. A rig at home sits at white with the dimmer down
+/// rather than at black twice over, so an operator brings a lamp up and gets
+/// light rather than a lamp that is on and invisible.
+///
+/// **This test did not exist when B1 was first called fixed**, and the punch
+/// list said it did. That is how the second half of the fault survived: the
+/// generic profiles were right, the OFL converter believed the manufacturer's
+/// `defaultValue` of nought, and no test read the value at either end.
+#[test]
+fn a_colour_channel_rests_open_at_the_wire() {
+    let layout = FrameLayout::new([UniverseId::new(1)]).unwrap();
+    let open = fixture_type(
+        "test.rgbw",
+        4,
+        vec![
+            attribute(AttributeType::Red, u16::MAX, 0, None),
+            attribute(AttributeType::Green, u16::MAX, 1, None),
+            attribute(AttributeType::Blue, u16::MAX, 2, None),
+            // The dimmer is what decides whether any of it is seen, so it rests
+            // shut — the pair is the whole point.
+            attribute(AttributeType::Dimmer, 0, 3, None),
+        ],
+    );
+    let fixtures = [fixture(1, "test.rgbw", 1, 1)];
+    let types: Vec<(&Fixture, &FixtureType)> = fixtures.iter().map(|one| (one, &open)).collect();
+    let body = MergeBody::for_patch(&layout, types, (1..=2).map(ExecutorId::new)).unwrap();
+    let mut rig = engine(body, layout);
+
+    assert_eq!(
+        written(rig.tick()),
+        [(0, 1, 0xFF), (0, 2, 0xFF), (0, 3, 0xFF)],
+        "the colours rest open and the dimmer rests shut"
+    );
 }
 
 #[test]

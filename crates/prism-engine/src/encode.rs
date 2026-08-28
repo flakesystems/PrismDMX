@@ -32,7 +32,9 @@
 use core::fmt;
 use std::collections::BTreeSet;
 
-use prism_domain::{AttributeDef, AttributeType, Fixture, FixtureId, FixtureType, UniverseId};
+use prism_domain::{
+    AttributeDef, AttributeType, FeatureGroup, Fixture, FixtureId, FixtureType, UniverseId,
+};
 
 use crate::frame::{DmxFrame, FrameLayout, UNIVERSE_CHANNELS};
 use crate::plan::{MergeError, MergePlan};
@@ -45,6 +47,23 @@ use crate::plan::{MergeError, MergePlan};
 #[must_use]
 pub const fn invert(value: u16) -> u16 {
     u16::MAX - value
+}
+
+/// Scales a value by another, both full-scale at [`u16::MAX`] — the software
+/// dimmer's arithmetic.
+///
+/// Integer throughout and exact at both ends: `scaled(v, 0)` is 0 and
+/// `scaled(v, u16::MAX)` is `v`, so a fixture whose desk-supplied dimmer is at
+/// full is written byte for byte as it would be without one. Two multiplies and
+/// a divide on 32 bits, in the tick, per colour channel of a fixture that has
+/// one — which is the whole of what this feature costs the DMX thread.
+#[must_use]
+#[expect(
+    clippy::integer_division,
+    reason = "a level is an integer and the quotient is the answer: 32767/65535 of full               is a byte, not a fraction of one, and the tick may not carry a float"
+)]
+pub const fn scaled(value: u16, by: u16) -> u16 {
+    ((value as u32 * by as u32) / u16::MAX as u32) as u16
 }
 
 /// The high byte: what an 8-bit channel gets, and the coarse half of a 16-bit
@@ -203,6 +222,10 @@ pub struct ChannelTarget {
     coarse: u32,
     fine: Option<u32>,
     invert: bool,
+    /// The merge slot whose value scales this one on the way out, for a fixture
+    /// whose intensity the desk supplies — S43. `None` for every other channel,
+    /// which is every channel of a fixture with a dimmer of its own.
+    scale: Option<u32>,
 }
 
 impl ChannelTarget {
@@ -232,6 +255,16 @@ impl ChannelTarget {
     #[must_use]
     pub const fn is_sixteen_bit(&self) -> bool {
         self.fine.is_some()
+    }
+
+    /// The slot this channel is scaled by, if the desk supplies the fixture's
+    /// intensity and this is one of the channels it acts on.
+    #[must_use]
+    pub const fn scale(&self) -> Option<usize> {
+        match self.scale {
+            Some(slot) => Some(slot as usize),
+            None => None,
+        }
     }
 
     /// Whether the value is mirrored before it is written — the attribute's own
@@ -307,6 +340,22 @@ impl ChannelPlan {
             }
             let base = position * UNIVERSE_CHANNELS + usize::from(fixture.address - 1);
 
+            // **The desk-supplied intensity, if this fixture has one** — S43. It
+            // is a merge slot with no channel of its own (`MergePlan::build`),
+            // so what it does instead is scale the channels that carry the
+            // fixture's light. Which are they? The **colour** ones: a fixture
+            // with no intensity channel emits through its colour mixing and
+            // nothing else, and scaling anything further — a pan, a gobo wheel —
+            // would be dimming a mirror rather than a lamp.
+            //
+            // Resolved here, at patch time, so the tick carries one slot index
+            // per target and asks no questions about the patch.
+            let dimmer = if fixture.has_software_dimmer(fixture_type) {
+                plan.index_of(fixture.id, AttributeType::Dimmer)
+            } else {
+                None
+            };
+
             for def in &fixture_type.attributes {
                 let Some(slot) = plan.index_of(fixture.id, def.attribute) else {
                     return Err(PatchError::AttributeNotInPlan {
@@ -344,6 +393,12 @@ impl ChannelPlan {
                     coarse: coarse as u32,
                     fine: fine.map(|fine| fine as u32),
                     invert: def.invert ^ fixture_invert(fixture, def),
+                    scale: match dimmer {
+                        Some(index) if def.feature_group == FeatureGroup::Color => {
+                            Some(index as u32)
+                        }
+                        _ => None,
+                    },
                 });
             }
         }
@@ -396,6 +451,14 @@ impl ChannelPlan {
             let Some(&value) = values.get(target.slot()) else {
                 continue;
             };
+            // **Scaled before it is mirrored.** The software dimmer is about
+            // how much light the fixture makes; an invert is about how the
+            // fixture is wired, and a channel that reads backwards must read a
+            // dimmed value backwards too.
+            let value = match target.scale() {
+                Some(slot) => scaled(value, values.get(slot).copied().unwrap_or(0)),
+                None => value,
+            };
             let value = if target.invert { invert(value) } else { value };
             if let Some(byte) = channels.get_mut(target.coarse()) {
                 *byte = coarse_byte(value);
@@ -438,16 +501,121 @@ mod tests {
     use prism_domain::{AttributeType, Fixture, FixtureId, FixtureType, UniverseId};
     use proptest::prelude::*;
 
+    /// A colour-only PAR, which is the fixture the software dimmer exists for:
+    /// four channels of colour and no intensity anywhere.
+    fn colour_par() -> FixtureType {
+        fixture_type(
+            "test.rgbw",
+            vec![
+                attribute_at(AttributeType::Red, u16::MAX, 0, None),
+                attribute_at(AttributeType::Green, u16::MAX, 1, None),
+                attribute_at(AttributeType::Blue, u16::MAX, 2, None),
+                attribute_at(AttributeType::Pan, 0, 3, None),
+            ],
+        )
+    }
+
+    /// The plan pair for one such PAR at address 1, and the slot its supplied
+    /// intensity lives in.
+    fn colour_par_plans(supplied: bool) -> (MergePlan, ChannelPlan, FixtureType, Fixture) {
+        let par = colour_par();
+        let mut patched = fixture(1, "test.rgbw", 1, 1);
+        patched.software_dimmer = supplied;
+        let plan =
+            MergePlan::build([(patched.id, &par, patched.has_software_dimmer(&par))]).unwrap();
+        let channels = ChannelPlan::build(&plan, &layout(&[1]), [(&patched, &par)]).unwrap();
+        (plan, channels, par, patched)
+    }
+
+    /// **The supplied intensity scales the colour and nothing else** — S43.
+    ///
+    /// At nought the lamp is off although every colour channel is asking for
+    /// full, which is the state a rig is in when the daemon starts; at half the
+    /// colour is halved; and the pan, which is not light, is written straight
+    /// through at every setting.
+    #[test]
+    fn the_supplied_intensity_scales_the_colour_and_nothing_else() {
+        let (plan, channels, par, patched) = colour_par_plans(true);
+        let dimmer = plan
+            .index_of(patched.id, AttributeType::Dimmer)
+            .expect("the desk supplied one");
+        let mut values = vec![0u16; plan.slot_count()];
+        for attribute in [
+            AttributeType::Red,
+            AttributeType::Green,
+            AttributeType::Blue,
+        ] {
+            values[plan.index_of(patched.id, attribute).unwrap()] = u16::MAX;
+        }
+        values[plan.index_of(patched.id, AttributeType::Pan).unwrap()] = u16::MAX;
+
+        let mut frame = DmxFrame::new(&layout(&[1]));
+        channels.encode(&values, &mut frame);
+        assert_eq!(
+            &frame.channels()[0..4],
+            &[0, 0, 0, 255],
+            "dark, with the pan untouched, though the colour asks for full"
+        );
+
+        values[dimmer] = u16::MAX;
+        channels.encode(&values, &mut frame);
+        assert_eq!(
+            &frame.channels()[0..4],
+            &[255, 255, 255, 255],
+            "and at full it writes what it would have written with no dimmer at all"
+        );
+
+        values[dimmer] = u16::MAX / 2;
+        channels.encode(&values, &mut frame);
+        assert_eq!(frame.channels()[3], 255, "the pan is not light");
+        assert!(
+            (126..=128).contains(&frame.channels()[0]),
+            "the colour is halved, got {}",
+            frame.channels()[0]
+        );
+        let _ = par;
+    }
+
+    /// Switched off, every channel is written exactly as it was before S43 —
+    /// which is what the switch is **for**: a PAR on a dimmer pack wants its
+    /// colour channels driven, not scaled by a knob the desk invented.
+    #[test]
+    fn a_fixture_with_the_switch_off_is_written_straight_through() {
+        let (plan, channels, _par, patched) = colour_par_plans(false);
+        assert!(
+            plan.index_of(patched.id, AttributeType::Dimmer).is_none(),
+            "no slot, so nothing to scale by"
+        );
+        let mut values = vec![0u16; plan.slot_count()];
+        values[plan.index_of(patched.id, AttributeType::Red).unwrap()] = u16::MAX;
+        let mut frame = DmxFrame::new(&layout(&[1]));
+        channels.encode(&values, &mut frame);
+        assert_eq!(frame.channels()[0], 255);
+    }
+
+    /// The scaling is exact at both ends, so a rig at full is byte for byte the
+    /// rig S43 found — no rounding creeping into a show that never asked for a
+    /// software dimmer to do anything.
+    #[test]
+    fn scaling_is_exact_at_both_ends() {
+        for value in [0, 1, 12_345, u16::MAX / 2, u16::MAX] {
+            assert_eq!(crate::encode::scaled(value, u16::MAX), value);
+            assert_eq!(crate::encode::scaled(value, 0), 0);
+        }
+    }
+
     fn layout(ids: &[u32]) -> FrameLayout {
         FrameLayout::new(ids.iter().copied().map(UniverseId::new)).unwrap()
     }
 
     fn plan_of(entries: &[(&Fixture, &FixtureType)]) -> MergePlan {
-        MergePlan::build(
-            entries
-                .iter()
-                .map(|(fixture, fixture_type)| (fixture.id, *fixture_type)),
-        )
+        MergePlan::build(entries.iter().map(|(fixture, fixture_type)| {
+            (
+                fixture.id,
+                *fixture_type,
+                fixture.has_software_dimmer(fixture_type),
+            )
+        }))
         .unwrap()
     }
 
@@ -763,7 +931,7 @@ mod tests {
         );
         let layout = layout(&[1]);
         let patched = fixture(1, "test.movinghead", 1, 1);
-        let plan = MergePlan::build([(FixtureId::new(1), &head)]).unwrap();
+        let plan = MergePlan::build([(FixtureId::new(1), &head, false)]).unwrap();
         assert_eq!(
             ChannelPlan::build(&plan, &layout, [(&patched, &other)]).unwrap_err(),
             PatchError::AttributeNotInPlan {
@@ -781,7 +949,7 @@ mod tests {
         let layout = layout(&[1]);
         let a = fixture(1, "test.movinghead", 1, 1);
         let b = fixture(1, "test.movinghead", 1, 20);
-        let plan = MergePlan::build([(FixtureId::new(1), &head)]).unwrap();
+        let plan = MergePlan::build([(FixtureId::new(1), &head, false)]).unwrap();
         assert_eq!(
             ChannelPlan::build(&plan, &layout, [(&a, &head), (&b, &head)]).unwrap_err(),
             PatchError::DuplicateTarget {
@@ -1032,7 +1200,7 @@ mod tests {
             (patched, fixture_type) in arbitrary_patch(),
         ) {
             let layout = layout(&[1, 2, 3]);
-            let plan = MergePlan::build([(patched.id, &fixture_type)]).unwrap();
+            let plan = MergePlan::build([(patched.id, &fixture_type, false)]).unwrap();
             let Ok(channels) = ChannelPlan::build(&plan, &layout, [(&patched, &fixture_type)])
             else {
                 return Ok(());

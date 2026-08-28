@@ -286,3 +286,40 @@ fn a_search_over_the_whole_library_fits_in_a_frame() {
         assert!(haystack.contains("robe"), "{} does not match", entry.id);
     }
 }
+
+/// **Every colour channel in the installed library rests open** — punch-list B1,
+/// second attempt.
+///
+/// The property behind the fix, over the real tree rather than over one
+/// hand-written fixture — and it is what would have caught the fault the first
+/// time. `crate::library::colour` was right and the OFL converter was wrong: it
+/// believed a stated `defaultValue`, and 387 of the 391 colour channels in this
+/// library state nought. No test read a real file, so nothing said so and the
+/// owner found it by selecting a lamp.
+///
+/// Where a *lamp* parks with no DMX and where a *desk* parks a colour channel
+/// are two questions. This asserts the second one, which is the desk's to answer.
+#[test]
+fn no_profile_in_the_installed_library_rests_a_colour_shut() {
+    let Some(library) = installed() else {
+        return;
+    };
+    let mut checked = 0_usize;
+    for entry in library.entries() {
+        let profile = library.profile(&entry.id).expect("the library listed it");
+        for def in &profile.attributes {
+            if def.feature_group == prism_domain::FeatureGroup::Color {
+                assert_eq!(
+                    def.default_value,
+                    u16::MAX,
+                    "{} rests {:?} at {}",
+                    entry.id,
+                    def.attribute,
+                    def.default_value
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 100, "only {checked} colour channels were checked");
+}

@@ -59,6 +59,8 @@ function programmer(
 ): ProgrammerState {
   return {
     selection,
+    selectedGroups: [],
+    manualSelection: [],
     activeFeatureGroup: "Dimmer",
     values: values.map((entry) => ({
       fixture: entry.fixture,
@@ -159,17 +161,29 @@ describe("the fixture sheet", () => {
     expect(screen.getByTestId("sheet-row-5").className).toContain("row-selected");
   });
 
-  it("draws what is on the cable, and does it outside React", () => {
-    // The output column is the picture the telemetry loop paints. It is asserted
-    // here as *drawing happened for every row*; where each channel's bar went is
-    // `live.test.ts`, per pixel.
+  /**
+   * **The claim this test made is the one B8 took away** — S43.
+   *
+   * It said the sheet paints a live column outside React, thirty times a second,
+   * and it was true and asserted per row. The owner's entry says the bar's
+   * scaling was wrong and the table beside it was enough, and what is on the
+   * cable belongs to the `DMX Sheet` window — channel by channel, with no
+   * fixtures in the way.
+   *
+   * So the assertion is turned round rather than deleted: the sheet is handed a
+   * frame and **paints nothing**, because there is nothing here to paint on. The
+   * loop itself is untouched and still covered per pixel in `live.test.ts`,
+   * which is why S27's pattern survives the window that stopped using it.
+   */
+  it("no longer paints a live column, and takes a frame without one", () => {
     const { sink, frames, surface } = sheet({});
-    expect(surface).not.toBeNull();
+    expect(screen.queryByTestId("sheet-canvas")).toBeNull();
     sink.accept(narrowFrame(0));
     frames.step();
-    expect(surface?.clears.length).toBe(1);
-    // Three fixtures, so at least three rows were painted.
-    expect(surface?.fills.length).toBeGreaterThanOrEqual(3);
+    expect(surface?.clears.length ?? 0).toBe(0);
+    expect(surface?.fills.length ?? 0).toBe(0);
+    // And the rows are all still there: the column went, the sheet did not.
+    expect(screen.getByTestId("sheet-row-1")).not.toBeNull();
   });
 
   it("is a window with nothing in it when nothing is patched", () => {
@@ -178,13 +192,16 @@ describe("the fixture sheet", () => {
     expect(screen.queryByTestId("sheet-canvas")).toBeNull();
   });
 
-  it("renders without a canvas where there is no 2D context to be had", () => {
+  it("renders where there is no 2D context to be had", () => {
     // Every `jsdom` browser, and any real one that has run out of contexts. A
-    // sheet is a *view* of something happening whether or not it can be drawn.
+    // sheet is a *view* of something happening whether or not it can be drawn —
+    // which since B8 took the canvas out (above) is true by construction rather
+    // than by care, and is asserted so that a later window with live values in
+    // it inherits the requirement rather than rediscovering it.
     const { sink, frames } = sheet({ surface: null });
     sink.accept(narrowFrame(0));
     frames.step();
-    expect(screen.getByTestId("sheet-canvas")).not.toBeNull();
+    expect(screen.queryByTestId("sheet-canvas")).toBeNull();
     expect(screen.getByTestId("sheet-row-1")).not.toBeNull();
   });
 });

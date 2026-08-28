@@ -1,25 +1,25 @@
 /**
  * The Fixture Sheet: what every patched fixture is being told to do, live.
  *
- * # Two live columns, and they are allowed to disagree
+ * # One live column, since S43
  *
- * That disagreement is the reason both are here. The **programmer** column is
- * what the operator has laid on top — sparse, absolute priority, and *absent is
- * not zero* (`prism_core::programmer`), so an untouched attribute reads as a
- * dash and never as 0 %. The **output** column is what is actually on the cable
- * after the merge, the masters and the encoding. A fixture with nothing in the
- * programmer and a level on the cable is a playback running; one with a
- * programmer value and nothing on the cable is a grand master at zero, or a
- * universe with no output configured at all.
+ * The **programmer** column is what the operator has laid on top — sparse,
+ * absolute priority, and *absent is not zero* (`prism_core::programmer`), so an
+ * untouched attribute reads as a dash and never as 0 %.
  *
- * # And only one of them may be React
+ * There used to be a second: a canvas drawn over the last column showing what
+ * was actually on the cable, thirty times a second, outside React (S27's
+ * `./live.ts`). **Punch-list B8 took it out.** The owner's words were that its
+ * scaling was wrong and that the table beside it was enough, and both halves are
+ * right — a bar whose length did not mean what it looked like was worse than no
+ * bar, and *what is on the cable* is what the `DMX Sheet` window is for
+ * (`telemetry/panel.tsx`), channel by channel and with no fixtures in the way.
  *
- * `docs/IPC_PROTOCOL.md` §7, last paragraph. The programmer arrives as
- * `Delta::ProgrammerChanged` at the rate a human turns a knob and renders like
- * every other reader. The output arrives thirty times a second and is drawn on a
- * canvas by `./live.ts`, outside React entirely — `telemetry/render.test.tsx`
- * counts React commits over 300 frames and must stay at zero, so a sheet that
- * put levels in a `useState` would turn that test red.
+ * `./live.ts` is **kept**, and that is deliberate rather than an oversight: it is
+ * the pattern S27 recorded for any later view with per-row live values — a
+ * canvas the size of the window, `scrollTop` read off the container each frame,
+ * only the visible rows drawn — and it is covered by its own tests. What was
+ * removed is this sheet's use of it.
  *
  * # Which attributes are shown
  *
@@ -30,24 +30,38 @@
  * `prism_domain::FeatureGroup::attributes`, which is the same table the encoder
  * bar and the jog wheel walk (S26).
  *
+ * # Selecting — S43, B16 and B17
+ *
+ * **The whole row is the target**, not the number in its first cell. An operator
+ * pointing at a fixture points at the fixture, and a four-pixel-wide number was
+ * a target you had to aim at.
+ *
+ * **And a click adds to the selection rather than replacing it** (B17), which is
+ * how a console works: you pick the four lamps you want and then set them.
+ * `SelectionMode::Toggle` is what a row sends, so clicking a selected row takes
+ * it back out again; the way to start over is **Clear**, which is the owner's
+ * answer and the one the punch list gives in as many words.
+ *
+ * That is a difference between the pointer and the line, and it is a deliberate
+ * one: a typed `Fixture 5` still *replaces*, because a line naming a fixture is
+ * a statement about what the selection is. The rows write
+ * `Fixture 5 + ` — the grammar's own word for *and this one too* — so the
+ * gesture and the line are still the same thing, which is §4.5's whole point.
+ *
  * # Scrolling
  *
  * `CLAUDE.md` forbids scrolling *outside* the canvas. A rig of four hundred
- * fixtures scrolls **inside this window**, which is what a window is for, and
- * the output column is drawn only for the rows that are on the screen.
+ * fixtures scrolls **inside this window**, which is what a window is for.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import type { AttributeType, JsonValue, ProgrammerState } from "../bindings";
 import { bankParameters, groupOf, valueFor } from "../desk/programmer";
 import { encoderBank } from "../desk/session";
-import { useConsole } from "../desk/consoleshell";
+import { pick, useConsole } from "../desk/consoleshell";
 import { percentOfLevel } from "../desk/level";
-import { useTelemetryChannel } from "../telemetry/context";
-import { canvasSurface, devicePixelRatio, resizeCanvas } from "../telemetry/painter";
-import type { LiveFixture } from "./live";
-import { ROW_HEIGHT, driveFixtureLevels, liveFixtures } from "./live";
+import { ROW_HEIGHT } from "./live";
 import { patchRows } from "./patch";
 
 /** The whole sheet. */
@@ -61,7 +75,6 @@ export function FixtureSheet({
     readonly programmer: ProgrammerState | null;
 }) {
     const rows = useMemo(() => patchRows(show), [show]);
-    const fixtures = useMemo(() => liveFixtures(show), [show]);
     const bank = encoderBank(session);
     const attributes = bankParameters(bank);
     const selected = new Set(programmer?.selection ?? []);
@@ -72,12 +85,11 @@ export function FixtureSheet({
     return (
         <div className="fixture-sheet" data-testid="fixture-sheet">
             <p className="sheet-bank" data-testid="sheet-bank">
-                {bank} — programmer, and what is on the cable
+                {bank} — what the programmer holds. Click a row to add it to the selection.
             </p>
             <SheetBody
                 show={show}
                 rows={rows.map((row) => ({ id: row.id, name: row.name }))}
-                fixtures={fixtures}
                 attributes={attributes}
                 programmer={programmer}
                 selected={selected}
@@ -94,64 +106,35 @@ interface SheetRow {
     readonly name: string;
 }
 
-/**
- * The scrolling half: the table, and the canvas that is drawn over its last
- * column.
- *
- * The canvas is a sibling of the scroll container rather than a child of it, so
- * it stays the size of the *window* however many rows there are — and the loop
- * reads `scrollTop` off the container each frame instead. A canvas as tall as
- * four hundred rows would be nine thousand pixels of bitmap for the twenty a
- * person can see.
- */
+/** The scrolling half: the table. */
 function SheetBody({
     show,
     rows,
-    fixtures,
     attributes,
     programmer,
     selected,
 }: {
     readonly show: JsonValue;
     readonly rows: readonly SheetRow[];
-    readonly fixtures: readonly LiveFixture[];
     readonly attributes: readonly AttributeType[];
     readonly programmer: ProgrammerState | null;
     readonly selected: ReadonlySet<number>;
 }) {
-    const channel = useTelemetryChannel();
-    const { run } = useConsole();
-    const scroller = useRef<HTMLDivElement>(null);
-    const canvas = useRef<HTMLCanvasElement>(null);
-    // A ref rather than state: the loop reads it, and a repatch must not be a
-    // reason to tear the loop down and build another one.
-    const live = useRef(fixtures);
-    live.current = fixtures;
-
-    useEffect(() => {
-        if (channel === null) {
-            return;
-        }
-        const element = canvas.current;
-        resizeCanvas(element, devicePixelRatio());
-        const build = channel.surface ?? canvasSurface;
-        const surface = element === null ? null : build(element);
-        const driver = driveFixtureLevels({
-            sink: channel.sink,
-            surface,
-            fixtures: () => live.current,
-            scrollTop: () => scroller.current?.scrollTop ?? 0,
-            scale: devicePixelRatio,
-            scheduler: channel.scheduler,
+    const shell = useConsole();
+    const { run } = shell;
+    // **An argument when the line is waiting for one** — S43's second rebuild,
+    // `consoleshell.ts::pickOnto`. A line the fixture cannot go into answers
+    // `own`, and the row does what it has always done: `Store Fixture 5` is not
+    // a line, so a click with `Store` standing still selects.
+    const onPick = (id: number): void => {
+        pick(shell, `Fixture ${String(id)}`, () => {
+            run(`+ Fixture ${String(id)}`);
         });
-        return () => {
-            driver.stop();
-        };
-    }, [channel]);
+    };
 
     return (
         <div className="sheet-live">
-            <div className="sheet-scroll" ref={scroller} data-testid="sheet-scroll">
+            <div className="sheet-scroll" data-testid="sheet-scroll">
                 <table className="sheet">
                     <thead>
                         <tr>
@@ -166,33 +149,43 @@ function SheetBody({
                     </thead>
                     <tbody>
                         {rows.map((row) => (
+                            /*
+                              **The whole row is the pick** — S43, B16. It writes
+                              `+ Fixture 12` and submits: the pointer has supplied
+                              the argument the line was waiting for, and the
+                              leading `+` is the grammar's own word for *and this
+                              one too* (B17). Clicking a selected row writes the
+                              same line, which takes it back out — `Toggle`.
+                            */
                             <tr
                                 key={row.id}
                                 style={{ height: `${String(ROW_HEIGHT)}px` }}
-                                className={selected.has(row.id) ? "row-selected" : ""}
+                                className={`sheet-pick${selected.has(row.id) ? " row-selected" : ""}`}
                                 data-testid={`sheet-row-${String(row.id)}`}
+                                data-selected={selected.has(row.id) ? "yes" : "no"}
+                                title={
+                                    selected.has(row.id)
+                                        ? `Take fixture ${String(row.id)} out of the selection`
+                                        : `Add fixture ${String(row.id)} to the selection`
+                                }
+                                // A row is not a button, so it needs both: a
+                                // pointer gesture and a keyboard one. A console
+                                // is operated in the dark and Tab has to reach
+                                // every fixture in the sheet.
+                                tabIndex={0}
+                                role="button"
+                                aria-pressed={selected.has(row.id)}
+                                onClick={() => {
+                                    onPick(row.id);
+                                }}
+                                onKeyDown={(event) => {
+                                    if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault();
+                                        onPick(row.id);
+                                    }
+                                }}
                             >
-                                {/*
-                                  **The fixture number is a list pick** — §4.5.
-                                  It writes `Fixture 12` and submits, because the
-                                  pointer has supplied the argument the line was
-                                  waiting for, and it is exactly the line an
-                                  operator would have typed to select the same
-                                  fixture.
-                                */}
-                                <td>
-                                    <button
-                                        type="button"
-                                        className="linkish"
-                                        data-testid={`sheet-select-${String(row.id)}`}
-                                        title={`Select fixture ${String(row.id)}`}
-                                        onClick={() => {
-                                            run(`Fixture ${String(row.id)}`);
-                                        }}
-                                    >
-                                        {row.id}
-                                    </button>
-                                </td>
+                                <td data-testid={`sheet-select-${String(row.id)}`}>{row.id}</td>
                                 <td>{row.name === "" ? "—" : row.name}</td>
                                 {attributes.map((attribute) => (
                                     <td key={attribute} data-testid={`prog-${String(row.id)}-${attribute}`}>
@@ -204,7 +197,6 @@ function SheetBody({
                     </tbody>
                 </table>
             </div>
-            <canvas className="sheet-canvas" ref={canvas} data-testid="sheet-canvas" />
         </div>
     );
 }

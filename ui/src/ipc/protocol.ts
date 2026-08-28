@@ -357,17 +357,50 @@ function readProgrammerEntry(value: unknown, path: string): ProgrammerEntry {
   };
 }
 
+/**
+ * The stages the Clear key can be at — `prism_domain::ClearStage`.
+ *
+ * **Four since S43**, and this constant exists because three was written out by
+ * hand here and the widening on the Rust side did not reach it. What that cost
+ * is in the module documentation above; what it buys is that the bound is stated
+ * once and named, so the next session to widen the enum has something to grep
+ * for.
+ *
+ * `ProgrammerState["clearStage"]` is generated (`#[ts(type = "0 | 1 | 2 | 3")]`),
+ * so a stage this build does not know is a **type** error at every call site the
+ * moment the binding is regenerated — and a run-time fault here for a daemon
+ * that is newer than this interface.
+ */
+const CLEAR_STAGES: readonly ProgrammerState["clearStage"][] = [0, 1, 2, 3];
+
 /** The programmer, whole — the third document. */
 export function readProgrammerState(value: unknown, path: string): ProgrammerState {
   const record = asRecord(value, path);
-  const clearStage = asInteger(field(record, "clearStage"), `${path}.clearStage`);
-  if (clearStage !== 0 && clearStage !== 1 && clearStage !== 2) {
-    throw new ProtocolFault(`${path}.clearStage`, `one of 0, 1, 2, not ${clearStage}`);
+  const stage = asInteger(field(record, "clearStage"), `${path}.clearStage`);
+  const clearStage = CLEAR_STAGES.find((known) => known === stage);
+  if (clearStage === undefined) {
+    throw new ProtocolFault(
+      `${path}.clearStage`,
+      `one of ${CLEAR_STAGES.join(", ")}, not ${stage}`,
+    );
   }
   return {
     selection: asArray(field(record, "selection"), `${path}.selection`).map((id, index) =>
       asInteger(id, `${path}.selection[${index}]`),
     ),
+    // **The two provenance lists, optional on the wire** — S43, B27. They are
+    // `#[serde(default)]` on the daemon side, so a snapshot written before they
+    // existed decodes with both empty, and an empty pair is exactly the state
+    // *nothing was selected through a group*. Refusing a snapshot over them
+    // would be refusing to open a show for a reading nothing on the screen
+    // needs to be right about.
+    selectedGroups: asArray(field(record, "selectedGroups") ?? [], `${path}.selectedGroups`).map(
+      (id, index) => asInteger(id, `${path}.selectedGroups[${index}]`),
+    ),
+    manualSelection: asArray(
+      field(record, "manualSelection") ?? [],
+      `${path}.manualSelection`,
+    ).map((id, index) => asInteger(id, `${path}.manualSelection[${index}]`)),
     activeFeatureGroup: asVariant(
       field(record, "activeFeatureGroup"),
       `${path}.activeFeatureGroup`,
@@ -601,6 +634,15 @@ export function readAnswer(value: unknown, path: string): Answer {
           readSurfaceControl(entry, `${path}.controls[${index}]`),
         ),
         device: asString(field(record, "device"), `${path}.device`),
+        // The two an **export** needs — S43. Optional on the wire for the same
+        // reason the programmer's provenance lists are: a daemon one version
+        // behind sends the row without them, and an export that cannot name its
+        // device is better than a settings window that refuses to open.
+        deviceKey: asString(field(record, "deviceKey") ?? "", `${path}.deviceKey`),
+        profileVersion: asInteger(
+          field(record, "profileVersion") ?? 0,
+          `${path}.profileVersion`,
+        ),
         profile: readOptionalString(field(record, "profile"), `${path}.profile`),
         revision: asInteger(field(record, "revision"), `${path}.revision`),
         learning: asBoolean(field(record, "learning"), `${path}.learning`),

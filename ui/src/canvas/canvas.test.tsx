@@ -37,6 +37,7 @@ import { asStyle } from "./geometry";
 import recordingText from "../../tests/fixtures/session-recording.json?raw";
 
 interface Step {
+  readonly what: string;
   readonly deltas: readonly string[];
 }
 interface Recording {
@@ -54,6 +55,25 @@ function payload(text: string): Uint8Array {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+/**
+ * The documents after the recorded step **whose description starts with
+ * `what`** — the state of the canvas at a named moment of the script.
+ *
+ * **S43 replaced a count with a name here.** These tests used to say
+ * `documentsThrough("resize the DMX sheet")`, and when punch-list B10 added a step to the script — the
+ * drag the daemon now refuses — every one of those numbers quietly started
+ * pointing one step short. They did not fail loudly; they rendered an earlier
+ * canvas and compared it against coordinates from a later one. A description is
+ * a reference that either resolves or throws.
+ */
+function documentsThrough(what: string): Documents {
+  const at = recording.steps.findIndex((step) => step.what.startsWith(what));
+  if (at < 0) {
+    throw new Error(`the recorded script has no step "${what}"`);
+  }
+  return documentsAfter(at + 1);
 }
 
 /**
@@ -103,6 +123,7 @@ function canvas(documents: Documents) {
           onPlace={(instanceId, rect) => placed.push({ instanceId, rect })}
           onFocus={(instanceId) => focused.push(instanceId)}
           onClose={(instanceId) => closed.push(instanceId)}
+          onPicker={() => 0}
         />
       </TelemetryProvider>
     </Shell>,
@@ -150,12 +171,16 @@ beforeEach(() => {
 
 describe("what the canvas draws", () => {
   it("is the windows the daemon says are open, where it says they are", () => {
-    // Four steps in: window 1 dragged to 240,120 and window 2 resized to
-    // 1280 x 720. Both numbers are the daemon's.
-    canvas(documentsAfter(4));
+    // Window 1 dragged to 240,520 and window 2 resized to 1280 x 480 at 640,0.
+    // Both are the daemon's numbers, and **both moved in S43**: punch-list B10
+    // put the placement in the daemon and forbade a move that buries a
+    // neighbour, so the recorded script's drags go into room that is actually
+    // free. The two windows are now beside each other rather than one over the
+    // other, which is the arrangement the rule exists to produce.
+    canvas(documentsThrough("resize the DMX sheet"));
     expect(screen.getByTestId("canvas").dataset["windows"]).toBe("2");
-    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 120, w: 640, h: 480 }));
-    expect(styleOf(2)).toEqual(asStyle({ x: 0, y: 0, w: 1280, h: 720 }));
+    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 520, w: 640, h: 480 }));
+    expect(styleOf(2)).toEqual(asStyle({ x: 640, y: 0, w: 1280, h: 480 }));
     expect(screen.getByTestId("window-1").dataset["windowType"]).toBe("FixtureSheet");
     expect(screen.getByTestId("window-2").dataset["windowType"]).toBe("DmxSheet");
   });
@@ -164,7 +189,7 @@ describe("what the canvas draws", () => {
     // After `FocusWindow(1)` the daemon's list is [2, 1]. There is no z-index
     // in the stylesheet, so the later element is the one in front — and that
     // is only right if the elements are in the daemon's order.
-    canvas(documentsAfter(5));
+    canvas(documentsThrough("focus the fixture sheet"));
     const drawn = screen
       .getByTestId("canvas")
       .querySelectorAll("[data-window-type]");
@@ -178,13 +203,13 @@ describe("what the canvas draws", () => {
 
   it("says so plainly when a view has nothing open in it", () => {
     // The last step of the script selects view 1, which was stored empty.
-    canvas(documentsAfter(12));
+    canvas(documentsThrough("select view 1"));
     expect(screen.getByTestId("canvas-empty")).not.toBeNull();
     expect(screen.queryByTestId("window-1")).toBeNull();
   });
 
   it("puts the level view in the DMX sheet and the patch in the patch window", () => {
-    canvas(documentsAfter(7));
+    canvas(documentsThrough("open a patch window"));
     // S24's canvas, in a window sized by the window.
     expect(screen.getByTestId("telemetry-canvas")).not.toBeNull();
     // And the show, read out of the show document by pointer.
@@ -199,16 +224,17 @@ describe("dragging a window", () => {
   });
 
   it("sends where the pointer went and holds nothing when it gets there", () => {
-    const { placed } = canvas(documentsAfter(4));
+    const { placed } = canvas(documentsThrough("resize the DMX sheet"));
     const before = styleOf(1);
 
     press("title-window-1", { x: 500, y: 400 });
     drag({ x: 560, y: 430 });
 
     // While the button is down the window follows the pointer — that is
-    // §4.2's "drag state", and it is the only thing that is local.
-    expect(styleOf(1)).toEqual(asStyle({ x: 300, y: 150, w: 640, h: 480 }));
-    expect(placed).toEqual([{ instanceId: 1, rect: { x: 300, y: 150, w: 640, h: 480 } }]);
+    // §4.2's "drag state", and it is the only thing that is local. Down and to
+    // the right, away from the other window, so nothing stops it.
+    expect(styleOf(1)).toEqual(asStyle({ x: 300, y: 550, w: 640, h: 480 }));
+    expect(placed).toEqual([{ instanceId: 1, rect: { x: 300, y: 550, w: 640, h: 480 } }]);
 
     // **The criterion.** The button comes up and no delta ever arrives: the
     // window is back where the daemon has it. Nothing was applied.
@@ -217,12 +243,12 @@ describe("dragging a window", () => {
   });
 
   it("moves for good when the daemon says so, and not before", () => {
-    const { placed, view, documents } = canvas(documentsAfter(4));
+    const { placed, view, documents } = canvas(documentsThrough("resize the DMX sheet"));
     press("title-window-1", { x: 0, y: 0 });
     drag({ x: 100, y: 50 });
     release();
     expect(placed).toHaveLength(1);
-    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 120, w: 640, h: 480 }));
+    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 520, w: 640, h: 480 }));
 
     // The delta the daemon would have answered with. Only now does the window
     // move, and it moves because the document did.
@@ -246,15 +272,16 @@ describe("dragging a window", () => {
             onPlace={() => undefined}
             onFocus={() => undefined}
             onClose={() => undefined}
+            onPicker={() => undefined}
           />
         </TelemetryProvider>
       </Shell>,
     );
-    expect(styleOf(1)).toEqual(asStyle({ x: 340, y: 120, w: 640, h: 480 }));
+    expect(styleOf(1)).toEqual(asStyle({ x: 340, y: 520, w: 640, h: 480 }));
   });
 
   it("paces what it sends, and always says where the pointer finished", () => {
-    const { placed } = canvas(documentsAfter(4));
+    const { placed } = canvas(documentsThrough("resize the DMX sheet"));
     press("title-window-1", { x: 0, y: 0 });
     for (let step = 1; step <= 20; step += 1) {
       drag({ x: step, y: 0 });
@@ -267,46 +294,70 @@ describe("dragging a window", () => {
 
     release();
     // And the last position is not lost to the pacing.
-    expect(placed.at(-1)?.rect).toEqual({ x: 260, y: 120, w: 640, h: 480 });
+    expect(placed.at(-1)?.rect).toEqual({ x: 260, y: 520, w: 640, h: 480 });
   });
 
   it("resizes from the corner", () => {
-    const { placed } = canvas(documentsAfter(4));
+    // **Two walls at once, and neither is a refusal.** Window 2 sits at 640,0
+    // and already runs to the right-hand edge, so `resizedBy` clamps the width
+    // there exactly as it always has. Downwards it is stopped by window 1, which
+    // starts at y 520 and overlaps it in x — so a corner dragged 100 units down
+    // grows 40 and then meets the neighbour. Before S43 it would have grown all
+    // 100, sent a `PlaceWindow` the daemon refused, and snapped back.
+    const { placed } = canvas(documentsThrough("resize the DMX sheet"));
     press("resize-window-2", { x: 0, y: 0 });
     drag({ x: 200, y: 100 });
-    expect(styleOf(2)).toEqual(asStyle({ x: 0, y: 0, w: 1480, h: 820 }));
+    expect(styleOf(2)).toEqual(asStyle({ x: 640, y: 0, w: 1280, h: 520 }));
     release();
-    expect(placed).toEqual([{ instanceId: 2, rect: { x: 0, y: 0, w: 1480, h: 820 } }]);
+    expect(placed).toEqual([{ instanceId: 2, rect: { x: 640, y: 0, w: 1280, h: 520 } }]);
   });
 
   it("is not started by a button that is not the primary one", () => {
     // A right-click opens a context menu and produces no `pointerup`, so a
     // drag begun on one would never end.
-    const { placed } = canvas(documentsAfter(4));
+    const { placed } = canvas(documentsThrough("resize the DMX sheet"));
     press("title-window-1", { x: 0, y: 0 }, 2);
     drag({ x: 300, y: 300 });
     release();
     expect(placed).toEqual([]);
-    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 120, w: 640, h: 480 }));
+    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 520, w: 640, h: 480 }));
+  });
+
+  /**
+   * **S43, punch-list B10 second half.** The daemon refused an overlapping
+   * placement from the start; what an operator saw was the window crossing its
+   * neighbour and then being pulled back when the refusal arrived. It stops at
+   * the edge now — and, the half that matters here, **the command that would
+   * have been refused is never sent**.
+   */
+  it("stops a drag at the window beside it, and sends only what would be taken", () => {
+    const { placed } = canvas(documentsThrough("resize the DMX sheet"));
+    // Window 1 is at y 520 and window 2 fills 0…480 in the row above it. Dragged
+    // hard upwards, window 1 stops with its top edge on window 2's bottom one.
+    press("title-window-1", { x: 0, y: 0 });
+    drag({ x: 0, y: -400 });
+    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 480, w: 640, h: 480 }));
+    release();
+    expect(placed).toEqual([{ instanceId: 1, rect: { x: 240, y: 480, w: 640, h: 480 } }]);
   });
 
   it("stops listening when the pointer is cancelled", () => {
     // A touch turned into a scroll, or a window that lost the pointer. The
     // drag ends the way a release ends it.
-    const { placed } = canvas(documentsAfter(4));
+    const { placed } = canvas(documentsThrough("resize the DMX sheet"));
     press("title-window-1", { x: 0, y: 0 });
     drag({ x: 60, y: 0 });
     fireEvent.pointerCancel(window, { pointerId: 1 });
     expect(placed).toHaveLength(1);
     drag({ x: 500, y: 500 });
     expect(placed).toHaveLength(1);
-    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 120, w: 640, h: 480 }));
+    expect(styleOf(1)).toEqual(asStyle({ x: 240, y: 520, w: 640, h: 480 }));
   });
 });
 
 describe("the other two gestures", () => {
   it("asks the daemon to focus a window that is not focused, and not one that is", () => {
-    const { focused } = canvas(documentsAfter(4));
+    const { focused } = canvas(documentsThrough("resize the DMX sheet"));
     // Window 2 is the focused one after four steps.
     press("window-2", { x: 0, y: 0 });
     expect(focused).toEqual([]);
@@ -315,7 +366,7 @@ describe("the other two gestures", () => {
   });
 
   it("asks the daemon to close a window, and closes nothing itself", () => {
-    const { closed } = canvas(documentsAfter(4));
+    const { closed } = canvas(documentsThrough("resize the DMX sheet"));
     fireEvent.click(screen.getByTestId("close-window-1"));
     expect(closed).toEqual([1]);
     // Still there: what closes it is the delta, not the click.
@@ -323,7 +374,7 @@ describe("the other two gestures", () => {
   });
 
   it("does not drag the title bar when the close button is pressed", () => {
-    const { placed, closed } = canvas(documentsAfter(4));
+    const { placed, closed } = canvas(documentsThrough("resize the DMX sheet"));
     press("close-window-1", { x: 0, y: 0 });
     drag({ x: 400, y: 400 });
     release();

@@ -61,6 +61,7 @@ pub(crate) fn dimmer_type() -> FixtureType {
 /// A patched fixture at home geometry.
 pub(crate) fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),
@@ -109,7 +110,7 @@ pub(crate) fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
 pub(crate) fn preset(id: u32, fixture: u32, attribute: AttributeType, value: u16) -> Preset {
     Preset {
         id: prism_domain::PresetId::new(id),
-        pool: attribute.feature_group(),
+        pool: attribute.feature_group().into(),
         name: format!("Preset {id}"),
         color: None,
         values: vec![PresetValue {

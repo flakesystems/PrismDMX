@@ -18,7 +18,9 @@ mod common;
 
 use common::{machine_commands, populated_show};
 use prism_core::{MachineConfig, ShowError, ShowFile, ShowStore};
-use prism_domain::{Command, OutputId, OutputInstance, OutputKind, UniverseId};
+use prism_domain::{
+    Command, FixtureId, OutputId, OutputInstance, OutputKind, SelectionMode, UniverseId,
+};
 
 fn rig() -> Vec<OutputInstance> {
     vec![
@@ -102,7 +104,15 @@ fn a_machine_command_at_the_show_files_door_is_refused_and_journals_nothing() {
         };
         // Something undoable first, so that "the journal is empty" is a claim
         // about *this* command rather than about a journal that was never used.
-        file.apply(&Command::ClearProgrammer).unwrap();
+        //
+        // A selection rather than a Clear since **S43**: a Clear with nothing to
+        // clear is no longer an edit at all (B2), so it would journal nothing
+        // and this test would be asserting about an empty journal either way.
+        file.apply(&Command::SelectFixtures {
+            ids: vec![FixtureId::new(1)],
+            mode: SelectionMode::Set,
+        })
+        .unwrap();
         let undoable_before = file.journal.len();
         assert!(undoable_before > 0);
 

@@ -50,13 +50,56 @@ function payload(text: string): Uint8Array {
     return bytes;
 }
 
-/** The snapshot the recorded script starts from — a real daemon's. */
+/**
+ * The snapshot the recorded script starts from — a real daemon's, with the
+ * windows this file's subjects live in opened on its canvas.
+ *
+ * **S43 moved them into windows.** The executor strip and the console's keys
+ * were bands around the canvas and are `Executors` and `CommandKeys` now
+ * (punch-list B15 and B12), and the readings are `Status`. Everything else here
+ * is the daemon's: only *which windows are open* is invented, exactly as
+ * `patch/patchwindow.test.tsx` invents its Patch window, because which windows
+ * are open is S25's ground and is asserted there.
+ *
+ * They are placed side by side rather than stacked, because since B10 the daemon
+ * refuses a placement that buries a neighbour — and a fixture the daemon could
+ * not have produced is a fixture that proves nothing.
+ */
 function recordedSnapshot(): Snapshot {
     const message = readServerMessage(decode(payload(recording.initialSnapshot)));
     if (message.t !== "Snapshot") {
         throw new Error("the recording does not start with a snapshot");
     }
-    return message.snapshot;
+    return { ...message.snapshot, session: withWindows(message.snapshot.session) };
+}
+
+/**
+ * The recorded session document, with three windows opened on its canvas.
+ *
+ * Narrowed rather than asserted into shape: `CLAUDE.md` forbids `any` and `as`
+ * is a claim, not a check — so a recording that stopped carrying a session
+ * fails here by name instead of producing a document nothing can read.
+ */
+function withWindows(document: JsonValue): JsonValue {
+    if (document === null || typeof document !== "object" || Array.isArray(document)) {
+        throw new Error("the recorded snapshot has no session document");
+    }
+    const session = document["session"];
+    if (session === null || typeof session !== "object" || Array.isArray(session)) {
+        throw new Error("the recorded session document has no session in it");
+    }
+    return {
+        ...document,
+        session: {
+            ...session,
+            openWindows: [
+                { instanceId: 1, type: "Executors", x: 0, y: 0, w: 960, h: 540, params: {} },
+                { instanceId: 2, type: "CommandKeys", x: 960, y: 0, w: 960, h: 540, params: {} },
+                { instanceId: 3, type: "Status", x: 0, y: 540, w: 960, h: 540, params: {} },
+            ],
+            focusedWindow: 1,
+        },
+    };
 }
 
 /** The deltas of one recorded step. */
@@ -454,18 +497,36 @@ describe("paging the encoder bar", () => {
     /**
      * **A bank with more than one page is asserted to exist**, rather than
      * assumed: `FEATURE_GROUP_ATTRIBUTES` is generated from
-     * `FeatureGroup::attributes`, so a later session that moved an attribute off
-     * Beam would turn this red instead of quietly leaving the paging untested.
+     * `FeatureGroup::attributes`, so a later session that re-split the banks
+     * turns this red instead of quietly leaving the paging untested.
+     *
+     * **And S43 is that session.** Beam used to carry six attributes and was the
+     * bank these tests paged; the seven-bank split took Gobo and Control out of
+     * it, leaving three. **Colour** is the one that overflows now — five
+     * attributes over a page of four — so the tests below page that instead.
+     * This is exactly the failure the paragraph above was written for: the guard
+     * went red, and the tests were re-aimed rather than deleted.
+     *
+     * The second assertion is the one that matters and it is deliberately
+     * general: if a later split leaves **no** bank longer than a page, every
+     * paging test below becomes a test of nothing, and this says so.
      */
     it("is asserted to have a bank that does not fit on one page", () => {
-        expect(FEATURE_GROUP_ATTRIBUTES.Beam.length).toBe(6);
-        expect(FEATURE_GROUP_ATTRIBUTES.Beam.length).toBeGreaterThan(ENCODERS_PER_PAGE);
+        expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBe(5);
+        expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBeGreaterThan(ENCODERS_PER_PAGE);
+        const longest = Object.values(FEATURE_GROUP_ATTRIBUTES).reduce(
+            (most, bank) => Math.max(most, bank.length),
+            0,
+        );
+        expect(longest, "no bank needs paging, so paging is untested").toBeGreaterThan(
+            ENCODERS_PER_PAGE,
+        );
     });
 
     it("draws four at a time and pages by command", () => {
         const { acted, store } = desk();
-        session(store, { encoderBank: "Beam" });
-        expect(drawn()).toEqual(["Iris", "Zoom", "Gobo", "Prism"]);
+        session(store, { encoderBank: "Color" });
+        expect(drawn()).toEqual(["Red", "Green", "Blue", "White"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
         // Nowhere back from the first page, somewhere forward from it.
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(true);
@@ -474,12 +535,12 @@ describe("paging the encoder bar", () => {
         fireEvent.click(screen.getByTestId("encoder-page-down"));
         expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 1 }]);
         // D3: the page is the session's, so nothing has moved.
-        expect(drawn()).toEqual(["Iris", "Zoom", "Gobo", "Prism"]);
+        expect(drawn()).toEqual(["Red", "Green", "Blue", "White"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
 
         session(store, { programmerPage: 1 });
         // The rest of the bank, and a last page that is not full.
-        expect(drawn()).toEqual(["Shutter", "Control"]);
+        expect(drawn()).toEqual(["Amber"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("2/2");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(false);
@@ -487,7 +548,7 @@ describe("paging the encoder bar", () => {
 
     it("pages back down, and cannot page below the first page", () => {
         const { acted, store } = desk();
-        session(store, { encoderBank: "Beam", programmerPage: 1 });
+        session(store, { encoderBank: "Color", programmerPage: 1 });
         fireEvent.click(screen.getByTestId("encoder-page-up"));
         expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 0 }]);
 
@@ -505,8 +566,8 @@ describe("paging the encoder bar", () => {
      */
     it("shows the last page rather than an empty bar when the session runs past the bank", () => {
         const { store } = desk();
-        session(store, { encoderBank: "Beam", programmerPage: 9 });
-        expect(drawn()).toEqual(["Shutter", "Control"]);
+        session(store, { encoderBank: "Color", programmerPage: 9 });
+        expect(drawn()).toEqual(["Amber"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("2/2");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
 
@@ -523,12 +584,12 @@ describe("paging the encoder bar", () => {
      */
     it("lights the highlighted parameter only when its page is the one shown", () => {
         const { store } = desk();
-        session(store, { encoderBank: "Beam", programmerParamIndex: 5 });
-        expect(screen.queryByTestId("encoder-Control")).toBeNull();
+        session(store, { encoderBank: "Color", programmerParamIndex: 4 });
+        expect(screen.queryByTestId("encoder-Amber")).toBeNull();
 
         session(store, { programmerPage: 1 });
-        expect(screen.getByTestId("encoder-Control").dataset["selected"]).toBe("yes");
-        expect(screen.getByTestId("encoder-Shutter").dataset["selected"]).toBe("no");
+        expect(screen.getByTestId("encoder-Amber").dataset["selected"]).toBe("yes");
+        expect(screen.queryByTestId("encoder-White")).toBeNull();
     });
 });
 
@@ -610,21 +671,46 @@ describe("the encoder bar", () => {
         expect(screen.getByTestId("value-Pan").textContent).toBe(before);
     });
 
-    it("steps the highlighted parameter, and stops at both ends of the bank", () => {
+    /**
+     * **The two arrows are gone — S43, and it is a recorded departure from the
+     * owner's skeleton.**
+     *
+     * The skeleton draws a `<` `>` pair beside the encoders for stepping the
+     * highlighted parameter. The band has room for four encoders and their
+     * readings and not for a second stepper beside the page one, and the gesture
+     * the arrows performed is one an operator can make directly: **click the
+     * encoder you mean**. So the pair folded into the encoder itself, and what
+     * goes on the wire is unchanged — `SelectProgrammerParam` one step at a
+     * time, which is what the X-Touch's own keys send, so the two hands cannot
+     * disagree about which parameter the jog wheel has.
+     */
+    it("steps the highlighted parameter by clicking the encoder that is wanted", () => {
         const { acted, answer } = desk();
         for (let step = 0; step <= 14; step += 1) {
             answer(step);
         }
-        expect(screen.getByTestId("param-prev").hasAttribute("disabled")).toBe(true);
-        fireEvent.click(screen.getByTestId("param-next"));
-        expect(acted()).toEqual([{ t: "SelectProgrammerParam", direction: "Next" }]);
+        expect(screen.queryByTestId("param-prev")).toBeNull();
+        expect(screen.queryByTestId("param-next")).toBeNull();
+        expect(screen.getByTestId("encoder-Pan").dataset["selected"]).toBe("yes");
+
+        // Pan is index 0 and Tilt is index 1, so this is one step forward — and
+        // the click **also takes Tilt over** at the value it already has, which
+        // is the owner's fourth point from the hand-testing round. Two commands,
+        // one gesture, and neither of them decides a value here.
+        fireEvent.click(screen.getByTestId("encoder-Tilt"));
+        expect(acted()).toEqual([
+            { t: "SelectProgrammerParam", direction: "Next" },
+            { t: "SetAttribute", attribute: "Tilt", value: 0, relative: true },
+        ]);
+        // **And nothing has moved**: which parameter is highlighted is the
+        // session's, exactly as it was when an arrow sent the same command.
+        expect(screen.getByTestId("encoder-Pan").dataset["selected"]).toBe("yes");
 
         answer(17);
         expect(screen.getByTestId("encoder-Tilt").dataset["selected"]).toBe("yes");
-        // Position holds two parameters, so there is no next one.
-        expect(screen.getByTestId("param-next").hasAttribute("disabled")).toBe(true);
-        expect(screen.getByTestId("param-prev").hasAttribute("disabled")).toBe(false);
-        fireEvent.click(screen.getByTestId("param-prev"));
+
+        // And back, which is the other arrow's job.
+        fireEvent.click(screen.getByTestId("encoder-Pan"));
         expect(acted().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
     });
 
@@ -658,21 +744,45 @@ describe("the encoder bar", () => {
         expect(acted().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
     });
 
-    it("asks for a Clear and says which stage the next press is", () => {
+    /**
+     * **The stage is derived and the key is dead at nought — S43, punch-list B2.**
+     *
+     * The stage used to be *counted*: every press advanced it, so it could sit at
+     * *clear the selection* while the programmer had values in it again, and an
+     * operator could not tell what the next press would take. It is read off the
+     * programmer now (`ProgrammerState::stage`), so it cannot go stale — and
+     * stage nought means *there is nothing to clear*, which is a **disabled key**
+     * rather than a key that sends a command doing nothing.
+     */
+    it("says what the next press would clear, and does nothing when there is nothing", () => {
         const { acted, answer } = desk();
-        expect(screen.getByTestId("clear").dataset["stage"]).toBe("0");
-        fireEvent.click(screen.getByTestId("clear"));
-        expect(acted()).toEqual([{ t: "ClearProgrammer" }]);
-        expect(screen.getByTestId("clear").dataset["stage"]).toBe("0");
+        const clear = () => screen.getByTestId("clear");
+        expect(clear().dataset["stage"]).toBe("0");
+        expect(clear().hasAttribute("disabled")).toBe(true);
+        fireEvent.click(clear());
+        expect(acted()).toEqual([]);
 
-        for (let step = 0; step <= 20; step += 1) {
+        // With values in the programmer the key is live, and it says the next
+        // press takes the values.
+        for (let step = 0; step <= 19; step += 1) {
             answer(step);
         }
-        expect(screen.getByTestId("clear").dataset["stage"]).toBe("1");
+        expect(clear().dataset["stage"]).toBe("1");
+        expect(clear().hasAttribute("disabled")).toBe(false);
+        fireEvent.click(clear());
+        expect(acted()).toEqual([{ t: "ClearProgrammer" }]);
+
+        // **All four stages, from the daemon's own answers** — the recorded
+        // script presses Clear three times over. The values go and the selection
+        // is left; the selection goes and the bank is left; the bank goes and
+        // there is nothing left to take, which is where the key switches off.
+        answer(20);
+        expect(clear().dataset["stage"]).toBe("2");
         answer(21);
-        expect(screen.getByTestId("clear").dataset["stage"]).toBe("2");
+        expect(clear().dataset["stage"]).toBe("3");
         answer(22);
-        expect(screen.getByTestId("clear").dataset["stage"]).toBe("0");
+        expect(clear().dataset["stage"]).toBe("0");
+        expect(clear().hasAttribute("disabled")).toBe(true);
     });
 });
 
@@ -695,10 +805,10 @@ describe("the command line", () => {
         fireEvent.submit(input);
         expect(commands()).toEqual([
             // The line is mirrored into the session as it is typed…
-            { t: "CommandLineInput", text: "1 + 2" },
+            { t: "CommandLineInput", text: "1 + 2", run: false },
             // …and executing it is the commands it meant, then an empty line.
             { t: "SelectFixtures", ids: [1, 2], mode: "Set" },
-            { t: "CommandLineInput", text: "" },
+            { t: "CommandLineInput", text: "", run: false },
         ]);
         expect((input as HTMLInputElement).value).toBe("");
     });
@@ -712,7 +822,7 @@ describe("the command line", () => {
         expect(screen.getByTestId("command-reading").textContent).toContain("not a fixture number");
         // The line still reached the session — it is what the operator typed, and
         // every client shows it — but no command was executed.
-        expect(commands()).toEqual([{ t: "CommandLineInput", text: "banana" }]);
+        expect(commands()).toEqual([{ t: "CommandLineInput", text: "banana", run: false }]);
     });
 
     it("sends nothing at all for an empty line", () => {
@@ -739,14 +849,14 @@ describe("the command line", () => {
             fireEvent.change(input, { target: { value: "1 t" } });
             fireEvent.change(input, { target: { value: "1 th" } });
             // One command for the burst, carrying the first keystroke.
-            expect(commands()).toEqual([{ t: "CommandLineInput", text: "1" }]);
+            expect(commands()).toEqual([{ t: "CommandLineInput", text: "1", run: false }]);
             act(() => {
                 vi.advanceTimersByTime(SEND_INTERVAL_MS);
             });
             // And one more carrying where the line actually got to.
             expect(commands()).toEqual([
-                { t: "CommandLineInput", text: "1" },
-                { t: "CommandLineInput", text: "1 th" },
+                { t: "CommandLineInput", text: "1", run: false },
+                { t: "CommandLineInput", text: "1 th", run: false },
             ]);
             // A burst that ended on the line already sent says nothing further.
             act(() => {
@@ -773,7 +883,7 @@ describe("the command line", () => {
             act(() => {
                 vi.advanceTimersByTime(SEND_INTERVAL_MS * 4);
             });
-            expect(commands()).toEqual([{ t: "CommandLineInput", text: "12" }]);
+            expect(commands()).toEqual([{ t: "CommandLineInput", text: "12", run: false }]);
         } finally {
             vi.useRealTimers();
         }

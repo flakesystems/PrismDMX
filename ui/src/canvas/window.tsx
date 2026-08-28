@@ -34,6 +34,15 @@ export interface WindowFrameProps {
   readonly focused: boolean;
   /** The canvas element's box, for turning pixels into canvas units. */
   readonly box: () => { readonly width: number; readonly height: number };
+  /**
+   * Every other open window, as the session holds it.
+   *
+   * A drag stops against these the way it stops against the canvas edges — S43,
+   * B10. They come down from the canvas rather than being read here, because the
+   * canvas is what has the list and a frame that fetched its own would be
+   * reading the session once per window.
+   */
+  readonly neighbours: readonly Rect[];
   /** Sends a `PlaceWindow`. */
   readonly onPlace: (instanceId: number, rect: Rect) => void;
   /** Sends a `FocusWindow`. */
@@ -49,6 +58,7 @@ export function WindowFrame({
   window: instance,
   focused,
   box,
+  neighbours,
   onPlace,
   onFocus,
   onClose,
@@ -99,6 +109,7 @@ export function WindowFrame({
         onPlace(instance.instanceId, rect);
       },
       scale: (dx, dy) => toCanvasUnits(dx, dy, box()),
+      neighbours,
     });
     setDrag(started);
     setShown(started.rect);

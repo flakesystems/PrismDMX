@@ -36,7 +36,7 @@ import { expect, test } from "@playwright/test";
 import { join } from "node:path";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, pressConsole, showFixture, startDaemon } from "./daemon.ts";
+import { buildDaemon, forget, openWindow, pressConsole, showFixture, startDaemon } from "./daemon.ts";
 
 /** A port of this spec's own, so no other suite's daemon is disturbed. */
 const PORT = 7401;
@@ -127,6 +127,10 @@ test("**a flash is a layer**: held it lights the rig, released it gives the mast
   daemon = started.daemon;
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // **S43 made the strip a window.** It was a band under the canvas; the
+  // owner's skeleton has no bands, so an operator opens it. The claims below
+  // are the same ones, read off the same strip.
+  await openWindow(page, "Executors");
 
   // Strip 2 is the one S26 had to draw four disabled buttons on. All four are
   // pressable now, and their labels are the show's.
@@ -140,7 +144,7 @@ test("**a flash is a layer**: held it lights the rig, released it gives the mast
   // rather than of a fader: the cue could not put light on the rig by itself.
   await expect(page.getByTestId("percent-2")).toHaveText("0%");
 
-  await page.getByTestId("open-window").selectOption("DmxSheet");
+  await openWindow(page, "DmxSheet");
   await expect.poll(async () => litPixels(page, METER_FULL), { timeout: 15_000 }).toBe(0);
 
   // Held. The mouse goes down and stays down: a click would be press and
@@ -170,6 +174,7 @@ test("**a toggle latches**, and the cue number comes back from the tick", async 
   daemon = started.daemon;
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  await openWindow(page, "Executors");
 
   // Executor 0 plays "Warm Wash" and it is stopped: a dash rather than a
   // number, because a stopped playback is on no cue.

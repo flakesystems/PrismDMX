@@ -81,14 +81,15 @@ describe("a window's body", () => {
     expect(sheet).not.toContain("Addr");
   });
 
-  it("shows the sequence pool, and follows the executor for the cue list", () => {
-    // S28 filled these in: the sheet lists what there is and follows the
-    // sequence on the **selected executor**, which is the marked assumption in
-    // `show/looks.ts`. The recorded session has no executor selected, so what
-    // it says is that there is nothing in force — and it still lists the pool.
+  it("shows the sequence pool in one window and the cue list in the other", () => {
+    // **S43 split the two.** The Sequence Sheet is the pool — which cue lists
+    // there are — and the Cue Viewer is one list, its transport and its store
+    // bar. The recorded session has no executor selected and no sequence
+    // chosen, so the pool lists what there is and the viewer says so.
     expect(body("SequenceSheet")).toContain("Sequence 1");
-    expect(body("SequenceSheet")).toContain("No executor selected");
-    expect(body("CueViewer")).toContain("No cue list is in force");
+    expect(body("SequenceSheet")).not.toContain("No executor selected");
+    expect(body("CueViewer")).toContain("No executor selected");
+    expect(body("CueViewer")).toContain("No cue list is being edited");
   });
 
   it("says what is missing rather than showing an empty box", () => {
@@ -96,8 +97,8 @@ describe("a window's body", () => {
     expect(body("FixtureSheet", {})).toContain("Nothing is patched");
     expect(body("Groups", {})).toContain("There are no groups");
     expect(body("SequenceSheet", {})).toContain("0 sequences");
-    expect(body("SequenceSheet", {})).toContain("No cue list is in force");
-    expect(body("CueViewer", {})).toContain("No cue list is in force");
+    expect(body("SequenceSheet", {})).toContain("There are no cue lists");
+    expect(body("CueViewer", {})).toContain("No cue list is being edited");
     expect(body("PresetPool", {})).toContain("pool is empty");
     // A collection that is there but is not a collection — a hand-edited show,
     // or a daemon that changed shape.
@@ -121,15 +122,25 @@ describe("a window's body", () => {
   });
 
   it("says so, by name, for the windows that are not built yet", () => {
-    // **Three, since S37 built the fourth.** `Settings` had been in this list
-    // since S25 reserved it; what is left is the three whose sessions have not
-    // happened.
-    for (const type of ["Viewer3D", "PhaserEditor", "ClockViewer"] as const) {
+    // **Two, since S43 built the third.** `Settings` left this list in S37 and
+    // `ClockViewer` in S43 — a clock is a morning's work and the session's exit
+    // criterion says so in as many words. What is left is the two whose sessions
+    // have not happened: `Viewer3D` is S30 and `PhaserEditor` is an engine that
+    // does not exist yet, so both stay honest lines rather than empty windows.
+    for (const type of ["Viewer3D", "PhaserEditor"] as const) {
       const text = body(type);
       expect(text, type).toContain("is not built yet");
       // Named, so an operator can tell which button they pressed.
-      expect(text, type).toMatch(/Viewer 3D|Phaser Editor|Clock Viewer/);
+      expect(text, type).toMatch(/Viewer 3D|Phaser Editor/);
     }
+  });
+
+  it("draws the clock, which S43 built", () => {
+    // The owner's answer in S43's first round was *the clock and what there is*:
+    // the time, and the running times of what is playing back. It is a reading
+    // and it is drawn from the documents, so it belongs to no session of its own.
+    const text = body("ClockViewer");
+    expect(text).not.toContain("is not built yet");
   });
 
   it("draws the settings window, which S25 reserved and S37 built", () => {

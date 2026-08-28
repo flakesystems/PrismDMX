@@ -32,7 +32,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, showFixture, startDaemon } from "./daemon.ts";
+import { buildDaemon, forget, openWindow, showFixture, startDaemon } from "./daemon.ts";
 
 /** A port of this suite's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7397;
@@ -92,7 +92,7 @@ async function closeWindows(page: Page): Promise<void> {
   for (let open = await closers.count(); open > 0; open -= 1) {
     await closers.first().click();
   }
-  await expect(page.getByTestId("open-windows")).toHaveText("0");
+  await expect(page.locator("[data-window-type]")).toHaveCount(0);
 }
 
 /** Types a line into the console command line and presses Enter. */
@@ -100,6 +100,21 @@ async function command(page: Page, line: string): Promise<void> {
   const input = page.getByTestId("command-input");
   await input.fill(line);
   await input.press("Enter");
+}
+
+/**
+ * The same, answering the mode question if the line raises one.
+ *
+ * A store onto something that is already there asks which mode before it sends
+ * anything (S39, S40) — which is the console's own behaviour and not something
+ * to work around, so a test that stores twice says which answer it means.
+ */
+async function store(page: Page, line: string, mode: string): Promise<void> {
+  await command(page, line);
+  const prompt = page.getByTestId("command-prompt");
+  if ((await prompt.count()) > 0) {
+    await page.getByTestId(`prompt-${mode}`).click();
+  }
 }
 
 /**
@@ -145,8 +160,17 @@ async function litPixels(
 
 test("a show is written, corrected and fired entirely from the interface", async ({ page }) => {
   await desk(page, PORT);
-  await page.getByTestId("open-window").selectOption("SequenceSheet");
+  await openWindow(page, "SequenceSheet");
   await expect(page.getByTestId("sequence-sheet")).toBeVisible();
+  // **The cue work is the Cue Viewer's since S43** — the Sequence Sheet is the
+  // pool and nothing else. Both windows, because this test walks the whole
+  // gesture: choose a list on the left, edit its cues on the right.
+  await openWindow(page, "CueViewer");
+  await expect(page.getByTestId("cue-viewer")).toBeVisible();
+  // **And the strip is a window too since S43.** Selecting an executor is its
+  // gesture, so a test that selects one opens it. The daemon tiles the three
+  // rather than stacking them (`prism_core::layout`).
+  await openWindow(page, "Executors");
 
   // 1. The rig has no sequences and no executors, so the sheet says so rather
   //    than drawing an empty table — and it says *why* there is nothing in
@@ -182,7 +206,7 @@ test("a show is written, corrected and fired entirely from the interface", async
   await expect(page.getByTestId("store-cue")).toContainText("Merge");
   await page.getByTestId("store-cue").click();
   await expect(page.getByTestId("cue-row-1")).toBeVisible();
-  await expect(page.getByTestId("cue-parts-1")).toHaveText("3");
+  await expect(page.getByTestId("cue-viewer-count")).toContainText("3 values");
 
   // And now the sentence changes, because something *is* there: the same
   // gesture over the same number is an overwrite, and the counts say what it
@@ -244,6 +268,9 @@ test("a show is written, corrected and fired entirely from the interface", async
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
   await expect(page.getByTestId("sequence-sheet")).toBeVisible();
   await expect(page.getByTestId("cue-row-0.5")).toBeVisible();
+  // The count is a `Status` reading, which S43 moved off the bottom bar and
+  // into a window of its own.
+  await openWindow(page, "Status");
   await expect(page.getByTestId("sequences")).toHaveText("1");
 });
 
@@ -256,9 +283,13 @@ test("**the operator chooses the mode, and the daemon says what it will cost fir
   // the operator picks, the question carries the pick, and the sentence on the
   // button is the daemon's answer about **that** pick.
   await desk(page, PORT);
-  await page.getByTestId("open-window").selectOption("SequenceSheet");
+  await openWindow(page, "SequenceSheet");
   await page.getByTestId("new-sequence").click();
   await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
+  // The store bar is the Cue Viewer's since S43 — the Sequence Sheet is the
+  // pool. Which cue list it edits is `Session::selectedSequence`, and a new one
+  // is put in force by the store that made it.
+  await openWindow(page, "CueViewer");
   // And no executor was selected to get here, which is the other half of S39's
   // decision: a cue list is written before anybody decides which fader it is on.
   await expect(page.getByTestId("looks-executor-name")).toHaveText("No executor selected");
@@ -267,7 +298,7 @@ test("**the operator chooses the mode, and the daemon says what it will cost fir
   await command(page, "1 thru 3 red at 100");
   await command(page, "1 thru 2 green at 60");
   await page.getByTestId("store-cue").click();
-  await expect(page.getByTestId("cue-parts-1")).toHaveText("5");
+  await expect(page.getByTestId("cue-viewer-count")).toContainText("5 values");
 
   // A different, smaller look: one fixture, one attribute.
   await clearProgrammer(page);
@@ -294,7 +325,7 @@ test("**the operator chooses the mode, and the daemon says what it will cost fir
   // Back to Override, and press it: the cue afterwards is what was promised.
   await page.getByTestId("cue-store-mode").selectOption("Override");
   await page.getByTestId("store-cue").click();
-  await expect(page.getByTestId("cue-parts-1")).toHaveText("1");
+  await expect(page.getByTestId("cue-viewer-count")).toContainText("1 values");
 
   // **And a cue is loaded back and put down again.** S39's `EditCue` and
   // `Update`: the values come back into the programmer, one is changed, and the
@@ -306,7 +337,7 @@ test("**the operator chooses the mode, and the daemon says what it will cost fir
   await command(page, "1 white at 100");
   await expect(page.getByTestId("update-cue")).toHaveClass(/update-blinking/);
   await page.getByTestId("update-cue").click();
-  await expect(page.getByTestId("cue-parts-1")).toHaveText("2");
+  await expect(page.getByTestId("cue-viewer-count")).toContainText("2 values");
   await expect(page.getByTestId("update-cue")).not.toHaveClass(/update-blinking/);
 
   // Clearing the programmer ends the edit, which is one of the three rules
@@ -317,7 +348,7 @@ test("**the operator chooses the mode, and the daemon says what it will cost fir
   // Nothing of this is held here either.
   await page.reload();
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
-  await expect(page.getByTestId("cue-parts-1")).toHaveText("2");
+  await expect(page.getByTestId("cue-viewer-count")).toContainText("2 values");
 });
 
 test("a preset link is alive: editing the preset changes the light a cue puts out", async ({
@@ -327,11 +358,25 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
 
   // A colour in the programmer, stored as a preset. Which values go in is the
   // **daemon's** filter over the pool, not this interface's.
-  await page.getByTestId("open-window").selectOption("PresetPool");
+  await openWindow(page, "PresetPool");
   await expect(page.getByTestId("pool-empty")).toBeVisible();
   await command(page, "1 thru 3 red at 100");
-  await expect(page.getByTestId("store-preset")).toContainText("Nothing is there yet");
-  await page.getByTestId("store-preset").click();
+  // **The store bar is gone** — S43's second rebuild: a preset is stored from
+  // the command line, which is where the line was being built anyway. The
+  // window's own job is to show what came of it.
+  //
+  // The pool is **named**, and that is S43's second change here. A line that
+  // names none means `Session::encoderBank` (`Command::StorePreset`), which is
+  // whichever bank the encoders are on and is not what this test is about; the
+  // window is a tab per pool since B30, so the test says which tab it expects
+  // the preset to appear in rather than depending on where the encoders happen
+  // to be standing.
+  // And **named**, because the assertion below is that an operator can read
+  // which preset a cue follows off the cell. A line that names a pool and no
+  // name leaves the preset without one (`joinName` takes what is after the pool
+  // word), and `preset 1` on its own would be a weaker claim than the one this
+  // test is here to make.
+  await store(page, 'Store Preset 1 Color "Deep red"', "Merge");
   await expect(page.getByTestId("preset-1")).toBeVisible();
 
   // Apply it, so the programmer's values carry the **link**, and store a cue
@@ -340,11 +385,22 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await clearProgrammer(page);
   await command(page, "1 thru 3");
   await page.getByTestId("preset-1").click();
+  // **And the intensity, which is the desk's since S43.** These PARs have no
+  // dimmer channel of their own, so the desk supplies one that scales their
+  // colour — and it rests at nought, which is what stops a rig of them coming
+  // up white. Colour without intensity is no light, exactly as on a fixture with
+  // a real dimmer, so an operator who wants to see something brings it up.
+  // The preset is a **Colour** preset, so it carries the red and not this: the
+  // cue stored below is what carries both.
+  await command(page, "at 100");
   // One window at a time: they all open at 0, 0 at the same size, so a second
   // one on top of the first is a window an operator cannot click through.
   await closeWindows(page);
 
-  await page.getByTestId("open-window").selectOption("SequenceSheet");
+  await openWindow(page, "SequenceSheet");
+  await openWindow(page, "Executors");
+  // The store bar and the cue rows are the Cue Viewer's since B29.
+  await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
   // The fader is its own line since S40 — see the note in the first test.
@@ -353,9 +409,15 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await expect(page.getByTestId("cue-row-1")).toBeVisible();
   await closeWindows(page);
 
-  // The Cue Viewer shows the link, by the preset's own name.
-  await page.getByTestId("open-window").selectOption("CueViewer");
-  await expect(page.getByTestId("link-1-1-Red")).toHaveText("1 Color 1");
+  // **The Cue Viewer shows the link on the cell** — S43, B29. The window is a
+  // cue per row and an attribute per column now, so a link is a marked cell
+  // rather than a column of its own, and the preset's own name is in the title
+  // beside the fixture it belongs to. What is asserted is unchanged: an
+  // operator can see that this cue follows the preset.
+  await openWindow(page, "CueViewer");
+  const linked = page.getByTestId("cue-1-Red");
+  await expect(linked).toHaveAttribute("data-linked", "yes");
+  await expect(linked).toHaveAttribute("title", /preset 1 Deep red/);
   await closeWindows(page);
 
   // Fire the cue from the executor bar, so the preset's value is **on the rig**
@@ -363,11 +425,18 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   // S26's method. The programmer is cleared first, so what is on the cable is
   // the *cue's* doing and not the programmer's.
   await clearProgrammer(page);
-  await page.getByTestId("open-window").selectOption("DmxSheet");
+  await openWindow(page, "DmxSheet");
+  // The strip is a window since S43, and `closeWindows` above took it away with
+  // the rest. The daemon tiles the two (`prism_core::layout`), so the picture of
+  // the rig and the keys that fire it are both reachable.
+  await openWindow(page, "Executors");
   await expect.poll(async () => litPixels(page, FULL), { timeout: 15_000 }).toBe(0);
   await page.getByTestId("button-3-0").click();
   await expect(page.getByTestId("select-3")).toHaveClass(/strip-running/);
   await expect.poll(async () => litPixels(page, FULL), { timeout: 15_000 }).toBeGreaterThan(0);
+  // How much of the rig is at full with the preset's red at 100, which is what
+  // the second Go is measured against below.
+  const atFullBefore = await litPixels(page, FULL);
 
   // Stop it again, so what follows is about the *cue* and not about a fade in
   // flight — see the note below.
@@ -375,11 +444,11 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await expect.poll(async () => litPixels(page, FULL), { timeout: 15_000 }).toBe(0);
 
   // Now **edit the preset**, without the cue being touched or stored again.
-  await page.getByTestId("open-window").selectOption("PresetPool");
+  await openWindow(page, "PresetPool");
   await command(page, "1 thru 3 red at 50");
-  await page.getByTestId("preset-number").fill("1");
-  await expect(page.getByTestId("store-preset")).toContainText("replaced");
-  await page.getByTestId("store-preset").click();
+  // Storing over a preset that is there raises the console's own question —
+  // which mode — and an Override is what *replace these three values* means.
+  await store(page, 'Store Preset 1 Color "Deep red"', "Override");
   await clearProgrammer(page);
 
   // And the same Go now puts a **different level** on the rig, because the cue
@@ -396,7 +465,26 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await page.getByTestId("button-3-0").click();
   await expect(page.getByTestId("select-3")).toHaveClass(/strip-running/);
   await expect.poll(async () => litPixels(page, HALF), { timeout: 15_000 }).toBeGreaterThan(0);
-  await expect.poll(async () => litPixels(page, FULL), { timeout: 15_000 }).toBe(0);
+
+  // **Fewer channels at full than before, not none** — and the difference is
+  // punch-list B1 doing exactly what it was asked to.
+  //
+  // A colour rests **open**, so the green, blue and white of these PARs sit at
+  // full whenever nothing drives them. This cue touches the red and nothing
+  // else, so the other three go on resting open while the red halves — which is
+  // *tracking*, and is the same thing a CMY head does when you pull one colour
+  // and leave the rest. The old assertion here was `toBe(0)`, from a rig whose
+  // colours rested at nought: it was reading *the rig went dark* as *the cue
+  // changed*, and the two stopped being the same claim in S43.
+  //
+  // What the cue changed is therefore measured as a **drop**: red left the full
+  // band for the half band, so the count at full falls and the count at half
+  // rises. Both halves are asserted, because either alone would pass for a rig
+  // that went dark.
+  await expect
+    .poll(async () => litPixels(page, FULL), { timeout: 15_000 })
+    .toBeLessThan(atFullBefore);
+  await expect.poll(async () => litPixels(page, FULL), { timeout: 15_000 }).toBeGreaterThan(0);
 });
 
 test("a cue sheet of four hundred rows scrolls inside its own window", async ({ page }) => {
@@ -404,7 +492,10 @@ test("a cue sheet of four hundred rows scrolls inside its own window", async ({ 
   // exactly the case that breaks it: S27 checked the same thing with forty
   // fixtures, and this is the version with a cue list on the screen.
   await desk(page, PORT + 2);
-  await page.getByTestId("open-window").selectOption("SequenceSheet");
+  await openWindow(page, "SequenceSheet");
+  await openWindow(page, "Executors");
+  // The store bar and the rows are the Cue Viewer's since B29.
+  await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
   await command(page, "1 thru 3 red at 100");
@@ -422,7 +513,7 @@ test("a cue sheet of four hundred rows scrolls inside its own window", async ({ 
     return {
       page: scroll(document.documentElement),
       canvas: scroll(document.querySelector('[data-testid="canvas"]')),
-      cues: scroll(document.querySelector('[data-testid="cue-scroll"]')),
+      cues: scroll(document.querySelector('[data-testid="cue-viewer-scroll"]')),
     };
   });
   expect(overflow.page).toEqual([0, 0]);

@@ -62,9 +62,9 @@
 //! table for one either, nor for the programmer or the journal.
 
 use prism_domain::{
-    AttributeType, ClearStage, Command, CueEdit, Delta, FeatureGroup, FixtureId, JsonPatchOp,
-    NoticeLevel, ObjectRef, PlaybackTarget, PresetId, Sequence, SequenceId, StoreMode,
-    StorePreview, StoreTarget,
+    AttributeType, ClearStage, Command, CueEdit, Delta, FixtureId, JsonPatchOp, NoticeLevel,
+    ObjectRef, PlaybackTarget, PresetId, PresetPool, Sequence, SequenceId, StoreMode, StorePreview,
+    StoreTarget,
 };
 use serde::{Deserialize, Serialize};
 
@@ -352,7 +352,7 @@ impl ShowFile {
     fn preview_preset(
         &self,
         preset_id: PresetId,
-        pool: FeatureGroup,
+        pool: PresetPool,
         mode: StoreMode,
     ) -> StorePreview {
         let existing = self.show.preset(preset_id);
@@ -375,7 +375,7 @@ impl ShowFile {
             Ok(_) => counted(
                 existing.map(|preset| preset.name.as_str()),
                 &stored,
-                &self.programmer.stored_keys(&self.show, Some(pool)),
+                &self.programmer.stored_keys(&self.show, pool.group()),
                 mode,
             ),
             Err(error) => refused(
@@ -568,6 +568,13 @@ impl ShowFile {
             // already exists keeps its own pool instead, which
             // `Programmer::preset` decides, because a store into preset 1 is a
             // store into preset 1 rather than a way of moving it between pools.
+            //
+            // The fallback is still a **bank**, converted. `Multi` is a pool and
+            // not a bank (S43), so a line that names no pool cannot mean it:
+            // there is no encoder bank an operator could be standing on that
+            // would say *store everything*, and guessing it from a full
+            // programmer would make `Store Preset 1` mean two different things
+            // on two different days.
             Command::StorePreset {
                 preset_id,
                 pool,
@@ -576,7 +583,7 @@ impl ShowFile {
                 mode,
             } => Command::StorePreset {
                 preset_id: *preset_id,
-                pool: Some(pool.unwrap_or_else(|| self.session.session().encoder_bank)),
+                pool: Some(pool.unwrap_or_else(|| self.session.session().encoder_bank.into())),
                 name: name.clone(),
                 color: *color,
                 mode: *mode,
@@ -774,6 +781,13 @@ impl ShowFile {
         }
 
         let selection_before = self.programmer.state().selection.clone();
+        // **Read before the clear, not after** — S43. The page state goes with
+        // the *last* stage of Clear (`docs/DMX_MERGE.md` §3.1), and since the
+        // stage is derived from the contents it is gone the instant that press
+        // has been applied. Asking afterwards used to work only because the
+        // stage was a counter that wrapped to a distinguishable value.
+        let clearing_everything = matches!(command, Command::ClearProgrammer)
+            && self.programmer.state().stage() == ClearStage::All;
         // **A store that has already been written is not asked about again.**
         // The cue, the preset or the cue list was built above out of the show as
         // it stood *before* the write; re-deriving it through `Programmer::apply`
@@ -799,11 +813,9 @@ impl ShowFile {
         } else {
             self.session.set_programmer_param_index(0)?
         };
-        // The third press of Clear takes the page state with it
+        // The last press of Clear takes the page state with it
         // (`docs/DMX_MERGE.md` §3.1), and the page state is the session's.
-        if matches!(command, Command::ClearProgrammer)
-            && self.programmer.state().clear_stage == ClearStage::Idle
-        {
+        if clearing_everything {
             session_ops.extend(self.session.set_programmer_page(0)?);
             session_ops.extend(self.session.set_programmer_param_index(0)?);
         }
@@ -1110,6 +1122,8 @@ impl ShowFile {
             | Command::ImportShow { .. }
             | Command::SelectView { .. }
             | Command::StoreView { .. }
+            | Command::NewView { .. }
+            | Command::SetWindowPicker { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
@@ -1669,6 +1683,7 @@ mod tests {
 
         let applied = file
             .apply(&Command::PatchFixture {
+                software_dimmer: true,
                 id: prism_domain::FixtureId::new(2),
                 name: "Two".to_owned(),
                 type_id: "generic.rgbw.par".to_owned(),
@@ -1697,6 +1712,7 @@ mod tests {
         let mut file = file();
         let applied = file
             .apply(&Command::PatchFixture {
+                software_dimmer: true,
                 id: prism_domain::FixtureId::new(2),
                 name: "Two".to_owned(),
                 type_id: "generic.rgbw.par".to_owned(),
@@ -1732,8 +1748,8 @@ mod tests {
     fn a_command_has_a_scope_exactly_when_it_is_undoable() {
         use prism_domain::{
             AttributeType, ExecutorId, FeatureGroup, FixtureId, GoDirection, ObjectRef,
-            OverwriteMode, ParamDirection, PlaybackTarget, PresetId, SelectionMode, SequenceId,
-            SequenceStoreMode, StoreMode,
+            OverwriteMode, ParamDirection, PlaybackTarget, PresetId, PresetPool, SelectionMode,
+            SequenceId, SequenceStoreMode, StoreMode,
         };
 
         let file = file();
@@ -1777,6 +1793,7 @@ mod tests {
                 level: 0,
             },
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(1),
                 name: String::new(),
                 type_id: "generic.rgbw.par".to_owned(),
@@ -1823,11 +1840,12 @@ mod tests {
             },
             Command::CommandLineInput {
                 text: String::new(),
+                run: false,
             },
             // The four S28 added that write show content, and S39's four.
             Command::StorePreset {
                 preset_id: PresetId::new(1),
-                pool: Some(FeatureGroup::Color),
+                pool: Some(PresetPool::Color),
                 name: String::new(),
                 color: None,
                 mode: StoreMode::Merge,

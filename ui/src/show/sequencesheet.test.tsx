@@ -12,6 +12,15 @@
  * are the *windows*, the *selected executor* and the *selected sequence*: the
  * recorded show was opened with a fresh session, and which windows are open is
  * S25's ground while the two selections are S26's and S39's, all asserted there.
+ *
+ * # Two windows now, and the tests moved with the panels — S43
+ *
+ * The owner's rebuild made the Sequence Sheet a **pool** and moved the cue
+ * table, the transport and the store bar into the Cue Viewer. Almost every
+ * assertion in this file was true before the move and is true after it; what
+ * changed is which window has to be open for it. So the default window of
+ * {@link desk} is the Cue Viewer, the pool's own handful of tests name the
+ * Sequence Sheet, and nothing was deleted for being in the wrong file.
  */
 
 import { decode } from "@msgpack/msgpack";
@@ -21,6 +30,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "../App";
 import type { Answer, Command, JsonValue, WindowType } from "../bindings";
+import { ATTRIBUTE_TYPE_VARIANTS } from "../bindings/variants";
 import { Connection } from "../ipc/connection";
 import type { Snapshot } from "../ipc/protocol";
 import { TelemetrySink } from "../ipc/telemetry";
@@ -30,6 +40,8 @@ import { DeskStore, deskEvents } from "../store/desk";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { answerAbout, deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
 import { TelemetryProvider } from "../telemetry/panel";
+import { ConsoleContext } from "../desk/consoleshell";
+import type { ConsoleShell } from "../desk/consoleshell";
 import { CueViewer } from "./cueviewer";
 
 /**
@@ -74,7 +86,7 @@ type Sent =
 
 /** A whole interface with a daemon the test drives. */
 async function desk(
-  window: WindowType = "SequenceSheet",
+  window: WindowType = "CueViewer",
   selectedExecutor: number | null = 0,
   selectedSequence: number | null = 1,
 ) {
@@ -209,45 +221,97 @@ describe("the sequence sheet", () => {
   it("says what there is to look at when there is nothing", async () => {
     await desk("SequenceSheet", 0, null);
     expect(screen.getByTestId("sequence-count").textContent).toBe("0 sequences");
-    // A fresh show has no sequences and nothing is in force, which is a state
-    // the sheet has to be legible in rather than blank.
+    // A fresh show has no sequences, which is a state the pool has to be
+    // legible in rather than blank.
     expect(screen.getByTestId("no-sequence")).toBeTruthy();
-    expect(screen.getByTestId("looks-executor-name").textContent).toBe("Executor 0");
+    // **And no transport line** — S43. It went to the Cue Viewer with the cue
+    // table, because it is about one list and this window is about which.
+    expect(screen.queryByTestId("looks-executor")).toBeNull();
+    expect(screen.queryByTestId("cue-store")).toBeNull();
   });
 
-  it("says that no cue list is in force rather than blaming the executor", async () => {
-    // **S39's decision, seen from the screen.** Until it landed this note said
-    // *select an executor first*, because the sheet followed the executor's
-    // sequence; a cue list is chosen in its own right now, so an operator with
-    // no executor selected is told what to do about the cue list rather than
-    // about a fader they may not want yet.
-    await desk("SequenceSheet", null, null);
-    expect(screen.getByTestId("looks-executor-name").textContent).toBe("No executor selected");
-    expect(screen.getByTestId("no-sequence").textContent).toContain("No cue list is in force");
-    expect(screen.getByTestId("no-sequence").textContent).not.toContain("executor");
-    // And the three transport keys are dead, because there is nothing to fire.
-    for (const key of ["looks-go", "looks-back", "looks-off"]) {
-      expect(screen.getByTestId(key).hasAttribute("disabled")).toBe(true);
-    }
-  });
-
-  it("shows a cue list nobody has put on a fader", async () => {
-    // The other half of S39's decision, and the one an operator meets first: a
-    // show is written before anybody decides which fader each list goes on.
-    const { applyStep } = await desk("SequenceSheet", null, 1);
-    await applyStep(...A_CUE_LIST);
-    expect(screen.getByTestId("looks-executor-name").textContent).toBe("No executor selected");
-    expect(cueNumbers()).toEqual(["1", "2"]);
-  });
-
-  it("shows the cue list the daemon is holding, once there is one", async () => {
-    const { applyStep } = await desk();
+  it("shows the cue lists the daemon is holding, as a grid of boxes", async () => {
+    const { applyStep } = await desk("SequenceSheet");
     await applyStep(...A_CUE_LIST);
     expect(screen.getByTestId("sequence-count").textContent).toBe("1 sequences");
-    expect(cueNumbers()).toEqual(["1", "2"]);
-    expect(screen.getByTestId("cue-name-2").textContent).toBe("Green wash");
-    expect(screen.getByTestId("cue-fadeIn-2").textContent).toBe("5.5s");
-    expect(screen.getByTestId("cue-parts-1").textContent).toBe("5");
+    const box = screen.getByTestId("sequence-1");
+    expect(box.textContent).toContain("2 cues");
+    // The one that is being edited is lit, and it is the **session's** answer:
+    // `selectedSequence`, which the recording put in force.
+    expect(box.dataset["current"]).toBe("yes");
+    // No cue rows: the list is the other window's.
+    expect(screen.queryAllByTestId(/^cue-row-/)).toHaveLength(0);
+  });
+
+  /**
+   * **The smaller actions are on a right-click** — S43, the owner's rebuild:
+   * *Namens und Farbänderungen oder Ähnliches sollen keinen eigenen Knopf
+   * bekommen, sondern mit Rechtsklick auf eine Sequence erreichbar sein.*
+   *
+   * Each item is a line S40 gave to all six pools, which is what makes this a
+   * menu rather than five commands only this window can send.
+   */
+  it("manages a cue list from a right-click, with the lines every pool shares", async () => {
+    const { acted, applyStep } = await desk("SequenceSheet");
+    await applyStep(...A_CUE_LIST);
+    expect(screen.queryByTestId("sequence-menu")).toBeNull();
+
+    fireEvent.contextMenu(screen.getByTestId("sequence-1"));
+    const menu = screen.getByTestId("sequence-menu");
+    expect(menu.dataset["subject"]).toBe("1");
+
+    fireEvent.click(screen.getByTestId("sequence-rename"));
+    type("sequence-rename-input", "Act one");
+    fireEvent.submit(screen.getByTestId("sequence-rename-input").closest("form") as HTMLFormElement);
+    expect(acted().at(-1)).toEqual({
+      t: "Label",
+      target: { t: "Sequence", sequenceId: 1 },
+      name: "Act one",
+    });
+    // Choosing an item closes the menu.
+    expect(screen.queryByTestId("sequence-menu")).toBeNull();
+
+    fireEvent.contextMenu(screen.getByTestId("sequence-1"));
+    fireEvent.click(screen.getByTestId("sequence-colour"));
+    type("sequence-colour-input", "blue");
+    fireEvent.submit(screen.getByTestId("sequence-colour-input").closest("form") as HTMLFormElement);
+    expect(acted().at(-1)).toEqual({
+      t: "Color",
+      target: { t: "Sequence", sequenceId: 1 },
+      color: { r: 0, g: 0, b: 255 },
+    });
+
+    fireEvent.contextMenu(screen.getByTestId("sequence-1"));
+    fireEvent.click(screen.getByTestId("sequence-copy"));
+    expect(acted().at(-1)).toEqual({
+      t: "Copy",
+      from: { t: "Sequence", sequenceId: 1 },
+      to: { t: "Sequence", sequenceId: 2 },
+      mode: "Merge",
+    });
+
+    fireEvent.contextMenu(screen.getByTestId("sequence-1"));
+    fireEvent.click(screen.getByTestId("sequence-delete"));
+    expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "Sequence", sequenceId: 1 } });
+    // The box is still there: the pool is the daemon's.
+    expect(screen.getByTestId("sequence-1")).toBeTruthy();
+  });
+
+  /**
+   * **A Move is written and left standing** — `ARCHITECTURE_SPEC.md` §4.5's
+   * second shape. The destination is the argument the line is still waiting
+   * for, and the operator types it, which is why the item opens no box.
+   */
+  it("writes a move line rather than guessing where the operator wants it", async () => {
+    const { commands, applyStep } = await desk("SequenceSheet");
+    await applyStep(...A_CUE_LIST);
+    fireEvent.contextMenu(screen.getByTestId("sequence-1"));
+    fireEvent.click(screen.getByTestId("sequence-move"));
+    expect(commands().at(-1)).toEqual({
+      t: "CommandLineInput",
+      text: "Move Sequence 1 Sequence ",
+      run: false,
+    });
   });
 
   /**
@@ -284,8 +348,44 @@ describe("the sequence sheet", () => {
     fireEvent.click(screen.getByTestId("sequence-1"));
     // **The cue list in force is the session's** — S39's decision, and it is
     // why choosing one is a command rather than a click this interface
-    // remembers. No executor is selected and the chip is live all the same.
+    // remembers. No executor is selected and the box is live all the same.
     expect(acted()).toEqual([{ t: "SelectSequence", sequenceId: 1 }]);
+  });
+});
+
+describe("the cue viewer", () => {
+  it("says that no cue list is being edited rather than blaming the executor", async () => {
+    // **S39's decision, seen from the screen**, and S43's move. Until S39 this
+    // note said *select an executor first*, because the window followed the
+    // executor's sequence; a cue list is chosen in its own right now, so an
+    // operator with none chosen is told to choose one — in the Sequence Sheet,
+    // which is where choosing happens since the rebuild.
+    await desk("CueViewer", null, null);
+    expect(screen.getByTestId("looks-executor-name").textContent).toBe("No executor selected");
+    expect(screen.getByTestId("cue-viewer-empty").textContent).toContain(
+      "No cue list is being edited",
+    );
+    // And the three transport keys are dead, because there is nothing to fire.
+    for (const key of ["looks-go", "looks-back", "looks-off"]) {
+      expect(screen.getByTestId(key).hasAttribute("disabled")).toBe(true);
+    }
+  });
+
+  it("shows a cue list nobody has put on a fader", async () => {
+    // The other half of S39's decision, and the one an operator meets first: a
+    // show is written before anybody decides which fader each list goes on.
+    const { applyStep } = await desk("CueViewer", null, 1);
+    await applyStep(...A_CUE_LIST);
+    expect(screen.getByTestId("looks-executor-name").textContent).toBe("No executor selected");
+    expect(cueNumbers()).toEqual(["1", "2"]);
+  });
+
+  it("shows the cue list the daemon is holding, once there is one", async () => {
+    const { applyStep } = await desk();
+    await applyStep(...A_CUE_LIST);
+    expect(cueNumbers()).toEqual(["1", "2"]);
+    expect(screen.getByTestId("cue-name-2").textContent).toBe("Green wash");
+    expect(screen.getByTestId("cue-fadeIn-2").textContent).toBe("5.5s");
   });
 
   /**
@@ -657,82 +757,182 @@ function numberIn(testId: string): string {
   return field.value;
 }
 
-describe("the cue viewer", () => {
-  it("says what it is following when nothing is", async () => {
-    await desk("CueViewer", null);
-    expect(screen.getByTestId("cue-viewer-empty").textContent).toContain("No cue list is in force");
-  });
-
-  it("shows every value of every cue, with the preset link visible", async () => {
+describe("the cue grid", () => {
+  /**
+   * **One row per cue and one column per attribute** — S43, the owner's
+   * rebuild: *der Cue Viewer soll nur eine Zeile pro Cue haben und für jedes
+   * Attribut eine Spalte*.
+   *
+   * It was one row per **value** — cue, fixture, attribute, value, link —
+   * which for a rig of any size is thousands of rows, and which cannot answer
+   * the question this window is opened with: *what does this cue change, and
+   * what does it leave alone?* A column of dashes is that answer.
+   */
+  it("draws a column per attribute and a dash where a cue sets nothing", async () => {
     const { applyStep } = await desk("CueViewer");
-    await applyStep(
-      ...A_CUE_LIST,
-      "clear the programmer",
-      "select the PARs again",
-      "dial a blue",
-      "and a dimmer value on a PAR's white",
-      "store it, with a name and a scribble-strip colour",
-      "clear again",
-      "select the PARs",
-      "and apply the preset",
-      "store a cue out of it",
+    await applyStep(...A_CUE_LIST);
+    // The columns are the attributes the list touches, in the generated order
+    // rather than in one invented here — `AttributeType::ALL`, which is also
+    // the order the encoder banks walk.
+    const columns = [...screen.getAllByTestId(/^cue-column-/)].map(
+      (cell) => cell.textContent ?? "",
     );
-    // The cue stored from an applied preset carries the link on every part —
-    // and the viewer shows the preset's *name*, which is what makes the link
-    // something an operator can act on.
-    const link = screen.getByTestId("link-3-1-Blue");
-    expect(link.textContent).toBe("1 Deep blue");
-    expect(screen.getByTestId("part-1-1-Red")).toBeTruthy();
-    // A value nobody linked reads as a dash rather than as preset zero.
-    expect(screen.getByTestId("link-1-1-Red").textContent).toBe("—");
+    expect(columns.length).toBeGreaterThan(0);
+    expect(columns).toEqual([...columns].sort(byAttributeOrder));
+
+    // Every cue of the recording carries a value in the columns it touches,
+    // and reads them as percentages.
+    for (const attribute of columns) {
+      expect(screen.getByTestId(`cue-1-${attribute}`).textContent).toMatch(/(%|—)$/);
+    }
   });
 
-  it("says a cue list holds no values rather than drawing an empty table", async () => {
-    const { applyStep } = await desk("CueViewer");
-    await applyStep("make a cue list to store into", "put it on an executor");
-    expect(screen.getByTestId("cue-viewer-empty").textContent).toContain("holds no values yet");
+  /**
+   * **The dash is the reading this window exists for**, and it is asserted over
+   * a show built here rather than over the recording: what is being measured is
+   * *an attribute one cue sets and another does not*, and a fixture written to
+   * say exactly that says it better than a script that happens to.
+   */
+  it("says with a dash where a cue leaves an attribute to track", async () => {
+    const show = showWith([{ fixture: 1, attribute: "Red", value: 65535, presetRef: null }], [
+      { fixture: 1, attribute: "Green", value: 65535, presetRef: null },
+    ]);
+    const { unmount } = renderViewer(show);
+    expect(screen.getByTestId("cue-1-Red").dataset["set"]).toBe("yes");
+    expect(screen.getByTestId("cue-1-Green").dataset["set"]).toBe("no");
+    expect(screen.getByTestId("cue-1-Green").textContent).toBe("—");
+    expect(screen.getByTestId("cue-2-Red").dataset["set"]).toBe("no");
+    expect(screen.getByTestId("cue-2-Green").dataset["set"]).toBe("yes");
+    unmount();
+  });
+
+  it("says the range when the fixtures of a cue disagree, and never an average", async () => {
+    // Not an average, which is a number no fixture is at; not the first, which
+    // would be a claim about the others. The detail is in the title, which is
+    // where it went rather than where it was lost.
+    const show = showWith([
+      { fixture: 1, attribute: "Red", value: 65535, presetRef: null },
+      { fixture: 2, attribute: "Red", value: 0, presetRef: null },
+      { fixture: 1, attribute: "Green", value: 32768, presetRef: null },
+    ]);
+    const { unmount } = renderViewer(show);
+    const red = screen.getByTestId("cue-1-Red");
+    expect(red.textContent).toBe("0–100%");
+    expect(red.getAttribute("title")).toContain("Fixture 1: 100%");
+    expect(red.getAttribute("title")).toContain("Fixture 2: 0%");
+    // One fixture, one number — no range where there is nothing to range over.
+    expect(screen.getByTestId("cue-1-Green").textContent).toBe("50%");
+    unmount();
+  });
+
+  it("marks a linked value and names the preset in the title", async () => {
+    const show = showWith([
+      { fixture: 1, attribute: "Blue", value: 65535, presetRef: 1 },
+    ]);
+    const { unmount } = renderViewer(show);
+    const cell = screen.getByTestId("cue-1-Blue");
+    expect(cell.dataset["linked"]).toBe("yes");
+    expect(cell.getAttribute("title")).toContain("preset 1 Deep blue");
+    unmount();
   });
 
   it("names a link to a preset that is not there rather than drawing nothing", async () => {
     // A dangling link is a real state — `Show::remove_preset` leaves the value
     // and the link, and `Show::issues` reports it — so the viewer says which
-    // preset is missing rather than hiding the row an operator has to fix.
-    const show: JsonValue = {
-      sequences: {
-        "1": {
-          name: "Act 1",
-          loop: false,
-          cues: [
-            {
-              number: "1",
-              name: "",
-              fadeIn: 0,
-              fadeOut: 0,
-              delay: 0,
-              trigger: "Go",
-              triggerTime: null,
-              parts: [{ fixture: 1, attribute: "Red", value: 65535, presetRef: 44 }],
-            },
-          ],
-        },
-      },
-      executors: { "0": { sequenceId: 1, isActive: false, currentCueIndex: null } },
-    };
-    const { applyStep } = await desk("CueViewer");
-    await applyStep();
-    await act(async () => {
-      // The whole show replaced in one operation, which is what a `ShowPatch`
-      // rooted at `/` is allowed to be.
-      await Promise.resolve();
-    });
-    // Rendered directly rather than through a delta: what is being checked is
-    // the reading, and the mirror is `mirror.test.ts`'s ground.
-    const { unmount } = render(
-      <DeskProvider store={new DeskStore()}>
-        <CueViewer show={show} session={{ session: { selectedExecutor: 0 } }} />
-      </DeskProvider>,
+    // preset is missing rather than hiding the cell an operator has to fix.
+    const show = showWith([
+      { fixture: 1, attribute: "Red", value: 65535, presetRef: 44 },
+    ]);
+    const { unmount } = renderViewer(show);
+    expect(screen.getByTestId("cue-1-Red").getAttribute("title")).toContain(
+      "preset 44 (missing)",
     );
-    expect(screen.getByTestId("link-1-1-Red").textContent).toBe("44 (missing)");
     unmount();
   });
+
+  it("says a cue list has no cues rather than drawing an empty grid", async () => {
+    const { applyStep } = await desk("CueViewer");
+    await applyStep("make a cue list to store into", "put it on an executor");
+    expect(screen.getByTestId("no-cues").textContent).toContain("no cues");
+    // And the store bar is there all the same, because storing is how it stops
+    // having none.
+    expect(screen.getByTestId("cue-store")).toBeTruthy();
+  });
 });
+
+/**
+ * One part of a cue, as this file writes them.
+ *
+ * A `JsonValue` record and not an interface: a named type is not assignable to
+ * the recursive index signature `JsonValue` has, and the shape is what the
+ * daemon writes rather than something this file gets to define.
+ */
+type Part = Record<string, JsonValue>;
+
+/** A show of one cue per argument, and a preset for a link to reach. */
+function showWith(...cues: Part[][]): JsonValue {
+  return {
+    presets: { "1": { pool: "Color", name: "Deep blue", color: null, values: [] } },
+    sequences: {
+      "1": {
+        name: "Act 1",
+        loop: false,
+        cues: cues.map((parts, index) => ({
+          number: String(index + 1),
+          name: "",
+          fadeIn: 0,
+          fadeOut: 0,
+          delay: 0,
+          trigger: "Go",
+          triggerTime: null,
+          parts,
+        })),
+      },
+    },
+    executors: { "0": { sequenceId: 1, isActive: false, currentCueIndex: null } },
+  };
+}
+
+/**
+ * The window over a show written here, rather than through a daemon.
+ *
+ * What is being checked in these four is the **reading** — which cell says
+ * what — and the mirror is `mirror.test.ts`'s ground. The console shell is
+ * brought along because the cue keys write lines (§4.5) and a window that could
+ * not reach the console would throw before it drew anything.
+ */
+function renderViewer(show: JsonValue) {
+  return render(
+    <DeskProvider store={new DeskStore()}>
+      <ConsoleContext.Provider value={NO_CONSOLE}>
+        <CueViewer show={show} session={SELECTED} programmer={null} />
+      </ConsoleContext.Provider>
+    </DeskProvider>,
+  );
+}
+
+/** A console shell that records nothing: these tests press no cue key. */
+const NO_CONSOLE: ConsoleShell = {
+  line: "",
+  reading: { kind: "empty" },
+  prompt: null,
+  write: () => undefined,
+  append: () => undefined,
+  run: () => undefined,
+  runWithMode: () => undefined,
+  submit: () => undefined,
+  answer: () => undefined,
+  recall: () => undefined,
+};
+
+/** A session with sequence 1 chosen and executor 0 selected. */
+const SELECTED: JsonValue = {
+  session: { selectedExecutor: 0, selectedSequence: 1 },
+};
+
+/** The generated order of two attribute names. */
+function byAttributeOrder(left: string, right: string): number {
+  const order = (name: string): number =>
+    (ATTRIBUTE_TYPE_VARIANTS as readonly string[]).indexOf(name);
+  return order(left) - order(right);
+}

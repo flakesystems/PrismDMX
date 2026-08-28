@@ -9,7 +9,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { JsonValue, WindowType } from "../bindings";
+import type { JsonValue } from "../bindings";
 import { nullSink, setLogSink } from "../log/logger";
 import { ViewBar } from "./viewbar";
 
@@ -20,7 +20,7 @@ function bar(session: JsonValue) {
   const renamed: { id: number; name: string }[] = [];
   const deleted: number[] = [];
   const moved: { id: number; to: number }[] = [];
-  const opened: WindowType[] = [];
+  const made: { id: number; name: string }[] = [];
   render(
     <ViewBar
       session={session}
@@ -29,10 +29,10 @@ function bar(session: JsonValue) {
       onRenameView={(viewId, name) => renamed.push({ id: viewId, name })}
       onDeleteView={(viewId) => deleted.push(viewId)}
       onMoveView={(viewId, toViewId) => moved.push({ id: viewId, to: toViewId })}
-      onOpenWindow={(type) => opened.push(type)}
+      onNewView={(viewId, name) => made.push({ id: viewId, name })}
     />,
   );
-  return { selected, stored, renamed, deleted, moved, opened };
+  return { selected, stored, renamed, deleted, moved, made };
 }
 
 beforeEach(() => {
@@ -59,15 +59,27 @@ describe("the view bar", () => {
     const { stored } = bar({ session: { activeViewId: 1 }, views: {} });
     fireEvent.click(screen.getByTestId("store-view"));
     expect(stored).toEqual([{ id: 1, name: "View 1" }]);
-    fireEvent.click(screen.getByTestId("new-view"));
-    expect(stored.at(-1)).toEqual({ id: 1, name: "View 1" });
   });
 
-  it("opens nothing when the picker is put back to its own label", () => {
-    const { opened } = bar({ session: { activeViewId: 1 }, views: {} });
-    fireEvent.change(screen.getByTestId("open-window"), { target: { value: "" } });
-    expect(opened).toEqual([]);
-    fireEvent.change(screen.getByTestId("open-window"), { target: { value: "Groups" } });
-    expect(opened).toEqual(["Groups"]);
+  /**
+   * **B11.** *New* used to send `StoreView`, so a new view arrived carrying the
+   * windows of the one being left. The two buttons send two different commands
+   * now, and this is what says so: pressing New must not store anything.
+   */
+  it("makes an empty view rather than storing the canvas as one", () => {
+    const { stored, made } = bar({ session: { activeViewId: 1 }, views: {} });
+    fireEvent.click(screen.getByTestId("new-view"));
+    expect(made).toEqual([{ id: 1, name: "View 1" }]);
+    expect(stored).toEqual([]);
+  });
+
+  /**
+   * **B9.** The dropdown is gone, and gone rather than hidden: a window is
+   * opened from the chooser now (`canvas/picker.tsx`), which a right-click, a
+   * keyboard shortcut or an X-Touch key opens. The bar is about views.
+   */
+  it("has no window picker in it at all", () => {
+    bar({ session: { activeViewId: 1 }, views: {} });
+    expect(screen.queryByTestId("open-window")).toBeNull();
   });
 });

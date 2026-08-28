@@ -86,6 +86,7 @@ describe("deltas", () => {
         commandLine: "fixture 1 at full",
         openWindows: [
           { instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480, params: {} },
+          { instanceId: 2, type: "Status", x: 640, y: 0, w: 640, h: 480, params: {} },
         ],
         focusedWindow: 1,
       },

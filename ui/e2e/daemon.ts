@@ -10,6 +10,9 @@
  * own, so a developer's own daemon on 7373 is neither used nor disturbed.
  */
 
+import { expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
+
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { appendFileSync, copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -224,4 +227,36 @@ function member(value: unknown, key: string): unknown {
   }
   const entries: [string, unknown][] = Object.entries(value);
   return entries.find(([name]) => name === key)?.[1];
+}
+
+/**
+ * Opens a window on the canvas, the way an operator does since S43.
+ *
+ * **Punch-list B9 took the dropdown away.** A window is opened from a chooser
+ * now, and the chooser is opened by a right-click on an empty part of the
+ * canvas, by Insert, or by an X-Touch key. Insert is the one used here: it is
+ * the keyboard route, and a console is operated in the dark by somebody who is
+ * not looking at the screen.
+ *
+ * Which windows are open is **session** state, so this waits for the window to
+ * appear rather than for the click to return — the daemon decides, and it also
+ * decides *where* (`prism_core::layout`), which is why nothing here says a
+ * position.
+ */
+export async function openWindow(page: Page, type: string): Promise<void> {
+  // **The focus leaves the text field first.** `Insert` is ignored while the
+  // focus is in one (`App.tsx::useWindowPickerKey`) and that is deliberate: the
+  // command line is where an operator's hands are, and a shortcut that fired
+  // mid-word would be worse than no shortcut. A test that has just typed a line
+  // is in exactly that state, so it does what an operator's hand does — leaves
+  // the field — rather than asserting the rule away.
+  await page.evaluate(() => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement) {
+      focused.blur();
+    }
+  });
+  await page.keyboard.press("Insert");
+  await page.getByTestId(`picker-${type}`).click();
+  await expect(page.locator(`[data-window-type="${type}"]`).first()).toBeVisible();
 }

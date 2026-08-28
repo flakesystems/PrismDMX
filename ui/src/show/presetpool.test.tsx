@@ -22,7 +22,7 @@ import { DeskProvider } from "../store/context";
 import { Shell } from "../testing/shell";
 import { DeskStore, deskEvents } from "../store/desk";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
-import { answerAbout, deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
+import { deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
 import { TelemetryProvider } from "../telemetry/panel";
 import { PresetPool } from "./presetpool";
 
@@ -154,14 +154,6 @@ const A_PRESET = [
 ] as const;
 
 /** What is in a text box. */
-function valueIn(testId: string): string {
-  const field = screen.getByTestId(testId);
-  if (!(field instanceof HTMLInputElement)) {
-    throw new Error(`${testId} is not an input`);
-  }
-  return field.value;
-}
-
 /** Types into a field. */
 function type(testId: string, value: string): void {
   const field = screen.getByTestId(testId);
@@ -218,63 +210,56 @@ describe("the preset pools", () => {
     expect(acted()).toEqual([{ t: "ApplyPreset", presetId: 1 }]);
   });
 
-  it("asks the daemon what a store would do, and puts the answer on the button", async () => {
-    const { queries, answerQuery, applyStep } = await desk();
-    await applyStep(...A_PRESET);
-    expect(queries().some((query) => query.t === "StorePreview")).toBe(true);
-    await answerQuery("StorePreview", answerAbout("the three blues are replaced"));
-    const button = screen.getByTestId("store-preset");
-    expect(button.textContent).toContain("Merge");
-    expect(button.textContent).toContain("Deep blue");
-    expect(button.textContent).toContain("3 kept");
+  /**
+   * **The store bar is gone, and this is what took its place** — S43, the
+   * owner's second rebuild: *die Store Sektionen sollen entfernt werden, das
+   * soll nur über die Command Line gemacht werden.*
+   *
+   * Five tests went with it, and their claims are worth saying once so that
+   * nobody looks for them: the bar offered the lowest free number anywhere, it
+   * followed a typed number to that preset's own name, it wrote the **pool**
+   * into the line so a tab could not be silently disagreed with, it put the
+   * daemon's own store preview on the button, and it refused a number that was
+   * not one. All five described a panel that built one line out of three
+   * fields.
+   *
+   * Two of those are not lost, only moved. The preview is the console's
+   * **prompt** — the same `Query::StorePreview`, asked by the same line — and
+   * the pool is `Session::encoderBank` unless the line names one, which is
+   * `Command::StorePreset`'s own rule and what a typed line has always done.
+   */
+  it("has no store bar at all", async () => {
+    await desk();
+    for (const gone of ["preset-store", "preset-number", "preset-name", "store-preset"]) {
+      expect(screen.queryByTestId(gone), gone).toBeNull();
+    }
+    // And the empty pool says what to type rather than pointing at a bar that
+    // has gone.
+    expect(screen.getByTestId("pool-empty").textContent).toContain("Store Preset 1");
   });
 
-  it("stores into the pool that is chosen, with the number and the name in the boxes", async () => {
+  /**
+   * **A pool is an argument keyboard** — `consoleshell.ts::pickOnto`, and the
+   * gesture the owner described. `Delete Preset 1` is whole, so it goes at once
+   * rather than waiting for an Enter the operator already committed to.
+   */
+  it("finishes a waiting line and sends it at once", async () => {
     const { acted, applyStep } = await desk();
     await applyStep(...A_PRESET);
-    fireEvent.click(screen.getByTestId("pool-Beam"));
-    // Preset 1 is taken, so the box offers 2 — the next number free *anywhere*.
-    expect(valueIn("preset-number")).toBe("2");
-    type("preset-name", "Tight");
-    fireEvent.submit(screen.getByTestId("preset-store"));
-    // **The line names the pool** — `Store Preset 2 Beam "Tight"` — because
-    // this window has a tab of its own and the command line falls back to the
-    // encoder bank (S40).
-    expect(acted()).toEqual([
-      { t: "StorePreset", presetId: 2, pool: "Beam", name: "Tight", color: null, mode: "Merge" },
-    ]);
-    // **Dropped, not kept**: the boxes go back to offering what the daemon's
-    // pool says next.
-    expect(valueIn("preset-name")).toBe("Beam 2");
+    type("command-input", "Delete");
+    fireEvent.click(screen.getByTestId("preset-1"));
+    expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "Preset", presetId: 1 } });
+    // And it did **not** apply the preset: an operator who typed a verb was
+    // asking for an argument.
+    expect(acted().some((command) => command.t === "ApplyPreset")).toBe(false);
   });
 
-  it("carries the colour that is already there through a relabel", async () => {
+  /** With nothing typed, the box is the box: a preset is applied. */
+  it("applies the preset when nothing is waiting for an argument", async () => {
     const { acted, applyStep } = await desk();
     await applyStep(...A_PRESET);
-    type("preset-number", "1");
-    // The name follows the number: moving onto a preset that exists offers its
-    // name rather than the last one typed.
-    expect(valueIn("preset-name")).toBe("Deep blue");
-    type("preset-name", "Darker blue");
-    fireEvent.submit(screen.getByTestId("preset-store"));
-    expect(acted()).toEqual([
-      {
-        t: "StorePreset",
-        presetId: 1,
-        pool: "Color",
-        name: "Darker blue",
-        // **The colour is not sent, and that is the point** (S40). A relabel
-        // that dropped it would throw away something an operator chose and
-        // nothing on this screen can put back; a client that read it back off
-        // its mirror and sent it would be the read-modify-write S28 refused for
-        // a cue. So the command carries none and the *daemon* keeps it —
-        // `prism_core::Programmer::preset`.
-        color: null,
-        // The chooser's default, carried rather than assumed by the daemon —
-        // S39. A relabel is a Merge, which is the mode that cannot lose a value.
-        mode: "Merge",
-      },
-    ]);
+    fireEvent.click(screen.getByTestId("preset-1"));
+    expect(acted().at(-1)).toEqual({ t: "ApplyPreset", presetId: 1 });
   });
 
   it("draws a box with no colour as a plain one rather than as black", () => {
@@ -289,7 +274,6 @@ describe("the preset pools", () => {
               "3": { pool: "Color", name: "Plain", color: null, values: [] },
             },
           }}
-          programmer={null}
         />
       </Shell>,
     );
@@ -298,35 +282,4 @@ describe("the preset pools", () => {
     unmount();
   });
 
-  it("goes dead when the daemon says the store would be refused", async () => {
-    const { answerQuery, applyStep } = await desk();
-    await applyStep(...A_PRESET);
-    await answerQuery("StorePreview", answerAbout("nothing to store"));
-    const button = screen.getByTestId("store-preset");
-    expect(button.hasAttribute("disabled")).toBe(true);
-  });
-
-  it("asks again when the pool or the number changes", async () => {
-    const { queries, applyStep } = await desk();
-    await applyStep(...A_PRESET);
-    const before = queries().filter((query) => query.t === "StorePreview").length;
-    fireEvent.click(screen.getByTestId("pool-Focus"));
-    type("preset-number", "9");
-    expect(queries().filter((query) => query.t === "StorePreview").length).toBeGreaterThan(
-      before + 1,
-    );
-  });
-
-  it("refuses a preset number that is not a number, rather than sending a zero", async () => {
-    const { acted, applyStep } = await desk();
-    await applyStep(...A_PRESET);
-    type("preset-number", "");
-    type("preset-number", "nonsense");
-    // The box still offers what it offered: an empty box is *no answer yet*.
-    expect(valueIn("preset-number")).toBe("2");
-    fireEvent.submit(screen.getByTestId("preset-store"));
-    expect(acted()).toEqual([
-      { t: "StorePreset", presetId: 2, pool: "Color", name: "Color 2", color: null, mode: "Merge" },
-    ]);
-  });
 });

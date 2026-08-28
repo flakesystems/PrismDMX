@@ -101,6 +101,7 @@ mod conflict;
 mod desk;
 mod file;
 mod journal;
+mod layout;
 mod library;
 mod mirror;
 mod objects;

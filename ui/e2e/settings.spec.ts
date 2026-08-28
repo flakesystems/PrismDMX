@@ -31,7 +31,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, startDaemon } from "./daemon.ts";
+import { buildDaemon, forget, openWindow, startDaemon } from "./daemon.ts";
 
 /** A port of this suite's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7397;
@@ -66,7 +66,10 @@ async function desk(page: Page, port: number): Promise<string> {
   daemon = await startDaemon(port, undefined, { configurable: true });
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
-  await page.getByTestId("open-window").selectOption("Settings");
+  // **S43, B9**: the dropdown is gone. A window is opened from the chooser, and
+  // Insert is the keyboard route — a console is operated in the dark.
+  await page.keyboard.press("Insert");
+  await page.getByTestId("picker-Settings").click();
   await expect(page.getByTestId("settings")).toBeVisible();
   return daemon.dataDir;
 }
@@ -263,7 +266,7 @@ test("a second client sees what the first one changed", async ({ page, context }
   await second.close();
   await page.getByTestId("close-window-1").click();
   await expect(page.getByTestId("settings")).toBeHidden();
-  await page.getByTestId("open-window").selectOption("Settings");
+  await openWindow(page, "Settings");
   await page.getByTestId("settings-tab-this-machine").click();
   await expect(page.getByTestId("machine-universes")).toHaveValue("12");
   await done(dataDir);
@@ -384,5 +387,60 @@ test("a token is made by the daemon, and a flag greys the row it holds", async (
   await expect(page.getByTestId("machine-autostart")).toBeEnabled();
   await page.getByTestId("machine-autostart").click();
   await expect(page.getByTestId("machine-autostart")).toBeChecked();
+  await done(dataDir);
+});
+
+/**
+ * **Punch-list B5, and the reason it needed a browser to see.**
+ *
+ * The owner reported that some notices cannot be closed, and named the one that
+ * proves it: a successful JSON export. Every notice has carried a close button
+ * since it was written, so in `jsdom` — which has no layout — every unit test
+ * about it passed, and the entry was read as *hard to see* and wrongly closed.
+ *
+ * It was not hard to see. An export's message is an **absolute path with no
+ * spaces in it**, a flex item's automatic minimum size is its min-content width,
+ * and so the message refused to shrink and pushed the button one pixel past
+ * `.notice-wrapper`, where `overflow: hidden` removed all 28 px of it. An error
+ * is a sentence, it wraps, and its button stays — which is exactly the
+ * difference the owner described.
+ *
+ * So the assertion is a **box inside a box**, on the message that caused it, in
+ * a browser that does layout. Nothing about the DOM would have caught this, and
+ * that is the point of the test.
+ */
+test("the close button of a long notice is inside the notice", async ({ page }) => {
+  const dataDir = await desk(page, PORT + 6);
+  await page.getByTestId("settings-tab-show-files").click();
+  await page.getByTestId("show-ExportShow").click();
+  // A name, so the path the daemon answers with is a long absolute one — which
+  // is the whole of the fault.
+  await page.getByTestId("settings-showfiles").getByRole("textbox").fill("b5-export.json");
+  await page.getByTestId("show-form-apply").click();
+
+  const close = page.getByTestId("notice-close-1");
+  await expect(close).toBeVisible();
+  const boxes = await page.evaluate(() => {
+    const button = document.querySelector(".notice-close");
+    const wrapper = document.querySelector(".notice-wrapper");
+    if (button === null || wrapper === null) {
+      return null;
+    }
+    const one = button.getBoundingClientRect();
+    const two = wrapper.getBoundingClientRect();
+    return {
+      width: Math.round(one.width),
+      overhang: Math.round(one.right - two.right),
+    };
+  });
+  expect(boxes?.width).toBeGreaterThan(0);
+  // Not past the edge that clips it. One pixel was enough to lose the button.
+  expect(boxes?.overhang).toBeLessThanOrEqual(0);
+
+  // And pressing it takes the message away — the second half of the entry. The
+  // removal used to wait on `transitionend` alone, so a browser that did not run
+  // the collapse kept the notice for ever with a button that did nothing.
+  await close.click();
+  await expect(page.getByTestId("notices")).toHaveCount(0);
   await done(dataDir);
 });

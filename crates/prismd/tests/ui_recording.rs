@@ -194,6 +194,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
         },
         7 => Command::CommandLineInput {
             text: format!("fixture {} at {}", rng.below(4), rng.below(101)),
+            run: false,
         },
         8 => Command::SetEncoderBank {
             group: FeatureGroup::ALL[usize::try_from(rng.below(5)).unwrap_or(0)],
@@ -209,6 +210,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
         11 => {
             *patched += 1;
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(100 + *patched),
                 name: format!("Fixture {}", 100 + *patched),
                 type_id: "generic.dimmer".to_owned(),
@@ -505,6 +507,7 @@ fn client_messages() -> Vec<ClientRecord> {
             ClientMessage::Command {
                 seq: 5,
                 command: Command::PatchFixture {
+                    software_dimmer: true,
                     id: FixtureId::new(42),
                     name: "Fixture 42".to_owned(),
                     type_id: "generic.dimmer".to_owned(),
@@ -542,6 +545,7 @@ fn client_messages() -> Vec<ClientRecord> {
                 seq: 8,
                 command: Command::CommandLineInput {
                     text: "fixture 1 thru 4 at full".to_owned(),
+                    run: false,
                 },
             },
         ),
@@ -650,10 +654,17 @@ fn the_recording_is_a_delta_stream_this_build_could_have_sent() {
 
     // And the recording is worth having: a stream of nothing but `Notice`
     // deltas would satisfy every assertion above.
+    //
+    // **The programmer floor came down by one in S43**, and that is the fix
+    // showing rather than the recording thinning. A Clear with nothing to clear
+    // used to broadcast a `ProgrammerChanged` carrying a state that had not
+    // moved — the stage was a counter and the counter had turned — and so did a
+    // store, for the same reason. Neither does now (punch-list B2), so the same
+    // script produces exactly ten instead of eleven.
     assert!(with_show > 10, "only {with_show} show patches");
     assert!(with_session > 10, "only {with_session} session patches");
     assert!(
-        with_programmer > 10,
+        with_programmer >= 10,
         "only {with_programmer} programmer changes"
     );
     assert!(

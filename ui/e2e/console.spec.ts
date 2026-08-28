@@ -32,7 +32,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, showFixture, startDaemon } from "./daemon.ts";
+import { buildDaemon, forget, openWindow, showFixture, startDaemon } from "./daemon.ts";
 
 /** A port of this suite's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7399;
@@ -60,6 +60,11 @@ async function desk(page: Page): Promise<void> {
   daemon = await startDaemon(PORT, fixture.dataDir, { show: fixture.show });
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // **S43 moved these into windows.** The executor strip, the console's
+  // keys and the readings were bands around the canvas; the owner's
+  // skeleton has none, so they are windows an operator opens.
+  await openWindow(page, "Status");
+  await openWindow(page, "CommandKeys");
 }
 
 /** The command input. */
@@ -124,7 +129,7 @@ test.describe("the console shell", () => {
     // -- groups: the pool that had no commands at all before S40 -------------
     await command(page, "1 thru 3");
     await command(page, 'Store Group 1 "Front wash"');
-    await page.getByTestId("open-window").selectOption("Groups");
+    await openWindow(page, "Groups");
     await expect(page.getByTestId("group-1")).toContainText("Front wash");
     await expect(page.getByTestId("group-1")).toContainText("3 fixtures");
 
@@ -143,7 +148,10 @@ test.describe("the console shell", () => {
     await command(page, "red at 100");
 
     // -- a cue list, written by typing --------------------------------------
-    await page.getByTestId("open-window").selectOption("SequenceSheet");
+    // Two windows since S43: the pool, and the list. Every line below is typed,
+    // and each one is read off the window it belongs to.
+    await openWindow(page, "SequenceSheet");
+    await openWindow(page, "CueViewer");
     await command(page, 'Store Sequence 1 "Act 1"');
     await expect(page.getByTestId("sequence-1")).toContainText("Act 1");
     await command(page, "Sequence 1");
@@ -163,6 +171,8 @@ test.describe("the console shell", () => {
     await expect(page.getByTestId("cue-row-6")).toHaveCount(0);
 
     // -- a fader, and the transport ------------------------------------------
+    // The strip is a window since S43, like the readings and the console's keys.
+    await openWindow(page, "Executors");
     await command(page, "Assign Sequence 1 Executor 0");
     await expect(page.getByTestId("strip-0")).toContainText("Act 1");
     await command(page, "Go+ Executor 0");
@@ -211,14 +221,14 @@ test.describe("the console shell", () => {
     page,
   }) => {
     await desk(page);
-    await page.getByTestId("open-window").selectOption("SequenceSheet");
+    await openWindow(page, "CueViewer");
     await command(page, "1 thru 3");
     // The rig is PARs: a level goes on a colour, not on a dimmer they lack.
     await command(page, "red at 100");
     await command(page, 'Store Sequence 1 "Act 1"');
     await command(page, "Sequence 1");
     await command(page, "Store Cue 1");
-    await expect(page.getByTestId("cue-parts-1")).toHaveText("3");
+    await expect(page.getByTestId("cue-viewer-count")).toContainText("3 values");
 
     // A second store onto the same number, with a different look in the
     // programmer. The question stands and **nothing has been sent**.
@@ -227,26 +237,26 @@ test.describe("the console shell", () => {
     await command(page, "red at 50");
     await command(page, "Store Cue 1");
     await expect(page.getByTestId("command-prompt")).toBeVisible();
-    await expect(page.getByTestId("cue-parts-1")).toHaveText("3");
+    await expect(page.getByTestId("cue-viewer-count")).toContainText("3 values");
 
     // **The desk is not blocked while it stands.** A window opens on the canvas
     // and draws the show, with the question still in the footer where it was —
     // which is the whole reason it is not a modal (`CLAUDE.md`: a device
     // screen, and §4.2: the canvas is the operator's).
-    await page.getByTestId("open-window").selectOption("Groups");
+    await openWindow(page, "Groups");
     await expect(page.getByTestId("group-pool")).toBeVisible();
     await expect(page.getByTestId("command-prompt")).toBeVisible();
 
     // Escape cancels, and the cue is byte for byte what it was.
     await input(page).press("Escape");
     await expect(page.getByTestId("command-prompt")).toHaveCount(0);
-    await expect(page.getByTestId("cue-parts-1")).toHaveText("3");
+    await expect(page.getByTestId("cue-viewer-count")).toContainText("3 values");
 
     // And answering it does what the word says: an Override leaves the cue
     // holding exactly what the programmer holds, which is one value.
     await command(page, "Store Cue 1");
     await page.getByTestId("prompt-Override").click();
-    await expect(page.getByTestId("cue-parts-1")).toHaveText("1");
+    await expect(page.getByTestId("cue-viewer-count")).toContainText("1 values");
   });
 
   /**
@@ -258,12 +268,17 @@ test.describe("the console shell", () => {
    */
   test("plays a cue list that is on no executor at all", async ({ page }) => {
     await desk(page);
-    await page.getByTestId("open-window").selectOption("DmxSheet");
+    await openWindow(page, "DmxSheet");
     await expect(page.getByTestId("telemetry-canvas")).toBeVisible();
 
     await command(page, "1 thru 3");
-    // The rig is PARs: a level goes on a colour, not on a dimmer they lack.
     await command(page, "red at 100");
+    // **And the intensity, which is the desk's since S43.** These PARs have no
+    // dimmer channel of their own, so the desk supplies one that scales their
+    // colour — and it rests at nought, which is what stops a rig of them coming
+    // up white. Colour without intensity is no light, on a supplied dimmer
+    // exactly as on a real one.
+    await command(page, "at 100");
     await command(page, 'Store Sequence 1 "Act 1"');
     await command(page, "Sequence 1");
     await command(page, "Store Cue 1");

@@ -97,7 +97,7 @@
 | S34 | Executor functions and the tick readback | ✅ | 2026-08-20 | All exit criteria verified, CI green on run **32325628021** — see §2.32. **Every one of the eight `ExecutorButtonFunction` values does what its name says, checked on the frames a mock output received; and the tick answers back, so the desk shows a cue number for the first time.** `Command::ExecutorButton` carries *which button* and the executor decides; `Flash` is a layer over the master and never a write into it; `Toggle` is resolved against `isActive` by the daemon and by nobody else. Speed masters and the tap that learns one exist at last — `docs/DMX_MERGE.md` §4 item 3 had named them since S3. `docs/MCU_MAPPING.md` §4.1's three unbindable rows are bound as written and the shipped profile's `deviationsFromSection41` block is **empty** |
 | S39 | Store modes, cue editing, the update state | ✅ | 2026-08-20 | All exit criteria verified, CI green on run **32412552879** — see §2.33. **A store on top of something that is already there now does what the operator asked for**: Merge, Override and Remove on `StoreCue` and `StorePreset`, Append / Override / Merge on the new `StoreSequence`, each asserted on the **stored cue** rather than on the command being accepted. `EditCue` loads a cue back into the programmer with every `presetRef` kept and `Update` puts it down byte-identically; `Session::editingCue` is what makes an Update key blink and it clears on a Clear, a delete and another load. The selected sequence was **decided** and it went the other way from S28's assumption: `Session::selectedSequence` is a field of its own, because `Store Cue 5` with no executor selected has to mean something. The two tests written to go red did, and both are turned round. 542 UI tests, coverage **99.05 % lines**; 1 645 in the workspace |
 | S40 | The console shell | ✅ | 2026-08-21 | All exit criteria verified, CI green on run **32510091387** — see §2.34. **The command line is the interface** (`ARCHITECTURE_SPEC.md` §4.5): every key on the desk writes a word into `Session::commandLine` and none of them acts on its own, so what a gesture means is what the line means. The whole S40 vocabulary is built and each line is held to the commands a real daemon accepted for it. It was a protocol session as well: `ObjectRef` and four generic verbs (`Delete`, `Copy`, `Move`, `Label`) replaced seven narrower commands, `Goto` and `ExecutorOn` arrived, and `PlaybackTarget` made a playback addressable by **sequence** — so a cue list nobody has put on a fader can be played. 43 command variants, 28 e2e tests green |
-| S43 | Interface cleanup and polish | ☐ | | Added 2026-08-14. The §7 *carried out of* lists, gone through one entry at a time |
+| S43 | The punch list, the skeleton, and the first pre-release | ☐ | | Added 2026-08-14; **grew on 2026-08-24** from *interface cleanup and polish*. The §7 *carried out of* lists gone through one entry at a time, **plus** the owner's own fault list (`docs/PRERELEASE_PUNCHLIST.md`), the interface rebuilt along the owner's drawing (`design/skeleton/`, a Penpot export of flow and arrangement), and the windows that are a morning's work — `ClockViewer`. The **first interactive session**: agreed before it is built, driven by hand before it is called done, and anything too big for an afternoon becomes a session of its own rather than a dropped line |
 | S29 | `prism-app` Tauri shell | ☐ | | Needs MSVC Build Tools |
 
 *Listed in running order; the numbers are identity rather than sequence — see `IMPLEMENTATION_PLAN.md`, Conventions.*
@@ -5405,123 +5405,166 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
+**This one is different from the twelve before it.** S43 is the first
+*interactive* session: it is agreed with the owner before it is built, driven by
+hand before it is called done, and it asks its questions the moment they come up
+instead of guessing and writing the guess into a verification record. A model
+that runs it straight through to a commit without ever stopping has failed it,
+however green the gates are at the end.
+
 ---
 
 ```
-PrismDMX — Session S29: `prism-app` — die Tauri-Shell
+PrismDMX — Session S43: `ui` — die Fehlerliste, das Skeleton, und der erste Pre-Release
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2, S18); das Pult
 bedient ihn ohne Oberfläche (D11, S22); die Oberfläche ist seit S23–S28, S44,
 S35, S34, S39 und S40 ein vollständiges Pult, dessen *eigentliche* Oberfläche
-die Kommandozeile ist (§4.5). Seit S33, S36, S37 und S38 ist alles, was diese
-**Maschine** ausmacht, Daten statt Kommandozeilen-Flags — der Ausgangs-Patch,
-der MIDI-Port, die Netz-Freigabe mit ihrem Token, der Log-Level, die
-Universenzahl, das Verhalten beim Beenden, der Autostart, die
-Fixture-Bibliothek, das Binding-Profil **und die Bindungstabelle selbst** — und
-S37/S38 haben das Fenster gebaut, in dem ein Operator das einstellt.
+die Kommandozeile ist (ARCHITECTURE_SPEC.md §4.5). Seit S33, S36, S37 und S38
+ist alles, was diese **Maschine** ausmacht, Daten statt Kommandozeilen-Flags —
+der Ausgangs-Patch, der MIDI-Port, die Netz-Freigabe, die Fixture-Bibliothek und
+die Bindungstabelle des Pults selbst — und es gibt ein Fenster, in dem ein
+Operator das einstellt.
 
-**Was fehlt, ist die Anwendung.** Alles läuft heute in einem Browser-Tab gegen
-einen von Hand gestarteten `prismd`. Es gibt keine Shell, die den Daemon
-startet, ihn beim Schließen des Fensters weiterlaufen lässt (D9), sich an einen
-laufenden anhängt statt einen zweiten zu starten, oder den Autostart-Schalter
-tatsächlich *ausführt* — S37 schreibt ihn auf und **niemand handelt danach**.
+**Was fehlt, ist alles, was man einem Programm nicht ansieht, solange man es
+selbst gebaut hat.** Zwölf Sessions haben Funktionen gebaut und jede hat
+Kleinigkeiten aufgeschrieben und liegen lassen; der Eigentümer hat die
+Oberfläche benutzt und eine Fehlerliste geschrieben; und er hat gezeichnet, wie
+die Oberfläche eigentlich angeordnet sein soll. S43 ist die Session, die aus
+einer Bauherren-Oberfläche eine Operator-Oberfläche macht, und an deren Ende
+etwas steht, das man jemand anderem als **Pre-Release** in die Hand geben kann.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
-1. CLAUDE.md                    — verbindliche Qualitäts-, Architektur- und
-                                  Teststandards. Besonders: Zero-Crash-Invariante,
-                                  ≥ 85 % Coverage global und **> 95 % auf
-                                  engine/, programmer/ und protocols/**, „kein
-                                  Test darf ein Gerät brauchen", und die
-                                  UI-Regel: **wie ein Geräte-Bildschirm, nichts
-                                  scrollt außerhalb der Canvas**
-2. IMPLEMENTATION_PLAN.md       — Session-Protokoll und **die Definition von
-                                  S29**. Die Deliverables und die vier
-                                  Exit-Kriterien dort sind die Anforderung,
-                                  wortwörtlich. Danach die Laufreihenfolge am
-                                  Ende: S29 ist Nummer 13
-3. ARCHITECTURE_SPEC.md         — **§10.3 (Autostart ohne Administratorrechte —
-                                  die drei Stufen, und warum ein echter Dienst
-                                  nicht geht)**, §10.1 (wo Plattform-Code stehen
-                                  darf: `prism-app` ist eine der vier
-                                  Ausnahmen), §10.2 (der Raspberry Pi), §2
-                                  (D9 — die Shell startet oder hängt sich an),
-                                  §12 (Testtabelle) und §14
-4. PROGRESS.md                  — §2.40 (S38, gerade fertig), §2.39 (S37: die
-                                  Einstellungen, und der Autostart-Schalter, den
-                                  niemand ausführt), §2.19 (S18: der Daemon und
-                                  sein Lock), §2.18 (S17: die Thread-Priorität
-                                  und `machine.json`), §3 (Coverage- und
-                                  Performance-Tabellen mit den Zahlen, die
-                                  weiter stimmen müssen), §5 (offene
-                                  Verifikationspunkte) und §7 mit **allen**
-                                  „Carried out of"-Listen; die aus S38, S37,
-                                  S33 und S18 gehören unmittelbar dazu
-5. docs/IPC_PROTOCOL.md         — §2 (Transporte: der Named Pipe / Unix-Socket,
-                                  den die Shell benutzt), §2.2 (**Discovery —
-                                  wie ein Client den Daemon findet, nämlich über
-                                  die Lock-Datei**) und §4.1 (Handshake)
-6. crates/prismd/src/lock.rs    — `DaemonLock`, die Single-Instance-Garantie und
-                                  das Dokument mit den Endpunkten. **Das ist
-                                  schon die Hälfte von „hängt sich an statt zu
-                                  starten"**
-7. crates/prismd/src/paths.rs   — wo die Daten liegen, und
-   und daemon.rs                  `Daemon::start`s Reihenfolge
-8. crates/prism-core/src/desk.rs — `Settings::autostart`: geschrieben, gelesen,
-                                  gemeldet, **von nichts ausgeführt**
-9. ui/src/settings/machine.tsx  — der Schalter und der Satz, der zugibt, dass er
-                                  noch nichts tut
-10. crates/prism-app/           — was davon existiert
 
-Aufgabe: Session S29 umsetzen — die Tauri-Shell.
+1.  CLAUDE.md                     — verbindliche Qualitäts-, Architektur- und
+                                    Teststandards. Besonders die UI-Regel, die
+                                    diese Session zu ihrem Thema hat: **wie ein
+                                    Geräte-Bildschirm; nichts scrollt außerhalb
+                                    der Canvas; schnelles Erkennen von
+                                    Bereichen vor Ästhetik — aber nicht hässlich**.
+                                    Dazu ≥ 85 % Coverage global, > 95 % auf
+                                    engine/, programmer/ und protocols/, und
+                                    „kein Test darf ein Gerät brauchen"
+2.  IMPLEMENTATION_PLAN.md        — Session-Protokoll und **die Definition von
+                                    S43**. Die Deliverables und die neun
+                                    Exit-Kriterien dort sind die Anforderung,
+                                    wortwörtlich; der Abschnitt **Shape** dort
+                                    beschreibt die vier Bewegungen dieser
+                                    Session und ist genauso verbindlich. Danach
+                                    die Laufreihenfolge am Ende (S43 ist Nummer
+                                    12) und die Konvention **„Session-Nummern
+                                    sind Identität, die Reihenfolge ist der
+                                    Fahrplan"**
+3.  docs/PRERELEASE_PUNCHLIST.md  — **die Fehlerliste des Eigentümers.** Das ist
+                                    kein Hintergrundmaterial, das ist die halbe
+                                    Anforderung. Liegt die Datei nicht da:
+                                    **fragen**, nicht anfangen
+4.  design/skeleton/              — **das Layout des Eigentümers**, ein
+                                    Penpot-Export: pro Board ein PNG (ansehen)
+                                    und ein SVG (Beschriftungen und Positionen
+                                    genau lesen), dazu ein README, das sagt, was
+                                    jedes Board zeigt und was ein Pfeil im
+                                    Flowchart bedeutet. Es sagt **Fluss und
+                                    Anordnung** und ausdrücklich keine Details.
+                                    Was es nicht sagt, entscheidet diese Session
+                                    — und schreibt es auf
+5.  PROGRESS.md                   — §7 mit **allen** „Carried out of"-Listen,
+                                    von S38 bis hinunter zu S11: das ist die
+                                    zweite Fehlerliste, und sie ist von euch
+                                    selbst geschrieben. Dazu §5 (offene
+                                    Verifikationspunkte), §3 (Coverage- und
+                                    Performance-Tabellen mit den Zahlen, die
+                                    weiter stimmen müssen), §2.34 (S40 — die
+                                    Kommandozeile *ist* die Oberfläche), §2.30
+                                    (S35 — das Layout, das schon einmal korrigiert
+                                    wurde), §2.27 (S26 — die Canvas), §2.39 und
+                                    §2.40 (S37/S38 — die Einstellungen)
+6.  ARCHITECTURE_SPEC.md          — §4.5 (**die Kommandozeile ist die
+                                    Oberfläche, nicht eine von zweien** — ein
+                                    Umbau darf das nicht umdrehen), §4.4 und §6
+                                    (die elf Fenstertypen), §12 (Testtabelle),
+                                    §14 (offene Verifikationen), §2 (D3: kein
+                                    Client hat eine zweite Meinung; D11: das
+                                    Pult ändert den Daemon, die Oberfläche folgt)
+7.  ui/src/                       — die Rundreise durch das, was umgebaut wird:
+                                    `app.tsx`, `canvas/`, `command/`, `show/`,
+                                    `patch/`, `settings/`, `telemetry/`
+8.  ui/src/canvas/content.tsx     — die drei Fenster, die zugeben, dass sie
+                                    nicht gebaut sind. **`ClockViewer` gehört in
+                                    diese Session**; `Viewer3D` ist S30 und
+                                    `PhaserEditor` ist eine Engine, die es nicht
+                                    gibt
+9.  ui/e2e/                       — die elf Browser-Tests (heute 39 Stück). Sie
+                                    sind das, was ein Umbau als Erstes bricht,
+                                    und ihre `data-testid`s sind der Vertrag
+                                    zwischen Oberfläche und Suite
+10. docs/IPC_PROTOCOL.md          — §5 und §6, falls etwas aus der Fehlerliste
+                                    eine neue Nachricht braucht
 
-**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S29 sind
+Aufgabe: Session S43 umsetzen.
+
+**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S43 sind
 die Anforderung, vollständig und ohne Ausnahme.**
+
+## Ablauf — diese Session ist interaktiv, und das ist keine Höflichkeitsfloskel
+
+Keine der zwölf Sessions davor hat gefragt; diese fragt. Ihr Gegenstand — wie
+sich ein Programm bedienen lässt — steht in keinem Repository, sondern nur im
+Kopf des Menschen, der davorsitzt.
+
+1. **Fragerunde vor der Arbeit.** Erst alles lesen: die Fehlerliste, das
+   Skeleton, die „Carried out of"-Listen. Dann die genaue Umsetzung mit dem
+   Eigentümer **vereinbaren** — was aus der Liste wie behoben wird, was das
+   Skeleton an welcher Stelle bedeutet, was `ClockViewer` überhaupt zeigen soll
+   (es gibt in diesem Build weder Timecode-Quelle noch Uhrenobjekt, also ist das
+   eine echte Frage und keine rhetorische). Erst danach die erste Zeile Code.
+2. **Die Arbeit.** Fehler beheben, Oberfläche am Skeleton entlang umbauen, die
+   billigen fehlenden Fenster ergänzen.
+3. **Fragerunde nach der Arbeit.** Der Eigentümer bedient die gebaute Oberfläche
+   von Hand und sagt, was nicht stimmt. Beheben, zurückgeben, wiederholen — bis
+   er sagt, sie ist Pre-Release-reif. Das ist ein Exit-Kriterium und keine
+   Kür.
+4. **Die Tests.** Die Suite wieder auf den Stand von `CLAUDE.md` bringen, um
+   alles herum, was die beiden Runden verändert haben. Danach messen.
+
+**Fragen werden in dem Moment gestellt, in dem sie auftauchen** — nicht gesammelt,
+nicht umgangen, nicht durch eine Annahme ersetzt, die dann als Entscheidung im
+Verifikationsprotokoll steht. Eine Annahme, die niemand bestätigt hat, ist in
+dieser Session ein Fehler, auch wenn sie sich als richtig herausstellt.
+
+**Was zu groß ist, wird eine eigene Session.** Erweist sich ein Punkt der
+Fehlerliste oder ein Änderungswunsch als Session statt als Nachmittag: eine neue
+Session in `IMPLEMENTATION_PLAN.md` anlegen — **die nächste freie Nummer ist
+S45** —, mit Deliverables und prüfbaren Exit-Kriterien, einer Zeile in der
+Laufreihenfolge und einer Kante im Mermaid-Graphen; und der Punkt auf der
+Fehlerliste sagt, welche Session er geworden ist. Ist die neue Session
+UI-bezogen, wird sie **vor S29 (die Tauri-Shell) einsortiert**: die Oberfläche
+soll weitgehend fertig sein, bevor sie in eine Anwendung eingepackt wird. Was
+nicht erlaubt ist: einen Punkt still fallen zu lassen.
 
 ## Randbedingungen
 
-- **D9 ist das Exit-Kriterium, das man kaputt machen kann, ohne es zu merken.**
-  Das Fenster zu schließen darf den Daemon nicht beenden und darf DMX nicht
-  unterbrechen — und *das* ist zu behaupten, auf aufgezeichneten Frames, nicht
-  am Bildschirm zu beobachten. S18 hat die Form dafür: zwei Behauptungen, weil
-  jede allein von einem Daemon erfüllt wird, der auf die andere Art kaputt ist.
-- **Die zweite Instanz startet keinen zweiten Daemon.** `DaemonLock` weiß das
-  schon (`LockError::AlreadyRunning` ist kein Fehler, sondern die Anweisung,
-  sich anzuhängen), und §2.2 sagt, wie der Endpunkt gefunden wird. Wer hier
-  einen zweiten Discovery-Weg baut, baut die zweite Wahrheit, die D2 verbietet.
-- **Autostart ohne Administratorrechte, oder gar nicht.** §10.3 hat die drei
-  Stufen; Schulen können den Dienst nicht installieren, und das ist der Grund
-  für die ganze Sektion. Der Schalter existiert seit S37 in
-  `prism_core::Settings::autostart` — **er wird gelesen und von niemandem
-  ausgeführt**, und die Oberfläche sagt das im Klartext. S29 ist die Session,
-  die den Satz löschen darf.
-- **`prism-app` ist eine der vier Stellen, an denen `#[cfg(target_os = …)]`
-  stehen darf** (§10.1). Die anderen drei sind `prism-protocols`,
-  `prism-ipc/transport/local.rs` und `prism-midi/system.rs`. `grep -rn
-  "cfg(target_os" crates/` findet heute sieben Treffer außerhalb der vier, und
-  **jeder davon ist ein Kommentar** — das muss so bleiben.
-- **Kein Test darf ein Gerät berühren.** An dieser Maschine hängt ein echtes
-  X-Touch (S20, Firmware V1.25, Seriennummer `0156406`) und ein echter
-  SH-RS09B-Adapter; die Suite darf keines von beiden öffnen.
-- **Ein Test-Target, das einen Daemon startet, setzt `websocket:
-  Listen::Off`.** Der Listener ist seit S37 eine Einstellung und die Einstellung
-  ist *an*; ein Target, das nichts sagt, bindet 127.0.0.1:7373, und mehrere
-  laufen gleichzeitig.
-- **Ein Test, der eine echte Autostart-Eintragung schreibt, schreibt sie in die
-  Registry dieses Benutzers.** Das ist die eine Stelle, an der diese Suite die
-  Maschine verändern könnte, auf der sie läuft. Der Eintrag gehört hinter eine
-  Schnittstelle wie jede Hardware auch (`CLAUDE.md`), die Tests laufen gegen
-  ein Double, und was nur ein echter `HKCU\…\Run` beantworten kann, gehört als
-  🔌-Zeile in `ARCHITECTURE_SPEC.md` §14.
+- **Die `data-testid`s sind ein Vertrag.** Ein Umbau, der ein Element umbenennt,
+  bricht Browser-Tests, die eine Eigenschaft behaupten, die weiterhin gelten
+  soll. Dann wird der Test **nachgezogen**, nicht gelöscht — und wenn seine
+  Behauptung nicht mehr stimmt, wird in einem Satz gesagt, warum sie nicht mehr
+  stimmen soll. Ein Test, der verschwindet, weil er im Weg stand, ist die eine
+  Sache, die diese Session unbemerkt kaputt machen kann.
+- **Null React-Commits unter Telemetrie**, gemessen und seit S24 gehalten. Ein
+  Umbau der Oberfläche ist genau das, was diese Zahl bricht: ein Panel, das
+  einen *Pegel* in `useState` legt, rendert 30-mal pro Sekunde. Die Zahl wird
+  nach dem Umbau neu gemessen, mit allen Fenstertypen gleichzeitig offen.
+- **Nichts scrollt außerhalb der Canvas** — bei 1280 × 720 **und** bei 4K. Die
+  seit S37/S38 geltende Form: **ein Scroller pro Fenster**, im Fensterkörper,
+  nie in der Seite.
 - **`ui/src/bindings/` wird aus Rust erzeugt** (`cargo test -p prism-domain`),
   nicht von Hand geschrieben.
 - **Ein neues Kommando braucht eine Heimat in allen drei Appliern** und in den
   fest verdrahteten Zählungen — aber prüfe zuerst, ob es eines braucht: S38
   wollte zwei neue Dinge sagen und hat **kein** Kommando hinzugefügt, sondern
-  zwei `MachineChange`-Varianten, weil das die Regel „ein Feld pro Kommando"
-  schon hat und weil eine `Command`-Variante 560 Byte Stack im Property-Test
-  kostet.
+  zwei `MachineChange`-Varianten.
 - **Das Wertbaum-Budget ist gemessen und knapp**:
   `crates/prism-domain/src/wire.rs::a_generated_wire_value_fits_in_a_test_thread`
   fällt bei **30 992** Byte, was der größte Baum ist, auf dem die Suite je
@@ -5532,11 +5575,20 @@ die Anforderung, vollständig und ohne Ausnahme.**
   am besten einen Test, der sie durch den echten Decoder schickt.
 - **Ein neues Feld auf einem persistierten Typ braucht `#[serde(default)]`**,
   sonst öffnet keine ältere Datei mehr.
+- **Kein Test darf ein Gerät berühren.** An dieser Maschine hängt ein echtes
+  X-Touch (S20, Firmware V1.25, Seriennummer `0156406`) und ein echter
+  SH-RS09B-Adapter; die Suite darf keines von beiden öffnen.
+- **Ein Test-Target, das einen Daemon startet, setzt `websocket: Listen::Off`.**
+  Der Listener ist seit S37 eine Einstellung und die Einstellung ist *an*; ein
+  Target, das nichts sagt, bindet 127.0.0.1:7373, und mehrere laufen gleichzeitig.
+- **Die Gates laufen einzeln.** `cargo test --workspace` und `npm run test`
+  gleichzeitig lassen zwei UI-Tests durch Zeitüberschreitung fallen, die einzeln
+  grün sind — das ist S38 passiert und hat eine Stunde gekostet.
 - **Vor Zeitmessungen die Systemlast prüfen**, sonst sieht eine beschäftigte
   Maschine aus wie eine Regression:
   `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"`
   — der `Get-Counter`-Weg ist lokalisiert und schlägt auf einer deutschen
-  Installation fehl. S36, S37 und S38 haben dieselbe Falle getroffen.
+  Installation fehl.
 - **Eine Coverage-Messung ohne `cargo llvm-cov clean --workspace` davor ist
   keine Messung.**
 - **Die sechs Recordings sind ein Satz.** Ändert sich das Protokoll, werden alle
@@ -5557,15 +5609,22 @@ die Anforderung, vollständig und ohne Ausnahme.**
   die Playwright-Tests (heute 39)
 - Die Zahlen aus S24–S28, S33, S34, S39, S40, S36, S37 und S38 müssen weiter
   stimmen: null Allokationen im Tick (**acht** Pfade), das Tick-Deadline-Gate,
-  null React-Commits, das Telemetrie-Frame-Budget
-- PROGRESS.md aktualisieren: S29-Status, ein §2.41-Verifikationsprotokoll mit
-  **jeder gemessenen Zahl**, die Coverage- und Performance-Tabellen in §3, und
-  in §7 eine „Carried out of S29"-Liste — die strukturellen Entscheidungen
-  gehören dort ausdrücklich hinein
-- `ARCHITECTURE_SPEC.md` §10.3, §12 und §14 sowie `docs/IPC_PROTOCOL.md` §2.2
-  nachziehen
+  null React-Commits, das Telemetrie-Frame-Budget — die letzten beiden **neu
+  gemessen mit allen Fenstertypen gleichzeitig offen**
+- `docs/PRERELEASE_PUNCHLIST.md` selbst abgehakt: jeder Eintrag behoben,
+  begründet abgelehnt, oder mit der Nummer der Session versehen, die er geworden
+  ist
+- PROGRESS.md aktualisieren: S43-Status, ein §2.41-Verifikationsprotokoll mit
+  **jeder gemessenen Zahl** und mit der Runde der Handprüfung, die zum
+  Pre-Release-Urteil geführt hat; die Coverage- und Performance-Tabellen in §3;
+  in §7 die abgehakten „Carried out of"-Listen und eine neue Liste „Carried out
+  of S43"
+- `ARCHITECTURE_SPEC.md` §12 und §14 nachziehen, und jede Abweichung vom
+  Skeleton mit ihrem Grund dort, wo sie hingehört
 - PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt für die nächste
-  Session überschreiben (nach der Laufreihenfolge ist das S30)
+  Session überschreiben — nach der Laufreihenfolge ist das **S29 (die
+  Tauri-Shell)**, es sei denn, in dieser Session ist eine UI-Session entstanden,
+  die davor einsortiert wurde; dann ist es diese
 - Mit einer Conventional-Commit-Nachricht committen, pushen, CI beobachten und
   das Ergebnis in PROGRESS.md festhalten
 ```

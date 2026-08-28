@@ -63,6 +63,28 @@ export interface ParameterReading {
    * that would otherwise only be discovered afterwards.
    */
   readonly source: ProgrammerValueSource | null;
+  /**
+   * What the attribute **rests at** when the programmer is not holding it — the
+   * profile's own `defaultValue`, when every selected fixture that has this
+   * attribute agrees on one; `null` when they differ or none has it.
+   *
+   * S43, and it is the owner's third point: a colour channel now rests **open**
+   * (B1), so an operator mixes by pulling colours *down*. An encoder that read a
+   * dash there was telling them the truth about the programmer and nothing at
+   * all about the lamp — and the first thing they did was push the colours up
+   * from what looked like zero.
+   */
+  readonly home: number | null;
+  /**
+   * Whether this attribute is being **overridden**: the programmer holds it for
+   * at least one selected fixture, so whatever a playback says, this value goes
+   * out.
+   *
+   * The distinction the dash used to carry on its own, and the reason it can
+   * stop carrying it: it is a mark of its own now, on the encoder and in the
+   * sheet, so the value can always be a number.
+   */
+  readonly overriding: boolean;
 }
 
 /**
@@ -149,9 +171,17 @@ function readingOf(
   let mixed = false;
   let source: ProgrammerValueSource | null = null;
   let mixedSource = false;
+  let home: number | null = null;
+  let mixedHome = false;
   for (const fixture of selection) {
     if (groupOf(show, fixture, attribute) !== null) {
       available += 1;
+      const rest = homeOf(show, fixture, attribute);
+      if (rest !== null && home === null && !mixedHome) {
+        home = rest;
+      } else if (rest !== home) {
+        mixedHome = true;
+      }
     }
     const entry = entryFor(programmer, fixture, attribute);
     const value = entry?.value.value ?? null;
@@ -178,7 +208,86 @@ function readingOf(
     held,
     available,
     source: mixedSource ? null : source,
+    home: mixedHome ? null : home,
+    overriding: held > 0,
   };
+}
+
+/**
+ * What one fixture's attribute rests at, out of the show's own profile.
+ *
+ * The **bottom of the merge stack** (`docs/DMX_MERGE.md`), which is what a lamp
+ * does when nothing is driving it — and since B1 that is wide open for a colour
+ * and shut for everything else. Read out of the embedded profile rather than
+ * assumed, because a show carries its own copies (S11) and two profiles for the
+ * same lamp may rest differently.
+ */
+export function homeOf(
+  show: JsonValue | null,
+  fixture: number,
+  attribute: AttributeType,
+): number | null {
+  const attributes = typeAttributes(show, fixture);
+  if (attributes === null) {
+    return null;
+  }
+  if (attribute === "Dimmer" && suppliedIntensity(show, fixture, attributes)) {
+    // **Nought, and that is the point of it** — the colour underneath rests
+    // open (B1) and this is what keeps the lamp off until somebody asks.
+    return 0;
+  }
+  for (const entry of attributes) {
+    if (!isObject(entry) || stringAt(entry, "/attribute") !== attribute) {
+      continue;
+    }
+    const rest = valueAt(entry, "/defaultValue");
+    return typeof rest === "number" ? rest : null;
+  }
+  return null;
+}
+
+/**
+ * The attribute list of the profile one fixture instantiates, or `null` when
+ * the show cannot resolve it.
+ *
+ * One lookup for the two readings that need it, because they must agree about
+ * what a fixture *has*: a bank that offered an encoder the home value could not
+ * answer for would be a knob reading a dash it never leaves.
+ */
+function typeAttributes(show: JsonValue | null, fixture: number): readonly JsonValue[] | null {
+  const typeId = stringAt(show, `/fixtures/${String(fixture)}/typeId`);
+  if (typeId === null) {
+    return null;
+  }
+  const attributes = valueAt(show, `/fixtureTypes/${pointerToken(typeId)}/attributes`);
+  return attributes === null || !isArray(attributes) ? null : attributes;
+}
+
+/**
+ * Whether the desk supplies this fixture's intensity — S43, and the same
+ * question `prism_domain::Fixture::has_software_dimmer` answers in the daemon.
+ *
+ * The two halves are the operator's switch and the profile: a fixture whose
+ * profile has an intensity channel already has one, and a fixture whose switch
+ * is off has asked for none. **Absent means supplied**, which is the serde
+ * default one crate along and the safe answer — a colour-only fixture without
+ * it comes up lit, because a colour rests open.
+ *
+ * This is a *reading* of the show document and not a second opinion: the value
+ * it produces is what the daemon has already put in the merge, and the encoder
+ * draws it rather than deciding it.
+ */
+function suppliedIntensity(
+  show: JsonValue | null,
+  fixture: number,
+  attributes: readonly JsonValue[],
+): boolean {
+  if (valueAt(show, `/fixtures/${String(fixture)}/softwareDimmer`) === false) {
+    return false;
+  }
+  return !attributes.some(
+    (entry) => isObject(entry) && stringAt(entry, "/attribute") === "Dimmer",
+  );
 }
 
 /** The programmer's whole entry for one fixture and attribute, or `null`. */
@@ -270,13 +379,12 @@ export function groupOf(
   fixture: number,
   attribute: AttributeType,
 ): FeatureGroup | null {
-  const typeId = stringAt(show, `/fixtures/${String(fixture)}/typeId`);
-  if (typeId === null) {
+  const attributes = typeAttributes(show, fixture);
+  if (attributes === null) {
     return null;
   }
-  const attributes = valueAt(show, `/fixtureTypes/${pointerToken(typeId)}/attributes`);
-  if (attributes === null || !isArray(attributes)) {
-    return null;
+  if (attribute === "Dimmer" && suppliedIntensity(show, fixture, attributes)) {
+    return "Dimmer";
   }
   for (const entry of attributes) {
     if (!isObject(entry) || stringAt(entry, "/attribute") !== attribute) {
@@ -293,17 +401,30 @@ export function groupOf(
 /**
  * What one encoder reads.
  *
- * A dash for untouched, because **absent is not zero**: the programmer is
- * sparse, absence means *the playbacks decide*, and an encoder that displayed
- * 0 % would teach an operator that the two are the same thing. `mixed` for a
- * selection holding two different values, because averaging them would invent a
- * number nobody set.
+ * # It used to be a dash for untouched, and S43 is where that stopped
+ *
+ * The old rule was **absent is not zero**: the programmer is sparse, absence
+ * means *the playbacks decide*, and 0 % would have said *black*. That reasoning
+ * is still right and it is why a dash was the only honest number available —
+ * until B1 gave every attribute a resting value worth reading, and the owner
+ * asked to see it: colours rest **open**, so mixing is pulling them down, and an
+ * encoder reading a dash sent an operator looking for the value at the bottom.
+ *
+ * So the number is now the programmer's when it holds one and the **resting
+ * value** when it does not. What stops that from being the confusion the old
+ * rule guarded against is that the difference is no longer carried by the number
+ * at all: `overriding` is a mark of its own, on the encoder and in the sheet.
+ *
+ * A dash is left for the case where there is genuinely nothing to say — nothing
+ * selected has this attribute — and `mixed` for a selection that disagrees,
+ * because averaging would invent a number nobody set.
  */
 export function valueText(reading: ParameterReading): string {
   if (reading.mixed) {
     return "mixed";
   }
-  return reading.level === null ? "—" : `${String(percentOfLevel(reading.level))}%`;
+  const level = reading.level ?? reading.home;
+  return level === null ? "—" : `${String(percentOfLevel(level))}%`;
 }
 
 /** How many fixtures are selected. */

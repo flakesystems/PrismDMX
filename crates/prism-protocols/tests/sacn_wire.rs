@@ -77,6 +77,7 @@ fn attribute(
 
 fn fixture(id: u32, universe: u32, address: u16) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: "test.head".to_owned(),

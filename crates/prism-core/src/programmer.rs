@@ -42,8 +42,9 @@ use core::fmt;
 
 use prism_domain::{
     AttributeType, ClearStage, Command, Cue, CuePart, CueTrigger, Delta, FeatureGroup, FixtureId,
-    Preset, PresetId, PresetValue, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
-    RgbColor, SelectionMode, Sequence, SequenceId, SequenceStoreMode, StoreMode,
+    GroupId, Preset, PresetId, PresetPool, PresetValue, ProgrammerState, ProgrammerValue,
+    ProgrammerValueSource, RgbColor, SelectionMode, Sequence, SequenceId, SequenceStoreMode,
+    StoreMode,
 };
 
 use crate::command::Applied;
@@ -69,7 +70,7 @@ pub enum ProgrammerError {
     /// A preset number that does not exist.
     UnknownPreset(PresetId),
     /// A group number that does not exist (S40).
-    UnknownGroup(prism_domain::GroupId),
+    UnknownGroup(GroupId),
     /// A sequence number that does not exist.
     UnknownSequence(SequenceId),
     /// An absolute attribute value outside `0..=65535`.
@@ -332,7 +333,7 @@ impl Programmer {
     pub fn group(
         &self,
         show: &Show,
-        group_id: prism_domain::GroupId,
+        group_id: GroupId,
         name: &str,
         mode: prism_domain::OverwriteMode,
     ) -> Result<prism_domain::Group, ProgrammerError> {
@@ -506,6 +507,14 @@ impl Programmer {
     /// (`AttributeDef::feature_group`) rather than the attribute name's, which
     /// is the same rule [`Self::feature_groups`] follows.
     ///
+    /// **[`PresetPool::Multi`] is the pool with no filter** — S43. It takes
+    /// every value the programmer holds, across the categories, so one number
+    /// recalls a whole look. It needed no code of its own: `Multi` answers
+    /// `None` from `PresetPool::group`, and `None` is the argument
+    /// [`Self::touched`] has taken since S28 for a *cue*, which names no pool
+    /// either. A cue and a Multi preset take the same values for the same
+    /// reason, and they take them through the same line.
+    ///
     /// And a store with nothing to store is accepted when the preset already
     /// exists, because `Command::StorePreset` carries the name and the colour —
     /// so an empty programmer is an ordinary relabel. Onto a preset that does
@@ -531,7 +540,7 @@ impl Programmer {
         &self,
         show: &Show,
         id: PresetId,
-        pool: FeatureGroup,
+        pool: PresetPool,
         name: &str,
         color: Option<RgbColor>,
         mode: StoreMode,
@@ -555,7 +564,7 @@ impl Programmer {
                     what: format!("preset {id}"),
                 });
             };
-            let going = self.stored_keys(show, Some(pool));
+            let going = self.stored_keys(show, pool.group());
             let mut preset = held.clone();
             preset.name = name.to_owned();
             preset.color = color;
@@ -603,9 +612,9 @@ impl Programmer {
     }
 
     /// The touched values that belong in a pool, in fixture then attribute
-    /// order.
-    fn preset_values(&self, show: &Show, pool: FeatureGroup) -> Vec<PresetValue> {
-        self.touched(show, Some(pool))
+    /// order — or all of them, for [`PresetPool::Multi`].
+    fn preset_values(&self, show: &Show, pool: PresetPool) -> Vec<PresetValue> {
+        self.touched(show, pool.group())
             .map(|(fixture, attribute, value)| PresetValue {
                 fixture,
                 attribute,
@@ -707,14 +716,10 @@ impl Programmer {
             } => self.set_attribute(*attribute, *value, *relative, show)?,
             // S40's `Group 3`. The daemon expands it, which is what stops a
             // client sending a selection a second client's edit of that group
-            // has already made wrong.
-            Command::SelectGroup { group_id, mode } => {
-                let Some(group) = show.group(*group_id) else {
-                    return Err(ProgrammerError::UnknownGroup(*group_id));
-                };
-                let members = group.fixtures.clone();
-                self.select_fixtures(&members, *mode, show)?
-            }
+            // has already made wrong — and since S43 it is a **switch** rather
+            // than a per-fixture toggle, which is what stops a second group
+            // punching a hole in the first. See `select_group`.
+            Command::SelectGroup { group_id, mode } => self.select_group(*group_id, *mode, show)?,
             Command::ApplyPreset { preset_id } => self.apply_preset(*preset_id, show)?,
             Command::ClearProgrammer => self.clear(),
             Command::StoreCue {
@@ -821,6 +826,8 @@ impl Programmer {
             | Command::ImportShow { .. }
             | Command::SelectView { .. }
             | Command::StoreView { .. }
+            | Command::NewView { .. }
+            | Command::SetWindowPicker { .. }
             | Command::OpenWindow { .. }
             | Command::CloseWindow { .. }
             | Command::FocusWindow { .. }
@@ -888,11 +895,17 @@ impl Programmer {
 
     // -- edits ------------------------------------------------------------
 
-    /// Changes the selection.
+    /// Changes the selection, fixture by fixture.
     ///
     /// `Set` replaces it, `Add` appends what is not already selected, and
     /// `Toggle` removes what is and appends what is not. The selection is a
     /// list in selection order, and no fixture appears in it twice.
+    ///
+    /// **Every fixture named here is a *direct* pick** and is recorded as one in
+    /// [`ProgrammerState::manual_selection`], which is what makes it survive a
+    /// group being switched off later — S43, B27. `Set` drops the group
+    /// switches with the selection, because a line that names fixtures is a
+    /// statement about what the selection *is*.
     ///
     /// Returns whether anything changed.
     ///
@@ -914,16 +927,101 @@ impl Programmer {
         }
         let mut next = self.interaction();
         if mode == SelectionMode::Set {
-            next.selection.clear();
+            next.clear_selection();
         }
         for &id in ids {
             match next.selection.iter().position(|&selected| selected == id) {
                 Some(position) if mode == SelectionMode::Toggle => {
                     next.selection.remove(position);
+                    // Taken back out by hand, so it is no longer a direct pick.
+                    // The group that also holds it keeps its switch down: the
+                    // operator took *this fixture* out, not the group.
+                    next.manual_selection.retain(|&held| held != id);
                 }
-                Some(_) => {}
-                None => next.selection.push(id),
+                Some(_) => push_once(&mut next.manual_selection, id),
+                None => {
+                    next.selection.push(id);
+                    push_once(&mut next.manual_selection, id);
+                }
             }
+        }
+        Ok(self.commit(next))
+    }
+
+    /// Switches a group on or off — S43, punch-list B27.
+    ///
+    /// # A group is a switch, not a per-fixture toggle
+    ///
+    /// It used to be the latter: `Group 3` ran every one of its fixtures through
+    /// [`Self::select_fixtures`], so a group whose lamps happened to be selected
+    /// already *deselected* them. Two overlapping groups therefore could not be
+    /// held together — pressing the second punched a hole in the first — which
+    /// is the fault the owner reported.
+    ///
+    /// So the three modes act on the **group**:
+    ///
+    /// - `Set` — this group and nothing else.
+    /// - `Add` — switch it on. Its fixtures join the selection; nothing leaves.
+    /// - `Toggle` — on if it was off; if it was on, switch it off and take back
+    ///   only the fixtures **no other group that is still on, and no direct
+    ///   pick, is holding**.
+    ///
+    /// That last clause is why the programmer records provenance at all, and it
+    /// is the daemon's answer rather than a client's: which fixtures a group
+    /// holds is show state, so a client that worked out the subtraction would be
+    /// sending a selection that a second client's edit had already made wrong —
+    /// the same argument `Command::SelectGroup` makes for not expanding the
+    /// group in the first place.
+    ///
+    /// A group whose fixtures are all selected already still *switches on*, and
+    /// that matters: nothing visible happens, and switching it off afterwards
+    /// then takes nothing away, because every one of them is held by something
+    /// else. Returns whether anything changed — the switch alone counts.
+    ///
+    /// # Errors
+    ///
+    /// [`ProgrammerError::UnknownGroup`] if there is no such group, and
+    /// [`ProgrammerError::UnknownFixture`] if it holds one that is not patched.
+    pub fn select_group(
+        &mut self,
+        group_id: GroupId,
+        mode: SelectionMode,
+        show: &Show,
+    ) -> Result<bool, ProgrammerError> {
+        let Some(group) = show.group(group_id) else {
+            return Err(ProgrammerError::UnknownGroup(group_id));
+        };
+        for &id in &group.fixtures {
+            if show.fixture(id).is_none() {
+                return Err(ProgrammerError::UnknownFixture(id));
+            }
+        }
+        let members = group.fixtures.clone();
+        let mut next = self.interaction();
+        let was_on = next.selected_groups.contains(&group_id);
+
+        if mode == SelectionMode::Set {
+            next.clear_selection();
+        }
+        if mode == SelectionMode::Toggle && was_on {
+            next.selected_groups.retain(|&held| held != group_id);
+            // What the switches that are still down are holding. Read out of the
+            // show rather than remembered, so a group edited since it was
+            // switched on releases what it no longer holds.
+            let mut held_elsewhere: Vec<FixtureId> = next.manual_selection.clone();
+            for &other in &next.selected_groups {
+                if let Some(group) = show.group(other) {
+                    held_elsewhere.extend(group.fixtures.iter().copied());
+                }
+            }
+            next.selection
+                .retain(|id| !members.contains(id) || held_elsewhere.contains(id));
+            return Ok(self.commit(next));
+        }
+
+        push_once(&mut next.selected_groups, group_id);
+        for id in members {
+            push_once(&mut next.selection, id);
         }
         Ok(self.commit(next))
     }
@@ -1049,37 +1147,45 @@ impl Programmer {
         Ok(self.commit(next))
     }
 
-    /// Advances the three-stage Clear (`docs/DMX_MERGE.md` §3.1).
+    /// Clears the first thing there is to clear (`docs/DMX_MERGE.md` §3.1).
     ///
-    /// | Stage | Action |
+    /// | Stage | What a press takes away |
     /// |---|---|
-    /// | 0 → 1 | Clear the values, keep the selection |
-    /// | 1 → 2 | Clear the selection |
-    /// | 2 → 0 | Clear everything, including the active feature group |
+    /// | `Values` | the programmer values, keeping the selection |
+    /// | `Selection` | the selection |
+    /// | `All` | the rest — the feature group, and the session's page beside it |
+    /// | `Nothing` | nothing: there is nothing to clear |
     ///
-    /// The stage belongs to the button rather than to the contents, so a Clear
-    /// on an empty programmer still advances it. It is a cycle: the press after
-    /// the third starts again at the first.
+    /// # It reads the contents, and it is not a cycle — S43, B2
     ///
-    /// **The page state is the session's half of the third stage** and
+    /// The stage used to be a counter on the button, so a press advanced it
+    /// whether or not there was anything to clear and the cycle wrapped back to
+    /// the start. That left the button standing at a stage the programmer had
+    /// moved on from: set a value after clearing everything, and the next press
+    /// cleared the *selection* instead of the value. The owner's punch list is
+    /// where that turned up.
+    ///
+    /// Now the stage is [`ProgrammerState::stage`] — derived, so it cannot be
+    /// stale — and a press at `Nothing` **changes nothing and reports so**,
+    /// which is the second half of what B2 asks for.
+    ///
+    /// **The page state is the session's half of `All`** and
     /// [`ShowFile::apply`](crate::ShowFile::apply) resets it, because
     /// `programmerPage` and `programmerParamIndex` live in
     /// `ARCHITECTURE_SPEC.md` §4.1 rather than here.
     ///
-    /// Returns whether anything changed, which for this operation is always
-    /// true — the stage itself has moved.
+    /// Returns whether anything changed — `false` when there was nothing to
+    /// clear, which is new: it used to be always `true`.
     pub fn clear(&mut self) -> bool {
         let mut next = self.state.clone();
-        match self.state.clear_stage {
-            ClearStage::Idle => {
-                next.values.clear();
-                next.clear_stage = ClearStage::ValuesCleared;
-            }
-            ClearStage::ValuesCleared => {
-                next.selection.clear();
-                next.clear_stage = ClearStage::SelectionCleared;
-            }
-            ClearStage::SelectionCleared => next = ProgrammerState::default(),
+        match self.state.stage() {
+            ClearStage::Values => next.values.clear(),
+            // The provenance goes with it — see `ProgrammerState::
+            // clear_selection`. A `selected_groups` left standing over an empty
+            // selection would make the next press of that group a *deselect*.
+            ClearStage::Selection => next.clear_selection(),
+            ClearStage::All => next = ProgrammerState::default(),
+            ClearStage::Nothing => return false,
         }
         self.commit(next)
     }
@@ -1103,19 +1209,23 @@ impl Programmer {
 
     /// The successor an interaction that is *not* the Clear button starts from.
     ///
-    /// `docs/DMX_MERGE.md` §3.1: "the stage resets to 0 on any other programmer
-    /// interaction, so an operator who clears once and then grabs a fader does
-    /// not find a later Clear press in an unexpected stage." Every edit but
-    /// [`Self::clear`] and [`Self::restore`] goes through here, which is what
-    /// makes that one rule rather than four copies of it.
+    /// It is a plain clone since **S43**. The stage used to be reset here —
+    /// `docs/DMX_MERGE.md` §3.1's *the stage resets on any other programmer
+    /// interaction*, which existed because the stage was a counter that could
+    /// otherwise stand at a number the contents had moved past. A derived stage
+    /// cannot: it already reads the contents, so an operator who clears once and
+    /// then grabs a fader finds the key showing *values* again with nothing
+    /// having reset it. The rule is now a property of the definition rather than
+    /// a line every edit has to route through.
     fn interaction(&self) -> ProgrammerState {
-        ProgrammerState {
-            clear_stage: ClearStage::Idle,
-            ..self.state.clone()
-        }
+        self.state.clone()
     }
 
-    /// An interaction that changes nothing but the Clear stage.
+    /// An interaction that changes nothing at all.
+    ///
+    /// Kept as the name for *this command touched the programmer and moved
+    /// nothing*, which several arms of [`Self::apply`] answer with. It reports
+    /// `false` now, because there is no longer a stage for it to move.
     fn touch(&mut self) -> bool {
         let next = self.interaction();
         self.commit(next)
@@ -1127,7 +1237,12 @@ impl Programmer {
     /// `SessionState::commit` does for the session. There is no encoding step
     /// to fail before the write: `Delta::ProgrammerChanged` carries the state
     /// itself, and nothing in a `ProgrammerState` is a float.
-    fn commit(&mut self, next: ProgrammerState) -> bool {
+    fn commit(&mut self, mut next: ProgrammerState) -> bool {
+        // **The one place the Clear stage is written** — S43, B2. It is derived
+        // from the contents rather than counted on the button, so every path
+        // that changes the programmer brings it along and none of them has to
+        // remember to. See `prism_domain::ClearStage`.
+        next.restage();
         if next == self.state {
             return false;
         }
@@ -1174,6 +1289,17 @@ fn append_number(cues: &[Cue]) -> String {
     format!("{}", highest.floor() as i64 + 1)
 }
 
+/// Appends `value` unless the list already holds it.
+///
+/// The three selection lists are ordered sets: the order is the order things
+/// were pressed in, which is what a `thru` reads and what an operator sees, and
+/// a duplicate in any of them would make a group's switch need pressing twice.
+fn push_once<T: PartialEq>(list: &mut Vec<T>, value: T) {
+    if !list.contains(&value) {
+        list.push(value);
+    }
+}
+
 /// A relative move, saturating at both ends of the attribute range.
 ///
 /// The delta is an `i32` because an encoder turns both ways and a client may
@@ -1192,9 +1318,9 @@ mod tests {
     use crate::testkit::{cue, dimmer_type, executor, fixture, par_type, preset, sequence};
     use crate::{Show, ShowFile};
     use prism_domain::{
-        AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, Preset, PresetId,
-        PresetValue, ProgrammerState, ProgrammerValue, ProgrammerValueSource, SelectionMode,
-        SequenceId, SequenceStoreMode, StoreMode,
+        AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, GroupId, Preset,
+        PresetId, PresetPool, PresetValue, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
+        SelectionMode, SequenceId, SequenceStoreMode, StoreMode,
     };
 
     /// Three PARs and a dimmer, one preset, one sequence.
@@ -1293,6 +1419,238 @@ mod tests {
         assert!(applied.effects.is_empty());
     }
 
+    /// A show with two overlapping groups: 1 holds fixtures 1 and 2, 2 holds
+    /// 2 and 3. The overlap is the whole point — fixture 2 is what the old
+    /// per-fixture toggle got wrong.
+    fn show_with_overlapping_groups() -> Show {
+        let mut show = show();
+        show.store_group(prism_domain::Group {
+            id: GroupId::new(1),
+            name: "Front".to_owned(),
+            fixtures: vec![FixtureId::new(1), FixtureId::new(2)],
+        })
+        .unwrap();
+        show.store_group(prism_domain::Group {
+            id: GroupId::new(2),
+            name: "Back".to_owned(),
+            fixtures: vec![FixtureId::new(2), FixtureId::new(3)],
+        })
+        .unwrap();
+        show
+    }
+
+    /// **Two overlapping groups can be held at once** — S43, punch-list B27.
+    ///
+    /// This is the fault the owner reported, written as a test: under the old
+    /// per-fixture toggle, switching on a second group that shared a fixture
+    /// with the first *deselected* the shared one. A group is a switch now, so
+    /// the second press only ever adds.
+    #[test]
+    fn a_second_group_does_not_punch_a_hole_in_the_first() {
+        let show = show_with_overlapping_groups();
+        let mut programmer = Programmer::new();
+        programmer
+            .select_group(GroupId::new(1), SelectionMode::Toggle, &show)
+            .unwrap();
+        programmer
+            .select_group(GroupId::new(2), SelectionMode::Toggle, &show)
+            .unwrap();
+        assert_eq!(
+            programmer.state().selection,
+            vec![FixtureId::new(1), FixtureId::new(2), FixtureId::new(3)],
+            "the fixture the two groups share was toggled back out"
+        );
+        assert_eq!(
+            programmer.state().selected_groups,
+            vec![GroupId::new(1), GroupId::new(2)]
+        );
+    }
+
+    /// **Switching a group off leaves what something else is holding.**
+    ///
+    /// The other half of B27, and the reason the programmer records provenance
+    /// at all: fixture 2 is in both groups, so turning group 1 off must leave it
+    /// selected — group 2 is still on.
+    #[test]
+    fn switching_a_group_off_keeps_what_another_group_still_holds() {
+        let show = show_with_overlapping_groups();
+        let mut programmer = Programmer::new();
+        for id in [1, 2] {
+            programmer
+                .select_group(GroupId::new(id), SelectionMode::Toggle, &show)
+                .unwrap();
+        }
+        programmer
+            .select_group(GroupId::new(1), SelectionMode::Toggle, &show)
+            .unwrap();
+        assert_eq!(
+            programmer.state().selection,
+            vec![FixtureId::new(2), FixtureId::new(3)],
+            "fixture 1 was group 1's alone; fixture 2 is still group 2's"
+        );
+        assert_eq!(programmer.state().selected_groups, vec![GroupId::new(2)]);
+    }
+
+    /// A fixture picked by hand outlives the group that also held it.
+    ///
+    /// The provenance is two lists and not one: *held by a group* and *picked
+    /// directly* are different claims, and a fixture that is both must survive
+    /// either one going away.
+    #[test]
+    fn switching_a_group_off_keeps_what_was_picked_by_hand() {
+        let show = show_with_overlapping_groups();
+        let mut programmer = Programmer::new();
+        programmer
+            .select_group(GroupId::new(1), SelectionMode::Toggle, &show)
+            .unwrap();
+        // Already selected by the group; picking it again says *and this one*,
+        // which is what makes it survive below.
+        programmer
+            .select_fixtures(&[FixtureId::new(2)], SelectionMode::Add, &show)
+            .unwrap();
+        programmer
+            .select_group(GroupId::new(1), SelectionMode::Toggle, &show)
+            .unwrap();
+        assert_eq!(programmer.state().selection, vec![FixtureId::new(2)]);
+        assert!(programmer.state().selected_groups.is_empty());
+    }
+
+    /// A group edited while its switch is down releases what it no longer holds.
+    ///
+    /// The subtraction reads the show rather than a remembered member list —
+    /// which is the same reason `Command::SelectGroup` names the group instead
+    /// of expanding it in the client.
+    #[test]
+    fn switching_a_group_off_reads_the_group_as_it_is_now() {
+        let mut show = show_with_overlapping_groups();
+        let mut programmer = Programmer::new();
+        for id in [1, 2] {
+            programmer
+                .select_group(GroupId::new(id), SelectionMode::Toggle, &show)
+                .unwrap();
+        }
+        // Group 2 loses the fixture it shared, so group 1 is now the only thing
+        // holding fixture 2 and switching it off must take it.
+        show.store_group(prism_domain::Group {
+            id: GroupId::new(2),
+            name: "Back".to_owned(),
+            fixtures: vec![FixtureId::new(3)],
+        })
+        .unwrap();
+        programmer
+            .select_group(GroupId::new(1), SelectionMode::Toggle, &show)
+            .unwrap();
+        assert_eq!(programmer.state().selection, vec![FixtureId::new(3)]);
+    }
+
+    /// A typed `Group 3` still means *the selection is this group*.
+    ///
+    /// `Set` is what a line naming a thing means (`patch/sheet.tsx` writes the
+    /// same rule down for a fixture), and it drops both halves of the
+    /// provenance with the selection — or the group would come back on the next
+    /// press of a switch nobody had touched.
+    #[test]
+    fn a_group_named_without_a_plus_replaces_the_selection() {
+        let show = show_with_overlapping_groups();
+        let mut programmer = Programmer::new();
+        programmer
+            .select_fixtures(&[FixtureId::new(4)], SelectionMode::Set, &show)
+            .unwrap();
+        programmer
+            .select_group(GroupId::new(2), SelectionMode::Set, &show)
+            .unwrap();
+        assert_eq!(
+            programmer.state().selection,
+            vec![FixtureId::new(2), FixtureId::new(3)]
+        );
+        assert_eq!(programmer.state().selected_groups, vec![GroupId::new(2)]);
+        assert!(programmer.state().manual_selection.is_empty());
+    }
+
+    /// Clearing the selection clears the switches with it.
+    ///
+    /// Otherwise the first press of a group after a Clear would be a *deselect*
+    /// of fixtures that were never selected — the switch would be down with
+    /// nothing under it.
+    #[test]
+    fn clearing_the_selection_lifts_every_group_switch() {
+        let show = show_with_overlapping_groups();
+        let mut programmer = Programmer::new();
+        programmer
+            .select_group(GroupId::new(1), SelectionMode::Toggle, &show)
+            .unwrap();
+        // Stage 1 is the values; there are none, so this press takes the
+        // selection.
+        assert_eq!(programmer.state().stage(), ClearStage::Selection);
+        programmer.clear();
+        assert!(programmer.state().selection.is_empty());
+        assert!(programmer.state().selected_groups.is_empty());
+        assert!(programmer.state().manual_selection.is_empty());
+    }
+
+    /// **Multi takes every value, which is what a cue takes** — S43.
+    ///
+    /// The pool with no filter, and the test asserts it against a *filtered*
+    /// pool over the same programmer so that the difference is what is being
+    /// measured rather than the count.
+    #[test]
+    fn a_multi_preset_takes_every_value_and_a_colour_one_takes_the_colour() {
+        let show = show();
+        let mut programmer = Programmer::new();
+        // A PAR and a dimmer together: the dimmer has no colour, so the two
+        // settings land on different banks.
+        //
+        // **The PAR has an intensity too, and the desk supplies it** — S43. Its
+        // profile has none, so `Show::attribute_def` answers for it and the
+        // second line below lands on *both* fixtures. That is what makes this a
+        // sharper test of a Multi preset than it was: three values over two
+        // banks and two fixtures, where a Colour preset still takes exactly the
+        // one that is a colour.
+        programmer
+            .select_fixtures(
+                &[FixtureId::new(1), FixtureId::new(4)],
+                SelectionMode::Set,
+                &show,
+            )
+            .unwrap();
+        programmer
+            .set_attribute(AttributeType::Red, 65535, false, &show)
+            .unwrap();
+        programmer
+            .set_attribute(AttributeType::Dimmer, 30000, false, &show)
+            .unwrap();
+
+        let colour = programmer
+            .preset(
+                &show,
+                PresetId::new(9),
+                PresetPool::Color,
+                "Red",
+                None,
+                StoreMode::Merge,
+            )
+            .unwrap();
+        assert_eq!(colour.values.len(), 1);
+        assert_eq!(colour.values[0].attribute, AttributeType::Red);
+
+        let multi = programmer
+            .preset(
+                &show,
+                PresetId::new(10),
+                PresetPool::Multi,
+                "The look",
+                None,
+                StoreMode::Merge,
+            )
+            .unwrap();
+        assert_eq!(multi.pool, PresetPool::Multi);
+        assert_eq!(
+            multi.values.len(),
+            3,
+            "a Multi preset takes both banks: the PAR's red and both intensities"
+        );
+    }
+
     #[test]
     fn a_selection_never_contains_a_fixture_twice() {
         let show = show();
@@ -1348,7 +1706,7 @@ mod tests {
         let mut show = show();
         show.store_preset(Preset {
             id: PresetId::new(5),
-            pool: FeatureGroup::Color,
+            pool: PresetPool::Color,
             name: "Deep blue".to_owned(),
             color: None,
             values: vec![
@@ -1430,20 +1788,33 @@ mod tests {
         assert_eq!(nudge(100, i32::MIN), 0);
     }
 
+    /// **S43 changed what this asserts, and the reason is B2.** It used to say
+    /// that an undone Clear puts the *button's counter* back, because the stage
+    /// was remembered state that an Oops had to restore like any other. The
+    /// stage is derived now, so there is nothing to put back and nothing that
+    /// can be put back wrongly: restoring the look restores the stage, because
+    /// the stage is a reading of the look. That is a stronger claim than the old
+    /// one and it is what this now asserts.
     #[test]
-    fn restoring_puts_back_the_clear_stage_as_well() {
-        // S14 undoes a Clear by restoring what was there, and "what was there"
-        // includes which stage the button had reached.
+    fn restoring_puts_back_the_look_and_the_stage_follows_it() {
         let show = show();
         let mut programmer = programmer(&show);
+        // Something to clear: the fixture programmer() touched.
+        assert_eq!(programmer.state().clear_stage, ClearStage::Values);
         programmer.clear();
         let stored = programmer.state().clone();
-        assert_eq!(stored.clear_stage, ClearStage::ValuesCleared);
+        // The values are gone and the selection is not, so the key now offers
+        // the selection — read off the contents rather than counted.
+        assert_eq!(stored.clear_stage, ClearStage::Selection);
+        assert_eq!(stored.clear_stage, stored.stage());
 
         programmer
-            .select_fixtures(&[FixtureId::new(3)], SelectionMode::Set, &show)
+            .select_fixtures(&[FixtureId::new(3)], SelectionMode::Add, &show)
             .unwrap();
-        assert_eq!(programmer.state().clear_stage, ClearStage::Idle);
+        // Still nothing but a selection, so still the same offer. The old
+        // counter reset to zero here and told the operator there was nothing
+        // to clear when there was.
+        assert_eq!(programmer.state().clear_stage, ClearStage::Selection);
 
         assert!(programmer.restore(stored.clone()));
         assert_eq!(programmer.state(), &stored);
@@ -1619,7 +1990,7 @@ mod tests {
             empty.apply(
                 &Command::StorePreset {
                     preset_id: PresetId::new(9),
-                    pool: Some(FeatureGroup::Color),
+                    pool: Some(PresetPool::Color),
                     name: String::new(),
                     color: None,
                     mode: StoreMode::Merge,
@@ -1636,14 +2007,15 @@ mod tests {
     ///
     /// S13 proved that a store can never meet a non-zero Clear stage: pressing
     /// Clear once takes the values with it, so a programmer with something to
-    /// store is a programmer at stage 0. What is left to assert is the half
-    /// that matters — a store is not a clear, and the look survives it.
+    /// store is a programmer whose key offers its values. **S43** made the stage
+    /// derived, so a store cannot move it at all — a store changes neither the
+    /// values nor the selection — and the last three lines say so.
     #[test]
     fn a_store_leaves_the_look_in_the_programmer_and_says_nothing_it_need_not() {
         let show = show();
         let mut programmer = programmer(&show);
         let before = programmer.state().clone();
-        assert_eq!(before.clear_stage, ClearStage::Idle);
+        assert_eq!(before.clear_stage, ClearStage::Values);
 
         for command in [
             Command::StoreCue {
@@ -1653,7 +2025,7 @@ mod tests {
             },
             Command::StorePreset {
                 preset_id: PresetId::new(4),
-                pool: Some(FeatureGroup::Color),
+                pool: Some(PresetPool::Color),
                 name: "Deep red".to_owned(),
                 color: None,
                 mode: StoreMode::Merge,
@@ -1679,14 +2051,15 @@ mod tests {
 
         // `Programmer::stored` is the same answer with no re-derivation in
         // front of it — which is the whole difference, and the reason
-        // `ShowFile::apply` uses it. It reports a change only when the stage
-        // really moves.
+        // `ShowFile::apply` uses it. **It never reports a change now**: the only
+        // thing it used to move was the Clear stage, and the stage is a reading
+        // of contents a store does not touch.
         assert!(programmer.stored().deltas.is_empty());
         let mut cleared = programmer.clone();
         cleared.clear();
-        assert_eq!(cleared.state().clear_stage, ClearStage::ValuesCleared);
-        assert_eq!(cleared.stored().deltas.len(), 1);
-        assert_eq!(cleared.state().clear_stage, ClearStage::Idle);
+        assert_eq!(cleared.state().clear_stage, ClearStage::Selection);
+        assert!(cleared.stored().deltas.is_empty());
+        assert_eq!(cleared.state().clear_stage, ClearStage::Selection);
     }
 
     /// Every refusal says what was wrong, in words an operator can read.

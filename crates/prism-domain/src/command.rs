@@ -17,7 +17,7 @@ use ts_rs::TS;
 use crate::{
     AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, GroupId,
     JsonValue, MachineChange, OutputId, OutputInstance, OutputKind, PlaybackTarget, PresetId,
-    RgbColor, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+    PresetPool, RgbColor, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -458,12 +458,18 @@ pub enum Command {
         /// lit on the encoder bar. A preset that **exists** keeps its own pool
         /// instead, because a store onto preset 1 is a store into preset 1
         /// rather than a way of moving it between pools.
+        ///
+        /// **A pool is a [`PresetPool`] rather than a feature group since S43**,
+        /// so `Multi` is sayable here: a preset that takes every value the
+        /// programmer holds rather than one bank's. There is no bank called
+        /// Multi and there could not be — see [`PresetPool`] — which is why the
+        /// fallback below is still a *bank* converted into a pool.
         #[serde(default)]
         #[cfg_attr(
             any(test, feature = "proptest"),
             proptest(strategy = "crate::arb::boxed()")
         )]
-        pool: Option<FeatureGroup>,
+        pool: Option<PresetPool>,
         /// Operator-facing name.
         name: String,
         /// Colour for the scribble strip, if one was chosen.
@@ -933,6 +939,20 @@ pub enum Command {
         universe: UniverseId,
         /// Start address, `1..=512`.
         address: u16,
+        /// Whether the desk supplies this fixture's intensity when its profile
+        /// has none — S43, and the operator's switch for it.
+        ///
+        /// It travels with the rest of the patch form rather than as a command
+        /// of its own, for the same reason the name and the address do: the form
+        /// sends what the row **is**, and a second command for one checkbox
+        /// would be a second way for the row and the show to disagree.
+        ///
+        /// Defaulted rather than required, so a line, a script or a client
+        /// written before S43 patches a fixture that gets one — which is the
+        /// safe answer: `prism_domain::Fixture::software_dimmer` explains why a
+        /// colour-only fixture without it comes up lit.
+        #[serde(default = "crate::patch::supplied")]
+        software_dimmer: bool,
     },
     /// Take a fixture out of the patch.
     ///
@@ -1053,7 +1073,60 @@ pub enum Command {
         /// The view number to write.
         view_id: ViewId,
         /// Name for the view.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
         name: String,
+    },
+    /// Make a view with nothing on it, and switch to it.
+    ///
+    /// **S43, for punch-list entry B11**, and it is a second command rather
+    /// than a change to [`Self::StoreView`] because the two mean opposite
+    /// things and both are wanted. `StoreView` says *keep what is on the
+    /// canvas*, which is what an operator who has arranged a screen asks for;
+    /// this says *give me an empty one*, which is what an operator starting a
+    /// new arrangement asks for — and getting the first when you meant the
+    /// second is the fault B11 describes.
+    ///
+    /// Giving `StoreView` the second meaning was the cheaper change and would
+    /// have been wrong twice over: the name would no longer describe it, and an
+    /// F-key bound to `Store View 4` would quietly do something else than it
+    /// did the day before.
+    ///
+    /// Closes every open window, because the canvas *is* the view; the windows
+    /// of the view being left are unaffected, since a stored view keeps its own
+    /// copy.
+    NewView {
+        /// The view number to write.
+        view_id: ViewId,
+        /// Name for the view.
+        ///
+        /// Boxed for the property test's stack, which S43 pushed over its
+        /// budget by adding two variants: `proptest_derive` builds one value
+        /// tree holding every variant's at once, and a `String`'s is the
+        /// largest thing this variant carries. See `crate::wire`.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        name: String,
+    },
+    /// Open or close the window chooser.
+    ///
+    /// **S43.** The chooser is a panel over the canvas and would be an obvious
+    /// candidate for §4.2's per-screen state — except that a surface key has to
+    /// be able to open it, and a surface key is resolved by a daemon with no
+    /// screen. See [`crate::Session::window_picker`] for the rule that settles
+    /// it: on this desk the X-Touch drives the interface too, and the two are
+    /// never out of step.
+    ///
+    /// Deliberately **not** undoable: it changes nothing about the show and
+    /// nothing about the layout, and an Oops that reopened a chooser somebody
+    /// had dismissed would be an Oops that undid nothing visible.
+    SetWindowPicker {
+        /// Whether the chooser is standing open.
+        open: bool,
     },
     /// Open a window on the canvas.
     OpenWindow {
@@ -1067,7 +1140,12 @@ pub enum Command {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[cfg_attr(
             any(test, feature = "proptest"),
-            proptest(strategy = "proptest::option::of(crate::arb::small_map(2))")
+            // Boxed, and the reason is measured — S43. `proptest::option::of`
+            // builds a value tree of 1 152 bytes, which is twice the 576 a
+            // variant's slot costs when its payload is small, so this one field
+            // was paying for two variants. `crate::arb::boxed()` replaces it
+            // with a pointer. See `crate::wire`.
+            proptest(strategy = "crate::arb::boxed()")
         )]
         #[ts(optional)]
         params: Option<BTreeMap<String, JsonValue>>,
@@ -1193,6 +1271,17 @@ pub enum Command {
     CommandLineInput {
         /// The text entered.
         text: String,
+        /// Whether the desk should run it as well — S43.
+        ///
+        /// A keystroke is `false`: the line is being typed and Enter is what
+        /// runs it. `true` is a **bound line** whose binding said *write and
+        /// send* (`SurfaceAction::WriteCommandLine::submit`), and what it does
+        /// is bump `Session::command_line_run` so that the client with the
+        /// keyboard focus parses the line and sends what it means. The daemon
+        /// cannot: the parser is in the interface. See that action for the whole
+        /// argument, and for the session that removes this arrangement.
+        #[serde(default)]
+        run: bool,
     },
 
     // ---- The machine's own rig (S33) ----
@@ -1335,6 +1424,8 @@ impl Command {
         match self {
             Self::SelectView { .. }
             | Self::StoreView { .. }
+            | Self::NewView { .. }
+            | Self::SetWindowPicker { .. }
             | Self::OpenWindow { .. }
             | Self::CloseWindow { .. }
             | Self::FocusWindow { .. }
@@ -1452,8 +1543,8 @@ mod tests {
         AttributeType, Command, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup,
         FixtureId, GoDirection, GroupId, JsonValue, ObjectRef, OutputChange, OutputId,
         OutputInstance, OutputKind, OverwriteMode, ParamDirection, PlaybackTarget, PresetId,
-        RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, UniverseId, ViewId,
-        WindowInstanceId, WindowType,
+        PresetPool, RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, UniverseId,
+        ViewId, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -1598,6 +1689,7 @@ mod tests {
                 level: 0,
             },
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(1),
                 name: "PAR 1".to_owned(),
                 type_id: "generic.rgbw.par".to_owned(),
@@ -1616,7 +1708,7 @@ mod tests {
             },
             Command::StorePreset {
                 preset_id: PresetId::new(4),
-                pool: Some(FeatureGroup::Color),
+                pool: Some(PresetPool::Color),
                 name: "Deep blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 255 }),
                 mode: StoreMode::Override,
@@ -1710,6 +1802,7 @@ mod tests {
             },
             Command::CommandLineInput {
                 text: "1 thru 4 at full".to_owned(),
+                run: false,
             },
             // S33's four. Neither the show's nor the session's — see
             // `Command::is_machine_command`.
@@ -1869,6 +1962,7 @@ mod tests {
             },
             Command::CommandLineInput {
                 text: String::new(),
+                run: false,
             },
             // S40's four, each with a **view** as its target. The same four
             // commands naming anything else are show commands - see

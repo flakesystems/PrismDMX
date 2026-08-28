@@ -125,6 +125,11 @@ pub(crate) fn sequence(cues: Vec<Cue>, looping: bool) -> Sequence {
 /// A patched fixture at an address, with no geometry and no inverts.
 pub(crate) fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
+        // **Off, and asked for explicitly by the tests that are about it.** The
+        // desk-supplied intensity adds a merge slot (S43), and a slot changes
+        // every index after it — so a helper that switched it on would quietly
+        // make every test about addressing a test about two features.
+        software_dimmer: false,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),

@@ -11,6 +11,42 @@
  * a filter over one list, and a new preset takes the lowest number **nothing**
  * is filed under.
  *
+ * # Multi — the eighth tab, and the one that is not a bank
+ *
+ * S43, the owner's rebuild: *es kommt allerdings noch ein Multi Preset hinzu,
+ * welches Kategorie übergreifend funktioniert*. A Multi preset takes **every**
+ * value the programmer holds rather than one bank's, so one number recalls a
+ * whole look — colour, position and beam together — which is the preset an
+ * operator files a finished state in rather than one ingredient of it.
+ *
+ * It is a `PresetPool` and not an eighth `FeatureGroup`, because there is no
+ * encoder bank that could be *Multi* and no attribute that belongs to one. See
+ * `prism_domain::PresetPool`; the daemon needed no new filtering for it, since
+ * *no pool named* is the filter a **cue** has taken since S28.
+ *
+ * # A grid, and the smaller actions on a right-click
+ *
+ * *Alle kleineren Group bzw. Preset bezogenen Aktionen sollen über Rechtsklick
+ * ausgeführt werden.* So a box is the preset and nothing else, and rename,
+ * colour, copy, move and delete come off `chrome/menu.tsx`. The **colour** item
+ * is new in more than one sense: `Preset::color` has been on the wire since S11
+ * and nothing could set it — `Command::Color` refused anything but a sequence
+ * until S43 — so the scribble strips showed a colour no operator could choose.
+ *
+ * # The store bar is gone, and storing is the command line's
+ *
+ * The owner's second rebuild, and `grouppool.tsx` has the argument. One thing is
+ * specific to this window and worth saying: the bar carried a
+ * `Query::StorePreview` and put the daemon's own sentence on the button — *two
+ * added, three replaced* — which is a real reading and not decoration. It is
+ * not lost. `Store Preset 1` typed, or `Store Preset` and a click, raises the
+ * console's **prompt** (S39/S40), and that prompt is the same question answered
+ * by the same query. What went is the panel, not the answer.
+ *
+ * The **pool** a stored preset lands in is then `Session::encoderBank` rather
+ * than the tab being looked at (`Command::StorePreset`), which is the bank under
+ * the operator's hands. A line that wants another says so: `Store Preset 3 Beam`.
+ *
  * # Which values a store takes is the daemon's answer
  *
  * A colour preset stores the colour values of the programmer and leaves the
@@ -27,58 +63,36 @@
  * typed, which is §4.2's category: a half-finished edit is not something a
  * second operator's screen should follow.
  *
- * **The pool tab stays client-local, and the line names the pool** (S40). Which
- * of five tabs one screen is looking at is `ARCHITECTURE_SPEC.md` §4.2's own
- * category — two operators on two screens legitimately want different ones —
- * and the risk that a typed `Store Preset 1` would go somewhere else is met the
- * other way round: the window writes the pool into the line it submits
- * (`Store Preset 2 Beam "Tight"`), and only a line that names none falls back to
- * `Session::encoderBank`.
+ * **The pool tab is client-local** (S40, and still). Which of eight tabs one
+ * screen is looking at is `ARCHITECTURE_SPEC.md` §4.2's own category — two
+ * operators on two screens legitimately want different ones — and it is a
+ * *filter*, not a destination: what pool a store writes into is
+ * `Session::encoderBank` unless the line names one, which is
+ * `Command::StorePreset`'s own rule and the same answer wherever the line is
+ * typed from.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
-import type {
-  FeatureGroup,
-  JsonValue,
-  ProgrammerState,
-  StoreMode,
-  StorePreview,
-} from "../bindings";
-import { FEATURE_GROUP_VARIANTS } from "../bindings/variants";
-import { useConsole } from "../desk/consoleshell";
-import { useAsk } from "../store/hooks";
+import type { JsonValue, PresetPool as Pool } from "../bindings";
+import { PRESET_POOL_VARIANTS } from "../bindings/variants";
+import { ContextMenu, MenuField, MenuItem } from "../chrome/menu";
+import { useMenuAt } from "../chrome/menuat";
+import { objectLine, pick, useConsole } from "../desk/consoleshell";
 import type { PresetRow } from "./looks";
-import { colorStyle, nextFreeNumber, poolRows, presetRows, presetsDocument } from "./looks";
-import { StoreRequester, isStorable, storeText } from "./store";
-import { StoreModeChooser } from "./storemode";
+import { colorStyle, nextFreeNumber, poolRows, presetRows } from "./looks";
+import { Swatch } from "./sequencesheet";
 
 /** The whole window. */
-export function PresetPool({
-  show,
-  programmer,
-}: {
-  readonly show: JsonValue;
-  /**
-   * What the programmer is holding — see `SequenceSheet` for why a store
-   * preview has to watch it as well as the show.
-   */
-  readonly programmer: ProgrammerState | null;
-}) {
-  const ask = useAsk();
-  const { run } = useConsole();
-  const [pool, setPool] = useState<FeatureGroup>("Color");
+export function PresetPool({ show }: { readonly show: JsonValue }) {
+  const shell = useConsole();
+  const { run } = shell;
+  const [pool, setPool] = useState<Pool>("Color");
   const all = useMemo(() => presetRows(show), [show]);
   const rows = useMemo(() => poolRows(show, pool), [show, pool]);
-
-  // A box in a pool is a list pick: the line is written and submitted at once,
-  // because the pointer has supplied the argument it was waiting for (§4.5).
-  const apply = useCallback(
-    (presetId: number) => {
-      run(`Preset ${String(presetId)}`);
-    },
-    [run],
-  );
+  const present = useCallback((id: number) => all.some((row) => row.id === id), [all]);
+  const { menu, openMenu, closeMenu } = useMenuAt(present);
+  const over = menu === null ? undefined : all.find((row) => row.id === menu.subject);
 
   return (
     <div className="looks" data-testid="preset-pool">
@@ -86,14 +100,14 @@ export function PresetPool({
         <span className="looks-count" data-testid="preset-count">
           {rows.length} of {all.length} presets
         </span>
-        {FEATURE_GROUP_VARIANTS.map((group) => (
+        {PRESET_POOL_VARIANTS.map((group) => (
           <button
             key={group}
             type="button"
             className={`pool-tab${group === pool ? " pool-tab-current" : ""}`}
             data-testid={`pool-${group}`}
             data-current={group === pool ? "yes" : "no"}
-            // Client-local, and §4.2's category: which of five tabs one screen
+            // Client-local, and §4.2's category: which of eight tabs one screen
             // is looking at is not something a second screen should follow.
             onClick={() => {
               setPool(group);
@@ -105,178 +119,138 @@ export function PresetPool({
       </div>
       {rows.length === 0 ? (
         <p className="window-note" data-testid="pool-empty">
-          The {pool} pool is empty. Put a look in the programmer and store one below; only the
-          values of this pool go in.
+          The {pool} pool is empty. Put a look in the programmer and type{" "}
+          <code>Store Preset 1{pool === "Multi" ? " Multi" : ""}</code>;{" "}
+          {pool === "Multi"
+            ? "everything the programmer holds goes in, across the categories."
+            : "only the values of that pool go in."}
         </p>
       ) : (
         <div className="sheet-scroll" data-testid="pool-scroll">
           <ul className="pool-grid">
             {rows.map((row) => (
-              <PresetBox key={row.id} preset={row} onApply={apply} />
+              <li key={row.id}>
+                <button
+                  type="button"
+                  className="pool-box"
+                  data-testid={`preset-${String(row.id)}`}
+                  title={`Apply preset ${String(row.id)} to the selection. Right-click to manage.`}
+                  onClick={() => {
+                    // **An argument when the line is waiting for one** —
+                    // `consoleshell.ts::pickOnto`. `Store` and a click here is
+                    // `Store Preset 1`, which is how a preset is made now that
+                    // this window has no store bar of its own; the pool it goes
+                    // into is `Session::encoderBank`, which is the bank under
+                    // the operator's hands (`Command::StorePreset`).
+                    //
+                    // With nothing typed it is a list pick: the line is written
+                    // and submitted at once, because the pointer has supplied
+                    // the argument it was waiting for (§4.5).
+                    pick(shell, objectLine({ t: "Preset", presetId: row.id }), () => {
+                      run(`Preset ${String(row.id)}`);
+                    });
+                  }}
+                  onContextMenu={openMenu(row.id)}
+                >
+                  <Swatch
+                    color={colorStyle(row.color)}
+                    testId={`preset-swatch-${String(row.id)}`}
+                  />
+                  <span className="pool-number">{row.id}</span>
+                  <span className="pool-name">{row.name === "" ? "—" : row.name}</span>
+                  <span className="pool-note">{row.values} values</span>
+                </button>
+              </li>
             ))}
           </ul>
         </div>
       )}
-      <PresetStoreBar
-        pool={pool}
-        presets={all}
-        presetsDoc={presetsDocument(show)}
-        programmer={programmer}
-        ask={ask}
-      />
+      {menu !== null && over !== undefined ? (
+        <PresetMenu at={menu} preset={over} presets={all} onClose={closeMenu} />
+      ) : null}
     </div>
   );
 }
 
-/** One box: the number, the name, and the colour the scribble strips use. */
-function PresetBox({
+/** The menu over one preset. */
+function PresetMenu({
+  at,
   preset,
-  onApply,
+  presets,
+  onClose,
 }: {
+  readonly at: { readonly x: number; readonly y: number };
   readonly preset: PresetRow;
-  readonly onApply: (presetId: number) => void;
+  readonly presets: readonly PresetRow[];
+  readonly onClose: () => void;
 }) {
-  const swatch = colorStyle(preset.color);
+  const { run, write } = useConsole();
+  const free = nextFreeNumber(presets);
   return (
-    <li>
-      <button
-        type="button"
-        className="preset-box"
-        data-testid={`preset-${String(preset.id)}`}
-        title={`Apply preset ${String(preset.id)} to the selection`}
-        onClick={() => {
-          onApply(preset.id);
+    <ContextMenu
+      at={at}
+      title={`Preset ${String(preset.id)} · ${preset.name === "" ? "—" : preset.name}`}
+      label={`Manage preset ${String(preset.id)}`}
+      testId="preset-menu"
+      subject={String(preset.id)}
+      onClose={onClose}
+    >
+      <MenuField
+        testId="preset-rename"
+        label="Rename…"
+        verb="Rename"
+        initial={preset.name}
+        onClose={onClose}
+        onSubmit={(text) => {
+          run(`Label Preset ${String(preset.id)} ${JSON.stringify(text)}`);
+        }}
+      />
+      <MenuField
+        testId="preset-colour"
+        label="Colour…"
+        verb="Colour"
+        initial=""
+        onClose={onClose}
+        onSubmit={(text) => {
+          // The colour words and the hex form are the console's own
+          // (`desk/console.ts`), and an empty answer takes the colour off —
+          // `Label`'s rule one verb along. It writes **only** the colour: a
+          // store is what changes a preset's values, and a colour that took the
+          // programmer with it would make an operator choose between
+          // re-colouring a preset and keeping what is in it.
+          run(`Color Preset ${String(preset.id)} ${text.trim() === "" ? "none" : text.trim()}`);
+        }}
+      />
+      <MenuItem
+        testId="preset-copy"
+        onClose={onClose}
+        title={`Copy this preset to preset ${String(free)}`}
+        onChoose={() => {
+          run(`Copy Preset ${String(preset.id)} Preset ${String(free)}`);
         }}
       >
-        <span
-          className="preset-swatch"
-          data-testid={`preset-swatch-${String(preset.id)}`}
-          data-color={swatch ?? ""}
-          style={swatch === null ? undefined : { background: swatch }}
-        />
-        <span className="pool-number">{preset.id}</span>
-        <span className="pool-name">{preset.name === "" ? "—" : preset.name}</span>
-        <span className="pool-note">{preset.values} values</span>
-      </button>
-    </li>
-  );
-}
-
-/**
- * The Store button, which says what it will do before it is pressed.
- *
- * The number defaults to the lowest free one and the name to the pool's, and
- * both are typed over. Storing onto a number that already exists is the
- * overwrite the preview describes — including the case an empty programmer
- * makes, which is a **relabel**: `Command::StorePreset` carries the name and the
- * colour, so a store with nothing to store is accepted for a preset that exists
- * and refused for one that does not.
- */
-function PresetStoreBar({
-  pool,
-  presets,
-  presetsDoc,
-  programmer,
-  ask,
-}: {
-  readonly pool: FeatureGroup;
-  readonly presets: readonly PresetRow[];
-  /** The `/presets` subtree, as the dependency of the question below. */
-  readonly presetsDoc: JsonValue | null;
-  readonly programmer: ProgrammerState | null;
-  readonly ask: ReturnType<typeof useAsk>;
-}) {
-  const { runWithMode } = useConsole();
-  const [number, setNumber] = useState<number | null>(null);
-  const [name, setName] = useState<string | null>(null);
-  const [mode, setMode] = useState<StoreMode>("Merge");
-  const [preview, setPreview] = useState<StorePreview | null>(null);
-  const presetId = number ?? nextFreeNumber(presets);
-  const existing = presets.find((row) => row.id === presetId);
-  const wantedName = name ?? existing?.name ?? `${pool} ${String(presetId)}`;
-
-  const requester = useRef<StoreRequester | null>(null);
-  useEffect(() => {
-    const live = new StoreRequester(ask, setPreview);
-    requester.current = live;
-    return () => {
-      live.stop();
-      requester.current = null;
-    };
-  }, [ask]);
-  // Asked again whenever the number, the pool, the **pools** or the programmer
-  // move — which is exactly when the answer can have changed. Deliberately
-  // *not* whenever the show moves: since S34 the show document changes whenever
-  // a playback advances a cue, and an effect keyed on it would ask the daemon
-  // what a store would do once per cue of a chase. `presetsDoc` is the subtree
-  // a preview actually depends on, and structural sharing keeps its identity
-  // still while executors run (`looks.ts::presetsDocument`).
-  // The **mode** is a dependency too, since S39: choosing one asks the question
-  // again, so the counts on the button are what that mode would cost rather
-  // than what the last one would have.
-  useEffect(() => {
-    requester.current?.request({ t: "Preset", presetId, pool }, mode);
-  }, [mode, pool, presetId, presetsDoc, programmer]);
-
-  return (
-    <form
-      className="store-bar"
-      data-testid="preset-store"
-      onSubmit={(event) => {
-        event.preventDefault();
-        // **The line names the pool**, because this window has a tab of its own
-        // and the command line does not: `Store Preset 1` on its own means the
-        // encoder bank in force (`Command::StorePreset`), and a window that let
-        // it fall back would store into a pool other than the tab an operator
-        // was looking at. The mode is the chooser's, so there is nothing to
-        // prompt about — see `ConsoleShell::runWithMode`.
-        //
-        // A colour is a later gesture: `Preset::color` is what the scribble
-        // strips show and there is nothing on this screen that picks one yet.
-        // The line carries none, and the daemon **keeps** the one that is
-        // already there rather than this window reading it back and sending it
-        // — which would be the read-modify-write S28 refused for a cue.
-        runWithMode(
-          `Store Preset ${String(presetId)} ${pool} ${JSON.stringify(wantedName)}`,
-          mode,
-        );
-        setNumber(null);
-        setName(null);
-      }}
-    >
-      <label>
-        Preset
-        <input
-          className="cell-input cell-input-narrow"
-          data-testid="preset-number"
-          inputMode="numeric"
-          value={String(presetId)}
-          onChange={(event) => {
-            const typed = Number(event.target.value.trim());
-            if (event.target.value.trim() !== "" && Number.isInteger(typed) && typed > 0) {
-              setNumber(typed);
-              // The name follows the number until somebody types one: moving to
-              // a preset that exists should offer *its* name, not the last one.
-              setName(null);
-            }
-          }}
-        />
-      </label>
-      <label>
-        Name
-        <input
-          className="cell-input"
-          data-testid="preset-name"
-          value={wantedName}
-          onChange={(event) => {
-            setName(event.target.value);
-          }}
-        />
-      </label>
-      <StoreModeChooser mode={mode} onChoose={setMode} testId="preset-store-mode" />
-      <button type="submit" data-testid="store-preset" disabled={!isStorable(preview)}>
-        {storeText(preview, `preset ${String(presetId)}`)}
-      </button>
-    </form>
+        Copy to preset {free}
+      </MenuItem>
+      <MenuItem
+        testId="preset-move"
+        onClose={onClose}
+        title="Write a move line for this preset, and finish it in the command line"
+        onChoose={() => {
+          write(`Move Preset ${String(preset.id)} Preset `);
+        }}
+      >
+        Move to…
+      </MenuItem>
+      <MenuItem
+        testId="preset-delete"
+        onClose={onClose}
+        danger
+        onChoose={() => {
+          run(`Delete Preset ${String(preset.id)}`);
+        }}
+      >
+        Delete
+      </MenuItem>
+    </ContextMenu>
   );
 }

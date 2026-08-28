@@ -18,6 +18,7 @@ import {
   bankReadings,
   encoderPage,
   groupOf,
+  homeOf,
   sourceText,
   touchedBanks,
   valueText,
@@ -29,17 +30,34 @@ const SHOW: JsonValue = {
     "1": { typeId: "dim" },
     "2": { typeId: "dim" },
     "5": { typeId: "head" },
+    // **A colour-only PAR** — four channels of colour and no intensity, which
+    // is the fixture the desk supplies one for (S43). Fixture 7 has the switch
+    // off, so it has none at all.
+    "6": { typeId: "par" },
+    "7": { typeId: "par", softwareDimmer: false },
   },
   fixtureTypes: {
-    dim: { attributes: [{ attribute: "Dimmer", featureGroup: "Dimmer" }] },
+    // **The resting values are part of the fixture** since S43: a colour rests
+    // open (B1) and everything else rests shut, and an encoder reads them when
+    // the programmer is holding nothing.
+    dim: { attributes: [{ attribute: "Dimmer", featureGroup: "Dimmer", defaultValue: 0 }] },
     head: {
       attributes: [
-        { attribute: "Pan", featureGroup: "Position" },
-        { attribute: "Tilt", featureGroup: "Position" },
+        { attribute: "Pan", featureGroup: "Position", defaultValue: 32768 },
+        { attribute: "Tilt", featureGroup: "Position", defaultValue: 32768 },
         // A profile that files its **dimmer** on the colour bank. Odd, legal,
         // and the reason the bank an attribute is on is the profile's answer
         // rather than the attribute name's.
-        { attribute: "Dimmer", featureGroup: "Color" },
+        { attribute: "Dimmer", featureGroup: "Color", defaultValue: 65535 },
+        // A real colour attribute, resting open — B1's rule, and what the
+        // colour readings below are read from.
+        { attribute: "Red", featureGroup: "Color", defaultValue: 65535 },
+      ],
+    },
+    par: {
+      attributes: [
+        { attribute: "Red", featureGroup: "Color", defaultValue: 65535 },
+        { attribute: "Green", featureGroup: "Color", defaultValue: 65535 },
       ],
     },
   },
@@ -52,6 +70,8 @@ function programmer(
 ): ProgrammerState {
   return {
     selection,
+    selectedGroups: [],
+    manualSelection: [],
     activeFeatureGroup: "Dimmer",
     clearStage: 0,
     values: values.map(([fixture, attribute, value]) => ({
@@ -64,13 +84,75 @@ function programmer(
 }
 
 describe("what an encoder reads", () => {
-  it("says nothing at all for an attribute nobody has touched", () => {
+  /**
+   * **What an untouched attribute reads, and S43 changed it** — the owner's
+   * third point.
+   *
+   * It used to be a dash on the argument that *absent is not zero*. The
+   * argument still holds; what changed is that the difference is carried by
+   * `overriding` now instead of by the number, so the number is free to say
+   * something useful: where the lamp **rests**. These two lamps rest shut, so
+   * this one still reads 0 % — and it reads it as *not overriding*, which is the
+   * half that keeps the old argument true.
+   */
+  it("reads the resting value when the programmer holds nothing, and says it is not overriding", () => {
     const [dimmer] = bankReadings(programmer([1, 2]), SHOW, "Dimmer");
     expect(dimmer?.level).toBeNull();
     expect(dimmer?.mixed).toBe(false);
     expect(dimmer?.held).toBe(0);
     expect(dimmer?.available).toBe(2);
-    expect(valueText(dimmer ?? emptyReading())).toBe("—");
+    expect(dimmer?.overriding).toBe(false);
+    expect(dimmer?.home).toBe(0);
+    expect(valueText(dimmer ?? emptyReading())).toBe("0%");
+  });
+
+  /**
+   * **And this is the one the owner actually reported.** A colour rests open
+   * (B1), so its encoder reads 100 % before anybody has touched it and mixing is
+   * pulling it *down*. Reading a dash there sent an operator looking for the
+   * value at the bottom of the range.
+   */
+  it("reads a colour at full, because that is where a colour rests", () => {
+    const red = bankReadings(programmer([5]), SHOW, "Color").find(
+      (reading) => reading.attribute === "Red",
+    );
+    expect(red?.home).toBe(65535);
+    expect(red?.overriding).toBe(false);
+    expect(valueText(red ?? emptyReading())).toBe("100%");
+  });
+
+  it("says nothing at all when nothing selected has the attribute", () => {
+    // The one case a dash is still the honest answer: there is no resting value
+    // to read, because there is no fixture to read it from.
+    const [pan] = bankReadings(programmer([1, 2]), SHOW, "Position");
+    expect(pan?.available).toBe(0);
+    expect(pan?.home).toBeNull();
+    expect(valueText(pan ?? emptyReading())).toBe("—");
+  });
+
+  it("reads the resting value over a selection only some of which has the attribute", () => {
+    // The dimmer has no red at all, so there is one fixture to read a resting
+    // value from and no disagreement to report.
+    const red = bankReadings(programmer([1, 5]), SHOW, "Color").find(
+      (reading) => reading.attribute === "Red",
+    );
+    expect(red?.available).toBe(1);
+    expect(red?.home).toBe(65535);
+    expect(red?.overriding).toBe(false);
+  });
+
+  it("marks an attribute the programmer holds as overriding", () => {
+    // The mark that took over from the dash — S43, the owner's fourth point.
+    // *Overriding* means this value goes out whatever the playbacks say, and it
+    // is what a click on an encoder turns on without moving anything.
+    const state = programmer([1, 2], [[1, "Dimmer", 32767]]);
+    const [dimmer] = bankReadings(state, SHOW, "Dimmer");
+    expect(dimmer?.overriding).toBe(true);
+    expect(dimmer?.held).toBe(1);
+    expect(dimmer?.available).toBe(2);
+    // Held by one of two, and the number is that one's rather than the resting
+    // value: what is asserted wins over what rests.
+    expect(valueText(dimmer ?? emptyReading())).toBe("50%");
   });
 
   it("shows the value when the whole selection agrees", () => {
@@ -117,9 +199,14 @@ describe("what an encoder reads", () => {
     expect(bankParameters("Dimmer")).toEqual(["Dimmer"]);
     expect(bankParameters("Position")).toEqual(["Pan", "Tilt"]);
     expect(bankParameters("Focus")).toEqual(["Focus"]);
-    expect(bankReadings(null, null, "Beam").map((reading) => reading.index)).toEqual([
-      0, 1, 2, 3, 4, 5,
-    ]);
+    // **Seven banks since S43**, so Beam is three parameters rather than the six
+    // it carried when Gobo and Control were folded into it. The list is
+    // generated from `prism_domain::FeatureGroup::attributes`, so what is
+    // asserted here is the *order* reaching the encoders — the membership is
+    // `feature_groups_are_the_seven_encoder_banks`'s, in Rust.
+    expect(bankParameters("Beam")).toEqual(["Iris", "Zoom", "Shutter"]);
+    expect(bankParameters("Gobo")).toEqual(["Gobo", "Prism"]);
+    expect(bankReadings(null, null, "Beam").map((reading) => reading.index)).toEqual([0, 1, 2]);
   });
 });
 
@@ -130,6 +217,34 @@ describe("which bank an attribute is on", () => {
     expect(groupOf(SHOW, 5, "Dimmer")).toBe("Color");
     expect(groupOf(SHOW, 1, "Dimmer")).toBe("Dimmer");
     expect(touchedBanks(programmer([5], [[5, "Dimmer", 100]]), SHOW)).toEqual(["Color"]);
+  });
+
+  /**
+   * **The desk supplies an intensity for a fixture whose profile has none** —
+   * S43, and this side of it is the *reading*: the merge already has the slot,
+   * and the bar has to find it or an operator has a dimmer they cannot turn.
+   *
+   * It rests at nought, which is what makes a rig of PARs dark at home now that
+   * a colour rests open (B1) — and it is on the intensity bank, so it is under
+   * the operator's hands where a dimmer belongs.
+   */
+  it("supplies an intensity for a fixture whose profile has none", () => {
+    expect(groupOf(SHOW, 6, "Dimmer")).toBe("Dimmer");
+    expect(homeOf(SHOW, 6, "Dimmer")).toBe(0);
+    // The colour beside it is untouched, and open.
+    expect(homeOf(SHOW, 6, "Red")).toBe(65535);
+  });
+
+  it("supplies nothing where the operator switched it off, or where there is one already", () => {
+    // Switched off in the patch: the fixture has no intensity at all, which is
+    // what an operator asks for when the PAR is on a dimmer pack.
+    expect(groupOf(SHOW, 7, "Dimmer")).toBeNull();
+    expect(homeOf(SHOW, 7, "Dimmer")).toBeNull();
+    // And a profile that *has* a dimmer keeps its own, wherever it files it —
+    // the head above files one on the colour bank, and supplying a second would
+    // name the same attribute twice.
+    expect(groupOf(SHOW, 5, "Dimmer")).toBe("Color");
+    expect(homeOf(SHOW, 5, "Dimmer")).toBe(65535);
   });
 
   it("marks the banks in bank order, however the values were set", () => {
@@ -275,7 +390,14 @@ describe("where a value came from", () => {
   });
 });
 
-/** A reading of nothing, for the cases above that index into an array. */
+/**
+ * A reading of nothing, for the cases above that index into an array.
+ *
+ * **S43** added the two fields at the bottom: `home` is what the attribute rests
+ * at when the programmer holds nothing, and `overriding` says whether the
+ * programmer holds it — the mark that took over from the dash. A reading of
+ * nothing has neither.
+ */
 function emptyReading() {
   return {
     attribute: "Dimmer",
@@ -285,5 +407,7 @@ function emptyReading() {
     held: 0,
     available: 0,
     source: null,
+    home: null,
+    overriding: false,
   } as const;
 }

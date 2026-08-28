@@ -319,6 +319,11 @@ describe("the patch window", () => {
       typeId: "generic.dimmer",
       universe: 1,
       address: 7,
+      // **S43**: the row carries whether the desk supplies this fixture's
+      // intensity, like every other thing the row *is*. A dimmer has one of its
+      // own, so the flag says nothing here — and it still travels, because the
+      // form sends the whole row.
+      softwareDimmer: true,
     });
     // **And the table has not moved.** There is nowhere for the answer to be
     // kept: the rows are `patchRows(show)` and the draft was dropped when it
@@ -353,6 +358,7 @@ describe("the patch window", () => {
         typeId: "generic.rgbw.par",
         universe: 1,
         address: 20,
+        softwareDimmer: true,
       },
     ]);
   });
@@ -365,6 +371,37 @@ describe("the patch window", () => {
     fireEvent.click(screen.getByTestId("draft-apply"));
     expect(commands().slice(before)).toHaveLength(1);
     expect(commands().at(-1)).toMatchObject({ t: "PatchFixture", id: 2 });
+  });
+
+  /**
+   * **The desk-supplied intensity, and the switch for it** — S43.
+   *
+   * Drawn only for a profile that has no dimmer of its own, because that is the
+   * only fixture it does anything to: a checkbox on a row with a real dimmer
+   * would read as an offer to take that dimmer away.
+   *
+   * Fixture 5 is the RGBW PAR and fixture 1 is a dimmer, so the same form says
+   * two different things depending on which row is open.
+   */
+  it("offers the desk's dimmer only to a fixture whose profile has none", async () => {
+    const { commands } = await desk();
+
+    fireEvent.click(screen.getByTestId("patch-row-1"));
+    expect(screen.queryByTestId("draft-software-dimmer")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("patch-row-5"));
+    const check = screen.getByTestId("draft-software-dimmer") as HTMLInputElement;
+    expect(check.checked).toBe(true);
+
+    // Switched off and applied: the flag travels with the rest of the row, and
+    // the daemon is what decides what happens to it.
+    fireEvent.click(check);
+    fireEvent.click(screen.getByTestId("draft-apply"));
+    expect(commands().at(-1)).toMatchObject({
+      t: "PatchFixture",
+      id: 5,
+      softwareDimmer: false,
+    });
   });
 
   it("unpatches by the number the row started at, not the one being typed", async () => {
@@ -393,6 +430,7 @@ describe("the patch window", () => {
       typeId: "generic.dimmer",
       universe: 1,
       address: 1,
+      softwareDimmer: true,
     });
   });
 
@@ -408,45 +446,95 @@ describe("the patch window", () => {
     expect(tableIds()).toEqual([1, 2, 5]);
   });
 
-  it("searches the desk's library, and embeds the profile that was chosen", async () => {
+  it("patches straight out of the desk's library, from the row being patched", async () => {
     // **A search and not a menu** — S44. The desk's library is the Open Fixture
     // Library, and neither a frame nor an operator can take two thousand
     // entries: what is typed goes to the daemon and what comes back is drawn.
+    //
+    // **S43, B19 moved it into the form.** It used to sit in the toolbar and do
+    // one thing — embed — which an operator then had to follow with a second
+    // gesture in a second place to actually use. One field does both now, and
+    // the assertion is the pair: the show gets its copy *and* the row is set to
+    // it, from one click.
     const { commands, queries, answerQuery } = await desk();
+    fireEvent.click(screen.getByTestId("patch-row-1"));
+    // **The library is a panel since B23**, so it is opened rather than focused:
+    // a table with columns needs room, and the room is a modal over the canvas.
+    fireEvent.click(screen.getByTestId("library-open"));
     const search = screen.getByTestId("library-search");
-    fireEvent.focus(search);
     fireEvent.change(search, { target: { value: "robe wash" } });
     expect(queries().some((query) => query.t === "SearchLibrary")).toBe(true);
 
     // The daemon's own answer to that very search, out of the recording.
     await answerQuery("SearchLibrary", recordedAnswer("search the desk's library"));
-    const matches = screen.getByTestId("library-matches");
-    expect(matches.textContent).toContain("Robe Wash 7Q5");
-    expect(matches.textContent).toContain("4ch");
+    // **Read off the row, column by column** — the make, the model, the mode
+    // and the width are four cells now rather than one run-together line, which
+    // is the whole of B23. Two modes of the one fixture come back and they are
+    // told apart by the two columns an operator actually uses to tell them
+    // apart.
+    const row = screen.getByTestId("library-row-robe/wash-7q5/4ch");
+    const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
+    expect(cells.slice(0, 4)).toEqual(["Robe", "Wash 7Q5", "4ch", "4"]);
+    expect(screen.getByTestId("library-row-robe/wash-7q5/2ch")).not.toBeNull();
 
     fireEvent.click(screen.getByTestId("library-robe/wash-7q5/4ch"));
     expect(commands().at(-1)).toEqual({
       t: "EmbedFixtureType",
       typeId: "robe/wash-7q5/4ch",
     });
-    // And the box is cleared rather than left showing what was picked: what the
-    // show carries is the daemon's answer and arrives as a delta.
-    expect((search as HTMLInputElement).value).toBe("");
+    // The row is on it, and the preview has been asked about it: the profile is
+    // in the show by the time the question arrives, because both went out on one
+    // ordered channel.
+    // The **key**, not the pretty label: what the field draws comes from the
+    // show's own profiles, and the show has not answered yet. It reads as the
+    // manufacturer and mode one delta later. A row that showed the label it had
+    // just been clicked would be this client holding an opinion about the show
+    // for the length of a round trip — the fault §4.2 names.
+    expect(screen.getByTestId("draft-type").textContent).toContain("robe/wash-7q5/4ch");
+    // And the panel closes on the pick rather than being dismissed afterwards:
+    // the question it was asking has been answered, and a chooser left standing
+    // over the form is a chooser an operator has to put away by hand.
+    expect(screen.queryByTestId("library-modal")).toBeNull();
   });
 
   it("says so when the library has nothing matching, rather than showing everything", async () => {
     // The failure a search that ignored an unmatched word would produce, and
     // which an operator would read as *the library is broken*.
     const { answerQuery } = await desk();
-    fireEvent.focus(screen.getByTestId("library-search"));
+    fireEvent.click(screen.getByTestId("patch-row-1"));
+    fireEvent.click(screen.getByTestId("library-open"));
     await answerQuery("SearchLibrary", recordedAnswer("a search that matches nothing"));
-    expect(screen.getByTestId("library-matches").textContent).toContain("Nothing in the library");
+    // The note replaces the table rather than sitting under an empty one: a
+    // header row with nothing beneath it reads as *still loading*.
+    expect(screen.getByTestId("library-empty").textContent).toContain("Nothing in the library");
+    expect(screen.queryByTestId("library-matches")).toBeNull();
   });
 
-  it("shows a profile the show already carries as already carried", async () => {
-    // Hidden, an operator who had just added one would look for it elsewhere.
-    const { answerQuery } = await desk();
-    fireEvent.focus(screen.getByTestId("library-search"));
+  /**
+   * **The assertion at the bottom of this test was itself the fault**, and the
+   * owner found it — second attempt at B1.
+   *
+   * It used to say the embedding must not happen twice. That sounded like thrift
+   * and was a trap: a show that embedded a profile before a library fix kept the
+   * **stale copy for ever**, because picking that profile again sent nothing and
+   * no other gesture in this interface could replace it. So after B1 gave colour
+   * channels a home value of full, an existing rig went on reading its colours
+   * at nought and re-patching changed nothing at all — which is exactly what was
+   * reported, twice.
+   *
+   * Picking a profile out of the library means *use the library's copy of it*,
+   * every time. The daemon refuses the replacement when it would break a patch
+   * already standing on it (`ShowError::TypeChangeBreaksPatch`), and that is the
+   * guard that makes it safe to do.
+   */
+  it("re-reads a profile the show already carries, rather than keeping the old copy", async () => {
+    // Marked rather than hidden: an operator who had just added one would look
+    // for it elsewhere. And not disabled — the second lamp of a rig is the
+    // commonest patch there is.
+    const { commands, answerQuery } = await desk();
+    fireEvent.click(screen.getByTestId("patch-row-1"));
+    const before = commands().length;
+    fireEvent.click(screen.getByTestId("library-open"));
     await answerQuery("SearchLibrary", {
       t: "LibraryMatches",
       matches: [
@@ -460,23 +548,42 @@ describe("the patch window", () => {
       ],
       total: 4,
     });
+    // The sentence is on the **row** now that the panel has columns — the
+    // *In this show* one — rather than trailing off the end of the key.
+    const row = screen.getByTestId("library-row-generic.dimmer");
+    expect(row.textContent).toContain("picking re-reads it");
     const already = screen.getByTestId("library-generic.dimmer");
-    expect(already.textContent).toContain("already in this show");
-    expect(already.hasAttribute("disabled")).toBe(true);
+    expect(already.hasAttribute("disabled")).toBe(false);
+
+    fireEvent.click(already);
+    expect(screen.getByTestId("draft-type").textContent).toContain("Dimmer");
+    // **The embed goes anyway**, and that is the whole of the fix: it is what
+    // replaces a copy the show has been carrying since before a library change.
+    expect(commands().slice(before)).toContainEqual({
+      t: "EmbedFixtureType",
+      typeId: "generic.dimmer",
+    });
   });
 
-  it("says plainly when a show has no profiles, and offers nothing to patch", async () => {
-    // The state a brand-new show is in, and the reason `EmbedFixtureType` and
-    // the desk's library exist at all: without them this window would be a form
-    // with an empty menu and no way out of it.
-    const { commands } = await desk({ fixtures: {}, fixtureTypes: {} });
-    expect(screen.getByTestId("patch-no-profiles").textContent).toContain(
-      "no fixture profiles",
-    );
+  it("opens a row on a show with no profiles at all, because the field is the library", async () => {
+    // **The claim this test used to make was the fault** — S43, B19. It said a
+    // show with no profiles offers nothing to patch, and asserted the Add button
+    // disabled and the form refusing to open: correct while the Type field was a
+    // menu of what had been embedded, and a dead end for the one show that is
+    // guaranteed to be in this state — a new one.
+    //
+    // The field is a search over the desk's whole library now, so an empty show
+    // is an ordinary starting point: open a row, type, pick.
+    const { commands, queries } = await desk({ fixtures: {}, fixtureTypes: {} });
     const add = screen.getByText("Add fixture");
-    expect(add.hasAttribute("disabled")).toBe(true);
+    expect(add.hasAttribute("disabled")).toBe(false);
     fireEvent.click(add);
-    expect(screen.queryByTestId("patch-form")).toBeNull();
+    expect(screen.queryByTestId("patch-form")).not.toBeNull();
+    expect(screen.getByTestId("draft-type").textContent).toContain("No profile chosen");
+
+    fireEvent.click(screen.getByTestId("library-open"));
+    expect(queries().some((query) => query.t === "SearchLibrary")).toBe(true);
+    // Nothing has been sent: opening a row is local until Apply (§4.2).
     expect(commands()).toHaveLength(0);
   });
 
@@ -485,15 +592,27 @@ describe("the patch window", () => {
     // pair a preview has to be asked about again: a different profile is a
     // different footprint, and a different universe is a different set of
     // neighbours.
-    const { commands, queries } = await desk();
+    const { commands, queries, answerQuery } = await desk();
     fireEvent.click(screen.getByTestId("patch-row-1"));
     const asked = queries().filter((query) => query.t === "PatchPreview").length;
 
-    const type_ = screen.getByTestId("draft-type");
-    if (!(type_ instanceof HTMLSelectElement)) {
-      throw new Error("the type is a menu");
-    }
-    fireEvent.change(type_, { target: { value: "generic.rgbw.par" } });
+    // The type is a search now rather than a menu (B19), so the profile is
+    // chosen the way an operator chooses it: open the library and pick a row.
+    fireEvent.click(screen.getByTestId("library-open"));
+    await answerQuery("SearchLibrary", {
+      t: "LibraryMatches",
+      matches: [
+        {
+          id: "generic.rgbw.par",
+          manufacturer: "Generic",
+          name: "RGBW PAR",
+          mode: "4ch",
+          footprint: 4,
+        },
+      ],
+      total: 4,
+    });
+    fireEvent.click(screen.getByTestId("library-generic.rgbw.par"));
     type("draft-universe", "2");
     expect(queries().filter((query) => query.t === "PatchPreview").length).toBeGreaterThan(asked);
 
@@ -505,6 +624,7 @@ describe("the patch window", () => {
       typeId: "generic.rgbw.par",
       universe: 2,
       address: 1,
+      softwareDimmer: true,
     });
   });
 

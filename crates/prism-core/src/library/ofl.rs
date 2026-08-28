@@ -414,16 +414,71 @@ fn definition_to_attribute(
 ///
 /// Pan and tilt default to the centre of their travel when the file does not
 /// say, because a head that is patched and never touched should point at the
-/// middle rather than at an end stop. Everything else defaults to zero, which
-/// is what OFL means by an absent `defaultValue`.
+/// middle rather than at an end stop.
+///
+/// # A colour channel rests at full, whatever the file says — punch-list B1
+///
+/// **And *whatever the file says* is the correction.** The first attempt at this
+/// deferred to a stated `defaultValue` on the grounds that it is the
+/// manufacturer telling us where the channel rests, and the owner reported the
+/// colours still starting at nought. Counted in the library this build ships:
+/// **391 of 1131 colour channels state a default, and 387 of those state
+/// zero.** So on most real fixtures the deferral was the whole of the fault.
+///
+/// The two are answering different questions. A manufacturer's `defaultValue`
+/// is where the *lamp* parks when it is powered on with no DMX — dark, which is
+/// the only safe answer a lamp can give. Where a **desk** parks a colour channel
+/// is a convention of the desk, and on every console the owner has used it is
+/// open: you mix by turning colour *down*, and the dimmer decides whether any of
+/// it is seen. This model's `default_value` is the second question, so the
+/// manufacturer's answer to the first one is not evidence about it.
+///
+/// It is a property of the *profile*, set here and in `crate::library::colour`
+/// and nowhere else — a rule in the engine that overrode it would be a second
+/// answer to a question that has one.
+///
+/// Everything else takes the file's value and, absent one, zero — which is what
+/// OFL means by an absent `defaultValue`.
 fn default_value(attribute: AttributeType, definition: &Value) -> u16 {
-    match definition.get("defaultValue").and_then(Value::as_u64) {
-        Some(value) => u16::try_from(value.min(255))
-            .unwrap_or(0)
-            .saturating_mul(257),
+    if attribute.feature_group() == FeatureGroup::Color {
+        return u16::MAX;
+    }
+    match stated_default(definition.get("defaultValue")) {
+        Some(value) => value,
         None if matches!(attribute, AttributeType::Pan | AttributeType::Tilt) => 32768,
         None => 0,
     }
+}
+
+/// A stated `defaultValue`, in the two forms OFL writes it.
+///
+/// A number is in the channel's own resolution, which is 8-bit unless the file
+/// says otherwise; scaling by 257 rather than by 256 is what makes 255 become
+/// 65535 rather than 65280 — a dimmer that stopped one step short of full at
+/// home would be the sort of fault nobody measures.
+///
+/// A **percentage string** is the other form, and it was being dropped: `as_u64`
+/// answers `None` for `"50%"`, so a channel the file parked halfway came out at
+/// nought and nothing said so. Ten of the shipped library's stated colour
+/// defaults are written that way, which is how it was noticed.
+fn stated_default(value: Option<&Value>) -> Option<u16> {
+    let value = value?;
+    if let Some(number) = value.as_u64() {
+        return Some(
+            u16::try_from(number.min(255))
+                .unwrap_or(0)
+                .saturating_mul(257),
+        );
+    }
+    let text = value.as_str()?.trim();
+    let percent: f64 = text.strip_suffix('%')?.trim().parse().ok()?;
+    if !percent.is_finite() {
+        return None;
+    }
+    // Rounded rather than truncated, so `"100%"` is full and `"50%"` is the
+    // midpoint an operator would read as 50 %.
+    let scaled = (percent.clamp(0.0, 100.0) / 100.0 * f64::from(u16::MAX)).round();
+    Some(scaled as u16)
 }
 
 /// The physical range an attribute covers, in the units `AttributeDef` uses.
@@ -542,6 +597,7 @@ const _: fn() -> MergeMode = || AttributeType::Dimmer.default_merge_mode();
 mod tests {
     use super::{Conversion, read_fixture};
     use prism_domain::{AttributeType, FeatureGroup, MergeMode};
+    use serde_json::json;
 
     /// The fixture the S44 request came with, cut down to the parts that matter.
     ///
@@ -721,10 +777,37 @@ mod tests {
         // 255 becomes 65535 and not 65280: a dimmer that stopped one step short
         // of full at home is the sort of fault nobody measures.
         assert_eq!(home(AttributeType::White), 65535);
-        assert_eq!(home(AttributeType::Red), 0);
+        // **Red states `defaultValue: 0` in this file and rests at full anyway**
+        // — punch-list B1, second attempt. Where a *lamp* parks with no DMX and
+        // where a *desk* parks a colour channel are two questions, and 387 of the
+        // shipped library's 391 stated colour defaults answer the first one with
+        // nought. Believing them was the whole of the fault the owner reported.
+        assert_eq!(home(AttributeType::Red), 65535);
         // Pan and tilt have no `defaultValue` here, so they centre.
         assert_eq!(home(AttributeType::Pan), 32768);
         assert_eq!(home(AttributeType::Tilt), 32768);
+    }
+
+    /// **A percentage default is read, rather than silently dropped.**
+    ///
+    /// OFL writes `defaultValue` as a number *or* as a percentage string, and
+    /// `as_u64` answers `None` for the second — so a channel the file parked
+    /// halfway came out at nought and nothing said so. Found while counting the
+    /// colour defaults for B1; ten of them are written this way.
+    #[test]
+    fn a_default_value_written_as_a_percentage_is_read_as_one() {
+        assert_eq!(super::stated_default(Some(&json!("100%"))), Some(65535));
+        assert_eq!(super::stated_default(Some(&json!("0%"))), Some(0));
+        assert_eq!(super::stated_default(Some(&json!(" 50 % "))), Some(32768));
+        // And the forms that are not a value at all answer nothing, so the
+        // attribute takes its own default rather than a number made up here.
+        assert_eq!(super::stated_default(Some(&json!("halfway"))), None);
+        assert_eq!(super::stated_default(Some(&json!("%"))), None);
+        assert_eq!(super::stated_default(Some(&json!(null))), None);
+        assert_eq!(super::stated_default(None), None);
+        // A number is still a number, in the channel's own 8-bit resolution.
+        assert_eq!(super::stated_default(Some(&json!(255))), Some(65535));
+        assert_eq!(super::stated_default(Some(&json!(128))), Some(32896));
     }
 
     #[test]

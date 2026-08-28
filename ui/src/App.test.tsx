@@ -88,7 +88,10 @@ describe("the interface", () => {
         expect(screen.getByTestId("executors").textContent).toBe("1");
         expect(screen.getByTestId("command-line").textContent).toBe("fixture 1 at full");
         expect(screen.getByTestId("tick-hz").textContent).toBe("44.0 Hz");
-        expect(screen.getByTestId("output-1").textContent).toBe("Mock: Ok");
+        // **The name is the label and the health is the value** since S43 put
+        // these readings in the `Status` window: a row of label/value pairs
+        // rather than one string with a colon in the middle of it.
+        expect(screen.getByTestId("output-1").textContent).toBe("Ok");
         expect(screen.getByTestId("dirty-flag").textContent).toBe("saved");
     });
 
@@ -114,10 +117,32 @@ describe("the interface", () => {
     });
 
     it("shows a reading that is not in the document as a dash, not as zero", () => {
+        // **The readings are a window since S43**, so the session has to have
+        // that window open for there to be anywhere to read them — but it
+        // carries none of the fields they read. That is the case: a document
+        // this interface cannot find a number in says so, rather than showing a
+        // zero an operator would take for a real reading.
         const { network } = desk();
-        serve(network, aSnapshot({ session: { session: {}, views: {} } }));
+        serve(
+            network,
+            aSnapshot({
+                session: {
+                    session: {
+                        openWindows: [
+                            { instanceId: 1, type: "Status", x: 0, y: 0, w: 640, h: 480, params: {} },
+                        ],
+                    },
+                    views: {},
+                },
+            }),
+        );
         expect(screen.getByTestId("executor-page").textContent).toBe("—");
-        expect(screen.getByTestId("open-windows").textContent).toBe("—");
+        expect(screen.getByTestId("active-view").textContent).toBe("—");
+        expect(screen.getByTestId("encoder-bank").textContent).toBe("—");
+        // And one that *is* there reads its real value: the window the readings
+        // are drawn in is itself an open window, so this counts one. A test that
+        // expected a dash here would be asking the interface to lie.
+        expect(screen.getByTestId("open-windows").textContent).toBe("1");
     });
 
     /**
@@ -157,7 +182,13 @@ describe("the interface", () => {
                         executorPage: 0,
                         encoderBank: "Dimmer",
                         commandLine: "",
-                        openWindows: [],
+                        // The `Status` window, because the readings asserted
+                        // below are drawn in it (S43) — and it is the restarted
+                        // daemon's own session, which is the point of the test:
+                        // a different one from the session before the drop.
+                        openWindows: [
+                            { instanceId: 1, type: "Status", x: 0, y: 0, w: 640, h: 480, params: {} },
+                        ],
                     },
                     views: {},
                 },
@@ -313,8 +344,37 @@ describe("the command line", () => {
      * - a **whole command** runs at once.
      */
     it("writes into the line with a key, and only the third shape acts", () => {
+        // **The keys are the `CommandKeys` window since S43** (punch-list B12):
+        // they crowded the line, and the line *is* the interface. The rule they
+        // are held to has not moved an inch — a key writes into the line and the
+        // line decides, exactly as it does for a typed one.
         const { network } = desk();
-        serve(network);
+        serve(
+            network,
+            aSnapshot({
+                session: {
+                    session: {
+                        activeViewId: 1,
+                        executorPage: 3,
+                        encoderBank: "Dimmer",
+                        commandLine: "",
+                        openWindows: [
+                            {
+                                instanceId: 1,
+                                type: "CommandKeys",
+                                x: 0,
+                                y: 0,
+                                w: 640,
+                                h: 480,
+                                params: {},
+                            },
+                        ],
+                        focusedWindow: 1,
+                    },
+                    views: {},
+                },
+            }),
+        );
         const input = screen.getByTestId("command-input");
         if (!(input instanceof HTMLInputElement)) {
             throw new Error("the command line is an input");

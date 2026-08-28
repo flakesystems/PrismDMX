@@ -288,7 +288,7 @@ mod tests {
     /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
     fn plan() -> MergePlan {
         let head = moving_head();
-        MergePlan::build((1..=3).map(|id| (FixtureId::new(id), &head))).unwrap()
+        MergePlan::build((1..=3).map(|id| (FixtureId::new(id), &head, false))).unwrap()
     }
 
     fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
@@ -572,7 +572,7 @@ mod tests {
                 },
             ],
         );
-        let plan = MergePlan::build([(FixtureId::new(1), &odd)]).unwrap();
+        let plan = MergePlan::build([(FixtureId::new(1), &odd, false)]).unwrap();
         let mut masters = MasterLayer::new(&plan);
         masters.set_grand(0);
 

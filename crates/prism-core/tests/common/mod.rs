@@ -64,6 +64,7 @@ pub fn dimmer_type(id: &str, home: u16) -> FixtureType {
 /// A patched fixture at home geometry.
 pub fn fixture(id: u32, type_id: &str, universe: u32, address: u16) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: type_id.to_owned(),
@@ -121,7 +122,7 @@ pub fn group(id: u32, fixtures: &[u32]) -> Group {
 pub fn preset(id: u32, fixture: u32, attribute: AttributeType, value: u16) -> Preset {
     Preset {
         id: PresetId::new(id),
-        pool: attribute.feature_group(),
+        pool: attribute.feature_group().into(),
         name: format!("Preset {id}"),
         color: None,
         values: vec![PresetValue {
@@ -150,6 +151,7 @@ pub fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
 /// The `PatchFixture` command for one PAR.
 pub fn patch_command(id: u32, universe: u32, address: u16) -> Command {
     Command::PatchFixture {
+        software_dimmer: true,
         id: FixtureId::new(id),
         name: format!("Fixture {id}"),
         type_id: "generic.rgbw.par".to_owned(),
@@ -228,7 +230,7 @@ pub fn show_commands() -> Vec<Command> {
         // cue 1, sequence 9 is free, and executor 2 is an empty slot.
         Command::StorePreset {
             preset_id: PresetId::new(4),
-            pool: Some(FeatureGroup::Color),
+            pool: Some(prism_domain::PresetPool::Color),
             name: "Deep blue".to_owned(),
             color: None,
             mode: StoreMode::Merge,
@@ -424,6 +426,11 @@ pub fn session_commands() -> Vec<Command> {
             view_id: ViewId::new(3),
             name: "Playback".to_owned(),
         },
+        Command::NewView {
+            view_id: ViewId::new(5),
+            name: "Blank".to_owned(),
+        },
+        Command::SetWindowPicker { open: true },
         Command::Label {
             target: ObjectRef::View {
                 view_id: ViewId::new(2),
@@ -488,6 +495,7 @@ pub fn session_commands() -> Vec<Command> {
         },
         Command::CommandLineInput {
             text: "1 thru 4 at full".to_owned(),
+            run: false,
         },
     ]
 }

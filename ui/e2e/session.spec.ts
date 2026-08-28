@@ -25,7 +25,7 @@ import { expect, test } from "@playwright/test";
 import { join } from "node:path";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, pressConsole, startDaemon } from "./daemon.ts";
+import { buildDaemon, forget, openWindow, pressConsole, startDaemon } from "./daemon.ts";
 
 /** A port of this suite's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7383;
@@ -58,13 +58,13 @@ test("windows live in the session: the canvas survives a reload the daemon never
 
   // Nothing is open, because a fresh show's view 1 is empty.
   await expect(page.getByTestId("canvas-empty")).toBeVisible();
-  await expect(page.getByTestId("open-windows")).toHaveText("0");
+  await expect(page.locator("[data-window-type]")).toHaveCount(0);
 
   // 1. Open one window. That is an `OpenWindow` out and a `SessionPatch` back;
   //    the canvas draws what came back.
-  await page.getByTestId("open-window").selectOption("DmxSheet");
+  await openWindow(page, "DmxSheet");
   await expect(page.getByTestId("window-1")).toBeVisible();
-  await expect(page.getByTestId("open-windows")).toHaveText("1");
+  await expect(page.locator("[data-window-type]")).toHaveCount(1);
 
   // 2. Drag it somewhere it plainly was not. The daemon opens every window at
   //    the same 0,0 — `OpenWindow` carries no geometry — so this is done
@@ -111,14 +111,14 @@ test("windows live in the session: the canvas survives a reload the daemon never
   // 4. A second window, opened after the reload: the numbering is the
   //    daemon's, so it is 2 even though this page has never seen a window 1
   //    being made.
-  await page.getByTestId("open-window").selectOption("Patch");
+  await openWindow(page, "Patch");
   await expect(page.getByTestId("window-2")).toBeVisible();
-  await expect(page.getByTestId("open-windows")).toHaveText("2");
+  await expect(page.locator("[data-window-type]")).toHaveCount(2);
 
   // 5. And closing one is the same contract in reverse.
   await page.getByTestId("close-window-2").click();
   await expect(page.getByTestId("window-2")).toHaveCount(0);
-  await expect(page.getByTestId("open-windows")).toHaveText("1");
+  await expect(page.locator("[data-window-type]")).toHaveCount(1);
 
   await daemon.kill();
   daemon = null;
@@ -135,14 +135,20 @@ test("**D11**: a view switched at the console appears in the browser, unasked", 
 
   // A layout, stored as view 2 — the second view, because `Channel ▶` means
   // *the next one* and a desk with one view has no next one.
-  await page.getByTestId("open-window").selectOption("Groups");
-  await expect(page.getByTestId("window-1")).toBeVisible();
+  // **`New` makes an empty view and switches to it** — S43, punch-list B12. It
+  // used to store the canvas as a new view, which is why the layout for a view
+  // is now built *in* it: New, open the windows, Store. `Store` writes the
+  // canvas into the active view (`prism_core::Session::store_view`); nothing
+  // else does, so a view switched away from without one keeps what it had.
   await page.getByTestId("new-view").click();
-  await expect(page.getByTestId("view-2")).toBeVisible();
+  await expect(page.getByTestId("view-2")).toHaveAttribute("data-active", "yes");
+  await openWindow(page, "Groups");
+  await expect(page.getByTestId("window-1")).toBeVisible();
+  await page.getByTestId("store-view").click();
 
-  // Then the canvas is changed, so that a view switch is visible rather than a
-  // no-op: the window is closed and view 1 is active.
-  await page.getByTestId("close-window-1").click();
+  // Back to view 1, which was left empty — so a view switch is visible rather
+  // than a no-op.
+  await page.getByTestId("view-1").click();
   await expect(page.getByTestId("canvas-empty")).toBeVisible();
   await expect(page.getByTestId("view-1")).toHaveAttribute("data-active", "yes");
 
@@ -152,7 +158,6 @@ test("**D11**: a view switched at the console appears in the browser, unasked", 
 
   // And the interface follows. It was told; it did not ask.
   await expect(page.getByTestId("view-2")).toHaveAttribute("data-active", "yes");
-  await expect(page.getByTestId("active-view")).toHaveText("2");
   await expect(page.getByTestId("window-1")).toBeVisible();
   await expect(page.getByTestId("window-1")).toHaveAttribute("data-window-type", "Groups");
 
@@ -160,7 +165,7 @@ test("**D11**: a view switched at the console appears in the browser, unasked", 
   pressConsole(keys, F1);
   await expect(page.getByTestId("window-2")).toBeVisible();
   await expect(page.getByTestId("window-2")).toHaveAttribute("data-window-type", "FixtureSheet");
-  await expect(page.getByTestId("open-windows")).toHaveText("2");
+  await expect(page.locator("[data-window-type]")).toHaveCount(2);
 
   await daemon.kill();
   daemon = null;
@@ -183,16 +188,22 @@ test("**after a move, `Channel ▶` steps to the view that is drawn next**", asy
 
   // Three views, each with a layout that says which one it is: view 1 empty,
   // view 2 with a Groups window, view 3 with a Patch window.
-  await page.getByTestId("open-window").selectOption("Groups");
+  // **`New` makes an empty view and switches to it** — S43, punch-list B12. It
+  // used to store the canvas as a new view, which is why the layout for a view
+  // is now built *in* it: New, open the windows, Store. `Store` writes the
+  // canvas into the active view (`prism_core::Session::store_view`); nothing
+  // else does, so a view switched away from without one keeps what it had.
+  await page.getByTestId("new-view").click();
+  await expect(page.getByTestId("view-2")).toHaveAttribute("data-active", "yes");
+  await openWindow(page, "Groups");
   await expect(page.getByTestId("window-1")).toBeVisible();
-  await page.getByTestId("new-view").click();
-  await expect(page.getByTestId("view-2")).toBeVisible();
+  await page.getByTestId("store-view").click();
 
-  await page.getByTestId("close-window-1").click();
-  await page.getByTestId("open-window").selectOption("Patch");
-  await expect(page.getByTestId("window-2")).toBeVisible();
   await page.getByTestId("new-view").click();
-  await expect(page.getByTestId("view-3")).toBeVisible();
+  await expect(page.getByTestId("view-3")).toHaveAttribute("data-active", "yes");
+  await openWindow(page, "Patch");
+  await expect(page.getByTestId("window-2")).toBeVisible();
+  await page.getByTestId("store-view").click();
 
   // Back to view 1, which is where `Channel ▶` counts from.
   await page.getByTestId("view-1").click();
@@ -222,7 +233,6 @@ test("**after a move, `Channel ▶` steps to the view that is drawn next**", asy
 
   pressConsole(keys, CHANNEL_RIGHT);
   await expect(page.getByTestId("view-2")).toHaveAttribute("data-active", "yes");
-  await expect(page.getByTestId("active-view")).toHaveText("2");
   await expect(page.getByTestId("window-2")).toHaveAttribute("data-window-type", "Patch");
 
   await daemon.kill();
@@ -238,11 +248,13 @@ test("a view is renamed and deleted from the interface, and the daemon says what
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
 
-  await page.getByTestId("open-window").selectOption("Groups");
-  await expect(page.getByTestId("window-1")).toBeVisible();
+  // View 1 is left empty and view 2 gets the layout — see the note in the D11
+  // test: `New` empties the canvas and `Store` is what writes it into a view.
   await page.getByTestId("new-view").click();
-  await expect(page.getByTestId("view-2")).toBeVisible();
   await expect(page.getByTestId("view-2")).toContainText("View 2");
+  await openWindow(page, "Groups");
+  await expect(page.getByTestId("window-1")).toBeVisible();
+  await page.getByTestId("store-view").click();
 
   // Rename: a command out, and the name that comes back is the daemon's.
   await page.getByTestId("view-2").click({ button: "right" });
@@ -262,7 +274,6 @@ test("a view is renamed and deleted from the interface, and the daemon says what
 
   await expect(page.getByTestId("view-2")).toHaveCount(0);
   await expect(page.getByTestId("view-1")).toHaveAttribute("data-active", "yes");
-  await expect(page.getByTestId("active-view")).toHaveText("1");
   await expect(page.getByTestId("canvas-empty")).toBeVisible();
 
   // The last view cannot go: the session must always have one for
@@ -283,9 +294,12 @@ test("the screen is a device screen: nothing outside the canvas scrolls", async 
   await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
   for (const type of ["DmxSheet", "Patch", "Settings", "Groups"]) {
-    await page.getByTestId("open-window").selectOption(type);
+    await openWindow(page, type);
   }
-  await expect(page.getByTestId("open-windows")).toHaveText("4");
+  // Four on the canvas. The *count* readout moved into the `Status` window in
+  // S43, so what is counted here is the canvas itself — which is the thing this
+  // test is about anyway.
+  await expect(page.locator("[data-window-type]")).toHaveCount(4);
 
   const overflow = await page.evaluate(() => ({
     pageWidth: document.documentElement.scrollWidth - document.documentElement.clientWidth,

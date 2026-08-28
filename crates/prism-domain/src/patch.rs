@@ -94,9 +94,61 @@ pub struct Fixture {
     pub invert_pan: bool,
     /// Reverse tilt for this fixture.
     pub invert_tilt: bool,
+    /// Whether the desk supplies an intensity for this fixture when its profile
+    /// has none — S43, and the owner's answer to what B1 turned up.
+    ///
+    /// # Why a fixture needs one
+    ///
+    /// B1 gave colour channels a home value of **full**, because on every desk
+    /// the owner has used a colour starts open and you subtract; the dimmer is
+    /// what decides whether any of it is seen. That is right for anything with
+    /// an intensity channel and wrong for a fixture without one: an RGBW PAR has
+    /// four colour channels and nothing else, so *colour open* and *lamp at
+    /// full* are the same eight bits, and a rig of them came up white the moment
+    /// the daemon started. A console that lights the stage with nothing
+    /// programmed is not a console anybody can run a show on.
+    ///
+    /// So the desk supplies the missing channel. The fixture gets a `Dimmer`
+    /// attribute that exists in the merge and on the encoders but occupies no
+    /// DMX channel, resting at **nought**; what it scales on the way out is the
+    /// fixture's colour, which for a fixture with no intensity of its own *is*
+    /// its intensity. The rig is dark at home, the colour is open underneath it,
+    /// and both halves of B1 hold.
+    ///
+    /// # Why it can be switched off
+    ///
+    /// The owner's own condition. A PAR that is on a dimmer pack, or one whose
+    /// colour channels a house rig drives directly, wants its channels written
+    /// through untouched — and the desk cannot know which. So this is a patch
+    /// field per fixture and not a rule.
+    ///
+    /// It says nothing at all about a fixture whose profile **has** an
+    /// intensity: there the profile's own channel is the dimmer and this is
+    /// ignored. [`Self::has_software_dimmer`] is the question worth asking, and
+    /// this field on its own never is.
+    #[serde(default = "supplied")]
+    pub software_dimmer: bool,
+}
+
+/// The default for [`Fixture::software_dimmer`]: a fixture that needs one gets
+/// one, so a rig read from a show file written before S43 comes up dark.
+pub(crate) const fn supplied() -> bool {
+    true
 }
 
 impl Fixture {
+    /// Whether the desk supplies this fixture's intensity.
+    ///
+    /// True when the operator has left [`Self::software_dimmer`] on **and** the
+    /// type has no intensity channel of its own. The two halves are asked
+    /// together everywhere, so they are asked together here: a caller that
+    /// looked only at the field would give a moving head two dimmers, and one
+    /// that looked only at the type would take the operator's switch away.
+    #[must_use]
+    pub fn has_software_dimmer(&self, fixture_type: &crate::FixtureType) -> bool {
+        self.software_dimmer && !fixture_type.has_dimmer()
+    }
+
     /// The last channel this fixture occupies, given its type's `footprint`.
     ///
     /// `None` when the fixture does not fit: address 0, an empty footprint, or a
@@ -137,6 +189,7 @@ mod tests {
 
     fn fixture() -> Fixture {
         Fixture {
+            software_dimmer: true,
             id: FixtureId::new(1),
             name: "Front left".to_owned(),
             type_id: "generic.rgbw.par".to_owned(),
@@ -147,6 +200,73 @@ mod tests {
             invert_pan: false,
             invert_tilt: true,
         }
+    }
+
+    /// **The desk supplies an intensity only where the profile has none** — S43.
+    ///
+    /// Both halves, because either on its own is a wrong answer: read the field
+    /// alone and a moving head gets a second dimmer nothing can reach; read the
+    /// type alone and the operator's switch does nothing.
+    #[test]
+    fn the_desk_supplies_an_intensity_only_where_the_profile_has_none() {
+        let colour_only = crate::FixtureType {
+            id: "test.par".to_owned(),
+            manufacturer: "Test".to_owned(),
+            name: "PAR".to_owned(),
+            mode: "1ch".to_owned(),
+            footprint: 1,
+            attributes: vec![crate::AttributeDef {
+                attribute: crate::AttributeType::Red,
+                feature_group: crate::FeatureGroup::Color,
+                coarse_offset: 0,
+                fine_offset: None,
+                default_value: u16::MAX,
+                merge_mode: crate::MergeMode::Ltp,
+                invert: false,
+                physical_from: 0.0,
+                physical_to: 100.0,
+            }],
+        };
+        let mut with_intensity = colour_only.clone();
+        with_intensity.attributes.push(crate::AttributeDef {
+            attribute: crate::AttributeType::Dimmer,
+            feature_group: crate::FeatureGroup::Dimmer,
+            coarse_offset: 1,
+            fine_offset: None,
+            default_value: 0,
+            merge_mode: crate::MergeMode::Htp,
+            invert: false,
+            physical_from: 0.0,
+            physical_to: 100.0,
+        });
+
+        let mut patched = fixture();
+        patched.software_dimmer = true;
+        assert!(
+            patched.has_software_dimmer(&colour_only),
+            "a fixture with no intensity of its own gets one"
+        );
+        assert!(
+            !patched.has_software_dimmer(&with_intensity),
+            "a fixture with a dimmer channel already has one"
+        );
+
+        patched.software_dimmer = false;
+        assert!(
+            !patched.has_software_dimmer(&colour_only),
+            "and the operator can switch it off"
+        );
+    }
+
+    /// A show file written before S43 carries no such field, and the fixture it
+    /// describes must come up **dark** rather than lit — which is the whole
+    /// reason the default is *supplied* and not `false`.
+    #[test]
+    fn a_fixture_read_without_the_field_gets_the_supplied_intensity() {
+        let mut json = serde_json::to_value(fixture()).unwrap();
+        json.as_object_mut().unwrap().remove("softwareDimmer");
+        let read: Fixture = serde_json::from_value(json).unwrap();
+        assert!(read.software_dimmer);
     }
 
     #[test]
@@ -168,6 +288,9 @@ mod tests {
                 "name",
                 "position",
                 "rotation",
+                // **S43.** The desk supplies an intensity for a fixture whose
+                // profile has none, and this is the operator's switch for it.
+                "softwareDimmer",
                 "typeId",
                 "universe",
             ]

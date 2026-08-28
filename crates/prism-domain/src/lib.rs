@@ -74,7 +74,7 @@ pub use output::{
 };
 pub use patch::{CHANNELS_PER_UNIVERSE, Fixture, Group, RgbColor, Vec3};
 pub use playback::{PlaybackId, PlaybackTarget};
-pub use preset::{Preset, PresetValue};
+pub use preset::{Preset, PresetPool, PresetValue};
 pub use programmer::{
     ClearStage, InvalidClearStage, ProgrammerEntry, ProgrammerState, ProgrammerValue,
     ProgrammerValueSource, ProgrammerValues,
@@ -83,7 +83,10 @@ pub use query::{
     Answer, LibraryEntry, PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget,
 };
 pub use sequence::{Cue, CueEdit, CuePart, CueProperty, CueTrigger, Sequence};
-pub use session::{Session, View, WindowInstance, WindowType};
+pub use session::{
+    CANVAS_HEIGHT, CANVAS_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, Session, View,
+    WindowInstance, WindowType,
+};
 pub use surface::{
     BoundControl, ExecutorTarget, GlobalButton, RESERVED_BUTTONS, RESERVED_REASON, Step,
     StripButton, SurfaceAction, SurfaceBinding, SurfaceControl,

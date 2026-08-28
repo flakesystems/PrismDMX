@@ -79,8 +79,16 @@ const recording: Recording = JSON.parse(recordingText) as Recording;
 const SCRIPT: readonly Command[] = [
   { t: "OpenWindow", window: "FixtureSheet" },
   { t: "OpenWindow", window: "DmxSheet" },
-  { t: "PlaceWindow", instanceId: 1, x: 240, y: 120, w: 640, h: 480 },
-  { t: "PlaceWindow", instanceId: 2, x: 0, y: 0, w: 1280, h: 720 },
+  // **S43, punch-list B10 rewrote these three.** The daemon places a new window
+  // in free space and refuses a move that would bury a neighbour
+  // (`prism_core::layout`), so the script's drags had to move into room that is
+  // actually free — and a fourth step was added for the case the rule exists
+  // for: a drag straight back on top of the other window, which the daemon
+  // refuses. *Nothing happens* is now recorded rather than assumed, which is the
+  // only way this file can hold it: `windows.ts` reads what the daemon said.
+  { t: "PlaceWindow", instanceId: 1, x: 240, y: 520, w: 640, h: 480 },
+  { t: "PlaceWindow", instanceId: 1, x: 700, y: 0, w: 640, h: 480 },
+  { t: "PlaceWindow", instanceId: 2, x: 640, y: 0, w: 1280, h: 480 },
   { t: "FocusWindow", instanceId: 1 },
   { t: "StoreView", viewId: 2, name: "Programming" },
   { t: "OpenWindow", window: "Patch" },
@@ -245,25 +253,34 @@ describe("what the canvas reads out of a session", () => {
   });
 
   it("keeps the stacking order the daemon chose, rather than sorting by number", () => {
-    // Step 5 is `FocusWindow(1)`, which moves window 1 to the end of the list.
-    // A canvas that sorted its windows would draw the same two rectangles in
-    // the wrong order, and every assertion about *which* windows are open
-    // would still pass.
-    const step = recording.steps[4];
-    expect(step).toBeDefined();
-    const order = step?.windows.map((window) => window.instanceId) ?? [];
+    // `FocusWindow(1)` moves window 1 to the end of the list. A canvas that
+    // sorted its windows would draw the same two rectangles in the wrong order,
+    // and every assertion about *which* windows are open would still pass.
+    //
+    // **It is step 6 since S43** — B10 added a step to the script, for the drag
+    // the daemon refuses. The step is found by what it *does* rather than by its
+    // number, so the next insertion moves nothing here: an index written down in
+    // a test is a reference that goes quietly wrong.
+    const at = recording.steps.findIndex((step) => step.what.startsWith("focus the fixture sheet"));
+    expect(at, "the script no longer focuses the fixture sheet").toBeGreaterThanOrEqual(0);
+    const order = recording.steps[at]?.windows.map((window) => window.instanceId) ?? [];
     expect(order).toEqual([2, 1]);
     expect([...order].sort((left, right) => left - right)).not.toEqual(order);
   });
 
   it("finds one window's rectangle, and nothing for one that is not open", () => {
+    // Up to and including the drag of the fixture sheet, which since B10 is a
+    // drag into the room the daemon left free below it rather than on top of
+    // its neighbour. Found by what the step does, not by its index.
+    const at = recording.steps.findIndex((step) => step.what.startsWith("drag the fixture sheet"));
+    expect(at, "the script no longer drags the fixture sheet").toBeGreaterThanOrEqual(0);
     let documents = documentsOf(recording.initialSnapshot);
-    for (const step of recording.steps.slice(0, 4)) {
+    for (const step of recording.steps.slice(0, at + 1)) {
       for (const encodedDelta of step.deltas) {
         documents = applyDelta(documents, deltaOf(encodedDelta));
       }
     }
-    expect(windowRect(documents.session, 1)).toEqual({ x: 240, y: 120, w: 640, h: 480 });
+    expect(windowRect(documents.session, 1)).toEqual({ x: 240, y: 520, w: 640, h: 480 });
     expect(windowRect(documents.session, 99)).toBeNull();
   });
 });

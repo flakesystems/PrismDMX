@@ -39,6 +39,8 @@ interface RecordedRow {
   readonly universe: number;
   readonly address: number;
   readonly footprint: number;
+  /** Whether the desk supplies this fixture's intensity — S43. */
+  readonly softwareDimmer: boolean;
 }
 
 interface RecordedProfile {
@@ -47,6 +49,8 @@ interface RecordedProfile {
   readonly name: string;
   readonly mode: string;
   readonly footprint: number;
+  /** Whether the mode has a dimmer channel of its own — S43. */
+  readonly hasIntensity: boolean;
 }
 
 interface Recording {
@@ -182,6 +186,7 @@ describe("the patch, read out of the show document", () => {
         universe: 1,
         address: 1,
         footprint: 0,
+        softwareDimmer: true,
       }));
     expect(nextFreeFixtureId([])).toBe(1);
     expect(nextFreeFixtureId(rows([1, 2, 3]))).toBe(4);
@@ -197,12 +202,20 @@ describe("the patch, read out of the show document", () => {
         name: "RGBW PAR",
         mode: "4ch",
         footprint: 4,
+        hasIntensity: false,
       }),
     ).toBe("Generic RGBW PAR · 4ch · 4 ch");
     // A profile that carries almost nothing still has to be choosable, so the
     // key stands in for a name that is not there.
     expect(
-      profileLabel({ id: "bare", manufacturer: "", name: "", mode: "", footprint: 2 }),
+      profileLabel({
+        id: "bare",
+        manufacturer: "",
+        name: "",
+        mode: "",
+        footprint: 2,
+        hasIntensity: false,
+      }),
     ).toBe("bare · 2 ch");
   });
 

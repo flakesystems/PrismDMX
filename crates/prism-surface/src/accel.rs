@@ -24,19 +24,45 @@
 //! worse direction for the jog wheel: it would make the wheel a control that
 //! cannot be hurried, which is exactly what an operator reaches for it to do.
 //!
+//! # What a curve is denominated in — S43, punch-list B20
+//!
+//! **Attribute units**, all the way through: the number a curve answers with is
+//! added to a 16-bit parameter by `Command::SetAttribute { relative: true }`,
+//! and nothing between here and `prism_core::programmer::nudge` scales it.
+//!
+//! Both tables were originally written as though a *step* were something larger
+//! that somebody downstream would multiply out. Nobody did. So a careful V-Pot
+//! click moved a parameter by one part in 65 535 — 0.0015 % — and the owner's
+//! punch list found the same arithmetic on the wheel: **a full turn of the jog
+//! wheel changed a value by about 1 %**. Both controls were doing exactly what
+//! they were told and the telling was wrong by two orders of magnitude.
+//!
+//! [`COARSE`] is what fixes the size and, more usefully, what makes the numbers
+//! readable: a curve entry of `COARSE` is *one DMX step of an 8-bit channel*,
+//! which is the smallest move a lamp on a coarse channel can actually make.
+//! Below that a turn is a number changing on a screen.
+//!
 //! # These numbers are taste, and they are data
 //!
-//! The measurements above are facts about the desk. How many parameter steps a
-//! detent is worth is a decision about how a desk should feel, so both curves
-//! are values a profile or a settings screen can replace rather than constants
+//! The measurements above are facts about the desk. How far a detent moves a
+//! parameter is a decision about how a desk should feel, so both curves are
+//! values a profile or a settings screen can replace rather than constants
 //! compiled into the translation.
 
 use std::time::Duration;
 
-/// How the magnitude a V-Pot reports becomes a number of parameter steps.
+/// One DMX step of an 8-bit channel, in the 16-bit attribute range: 65 535 / 255.
+///
+/// The unit both curves are written in. It is the smallest move that is visible
+/// on the least precise fixture in a rig, which makes it the floor worth having
+/// — a control that moves a parameter by less than this has moved a number and
+/// not a lamp.
+pub const COARSE: i16 = 257;
+
+/// How the magnitude a V-Pot reports becomes a distance to move a parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VPotAcceleration {
-    /// Steps for a reported magnitude of 1, 2, 3 … in order.
+    /// Attribute units for a reported magnitude of 1, 2, 3 … in order.
     ///
     /// A magnitude past the end of the table saturates on the last entry rather
     /// than falling back to one step: a surface that reported more than this
@@ -45,24 +71,34 @@ pub struct VPotAcceleration {
     pub curve: &'static [i16],
 }
 
-/// The default V-Pot curve: the triangular numbers.
+/// The default V-Pot curve: the triangular numbers, in [`COARSE`] steps.
 ///
-/// One detent is one step, and each further detent in the same message is worth
-/// one more than the last — 1, 3, 6, 10, 15, 21, 28, 36 across the 1…8 the desk
-/// actually sends (§2.7). A full-speed sweep therefore covers thirty-six times
-/// what a careful click does, which is the ratio that lets one encoder both trim
-/// a value by hand and cross a 16-bit parameter without an operator winding it
-/// like a fishing reel.
+/// One detent is one coarse DMX step, and each further detent in the same
+/// message is worth one more than the last — 1, 3, 6, 10, 15, 21, 28, 36 across
+/// the 1…8 the desk actually sends (§2.7). A full-speed sweep therefore covers
+/// thirty-six times what a careful click does, which is the ratio that lets one
+/// encoder both trim a value by hand and cross a 16-bit parameter without an
+/// operator winding it like a fishing reel: the top row is 9 252, or 14 % of the
+/// range, per message.
 ///
 /// Linear would be the obvious alternative and is the one to avoid: it makes the
 /// fastest turn eight times the slowest, and eight is not enough range to be
 /// worth the surface having measured the speed.
 pub const VPOT_ACCELERATION: VPotAcceleration = VPotAcceleration {
-    curve: &[1, 3, 6, 10, 15, 21, 28, 36],
+    curve: &[
+        COARSE,
+        3 * COARSE,
+        6 * COARSE,
+        10 * COARSE,
+        15 * COARSE,
+        21 * COARSE,
+        28 * COARSE,
+        36 * COARSE,
+    ],
 };
 
 impl VPotAcceleration {
-    /// The parameter steps a reported detent count is worth, sign preserved.
+    /// The attribute units a reported detent count is worth, sign preserved.
     ///
     /// Zero in, zero out — the surface never sends a zero-magnitude message
     /// (§2.7), and a codec that received one from something else must not have
@@ -81,11 +117,11 @@ impl VPotAcceleration {
     }
 }
 
-/// How the gap between two jog messages becomes a number of parameter steps.
+/// How the gap between two jog messages becomes a distance to move a parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct JogAcceleration {
-    /// Rows of *at least this long since the last message* and *this many steps
-    /// per detent*, from the longest interval to the shortest.
+    /// Rows of *at least this long since the last message* and *this many
+    /// attribute units per detent*, from the longest interval to the shortest.
     ///
     /// The last row wants an interval of [`Duration::ZERO`] so that every gap
     /// matches something; a table whose rows all missed would silently stop the
@@ -96,20 +132,38 @@ pub struct JogAcceleration {
 /// The default jog curve.
 ///
 /// The wheel reports every detent it passes, so the interval *is* the speed. A
-/// deliberate click lands well beyond 40 ms and is worth one step; a fast spin
-/// puts messages 10 ms apart or less and is worth eight, which is the same
-/// ceiling the V-Pot curve reaches by a different route.
+/// deliberate click lands well beyond 40 ms; a fast spin puts messages 10 ms
+/// apart or less, and the spread between the two rows is eightfold — which is
+/// the punch list's *the rate scales with how fast the wheel is turned*.
+///
+/// # Where the four numbers come from — S43, punch-list B20
+///
+/// The owner measured the wheel: **a full turn moved a value by about 1 %**, and
+/// asked that a fast full turn be worth **about 20 %**. Those two numbers are
+/// enough to size the table without counting detents anywhere: the ratio is
+/// twenty, so every row is what it was times twenty. The shape — the eightfold
+/// spread, the interval boundaries S21's clock reads — is unchanged, because
+/// the shape was never what was wrong.
+///
+/// The slowest row is [`COARSE`] / 13, deliberately finer than the V-Pot's
+/// smallest move: the wheel is the control an operator reaches for to *trim*,
+/// and a full slow turn is about 2.5 %.
+///
+/// **This is a calibration, not a measurement**, and it is the one number in
+/// this module that wants a real wheel under a real hand to confirm. `CLAUDE.md`
+/// forbids a test touching the device, so what holds it is the ratio, asserted
+/// below, and the round of hand-testing recorded in `PROGRESS.md` §2.41.
 pub const JOG_ACCELERATION: JogAcceleration = JogAcceleration {
     rows: &[
-        (Duration::from_millis(40), 1),
-        (Duration::from_millis(20), 2),
-        (Duration::from_millis(10), 4),
-        (Duration::ZERO, 8),
+        (Duration::from_millis(40), 20),
+        (Duration::from_millis(20), 40),
+        (Duration::from_millis(10), 80),
+        (Duration::ZERO, 160),
     ],
 };
 
 impl JogAcceleration {
-    /// The parameter steps one jog message is worth.
+    /// The attribute units one jog message is worth.
     ///
     /// `since` is the time since the previous jog message, or `None` for the
     /// first one after a pause — which is the slowest row, because a wheel that
@@ -131,7 +185,7 @@ impl JogAcceleration {
     }
 
     /// The factor for a wheel that is barely moving: the first row's, or one
-    /// step if the table is empty.
+    /// attribute unit if the table is empty.
     fn slowest(&self) -> i16 {
         self.rows.first().map_or(1, |(_, steps)| *steps)
     }
@@ -139,22 +193,29 @@ impl JogAcceleration {
 
 #[cfg(test)]
 mod tests {
-    use super::{JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
+    use super::{COARSE, JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
     use std::time::Duration;
 
+    /// The floor of both curves, and **S43 changed what the floor is**.
+    ///
+    /// This test used to say *one detent is one step* and mean one part in
+    /// 65 535, which is what punch-list B20 was reporting from the other end of
+    /// the cable: a control that could not move a lamp. The claim it makes now
+    /// is the same claim about a different number — a single click is the
+    /// smallest move an operator can *see*, which on a coarse channel is
+    /// [`COARSE`], and the wheel's slowest row is deliberately finer than that
+    /// because the wheel is the one that trims.
     #[test]
-    fn one_detent_is_one_step_on_both_curves() {
-        // The floor is the part an operator feels as precision: whatever the
-        // curves do at speed, a single click must move a parameter by one.
-        assert_eq!(VPOT_ACCELERATION.steps(1), 1);
-        assert_eq!(VPOT_ACCELERATION.steps(-1), -1);
+    fn one_detent_is_a_move_that_can_be_seen_on_both_curves() {
+        assert_eq!(VPOT_ACCELERATION.steps(1), i32::from(COARSE));
+        assert_eq!(VPOT_ACCELERATION.steps(-1), -i32::from(COARSE));
         assert_eq!(
             JOG_ACCELERATION.steps(1, Some(Duration::from_millis(500))),
-            1
+            20
         );
         assert_eq!(
             JOG_ACCELERATION.steps(-1, Some(Duration::from_millis(500))),
-            -1
+            -20
         );
     }
 
@@ -165,6 +226,7 @@ mod tests {
         // what a person tunes when the desk feels wrong.
         let expected = [1, 3, 6, 10, 15, 21, 28, 36];
         for (detents, want) in (1..=8i8).zip(expected) {
+            let want = want * i32::from(COARSE);
             assert_eq!(VPOT_ACCELERATION.steps(detents), want, "{detents} detents");
             assert_eq!(VPOT_ACCELERATION.steps(-detents), -want);
         }
@@ -188,9 +250,10 @@ mod tests {
     fn a_magnitude_past_the_table_saturates_rather_than_starting_again() {
         // The X-Touch stops at 8; another MCU surface might not. Falling back to
         // one step would make the fastest possible turn the slowest.
-        assert_eq!(VPOT_ACCELERATION.steps(9), 36);
-        assert_eq!(VPOT_ACCELERATION.steps(63), 36);
-        assert_eq!(VPOT_ACCELERATION.steps(-63), -36);
+        let top = 36 * i32::from(COARSE);
+        assert_eq!(VPOT_ACCELERATION.steps(9), top);
+        assert_eq!(VPOT_ACCELERATION.steps(63), top);
+        assert_eq!(VPOT_ACCELERATION.steps(-63), -top);
     }
 
     #[test]
@@ -207,18 +270,18 @@ mod tests {
         // §2.7: +-1 in 404 messages however hard it was spun. Every row of the
         // table, on both sides of its boundary.
         for (gap, want) in [
-            (500u64, 1),
-            (41, 1),
-            (40, 1),
-            (39, 2),
-            (21, 2),
-            (20, 2),
-            (19, 4),
-            (11, 4),
-            (10, 4),
-            (9, 8),
-            (1, 8),
-            (0, 8),
+            (500u64, 20),
+            (41, 20),
+            (40, 20),
+            (39, 40),
+            (21, 40),
+            (20, 40),
+            (19, 80),
+            (11, 80),
+            (10, 80),
+            (9, 160),
+            (1, 160),
+            (0, 160),
         ] {
             assert_eq!(
                 JOG_ACCELERATION.steps(1, Some(Duration::from_millis(gap))),
@@ -231,9 +294,9 @@ mod tests {
     #[test]
     fn the_first_message_after_a_pause_is_a_click_and_not_a_spin() {
         // There is no interval to read, and guessing "fast" would make the first
-        // detent of every touch of the wheel jump eight steps.
-        assert_eq!(JOG_ACCELERATION.steps(1, None), 1);
-        assert_eq!(JOG_ACCELERATION.steps(-1, None), -1);
+        // detent of every touch of the wheel jump eight rows.
+        assert_eq!(JOG_ACCELERATION.steps(1, None), 20);
+        assert_eq!(JOG_ACCELERATION.steps(-1, None), -20);
     }
 
     #[test]
@@ -273,7 +336,39 @@ mod tests {
         // the V-Pot curve would score as one.
         let fast_jog = JOG_ACCELERATION.steps(1, Some(Duration::from_millis(5)));
         let same_magnitude_on_a_pot = VPOT_ACCELERATION.steps(1);
-        assert_eq!(fast_jog, 8);
-        assert_eq!(same_magnitude_on_a_pot, 1);
+        assert_eq!(fast_jog, 160);
+        assert_eq!(same_magnitude_on_a_pot, i32::from(COARSE));
+    }
+
+    /// **The punch list's two numbers, as arithmetic** — S43, B20.
+    ///
+    /// The owner measured a full turn of the wheel at about 1 % and asked for
+    /// about 20 % when it is spun. No test can count the detents in a
+    /// revolution without a wheel to turn, and `CLAUDE.md` forbids a test that
+    /// opens the device — so what is held here is the part that *is* knowable
+    /// from the two numbers: every row is twenty times the row it replaced, so
+    /// whatever a revolution is worth, it is worth twenty times what the owner
+    /// measured. The detent count cancels out, which is the whole reason the
+    /// table could be sized from a report rather than from a measurement.
+    #[test]
+    fn every_jog_row_is_twenty_times_the_row_the_owner_measured() {
+        let measured = [1i16, 2, 4, 8];
+        assert_eq!(JOG_ACCELERATION.rows.len(), measured.len());
+        for (row, before) in JOG_ACCELERATION.rows.iter().zip(measured) {
+            assert_eq!(row.1, before * 20, "{:?}", row.0);
+        }
+    }
+
+    /// And the spread is untouched, because the spread was never what was wrong.
+    ///
+    /// *The rate scales with how fast the wheel is turned* is the entry's own
+    /// wording, and it was already true — eightfold between the slowest row and
+    /// the fastest. A retune that flattened it would satisfy `every_jog_row_is_
+    /// twenty_times…` and lose the thing the operator actually asked for.
+    #[test]
+    fn the_wheel_still_answers_eightfold_between_a_click_and_a_spin() {
+        let click = JOG_ACCELERATION.steps(1, Some(Duration::from_millis(500)));
+        let spin = JOG_ACCELERATION.steps(1, Some(Duration::ZERO));
+        assert_eq!(spin, click * 8);
     }
 }

@@ -108,7 +108,7 @@
     { "control": "Global.AssignPan", "action": { "t": "SetEncoderBank", "group": "Color" } },
     { "control": "Global.AssignPlugin", "action": { "t": "SetEncoderBank", "group": "Beam" } },
     { "control": "Global.AssignEq", "action": { "t": "SetEncoderBank", "group": "Focus" } },
-    { "control": "Global.AssignInstrument", "action": null },
+    { "control": "Global.AssignInstrument", "action": { "t": "SetEncoderBank", "group": "Gobo" } },
 
     { "control": "Global.F1", "action": { "t": "OpenWindow", "window": "FixtureSheet" } },
     { "control": "Global.F2", "action": { "t": "OpenWindow", "window": "SequenceSheet" } },

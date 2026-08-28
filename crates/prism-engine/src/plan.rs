@@ -119,9 +119,25 @@ pub struct MergePlan {
 impl MergePlan {
     /// Flattens a patch into slots.
     ///
-    /// Each entry is a patched fixture number and the type it instantiates. The
-    /// merge needs nothing else from the patch: addresses and inverts are S4's,
-    /// geometry is the viewer's.
+    /// Each entry is a patched fixture number, the type it instantiates, and
+    /// whether the desk supplies that fixture's intensity
+    /// (`prism_domain::Fixture::has_software_dimmer`). The merge needs nothing
+    /// else from the patch: addresses and inverts are S4's, geometry is the
+    /// viewer's.
+    ///
+    /// # The slot with no channel — S43
+    ///
+    /// A fixture whose profile has no intensity gets a [`AttributeType::Dimmer`]
+    /// slot anyway, resting at nought. It is an ordinary slot in every way the
+    /// merge cares about — playbacks write it, the masters scale it because it
+    /// is [`FeatureGroup::Dimmer`], the programmer takes it over — and the one
+    /// thing it has not got is a DMX channel: `encode.rs` uses it to scale the
+    /// fixture's colour on the way out instead. Which is what an intensity
+    /// **is** for a fixture whose only output is its colour.
+    ///
+    /// The flag is the caller's answer and not this function's, because the
+    /// operator can switch it off per fixture and the plan must follow the
+    /// patch rather than second-guess it.
     ///
     /// # Errors
     ///
@@ -129,15 +145,31 @@ impl MergePlan {
     /// attribute twice, or the patch is implausibly large.
     pub fn build<'a, I>(fixtures: I) -> Result<Self, MergeError>
     where
-        I: IntoIterator<Item = (FixtureId, &'a FixtureType)>,
+        I: IntoIterator<Item = (FixtureId, &'a FixtureType, bool)>,
     {
         let mut slots: Vec<AttributeSlot> = Vec::new();
         let mut patched: BTreeSet<FixtureId> = BTreeSet::new();
-        for (fixture, fixture_type) in fixtures {
+        for (fixture, fixture_type, software_dimmer) in fixtures {
             if !patched.insert(fixture) {
                 return Err(MergeError::DuplicateFixture(fixture));
             }
             let mut defined: BTreeSet<AttributeType> = BTreeSet::new();
+            if software_dimmer {
+                if slots.len() == MAX_SLOTS {
+                    return Err(MergeError::TooManySlots(MAX_SLOTS + 1));
+                }
+                defined.insert(AttributeType::Dimmer);
+                slots.push(AttributeSlot {
+                    fixture,
+                    attribute: AttributeType::Dimmer,
+                    merge_mode: AttributeType::Dimmer.default_merge_mode(),
+                    feature_group: FeatureGroup::Dimmer,
+                    // **Nought, and this is the whole point of the feature.** The
+                    // colour underneath rests open (B1); what keeps the lamp off
+                    // until somebody asks for it is this.
+                    home: 0,
+                });
+            }
             for def in &fixture_type.attributes {
                 if !defined.insert(def.attribute) {
                     return Err(MergeError::DuplicateAttribute {
@@ -203,14 +235,14 @@ impl MergePlan {
 #[cfg(all(test, not(loom)))]
 mod tests {
     use crate::plan::{MAX_SLOTS, MergeError, MergePlan};
-    use crate::testkit::{attribute_def, fixture_type, moving_head};
+    use crate::testkit::{attribute_at, attribute_def, fixture_type, moving_head};
     use prism_domain::{AttributeDef, AttributeType, FeatureGroup, FixtureId, MergeMode};
 
     fn plan_of(entries: &[(u32, &prism_domain::FixtureType)]) -> MergePlan {
         MergePlan::build(
             entries
                 .iter()
-                .map(|(id, fixture_type)| (FixtureId::new(*id), *fixture_type)),
+                .map(|(id, fixture_type)| (FixtureId::new(*id), *fixture_type, false)),
         )
         .unwrap()
     }
@@ -331,11 +363,66 @@ mod tests {
         assert!(plan.slots().is_empty());
     }
 
+    /// **A fixture with no intensity of its own gets a slot for one** — S43.
+    ///
+    /// Resting at nought, filed under the intensity bank so the masters scale
+    /// it, and merged HTP like any dimmer. The colour beside it rests **open**
+    /// (punch-list B1), so nought here is what keeps the lamp off.
+    #[test]
+    fn a_supplied_intensity_is_a_slot_that_rests_at_nought() {
+        let par = fixture_type(
+            "test.par",
+            vec![
+                attribute_at(AttributeType::Red, u16::MAX, 0, None),
+                attribute_at(AttributeType::Green, u16::MAX, 1, None),
+            ],
+        );
+        let plan = MergePlan::build([(FixtureId::new(1), &par, true)]).unwrap();
+        assert_eq!(plan.slot_count(), 3, "two colours and the supplied dimmer");
+
+        let index = plan
+            .index_of(FixtureId::new(1), AttributeType::Dimmer)
+            .expect("the desk supplied one");
+        let slot = plan.slot(index).unwrap();
+        assert_eq!(slot.home, 0, "dark at home");
+        assert_eq!(slot.feature_group, FeatureGroup::Dimmer);
+        assert_eq!(slot.merge_mode, MergeMode::Htp);
+        assert!(slot.is_intensity(), "so the masters may scale it");
+
+        // And the colour it sits over is untouched: open, as B1 left it.
+        let red = plan
+            .slot(
+                plan.index_of(FixtureId::new(1), AttributeType::Red)
+                    .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(red.home, u16::MAX);
+    }
+
+    /// Switched off, the plan is what it was: no slot, and nothing renumbered
+    /// around it.
+    #[test]
+    fn a_fixture_that_was_not_given_one_has_the_slots_it_always_had() {
+        let par = fixture_type(
+            "test.par",
+            vec![attribute_at(AttributeType::Red, u16::MAX, 0, None)],
+        );
+        let plan = MergePlan::build([(FixtureId::new(1), &par, false)]).unwrap();
+        assert_eq!(plan.slot_count(), 1);
+        assert!(
+            plan.index_of(FixtureId::new(1), AttributeType::Dimmer)
+                .is_none()
+        );
+    }
+
     #[test]
     fn the_same_fixture_number_patched_twice_is_rejected() {
         let head = moving_head();
-        let error =
-            MergePlan::build([(FixtureId::new(4), &head), (FixtureId::new(4), &head)]).unwrap_err();
+        let error = MergePlan::build([
+            (FixtureId::new(4), &head, false),
+            (FixtureId::new(4), &head, false),
+        ])
+        .unwrap_err();
         assert_eq!(error, MergeError::DuplicateFixture(FixtureId::new(4)));
     }
 
@@ -350,7 +437,7 @@ mod tests {
                 attribute_def(AttributeType::Pan, 100),
             ],
         );
-        let error = MergePlan::build([(FixtureId::new(1), &broken)]).unwrap_err();
+        let error = MergePlan::build([(FixtureId::new(1), &broken, false)]).unwrap_err();
         assert_eq!(
             error,
             MergeError::DuplicateAttribute {
@@ -378,7 +465,7 @@ mod tests {
         );
         let count = MAX_SLOTS / AttributeType::ALL.len() + 1;
         let fixtures: Vec<_> = (0..count as u32)
-            .map(|id| (FixtureId::new(id), &wide))
+            .map(|id| (FixtureId::new(id), &wide, false))
             .collect();
         let error = MergePlan::build(fixtures).unwrap_err();
         assert!(matches!(error, MergeError::TooManySlots(_)), "{error:?}");

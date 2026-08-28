@@ -46,7 +46,7 @@ import { ConsoleContext, appended } from "./consoleshell";
 import type { ConsoleShell, Prompt } from "./consoleshell";
 import { objectExists } from "./exists";
 import { History } from "./history";
-import { commandLine } from "./session";
+import { commandLine, commandLineRun } from "./session";
 import { SEND_INTERVAL_MS } from "./valuedrag";
 
 /** What the provider needs to read. */
@@ -167,6 +167,47 @@ export function ConsoleProvider({ session, show, children }: ConsoleProviderProp
     execute(typed);
   }, [execute, typed]);
 
+  /**
+   * **A bound line that asked to be sent** — S43.
+   *
+   * A key on the X-Touch bound with *send it* writes the line into the session
+   * and bumps `Session::commandLineRun`. The daemon cannot run it: the parser is
+   * here. So the edge is watched for, and the line the **daemon** holds is
+   * parsed and sent — `daemonLine` and not `typed`, because the line that asked
+   * to be run is the one the key wrote, not whatever this screen has half typed.
+   *
+   * # Only the focused client
+   *
+   * Every screen sees the same counter, and every screen running it would send
+   * the commands once each — a doubled Go being exactly the failure worth
+   * designing against on a console. At most one window has the keyboard focus,
+   * and that is the screen the operator is at: the same one that would have run
+   * the line if they had pressed Enter.
+   *
+   * The case this does not cover is two focused windows on two machines, which
+   * is the owner's own *less focus on multiple operators*. The real fix is
+   * moving the parser into the daemon, which is a session of its own.
+   */
+  const ran = useRef<number | null>(null);
+  const runSerial = commandLineRun(session);
+  useEffect(() => {
+    // The first session sets the mark rather than firing: a client that
+    // connected to a desk whose counter already stood at four would otherwise
+    // run whatever line happened to be in the box.
+    if (ran.current === null) {
+      ran.current = runSerial;
+      return;
+    }
+    if (runSerial === ran.current) {
+      return;
+    }
+    ran.current = runSerial;
+    if (typeof document !== "undefined" && !document.hasFocus()) {
+      return;
+    }
+    execute(daemonLine);
+  }, [runSerial, daemonLine, execute]);
+
   const run = useCallback(
     (text: string) => {
       setTyped(text);
@@ -273,7 +314,11 @@ function useMirror(send: (command: Command) => void): {
       sent.current = text;
       owed.current = null;
       outstanding.current.push(text);
-      send({ t: "CommandLineInput", text });
+      // `run: false` always: a keystroke is a keystroke. `run` is the
+      // **daemon's** way of telling clients that a *bound* line asked to be
+      // sent (S43), and a client that set it here would be asking itself to run
+      // a line it is already about to run.
+      send({ t: "CommandLineInput", text, run: false });
     };
     const now = (text: string): void => {
       if (timer.current !== null) {

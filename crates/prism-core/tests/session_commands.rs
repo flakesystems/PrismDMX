@@ -32,9 +32,11 @@ fn snapshot(session: &SessionState) -> (Vec<u8>, bool) {
 fn the_session_commands_are_the_session_group() {
     // §4.4's twelve, plus `PlaceWindow` — which a screen needs and a console
     // cannot issue — plus S40's four generic verbs **with a view as their
-    // target**, which is the one of their six targets that is session state.
+    // target**, which is the one of their six targets that is session state,
+    // plus S43's two: `NewView` (a view that starts empty, B11) and
+    // `SetWindowPicker` (the chooser a surface key opens, B9).
     // See `common::session_commands`.
-    assert_eq!(session_commands().len(), 17);
+    assert_eq!(session_commands().len(), 19);
     for command in session_commands() {
         assert!(command.is_session_command(), "{command:?}");
     }
@@ -45,7 +47,7 @@ fn the_session_commands_are_the_session_group() {
     // `common::machine_commands`.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        60
+        62
     );
 }
 
@@ -192,14 +194,19 @@ fn the_session_survives_save_and_load() {
         },
         Command::CommandLineInput {
             text: "1 thru 4 at full".to_owned(),
+            run: false,
         },
     ] {
         session.apply(&command).unwrap();
     }
     // The window is placed, because geometry is session state (§4.1) and no
-    // §4.4 command carries any.
+    // §4.4 command carries any. **Somewhere clear of the other two**, which
+    // S43 made a rule (`prism_core::layout`, punch-list B10): the two windows
+    // view 2 restores sit at the top of the canvas, so a move back over them
+    // changes nothing at all and this test would be asserting about a window
+    // that had not moved.
     session
-        .place_window(WindowInstanceId::new(3), 120.0, 64.0, 800.0, 512.0)
+        .place_window(WindowInstanceId::new(3), 120.0, 512.0, 800.0, 512.0)
         .unwrap();
 
     let file = ShowFile {
@@ -235,7 +242,7 @@ fn the_session_survives_save_and_load() {
     let placed = &restored.open_windows[2];
     assert_eq!(
         (placed.x, placed.y, placed.w, placed.h),
-        (120.0, 64.0, 800.0, 512.0)
+        (120.0, 512.0, 800.0, 512.0)
     );
 
     // And through JSON, which is S15's export path. The geometry above is
@@ -272,11 +279,28 @@ fn keys(value: &serde_json::Value, into: &mut Vec<String>) {
 
 #[test]
 fn client_local_state_is_absent_from_the_session_document() {
-    // §4.1's thirteen members, and nothing else. The session type is
+    // §4.1's fifteen members, and nothing else. The session type is
     // `prism_domain::Session`, so this is the assertion that the daemon's
     // session document is that type plus the views it selects between. The two
     // S39 added are `selectedSequence` — the decision S28 marked and §4.4 gave
     // to this session — and `editingCue`, the state an Update key blinks on.
+    //
+    // **`windowPicker` is S43's, and it is the first member that looks like
+    // client-local state and is not.** A chooser over the canvas would be §4.2's
+    // category — hover, drag, scroll — except that a *surface key* opens it, and
+    // a surface key is resolved by a daemon with no screen. See
+    // `prism_domain::Session::window_picker`: on this desk the X-Touch drives the
+    // interface too, and the two are never allowed to be out of step.
+    //
+    // **`commandLineRun` is S43's too, and it is the member that is here under
+    // protest.** It is a counter the daemon bumps when a *bound* line asked to
+    // be sent, and it is on the wire only because the command-line parser lives
+    // in the interface: the daemon writes the line, and the client with the
+    // keyboard focus is what turns it into commands. That is a stop-gap, it is
+    // written down as one in `SurfaceAction::WriteCommandLine`, and
+    // `IMPLEMENTATION_PLAN.md` S49 is the session that moves the parser and
+    // takes this member out again. A test that let it in silently would be the
+    // reason nobody remembered to.
     let session = populated_session();
     let document = serde_json::to_value(session.to_json().unwrap()).unwrap();
     let members: Vec<&str> = document["session"]
@@ -290,6 +314,7 @@ fn client_local_state_is_absent_from_the_session_document() {
         [
             "activeViewId",
             "commandLine",
+            "commandLineRun",
             "editingCue",
             "encoderBank",
             "executorPage",
@@ -301,6 +326,7 @@ fn client_local_state_is_absent_from_the_session_document() {
             "programmerParamIndex",
             "selectedExecutor",
             "selectedSequence",
+            "windowPicker",
         ]
     );
     assert_eq!(
@@ -416,7 +442,7 @@ proptest! {
     /// windows share a number, and the active view exists.
     #[test]
     fn the_session_invariants_survive_any_command_sequence(
-        commands in proptest::collection::vec(any::<Command>(), 1..24)
+        commands in proptest::collection::vec(prism_domain::arb::command(), 1..24)
     ) {
         let mut session = populated_session();
         for command in commands {

@@ -20,7 +20,7 @@
 import { expect, test } from "@playwright/test";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, showFixture, startDaemon } from "./daemon.ts";
+import { buildDaemon, forget, openWindow, showFixture, startDaemon } from "./daemon.ts";
 
 /** A port of this spec's own. */
 const PORT = 7383;
@@ -95,7 +95,7 @@ test("64 universes at 30 Hz, drawn inside the frame budget", async ({ page }) =>
   // there to be a canvas at all. Opening it is an `OpenWindow` to the daemon
   // and a `SessionPatch` back — which means this measurement is now taken
   // through the window system as well as through the telemetry channel.
-  await page.getByTestId("open-window").selectOption("DmxSheet");
+  await openWindow(page, "DmxSheet");
   await expect(page.getByTestId("telemetry")).toBeVisible();
 
   // The channel is carrying the whole rig. This is the assertion that says the

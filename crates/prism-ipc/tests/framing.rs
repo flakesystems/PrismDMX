@@ -155,7 +155,7 @@ fn any_client_message() -> BoxedStrategy<ClientMessage> {
         any_hello().prop_map(|hello| ClientMessage::Hello { hello }),
         (any::<u64>(), any::<prism_domain::Query>())
             .prop_map(|(seq, query)| ClientMessage::Query { seq, query }),
-        (any::<u64>(), any::<Command>().boxed())
+        (any::<u64>(), arb::command())
             .prop_map(|(seq, command)| ClientMessage::Command { seq, command }),
     ]
     .boxed()

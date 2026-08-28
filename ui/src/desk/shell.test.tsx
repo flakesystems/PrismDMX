@@ -21,6 +21,8 @@ import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { DeskStore } from "../store/desk";
 import { CommandLine } from "./commandline";
+import { completions } from "./console";
+import { Keypad } from "./keypad";
 import { History } from "./history";
 import { appended, objectLine, useConsole } from "./consoleshell";
 import { ConsoleProvider } from "./shell";
@@ -53,6 +55,14 @@ function shell(session: JsonValue = SESSION, show: JsonValue = SHOW) {
     <DeskProvider store={store}>
       <ConsoleProvider session={session} show={show}>
         <CommandLine daemonLine="" />
+        {/*
+          **The keys are a window since S43** (punch-list B12) and the line is a
+          band, so they are two subtrees of the canvas rather than one control.
+          They are rendered together here because what this file is about is the
+          rule that binds them: every key writes into the line and none of them
+          sends a command of its own.
+        */}
+        <Keypad />
         <Probe />
       </ConsoleProvider>
     </DeskProvider>,
@@ -125,7 +135,7 @@ describe("a key writes a word into the line", () => {
     expect(acted()).toEqual([]);
     // The line itself did go out, because `Session::commandLine` is session
     // state and every attached client draws it.
-    expect(sent).toEqual([{ t: "CommandLineInput", text: "Store " }]);
+    expect(sent).toEqual([{ t: "CommandLineInput", text: "Store ", run: false }]);
   });
 
   /** The third: appended to the line as it stands. */
@@ -138,7 +148,7 @@ describe("a key writes a word into the line", () => {
   });
 
   /** And the keypad in the footer is those three shapes, spelled out. */
-  it("has a key for each of the three shapes", () => {
+  it("has a key for each of the three shapes, in the window they now live in", () => {
     const { acted, sent } = shell();
     fireEvent.click(screen.getByTestId("key-cue"));
     expect(input().value).toBe("Cue ");
@@ -147,7 +157,7 @@ describe("a key writes a word into the line", () => {
     expect(acted()).toEqual([]);
     fireEvent.click(screen.getByTestId("key-oops"));
     expect(acted()).toEqual([{ t: "Oops" }]);
-    expect(sent.at(-1)).toEqual({ t: "CommandLineInput", text: "" });
+    expect(sent.at(-1)).toEqual({ t: "CommandLineInput", text: "", run: false });
   });
 });
 
@@ -224,24 +234,34 @@ describe("the line follows the daemon", () => {
 });
 
 describe("completion and history", () => {
-  it("offers the words that are legal at this point in the line", () => {
+  /**
+   * **The strip of suggestions is gone — S43, punch-list B13.**
+   *
+   * It sat under the line at all times and was read as clutter rather than as
+   * help. What went is the *display*; `completions()` and Tab are untouched, and
+   * they are what this pair of tests holds now. The grammar claim survives with
+   * them: what is offered is the word `sequence`, never the sequences there are.
+   */
+  it("offers the words that are legal at this point in the line, without drawing them", () => {
     shell();
     fireEvent.change(input(), { target: { value: "de" } });
-    expect(screen.getByTestId("complete-delete")).not.toBeNull();
-    // A grammar answer, never a show answer: the word `sequence`, never the
-    // sequences there are.
+    expect(completions("de")).toContain("Delete");
+    expect(screen.queryByTestId("complete-delete")).toBeNull();
     fireEvent.change(input(), { target: { value: "delete " } });
-    expect(screen.getByTestId("complete-sequence")).not.toBeNull();
-    expect(screen.queryByTestId("complete-1")).toBeNull();
+    expect(completions("delete ")).toContain("Sequence");
+    expect(completions("delete ")).not.toContain("1");
   });
 
-  it("takes a completion on Tab and on a click", () => {
+  it("takes a completion on Tab", () => {
+    // **Capitalised since B14**, so a completed word reads the way the same word
+    // reads everywhere else in the desk. The line itself is still
+    // case-insensitive — what changed is what it is *offered*.
     shell();
     fireEvent.change(input(), { target: { value: "de" } });
     fireEvent.keyDown(input(), { key: "Tab" });
-    expect(input().value).toBe("delete ");
-    fireEvent.click(screen.getByTestId("complete-sequence"));
-    expect(input().value).toBe("delete sequence ");
+    expect(input().value).toBe("Delete ");
+    fireEvent.keyDown(input(), { key: "Tab" });
+    expect(input().value).toBe("Delete Sequence ");
   });
 
   it("walks back through the lines this operator typed", () => {

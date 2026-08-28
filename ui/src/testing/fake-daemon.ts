@@ -136,7 +136,14 @@ export class ManualTimer {
 
 /** A programmer with nothing in it. */
 export function emptyProgrammer(): ProgrammerState {
-  return { selection: [], activeFeatureGroup: "Dimmer", values: [], clearStage: 0 };
+  return {
+    selection: [],
+    selectedGroups: [],
+    manualSelection: [],
+    activeFeatureGroup: "Dimmer",
+    values: [],
+    clearStage: 0,
+  };
 }
 
 /**
@@ -220,12 +227,21 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
         executorPage: 3,
         encoderBank: "Dimmer",
         commandLine: "fixture 1 at full",
-        // One window, because a canvas with nothing on it cannot tell a test
+        // Two windows, because a canvas with nothing on it cannot tell a test
         // that draws windows from one that does not — and because the level
         // view lives in a `DmxSheet` from S25 onwards, so the telemetry tests
         // need one open to have anywhere to draw.
+        //
+        // **`Status` joined it in S43.** The readings that used to sit in bands
+        // around the canvas — the executor page, the frame rate, what is
+        // running — are a window now, so a test that asserts *the control state
+        // is intact* has to have that window open to read it in. They are placed
+        // side by side rather than stacked: since punch-list B10 the daemon
+        // refuses a placement that buries a neighbour, and a fixture that could
+        // not be produced by the daemon is a fixture that proves nothing.
         openWindows: [
           { instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480, params: {} },
+          { instanceId: 2, type: "Status", x: 640, y: 0, w: 640, h: 480, params: {} },
         ],
         focusedWindow: 1,
       },

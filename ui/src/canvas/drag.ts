@@ -44,7 +44,7 @@
  */
 
 import type { Point, Rect } from "./geometry";
-import { movedBy, resizedBy, rounded, sameRect } from "./geometry";
+import { grownTo, movedBy, resizedBy, rounded, sameRect, slidTo } from "./geometry";
 
 /**
  * The shortest gap between two `PlaceWindow` commands from one drag.
@@ -71,6 +71,21 @@ export interface DragOptions {
   readonly place: (rect: Rect) => void;
   /** Turns a displacement in pixels into one in canvas units. */
   readonly scale: (dx: number, dy: number) => Point;
+  /**
+   * The other windows on the canvas, as the session holds them — S43, B10.
+   *
+   * The drag stops against them the way it stops against the canvas edges,
+   * rather than crossing them and being pulled back when the daemon refuses.
+   * They are the *daemon's* rectangles, read out of `openWindows`, which is why
+   * this is a prediction of the daemon's own rule and not a second opinion —
+   * see `geometry.ts`'s `slidTo`.
+   *
+   * Read once when the button goes down. A second operator moving a window
+   * during this drag will not be taken into account, and that is the right
+   * trade: the daemon still decides, and re-reading the layout on every pointer
+   * event would make a window move under a hand that is already moving.
+   */
+  readonly neighbours: readonly Rect[];
 }
 
 /**
@@ -114,10 +129,16 @@ export class WindowDrag {
    * and there is something new to say.
    */
   to(to: Point, now: number): Rect {
-    const { from, kind, origin, scale } = this.#options;
+    const { from, kind, neighbours, origin, scale } = this.#options;
     const by = scale(to.x - from.x, to.y - from.y);
+    // The walls first, then the neighbours: `movedBy` keeps the window on the
+    // canvas and `slidTo` keeps it out of the windows already on it. Both are
+    // clamps rather than refusals, which is what makes a window slide along
+    // whatever it is pressed against instead of stopping dead.
     this.#rect = rounded(
-      kind === "move" ? movedBy(origin, by.x, by.y) : resizedBy(origin, by.x, by.y),
+      kind === "move"
+        ? slidTo(origin, movedBy(origin, by.x, by.y), neighbours)
+        : grownTo(origin, resizedBy(origin, by.x, by.y), neighbours),
     );
     if (!sameRect(this.#rect, this.#sent)) {
       this.#owed = true;

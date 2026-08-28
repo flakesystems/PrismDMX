@@ -39,11 +39,12 @@
  * ```text
  *   line     := select | level | verb | playback | word
  *
- *   select   := ["fixture"] fixtures        -- 1 · 1 thru 4 · 1 + 3 · fixture 12
+ *   select   := ["+"] ["fixture"] fixtures  -- 1 · 1 thru 4 · 1 + 3 · fixture 12 · + 5
  *   level    := [fixtures] [attribute] "at" percent
  *
  *   word     := "clear" | "full" | "oops" | "update"
  *   verb     := "store"  target
+ *             | "new"    "view" n [name]     -- an empty view, and switch to it
  *             | "edit"   cue
  *             | "goto"   [playback] cue     -- goto cue 5
  *             | "delete" object
@@ -78,15 +79,15 @@
 import type {
   AttributeType,
   Command,
-  FeatureGroup,
   ObjectRef,
   OverwriteMode,
   PlaybackTarget,
+  PresetPool,
   RgbColor,
   SequenceStoreMode,
   StoreMode,
 } from "../bindings";
-import { ATTRIBUTE_TYPE_VARIANTS, FEATURE_GROUP_VARIANTS } from "../bindings/variants";
+import { ATTRIBUTE_TYPE_VARIANTS, PRESET_POOL_VARIANTS } from "../bindings/variants";
 import { levelFromPercent } from "./level";
 
 /**
@@ -126,6 +127,73 @@ export type ConsoleResult =
   /** A line that is not one, and what to tell the operator about it. */
   | { readonly kind: "error"; readonly message: string };
 
+/**
+ * Every word that begins a **command** rather than a selection.
+ *
+ * The head words of {@link parseCommandLine}'s own switch, and the line between
+ * the two halves of this grammar: a line that starts with one of these is
+ * *doing* something to a named object, and a line that does not is a **fixture
+ * selection** (`selectionLine`, the default branch).
+ *
+ * S43's second rebuild is what needs the distinction written down. A click on a
+ * pool appends its object to the line when the line is a command waiting for
+ * one, and does the pool's own thing when it is not — and *is not* means, in so
+ * many words, *this is a selection, and a selection takes fixtures*. Typing
+ * `1 thru` and clicking a group is not a group being named, it is a range being
+ * built, and the group's box should behave as a group's box.
+ *
+ * A list beside the switch rather than one derived from it, because a `switch`
+ * is not a value; `console.test.ts` walks both this table and
+ * {@link CONSOLE_WORDS} and asserts they agree, so a verb added to the grammar
+ * and to the completions and not to this list is a red test rather than a pool
+ * that quietly stops offering it.
+ */
+export const VERB_WORDS: readonly string[] = [
+  "clear",
+  "full",
+  "oops",
+  "update",
+  "store",
+  "new",
+  "edit",
+  "goto",
+  "delete",
+  "move",
+  "copy",
+  "label",
+  "color",
+  "assign",
+  "on",
+  "off",
+  "go",
+  "go+",
+  "go-",
+  "goback",
+  "page",
+];
+
+/**
+ * The verbs whose **absent** trailing argument is itself an instruction.
+ *
+ * `Label View 1` clears the name and `Color Sequence 4` takes the colour off —
+ * both are deliberate (see {@link labelLine} and the note on `none`/`off` in
+ * {@link colorLine}), and both parse to a perfectly good command with nothing
+ * after the object.
+ *
+ * That makes them the two verbs a **pointer** must never finish. S43's rebuild
+ * lets a click on a data source append its object to the line and send the line
+ * if it is done (`consoleshell.ts::pickOnto`); for these two, *done* would mean
+ * a click that silently wiped a name or a colour. So they are appended and left
+ * standing, and the operator types the word or presses Enter themselves.
+ *
+ * A list of two beside the parser rather than a property derived from it,
+ * because there is nothing to derive it from: what makes these two different is
+ * that their argument is optional **and** its absence means something.
+ * `console.test.ts` asserts exactly that of each of them, so an entry that
+ * stopped being true, or a verb that started being one, is a red test.
+ */
+export const CLEARING_VERBS: readonly string[] = ["label", "color"];
+
 /** The word that makes a range. */
 const THRU = "thru";
 
@@ -159,6 +227,7 @@ export const CONSOLE_WORDS: readonly string[] = [
   "group",
   "label",
   "move",
+  "new",
   "off",
   "on",
   "oops",
@@ -206,9 +275,13 @@ export function readingText(reading: ConsoleResult): string {
 function describe(command: Command): string {
   switch (command.t) {
     case "SelectFixtures":
-      return `select ${command.ids.join(" + ")}`;
+      return command.mode === "Set"
+        ? `select ${command.ids.join(" + ")}`
+        : `add ${command.ids.join(" + ")} to the selection`;
     case "SelectGroup":
-      return `select group ${String(command.groupId)}`;
+      return command.mode === "Set"
+        ? `select group ${String(command.groupId)}`
+        : `add group ${String(command.groupId)} to the selection`;
     case "ApplyPreset":
       return `apply preset ${String(command.presetId)}`;
     case "SetAttribute":
@@ -231,6 +304,10 @@ function describe(command: Command): string {
       return `store preset ${String(command.presetId)}`;
     case "StoreView":
       return `store view ${String(command.viewId)}`;
+    case "NewView":
+      return `new, empty view ${String(command.viewId)}`;
+    case "SetWindowPicker":
+      return command.open ? "choose a window to open" : "close the window chooser";
     case "EditCue":
       return `edit cue ${command.cueNumber}${sequenceSuffix(command.sequenceId)}`;
     case "Goto":
@@ -380,6 +457,8 @@ export function parseCommandLine(line: string): ConsoleResult {
       return only(words, "update", [{ t: "Update" }]);
     case "store":
       return storeLine(words);
+    case "new":
+      return newLine(words);
     case "edit":
       return editLine(words);
     case "goto":
@@ -595,6 +674,45 @@ function storeLine(words: readonly Token[]): ConsoleResult {
           'an executor is assigned rather than stored. Try "assign sequence 5 executor 1".',
       };
   }
+}
+
+/**
+ * `new view 5` · `new view 5 "Busking"` — S43, punch-list B11.
+ *
+ * The opposite of `store view 5`, and both are wanted: storing means *keep what
+ * is on the canvas*, and this means *give me an empty one*. Getting the first
+ * when you meant the second is the fault B11 describes.
+ *
+ * **A view is the only thing this verb takes**, and that is not an oversight
+ * waiting to be filled in. `New Sequence 5` would be `Store Sequence 5` on a
+ * free number, which S40 already decided (the parser does not read the show, so
+ * it cannot know which of the two acts a store is); `New Group`, `New Preset`
+ * and `New Cue` are the same. A view is different because storing one is the
+ * *only* session command that reads the canvas, so it is the only one whose
+ * empty form means something else.
+ */
+function newLine(words: readonly Token[]): ConsoleResult {
+  const read = readObject(words.slice(1));
+  if (typeof read === "string") {
+    return { kind: "error", message: read };
+  }
+  if (read.target.t !== "View") {
+    return {
+      kind: "error",
+      message: `new takes a view: try "new view 5". Anything else is stored into.`,
+    };
+  }
+  const name = joinName(read.rest);
+  return {
+    kind: "commands",
+    commands: [
+      {
+        t: "NewView",
+        viewId: read.target.viewId,
+        name: name === "" ? `View ${String(read.target.viewId)}` : name,
+      },
+    ],
+  };
 }
 
 /** `edit cue 3` · `edit sequence 5 cue 3`. */
@@ -968,13 +1086,29 @@ function pageCommand(words: readonly Token[]): ConsoleResult {
  */
 function selectionLine(words: readonly Token[]): ConsoleResult {
   // A bare keyword and a number is the *selecting* form of that word — see the
-  // module documentation.
-  const keyword = keywordSelection(words);
+  // module documentation. A leading `+` reaches it too, so `+ Group 3` adds a
+  // group's fixtures to what is selected rather than replacing it (S43, B17) —
+  // the same word, the same meaning, whether what follows is a number or a noun.
+  const plus = words[0]?.text === "+";
+  const keyword = keywordSelection(plus ? words.slice(1) : words, plus);
   if (keyword !== null) {
     return keyword;
   }
+  // **A leading `+` adds to the selection instead of replacing it** — S43,
+  // punch-list B17. `+ 5` and `+ fixture 5` are *and this one too*; `5` on its
+  // own is still *the selection is 5*, because a line that names a fixture is a
+  // statement about what the selection is and an operator who types a number
+  // expects the number.
+  //
+  // The mode is `Toggle` rather than `Add`, which is what makes the same gesture
+  // take a fixture back out again — the sheet's rows write this line, and a row
+  // that could only ever add would need a second gesture to undo a mis-click.
+  const adding = words[0]?.text === "+";
+  const afterPlus = adding ? words.slice(1) : words;
   const rest =
-    words[0]?.text === "fixture" || words[0]?.text === "fixtures" ? words.slice(1) : words;
+    afterPlus[0]?.text === "fixture" || afterPlus[0]?.text === "fixtures"
+      ? afterPlus.slice(1)
+      : afterPlus;
   const at = rest.findIndex((word) => word.text === "at");
   const commands: Command[] = [];
 
@@ -992,7 +1126,7 @@ function selectionLine(words: readonly Token[]): ConsoleResult {
     if (typeof ids === "string") {
       return { kind: "error", message: ids };
     }
-    commands.push({ t: "SelectFixtures", ids, mode: "Set" });
+    commands.push({ t: "SelectFixtures", ids, mode: adding ? "Toggle" : "Set" });
   }
 
   if (atWithout === -1) {
@@ -1021,13 +1155,22 @@ function selectionLine(words: readonly Token[]): ConsoleResult {
  * fixture selection or a level. A **cue** on its own is deliberately not here:
  * `Cue 5` could be a Goto or an Edit and the desk must not guess, so it says so.
  */
-function keywordSelection(words: readonly Token[]): ConsoleResult | null {
+function keywordSelection(words: readonly Token[], adding = false): ConsoleResult | null {
   const head = words[0];
   if (head === undefined || head.text === "fixture" || head.text === "fixtures") {
     return null;
   }
   if (!(OBJECT_WORDS as readonly string[]).includes(head.text)) {
     return null;
+  }
+  // `+` means *and this one too*, which only a **selection** can mean. A view, a
+  // sequence, an executor or a preset is one thing at a time, so the word is
+  // refused there rather than quietly ignored.
+  if (adding && head.text !== "group") {
+    return {
+      kind: "error",
+      message: `"+" adds to a selection, and ${head.text} is not one. Try "${head.raw} …" on its own.`,
+    };
   }
   if (head.text === "cue") {
     return {
@@ -1046,7 +1189,13 @@ function keywordSelection(words: readonly Token[]): ConsoleResult | null {
     case "Group":
       return {
         kind: "commands",
-        commands: [{ t: "SelectGroup", groupId: read.target.groupId, mode: "Set" }],
+        commands: [
+          {
+            t: "SelectGroup",
+            groupId: read.target.groupId,
+            mode: adding ? "Toggle" : "Set",
+          },
+        ],
       };
     case "Sequence":
       return {
@@ -1110,19 +1259,23 @@ function readLevel(words: readonly Token[], attribute: AttributeType): Command |
 }
 
 /**
- * The feature group the first of these words names, if it names one.
+ * The pool the first of these words names, if it names one.
  *
  * Only the **first**: `Store Preset 1 Color Deep blue` names the Colour pool and
- * is called *Deep blue*, and a name with a bank word later in it is a name.
+ * is called *Deep blue*, and a name with a pool word later in it is a name.
+ *
+ * The table is `PRESET_POOL_VARIANTS` and not the banks, so **`Multi` is a word
+ * an operator can type** — S43. It is the one pool that is not an encoder bank
+ * (`prism_domain::PresetPool`), which is exactly why a line that names no pool
+ * still cannot mean it: the fallback is `Session::encoderBank`, and there is no
+ * bank an operator could be standing on that would say *store everything*.
  */
-function poolIn(words: readonly Token[]): FeatureGroup | null {
+function poolIn(words: readonly Token[]): PresetPool | null {
   const head = words[0];
   if (head === undefined) {
     return null;
   }
-  return (
-    FEATURE_GROUP_VARIANTS.find((group) => group.toLowerCase() === head.text) ?? null
-  );
+  return PRESET_POOL_VARIANTS.find((pool) => pool.toLowerCase() === head.text) ?? null;
 }
 
 /** The attribute one of these words names, if any of them does. */
@@ -1314,6 +1467,19 @@ function tokenise(line: string): Token[] {
  * word `sequence`, never the sequences there are, for the same reason the parser
  * does not read the show. A list of what exists is what the pools on the canvas
  * are for.
+ *
+ * # They come back capitalised — S43, punch-list B14
+ *
+ * `Fixture`, not `fixture`. The grammar's own table is lower case because the
+ * parser lower-cases everything it reads and comparing lower to lower is one
+ * fewer thing to get wrong; but what a *person* is shown is a word, and every
+ * other word this interface shows an operator — the console keys, the window
+ * titles, the pool names — starts with a capital. Tab therefore writes
+ * `Fixture ` into the line, which the parser reads exactly as it read
+ * `fixture `.
+ *
+ * The matching is still done in lower case, so typing `fix` still offers
+ * `Fixture`.
  */
 export function completions(line: string): readonly string[] {
   const words = tokenise(line);
@@ -1321,7 +1487,14 @@ export function completions(line: string): readonly string[] {
   const typed = trailing ? "" : (words.at(-1)?.text ?? "");
   const before = trailing ? words : words.slice(0, -1);
   const legal = legalWords(before);
-  return legal.filter((word) => word.startsWith(typed) && word !== typed);
+  return legal
+    .filter((word) => word.startsWith(typed) && word !== typed)
+    .map(capitalised);
+}
+
+/** A word as an operator is shown it: first letter upper case, rest untouched. */
+function capitalised(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 /** Which words may come next, given what is already there. */
@@ -1336,6 +1509,9 @@ function legalWords(before: readonly Token[]): readonly string[] {
       // reference is two tokens, so anything from the fourth word on is the
       // colour — `color sequence 4 ‹here›`.
       return before.length >= 3 ? COLOR_WORDS : OBJECT_WORDS;
+    case "new":
+      // The one verb that takes a *view* and nothing else — see `newLine`.
+      return ["view"];
     case "store":
     case "delete":
     case "move":

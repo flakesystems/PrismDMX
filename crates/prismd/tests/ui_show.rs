@@ -34,8 +34,8 @@ use std::time::Duration;
 
 use prism_core::{Show, ShowFile, ShowMirror, ShowStore};
 use prism_domain::{
-    Answer, AttributeType, Command, CueProperty, CueTrigger, ExecutorId, FeatureGroup, FixtureId,
-    GoDirection, JsonValue, ObjectRef, OverwriteMode, PlaybackTarget, PresetId, RgbColor,
+    Answer, AttributeType, Command, CueProperty, CueTrigger, ExecutorId, FixtureId, GoDirection,
+    JsonValue, ObjectRef, OverwriteMode, PlaybackTarget, PresetId, PresetPool, RgbColor,
     SelectionMode, SequenceId, SequenceStoreMode, StoreMode, StoreTarget, UniverseId,
 };
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, Snapshot, Wire, local};
@@ -86,6 +86,7 @@ fn show_rig() -> ShowFile {
         (4, "generic.dimmer", 20),
     ] {
         show.patch_fixture(prism_domain::Fixture {
+            software_dimmer: true,
             id: FixtureId::new(id),
             name: format!("Fixture {id}"),
             type_id: type_id.to_owned(),
@@ -290,7 +291,7 @@ fn preview_cue(sequence: u32, number: &str, mode: StoreMode) -> Query {
 }
 
 /// The same question for a preset pool.
-fn preview_preset(preset: u32, pool: FeatureGroup, mode: StoreMode) -> Query {
+fn preview_preset(preset: u32, pool: PresetPool, mode: StoreMode) -> Query {
     Query::StorePreview {
         target: StoreTarget::Preset {
             preset_id: PresetId::new(preset),
@@ -455,13 +456,13 @@ fn script() -> Vec<Scripted> {
         Scripted::Ask(
             "what would storing preset 1 in the Colour pool do? a create, and it \
              counts the colour values only",
-            preview_preset(1, FeatureGroup::Color, StoreMode::Merge),
+            preview_preset(1, PresetPool::Color, StoreMode::Merge),
         ),
         Scripted::Do(
             "store it, with a name and a scribble-strip colour",
             Command::StorePreset {
                 preset_id: PresetId::new(1),
-                pool: Some(FeatureGroup::Color),
+                pool: Some(PresetPool::Color),
                 name: "Deep blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 255 }),
                 mode: StoreMode::Merge,
@@ -485,13 +486,13 @@ fn script() -> Vec<Scripted> {
         Scripted::Ask(
             "what would storing over preset 1 do? an edit of a preset: the three \
              blues are replaced and the three whites are kept",
-            preview_preset(1, FeatureGroup::Color, StoreMode::Merge),
+            preview_preset(1, PresetPool::Color, StoreMode::Merge),
         ),
         Scripted::Do(
             "edit the preset — **and cue 3 follows it**, which is the whole claim",
             Command::StorePreset {
                 preset_id: PresetId::new(1),
-                pool: Some(FeatureGroup::Color),
+                pool: Some(PresetPool::Color),
                 name: "Darker blue".to_owned(),
                 color: Some(RgbColor { r: 0, g: 0, b: 120 }),
                 mode: StoreMode::Merge,

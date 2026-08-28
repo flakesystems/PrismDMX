@@ -12,15 +12,33 @@
 import { describe, expect, it } from "vitest";
 
 import type { SurfaceAction } from "../bindings";
-import { ACTION_KINDS, actionOfKind, actionText, kindOf, sameControl, slotOf } from "./actions";
+import {
+  ACTION_GROUPS,
+  ACTION_KINDS,
+  CUSTOM_KINDS,
+  actionOfKind,
+  actionText,
+  isCustom,
+  kindOf,
+  sameControl,
+  slotOf,
+  slotOfControl,
+} from "./actions";
 import type { ActionKind } from "./actions";
 
-/** The one extra answer a kind needs, where it needs one. */
+/**
+ * The one extra answer a kind needs, where it needs one.
+ *
+ * **Five, since S43.** *Type a command* joined them with B4: its detail is the
+ * line itself, which is why it is the one kind whose answer is free text rather
+ * than a name out of a generated table.
+ */
 const DETAIL: Partial<Record<ActionKind, string>> = {
   "Executor button": "Flash",
   "Open window": "Patch",
   "Encoder bank": "Color",
   "Jump to view": "3",
+  "Type a command": "Go Executor 1",
 };
 
 describe("the vocabulary an operator picks from", () => {
@@ -75,6 +93,78 @@ describe("the three kinds that need an answer and do not have one", () => {
     expect(actionOfKind("Open window", "Selected", "Nonesuch")).toBeNull();
     expect(actionOfKind("Encoder bank", "Selected", "Sparkle")).toBeNull();
     expect(actionOfKind("Executor button", "Selected", "Wibble")).toBeNull();
+  });
+});
+
+describe("the panel's own list of rows", () => {
+  /**
+   * **S43, B3.** The panel is a list of actions now, so a kind that fell out of
+   * `ACTION_GROUPS` would be a piece of the vocabulary an operator could no
+   * longer reach from anywhere — and nothing else in the interface would
+   * notice, because the kinds are still all buildable and still all nameable.
+   * This is the test that would.
+   */
+  it("carries every kind except Nothing, exactly once, across the four sections", () => {
+    // **Four tables since the rebuild**, not one: the owner asked for an
+    // Executor, a Programmer, an *other internal commands* and a **Custom**
+    // section, and the fourth is a different shape — the key is the row there,
+    // because *open window* is fourteen bindings and *type a command* is as
+    // many as an operator can think of (`CUSTOM_KINDS`). The claim is unchanged
+    // and is what matters: a kind that fell out of **both** tables would be
+    // unreachable from anywhere, and nothing else in the interface would
+    // notice.
+    const listed = [...ACTION_GROUPS.flatMap((group) => group.kinds), ...CUSTOM_KINDS];
+    expect([...listed].sort()).toEqual(
+      [...ACTION_KINDS].filter((kind) => kind !== "Nothing").sort(),
+    );
+    expect(new Set(listed).size).toBe(listed.length);
+  });
+
+  /** The custom kinds are the ones a section of rows could not have held. */
+  it("keeps the custom kinds out of the fixed sections", () => {
+    const fixed = ACTION_GROUPS.flatMap((group) => group.kinds);
+    for (const kind of CUSTOM_KINDS) {
+      expect(fixed).not.toContain(kind);
+      expect(isCustom(kind)).toBe(true);
+    }
+    for (const kind of fixed) {
+      expect(isCustom(kind)).toBe(false);
+    }
+  });
+
+  it("does not list Nothing, because unbinding is a key's button and not a row", () => {
+    // A row *Nothing* would be a row an operator learns a key onto in order to
+    // make that key do nothing, which is the unbind that is already on the key.
+    expect(ACTION_GROUPS.flatMap((group) => group.kinds)).not.toContain("Nothing");
+  });
+
+  it("puts every group under a title, and none of them empty", () => {
+    for (const group of ACTION_GROUPS) {
+      expect(group.title.length, "a group with no title").toBeGreaterThan(0);
+      expect(group.kinds.length, `${group.title} is empty`).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("which of a strip's keys a **control** is", () => {
+  /**
+   * `slotOf`'s twin — S43, B3. The panel used to know the row's *name* and read
+   * the position off it; learn hands over a `BoundControl` instead, and the two
+   * have to agree or a key learned onto *the key in this position* would bind
+   * the wrong position.
+   */
+  it("agrees with the name-reading half, key for key", () => {
+    const keys = ["Rec", "Solo", "Mute", "Select", "VPotPush"] as const;
+    for (const [index, key] of keys.entries()) {
+      expect(slotOfControl({ t: "StripButton", button: key })).toBe(index);
+      expect(slotOf(`Strip[*].Button.${key}`)).toBe(index);
+    }
+  });
+
+  it("is nought for anything that is not a strip key", () => {
+    expect(slotOfControl({ t: "Global", button: "Play" })).toBe(0);
+    expect(slotOfControl({ t: "MainFader" })).toBe(0);
+    expect(slotOfControl({ t: "Jog" })).toBe(0);
   });
 });
 

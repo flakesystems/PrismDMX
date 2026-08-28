@@ -12,7 +12,7 @@ mod common;
 use common::{par_type, populated_show, preset, show_commands};
 use prism_core::{Programmer, ProgrammerError, ShowFile};
 use prism_domain::{
-    AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, PresetId,
+    AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, PresetId, PresetPool,
     ProgrammerValueSource, SelectionMode, SequenceId, StoreMode,
 };
 use proptest::prelude::*;
@@ -74,7 +74,7 @@ fn the_programmer_commands_are_the_ones_the_show_hands_on() {
         // go in it.
         Command::StorePreset {
             preset_id: PresetId::new(4),
-            pool: Some(FeatureGroup::Color),
+            pool: Some(PresetPool::Color),
             name: "Deep blue".to_owned(),
             color: None,
             mode: StoreMode::Merge,
@@ -214,15 +214,32 @@ fn an_untouched_attribute_is_absent_rather_than_zero() {
 fn an_attribute_the_fixture_does_not_have_is_not_written() {
     // A PAR has no pan. A programmer value for it would name a merge slot that
     // does not exist, which S6 already has to drop on the way into the engine.
+    //
+    // **It used to say *a PAR has no dimmer*, and since S43 it has one**: the
+    // desk supplies an intensity for a fixture whose profile has none, so the
+    // dimmer is exactly the wrong attribute to make this claim with now. Pan is
+    // the right one and always was the one the comment named — nothing supplies
+    // a fixture a motor it has not got.
     let mut file = file();
     file.apply(&select(&[1, 4], SelectionMode::Set)).unwrap();
-    file.apply(&set(AttributeType::Dimmer, 30000)).unwrap();
+    file.apply(&set(AttributeType::Pan, 30000)).unwrap();
 
     let state = file.programmer.state();
-    assert!(
+    assert!(state.value(FixtureId::new(1), AttributeType::Pan).is_none());
+    assert!(state.value(FixtureId::new(4), AttributeType::Pan).is_none());
+    assert!(state.values.is_empty(), "neither fixture has a pan");
+
+    // And the intensity the desk supplies **is** written, to the PAR that had
+    // none of its own and to the dimmer that has one — the same line, one merge
+    // slot each.
+    file.apply(&set(AttributeType::Dimmer, 30000)).unwrap();
+    let state = file.programmer.state();
+    assert_eq!(
         state
             .value(FixtureId::new(1), AttributeType::Dimmer)
-            .is_none()
+            .map(|value| value.value),
+        Some(30000),
+        "the PAR's intensity is the desk's"
     );
     assert_eq!(
         state
@@ -283,8 +300,11 @@ fn a_selection_that_names_an_unpatched_fixture_is_refused_whole() {
 // -- the three-stage clear ------------------------------------------------
 
 #[test]
-fn the_three_stage_clear_runs_through_every_transition() {
-    // docs/DMX_MERGE.md §3.1, taken one row at a time and then round again.
+fn the_clear_key_offers_the_first_thing_there_is_to_clear() {
+    // `docs/DMX_MERGE.md` §3.1, taken one row at a time — and then a fourth
+    // press, which is where **S43** changed the answer. The key used to be a
+    // counter that wrapped round to the start; it reads the contents now, so a
+    // press with nothing to clear does nothing and says so (B2).
     let mut file = file();
     file.apply(&select(&[1, 2], SelectionMode::Set)).unwrap();
     file.apply(&set(AttributeType::Red, 65535)).unwrap();
@@ -294,14 +314,11 @@ fn the_three_stage_clear_runs_through_every_transition() {
     .unwrap();
     file.session.set_programmer_page(3).unwrap();
     file.session.set_programmer_param_index(2).unwrap();
-    assert_eq!(file.programmer.state().clear_stage, ClearStage::Idle);
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Values);
 
-    // 0 → 1: values go, the selection stays.
+    // Values go, the selection stays — and the key now offers the selection.
     file.apply(&Command::ClearProgrammer).unwrap();
-    assert_eq!(
-        file.programmer.state().clear_stage,
-        ClearStage::ValuesCleared
-    );
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Selection);
     assert!(file.programmer.state().values.is_empty());
     assert_eq!(file.programmer.state().selection.len(), 2);
     assert_eq!(
@@ -309,22 +326,19 @@ fn the_three_stage_clear_runs_through_every_transition() {
         FeatureGroup::Color
     );
 
-    // 1 → 2: the selection goes.
+    // The selection goes. What is left is the bank, so the key offers the rest.
     file.apply(&Command::ClearProgrammer).unwrap();
-    assert_eq!(
-        file.programmer.state().clear_stage,
-        ClearStage::SelectionCleared
-    );
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::All);
     assert!(file.programmer.state().selection.is_empty());
     assert_eq!(
         file.programmer.state().active_feature_group,
         FeatureGroup::Color,
-        "the feature group survives until the third press"
+        "the feature group survives until the last press"
     );
 
-    // 2 → 0: everything, including the feature group and the page state.
+    // Everything, including the feature group and the page state.
     file.apply(&Command::ClearProgrammer).unwrap();
-    assert_eq!(file.programmer.state().clear_stage, ClearStage::Idle);
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Nothing);
     assert_eq!(
         file.programmer.state().active_feature_group,
         FeatureGroup::default()
@@ -333,50 +347,84 @@ fn the_three_stage_clear_runs_through_every_transition() {
     assert_eq!(file.session.session().programmer_page, 0);
     assert_eq!(file.session.session().programmer_param_index, 0);
 
-    // And round again: the machine is a cycle, not a ladder with an end.
-    file.apply(&Command::ClearProgrammer).unwrap();
-    assert_eq!(
-        file.programmer.state().clear_stage,
-        ClearStage::ValuesCleared
+    // **And a fourth press does nothing at all.** The old machine was a cycle
+    // and started again here, which is what B2 describes as unübersichtlich:
+    // the key moved without anything having been cleared.
+    let applied = file.apply(&Command::ClearProgrammer).unwrap();
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Nothing);
+    assert!(
+        applied.deltas.is_empty(),
+        "a Clear with nothing to clear broadcast something"
     );
 }
 
+/// **S43 rewrote this test and the rule under it.** It used to assert that any
+/// other programmer interaction *reset* the Clear stage, because the stage was a
+/// counter that would otherwise stand where the contents no longer did. A
+/// derived stage cannot get out of step, so there is nothing to reset — and the
+/// claim worth making is the one the old rule was reaching for: after any
+/// interaction the key offers the first thing there is to clear, whatever
+/// happened before it.
 #[test]
-fn any_other_programmer_interaction_puts_the_clear_stage_back_to_zero() {
-    // The rule exists so an operator who clears once and then grabs a fader
-    // does not find a later Clear press in an unexpected stage. It is asserted
-    // from **both** non-zero stages, for each of the interactions that can
-    // reach them — see the test below for the one that cannot.
-    let interactions: Vec<Command> = vec![
-        select(&[1], SelectionMode::Set),
-        select(&[2], SelectionMode::Toggle),
-        set(AttributeType::Red, 100),
-        Command::ApplyPreset {
-            preset_id: PresetId::new(4),
-        },
-        Command::SelectGroup {
-            group_id: prism_domain::GroupId::new(1),
-            mode: SelectionMode::Set,
-        },
+fn the_stage_follows_the_contents_after_any_other_interaction() {
+    // Two presses in, the selection is gone as well — so a command that writes
+    // a *value* writes nothing, because there is nothing selected to write it
+    // to, and the key goes on offering what is actually there. That asymmetry
+    // is the whole point of a derived stage: the old counter answered `Idle`
+    // for every one of these, which was wrong in five cases out of ten.
+    let interactions: Vec<(Command, ClearStage, ClearStage)> = vec![
+        (
+            select(&[1], SelectionMode::Set),
+            ClearStage::Selection,
+            ClearStage::Selection,
+        ),
+        (
+            select(&[2], SelectionMode::Toggle),
+            ClearStage::Selection,
+            ClearStage::Selection,
+        ),
+        (
+            set(AttributeType::Red, 100),
+            ClearStage::Values,
+            ClearStage::All,
+        ),
+        (
+            Command::ApplyPreset {
+                preset_id: PresetId::new(4),
+            },
+            ClearStage::Values,
+            ClearStage::All,
+        ),
+        (
+            Command::SelectGroup {
+                group_id: prism_domain::GroupId::new(1),
+                mode: SelectionMode::Set,
+            },
+            ClearStage::Selection,
+            ClearStage::Selection,
+        ),
     ];
 
-    for command in interactions {
-        for stage in [ClearStage::ValuesCleared, ClearStage::SelectionCleared] {
+    for (command, after_one, after_two) in interactions {
+        for (presses, want) in [(1_u8, after_one), (2, after_two)] {
             let mut file = file();
             file.apply(&select(&[1], SelectionMode::Set)).unwrap();
             file.apply(&set(AttributeType::Blue, 4096)).unwrap();
-            file.apply(&Command::ClearProgrammer).unwrap();
-            if stage == ClearStage::SelectionCleared {
+            for _ in 0..presses {
                 file.apply(&Command::ClearProgrammer).unwrap();
             }
-            assert_eq!(file.programmer.state().clear_stage, stage);
 
             file.apply(&command)
                 .unwrap_or_else(|error| panic!("{command:?}: {error}"));
             assert_eq!(
                 file.programmer.state().clear_stage,
-                ClearStage::Idle,
-                "{command:?} from {stage:?}"
+                want,
+                "{command:?} after {presses} press(es)"
+            );
+            // And it is a reading rather than a remembered number, always.
+            assert_eq!(
+                file.programmer.state().clear_stage,
+                file.programmer.state().stage()
             );
         }
     }
@@ -385,9 +433,9 @@ fn any_other_programmer_interaction_puts_the_clear_stage_back_to_zero() {
 #[test]
 fn a_store_can_never_meet_a_non_zero_clear_stage() {
     // The fifth interaction is the exception that proves the rule rather than
-    // an untested case: the only way to a non-zero stage is a Clear, and the
-    // first Clear has already emptied the values — so a store from stage 1 or
-    // 2 has nothing to store and is refused before the stage is reached at all.
+    // an untested case: the only way past `Values` is a Clear, and that Clear
+    // has already emptied the values — so a store from `Selection` or `All` has
+    // nothing to store and is refused before the stage is reached at all.
     let mut file = file();
     file.apply(&select(&[1], SelectionMode::Set)).unwrap();
     file.apply(&set(AttributeType::Blue, 4096)).unwrap();
@@ -405,33 +453,33 @@ fn a_store_can_never_meet_a_non_zero_clear_stage() {
     assert_eq!(snapshot(&file), before);
     assert_eq!(
         file.programmer.state().clear_stage,
-        ClearStage::ValuesCleared,
+        ClearStage::Selection,
         "a refused store must not move the stage either"
     );
 }
 
+/// **S43 turned this test round, and that is B2.** It used to assert that a
+/// Clear on an empty programmer advanced the stage anyway, on the rule that *the
+/// stage belongs to the button, not to the contents*. That rule is what the
+/// owner's punch list objects to: a key that moves when nothing was cleared
+/// tells the operator that something was. The stage reads the contents now, so
+/// an empty programmer offers nothing and a press on it is not an edit.
 #[test]
-fn clearing_an_empty_programmer_still_advances_the_stage() {
-    // The stage belongs to the button, not to the contents.
+fn clearing_an_empty_programmer_does_nothing_and_says_so() {
     let mut file = file();
-    for expected in [
-        ClearStage::ValuesCleared,
-        ClearStage::SelectionCleared,
-        ClearStage::Idle,
-    ] {
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Nothing);
+    for _ in 0..3 {
         let applied = file.apply(&Command::ClearProgrammer).unwrap();
-        assert_eq!(file.programmer.state().clear_stage, expected);
+        assert_eq!(file.programmer.state().clear_stage, ClearStage::Nothing);
         assert!(
-            applied
+            !applied
                 .deltas
                 .iter()
                 .any(|delta| matches!(delta, Delta::ProgrammerChanged { .. })),
-            "the stage moved and nobody was told"
+            "a Clear with nothing to clear broadcast a programmer that had not moved"
         );
     }
 }
-
-// -- presets --------------------------------------------------------------
 
 #[test]
 fn applying_a_preset_records_the_preset_reference() {

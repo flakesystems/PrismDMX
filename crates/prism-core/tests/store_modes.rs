@@ -20,8 +20,8 @@ mod common;
 use common::{cue, populated_show, preset, sequence};
 use prism_core::{ProgrammerError, ShowFile, ShowFileError};
 use prism_domain::{
-    AttributeType, Command, CueEdit, CuePart, CueProperty, FeatureGroup, FixtureId, ObjectRef,
-    OverwriteMode, PresetId, ProgrammerValueSource, SelectionMode, SequenceId, SequenceStoreMode,
+    AttributeType, Command, CueEdit, CuePart, CueProperty, FixtureId, ObjectRef, OverwriteMode,
+    PresetId, PresetPool, ProgrammerValueSource, SelectionMode, SequenceId, SequenceStoreMode,
     StoreMode, StoreTarget,
 };
 
@@ -298,7 +298,7 @@ fn the_modes_reach_a_preset_pool_as_well() {
     merged
         .apply(&Command::StorePreset {
             preset_id: PresetId::new(7),
-            pool: Some(FeatureGroup::Color),
+            pool: Some(PresetPool::Color),
             name: "Warm".to_owned(),
             color: None,
             mode: StoreMode::Merge,
@@ -314,7 +314,7 @@ fn the_modes_reach_a_preset_pool_as_well() {
     overridden
         .apply(&Command::StorePreset {
             preset_id: PresetId::new(7),
-            pool: Some(FeatureGroup::Color),
+            pool: Some(PresetPool::Color),
             name: "Warm".to_owned(),
             color: None,
             mode: StoreMode::Override,
@@ -352,7 +352,7 @@ fn the_modes_reach_a_preset_pool_as_well() {
     dial(&mut file, &[1], AttributeType::Red, 5);
     file.apply(&Command::StorePreset {
         preset_id: PresetId::new(7),
-        pool: Some(FeatureGroup::Color),
+        pool: Some(PresetPool::Color),
         name: "Warm".to_owned(),
         color: None,
         mode: StoreMode::Remove,

@@ -406,6 +406,7 @@ async fn a_killed_client_comes_back_to_the_state_it_had_accumulated() {
         Command::SetExecutorPage { page: 7 },
         Command::CommandLineInput {
             text: "fixture 2 at 50".to_owned(),
+            run: false,
         },
         Command::SetExecutorMaster {
             executor_id: ExecutorId::new(0),
@@ -416,6 +417,7 @@ async fn a_killed_client_comes_back_to_the_state_it_had_accumulated() {
             direction: GoDirection::Next,
         },
         Command::PatchFixture {
+            software_dimmer: true,
             id: FixtureId::new(4),
             name: "Fixture 4".to_owned(),
             type_id: "generic.dimmer".to_owned(),

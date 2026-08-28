@@ -36,7 +36,7 @@ fn snapshot(show: &Show) -> (Vec<u8>, u64, bool) {
 #[test]
 fn the_three_groups_together_are_the_whole_protocol() {
     // A new command variant has to be given a home here, or this fails. The
-    // sum is larger than the forty-seven variants there are, because two of the
+    // sum is larger than the forty-nine variants there are, because two of the
     // show forms are repeats — a `StoreSequence` into a list that exists and
     // into one that does not — and because S40's four generic verbs are in
     // **two** of the lists, once with a view as their target and once without.
@@ -48,7 +48,7 @@ fn the_three_groups_together_are_the_whole_protocol() {
     // same reason the cabling does.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        60
+        62
     );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
@@ -203,6 +203,7 @@ fn every_rejection_leaves_the_show_byte_identical() {
         ),
         (
             Command::PatchFixture {
+                software_dimmer: true,
                 id: FixtureId::new(9),
                 name: "Nine".to_owned(),
                 type_id: "nothing.at.all".to_owned(),
@@ -336,7 +337,7 @@ fn an_applied_command_reports_what_the_daemon_still_has_to_do() {
 proptest! {
     /// The broad net: whatever arrives, a refusal costs the show nothing.
     #[test]
-    fn a_rejected_command_never_changes_the_show(command in any::<Command>()) {
+    fn a_rejected_command_never_changes_the_show(command in prism_domain::arb::command()) {
         let mut show = populated_show();
         let before = snapshot(&show);
         if show.apply(&command).is_err() {
@@ -347,7 +348,7 @@ proptest! {
     /// And an accepted one only ever changes it in ways it announced: a command
     /// that produced no `ShowPatch` may not have touched the show.
     #[test]
-    fn a_command_that_reports_no_change_made_none(command in any::<Command>()) {
+    fn a_command_that_reports_no_change_made_none(command in prism_domain::arb::command()) {
         let mut show = populated_show();
         let before = rmp_serde::to_vec_named(&show).unwrap();
         if let Ok(applied) = show.apply(&command) {

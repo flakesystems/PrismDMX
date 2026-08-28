@@ -60,8 +60,8 @@
 //!   until somebody edited the preset and watched nothing happen (S28's rule).
 
 use prism_domain::{
-    Cue, CuePart, Executor, Group, JsonPatchOp, ObjectRef, OverwriteMode, Preset, PresetValue,
-    RgbColor, Sequence, SequenceId,
+    Cue, CuePart, Executor, Group, JsonPatchOp, ObjectRef, OverwriteMode, Preset, PresetId,
+    PresetValue, RgbColor, Sequence, SequenceId,
 };
 
 use crate::show::{GROUPS, PRESETS, SEQUENCES, Show, ShowError, pointer, put};
@@ -175,6 +175,14 @@ impl Show {
     ) -> Result<Vec<JsonPatchOp>, ShowError> {
         match target {
             ObjectRef::Sequence { sequence_id } => self.color_sequence(*sequence_id, color),
+            // **A preset has a colour and, until S43, nothing could set it.**
+            // `Preset::color` is what the X-Touch's scribble strips show, and it
+            // has been on the wire since S11 with only `StorePreset` able to
+            // carry one — which meant colouring a preset required storing over
+            // it, and storing over it required a programmer holding the right
+            // values. The owner's rebuild put the colour on a right-click, and
+            // the verb it needed already existed one pool along.
+            ObjectRef::Preset { preset_id } => self.color_preset(*preset_id, color),
             ObjectRef::Executor { executor_id } => {
                 let Some(executor) = self.executor(*executor_id) else {
                     return Err(ShowError::UnknownExecutor(*executor_id));
@@ -412,6 +420,29 @@ impl Show {
             &sequence,
             true,
         )?])
+    }
+
+    /// Sets the colour the scribble strips show for a preset.
+    ///
+    /// The mirror of [`Self::color_sequence`], and it writes **only** the
+    /// colour: a store is what changes a preset's values, and a colour that
+    /// took the programmer with it would make an operator choose between
+    /// re-colouring a preset and keeping what is in it.
+    fn color_preset(
+        &mut self,
+        id: PresetId,
+        color: Option<RgbColor>,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(preset) = self.presets_mut().get_mut(&id) else {
+            return Err(ShowError::UnknownPreset(id));
+        };
+        if preset.color == color {
+            return Ok(Vec::new());
+        }
+        preset.color = color;
+        let preset = preset.clone();
+        self.mark();
+        Ok(vec![put(pointer(PRESETS, &id.to_string()), &preset, true)?])
     }
 
     /// Renames one cue of a cue list.

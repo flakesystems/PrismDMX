@@ -7,7 +7,7 @@
     640.0,
     480.0
   ],
-  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOBoTCJr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqZNYXN0ZXKiaWQAqGlzQWN0aXZlwqttYXN0ZXJMZXZlbM3//6pzZXF1ZW5jZUlkAaVzcGVlZM0EAKxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVys2dlbmVyaWMuZGltbWVyLmRhcmuGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlks2dlbmVyaWMuZGltbWVyLmRhcmusbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaMxY2ikbmFtZaZEaW1tZXKoZml4dHVyZXODoTGJp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiadhZGRyZXNzBaJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEziadhZGRyZXNzAaJpZAOpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4GhMYelY29sb3LApGN1ZXORiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqlwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqRuYW1lqlNlcXVlbmNlIDGnc2Vzc2lvboKnc2Vzc2lvbo2sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZbFmaXh0dXJlIDEgYXQgZnVsbKplZGl0aW5nQ3VlwKtlbmNvZGVyQmFua6ZEaW1tZXKsZXhlY3V0b3JQYWdlA61mb2N1c2VkV2luZG93wKJpZAGkbmFtZaRNYWluq29wZW5XaW5kb3dzkK5wcm9ncmFtbWVyUGFnZQC0cHJvZ3JhbW1lclBhcmFtSW5kZXgAsHNlbGVjdGVkRXhlY3V0b3LAsHNlbGVjdGVkU2VxdWVuY2XApXZpZXdzgaExg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5CqcHJvZ3JhbW1lcoSpc2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXOSAQKnZW5hYmxlZMOqZnJhbWVzU2VudMzQqWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEYAshM8hKyrbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzwq5maXh0dXJlTGlicmFyec0IcadtYWNoaW5ljaZkZXNrSWTZJDg2MDg2NGEwLTAxNzctNGQ2NS04MmNjLWJkYjZlNTM3ZmYwMqdkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcGZkcGp6MKVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOVp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbKhzaG93RmlsZYWkcGF0aNk3QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBmZHBqejBcYXVsYS5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2VzwqhyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg==",
+  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOBoTCJr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqZNYXN0ZXKiaWQAqGlzQWN0aXZlwqttYXN0ZXJMZXZlbM3//6pzZXF1ZW5jZUlkAaVzcGVlZM0EAKxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVys2dlbmVyaWMuZGltbWVyLmRhcmuGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlks2dlbmVyaWMuZGltbWVyLmRhcmusbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaMxY2ikbmFtZaZEaW1tZXKoZml4dHVyZXODoTGKp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZK5nZW5lcmljLmRpbW1lcqh1bml2ZXJzZQGhMoqnYWRkcmVzcwWiaWQCqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDKocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlks2dlbmVyaWMuZGltbWVyLmRhcmuodW5pdmVyc2UBoTOKp2FkZHJlc3MBomlkA6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAzqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4GhMYelY29sb3LApGN1ZXORiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqlwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqRuYW1lqlNlcXVlbmNlIDGnc2Vzc2lvboKnc2Vzc2lvbo+sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZbFmaXh0dXJlIDEgYXQgZnVsbK5jb21tYW5kTGluZVJ1bgCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQOtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKx3aW5kb3dQaWNrZXLCpXZpZXdzgaExg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5CqcHJvZ3JhbW1lcoapc2VsZWN0aW9ukK5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXOSAQKnZW5hYmxlZMOqZnJhbWVzU2VudHypbGFzdEVycm9ywK5sYXN0RXJyb3JBZ29Nc8CmaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestARhXpRc4nWqttaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPCrmZpeHR1cmVMaWJyYXJ5zQhxp21hY2hpbmWNpmRlc2tJZNkkMTgyZjc3ZDEtNzExZC00NmNjLWIxZTUtYzg2Y2Y5NDcyODkzp2RhdGFEaXLZLEM6XFVzZXJzXE1pbGFuXEFwcERhdGFcTG9jYWxcVGVtcFwudG1wNkFTZmdspWxvY2Fsw6l3ZWJzb2NrZXSuMTI3LjAuMC4xOjczNzOtd2Vic29ja2V0T3BlbsCldG9rZW7AqGxvZ0xldmVspEluZm+pdW5pdmVyc2VzQKpleGl0QWN0aW9upEhvbGSpYXV0b3N0YXJ0wq5maXh0dXJlTGlicmFyecCuc3VyZmFjZVByb2ZpbGXAqW92ZXJyaWRlc5WnT3V0cHV0c6VMb2NhbKlXZWJzb2NrZXSpVW5pdmVyc2VzqExvZ0xldmVsqHNob3dGaWxlhaRwYXRo2TdDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcDZBU2ZnbFxhdWxhLnByaXNtpnJlY2VudJCudW5zYXZlZENoYW5nZXPCqHJlY292ZXJ5wq9hdXRvc2F2ZVNlY29uZHMe",
   "steps": [
     {
       "what": "open a fixture sheet: the canvas has one window, at the daemon's default",
@@ -42,7 +42,7 @@
       "client": "g6F0p0NvbW1hbmSjc2VxAqdjb21tYW5kgqF0qk9wZW5XaW5kb3emd2luZG93qERteFNoZWV0",
       "clientInteger": null,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4ywAAAAAAAAAAoXnLAAAAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQIQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAAg6JvcKdyZXBsYWNlpHBhdGi2L3Nlc3Npb24vZm9jdXNlZFdpbmRvd6V2YWx1ZQI="
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4ywAAAAAAAAAAoXnLAAAAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQIQAAAAAAACheMtAhAAAAAAAAKF5ywAAAAAAAAAAg6JvcKdyZXBsYWNlpHBhdGi2L3Nlc3Npb24vZm9jdXNlZFdpbmRvd6V2YWx1ZQI="
       ],
       "refused": false,
       "windows": [
@@ -57,7 +57,7 @@
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 640.0,
           "h": 480.0
@@ -75,10 +75,10 @@
     },
     {
       "what": "drag the fixture sheet: the position is the daemon's, not the canvas's",
-      "client": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjLQG4AAAAAAAChectAXgAAAAAAAKF3y0CEAAAAAAAAoWjLQH4AAAAAAAA=",
-      "clientInteger": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjM8KF5eKF3zQKAoWjNAeA=",
+      "client": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjLQG4AAAAAAAChectAgEAAAAAAAKF3y0CEAAAAAAAAoWjLQH4AAAAAAAA=",
+      "clientInteger": "g6F0p0NvbW1hbmSjc2VxA6djb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjM8KF5zQIIoXfNAoChaM0B4A==",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQIQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAA"
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQIBAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQIQAAAAAAACheMtAhAAAAAAAAKF5ywAAAAAAAAAA"
       ],
       "refused": false,
       "windows": [
@@ -86,14 +86,14 @@
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         },
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 640.0,
           "h": 480.0
@@ -110,11 +110,45 @@
       ]
     },
     {
-      "what": "resize the DMX sheet by its corner",
-      "client": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjLAAAAAAAAAAChecsAAAAAAAAAAKF3y0CUAAAAAAAAoWjLQIaAAAAAAAA=",
-      "clientInteger": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXgAoXkAoXfNBQChaM0C0A==",
+      "what": "drag it back on top of the DMX sheet: blocked, and nothing moves",
+      "client": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjLQIXgAAAAAAChecsAAAAAAAAAAKF3y0CEAAAAAAAAoWjLQH4AAAAAAAA=",
+      "clientInteger": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQBoXjNAryheQChd80CgKFozQHg",
+      "deltas": [],
+      "refused": false,
+      "windows": [
+        {
+          "instanceId": 1,
+          "type": "FixtureSheet",
+          "x": 240.0,
+          "y": 520.0,
+          "w": 640.0,
+          "h": 480.0
+        },
+        {
+          "instanceId": 2,
+          "type": "DmxSheet",
+          "x": 640.0,
+          "y": 0.0,
+          "w": 640.0,
+          "h": 480.0
+        }
+      ],
+      "focusedWindow": 2,
+      "activeViewId": 1,
+      "storedViews": [
+        [
+          1,
+          "View 1",
+          0
+        ]
+      ]
+    },
+    {
+      "what": "resize the DMX sheet by its corner, into the room beside it",
+      "client": "g6F0p0NvbW1hbmSjc2VxBadjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjLQIQAAAAAAAChecsAAAAAAAAAAKF3y0CUAAAAAAAAoWjLQH4AAAAAAAA=",
+      "clientInteger": "g6F0p0NvbW1hbmSjc2VxBadjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjNAoCheQChd80FAKFozQHg",
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAACHoWjLQIaAAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAA"
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQIBAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMtAhAAAAAAAAKF5ywAAAAAAAAAA"
       ],
       "refused": false,
       "windows": [
@@ -122,17 +156,17 @@
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         },
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 1280.0,
-          "h": 720.0
+          "h": 480.0
         }
       ],
       "focusedWindow": 2,
@@ -147,26 +181,26 @@
     },
     {
       "what": "focus the fixture sheet: it goes to the end, which is the front",
-      "client": "g6F0p0NvbW1hbmSjc2VxBadjb21tYW5kgqF0q0ZvY3VzV2luZG93qmluc3RhbmNlSWQB",
+      "client": "g6F0p0NvbW1hbmSjc2VxBqdjb21tYW5kgqF0q0ZvY3VzV2luZG93qmluc3RhbmNlSWQB",
       "clientInteger": null,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0CGgAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0BeAAAAAAAAg6JvcKdyZXBsYWNlpHBhdGi2L3Nlc3Npb24vZm9jdXNlZFdpbmRvd6V2YWx1ZQE="
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLQIQAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0CAQAAAAAAAg6JvcKdyZXBsYWNlpHBhdGi2L3Nlc3Npb24vZm9jdXNlZFdpbmRvd6V2YWx1ZQE="
       ],
       "refused": false,
       "windows": [
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 1280.0,
-          "h": 720.0
+          "h": 480.0
         },
         {
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         }
@@ -183,10 +217,10 @@
     },
     {
       "what": "store the canvas as view 2",
-      "client": "g6F0p0NvbW1hbmSjc2VxBqdjb21tYW5kg6F0qVN0b3JlVmlld6Z2aWV3SWQCpG5hbWWrUHJvZ3JhbW1pbmc=",
+      "client": "g6F0p0NvbW1hbmSjc2VxB6djb21tYW5kg6F0qVN0b3JlVmlld6Z2aWV3SWQCpG5hbWWrUHJvZ3JhbW1pbmc=",
       "clientInteger": null,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKNhZGSkcGF0aKgvdmlld3MvMqV2YWx1ZYOiaWQCpG5hbWWrUHJvZ3JhbW1pbmend2luZG93c5KHoWjLQIaAAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAAA=",
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKNhZGSkcGF0aKgvdmlld3MvMqV2YWx1ZYOiaWQCpG5hbWWrUHJvZ3JhbW1pbmend2luZG93c5KHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMtAhAAAAAAAAKF5ywAAAAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQIBAAAAAAAA=",
         "gqF0pURlbHRhpWRlbHRhgqF0qURpcnR5RmxhZ651bnNhdmVkQ2hhbmdlc8M="
       ],
       "refused": false,
@@ -194,16 +228,16 @@
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 1280.0,
-          "h": 720.0
+          "h": 480.0
         },
         {
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         }
@@ -225,26 +259,26 @@
     },
     {
       "what": "open a patch window on top of it",
-      "client": "g6F0p0NvbW1hbmSjc2VxB6djb21tYW5kgqF0qk9wZW5XaW5kb3emd2luZG93pVBhdGNo",
+      "client": "g6F0p0NvbW1hbmSjc2VxCKdjb21tYW5kgqF0qk9wZW5XaW5kb3emd2luZG93pVBhdGNo",
       "clientInteger": null,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWTh6Foy0CGgAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0BeAAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQDpnBhcmFtc4CkdHlwZaVQYXRjaKF3y0CEAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWUD"
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWTh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLQIQAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0CAQAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQDpnBhcmFtc4CkdHlwZaVQYXRjaKF3y0CEAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWUD"
       ],
       "refused": false,
       "windows": [
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 1280.0,
-          "h": 720.0
+          "h": 480.0
         },
         {
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         },
@@ -274,10 +308,10 @@
     },
     {
       "what": "close the DMX sheet",
-      "client": "g6F0p0NvbW1hbmSjc2VxCKdjb21tYW5kgqF0q0Nsb3NlV2luZG93qmluc3RhbmNlSWQC",
+      "client": "g6F0p0NvbW1hbmSjc2VxCadjb21tYW5kgqF0q0Nsb3NlV2luZG93qmluc3RhbmNlSWQC",
       "clientInteger": null,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAOmcGFyYW1zgKR0eXBlpVBhdGNooXfLQIQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAA"
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi0L3Nlc3Npb24vb3BlbldpbmRvd3OldmFsdWWSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQIBAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAOmcGFyYW1zgKR0eXBlpVBhdGNooXfLQIQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAA"
       ],
       "refused": false,
       "windows": [
@@ -285,7 +319,7 @@
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         },
@@ -315,8 +349,8 @@
     },
     {
       "what": "drag the window that was just closed: refused, and nothing moves",
-      "client": "g6F0p0NvbW1hbmSjc2VxCadjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjLQIwgAAAAAAChectAjCAAAAAAAKF3y0BZAAAAAAAAoWjLQFkAAAAAAAA=",
-      "clientInteger": "g6F0p0NvbW1hbmSjc2VxCadjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjNA4Shec0DhKF3ZKFoZA==",
+      "client": "g6F0p0NvbW1hbmSjc2VxCqdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjLQIwgAAAAAAChectAjCAAAAAAAKF3y0BZAAAAAAAAoWjLQFkAAAAAAAA=",
+      "clientInteger": "g6F0p0NvbW1hbmSjc2VxCqdjb21tYW5khqF0q1BsYWNlV2luZG93qmluc3RhbmNlSWQCoXjNA4Shec0DhKF3ZKFoZA==",
       "deltas": [],
       "refused": true,
       "windows": [
@@ -324,7 +358,7 @@
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         },
@@ -354,26 +388,26 @@
     },
     {
       "what": "select view 2: the layout comes back, the patch window is gone",
-      "client": "g6F0p0NvbW1hbmSjc2VxCqdjb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAg==",
+      "client": "g6F0p0NvbW1hbmSjc2VxC6djb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAg==",
       "clientInteger": null,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOTg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vYWN0aXZlVmlld0lkpXZhbHVlAoOib3CncmVwbGFjZaRwYXRotC9zZXNzaW9uL29wZW5XaW5kb3dzpXZhbHVlkoehaMtAhoAAAAAAAKppbnN0YW5jZUlkAqZwYXJhbXOApHR5cGWoRG14U2hlZXShd8tAlAAAAAAAAKF4ywAAAAAAAAAAoXnLAAAAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAGmcGFyYW1zgKR0eXBlrEZpeHR1cmVTaGVldKF3y0CEAAAAAAAAoXjLQG4AAAAAAAChectAXgAAAAAAAIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWUB"
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOTg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vYWN0aXZlVmlld0lkpXZhbHVlAoOib3CncmVwbGFjZaRwYXRotC9zZXNzaW9uL29wZW5XaW5kb3dzpXZhbHVlkoehaMtAfgAAAAAAAKppbnN0YW5jZUlkAqZwYXJhbXOApHR5cGWoRG14U2hlZXShd8tAlAAAAAAAAKF4y0CEAAAAAAAAoXnLAAAAAAAAAACHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAGmcGFyYW1zgKR0eXBlrEZpeHR1cmVTaGVldKF3y0CEAAAAAAAAoXjLQG4AAAAAAAChectAgEAAAAAAAIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWUB"
       ],
       "refused": false,
       "windows": [
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 1280.0,
-          "h": 720.0
+          "h": 480.0
         },
         {
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         }
@@ -395,7 +429,7 @@
     },
     {
       "what": "select a view that was never stored: refused, the canvas stands still",
-      "client": "g6F0p0NvbW1hbmSjc2VxC6djb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkCQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxDKdjb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkCQ==",
       "clientInteger": null,
       "deltas": [],
       "refused": true,
@@ -403,16 +437,16 @@
         {
           "instanceId": 2,
           "type": "DmxSheet",
-          "x": 0.0,
+          "x": 640.0,
           "y": 0.0,
           "w": 1280.0,
-          "h": 720.0
+          "h": 480.0
         },
         {
           "instanceId": 1,
           "type": "FixtureSheet",
           "x": 240.0,
-          "y": 120.0,
+          "y": 520.0,
           "w": 640.0,
           "h": 480.0
         }
@@ -434,7 +468,7 @@
     },
     {
       "what": "select view 1: the canvas empties, because view 1 was stored empty",
-      "client": "g6F0p0NvbW1hbmSjc2VxDKdjb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxDadjb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAQ==",
       "clientInteger": null,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOTg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vYWN0aXZlVmlld0lkpXZhbHVlAYOib3CncmVwbGFjZaRwYXRotC9zZXNzaW9uL29wZW5XaW5kb3dzpXZhbHVlkIOib3CncmVwbGFjZaRwYXRoti9zZXNzaW9uL2ZvY3VzZWRXaW5kb3eldmFsdWXA"
@@ -458,7 +492,7 @@
     },
     {
       "what": "store the canvas as view 5, leaving a gap: views are not consecutive",
-      "client": "g6F0p0NvbW1hbmSjc2VxDadjb21tYW5kg6F0qVN0b3JlVmlld6Z2aWV3SWQFpG5hbWWnQnVza2luZw==",
+      "client": "g6F0p0NvbW1hbmSjc2VxDqdjb21tYW5kg6F0qVN0b3JlVmlld6Z2aWV3SWQFpG5hbWWnQnVza2luZw==",
       "clientInteger": null,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKNhZGSkcGF0aKgvdmlld3MvNaV2YWx1ZYOiaWQFpG5hbWWnQnVza2luZ6d3aW5kb3dzkA=="
@@ -487,7 +521,7 @@
     },
     {
       "what": "rename view 5: the name changes and its windows do not",
-      "client": "g6F0p0NvbW1hbmSjc2VxDqdjb21tYW5kg6F0pUxhYmVspnRhcmdldIKhdKRWaWV3pnZpZXdJZAWkbmFtZa5Gcm9udCBvZiBob3VzZQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxD6djb21tYW5kg6F0pUxhYmVspnRhcmdldIKhdKRWaWV3pnZpZXdJZAWkbmFtZa5Gcm9udCBvZiBob3VzZQ==",
       "clientInteger": null,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGioL3ZpZXdzLzWldmFsdWWDomlkBaRuYW1lrkZyb250IG9mIGhvdXNlp3dpbmRvd3OQ"
@@ -516,7 +550,7 @@
     },
     {
       "what": "rename a view that was never stored: refused, nothing changes",
-      "client": "g6F0p0NvbW1hbmSjc2VxD6djb21tYW5kg6F0pUxhYmVspnRhcmdldIKhdKRWaWV3pnZpZXdJZAmkbmFtZadOb3doZXJl",
+      "client": "g6F0p0NvbW1hbmSjc2VxEKdjb21tYW5kg6F0pUxhYmVspnRhcmdldIKhdKRWaWV3pnZpZXdJZAmkbmFtZadOb3doZXJl",
       "clientInteger": null,
       "deltas": [],
       "refused": true,
@@ -543,10 +577,10 @@
     },
     {
       "what": "move view 5 onto view 2: the two swap contents and keep their numbers",
-      "client": "g6F0p0NvbW1hbmSjc2VxEKdjb21tYW5khKF0pE1vdmWkZnJvbYKhdKRWaWV3pnZpZXdJZAWidG+CoXSkVmlld6Z2aWV3SWQCpG1vZGWlTWVyZ2U=",
+      "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5khKF0pE1vdmWkZnJvbYKhdKRWaWV3pnZpZXdJZAWidG+CoXSkVmlld6Z2aWV3SWQCpG1vZGWlTWVyZ2U=",
       "clientInteger": null,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGioL3ZpZXdzLzWldmFsdWWDomlkBaRuYW1lq1Byb2dyYW1taW5np3dpbmRvd3OSh6Foy0CGgAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLAAAAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0BeAAAAAAAAg6JvcKdyZXBsYWNlpHBhdGioL3ZpZXdzLzKldmFsdWWDomlkAqRuYW1lrkZyb250IG9mIGhvdXNlp3dpbmRvd3OQ"
+        "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGioL3ZpZXdzLzWldmFsdWWDomlkBaRuYW1lq1Byb2dyYW1taW5np3dpbmRvd3OSh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQCpnBhcmFtc4CkdHlwZahEbXhTaGVldKF3y0CUAAAAAAAAoXjLQIQAAAAAAAChecsAAAAAAAAAAIehaMtAfgAAAAAAAKppbnN0YW5jZUlkAaZwYXJhbXOApHR5cGWsRml4dHVyZVNoZWV0oXfLQIQAAAAAAACheMtAbgAAAAAAAKF5y0CAQAAAAAAAg6JvcKdyZXBsYWNlpHBhdGioL3ZpZXdzLzKldmFsdWWDomlkAqRuYW1lrkZyb250IG9mIGhvdXNlp3dpbmRvd3OQ"
       ],
       "refused": false,
       "windows": [],
@@ -572,7 +606,7 @@
     },
     {
       "what": "move view 1 onto itself: nothing at all happens",
-      "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5khKF0pE1vdmWkZnJvbYKhdKRWaWV3pnZpZXdJZAGidG+CoXSkVmlld6Z2aWV3SWQBpG1vZGWlTWVyZ2U=",
+      "client": "g6F0p0NvbW1hbmSjc2VxEqdjb21tYW5khKF0pE1vdmWkZnJvbYKhdKRWaWV3pnZpZXdJZAGidG+CoXSkVmlld6Z2aWV3SWQBpG1vZGWlTWVyZ2U=",
       "clientInteger": null,
       "deltas": [],
       "refused": false,
@@ -599,7 +633,7 @@
     },
     {
       "what": "copy view 2 onto a number nobody has used: view 7 appears",
-      "client": "g6F0p0NvbW1hbmSjc2VxEqdjb21tYW5khKF0pENvcHmkZnJvbYKhdKRWaWV3pnZpZXdJZAKidG+CoXSkVmlld6Z2aWV3SWQHpG1vZGWlTWVyZ2U=",
+      "client": "g6F0p0NvbW1hbmSjc2VxE6djb21tYW5khKF0pENvcHmkZnJvbYKhdKRWaWV3pnZpZXdJZAKidG+CoXSkVmlld6Z2aWV3SWQHpG1vZGWlTWVyZ2U=",
       "clientInteger": null,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKNhZGSkcGF0aKgvdmlld3MvN6V2YWx1ZYOiaWQHpG5hbWWuRnJvbnQgb2YgaG91c2Wnd2luZG93c5A="
@@ -633,7 +667,7 @@
     },
     {
       "what": "select view 2 — which is now the layout that used to be view 5",
-      "client": "g6F0p0NvbW1hbmSjc2VxE6djb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAg==",
+      "client": "g6F0p0NvbW1hbmSjc2VxFKdjb21tYW5kgqF0qlNlbGVjdFZpZXemdmlld0lkAg==",
       "clientInteger": null,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGi1L3Nlc3Npb24vYWN0aXZlVmlld0lkpXZhbHVlAg=="
@@ -667,7 +701,7 @@
     },
     {
       "what": "delete the active view: the daemon decides what the canvas then shows",
-      "client": "g6F0p0NvbW1hbmSjc2VxFKdjb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSCoXSkVmlld6Z2aWV3SWQC",
+      "client": "g6F0p0NvbW1hbmSjc2VxFadjb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSCoXSkVmlld6Z2aWV3SWQC",
       "clientInteger": null,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHOSgqJvcKZyZW1vdmWkcGF0aKgvdmlld3MvMoOib3CncmVwbGFjZaRwYXRotS9zZXNzaW9uL2FjdGl2ZVZpZXdJZKV2YWx1ZQE="
@@ -696,7 +730,7 @@
     },
     {
       "what": "delete a view that was never stored: refused",
-      "client": "g6F0p0NvbW1hbmSjc2VxFadjb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSCoXSkVmlld6Z2aWV3SWQJ",
+      "client": "g6F0p0NvbW1hbmSjc2VxFqdjb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSCoXSkVmlld6Z2aWV3SWQJ",
       "clientInteger": null,
       "deltas": [],
       "refused": true,
@@ -722,5 +756,5 @@
       ]
     }
   ],
-  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOBoTCJr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqZNYXN0ZXKiaWQAqGlzQWN0aXZlwqttYXN0ZXJMZXZlbM3//6pzZXF1ZW5jZUlkAaVzcGVlZM0EAKxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVys2dlbmVyaWMuZGltbWVyLmRhcmuGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlks2dlbmVyaWMuZGltbWVyLmRhcmusbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaMxY2ikbmFtZaZEaW1tZXKoZml4dHVyZXODoTGJp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiadhZGRyZXNzBaJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAaEziadhZGRyZXNzAaJpZAOpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAApnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4GhMYelY29sb3LApGN1ZXORiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqlwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqRuYW1lqlNlcXVlbmNlIDGnc2Vzc2lvboKnc2Vzc2lvbo2sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZbFmaXh0dXJlIDEgYXQgZnVsbKplZGl0aW5nQ3VlwKtlbmNvZGVyQmFua6ZEaW1tZXKsZXhlY3V0b3JQYWdlA61mb2N1c2VkV2luZG93wKJpZAGkbmFtZaRNYWluq29wZW5XaW5kb3dzkK5wcm9ncmFtbWVyUGFnZQC0cHJvZ3JhbW1lclBhcmFtSW5kZXgAsHNlbGVjdGVkRXhlY3V0b3LAsHNlbGVjdGVkU2VxdWVuY2XApXZpZXdzg6Exg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5ChNYOiaWQFpG5hbWWrUHJvZ3JhbW1pbmend2luZG93c5KHoWjLQIaAAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMsAAAAAAAAAAKF5ywAAAAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQF4AAAAAAAChN4OiaWQHpG5hbWWuRnJvbnQgb2YgaG91c2Wnd2luZG93c5CqcHJvZ3JhbW1lcoSpc2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXOSAQKnZW5hYmxlZMOqZnJhbWVzU2VudMzeqWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEYajzg1sK6rbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzw65maXh0dXJlTGlicmFyec0IcadtYWNoaW5ljaZkZXNrSWTZJDg2MDg2NGEwLTAxNzctNGQ2NS04MmNjLWJkYjZlNTM3ZmYwMqdkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcGZkcGp6MKVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOVp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbKhzaG93RmlsZYWkcGF0aNk3QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXBmZHBqejBcYXVsYS5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2Vzw6hyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg=="
+  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOBoTCJr2J1dHRvbkZ1bmN0aW9uc5CvY3VycmVudEN1ZUluZGV4wK9lbmNvZGVyRnVuY3Rpb26lRW1wdHmtZmFkZXJGdW5jdGlvbqZNYXN0ZXKiaWQAqGlzQWN0aXZlwqttYXN0ZXJMZXZlbM3//6pzZXF1ZW5jZUlkAaVzcGVlZM0EAKxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVys2dlbmVyaWMuZGltbWVyLmRhcmuGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlks2dlbmVyaWMuZGltbWVyLmRhcmusbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaMxY2ikbmFtZaZEaW1tZXKoZml4dHVyZXODoTGKp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZK5nZW5lcmljLmRpbW1lcqh1bml2ZXJzZQGhMoqnYWRkcmVzcwWiaWQCqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDKocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlks2dlbmVyaWMuZGltbWVyLmRhcmuodW5pdmVyc2UBoTOKp2FkZHJlc3MBomlkA6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAzqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLNnZW5lcmljLmRpbW1lci5kYXJrqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4GhMYelY29sb3LApGN1ZXORiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lpUN1ZSAxpm51bWJlcqExpXBhcnRzkYSpYXR0cmlidXRlpkRpbW1lcqdmaXh0dXJlAqlwcmVzZXRSZWbApXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqRuYW1lqlNlcXVlbmNlIDGnc2Vzc2lvboKnc2Vzc2lvbo+sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZbFmaXh0dXJlIDEgYXQgZnVsbK5jb21tYW5kTGluZVJ1bgCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQOtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKx3aW5kb3dQaWNrZXLCpXZpZXdzg6Exg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5ChNYOiaWQFpG5hbWWrUHJvZ3JhbW1pbmend2luZG93c5KHoWjLQH4AAAAAAACqaW5zdGFuY2VJZAKmcGFyYW1zgKR0eXBlqERteFNoZWV0oXfLQJQAAAAAAACheMtAhAAAAAAAAKF5ywAAAAAAAAAAh6Foy0B+AAAAAAAAqmluc3RhbmNlSWQBpnBhcmFtc4CkdHlwZaxGaXh0dXJlU2hlZXShd8tAhAAAAAAAAKF4y0BuAAAAAAAAoXnLQIBAAAAAAAChN4OiaWQHpG5hbWWuRnJvbnQgb2YgaG91c2Wnd2luZG93c5CqcHJvZ3JhbW1lcoapc2VsZWN0aW9ukK5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXOSAQKnZW5hYmxlZMOqZnJhbWVzU2VudMyIqWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEYDdq3F/W6rbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzw65maXh0dXJlTGlicmFyec0IcadtYWNoaW5ljaZkZXNrSWTZJDE4MmY3N2QxLTcxMWQtNDZjYy1iMWU1LWM4NmNmOTQ3Mjg5M6dkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcDZBU2ZnbKVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOVp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbKhzaG93RmlsZYWkcGF0aNk3QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXA2QVNmZ2xcYXVsYS5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2Vzw6hyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg=="
 }

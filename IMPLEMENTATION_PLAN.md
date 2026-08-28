@@ -679,34 +679,134 @@ window on the canvas.
 - Every new command is undoable or deliberately not, per `ARCHITECTURE_SPEC.md` §6.1, and S14's property test over **all** commands still holds
 - Coverage ≥ 85 % on what this session writes, and **> 95 %** on anything it adds to `engine/`, `programmer/` or `protocols/` (`CLAUDE.md`)
 
-## S43 · `ui` — cleanup and polish
-**Size:** M · **Depends on:** S40, S37, S38
+## S43 · `ui` — the punch list, the skeleton, and the first pre-release
+**Size:** XL · **Depends on:** S40, S37, S38
 
-**Goal:** the session for everything that is a paragraph rather than a session — the small wrongnesses S23–S40 each wrote down and deliberately left.
+**Goal:** the session that turns a builder's interface into an operator's. It is three things at once, and they belong together because they touch the same screens: the owner's list of what is actually wrong with the running program, the owner's own drawing of how the interface should be arranged, and everything that is a paragraph rather than a session — the small wrongnesses S23–S40 each wrote down and deliberately left. What comes out of it is fit to hand to somebody else as a **pre-release**.
+
+**Shape — this session is interactive, and none before it were.** It runs in four movements, in this order:
+
+1. **Questions and answers.** Everything read first — the punch list, the skeleton, the carried lists — and then the exact undertaking *agreed with the owner* before a line is written. The list and the drawing are the requirement; what they do not say is asked, not guessed.
+2. **The work.** The faults fixed, the interface rebuilt along the skeleton, the cheap missing windows added.
+3. **Questions and answers again.** The owner drives the built interface by hand and says what is wrong. Fix, hand back, repeat — until the owner says it is fit for a pre-release.
+4. **The tests.** The suite brought back to `CLAUDE.md`'s standard around everything the two rounds changed, and the measured numbers re-taken.
+
+Questions are asked **at the moment they come up**, not collected for the end and not worked around. This is the one session whose subject — how a thing looks and feels to use — cannot be derived from the repository.
 
 **Deliverables**
-- `PROGRESS.md` §7's *carried out of* lists, gone through one entry at a time
-- The window bodies still saying they are not built yet, and the ones that are a morning's work
+- The owner's fault list, `docs/PRERELEASE_PUNCHLIST.md`, gone through one entry at a time. Every entry ends in one of three states: fixed, refused **with the reason written next to it**, or promoted to a session of its own
+- The interface rebuilt along the owner's skeleton in `design/skeleton/` — a Penpot export: flow as a flowchart, plus the rough placement and grouping of the elements. It states **arrangement and flow** and deliberately not detail; what it does not state, this session decides and **writes down**
+- `PROGRESS.md` §7's *carried out of* lists, gone through one entry at a time, with the same three outcomes
+- The window bodies still saying they are not built yet: **`ClockViewer` is a morning's work and belongs in this session**; `Viewer3D` is S30 and `PhaserEditor` is an engine that does not exist, so both stay honest lines
 - Keyboard: focus order, shortcuts, and the fact that a console is operated in the dark by somebody who is not looking at the screen
 - Colour, contrast and density read at two metres in a dark room (`CLAUDE.md`: fast recognition of sections before aesthetics)
 - Notices, refusals and errors: one voice, one place on the screen, and a message an operator can act on
 - Empty states everywhere: a fresh show, an empty page, an empty pool, a disconnected desk
 - The measured numbers re-taken with everything on the screen at once
 
+**Too big is not a reason to do it badly.** A fault or a change that turns out to be a session rather than an afternoon becomes **a session of its own in this plan** — the next free number, a row in the running order and an edge in the graph — and the punch-list entry says which one it became. A UI session created this way is placed **before S29**: the interface is to be largely finished before it is wrapped in a shell.
+
 **Exit criteria**
-- Every item carried out of S23–S40 is done, or has become a session of its own — **nothing merely dropped**, and the list is checked off in `PROGRESS.md`
+- Every entry on the punch list is fixed, refused with a reason, or carries the number of the session it became — **nothing merely dropped**, and the file itself says so
+- Every item carried out of S23–S40 has the same three outcomes, and the list is checked off in `PROGRESS.md`
+- The arrangement matches the skeleton wherever the skeleton states one, and **every deliberate departure is written down with its reason**
+- `ClockViewer` draws something an operator can read, and the count of windows that say *not built yet* is down to two
+- The owner has driven the built interface by hand and said it is fit for a pre-release — recorded in `PROGRESS.md` with the round of changes that got it there
 - The two telemetry numbers hold with every window type open at once
 - No scrolling outside the canvas, at 1280 × 720 **and** at 4K
 - Coverage does not fall in any module
 - A full pass with the keyboard alone reaches every control
+
+## S45 · `prism-core` + `prism-engine` + `ui` — the executor window, and one sequence one playback
+**Size:** L · **Depends on:** S43, S34, S39
+
+**Goal:** an executor an operator can *assign*. Today what a fader and its four buttons do is decided when the executor is created and cannot be changed afterwards from anywhere — not from the interface, not from the line, not from the desk. Two punch-list entries land on the same model and are therefore one session: **B15** (the actions cannot be edited) and **B18** (two executors of one sequence move independently).
+
+**Why the two belong together.** B15 wants a window that says *this button is Go+*, and B18 says that once two executors carry the same sequence, one of them is a second opinion about a playback that already exists — which is **D3** applied to the desk rather than to a client. Building the editor first and moving the state afterwards would mean drawing a panel over a model that is about to change; and moving the state first without the editor leaves an operator with no way to see what moved. What comes out is one statement: **an executor is a handle on a sequence's playback, and which handle it is, is editable.**
+
+**What is there now, and what it cannot express.** `Executor` carries `fader_function`, `button_functions`, `encoder_function`, `master_level`, `speed`, `is_active` and `current_cue_index` — all seven per **executor**. Playbacks are keyed `PlaybackId::of_executor`, so `Go` on executor 1 and `Go` on executor 9 start *two* playbacks of one sequence, each with its own cue pointer and its own fade. Nothing rejects it and nothing merges it: `docs/DMX_MERGE.md` sees two contributors and does what it is told. S43's punch list found it from the other end — two Master faders that will not move together.
+
+**Deliverables**
+- The `Executors` window from S43 grown into the editor: what each of the four buttons does, what the fader does, what the encoder does, per executor, per page (**D7**, `page * 8 + slot`)
+- The list to choose from is `ExecutorButtonFunction` and `ExecutorFaderFunction` in full, **plus a custom row**: *send this command line*, which is the owner's answer from S43's third round — every desk needs a different number of them, so it is a row an operator adds rather than a variant somebody has to add to an enum
+- Whether this is a `Command` or a `MachineChange` is **decided in the session and written down**: an executor's assignment is show content and a desk's key binding is not, and S38's precedent cuts the other way
+- The playback state moved to where a sequence can only have one of it: one cue pointer, one fade, one master level per *fader function*, and one button state per *button function* — so two Master faders on one sequence are two handles on one number, while a Master and an XFade on that same sequence stay independent, which is exactly what the entry asks for
+- The X-Touch follows: a reassigned button relabels the scribble strip and a level moved from one executor moves the other's motor fader, inside the frame budget S26 measured
+- The `.prism` file: an executor written before this session loads and means the same thing (`#[serde(default)]`), and the *level* it carried becomes the sequence's
+
+**Exit criteria**
+- Every button and fader function is assignable from the window, from the command line and from a bound X-Touch key, and the three produce **the same** state — asserted, not demonstrated
+- Two executors on one sequence with the same fader function move together at the DMX output; with different fader functions they do not — both asserted on frames, which is the only place the difference is real
+- `Go` on either of two executors carrying one sequence advances **one** cue pointer, and the second executor's window row says so
+- A custom *send this command line* row survives a save and a restart, and firing it produces exactly what typing the line produces
+- The tick still makes no allocator call on the eight paths S18 and S34 measured
+- Coverage on the new `prism-core` and `prism-engine` code **> 95 %**
+
+## S48 · `prism-domain` + `prism-core` + `prism-engine` — tracking, and a cue list that lands in the same place twice
+**Size:** XL · **Depends on:** S39, S34, S45
+
+**Goal:** a cue list whose output at cue 7 does not depend on how the operator got to cue 7. Asked for by the owner on 2026-08-27, out of S43's hand-testing, and it is the deepest thing that list turned up: **a cue is not a state, it is an edit**, and a console that never says which is which cannot be rehearsed with.
+
+**What is there now, and what it cannot express.** A `Cue` is a list of `CuePart`s — fixture, attribute, value — and it is **sparse by construction**: it carries what was in the programmer when it was stored and nothing else (`docs/DMX_MERGE.md` §3). `Player::goto` moves `current` to an index and fades that cue's parts in. Everything the cue does not name is therefore left wherever the *previous* cue put it — which is what a lighting desk calls **tracking**, and it is the right default. What is missing is the other half: nothing computes what tracking *implies* for a cue reached out of order.
+
+So today, a rehearsal does this. Cue 1 puts the wash at 50 %. Cue 5 puts it at 100 %. Go to cue 7, then Goto cue 3 — and the wash is still at 100 %, because cue 3 never mentioned it. Walking the list from the top would have left it at 50 %. **The same cue, two outputs, and which one you get depends on where you have been.** An operator cannot rehearse cue 3, and a show cannot be handed to somebody else.
+
+**The other half of the same statement, and where it comes from.** S43 made *overriding* a thing an operator can see and set in the programmer: an attribute the programmer holds goes out whatever the playbacks say, an attribute it does not hold rests. That distinction is exactly what a cue has to carry — **this cue asserts this attribute** versus **this cue leaves it to whatever came before** — and it is what makes the accumulation above computable rather than guessed. The two are one design and this session is where the second half lands.
+
+**Deliverables**
+- A **tracking state per cue**: for a sequence and a cue index, the full set of attribute values that walking the list from its first cue would produce. Derived, never stored in the show — a `.prism` file keeps the *edits*, because a file that stored the resolved state would be a file that could not be corrected by editing cue 2
+- Computed where it can be used without a tick paying for it: at load, and again when a cue is stored, edited, deleted, renumbered or moved. `prism_engine`'s tick reads it; the tick does not build it, and it makes **no allocator call** doing so — the ninth path
+- `Player::goto` and every playback start resolve **through** that state, so a jump to cue 3 restores every attribute cue 3 does not name to what it would have been — and a Go from cue 3 onwards behaves as if the list had been walked
+- **Cue-only** beside tracking, per cue: a cue that asserts a value *and takes it back at the end* is what an operator wants for a one-off, and it is the second half of the vocabulary S39's store modes started
+- The interface says which is which: a cue sheet that marks the attributes a cue **asserts** against the ones it inherits, in the same visual language S43 gave the programmer's encoders
+- What a fade does across the boundary: an attribute inherited from four cues back and now asserted has to fade from where it *is*, not from where the tracking state says it was
+- **Blocking cues**: a cue that asserts everything, so a list can be cut into rehearsable sections. One command, and the marking to go with it
+
+**Exit criteria**
+- **The worked example, asserted on frames.** A list where cue 1 sets a wash to 50 %, cue 5 to 100 % and cue 3 mentions neither: walking 1→2→3 and jumping 7→3 produce the **byte-identical** frame sequence. That is the whole session in one test, and it fails today
+- Every cue in a recorded list, reached both ways — walked and jumped to — gives the same output, as a property over a generated sequence rather than one worked example
+- A cue-only cue takes its values back when the list leaves it, and a tracking cue does not
+- Editing cue 2 changes what cue 5 outputs, without cue 5 being touched — which is what says the state is derived rather than stored
+- A show saved and reloaded resolves to the same output, and a show file written before this session loads and means what it meant (`#[serde(default)]`)
+- The tick makes no allocator call on any path this session adds, and the tick-deadline gate still holds with the tracking state in force at 64 universes
+- Coverage on the new `prism-core` and `prism-engine` code **> 95 %**
+
+## S49 · `prism-domain` + `prism-core` + `ui` — the command line moves into the daemon
+**Size:** L · **Depends on:** S40, S43
+
+**Goal:** one place that turns a line into commands, and it is the desk.
+
+**Where this comes from.** `ARCHITECTURE_SPEC.md` §4.5 made the command line *the* interface, and S40 built the whole vocabulary — in TypeScript, in `ui/src/desk/console.ts`, because that is where the operator types. The daemon has never had a parser, and the consequence has been quiet until now: **a key on the X-Touch cannot run a line.** `SurfaceAction::WriteCommandLine` writes it and stops, and its own documentation has said so since S43.
+
+S43's rebuild made that visible, because the owner asked for the obvious thing — *bei Send Command soll es eine Option geben, den Text nur in die Konsole zu schreiben, oder zu schreiben und direkt abzusenden* — and there is no honest way to give it to a daemon that cannot read a line. What S43 shipped instead is a **stop-gap that is written down as one**: the daemon bumps `Session::command_line_run`, and the client holding the keyboard focus parses the line and sends what it means. On one screen that is exactly right. On two focused screens on two machines it runs the line twice, and a doubled Go is the failure this session exists to remove.
+
+**Deliverables**
+- The parser in `prism-core`, over `prism_domain::Command` — the grammar of `docs/COMMAND_LINE.md`, moved rather than rewritten, with the TypeScript one deleted rather than left as a second opinion
+- `Command::RunCommandLine`, or `CommandLineInput { run }` resolved at the daemon: a line arrives, the daemon parses it, and what comes back is the deltas of what it did
+- The **reading under the box** — what the line would do, shown as it is typed — as a `Query`, because the interface still has to say it and must not answer it itself
+- `Session::command_line_run` and the focus rule **removed**, and `SurfaceAction::WriteCommandLine::submit` resolved by the daemon
+- The parser's errors are the daemon's sentences, so a line refused at the console and a line refused on a screen read the same
+
+**Exit criteria**
+- A key on the X-Touch bound to `Go Executor 1` with *send* fires it with **no client connected at all** — which is the whole session in one test, and is impossible today
+- Two screens open, one bound key pressed: the commands are sent **once**
+- Every line `ui/src/desk/console.test.ts` covers parses to the same commands in Rust, as a table shared by both suites until the TypeScript one goes
+- The DMX thread is untouched: parsing happens on the command path and makes no allocator call on the tick
 
 ## S29 · `prism-app` — Tauri shell
 **Size:** M · **Depends on:** S17, S23
 
 **Deliverables:** Tauri shell, daemon spawn-or-attach, autostart settings per `ARCHITECTURE_SPEC.md` §10.3, tray, explicit shutdown. The autostart and machine settings are **driven from the settings window** (S37) rather than from a menu of their own: a setting that exists in two places is a setting that disagrees with itself, and the Web Remote (S31) has no menu bar at all.
 
+**And the operating system's own file dialogue, for every path an operator types** — asked for by the owner on 2026-08-28, out of S43's rebuild: *Dateien öffnen und speichern unter jeglicher Art (Showfiles/JSON/Control Map) sollte im Dateimanager des ausführenden Betriebssystems geschehen, um einfacher Pfade angeben zu können.* The owner named the condition themselves — *sollte das erst mit der Desktop Umgebung gehen, muss das Feature in diese Session verschoben werden* — and it does, for a reason worth writing down rather than deferring quietly:
+
+**A browser cannot name a path on the daemon's machine.** `showOpenFilePicker` hands a page a *handle*, never a path; the two are deliberately not the same thing, and the daemon needs a path because the daemon is what opens the file. On a desk where the browser and the daemon are the same machine that is a wall in the way of something that would obviously work, and the shell is what takes it down: a Tauri command returns the chosen path as a string, the settings window puts it in the box it already has, and `OpenShow` travels unchanged. Nothing about the protocol moves — `settings/showfiles.tsx` has said so since S37, and the box stays, because the Web Remote is a browser and always will be.
+
+The **control map** is the exception and it is already done (S43): it is exported and imported as a *file the browser holds*, not a path the daemon resolves, because a binding table belongs to the machine an operator is sitting at rather than to the one running the show. That one wants no shell.
+
 **Exit criteria**
 - Closing the window leaves the daemon running and DMX flowing — asserted, this is D9
+- **Open, Save as, New, Export and Import each open the OS dialogue** and put the chosen path in the box the daemon is sent; typing a path still works, and the Web Remote is unchanged
 - Second shell instance attaches instead of spawning a second daemon
 - Opt-in autostart installs and uninstalls cleanly **without administrator rights**
 - Installer produces a working build on a clean Windows machine
@@ -791,6 +891,27 @@ operator reads — **a desk that has merely gone quiet is never reopened**, beca
 reopening is the one thing that cannot recover it.
 
 ---
+
+## S46 · `prism-protocols` + `prismd` + `ui` — Art-Net node discovery
+**Size:** M · **Depends on:** S33
+
+**Goal:** an Art-Net output that knows whether anything is listening. S43's punch list, **B6**: a configured node reads *Health OK* with no node plugged in, because health today means *the socket accepted the datagram* — and UDP always accepts it. An installer reading that line is being told something the program does not know.
+
+**What is there now.** `prism_protocols::artnet` sends `ArtDmx` to a configured address and counts frames. There is no receive path at all, so there is nothing that could distinguish a node from an empty subnet.
+
+**Deliverables**
+- `ArtPoll` sent on a cadence of its own, and `ArtPollReply` parsed: the node's short and long name, its IP and MAC, its port-address table, its status bytes and its firmware revision — §6 of the Art-Net 4 specification, which is where the field order comes from
+- A **discovered** node is not the same thing as a **configured** one, and the settings panel shows both: what is out there, what this machine is addressed to, and where the two disagree — a node answering on a universe nothing is patched to is as useful to an installer as a configured node that never answers
+- Health becomes three-valued rather than a boolean: *answering*, *never answered*, *stopped answering at 20:14*, with the last reply's time on the row
+- The receive socket is bound the way S33's outputs are: its own thread, never the tick's, and a socket that will not bind degrades **alone**
+- A discovered node offered as a one-click output, so the common case — plug in a node, add it — does not need its address typed
+
+**Exit criteria**
+- A mock node that answers `ArtPoll` is discovered, named and shown; one that stops answering is reported as *stopped*, with the time, within one poll interval
+- A configured node that never answers never reads *OK* — which is the entry, asserted
+- Replies from the network are parsed under the fuzz harness pattern of `prism-surface`: no panic, no allocation storm, and a malformed reply is dropped rather than believed
+- No test opens a real socket on a real network, and the tick is untouched — asserted on the frame sequence
+- Coverage on the new protocol code **> 95 %**
 
 # Phase 8 — Settings and the control editor
 
@@ -886,6 +1007,27 @@ none that writes one.
 
 ---
 
+## S47 · `prism-core` + `prism-protocols` + `ui` — timecode
+**Size:** L · **Depends on:** S34, S39, S36
+
+**Goal:** cues that fire off a clock somebody else is running. Asked for in S43's first round, where the owner chose the show clock for that session and put timecode here on purpose: a clock that shows the time is a morning's work, and a cue list that *follows* one is a session.
+
+**Deliverables**
+- MIDI Timecode in (quarter-frame and full-frame), on the port layer S36 built, at the four standard rates including 29.97 drop-frame — which is the one that makes the arithmetic worth testing
+- Art-Net Timecode as a second source, so a rig with no MIDI cable can still follow the desk that has one
+- A **timecode track** on a sequence: a cue with a time on it, fired when the clock passes it, and re-armed when the clock is wound back — scrubbing backwards is the case that separates a working implementation from a demonstration
+- Free-run, chase and off, per sequence, with what the sequence is doing visible in the cue list rather than only in a settings panel
+- Drift and drop-out: a source that stutters must not fire a cue twice, and a source that disappears leaves the sequence where it is rather than at cue 1
+- The reader lives off the tick thread and hands over one atomic, the way S33's `FrameEnrolment` does
+
+**Exit criteria**
+- A recorded timecode stream drives a recorded cue list to a byte-identical frame sequence, twice, from a cold start — the fixture is the assertion
+- Scrubbing backwards re-arms every cue it passes and fires none of them on the way
+- 29.97 drop-frame arithmetic is asserted against the published frame-number table, not against itself
+- A source that stops mid-show is reported and the show carries on; a source that returns picks up where the clock now is
+- No test opens a MIDI port — `CLAUDE.md`'s rule, and S36 left the mock that makes it possible
+- The tick makes no allocator call on any path this session adds
+
 # Phase 10 — Documentation and release
 
 ## S41 · docs — the manual, and a README in every crate
@@ -949,7 +1091,11 @@ flowchart LR
     S33 & S36 & S27 --> S37 --> S38
     S34 --> S38
     S6 & S27 & S37 --> S32
-    S37 & S40 & S38 --> S43
+    S37 & S40 & S38 --> S43 --> S45
+    S34 & S39 --> S45
+    S39 & S34 & S45 --> S48
+    S33 --> S46
+    S34 & S39 & S36 --> S47
     S37 & S40 --> S41 --> S42
 ```
 
@@ -979,8 +1125,12 @@ is, is the order the work was planned to make sense in.
 | 8 | **S33** core/protocols — the output patch | The first session a venue rather than a laptop needs. Independent of everything above, so it may equally run earlier if hardware is waiting. **Done 2026-08-22** — see `PROGRESS.md` §2.35. The worked example is expressible and asserted: twelve universes across five outputs of three kinds, each given exactly its own. It settled where a rig lives — `prism_core::MachineConfig`, beside the desk identity, so a show carried on a stick brings no cabling with it — which made the four commands a **third applier** and none of them undoable. Hot reconfiguration needed a new thing in `prism-engine`: `FrameEnrolment`, a subscriber hand-over behind one atomic flag, and the tick that takes one on and gives one up still makes no allocator call |
 | 9 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock. S33 left it the pattern for exactly this problem — the device behind a factory, a mock beside it, a flag that demands the mock, and the configured port in `MachineConfig`. **Done 2026-08-22**, CI green on run **32581376059** — see `PROGRESS.md` §2.36. The backend got a home rather than a second tool: `prism-midi` is §10.1's fourth exception, `midir` is target-gated so the ARM64 cross-check compiles none of it, and `prism-surface` gained no dependency at all. A configured port is a **name** that survives a replug; one that is not there is a warning and a daemon that starts; a cable pulled mid-show and put back costs the engine nothing. S20's finding is kept as a rule the port layer obeys — **a desk that has merely gone quiet is never reopened** — and the 🔌 half, the gate over a *real* port, is a row in `ARCHITECTURE_SPEC.md` §14 with the recipe |
 | 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure, and now has it: S33's rig and S36's port are both `MachineConfig`'s, both reachable over the protocol, and three of the four panels need no protocol change at all. The fourth — show files — is the one that does. **Done 2026-08-23** — see `PROGRESS.md` §2.39. It went further than the fourth panel: **every operational `prismd` flag is a setting now**, so a venue's desk is configured where an operator can see it rather than in a shortcut nobody opens, and the WebSocket listener is on by default because the settings window, the Web Remote and the whole end-to-end suite all speak it. Three decisions are worth carrying: a flag still wins for its run and the panel is *told which rows a flag is holding*; a value a client must not choose — a token, a desk identity — is asked for rather than sent; and a counter that moves faster than any delta is a **query with a cadence of the client's own**, which is the gap S33 named on its way out |
-| 11 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from. S37 built half of the profile half already: the Devices panel names the binding file and re-reads it, so what is left is the table itself. **Next** |
-| 12 | **S43** `ui` — cleanup and polish | After the last feature and before the first release, because that is the only moment the list is complete |
-| 13 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab |
-| 14 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC | Extended features, in whichever order the venue asks for them |
-| 15 | **S41** docs · **S42** prismdmx.de | Last, because a manual written before the settings window would document a program that does not exist |
+| 11 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from. S37 built half of the profile half already: the Devices panel names the binding file and re-reads it, so what is left is the table itself. **Done 2026-08-23**, CI green on run **32649175306** — see `PROGRESS.md` §2.40. All seventy-three controls are drawn with what each does, the whole vocabulary of §4 to choose from, and — because a client holds no device profile — which stay PrismDMX's in the combined Xctl+MC mode. **Learn** is S20's method rule run backwards: press the key you mean and the daemon names it, without firing it. Three decisions carry: the table lives in `MachineConfig` beside the rig and the port, a **profile file is an import** so a desk starts with the keys it was left with, and S22's rule split in two — a file that will not parse leaves *the table in force* standing. It also added **no command**: what a desk's keys do is one of this machine's settings, so it is two `MachineChange` variants |
+| 12 | **S43** `ui` — the punch list, the skeleton, and the first pre-release | After the last feature and before the first release, because that is the only moment the list is complete. Grew on 2026-08-24 from *cleanup and polish* into the session that makes the interface an operator's: an owner-written fault list (`docs/PRERELEASE_PUNCHLIST.md`), an owner-drawn layout (`design/skeleton/`, a Penpot export of flow and arrangement) and the cheap missing windows. It is also the **first interactive session** — agreed before it is built and driven by hand before it is called done. **Next** |
+| 13 | **S45** core/engine/`ui` — the executor window, and one sequence one playback | Born out of S43 on 2026-08-27 from two punch-list entries that land on the same model: B15 (a button's action cannot be edited) and B18 (two executors of one sequence move independently). A UI session, so **before S29** — the interface is to be largely finished before it is wrapped in a shell |
+| 14 | **S46** protocols/`prismd`/`ui` — Art-Net node discovery | Born out of S43 on 2026-08-27 from punch-list B6: health means *the socket took it*, and UDP always takes it. Needs a receive path that does not exist yet, which is the session. Independent of S45, so it may equally run beside it |
+| 15 | **S48** domain/core/engine — tracking, and a cue list that lands in the same place twice | Asked for by the owner on 2026-08-27 out of S43's hand-testing, and it is the deepest thing that list turned up: today the output at a cue depends on how you got there, so a cue cannot be rehearsed. After S45 because it needs *one sequence, one playback* underneath it — a tracking state per playback of the same list is two answers to the question this session exists to give one answer to |
+| 16 | **S49** domain/core/`ui` — the command line moves into the daemon | Born out of S43 on 2026-08-28: the owner asked for a bound key that *sends* its line, and a daemon with no parser cannot. S43 shipped the stop-gap and named it one. After S45 and S48 because those two add words to the grammar, and moving a grammar twice is moving it twice |
+| 17 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab. It also carries the **OS file dialogue** the owner asked for on 2026-08-28, which is here because a browser cannot name a path on the daemon's machine |
+| 18 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them |
+| 19 | **S41** docs · **S42** prismdmx.de | Last, because a manual written before the settings window would document a program that does not exist |

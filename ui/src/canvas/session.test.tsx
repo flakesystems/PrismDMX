@@ -158,6 +158,20 @@ function stepAbout(what: string): number {
   return at;
 }
 
+/**
+ * Replays every recorded step up to and including the one about `what`.
+ *
+ * The companion to {@link stepAbout}, and it exists for the same reason: a list
+ * of indices written out by hand stops meaning what it meant the moment a step
+ * is inserted into the script — which S43's punch-list B10 did.
+ */
+function playThrough(answer: (deltas: readonly Delta[]) => void, what: string): void {
+  const last = stepAbout(what);
+  for (let step = 0; step <= last; step += 1) {
+    answer(recordedDeltas(step));
+  }
+}
+
 /** The numbers of the windows on the canvas, in the order they are drawn. */
 function drawn(): string[] {
   return [...screen.getByTestId("canvas").querySelectorAll("[data-window-type]")].map(
@@ -174,22 +188,36 @@ describe("opening and closing a window", () => {
     const { acted, answer } = desk();
     expect(drawn()).toEqual([]);
 
-    // The picker is the whole vocabulary, from the generated table.
-    fireEvent.change(screen.getByTestId("open-window"), { target: { value: "DmxSheet" } });
+    // **The chooser is the whole vocabulary, from the generated table** — and
+    // since S43's punch-list B9 it is a modal rather than a dropdown, opened by
+    // a right-click on an empty part of the canvas, by Insert, or by an X-Touch
+    // key. Which one is open is `Session::windowPicker`, so the console and the
+    // screen cannot disagree about whether the chooser is up.
+    fireEvent.contextMenu(screen.getByTestId("canvas"));
+    answer([
+      { t: "SessionPatch", ops: [{ op: "replace", path: "/session/windowPicker", value: true }] },
+    ]);
+    fireEvent.click(screen.getByTestId("picker-DmxSheet"));
 
-    // **The first exit criterion.** A command went out.
-    expect(acted()).toEqual([{ t: "OpenWindow", window: "DmxSheet" }]);
+    // **The first exit criterion.** A command went out. Two, in fact: opening
+    // the chooser is a command as well, because the chooser is session state.
+    expect(acted()).toEqual([
+      { t: "SetWindowPicker", open: true },
+      { t: "OpenWindow", window: "DmxSheet" },
+      { t: "SetWindowPicker", open: false },
+    ]);
     // And nothing opened: there is nowhere in this interface for a window to
     // be, other than the session (D3).
     expect(drawn()).toEqual([]);
-    expect(screen.getByTestId("open-windows").textContent).toBe("0");
 
     // The daemon's own deltas for the first two steps of the recorded script.
     answer(recordedDeltas(0));
     expect(drawn()).toEqual(["window-1"]);
     answer(recordedDeltas(1));
     expect(drawn()).toEqual(["window-1", "window-2"]);
-    expect(screen.getByTestId("open-windows").textContent).toBe("2");
+    // The *count* of open windows is the `Status` window's readout since S43 and
+    // is asserted there. What this test is about is the canvas, and `drawn()` is
+    // the canvas's own answer to the same question.
   });
 
   it("asks for a window to be closed rather than closing one", () => {
@@ -201,12 +229,14 @@ describe("opening and closing a window", () => {
     expect(acted()).toEqual([{ t: "CloseWindow", instanceId: 2 }]);
     expect(drawn()).toEqual(["window-1", "window-2"]);
 
-    // Step 7 of the script is `CloseWindow(2)`, so these are the very deltas
-    // this command produces at a daemon.
-    for (const step of [2, 3, 4, 5, 6]) {
+    // The script's `CloseWindow(2)` step, so these are the very deltas this
+    // command produces at a daemon. Every step up to it is replayed first —
+    // **by name, not by number**, because B10 added a step to the script and a
+    // range written out by hand would have started meaning something else.
+    const closes = stepAbout("close the DMX sheet");
+    for (let step = 2; step <= closes; step += 1) {
       answer(recordedDeltas(step));
     }
-    answer(recordedDeltas(7));
     expect(drawn()).toEqual(["window-1", "window-3"]);
   });
 
@@ -220,7 +250,7 @@ describe("opening and closing a window", () => {
     expect(acted()).toEqual([{ t: "FocusWindow", instanceId: 1 }]);
     expect(drawn()).toEqual(["window-1", "window-2"]);
 
-    answer(recordedDeltas(4));
+    answer(recordedDeltas(stepAbout("focus the fixture sheet")));
     expect(drawn()).toEqual(["window-2", "window-1"]);
   });
 
@@ -254,10 +284,10 @@ describe("the View Selector Bar", () => {
     const { acted, answer } = desk();
     expect(screen.getByTestId("view-1").dataset["active"]).toBe("yes");
 
-    // Store the canvas as view 2 (step 6 of the script), so there are two.
-    for (const step of [0, 1, 2, 3, 4, 5]) {
-      answer(recordedDeltas(step));
-    }
+    // Store the canvas as view 2, so there are two. **By name**, because B10
+    // added a step to the script and a list of indices written out by hand would
+    // now stop one short of the store.
+    playThrough(answer, "store the canvas as view 2");
     expect(screen.getByTestId("view-2")).not.toBeNull();
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("no");
 
@@ -269,24 +299,27 @@ describe("the View Selector Bar", () => {
 
   it("stores the active view under the name it already has", () => {
     const { acted, answer } = desk();
-    for (const step of [0, 1, 2, 3, 4, 5]) {
-      answer(recordedDeltas(step));
-    }
+    playThrough(answer, "store the canvas as view 2");
     fireEvent.click(screen.getByTestId("store-view"));
     expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 1, name: "View 1" });
   });
 
-  it("stores a new view one past the highest, rather than over somebody's layout", () => {
+  /**
+   * **`NewView` since S43, punch-list B11.** *New* used to send `StoreView`, so
+   * the new view arrived carrying every window of the one being left. They are
+   * two commands now: this one writes an empty view, selects it, and clears the
+   * canvas. What has not changed is the number it picks — one past the highest,
+   * never over somebody's layout.
+   */
+  it("makes a new view one past the highest, rather than over somebody's layout", () => {
     const { acted, answer } = desk();
     fireEvent.click(screen.getByTestId("new-view"));
-    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 2, name: "View 2" });
+    expect(acted().at(-1)).toEqual({ t: "NewView", viewId: 2, name: "View 2" });
 
-    // After view 2 exists — step 5 of the script stores it — the next one is 3.
-    for (const step of [0, 1, 2, 3, 4, 5]) {
-      answer(recordedDeltas(step));
-    }
+    // After view 2 exists, the next one is 3.
+    playThrough(answer, "store the canvas as view 2");
     fireEvent.click(screen.getByTestId("new-view"));
-    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 3, name: "View 3" });
+    expect(acted().at(-1)).toEqual({ t: "NewView", viewId: 3, name: "View 3" });
   });
 });
 
@@ -302,20 +335,21 @@ describe("D11, from this end", () => {
   it("follows a view the console switched, with no local action at all", () => {
     const { answer } = desk();
     // A layout stored as view 2 while this interface was watching.
-    for (const step of [0, 1, 2, 3, 4, 5]) {
-      answer(recordedDeltas(step));
-    }
+    playThrough(answer, "store the canvas as view 2");
     // Then the canvas is changed and the operator presses `Channel ▶` on the
-    // desk: view 2 comes back. Step 9 of the script is that `SelectView`.
-    answer(recordedDeltas(6));
-    answer(recordedDeltas(7));
+    // desk: view 2 comes back. All three steps are found by name, which is what
+    // stopped this test from silently drifting when B10 lengthened the script.
+    answer(recordedDeltas(stepAbout("open a patch window")));
+    answer(recordedDeltas(stepAbout("close the DMX sheet")));
     expect(drawn()).toEqual(["window-1", "window-3"]);
 
-    answer(recordedDeltas(9));
+    answer(recordedDeltas(stepAbout("select view 2: the layout comes back")));
     expect(drawn()).toEqual(["window-2", "window-1"]);
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("yes");
     expect(screen.getByTestId("view-1").dataset["active"]).toBe("no");
-    expect(screen.getByTestId("active-view").textContent).toBe("2");
+    // The *number* of the active view is the `Status` window's readout since
+    // S43 and is asserted there; the bar's own lit key is the reading this test
+    // is about, and it says the same thing.
   });
 });
 
@@ -332,9 +366,7 @@ describe("restarting the interface", () => {
    */
   it("draws the layout it is given, having taken no part in making it", () => {
     const first = desk();
-    for (const step of [0, 1, 2, 3, 4]) {
-      first.answer(recordedDeltas(step));
-    }
+    playThrough(first.answer, "focus the fixture sheet");
     const before = drawn();
     const geometry = screen.getByTestId("window-1").style.left;
     expect(before).toEqual(["window-2", "window-1"]);
@@ -342,7 +374,7 @@ describe("restarting the interface", () => {
 
     // A fresh interface, and a snapshot rather than a delta — which is what a
     // reloaded page receives.
-    const session = sessionAfter(5);
+    const session = sessionAfter(stepAbout("focus the fixture sheet") + 1);
     desk(snapshot({ session }));
     expect(drawn()).toEqual(before);
     expect(screen.getByTestId("window-1").style.left).toBe(geometry);
@@ -415,7 +447,11 @@ describe("managing a view", () => {
     upTo(answer, "store the canvas as view 5");
     expect(screen.queryByTestId("view-menu")).toBeNull();
 
-    expect(menuOver(5).dataset["view"]).toBe("5");
+    // `data-subject` since S43: the menu is `chrome/menu.tsx` now and the
+    // attribute is the shared one. The claim is the same — *the menu that
+    // opened belongs to the view that was right-clicked* — and it is still the
+    // one thing about a pop-up nothing else on the screen would show.
+    expect(menuOver(5).dataset["subject"]).toBe("5");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByTestId("view-menu")).toBeNull();
 

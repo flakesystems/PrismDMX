@@ -450,7 +450,7 @@ mod tests {
     /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
     fn plan() -> MergePlan {
         let head = moving_head();
-        MergePlan::build((1..=3).map(|id| (FixtureId::new(id), &head))).unwrap()
+        MergePlan::build((1..=3).map(|id| (FixtureId::new(id), &head, false))).unwrap()
     }
 
     fn layer(plan: &MergePlan, sources: u32) -> PlaybackLayer {
@@ -741,7 +741,7 @@ mod tests {
         // show: `CLAUDE.md`'s zero-crash invariant does not stop at the parts
         // that are easy to get right.
         let plan = plan();
-        let smaller = MergePlan::build([(FixtureId::new(1), &moving_head())]).unwrap();
+        let smaller = MergePlan::build([(FixtureId::new(1), &moving_head(), false)]).unwrap();
         let mut layer = layer(&plan, 1);
         let last = slot(&plan, 3, AttributeType::Pan);
         layer.source_mut(ExecutorId::new(1)).unwrap().set(last, 999);
@@ -927,7 +927,7 @@ mod tests {
             let mut def = attribute_def(AttributeType::Pan, 0);
             def.merge_mode = MergeMode::Htp;
             let odd = fixture_type("test.htp-pan", vec![def]);
-            let plan = MergePlan::build([(FixtureId::new(1), &odd)]).unwrap();
+            let plan = MergePlan::build([(FixtureId::new(1), &odd, false)]).unwrap();
             let mut layer = PlaybackLayer::new(
                 &plan,
                 [ExecutorId::new(1), ExecutorId::new(2)],

@@ -169,19 +169,36 @@ fn script() -> Vec<(&'static str, Command)> {
             Command::PlaceWindow {
                 instance_id: WindowInstanceId::new(1),
                 x: 240.0,
-                y: 120.0,
+                y: 520.0,
+                w: 640.0,
+                h: 480.0,
+            },
+        ),
+        // **S43, punch-list B10.** A window may not be dropped on top of
+        // another, and a placement that would is not an error — it simply
+        // changes nothing, because a drag sends one every 33 ms and a stream of
+        // refusals would be a stream of notices for an ordinary gesture. The
+        // client's local rectangle is dropped when the button comes up and the
+        // window springs back. Recorded because *nothing happens* is a claim a
+        // browser has to be held to as much as any other.
+        (
+            "drag it back on top of the DMX sheet: blocked, and nothing moves",
+            Command::PlaceWindow {
+                instance_id: WindowInstanceId::new(1),
+                x: 700.0,
+                y: 0.0,
                 w: 640.0,
                 h: 480.0,
             },
         ),
         (
-            "resize the DMX sheet by its corner",
+            "resize the DMX sheet by its corner, into the room beside it",
             Command::PlaceWindow {
                 instance_id: WindowInstanceId::new(2),
-                x: 0.0,
+                x: 640.0,
                 y: 0.0,
                 w: 1280.0,
-                h: 720.0,
+                h: 480.0,
             },
         ),
         (

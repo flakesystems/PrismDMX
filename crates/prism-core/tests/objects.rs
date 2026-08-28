@@ -254,9 +254,14 @@ fn a_sequence_takes_a_colour_and_an_executor_passes_one_on() {
 /// "not there" — each refused, each leaving the show byte-identical.
 #[test]
 fn colouring_something_that_has_no_colour_is_refused() {
+    // **A preset is colourable since S43** and is no longer in this list —
+    // `Preset::color` had been on the wire since S11 with nothing able to set
+    // it, so the scribble strips showed a colour no operator could choose. A
+    // cue, a group and a view still have no colour field at all, which is what
+    // this test is about.
     let mut show = populated_show();
     let before = bytes(&show);
-    for target in [cue_ref(1, "1"), group_ref(1), preset_ref(4), view_ref(1)] {
+    for target in [cue_ref(1, "1"), group_ref(1), view_ref(1)] {
         let refusal = show.apply(&Command::Color {
             target: target.clone(),
             color: Some(RgbColor { r: 1, g: 2, b: 3 }),
@@ -267,6 +272,38 @@ fn colouring_something_that_has_no_colour_is_refused() {
         );
         assert_eq!(bytes(&show), before);
     }
+
+    // **A preset takes one, and takes only that.** A store is what changes a
+    // preset's values, and a colour that took the programmer with it would make
+    // an operator choose between re-colouring a preset and keeping what is in
+    // it — which is why `color_preset` writes the one field.
+    let values = show.preset(PresetId::new(4)).unwrap().values.clone();
+    show.apply(&Command::Color {
+        target: preset_ref(4),
+        color: Some(RgbColor { r: 1, g: 2, b: 3 }),
+    })
+    .unwrap();
+    let preset = show.preset(PresetId::new(4)).unwrap();
+    assert_eq!(preset.color, Some(RgbColor { r: 1, g: 2, b: 3 }));
+    assert_eq!(preset.values, values);
+
+    // And taking it off is the same verb with no colour, which is `Label`'s
+    // rule one word along.
+    show.apply(&Command::Color {
+        target: preset_ref(4),
+        color: None,
+    })
+    .unwrap();
+    assert_eq!(show.preset(PresetId::new(4)).unwrap().color, None);
+
+    // A preset that is not there is refused, like a sequence that is not there.
+    assert!(matches!(
+        show.apply(&Command::Color {
+            target: preset_ref(404),
+            color: None,
+        }),
+        Err(ShowError::UnknownPreset(_))
+    ));
 
     // A sequence that is not there, and an executor with an empty slot: the
     // same two refusals `Label` gives, because it is the same indirection.
@@ -681,7 +718,7 @@ fn a_copied_cue_takes_a_name_only_where_there_is_none() {
 fn a_copied_preset_merges_and_keeps_the_destinations_pool() {
     let mut show = populated_show();
     let mut other = preset(6, 2, AttributeType::Green, 100);
-    other.pool = prism_domain::FeatureGroup::Beam;
+    other.pool = prism_domain::PresetPool::Beam;
     show.store_preset(other).unwrap();
 
     show.apply(&Command::Copy {
@@ -692,7 +729,7 @@ fn a_copied_preset_merges_and_keeps_the_destinations_pool() {
     .unwrap();
 
     let six = show.preset(PresetId::new(6)).unwrap();
-    assert_eq!(six.pool, prism_domain::FeatureGroup::Beam);
+    assert_eq!(six.pool, prism_domain::PresetPool::Beam);
     assert_eq!(six.values.len(), 2);
 
     // A **move** carries the pool along, because the preset itself moved.
@@ -709,8 +746,8 @@ fn a_copied_preset_merges_and_keeps_the_destinations_pool() {
 }
 
 /// The pool `common::preset` files preset 4 under, named once.
-fn show_pool_of_four() -> prism_domain::FeatureGroup {
-    prism_domain::FeatureGroup::Color
+fn show_pool_of_four() -> prism_domain::PresetPool {
+    prism_domain::PresetPool::Color
 }
 
 /// **An executor copies everything but its number and its playback state.**

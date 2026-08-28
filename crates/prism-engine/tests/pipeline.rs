@@ -79,6 +79,7 @@ fn attribute(
 fn patch() -> Vec<Fixture> {
     (1..=2u32)
         .map(|id| Fixture {
+            software_dimmer: true,
             id: FixtureId::new(id),
             name: format!("Head {id}"),
             type_id: "test.head".to_owned(),

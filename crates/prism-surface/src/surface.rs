@@ -1540,6 +1540,13 @@ mod tests {
         // The V-Pot's magnitude and the jog wheel's clock, through the
         // controller rather than through the curves on their own - the wiring is
         // the part that can be crossed over.
+        //
+        // **The numbers moved in S43** (punch-list B20) and the wiring did not:
+        // both curves are denominated in attribute units now rather than in a
+        // step nobody downstream multiplied out. 9 252 is the V-Pot's top row,
+        // 36 * `accel::COARSE`, and it is written out here rather than computed
+        // so that a crossed wire cannot arrive at the right answer by using the
+        // other curve's arithmetic.
         let (mut controller, start) = settled();
         let mut events = Vec::new();
         controller.push(&[0xB0, 16, 0x08], start, |event| events.push(event));
@@ -1547,13 +1554,13 @@ mod tests {
             events,
             vec![SurfaceEvent::Encoder {
                 strip: 0,
-                steps: 36
+                steps: 9252
             }]
         );
         events.clear();
         // The first jog message after a pause is a click, not a spin.
         controller.push(&[0xB0, 60, 0x01], start, |event| events.push(event));
-        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 1 }]);
+        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 20 }]);
         events.clear();
         // The same magnitude five milliseconds later is a spin.
         controller.push(
@@ -1563,7 +1570,7 @@ mod tests {
                 events.push(event);
             },
         );
-        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 8 }]);
+        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 160 }]);
     }
 
     #[test]
@@ -2005,7 +2012,7 @@ mod tests {
         // They are taste rather than measurement, so a settings screen owns them.
         let (mut controller, start) = settled();
         let (vpot, jog) = controller.curves();
-        assert_eq!(vpot.steps(8), 36);
+        assert_eq!(vpot.steps(8), 36 * i32::from(crate::COARSE));
         controller.set_curves(VPotAcceleration { curve: &[2] }, jog);
         let mut events = Vec::new();
         controller.push(&[0xB0, 16, 0x03], start, |event| events.push(event));

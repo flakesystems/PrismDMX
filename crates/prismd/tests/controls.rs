@@ -247,7 +247,7 @@ async fn the_shipped_defaults_survive_a_round_trip_through_the_editor() {
     let dir = tempfile::tempdir().unwrap();
     let (daemon, _surface) = desk(dir.path()).await;
 
-    let before = *daemon.bindings();
+    let before = daemon.bindings().clone();
     assert_eq!(before, Bindings::defaults(), "a fresh desk starts on §4.1");
 
     let (controls, _, _) = ask_table(&daemon);
@@ -256,7 +256,7 @@ async fn the_shipped_defaults_survive_a_round_trip_through_the_editor() {
         // Every row, including the ones that are deliberately nothing: the
         // strip encoder and F5–F8 are `None` in §4.1, and a round trip that
         // skipped them would not be one.
-        bind(&daemon, row.control, row.action);
+        bind(&daemon, row.control, row.action.clone());
     }
 
     assert_eq!(
@@ -294,7 +294,7 @@ async fn the_reserved_control_is_refused_by_name_before_anything_is_written() {
     let smpte = BoundControl::Global {
         button: GlobalButton::SmpteBeats,
     };
-    let before = *daemon.bindings();
+    let before = daemon.bindings().clone();
     let refusal = daemon
         .desk()
         .core()
@@ -510,7 +510,7 @@ async fn two_editors_change_two_controls_and_there_is_one_table() {
         controls
             .iter()
             .find(|row| row.control == wanted)
-            .and_then(|row| row.action)
+            .and_then(|row| row.action.clone())
     };
     // **Neither edit undid the other**, which is the claim.
     assert_eq!(action_of(f5), Some(SurfaceAction::SaveShow));

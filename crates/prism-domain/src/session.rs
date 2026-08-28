@@ -53,7 +53,63 @@ pub enum WindowType {
     Patch,
     /// Settings.
     Settings,
+    /// The executors of the current page — the strip, as a window.
+    ///
+    /// **Added in S43**, and the reason is the owner's skeleton
+    /// (`design/skeleton/main-layout.pdf`): the drawing has no band for the
+    /// executors under the canvas, so the strip S26 built into the shell has
+    /// nowhere to be *except* a window. That is also what the punch list asks
+    /// for by name (B15), and it is what makes the strip configurable at all —
+    /// a band with a fixed height has no room for an editor and a window has.
+    ///
+    /// S43 builds the window with the behaviour the band had; **S45** is where
+    /// its buttons and fader stop being fixed.
+    Executors,
+    /// The console keys — the words of the command line, as buttons.
+    ///
+    /// **Added in S43** for punch-list entry B12. They were a keypad under the
+    /// command line and they crowded it; every one of them is a word an
+    /// operator can type (`docs/COMMAND_LINE.md` §1), so a window is the right
+    /// home for them — an operator who has learned the words closes it, and one
+    /// who has not keeps it open.
+    CommandKeys,
+    /// The readings: the show, the session, the engine and the outputs.
+    ///
+    /// **Added in S43.** These were a strip across the bottom of the shell, and
+    /// the owner's skeleton has no strip. The one reading that must be true
+    /// without anybody having opened anything — *is the engine answering* — is
+    /// the only one that stayed in the header, as a light beside the title.
+    Status,
 }
+
+/// The width of the canvas coordinate space.
+///
+/// # Canvas units are not pixels, and both sides of the wire have to agree
+///
+/// A window's `x`, `y`, `w` and `h` are session state (`ARCHITECTURE_SPEC.md`
+/// §4.1), and the clients that share them do not share a screen — so the numbers
+/// are a fixed grid each client stretches over whatever box its canvas element
+/// turned out to be. A layout stored on a 4K desk opens sensibly on a laptop.
+///
+/// They live here rather than in `prism-core` because **the daemon places
+/// windows now** (S43, punch-list B10) and a client draws them, so the same four
+/// numbers are arithmetic on both sides of the wire. `ui/src/canvas/geometry.ts`
+/// carries the mirror and names this constant; `ts-rs` generates types and not
+/// constants, so the pair is kept by hand and by the note on each side.
+pub const CANVAS_WIDTH: f64 = 1920.0;
+
+/// The height of the canvas coordinate space. See [`CANVAS_WIDTH`].
+pub const CANVAS_HEIGHT: f64 = 1080.0;
+
+/// The narrowest a window may be, in canvas units.
+///
+/// Small enough to tuck four into a corner, wide enough that the title bar and
+/// its close button are still there to grab. It is also the floor a placement
+/// search shrinks to before it gives up (S43).
+pub const MIN_WINDOW_WIDTH: f64 = 200.0;
+
+/// The shortest a window may be. See [`MIN_WINDOW_WIDTH`].
+pub const MIN_WINDOW_HEIGHT: f64 = 140.0;
 
 /// One open window on the canvas.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -185,6 +241,38 @@ pub struct Session {
     pub programmer_param_index: u32,
     /// Contents of the command line.
     pub command_line: String,
+    /// How many times a **bound** line has asked to be run — S43.
+    ///
+    /// A counter and not a flag, because what a client watches for is the
+    /// *edge*: two identical lines bound to two keys have to run twice, and a
+    /// boolean that was already `true` would run the second one never. It only
+    /// ever goes up, and it is reset by nothing.
+    ///
+    /// Why it exists at all: the command-line parser is in the interface, so a
+    /// key on the X-Touch bound to a line the operator marked *send* cannot be
+    /// carried out by the daemon. It writes the line, bumps this, and the client
+    /// holding the keyboard focus runs it. See
+    /// `SurfaceAction::WriteCommandLine` for the whole argument.
+    ///
+    /// `#[serde(default)]` for [`Self::window_picker`]'s reason.
+    #[serde(default)]
+    pub command_line_run: u32,
+    /// Whether the operator is choosing a window to open.
+    ///
+    /// **S43, and it is session state on purpose.** The chooser it drives is a
+    /// panel over the canvas, which §4.2 would ordinarily call per-screen — but
+    /// the owner's rule for this desk is that **the X-Touch drives the whole
+    /// console, the interface included, and the two are never out of step**. A
+    /// panel a surface key can open therefore has to be a fact the daemon
+    /// holds, exactly as *what is part-way typed* already is
+    /// ([`Self::command_line`]). Two screens showing it at once is the price,
+    /// and on this desk two screens is the rare case.
+    ///
+    /// `#[serde(default)]` for [`Self::selected_sequence`]'s reason, and it is
+    /// the right default besides: a show opened with a chooser standing open
+    /// would be a show that opens asking a question.
+    #[serde(default)]
+    pub window_picker: bool,
 }
 
 impl Session {
@@ -205,6 +293,8 @@ impl Session {
             programmer_page: 0,
             programmer_param_index: 0,
             command_line: String::new(),
+            command_line_run: 0,
+            window_picker: false,
         }
     }
 }
@@ -245,6 +335,8 @@ mod tests {
             programmer_page: 0,
             programmer_param_index: 0,
             command_line: String::new(),
+            command_line_run: 4,
+            window_picker: false,
         }
     }
 
@@ -270,6 +362,7 @@ mod tests {
             [
                 "activeViewId",
                 "commandLine",
+                "commandLineRun",
                 "editingCue",
                 "encoderBank",
                 "executorPage",
@@ -281,6 +374,7 @@ mod tests {
                 "programmerParamIndex",
                 "selectedExecutor",
                 "selectedSequence",
+                "windowPicker",
             ]
         );
     }
@@ -371,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn all_eleven_window_types_exist() {
+    fn all_fourteen_window_types_exist() {
         // `ARCHITECTURE_SPEC.md` §6's ten, and `DmxSheet` — S25's, for the level
         // view S24 built and none of the ten named.
         let cfg = Config::new();
@@ -379,7 +473,8 @@ mod tests {
             WindowType::inline(&cfg),
             "\"FixtureSheet\" | \"DmxSheet\" | \"SequenceSheet\" | \"Groups\" \
              | \"Viewer3D\" | \"PhaserEditor\" | \"ClockViewer\" | \"CueViewer\" \
-             | \"PresetPool\" | \"Patch\" | \"Settings\""
+             | \"PresetPool\" | \"Patch\" | \"Settings\" | \"Executors\" \
+             | \"CommandKeys\" | \"Status\""
         );
     }
 }
@@ -391,7 +486,7 @@ impl WindowType {
     /// Added in S38, which needed the list twice: an *open this window* binding
     /// offers it at run time, and it is this enum's proptest strategy
     /// (`crate::arb::arbitrary_from_list`).
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 14] = [
         Self::FixtureSheet,
         Self::DmxSheet,
         Self::SequenceSheet,
@@ -403,6 +498,9 @@ impl WindowType {
         Self::PresetPool,
         Self::Patch,
         Self::Settings,
+        Self::Executors,
+        Self::CommandKeys,
+        Self::Status,
     ];
 }
 

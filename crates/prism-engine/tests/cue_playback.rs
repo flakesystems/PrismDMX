@@ -61,6 +61,7 @@ fn fixture_type(id: &str, footprint: u16, attributes: Vec<AttributeDef>) -> Fixt
 
 fn fixture(type_id: &str) -> Fixture {
     Fixture {
+        software_dimmer: true,
         id: FixtureId::new(1),
         name: "Dimmer".to_owned(),
         type_id: type_id.to_owned(),

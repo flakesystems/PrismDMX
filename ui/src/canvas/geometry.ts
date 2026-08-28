@@ -99,6 +99,162 @@ export function resizedBy(origin: Rect, dx: number, dy: number): Rect {
 }
 
 /**
+ * Whether two rectangles share any area at all.
+ *
+ * Edges that merely touch do not overlap, which is what lets two windows be put
+ * side by side with no gap — the arrangement {@link slidTo} exists to make easy.
+ */
+export function overlaps(one: Rect, two: Rect): boolean {
+  return (
+    one.x < two.x + two.w && two.x < one.x + one.w && one.y < two.y + two.h && two.y < one.y + one.h
+  );
+}
+
+/**
+ * The far end of a move, stopped where it meets a neighbour — S43, punch-list
+ * B10 second half.
+ *
+ * # What was wrong with refusing instead
+ *
+ * The daemon has refused an overlapping placement since B10
+ * (`prism_core::layout::may_place`), and refusing is right: it is the daemon's
+ * rule and the daemon keeps it. What an operator saw, though, was the window
+ * following the pointer *over* its neighbour and then jumping back when the
+ * refusal arrived — so putting two windows edge to edge meant aiming at a
+ * position you could not see yourself reach, and being told afterwards.
+ *
+ * The canvas edges never did that, because {@link movedBy} clamps to them: a
+ * window pushed at the right-hand wall slides along it. This is that, with the
+ * neighbours as walls too.
+ *
+ * # This predicts, it does not decide
+ *
+ * §4.2's line, and the same one {@link movedBy} is on: **where a window is** is
+ * the session's, and every drag still goes out as a `PlaceWindow` for the daemon
+ * to accept or refuse. What is local is only the rectangle shown while the
+ * button is down, and this keeps that rectangle somewhere the daemon will say
+ * yes to — which is why the jump disappears rather than being hidden. If the
+ * prediction is ever wrong the old behaviour is still underneath: the window
+ * goes back to where the session says it is.
+ *
+ * # A neighbour that is already overlapped is not a wall
+ *
+ * `may_place`'s rule, kept in step here: *overlap may only shrink*. A window
+ * that starts underneath another one — which a hand-edited show or a layout
+ * saved before B10 can produce — must still be draggable out from under it, so
+ * a neighbour that is overlapped at the start of the drag blocks nothing for the
+ * length of that drag.
+ *
+ * # One axis at a time, and that is what makes it slide
+ *
+ * The move is resolved along x with the window at its original y, then along y
+ * from where x finished. Resolving both at once would stop the window dead at
+ * the first corner it met; doing it in turn lets it run along the edge it is
+ * pressed against, which is the gesture an operator is actually making when
+ * they push one window up against another.
+ */
+export function slidTo(origin: Rect, wanted: Rect, neighbours: readonly Rect[]): Rect {
+  const walls = neighbours.filter((rect) => !overlaps(origin, rect));
+  const x = stopped(origin.x, wanted.x, origin.w, spanOf(origin, "y"), walls, "x");
+  const at = { ...origin, x };
+  const y = stopped(origin.y, wanted.y, origin.h, spanOf(at, "x"), walls, "y");
+  return { x, y, w: origin.w, h: origin.h };
+}
+
+/**
+ * The far corner of a resize, stopped where it meets a neighbour.
+ *
+ * The same rule as {@link slidTo} and for the same reason: a corner dragged into
+ * a neighbour used to grow over it and snap back. The top-left corner does not
+ * move, so what is limited is the width and the height.
+ */
+export function grownTo(origin: Rect, wanted: Rect, neighbours: readonly Rect[]): Rect {
+  const walls = neighbours.filter((rect) => !overlaps(origin, rect));
+  // No floor is applied here and none is needed: `resizedBy` has already put one
+  // on, and a wall that is not overlapped at the start is by definition at least
+  // `origin.w` away — so a window can always stay the size it was.
+  const w = limit(origin.x, wanted.w, spanOf(origin, "y"), walls, "x");
+  const h = limit(origin.y, wanted.h, spanOf({ ...origin, w }, "x"), walls, "y");
+  return { x: origin.x, y: origin.y, w, h };
+}
+
+/** The interval a rectangle covers on one axis, as `[from, to)`. */
+function spanOf(rect: Rect, axis: "x" | "y"): readonly [number, number] {
+  return axis === "x" ? [rect.x, rect.x + rect.w] : [rect.y, rect.y + rect.h];
+}
+
+/** Whether two half-open intervals share any length. */
+function crosses(one: readonly [number, number], two: readonly [number, number]): boolean {
+  return one[0] < two[1] && two[0] < one[1];
+}
+
+/**
+ * Where a move along one axis has to stop.
+ *
+ * `from` is where the near edge starts, `to` where it wants to go, `size` how
+ * far the far edge is beyond it, and `across` the interval the window covers on
+ * the *other* axis — a neighbour that does not cross that interval is beside the
+ * window rather than in front of it and cannot stop anything.
+ */
+function stopped(
+  from: number,
+  to: number,
+  size: number,
+  across: readonly [number, number],
+  walls: readonly Rect[],
+  axis: "x" | "y",
+): number {
+  if (to === from) {
+    return from;
+  }
+  const other = axis === "x" ? "y" : "x";
+  let stop = to;
+  for (const wall of walls) {
+    if (!crosses(across, spanOf(wall, other))) {
+      continue;
+    }
+    const [near, far] = spanOf(wall, axis);
+    if (to > from) {
+      // Moving towards the far end: only a wall already ahead of the window can
+      // stop it, and it stops it at its near edge.
+      if (near >= from + size) {
+        stop = Math.min(stop, near - size);
+      }
+    } else if (far <= from) {
+      stop = Math.max(stop, far);
+    }
+  }
+  return stop;
+}
+
+/**
+ * How large one side may grow before it meets a neighbour.
+ *
+ * {@link stopped}'s twin for a resize: the near edge is pinned, so what is
+ * limited is the distance to the far one.
+ */
+function limit(
+  near: number,
+  size: number,
+  across: readonly [number, number],
+  walls: readonly Rect[],
+  axis: "x" | "y",
+): number {
+  const other = axis === "x" ? "y" : "x";
+  let most = size;
+  for (const wall of walls) {
+    if (!crosses(across, spanOf(wall, other))) {
+      continue;
+    }
+    const start = spanOf(wall, axis)[0];
+    if (start >= near) {
+      most = Math.min(most, start - near);
+    }
+  }
+  return most;
+}
+
+/**
  * Whole canvas units.
  *
  * What goes on the wire, so that a pointer moved by half a pixel on a scaled

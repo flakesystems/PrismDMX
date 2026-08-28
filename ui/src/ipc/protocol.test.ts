@@ -160,6 +160,8 @@ describe("the programmer", () => {
   it("reads a full one", () => {
     const state = {
       selection: [1, 2],
+      selectedGroups: [3],
+      manualSelection: [2],
       activeFeatureGroup: "Color",
       values: [
         { fixture: 1, attribute: "Red", value: { value: 65535, source: "Manual", presetRef: null } },
@@ -168,6 +170,27 @@ describe("the programmer", () => {
       clearStage: 2,
     };
     expect(readProgrammerState(state, "p")).toEqual(state);
+  });
+
+  /**
+   * **The two provenance lists are optional** — S43, B27. They are
+   * `#[serde(default)]` on the daemon side, so a snapshot written before they
+   * existed reads with both empty, which is exactly the state *nothing was
+   * selected through a group*. Refusing the snapshot over them would be
+   * refusing to open a show for a reading nothing on the screen needs.
+   */
+  it("reads one from a daemon that does not send the group provenance", () => {
+    const state = {
+      selection: [1],
+      activeFeatureGroup: "Dimmer",
+      values: [],
+      clearStage: 1,
+    };
+    expect(readProgrammerState(state, "p")).toEqual({
+      ...state,
+      selectedGroups: [],
+      manualSelection: [],
+    });
   });
 
   it("refuses a value the daemon's vocabulary does not have", () => {
@@ -203,10 +226,32 @@ describe("the programmer", () => {
     ).toBe("p.values[0].value.source");
   });
 
-  it("refuses a clear stage that is not one of the three", () => {
-    expect(faultPath(() => readProgrammerState({ ...emptyProgrammer(), clearStage: 3 }, "p"))).toBe(
+  /**
+   * **This test asserted the bug.** Until S43 it said *stage 3 is refused*,
+   * which was true of a three-stage Clear and became false the moment the key
+   * started saying what the **next** press would clear — `Nothing`, `Values`,
+   * `Selection`, `All` (punch-list B2). The decoder still refused 3, so a desk
+   * that reached the fourth stage faulted **every attached client**, which
+   * resynchronised, was served the same state, and faulted again: a
+   * connect-and-drop loop that from the operator's seat looks exactly like the
+   * daemon having died. It had not; it was still running and still sending DMX.
+   *
+   * A test that pins a bound has to be read again when the bound moves, and this
+   * one now walks every stage the domain has rather than naming the first one it
+   * has not got.
+   */
+  it("reads every stage the Clear key has, and refuses one it has not", () => {
+    for (const clearStage of [0, 1, 2, 3]) {
+      expect(readProgrammerState({ ...emptyProgrammer(), clearStage }, "p").clearStage).toBe(
+        clearStage,
+      );
+    }
+    expect(faultPath(() => readProgrammerState({ ...emptyProgrammer(), clearStage: 4 }, "p"))).toBe(
       "p.clearStage",
     );
+    expect(
+      faultPath(() => readProgrammerState({ ...emptyProgrammer(), clearStage: -1 }, "p")),
+    ).toBe("p.clearStage");
   });
 });
 

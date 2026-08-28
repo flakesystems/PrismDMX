@@ -230,6 +230,7 @@ function messageFor(what: string): ClientMessage {
           typeId: "generic.dimmer",
           universe: 2,
           address: 271,
+          softwareDimmer: true,
         },
       };
     case "OpenWindow without params":
@@ -244,7 +245,7 @@ function messageFor(what: string): ClientMessage {
       return {
         t: "Command",
         seq: 8,
-        command: { t: "CommandLineInput", text: "fixture 1 thru 4 at full" },
+        command: { t: "CommandLineInput", text: "fixture 1 thru 4 at full", run: false },
       };
     case "SelectView":
       return { t: "Command", seq: 9, command: { t: "SelectView", viewId: 2 } };

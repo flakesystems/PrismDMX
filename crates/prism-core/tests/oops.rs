@@ -197,20 +197,22 @@ fn a_renumber_to_the_same_number_is_not_a_step() {
 /// Boxing puts the tree on the heap and costs one indirection per generated
 /// value. A later session adding a command with a large payload should reach for
 /// this rather than for `RUST_MIN_STACK`.
-/// Every command there is, filtered to the undoable ones, **built lazily**.
+/// Every command there is, filtered to the undoable ones.
 ///
-/// `any::<Command>()` returns one strategy value holding every variant's
-/// strategy at once, and in a debug build on Windows that value is now large
-/// enough to overflow a test thread's stack while it is still being
-/// constructed - S34's finding at the thirty-sixth variant, met again at S40's
-/// forty-second. `LazyJust` moves the construction inside the boxed strategy,
-/// so the big value is never a local of this function.
+/// `prism_domain::arb::command` rather than `any::<Command>()`, and **this test
+/// target is why it exists**. The derive builds one value tree holding a slot
+/// per variant, a slot costs about 576 bytes whatever the variant carries, and
+/// this target is the one that dies of it: S34 at the thirty-sixth variant, S40
+/// at the forty-second, and S43 at the fifty-seventh, each time with a
+/// `STATUS_STACK_OVERFLOW` and no failing case to read. The grouped strategy
+/// costs one slot per group and builds only the group it picked, so the tree is
+/// 16 bytes instead of 32 144.
 ///
-/// **A session adding a command reaches for this and not for `RUST_MIN_STACK`**,
-/// which only moves the cliff a few variants further along.
+/// **A session adding a command adds an arm to a group in `prism_domain::arb`,
+/// and never reaches for `RUST_MIN_STACK`** — which only moved the cliff a few
+/// variants along even when it worked.
 fn prop_lazy_command() -> BoxedStrategy<Command> {
-    proptest::strategy::LazyJust::new(|| ())
-        .prop_flat_map(|()| any::<Command>())
+    prism_domain::arb::command()
         .prop_filter("only undoable commands", Command::is_undoable)
         .boxed()
 }
@@ -555,7 +557,7 @@ fn one_record_can_cover_the_show_the_programmer_and_the_session() {
     // the session's page state with it.
     file.apply(&Command::ClearProgrammer).unwrap();
     assert_eq!(file.session.session().programmer_page, 0);
-    assert_eq!(file.programmer.state().clear_stage, ClearStage::Idle);
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Nothing);
 
     let record = file.journal.undoable().unwrap();
     assert_eq!(record.command(), &Command::ClearProgrammer);
@@ -573,8 +575,8 @@ fn one_record_can_cover_the_show_the_programmer_and_the_session() {
     assert_eq!(file.session.session().programmer_page, 3);
     assert_eq!(
         file.programmer.state().clear_stage,
-        ClearStage::SelectionCleared,
-        "the Clear button came back in a stage the operator never left it in"
+        ClearStage::All,
+        "the Clear key came back offering something other than what is there"
     );
 }
 

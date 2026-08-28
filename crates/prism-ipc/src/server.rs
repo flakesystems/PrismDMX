@@ -150,6 +150,8 @@ pub trait ServerHandler: Send + Sync + 'static {
             Query::SurfaceBindings => Answer::SurfaceBindings {
                 controls: Vec::new(),
                 device: String::new(),
+                device_key: String::new(),
+                profile_version: 0,
                 profile: None,
                 revision: 0,
                 learning: false,
