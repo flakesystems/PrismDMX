@@ -430,7 +430,29 @@ for (const viewport of [
       await openPicker(page);
       await page.getByTestId(`picker-${type}`).click();
     }
-    await expect(page.locator("[data-window-type]").first()).toBeVisible();
+    // **Wait for the canvas to settle, not just for the first window.** Every
+    // key is a command out and a `SessionPatch` back, and the daemon decides
+    // what fits — it places what it can and refuses the rest out loud
+    // (`SessionError::NoRoomOnTheCanvas`), so how many windows end up here is
+    // its answer and not a number this test can predict. What *can* be waited
+    // for is the answer having arrived: a count that has stopped moving.
+    //
+    // Waiting for the first window instead would not have turned this red. It
+    // would have measured the overflow of however many windows had landed by
+    // then, which is the quiet kind of wrong this session has already found
+    // twice.
+    let seen = -1;
+    await expect
+      .poll(
+        async () => {
+          const now = await page.locator("[data-window-type]").count();
+          const settled = now > 0 && now === seen;
+          seen = now;
+          return settled;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
 
     const overflow = await page.evaluate(() => {
       const scroll = (element: Element | null) =>

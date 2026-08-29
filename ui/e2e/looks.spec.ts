@@ -89,8 +89,28 @@ async function clearProgrammer(page: Page): Promise<void> {
  */
 async function closeWindows(page: Page): Promise<void> {
   const closers = page.locator("[data-testid^='close-window-']");
-  for (let open = await closers.count(); open > 0; open -= 1) {
+  // **One close at a time, and each one is waited for** — which is D3 turning up
+  // in the test suite. Closing a window is a command out and a `SessionPatch`
+  // back: the canvas is the daemon's, so the key going down proves nothing about
+  // the window going away.
+  //
+  // This used to take `count()` once and click `first()` that many times. On a
+  // fast machine each delta arrived before the next click and it worked; on the
+  // runner it did not, and the next click landed on a window that was already on
+  // its way out — leaving the last one open and the assertion below reading 1.
+  // `toHaveCount` is what waits, so the loop asks for the count to *drop* before
+  // it clicks again.
+  //
+  // The bound is a guard against a close that never lands, so that a broken
+  // build fails here with the count rather than hanging: fourteen window types
+  // and nothing opens more than one of each.
+  for (let guard = 0; guard < 20; guard += 1) {
+    const open = await closers.count();
+    if (open === 0) {
+      break;
+    }
     await closers.first().click();
+    await expect(closers).toHaveCount(open - 1);
   }
   await expect(page.locator("[data-window-type]")).toHaveCount(0);
 }
