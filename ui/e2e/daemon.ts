@@ -244,12 +244,31 @@ function member(value: unknown, key: string): unknown {
  * position.
  */
 export async function openWindow(page: Page, type: string): Promise<void> {
-  // **The focus leaves the text field first.** `Insert` is ignored while the
-  // focus is in one (`App.tsx::useWindowPickerKey`) and that is deliberate: the
-  // command line is where an operator's hands are, and a shortcut that fired
-  // mid-word would be worse than no shortcut. A test that has just typed a line
-  // is in exactly that state, so it does what an operator's hand does — leaves
-  // the field — rather than asserting the rule away.
+  await openPicker(page);
+  await page.getByTestId(`picker-${type}`).click();
+  await expect(page.locator(`[data-window-type="${type}"]`).first()).toBeVisible();
+}
+
+/**
+ * Opens the window chooser and **waits for it to be there**.
+ *
+ * Two things this does that a bare `keyboard.press("Insert")` does not, and both
+ * were found the hard way.
+ *
+ * **The focus leaves the text field first.** `Insert` is ignored while the focus
+ * is in one (`App.tsx::useWindowPickerKey`) and that is deliberate: the command
+ * line is where an operator's hands are, and a shortcut that fired mid-word
+ * would be worse than no shortcut. A test that has just typed a line — or opened
+ * a window that focuses something — is in exactly that state, so it does what an
+ * operator's hand does rather than asserting the rule away.
+ *
+ * **And it waits.** The chooser is a React render away from the key press, and a
+ * caller that read the DOM straight afterwards raced it. Playwright's locators
+ * wait for *actions* and assertions; `evaluateAll` does not, so it returned an
+ * empty list on a loaded runner and the test read that as *the build has no
+ * window types*. This is where the wait belongs, once, for every caller.
+ */
+export async function openPicker(page: Page): Promise<void> {
   await page.evaluate(() => {
     const focused = document.activeElement;
     if (focused instanceof HTMLElement) {
@@ -257,6 +276,5 @@ export async function openWindow(page: Page, type: string): Promise<void> {
     }
   });
   await page.keyboard.press("Insert");
-  await page.getByTestId(`picker-${type}`).click();
-  await expect(page.locator(`[data-window-type="${type}"]`).first()).toBeVisible();
+  await expect(page.getByTestId("window-picker")).toBeVisible();
 }

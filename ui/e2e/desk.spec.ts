@@ -34,7 +34,16 @@ import { expect, test } from "@playwright/test";
 import { join } from "node:path";
 
 import type { Daemon } from "./daemon.ts";
-import { buildDaemon, forget, openWindow, pressConsole, showFixture, startDaemon, turnConsoleWheel } from "./daemon.ts";
+import {
+  buildDaemon,
+  forget,
+  openPicker,
+  openWindow,
+  pressConsole,
+  showFixture,
+  startDaemon,
+  turnConsoleWheel,
+} from "./daemon.ts";
 
 /** A port of this spec's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7393;
@@ -400,7 +409,7 @@ for (const viewport of [
     // `prism_domain::WindowType`, so a type added later is covered by this test
     // the day it exists. The daemon places them (B10) and refuses the ones there
     // is no room for, which is itself the answer to *does this fit*.
-    await page.keyboard.press("Insert");
+    await openPicker(page);
     const types = await page.locator('[data-testid^="picker-"]').evaluateAll((nodes) =>
       nodes
         .map((node) => node.getAttribute("data-testid") ?? "")
@@ -409,11 +418,17 @@ for (const viewport of [
     );
     expect(types.length).toBeGreaterThan(10);
     for (const type of types) {
-      await page.keyboard.press("Insert");
-      const key = page.getByTestId(`picker-${type}`);
-      if ((await key.count()) > 0) {
-        await key.click();
-      }
+      // **The key is always there, so a missing one is a failure and not a
+      // skip.** The chooser lists `WINDOW_TYPE_VARIANTS` whole, every time
+      // (`canvas/picker.tsx`) — a window already open is still offered. This
+      // loop used to guard the click with `if (count > 0)`, which meant that a
+      // chooser that had not rendered yet, or an `Insert` swallowed by a window
+      // that had taken the focus, **silently opened nothing** and the test went
+      // green having checked one window instead of fourteen. `openPicker` waits
+      // for the chooser and leaves the text field first; the click is then
+      // unconditional.
+      await openPicker(page);
+      await page.getByTestId(`picker-${type}`).click();
     }
     await expect(page.locator("[data-window-type]").first()).toBeVisible();
 
