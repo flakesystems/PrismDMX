@@ -22,6 +22,7 @@
  */
 
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { join } from "node:path";
 
 import type { Daemon } from "./daemon.ts";
@@ -47,6 +48,34 @@ test.afterEach(async () => {
   await daemon?.kill();
   daemon = null;
 });
+
+/**
+ * Where window 1 is, once it has stopped moving.
+ *
+ * A drag is optimistic in `canvas/drag.ts` and authoritative only when the
+ * daemon's `SessionPatch` arrives, so reading `style.left` the instant the mouse
+ * comes up reads a value that is about to be corrected — which is how this file
+ * once compared a position taken mid-flight against the one that survived a
+ * reload, and failed by exactly one drag step. Two agreeing reads a frame apart
+ * is *the delta has arrived* said in the only terms a browser has.
+ */
+async function settled(page: Page): Promise<{ left: string; top: string }> {
+  const read = async (): Promise<{ left: string; top: string }> =>
+    page.getByTestId("window-1").evaluate((element) => ({
+      left: (element as HTMLElement).style.left,
+      top: (element as HTMLElement).style.top,
+    }));
+  let previous = await read();
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    await page.waitForTimeout(100);
+    const current = await read();
+    if (current.left === previous.left && current.top === previous.top) {
+      return current;
+    }
+    previous = current;
+  }
+  throw new Error(`window 1 never stopped moving: ${JSON.stringify(previous)}`);
+}
 
 test("windows live in the session: the canvas survives a reload the daemon never hears about", async ({
   page,
@@ -86,12 +115,14 @@ test("windows live in the session: the canvas survives a reload the daemon never
   }
   await page.mouse.up();
 
-  // Where it ended up is the **daemon's** answer, so it is read back off the
-  // element after the delta has arrived.
-  const moved = await page.getByTestId("window-1").evaluate((element) => ({
-    left: (element as HTMLElement).style.left,
-    top: (element as HTMLElement).style.top,
-  }));
+  // Where it ended up is the **daemon's** answer, so it has to be read after the
+  // delta has arrived — and *waited for*, which this did not do until a CI run
+  // caught it one drag step short. Placing a window is a command out and a
+  // delta back (**D3 applies to the suite**, S43's rule from `closeWindows`), so
+  // the value is read when it has stopped moving rather than the instant the
+  // mouse comes up: the last step is still optimistic in `canvas/drag.ts` at
+  // that moment, and the reload below compares against what the daemon kept.
+  const moved = await settled(page);
   expect(moved.left).not.toBe("0%");
   expect(moved.top).not.toBe("0%");
 
@@ -102,10 +133,7 @@ test("windows live in the session: the canvas survives a reload the daemon never
   await page.reload();
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
   await expect(page.getByTestId("window-1")).toBeVisible();
-  const after = await page.getByTestId("window-1").evaluate((element) => ({
-    left: (element as HTMLElement).style.left,
-    top: (element as HTMLElement).style.top,
-  }));
+  const after = await settled(page);
   expect(after).toEqual(moved);
 
   // 4. A second window, opened after the reload: the numbering is the
