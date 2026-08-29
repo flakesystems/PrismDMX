@@ -473,6 +473,7 @@ impl Desk {
                         .collect(),
                     listening: table.listening,
                     error: table.error.clone(),
+                    remedy: table.remedy(),
                     counters: prism_domain::ArtNetCounters {
                         polls_sent: table.counters.polls_sent,
                         polls_failed: table.counters.polls_failed,

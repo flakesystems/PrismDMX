@@ -916,7 +916,7 @@ type Answer =
       open: string | null; status: SurfaceStatus | null }
   | { t: "DarkUniverses"; universes: UniverseId[] }
   | { t: "ArtNetNodes"; nodes: ArtNetNodeInfo[]; listening: boolean; error: string | null;
-      counters: ArtNetCounters }
+      counters: ArtNetCounters; remedy: string | null }
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
       profile: string | null; revision: number; learning: boolean };
 
@@ -1086,6 +1086,21 @@ interface StorePreview {
 > reason. An empty list under a socket that never opened says nothing at all about
 > the network, and reading it as *no nodes* would be B6's mistake pointed the
 > other way.
+>
+> **`remedy` is what an evening cost.** A node that was connected, reachable and
+> answering every poll read `Degraded`, because Windows' inbound firewall rule
+> for `prismd` covered the *Private* profile while the lighting network was
+> *Public*: the polls went out, the replies were dropped before the process saw
+> them, and the desk said nothing more useful than the word *Degraded*. The
+> daemon could see that fingerprint exactly — polls sent, and **not one datagram
+> back, readable or not** — and that state has one overwhelmingly common cause.
+> So it says so, after three unanswered polls, and stops saying it the moment
+> anything at all arrives.
+>
+> It is **words** rather than a flag a client turns into a sentence, which is
+> `SurfaceStatus::remedy`'s rule (S37) and for exactly its reason: the obvious
+> sentence a client would compose is *check the node*, and the node is the one
+> thing that is working when this appears.
 >
 > **The counters are there because the panel could not answer a question the
 > daemon could.** A node that was connected, reachable and answering every poll

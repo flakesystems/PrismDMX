@@ -116,7 +116,52 @@ impl Default for DiscoveryTable {
     }
 }
 
+/// Polls that have to have gone unanswered before the desk suggests anything.
+///
+/// Three, which at the default cadence is about nine seconds. Long enough that a
+/// desk still starting up says nothing, short enough that somebody standing at a
+/// rack does not have to wait for it.
+const POLLS_BEFORE_A_REMEDY: u64 = 3;
+
+/// What to try when polls go out and **nothing at all** comes back.
+///
+/// The fingerprint is exact and it is worth being exact about: this desk has
+/// sent polls, and has received neither a reply, nor a datagram it could not
+/// read, nor a refused read. Not *the node said nothing useful* — **nothing
+/// arrived**. A node that is switched off produces the same silence, so the
+/// sentence names both and puts the one that is invisible from the rack first.
+///
+/// It cost an evening to learn once: the owner's node was connected, reachable
+/// and answering every poll, and the desk read `Degraded`, because Windows'
+/// inbound firewall rule for `prismd` covered the *Private* profile while the
+/// lighting network was *Public*. The polls went out and the replies were
+/// dropped before the process saw them — which is exactly what *nothing at all*
+/// looks like from in here.
+fn remedy_for(listening: bool, counters: &DiscoveryCounters) -> Option<String> {
+    if !listening || counters.polls_sent < POLLS_BEFORE_A_REMEDY {
+        return None;
+    }
+    // Anything at all having arrived means the path works and the fault is
+    // somewhere this sentence would only mislead about.
+    if counters.replies > 0 || counters.malformed > 0 || counters.read_errors > 0 {
+        return None;
+    }
+    Some(format!(
+        "{} polls have gone out and nothing at all has come back — not one \
+         datagram, readable or not. Either no node is on this network, or this \
+         machine's firewall is dropping the replies: check that inbound UDP on \
+         port 6454 is allowed for prismd on the network the nodes are on.",
+        counters.polls_sent
+    ))
+}
+
 impl DiscoveryTable {
+    /// What to try, in the daemon's own words — see [`remedy_for`].
+    #[must_use]
+    pub fn remedy(&self) -> Option<String> {
+        remedy_for(self.listening, &self.counters)
+    }
+
     /// Whether the node at `address` answers, as of `now`.
     ///
     /// Matched on the **IP alone**, for `NodeDiscovery::reach`'s reason: a node
@@ -410,12 +455,39 @@ fn run(source: &Arc<dyn SocketSource>, config: &DiscoveryConfig, shared: &Arc<Sh
     publish(&discovery, shared, true);
 
     let mut known = 0usize;
+    let mut reported = discovery.counters();
+    let mut warned = false;
     while shared.running.load(Ordering::Acquire) {
         let targets = lock(&shared.targets).clone();
         discovery.set_targets(targets);
         // `service` waits at most `config.wait` inside the socket read, so this
         // loop notices a stop within that — no sleep, and no spin.
         discovery.service();
+        // What the conversation is actually doing, at debug level. A rig that
+        // is not being answered looks identical from outside to one that is not
+        // being asked, and this is the line that tells them apart in a hall.
+        let counters = discovery.counters();
+        // Once. An installer reading a log at the back of a rack should meet
+        // this, and should not meet it every three seconds.
+        if let Some(remedy) = remedy_for(true, &counters).filter(|_| !warned) {
+            warned = true;
+            log::warn("artnet", &remedy);
+        }
+        if counters != reported {
+            reported = counters;
+            log::debug(
+                "artnet",
+                &format!(
+                    "polls sent {}, failed {}, replies {}, malformed {}, dropped {}, read errors {}",
+                    counters.polls_sent,
+                    counters.polls_failed,
+                    counters.replies,
+                    counters.malformed,
+                    counters.dropped,
+                    counters.read_errors
+                ),
+            );
+        }
         if discovery.nodes().len() != known {
             known = discovery.nodes().len();
             if let Some(node) = discovery.nodes().last() {
@@ -812,6 +884,77 @@ mod tests {
         assert!(format!("{discovery:?}").contains("enabled: true"));
         discovery.retarget(vec![node_at(5)]);
         assert!(format!("{discovery:?}").contains("running: true"));
+    }
+
+    /// **The evening this cost, as four assertions.**
+    ///
+    /// The fingerprint the desk can see and the operator cannot: polls going
+    /// out, and not one datagram coming back — readable or otherwise.
+    #[test]
+    fn polls_going_out_with_nothing_at_all_coming_back_is_worth_saying() {
+        let mut counters = prism_protocols::DiscoveryCounters {
+            polls_sent: super::POLLS_BEFORE_A_REMEDY,
+            ..Default::default()
+        };
+        let remedy = super::remedy_for(true, &counters).expect("a desk this quiet has advice");
+        assert!(remedy.contains("nothing at all has come back"), "{remedy}");
+        assert!(remedy.contains("6454"), "{remedy}");
+        assert!(
+            remedy.contains("firewall"),
+            "the cause that is invisible from the rack is named: {remedy}"
+        );
+        assert!(
+            remedy.contains("no node is on this network"),
+            "…and so is the other one, which is the honest half: {remedy}"
+        );
+
+        // **Anything arriving takes the advice away**, because the path works and
+        // this sentence would only send somebody to the wrong place.
+        for arrived in [
+            prism_protocols::DiscoveryCounters {
+                replies: 1,
+                ..counters
+            },
+            prism_protocols::DiscoveryCounters {
+                malformed: 1,
+                ..counters
+            },
+            prism_protocols::DiscoveryCounters {
+                read_errors: 1,
+                ..counters
+            },
+        ] {
+            assert_eq!(super::remedy_for(true, &arrived), None, "{arrived:?}");
+        }
+
+        // A desk that has barely started says nothing.
+        counters.polls_sent = super::POLLS_BEFORE_A_REMEDY - 1;
+        assert_eq!(super::remedy_for(true, &counters), None);
+
+        // …and neither does one that is not listening: the panel already says
+        // that, and two sentences about one silence is one too many.
+        counters.polls_sent = 99;
+        assert_eq!(super::remedy_for(false, &counters), None);
+    }
+
+    /// The table answers with it, which is what reaches a client.
+    #[test]
+    fn a_table_that_has_heard_nothing_carries_the_advice() {
+        let mut table = DiscoveryTable {
+            listening: true,
+            counters: prism_protocols::DiscoveryCounters {
+                polls_sent: 21,
+                ..Default::default()
+            },
+            ..DiscoveryTable::default()
+        };
+        assert!(
+            table
+                .remedy()
+                .is_some_and(|words| words.contains("21 polls"))
+        );
+        table.counters.replies = 1;
+        assert_eq!(table.remedy(), None);
     }
 
     #[test]

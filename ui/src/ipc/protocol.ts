@@ -612,6 +612,11 @@ export function readAnswer(value: unknown, path: string): Answer {
         listening: asBoolean(field(record, "listening"), `${path}.listening`),
         error: readOptionalString(field(record, "error"), `${path}.error`),
         counters: readArtNetCounters(field(record, "counters"), `${path}.counters`),
+        // Words, and the daemon's — never a sentence this file writes. The
+        // obvious one a client would compose from the counters is *check the
+        // node*, and the node is the one thing that is working when this
+        // appears. `Answer::MidiPorts`' remedy is the precedent (S37).
+        remedy: readOptionalString(field(record, "remedy"), `${path}.remedy`),
       };
     case "DarkUniverses":
       return {

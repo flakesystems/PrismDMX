@@ -936,6 +936,7 @@ describe("the rows that are easy to leave untested", () => {
       listening: false,
       error: null,
       counters: { pollsSent: 0, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy: null,
     });
     expect(screen.getByTestId("artnet-not-listening").textContent).toContain(
       "once an Art-Net output is configured",
@@ -952,6 +953,7 @@ describe("the rows that are easy to leave untested", () => {
       listening: false,
       error: "the local address could not be bound",
       counters: { pollsSent: 0, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy: null,
     });
     expect(screen.getByTestId("artnet-not-listening").textContent).toContain(
       "the local address could not be bound",
@@ -976,6 +978,7 @@ describe("the rows that are easy to leave untested", () => {
       listening: true,
       error: null,
       counters: { pollsSent: 42, pollsFailed: 0, replies: 0, malformed: 3, dropped: 0, readErrors: 0 },
+      remedy: null,
     });
     const line = screen.getByTestId("artnet-counters").textContent ?? "";
     expect(line).toContain("42 polls sent");
@@ -989,6 +992,46 @@ describe("the rows that are easy to leave untested", () => {
     expect(line).not.toContain("could not be sent");
   });
 
+  /**
+   * **The evening this cost, as a line on the screen** — S46.
+   *
+   * A node that was connected, reachable and answering every poll read
+   * `Degraded`, because the inbound firewall rule for `prismd` covered the
+   * Private profile and the lighting network was Public. The daemon could see
+   * the fingerprint the whole time. Now it says so, in its own words — this
+   * panel renders them and writes none of its own, because the sentence a
+   * client would compose from the counters is *check the node*, and the node is
+   * the one thing that is working.
+   */
+  it("passes on what the daemon suggests when nothing at all comes back", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      nodes: [],
+      listening: true,
+      error: null,
+      counters: { pollsSent: 21, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy:
+        "21 polls have gone out and nothing at all has come back — check that inbound UDP on port 6454 is allowed for prismd",
+    });
+    expect(screen.getByTestId("artnet-remedy").textContent).toContain("inbound UDP on port 6454");
+    expect(screen.getByTestId("artnet-counters").textContent).toContain("21 polls sent");
+  });
+
+  /** …and says nothing when the daemon has nothing to suggest. */
+  it("suggests nothing of its own when the daemon suggests nothing", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      nodes: [],
+      listening: true,
+      error: null,
+      counters: { pollsSent: 2, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy: null,
+    });
+    expect(screen.queryByTestId("artnet-remedy")).toBeNull();
+  });
+
   /** Nothing is counted at a desk that never opened a socket. */
   it("counts nothing while it is not listening", async () => {
     const { answerQuery } = await desk();
@@ -998,6 +1041,7 @@ describe("the rows that are easy to leave untested", () => {
       listening: false,
       error: null,
       counters: { pollsSent: 0, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy: null,
     });
     expect(screen.queryByTestId("artnet-counters")).toBeNull();
     expect(screen.getByTestId("artnet-not-listening")).toBeTruthy();
@@ -1012,6 +1056,7 @@ describe("the rows that are easy to leave untested", () => {
       listening: true,
       error: null,
       counters: { pollsSent: 4, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy: null,
     });
     expect(screen.queryByTestId("artnet-not-listening")).toBeNull();
     expect(screen.getByTestId("artnet-no-nodes")).toBeTruthy();
@@ -1031,6 +1076,7 @@ describe("the rows that are easy to leave untested", () => {
       listening: true,
       error: null,
       counters: { pollsSent: 12, pollsFailed: 0, replies: 12, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy: null,
       nodes: [
         {
           address: "10.0.0.11:6454",
@@ -1095,6 +1141,7 @@ describe("the rows that are easy to leave untested", () => {
       listening: true,
       error: null,
       counters: { pollsSent: 12, pollsFailed: 0, replies: 12, malformed: 0, dropped: 0, readErrors: 0 },
+      remedy: null,
       nodes: [
         {
           address: "10.0.0.9:6454",

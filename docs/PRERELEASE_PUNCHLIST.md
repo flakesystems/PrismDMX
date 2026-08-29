@@ -331,6 +331,25 @@ angezeigt wird.*
   gepollt* und *es kommt etwas an und wird verworfen* drei verschiedene Fehler
   mit drei verschiedenen Abhilfen sind und von außen identisch aussahen.
 
+  **Zweiter Nachtrag, und das war die eigentliche Ursache in diesem Saal:** die
+  **Windows-Firewall**. Die eingehende Regel für `prismd.exe` galt nur für das
+  Profil *Privat*, das Kabel zur Node (`Ethernet 4`) liegt aber im Profil
+  *Öffentlich* — also gingen die Polls hinaus und jede Antwort wurde verworfen,
+  bevor der Prozess sie sah. Eingegrenzt wurde das mit einer Messreihe: ARP löst
+  die Node auf, PowerShell bekommt mit **identischen Bytes auf identischem Port**
+  8 von 8 Antworten, `prismd` 0 von 21 — und zwar auch mit **deaktiviertem**
+  Output, also ohne ein einziges DMX-Paket auf der Leitung. Damit blieb als
+  einziger Unterschied die ausführende Datei, und die Regelliste zeigte die
+  Lücke: `prismd.exe` *Privat*, `powershell.exe` *Privat und Öffentlich*.
+
+  Das Pult **konnte das die ganze Zeit sehen** und hat nichts gesagt. Deshalb
+  gibt es jetzt `Answer::ArtNetNodes::remedy`: wenn Polls hinausgehen und **kein
+  einziges Datagramm** zurückkommt — kein lesbares und kein unlesbares —, sagt der
+  Daemon nach drei Polls in eigenen Worten, dass entweder keine Node im Netz ist
+  oder die Firewall die Antworten verwirft, und nennt Port 6454. Der Satz
+  verschwindet, sobald irgendetwas ankommt. Nach dem Öffnen der Regel:
+  `node discovered: "SGM  1" at 2.16.10.66:6454`, eine Antwort pro Poll.
+
 ### B19 — Keine doppelten Fixture Profile
 
 - **Wo:** Patch

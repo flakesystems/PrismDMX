@@ -521,6 +521,27 @@ pub enum Answer {
         /// What the discovery has done and been sent — see [`ArtNetCounters`]
         /// for why a panel is shown them at all.
         counters: ArtNetCounters,
+        /// What to try, in the daemon's own words, or `None` when there is
+        /// nothing to suggest.
+        ///
+        /// # Why the desk says this rather than the operator working it out
+        ///
+        /// It was worked out the hard way once, and it took an evening. A node
+        /// that was connected, reachable and answering every poll read
+        /// `Degraded`, because Windows' inbound firewall rule for `prismd`
+        /// covered the *Private* profile and the lighting network was *Public*.
+        /// The polls went out; nothing came back; and nothing in the desk said
+        /// anything more useful than the word *Degraded*.
+        ///
+        /// The daemon can see that state exactly — it has sent polls and has not
+        /// received **one datagram, readable or not** — and that fingerprint has
+        /// one overwhelmingly common cause. So it says so.
+        ///
+        /// Carried as **words** rather than derived from the counters by a
+        /// client, which is `Answer::MidiPorts`' rule (S37) and for its reason:
+        /// the obvious sentence a client would write is *check the node*, and
+        /// the node is the one thing here that is working.
+        remedy: Option<String>,
     },
     /// The patched universes no output carries, in order — S37.
     DarkUniverses {

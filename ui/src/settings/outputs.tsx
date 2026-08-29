@@ -242,6 +242,7 @@ export function OutputsPanel() {
   const [listening, setListening] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [counters, setCounters] = useState<ArtNetCounters | null>(null);
+  const [remedy, setRemedy] = useState<string | null>(null);
   // **One moment for the whole panel.** Every age on the screen is measured
   // against this, so two rows drawn from one answer cannot disagree about when
   // *now* was — which is the same reason the daemon measures every age in one
@@ -283,6 +284,7 @@ export function OutputsPanel() {
           setListening(answer.listening);
           setDiscoveryError(answer.error);
           setCounters(answer.counters);
+          setRemedy(answer.remedy);
         }
       });
     };
@@ -467,6 +469,7 @@ export function OutputsPanel() {
         listening={listening}
         error={discoveryError}
         counters={counters}
+        remedy={remedy}
         now={now}
         onAdd={addDiscovered}
       />
@@ -487,6 +490,7 @@ function NodeTable({
   listening,
   error,
   counters,
+  remedy,
   now,
   onAdd,
 }: {
@@ -494,6 +498,7 @@ function NodeTable({
   readonly listening: boolean;
   readonly error: string | null;
   readonly counters: ArtNetCounters | null;
+  readonly remedy: string | null;
   readonly now: number;
   readonly onAdd: (node: ArtNetNodeInfo) => void;
 }) {
@@ -523,6 +528,17 @@ function NodeTable({
           {counters.malformed === 0 ? "" : ` · ${String(counters.malformed)} unreadable`}
           {counters.dropped === 0 ? "" : ` · ${String(counters.dropped)} dropped`}
           {counters.pollsFailed === 0 ? "" : ` · ${String(counters.pollsFailed)} could not be sent`}
+        </p>
+      )}
+      {/* **What to try**, in the daemon's own words — S46, and it is here
+          because the alternative was measured: a node that was connected,
+          reachable and answering every poll read `Degraded` for an evening,
+          because the inbound firewall rule covered the wrong network profile.
+          The desk could see the fingerprint the whole time — polls out, not one
+          datagram back — and said nothing more useful than the word. */}
+      {remedy === null ? null : (
+        <p className="settings-warning" data-testid="artnet-remedy" role="status">
+          {remedy}
         </p>
       )}
       {nodes.length === 0 ? (
