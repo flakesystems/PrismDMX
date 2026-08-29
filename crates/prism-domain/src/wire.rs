@@ -123,6 +123,7 @@ round_trip! {
     midi_port_info => crate::MidiPortInfo,
     surface_health => crate::SurfaceHealth,
     surface_status => crate::SurfaceStatus,
+    art_net_counters => crate::ArtNetCounters,
     node_health => crate::NodeHealth,
     node_reach => crate::NodeReach,
     art_net_node_info => crate::ArtNetNodeInfo,

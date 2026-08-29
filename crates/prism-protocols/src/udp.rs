@@ -74,6 +74,18 @@ pub enum UdpError {
     Unreachable,
     /// The socket is there and refused this datagram.
     Io,
+    /// A datagram arrived that did not fit in the buffer it was read into.
+    ///
+    /// **A platform difference this desk was bitten by.** A `recvfrom` into a
+    /// buffer smaller than the datagram truncates silently on Unix and *fails*
+    /// on Windows — `WSAEMSGSIZE`, and the data is discarded — so the same node
+    /// on the same network works on one and not on the other. Windows is the
+    /// release target (D10), so it is the behaviour this seam reports, and it is
+    /// reported as **its own value** rather than as [`Io`](Self::Io): a datagram
+    /// nobody can read is one to drop and carry on from, and treating it as a
+    /// socket fault would let one oversized packet end a receive pass that had a
+    /// real reply waiting behind it.
+    Oversized,
     /// The send moved fewer bytes than the datagram holds, which is a truncated
     /// packet rather than a partial success — the same reasoning as
     /// [`FtdiError::ShortWrite`](crate::FtdiError::ShortWrite): a receiver
@@ -102,6 +114,7 @@ impl fmt::Display for UdpError {
             Self::NotBound => write!(f, "the socket is not open"),
             Self::Unreachable => write!(f, "the network is not reachable"),
             Self::Io => write!(f, "the socket refused the datagram"),
+            Self::Oversized => write!(f, "the datagram was larger than the buffer"),
             Self::ShortSend { sent, expected } => {
                 write!(f, "the socket took {sent} of {expected} bytes")
             }
@@ -543,6 +556,16 @@ impl<S: UdpNode + ?Sized> UdpNode for Box<S> {
     }
 }
 
+/// `WSAEMSGSIZE`: a datagram was larger than the buffer it was read into.
+///
+/// Matched by its raw number because the standard library has no `ErrorKind` for
+/// it — it arrives as `Uncategorized`, which is also what a dozen unrelated
+/// failures arrive as. The constant is written out rather than taken from a
+/// platform crate: `prism-protocols`' network half has no `#[cfg]` in it and is
+/// compiled by the Linux CI job and the ARM64 cross-check, which is worth more
+/// than not spelling a number.
+const WSAEMSGSIZE: i32 = 10_040;
+
 /// The shortest read timeout a real socket will accept.
 ///
 /// `UdpSocket::set_read_timeout` refuses a zero duration — it means *block for
@@ -625,6 +648,11 @@ impl UdpNode for SystemUdpNode {
             {
                 Ok(None)
             }
+            // A datagram bigger than the buffer. Windows discards it and fails
+            // the read; Unix truncates and succeeds. Reported as itself so the
+            // caller can drop that one datagram and read the next, which is what
+            // an oversized packet deserves either way.
+            Err(error) if error.raw_os_error() == Some(WSAEMSGSIZE) => Err(UdpError::Oversized),
             // A datagram nobody was listening for produces `ConnectionReset` on
             // Windows from a *previous* send, which is not a reason to stop
             // listening — see `discovery.rs`. It is classified as `Io`, and the
@@ -814,10 +842,15 @@ impl UdpNode for MockUdpNode {
         let Some((from, datagram)) = state.inbound.pop_front() else {
             return Ok(None);
         };
-        // Truncated rather than refused, which is what a real socket does to an
-        // oversized datagram — and what the parser above therefore has to
-        // survive.
-        let len = datagram.len().min(buffer.len());
+        // **Refused rather than truncated**, which is what Windows does and
+        // therefore what this mock does. It truncated until S46 found out the
+        // hard way that the two platforms disagree here, and a double that
+        // models the forgiving one is a double that cannot fail the way the
+        // release target fails. See [`UdpError::Oversized`].
+        if datagram.len() > buffer.len() {
+            return Err(UdpError::Oversized);
+        }
+        let len = datagram.len();
         if let (Some(slot), Some(bytes)) = (buffer.get_mut(..len), datagram.get(..len)) {
             slot.copy_from_slice(bytes);
         }
@@ -974,6 +1007,10 @@ mod tests {
         assert!(UdpError::Unreachable.is_link_lost());
         assert!(!UdpError::Io.is_link_lost());
         assert!(
+            !UdpError::Oversized.is_link_lost(),
+            "a datagram nobody can read is one to drop, not a socket to reopen"
+        );
+        assert!(
             !UdpError::ShortSend {
                 sent: 1,
                 expected: 2
@@ -989,6 +1026,10 @@ mod tests {
             (UdpError::NotBound, "the socket is not open"),
             (UdpError::Unreachable, "the network is not reachable"),
             (UdpError::Io, "the socket refused the datagram"),
+            (
+                UdpError::Oversized,
+                "the datagram was larger than the buffer",
+            ),
             (
                 UdpError::ShortSend {
                     sent: 12,
@@ -1242,19 +1283,64 @@ mod tests {
     }
 
     #[test]
-    fn a_mock_node_truncates_an_oversized_datagram_the_way_a_socket_does() {
-        // Which is why the parser above has to survive a truncated reply.
+    fn a_mock_node_refuses_an_oversized_datagram_the_way_windows_does() {
+        // The behaviour S46 was bitten by: a node padding its ArtPollReply past
+        // the buffer made Windows fail the read and discard the data, while the
+        // same packet truncated harmlessly on Linux. The mock models the
+        // release target, so a test can fail here rather than in a hall.
         let mut node = MockUdpNode::new();
         let handle = node.handle();
         node.bind(loopback(), false).unwrap();
         handle.deliver(loopback(), &[7u8; 64]);
         let mut buffer = [0u8; 8];
+        assert_eq!(
+            node.recv_from(&mut buffer, Duration::from_millis(1)),
+            Err(UdpError::Oversized)
+        );
+        // …and exactly the buffer's size still fits, which is the boundary.
+        handle.deliver(loopback(), &[7u8; 8]);
         let (len, _) = node
             .recv_from(&mut buffer, Duration::from_millis(1))
             .unwrap()
-            .expect("a datagram");
+            .expect("a datagram of exactly the buffer's size");
         assert_eq!(len, 8);
         assert_eq!(buffer, [7u8; 8]);
+    }
+
+    /// The platform difference, on the platform, over a **real** socket.
+    ///
+    /// This is the test that would have caught S46's fault before a node did.
+    /// It asserts what the operating system this desk ships on actually does —
+    /// on Unix the read truncates and succeeds, on Windows it fails with
+    /// `WSAEMSGSIZE` — so it is written as *one of the two, and never anything
+    /// else*, and the point is the branch below it: the datagram that fits is
+    /// read either way.
+    #[test]
+    fn a_real_node_socket_meets_a_datagram_bigger_than_its_buffer() {
+        let mut node = SystemUdpNode::new();
+        node.bind(loopback(), false).unwrap();
+        let listening = node.local_addr().expect("a bound address");
+        let far = UdpSocket::bind(loopback()).unwrap();
+
+        far.send_to(&[7u8; 240], listening).unwrap();
+        let mut buffer = [0u8; 239];
+        match node.recv_from(&mut buffer, Duration::from_secs(2)) {
+            Err(UdpError::Oversized) => {}
+            Ok(Some((len, _))) => assert_eq!(len, 239, "a truncating platform reads the buffer"),
+            other => panic!("an oversized datagram is not {other:?}"),
+        }
+
+        // The fix, stated as a test: a buffer with room reads it whole. This is
+        // why `NodeDiscovery` reads into an MTU rather than into the size of the
+        // packet it expects.
+        far.send_to(&[7u8; 240], listening).unwrap();
+        let mut roomy = [0u8; 1_500];
+        let (len, from) = node
+            .recv_from(&mut roomy, Duration::from_secs(2))
+            .unwrap()
+            .expect("a datagram that fits");
+        assert_eq!(len, 240);
+        assert_eq!(from, far.local_addr().unwrap());
     }
 
     #[test]

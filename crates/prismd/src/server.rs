@@ -473,6 +473,14 @@ impl Desk {
                         .collect(),
                     listening: table.listening,
                     error: table.error.clone(),
+                    counters: prism_domain::ArtNetCounters {
+                        polls_sent: table.counters.polls_sent,
+                        polls_failed: table.counters.polls_failed,
+                        replies: table.counters.replies,
+                        malformed: table.counters.malformed,
+                        dropped: table.counters.dropped,
+                        read_errors: table.counters.read_errors,
+                    },
                 }
             }
             // `filter_map` rather than a `match` with an unreachable arm:

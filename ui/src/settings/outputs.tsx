@@ -67,6 +67,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
+  ArtNetCounters,
   ArtNetNodeInfo,
   NodeReach,
   OutputInstance,
@@ -240,6 +241,7 @@ export function OutputsPanel() {
   const [discovered, setDiscovered] = useState<readonly ArtNetNodeInfo[]>([]);
   const [listening, setListening] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [counters, setCounters] = useState<ArtNetCounters | null>(null);
   // **One moment for the whole panel.** Every age on the screen is measured
   // against this, so two rows drawn from one answer cannot disagree about when
   // *now* was — which is the same reason the daemon measures every age in one
@@ -280,6 +282,7 @@ export function OutputsPanel() {
           setDiscovered(answer.nodes);
           setListening(answer.listening);
           setDiscoveryError(answer.error);
+          setCounters(answer.counters);
         }
       });
     };
@@ -463,6 +466,7 @@ export function OutputsPanel() {
         nodes={discovered}
         listening={listening}
         error={discoveryError}
+        counters={counters}
         now={now}
         onAdd={addDiscovered}
       />
@@ -482,12 +486,14 @@ function NodeTable({
   nodes,
   listening,
   error,
+  counters,
   now,
   onAdd,
 }: {
   readonly nodes: readonly ArtNetNodeInfo[];
   readonly listening: boolean;
   readonly error: string | null;
+  readonly counters: ArtNetCounters | null;
   readonly now: number;
   readonly onAdd: (node: ArtNetNodeInfo) => void;
 }) {
@@ -505,12 +511,26 @@ function NodeTable({
             : `This desk is not listening for Art-Net nodes: ${error}. The outputs are still sending, and this desk cannot tell whether anything receives them.`}
         </p>
       )}
+      {/* **What this desk has actually done**, and it is here because the first
+          thing S46 got wrong in a hall could not be seen from outside: polls
+          going out with nothing coming back, nothing being asked at all, and
+          something arriving and being dropped are three different faults that
+          looked identical from this panel. The numbers are the daemon's; this
+          reads them out and does not interpret them. */}
+      {counters === null || !listening ? null : (
+        <p className="settings-hint" data-testid="artnet-counters">
+          {counters.pollsSent} polls sent · {counters.replies} replies
+          {counters.malformed === 0 ? "" : ` · ${String(counters.malformed)} unreadable`}
+          {counters.dropped === 0 ? "" : ` · ${String(counters.dropped)} dropped`}
+          {counters.pollsFailed === 0 ? "" : ` · ${String(counters.pollsFailed)} could not be sent`}
+        </p>
+      )}
       {nodes.length === 0 ? (
         listening ? (
           <p className="window-note" data-testid="artnet-no-nodes">
             No node has answered yet. A node answers within a few seconds of being
-            switched on; one that never answers is either at another address or on
-            another network.
+            switched on; one that never answers is either at another address, on
+            another network, or behind a firewall that is dropping the reply.
           </p>
         ) : null
       ) : (

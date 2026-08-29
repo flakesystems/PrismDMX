@@ -915,7 +915,8 @@ type Answer =
   | { t: "MidiPorts"; ports: MidiPortInfo[]; configured: string | null;
       open: string | null; status: SurfaceStatus | null }
   | { t: "DarkUniverses"; universes: UniverseId[] }
-  | { t: "ArtNetNodes"; nodes: ArtNetNodeInfo[]; listening: boolean; error: string | null }
+  | { t: "ArtNetNodes"; nodes: ArtNetNodeInfo[]; listening: boolean; error: string | null;
+      counters: ArtNetCounters }
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
       profile: string | null; revision: number; learning: boolean };
 
@@ -939,6 +940,12 @@ interface NodeReach {                     // S46 — one node an output sends to
   health: NodeHealth;
   name: string | null;                    // its short name, once it has given one
   lastReplyAgoMs: number | null;          // an AGE, not a time
+}
+
+interface ArtNetCounters {                // S46 — what the discovery has done
+  pollsSent: number; pollsFailed: number;
+  replies: number; malformed: number;     // read, and dropped rather than believed
+  dropped: number; readErrors: number;    // no room in the table; refused reads
 }
 
 interface ArtNetNodeInfo {                // S46 — a node that answered ArtPoll
@@ -1079,6 +1086,15 @@ interface StorePreview {
 > reason. An empty list under a socket that never opened says nothing at all about
 > the network, and reading it as *no nodes* would be B6's mistake pointed the
 > other way.
+>
+> **The counters are there because the panel could not answer a question the
+> daemon could.** A node that was connected, reachable and answering every poll
+> read `Degraded`, and the panel showed an empty list with no way to say whether
+> that meant *nobody is out there*, *nobody was asked*, or *something came back
+> and could not be read*. Three faults, three remedies, one picture. `pollsSent`
+> climbing with `replies` at zero is the first two; `malformed` climbing beside
+> it is the third, and the third is a bug in this desk rather than a fault in the
+> hall. A client renders them and interprets nothing.
 >
 > **Both disagreements are the daemon's arithmetic.** `unaddressedPorts` and
 > `missingPorts` are the rig intersected with the discovery table, and a client

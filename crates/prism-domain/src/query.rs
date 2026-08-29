@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    ArtNetNodeInfo, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, PresetPool, SequenceId,
-    SurfaceControl, SurfaceStatus, UniverseId,
+    ArtNetCounters, ArtNetNodeInfo, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId,
+    PresetPool, SequenceId, SurfaceControl, SurfaceStatus, UniverseId,
 };
 
 /// Two fixtures sharing DMX channels.
@@ -518,6 +518,9 @@ pub enum Answer {
         /// `Answer::MidiPorts`' reason: another Art-Net program already holding
         /// port 6454 is the common cause and no client could guess it.
         error: Option<String>,
+        /// What the discovery has done and been sent — see [`ArtNetCounters`]
+        /// for why a panel is shown them at all.
+        counters: ArtNetCounters,
     },
     /// The patched universes no output carries, in order — S37.
     DarkUniverses {

@@ -307,6 +307,30 @@ angezeigt wird.*
 
   Im Panel stehen jetzt beide Listen und wo sie sich widersprechen: was konfiguriert ist, was im Netz antwortet, welche Universen eine Node ausgibt, auf die dieses Pult nichts sendet, und welche dieses Pult sendet, die die Node nicht hat. Eine entdeckte Node wird mit einem Klick zum Output — als **Formular**, nicht als Kommando, weil ein Panel nicht unaufgefordert das Rig einer laufenden Show ändert. Tests: `a_configured_node_that_never_answers_never_reads_ok` und fünf weitere in `crates/prismd/tests/artnet_nodes.rs` (über das Protokoll, an einem laufenden Daemon), `an_art_net_output_whose_node_never_answers_is_not_reported_ok` in `crates/prismd/src/outputs.rs`, die 21 in `crates/prism-protocols/src/discovery.rs`, `artpoll_wire.rs` über einen echten Loopback-Socket, `artpoll_fuzz.rs` mit einer Viertelmillion zufälliger Bytes und **null** Allokationen, und sieben in `ui/src/settings/settingswindow.test.tsx`.
 
+  **Nachtrag vom selben Tag, aus der Handprobe des Eigentümers:** die erste
+  Fassung las eine echte, angeschlossene Node weiterhin als `Degraded`. Der
+  Grund war ein **Plattformunterschied**, den kein Test treffen konnte. Ein
+  `ArtPollReply` ist laut §6 *mindestens* 239 Byte — das `Filler`-Feld ist
+  „transmit as zero, receivers do not test", also polstern Hersteller, und eine
+  Antwort mit 240 oder 512 Byte ist eine ganz normale Antwort. Ein `recvfrom` in
+  einen Puffer, der kleiner ist als das Datagramm, **schneidet unter Unix ab und
+  scheitert unter Windows** (`WSAEMSGSIZE`, und die Daten sind weg). Der Puffer
+  war genau 239 Byte groß: unter Linux — also in der CI — lief alles, auf dem
+  Release-Ziel wurde jede gepolsterte Antwort verworfen, und die Node antwortete
+  brav auf jeden Poll. Gelesen wird jetzt in eine **MTU**, `UdpError::Oversized`
+  ist ein eigener Wert, damit ein unlesbares Datagramm verworfen wird statt den
+  Empfangsdurchgang zu beenden, und `MockUdpNode` bildet ab sofort Windows nach
+  statt Unix — ein Double, das die nachsichtigere Plattform nachbildet, kann
+  nicht so scheitern wie das Release-Ziel. Tests:
+  `a_node_that_pads_its_reply_is_still_a_node_that_answered`,
+  `a_real_node_socket_meets_a_datagram_bigger_than_its_buffer` (über einen echten
+  Socket, und **der** Test hätte es gefunden) und
+  `a_node_that_pads_its_reply_is_answering_and_not_degraded` über das Protokoll.
+  Dazu zeigt das Panel jetzt die **Zähler** — gesendete Polls, Antworten,
+  Unlesbares —, weil *es wird gepollt und nichts kommt*, *es wird gar nicht
+  gepollt* und *es kommt etwas an und wird verworfen* drei verschiedene Fehler
+  mit drei verschiedenen Abhilfen sind und von außen identisch aussahen.
+
 ### B19 — Keine doppelten Fixture Profile
 
 - **Wo:** Patch

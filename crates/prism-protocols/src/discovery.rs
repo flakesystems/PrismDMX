@@ -75,10 +75,18 @@ use prism_engine::{Clock, SystemClock};
 
 use crate::artnet::{ART_NET_PORT, PortAddress};
 use crate::artpoll::{
-    ART_POLL_REPLY_BYTES, ArtPollReply, LONG_NAME_BYTES, MAX_NODE_PORTS, art_poll,
-    parse_art_poll_reply,
+    ArtPollReply, LONG_NAME_BYTES, MAX_NODE_PORTS, art_poll, parse_art_poll_reply,
 };
 use crate::udp::{UdpError, UdpNode};
+
+/// Bytes read from the socket at once.
+///
+/// One Ethernet MTU, which is more than any Art-Net packet and enough that a
+/// node padding its reply is read rather than refused — see
+/// [`NodeDiscovery::buffer`]. A datagram larger than this is still dropped, and
+/// dropped **without ending the pass**, because a stranger sending one giant
+/// packet must not stop the reply behind it being read.
+pub const RECV_BUFFER_BYTES: usize = 1_500;
 
 /// How a discovery behaves.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -200,10 +208,17 @@ pub struct NodeDiscovery<S: UdpNode, C: Clock = SystemClock> {
     counters: DiscoveryCounters,
     /// When the last round of polls went out, or `None` before the first.
     polled_at: Option<Duration>,
-    /// The receive buffer, allocated once. A datagram longer than an
-    /// ArtPollReply is truncated into it, which is what a real socket does, and
-    /// a truncated reply is one the parser drops.
-    buffer: Box<[u8; ART_POLL_REPLY_BYTES]>,
+    /// The receive buffer, allocated once.
+    ///
+    /// **An MTU, not the size of the packet this expects**, and that is a fix
+    /// rather than a margin. An ArtPollReply is 239 bytes *at least*: §6's
+    /// `Filler` is "transmit as zero, receivers do not test", so vendors pad,
+    /// and a reply of 240 or 512 bytes is an ordinary reply. Reading it into 239
+    /// bytes truncates on Unix and **fails** on Windows (`WSAEMSGSIZE`, and the
+    /// data is discarded), so a padded node worked on Linux and read *Degraded*
+    /// for ever on the release target — which is exactly what S46 shipped and a
+    /// real node found. See [`crate::UdpError::Oversized`].
+    buffer: Box<[u8; RECV_BUFFER_BYTES]>,
 }
 
 impl<S: UdpNode> NodeDiscovery<S, SystemClock> {
@@ -234,7 +249,7 @@ impl<S: UdpNode, C: Clock> NodeDiscovery<S, C> {
             nodes: Vec::new(),
             counters: DiscoveryCounters::default(),
             polled_at: None,
-            buffer: Box::new([0; ART_POLL_REPLY_BYTES]),
+            buffer: Box::new([0; RECV_BUFFER_BYTES]),
         }
     }
 
@@ -391,6 +406,11 @@ impl<S: UdpNode, C: Clock> NodeDiscovery<S, C> {
                         replies += 1;
                     }
                 }
+                // A datagram that did not fit. Dropped and counted as what it
+                // is — rubbish this desk cannot read — and the pass **carries
+                // on**, because the reply worth having may be the next one in
+                // the queue and one oversized packet must not cost it.
+                Err(UdpError::Oversized) => self.counters.malformed += 1,
                 Err(_) => {
                     // Counted and carried on from. A read error here is
                     // routinely the operating system reporting a *previous*
@@ -929,17 +949,45 @@ mod tests {
         assert_eq!(discovery.reach(node_at(5)).health, NodeHealth::Answering);
     }
 
+    /// **The fault a real node found**, as a test.
+    ///
+    /// §6's `Filler` is *transmit as zero, receivers do not test*, so a node may
+    /// pad its ArtPollReply past 239 bytes and many do. Reading that into a
+    /// 239-byte buffer truncates on Unix and fails on Windows, so before S46's
+    /// fix a padded node answered every poll and read *Degraded* for ever on the
+    /// release target. The buffer is an MTU now, and a padded reply is a reply.
     #[test]
-    fn a_datagram_longer_than_a_reply_is_truncated_and_dropped() {
-        // What a real socket does to an oversized datagram, and the parser's
-        // answer to a truncated one.
+    fn a_node_that_pads_its_reply_is_still_a_node_that_answered() {
         let (mut discovery, socket) = discovery();
         discovery.open().unwrap();
-        let mut oversized = reply_from(5, "Stage left", &[0]);
-        oversized.extend(std::iter::repeat_n(0u8, 1_000));
-        socket.deliver(node_at(5), &oversized);
-        assert_eq!(discovery.service(), 1, "the first 239 bytes are the reply");
+        let mut padded = reply_from(5, "Stage left", &[0]);
+        padded.extend(std::iter::repeat_n(0u8, 273));
+        assert_eq!(padded.len(), 512, "a size real nodes actually send");
+        socket.deliver(node_at(5), &padded);
+
+        assert_eq!(discovery.service(), 1);
         assert_eq!(discovery.nodes().len(), 1);
-        assert!(parse_art_poll_reply(&oversized).is_some());
+        assert_eq!(discovery.nodes()[0].reply.short_name(), "Stage left");
+        assert_eq!(
+            discovery.reach(node_at(5)).health,
+            NodeHealth::Answering,
+            "which is the whole of the bug: it answered, and the desk said Degraded"
+        );
+        assert!(parse_art_poll_reply(&padded).is_some());
+    }
+
+    #[test]
+    fn a_datagram_too_big_even_for_the_mtu_is_dropped_without_ending_the_pass() {
+        // A stranger's giant packet must not cost the reply behind it. Before
+        // the fix an unreadable datagram ended the receive pass.
+        let (mut discovery, socket) = discovery();
+        discovery.open().unwrap();
+        socket.deliver(node_at(9), &vec![0u8; super::RECV_BUFFER_BYTES + 1]);
+        socket.deliver(node_at(5), &reply_from(5, "Stage left", &[0]));
+
+        assert_eq!(discovery.service(), 1, "the reply behind it was still read");
+        assert_eq!(discovery.counters().malformed, 1);
+        assert_eq!(discovery.counters().read_errors, 0);
+        assert_eq!(discovery.reach(node_at(5)).health, NodeHealth::Answering);
     }
 }

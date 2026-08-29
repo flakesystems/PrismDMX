@@ -23,6 +23,7 @@
 
 import type {
   Answer,
+  ArtNetCounters,
   ArtNetNodeInfo,
   BoundControl,
   Command,
@@ -610,6 +611,7 @@ export function readAnswer(value: unknown, path: string): Answer {
         ),
         listening: asBoolean(field(record, "listening"), `${path}.listening`),
         error: readOptionalString(field(record, "error"), `${path}.error`),
+        counters: readArtNetCounters(field(record, "counters"), `${path}.counters`),
       };
     case "DarkUniverses":
       return {
@@ -854,6 +856,27 @@ function readNodeReach(value: unknown, path: string): NodeReach {
       field(record, "lastReplyAgoMs"),
       `${path}.lastReplyAgoMs`,
     ),
+  };
+}
+
+/**
+ * What this desk's discovery has done and been sent — S46.
+ *
+ * Optional on the wire, and **zero** rather than absent when it is missing: a
+ * daemon one version behind sends the answer without it, and a settings window
+ * that refused to open over a missing counter would be worse than one drawing
+ * zeroes.
+ */
+function readArtNetCounters(value: unknown, path: string): ArtNetCounters {
+  const record = value === undefined || value === null ? {} : asRecord(value, path);
+  const count = (name: string): number => asInteger(field(record, name) ?? 0, `${path}.${name}`);
+  return {
+    pollsSent: count("pollsSent"),
+    pollsFailed: count("pollsFailed"),
+    replies: count("replies"),
+    malformed: count("malformed"),
+    dropped: count("dropped"),
+    readErrors: count("readErrors"),
   };
 }
 

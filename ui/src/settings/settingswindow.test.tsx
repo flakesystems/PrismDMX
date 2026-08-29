@@ -930,7 +930,13 @@ describe("the rows that are easy to leave untested", () => {
    */
   it("says it is not listening before it says there are no nodes", async () => {
     const { answerQuery } = await desk();
-    await answerQuery("ArtNetNodes", { t: "ArtNetNodes", nodes: [], listening: false, error: null });
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      nodes: [],
+      listening: false,
+      error: null,
+      counters: { pollsSent: 0, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+    });
     expect(screen.getByTestId("artnet-not-listening").textContent).toContain(
       "once an Art-Net output is configured",
     );
@@ -945,6 +951,7 @@ describe("the rows that are easy to leave untested", () => {
       nodes: [],
       listening: false,
       error: "the local address could not be bound",
+      counters: { pollsSent: 0, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
     });
     expect(screen.getByTestId("artnet-not-listening").textContent).toContain(
       "the local address could not be bound",
@@ -952,10 +959,60 @@ describe("the rows that are easy to leave untested", () => {
     expect(screen.queryByTestId("artnet-no-nodes")).toBeNull();
   });
 
+  /**
+   * **What the desk has actually done** — S46, added after a real node read
+   * `Degraded` while it was answering every poll.
+   *
+   * Polls going out with nothing coming back, nothing being asked at all, and
+   * something arriving and being dropped are three different faults, and from
+   * this panel they looked identical. The numbers are the daemon's; the panel
+   * reads them out and interprets nothing.
+   */
+  it("says how many polls went out and how many replies came back", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      nodes: [],
+      listening: true,
+      error: null,
+      counters: { pollsSent: 42, pollsFailed: 0, replies: 0, malformed: 3, dropped: 0, readErrors: 0 },
+    });
+    const line = screen.getByTestId("artnet-counters").textContent ?? "";
+    expect(line).toContain("42 polls sent");
+    expect(line).toContain("0 replies");
+    expect(line, "a reply that arrived and could not be read is its own fact").toContain(
+      "3 unreadable",
+    );
+    // The quiet counters stay off the line: a panel that printed six zeroes
+    // every second would be six things to read past.
+    expect(line).not.toContain("dropped");
+    expect(line).not.toContain("could not be sent");
+  });
+
+  /** Nothing is counted at a desk that never opened a socket. */
+  it("counts nothing while it is not listening", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      nodes: [],
+      listening: false,
+      error: null,
+      counters: { pollsSent: 0, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+    });
+    expect(screen.queryByTestId("artnet-counters")).toBeNull();
+    expect(screen.getByTestId("artnet-not-listening")).toBeTruthy();
+  });
+
   /** A desk that *is* listening and has heard nothing says a different thing. */
   it("tells a silent network apart from a socket that never opened", async () => {
     const { answerQuery } = await desk();
-    await answerQuery("ArtNetNodes", { t: "ArtNetNodes", nodes: [], listening: true, error: null });
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      nodes: [],
+      listening: true,
+      error: null,
+      counters: { pollsSent: 4, pollsFailed: 0, replies: 0, malformed: 0, dropped: 0, readErrors: 0 },
+    });
     expect(screen.queryByTestId("artnet-not-listening")).toBeNull();
     expect(screen.getByTestId("artnet-no-nodes")).toBeTruthy();
   });
@@ -973,6 +1030,7 @@ describe("the rows that are easy to leave untested", () => {
       t: "ArtNetNodes",
       listening: true,
       error: null,
+      counters: { pollsSent: 12, pollsFailed: 0, replies: 12, malformed: 0, dropped: 0, readErrors: 0 },
       nodes: [
         {
           address: "10.0.0.11:6454",
@@ -1036,6 +1094,7 @@ describe("the rows that are easy to leave untested", () => {
       t: "ArtNetNodes",
       listening: true,
       error: null,
+      counters: { pollsSent: 12, pollsFailed: 0, replies: 12, malformed: 0, dropped: 0, readErrors: 0 },
       nodes: [
         {
           address: "10.0.0.9:6454",

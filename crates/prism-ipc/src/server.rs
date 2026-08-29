@@ -151,6 +151,7 @@ pub trait ServerHandler: Send + Sync + 'static {
                 nodes: Vec::new(),
                 listening: false,
                 error: None,
+                counters: prism_domain::ArtNetCounters::default(),
             },
             // And no surface, so no table. An empty list is the same shape a
             // desk with a table gives and is the honest answer for a handler

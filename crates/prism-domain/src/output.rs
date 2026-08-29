@@ -137,6 +137,44 @@ pub struct NodeReach {
     pub last_reply_ago_ms: Option<u64>,
 }
 
+/// What this desk's Art-Net discovery has done and been sent - S46.
+///
+/// # Why a panel is shown counters at all
+///
+/// Because the first thing this session got wrong in a hall could not be seen
+/// from the outside. A node was connected, reachable and answering, and the desk
+/// read `Degraded`; the panel showed an empty node list and had no way to say
+/// whether that meant *nobody is out there*, *nobody was asked*, or *something
+/// came back and could not be read*. Those are three different faults with three
+/// different remedies, and the daemon knew which one it was the whole time.
+///
+/// So the numbers travel. `polls_sent` climbing with `replies` at zero is a node
+/// that is not answering **or** a reply that is not arriving; `malformed`
+/// climbing beside it is a reply that is arriving and being dropped, which is a
+/// bug in this desk rather than a fault in the hall. An operator does not have
+/// to read them — the row above says the useful thing — but somebody diagnosing
+/// a rig at eleven at night does.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct ArtNetCounters {
+    /// `ArtPoll` datagrams that have gone out.
+    pub polls_sent: u64,
+    /// Polls that could not be sent — a node whose route has gone.
+    pub polls_failed: u64,
+    /// `ArtPollReply` datagrams that were read.
+    pub replies: u64,
+    /// Datagrams that were not a reply this desk could read, dropped rather
+    /// than believed.
+    pub malformed: u64,
+    /// Replies from a node the table had no room for.
+    pub dropped: u64,
+    /// Reads the socket refused.
+    pub read_errors: u64,
+}
+
 /// A node that answered an `ArtPoll` - S46.
 ///
 /// # A discovered node is not a configured one

@@ -121,6 +121,7 @@ pub use device::{
 };
 pub use discovery::{
     DiscoveredNode, DiscoveryConfig, DiscoveryCounters, NODE_TEXT_BYTES, NodeDiscovery,
+    RECV_BUFFER_BYTES,
 };
 pub use ftdi::{
     BITS_PER_SLOT, FlowControl, FtdiBackend, FtdiCall, FtdiError, MockFtdi, MockFtdiHandle, Parity,

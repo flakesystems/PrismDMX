@@ -249,17 +249,74 @@ async fn a_configured_node_that_never_answers_never_reads_ok() {
     // the emptiness is evidence rather than ignorance.
     let answer = daemon.desk().query(&Query::ArtNetNodes);
     assert!(nodes_of(&answer).is_empty());
-    assert!(
-        matches!(
-            answer,
-            Answer::ArtNetNodes {
-                listening: true,
-                error: None,
-                ..
-            }
-        ),
-        "{answer:?}"
+    let Answer::ArtNetNodes {
+        listening,
+        error,
+        counters,
+        ..
+    } = &answer
+    else {
+        panic!("a question about nodes was answered with {answer:?}")
+    };
+    assert!(*listening);
+    assert_eq!(*error, None);
+    // **The numbers that make this diagnosable**, and they are here because the
+    // first thing S46 got wrong in a hall could not be seen from outside: polls
+    // going out with nothing coming back is a different fault from nothing
+    // being asked, and from something arriving and being dropped.
+    assert!(counters.polls_sent >= 1, "{counters:?}");
+    assert_eq!(counters.replies, 0);
+    assert_eq!(counters.malformed, 0, "nothing arrived to be dropped");
+    assert_eq!(counters.read_errors, 0);
+
+    daemon.shutdown().await;
+}
+
+/// **The fault a real node found.** A node that pads its `ArtPollReply` past the
+/// 239 bytes §6 lists is a node that answered, and it must not read *Degraded*.
+///
+/// Before the fix the reply was read into a buffer exactly the size of the
+/// packet, which truncates on Unix and **fails** on Windows (`WSAEMSGSIZE`, and
+/// the data is discarded) — so the node answered every poll, the desk heard
+/// nothing, and CI was green because CI is Linux.
+#[tokio::test]
+async fn a_node_that_pads_its_reply_is_answering_and_not_degraded() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    write_show(&dir.path().join("aula.prism"));
+    let daemon = Daemon::start(&options(dir.path())).await.unwrap();
+
+    let (discovery, socket) = discovery();
+    daemon.desk().core().adopt_discovery(discovery);
+    daemon
+        .desk()
+        .core()
+        .apply(&Command::AddOutput {
+            output: node_output(1, 5, &[1], Vec::new()),
+        })
+        .unwrap();
+    until("the driver to start sending", || {
+        daemon.desk().core().outputs().health(OutputId::new(1)) == OutputHealth::Ok
+    })
+    .await;
+
+    let mut padded = reply_from(5, "Stage left", &[0]);
+    padded.extend(std::iter::repeat_n(0u8, 273));
+    assert_eq!(padded.len(), 512, "a size real nodes actually send");
+    socket.deliver(node_at(5), &padded);
+    until("the padded reply to be heard", || {
+        !daemon.desk().core().outputs().discovered().nodes.is_empty()
+    })
+    .await;
+
+    let status = status_of(&daemon.desk().query(&Query::OutputStatus), 1);
+    assert_eq!(
+        status.health,
+        OutputHealth::Ok,
+        "it answered, and a reply this desk could not read is not the node's fault"
     );
+    assert_eq!(status.nodes[0].health, NodeHealth::Answering);
+    assert_eq!(status.nodes[0].name.as_deref(), Some("Stage left"));
 
     daemon.shutdown().await;
 }
