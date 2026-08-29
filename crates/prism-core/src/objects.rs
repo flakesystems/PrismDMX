@@ -320,14 +320,12 @@ impl Show {
                 let Some(from) = self.executor(*source).cloned() else {
                     return Err(ShowError::UnknownExecutor(*source));
                 };
-                // Everything but the number, and **not** the playback state: an
-                // executor is a fader, four keys and a cue list, and a copy that
-                // carried `is_active` would claim a slot was running because
-                // another one was. That state has one author (S34's tick).
+                // Everything but the number. There is no playback state to
+                // leave behind since S45 — an executor is a fader, four keys and
+                // a cue list, and what that list is *doing* is the list's — so
+                // the copy is the assignment and nothing else.
                 self.store_executor(Executor {
                     id: *target,
-                    is_active: false,
-                    current_cue_index: None,
                     ..from
                 })
             }
@@ -491,6 +489,11 @@ impl Show {
         };
         self.store_sequence(Sequence {
             id: target,
+            // A copy of a cue list is a copy of its *cues*, not of what the
+            // original's playback is doing — S45's four fields go the way
+            // `is_active` already went.
+            master_level: u16::MAX,
+            speed: prism_domain::SPEED_UNITY,
             name: naming.pick(
                 existing.as_ref().map(|sequence| sequence.name.as_str()),
                 &from.name,
@@ -568,19 +571,9 @@ impl Show {
             return Err(ShowError::SameObject(format!("executor {source}")));
         }
         let held = self.executor(target).cloned();
-        let mut ops = self.store_executor(Executor {
-            id: target,
-            is_active: false,
-            current_cue_index: None,
-            ..from
-        })?;
+        let mut ops = self.store_executor(Executor { id: target, ..from })?;
         ops.extend(match held {
-            Some(held) => self.store_executor(Executor {
-                id: source,
-                is_active: false,
-                current_cue_index: None,
-                ..held
-            })?,
+            Some(held) => self.store_executor(Executor { id: source, ..held })?,
             // Nothing came back the other way, so the slot the operator moved
             // out of is empty — which is `Delete Executor`'s answer, and the
             // *place* survives because a place is arithmetic (**D7**).

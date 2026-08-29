@@ -1,45 +1,50 @@
-//! What a playback is, and how a command names one — S40.
+//! What a playback is, and how a command names one — S40, settled in S45.
 //!
-//! # A playback used to be an executor, and now it is not quite
+//! # A playback was an executor, then nearly a sequence, and now it is one
 //!
 //! Until S40 every playback in PrismDMX was an executor: `PlaybackLayer` keyed
 //! its sources by [`ExecutorId`], `CueLayer` keyed its players the same way, and
 //! every playback command in `docs/IPC_PROTOCOL.md` §5 carried an executor
 //! number. That is a good model of a desk — a fader, four keys and a cue list —
-//! and it has one hole in it, which S40's command line walks straight into:
-//! **`On Sequence 1` for a cue list nobody has put on a fader had no
-//! representation at all.**
+//! and it had two holes in it, a session apart.
 //!
-//! S39 had already decided the half of this that is about *editing*:
-//! `Session::selectedSequence` exists so a cue list can be written before
-//! anybody decides which fader it goes on (`ARCHITECTURE_SPEC.md` §4.1). S40 is
-//! the same sentence about *playing* it, and it is the other half of the same
-//! argument — a list you can write but not hear is a list you cannot check.
+//! S40 walked into the first: **`On Sequence 1` for a cue list nobody has put on
+//! a fader had no representation at all.** The answer then was a second kind of
+//! playback, keyed by sequence, live exactly while no executor held that list.
 //!
-//! So a playback is one of two things, and [`PlaybackId`] is that choice:
+//! **S45 walked into the second, from the other end.** Punch-list entry B18: put
+//! one cue list on two executors and `Go` on either starts a playback of its
+//! own, each with its own cue pointer and its own fade. Nothing rejected it and
+//! nothing merged it — `docs/DMX_MERGE.md` saw two contributors and did what it
+//! was told. The rule S40 wrote down for its own two kinds is exactly the rule
+//! that was being broken: *two players of one cue list would fight over the same
+//! slots in the merge and neither would be wrong.*
 //!
-//! - an **executor** — a slot on the desk, with a master, a speed, a crossfade
-//!   and four keys, which is what `docs/DMX_MERGE.md` §2 has always merged;
-//! - a **sequence** — a cue list playing on nothing, with the master at full and
-//!   no keys, which exists exactly while no executor holds it.
+//! So a playback is **a cue list's**, always, and this type names one:
 //!
-//! **The two are never both live for one cue list.** The daemon resolves a
-//! [`PlaybackTarget::Sequence`] to the executor that plays it when there is one,
-//! and to the sequence's own playback when there is not. Two players of one list
-//! running side by side would fight over the same slots in the merge and neither
-//! would be wrong, which is the worst kind of bug a lighting desk can have.
+//! - one cue pointer and one fade per sequence, whoever pressed Go;
+//! - one master level, one rate and one crossfade per sequence, so two executors
+//!   whose faders are both `Master` are two handles on one number, while a
+//!   `Master` and an `XFade` on that same list stay independent — which is what
+//!   B18 asks for in as many words;
+//! - and `On Sequence 1` with no executor anywhere is the same playback as a Go
+//!   on the fader somebody later puts it on, rather than a second one.
+//!
+//! **An executor is therefore a handle rather than a player.** It says which cue
+//! list, which function each of its four keys has, what its fader does and what
+//! its encoder does — and every one of those is editable (S45). What it no
+//! longer carries is the playing: `prism_core::Show::playback_of` resolves an
+//! executor to the list standing on it, and refuses an executor with none.
 //!
 //! # Ordering
 //!
-//! [`PlaybackId`] is `Ord` and the order is *every executor, then every
-//! sequence*, each by number. Two things depend on it and both are load-bearing:
-//! the engine keeps its sources sorted so a lookup is a binary search, and
-//! `docs/DMX_MERGE.md` §2.2's LTP tie-break reads the ordering key when two
-//! sources went active on the same tick. The tie-break was already arbitrary —
-//! it exists so the merge is a function of the source set rather than of the
-//! iteration order — and putting the sequence playbacks after the executors
-//! keeps a desk's own faders winning it, which is the answer an operator would
-//! guess.
+//! [`PlaybackId`] is `Ord`, by sequence number. Two things depend on it and both
+//! are load-bearing: the engine keeps its sources sorted so a lookup is a binary
+//! search, and `docs/DMX_MERGE.md` §2.2's LTP tie-break reads the ordering key
+//! when two sources went active on the same tick. The tie-break is arbitrary by
+//! design — it exists so the merge is a function of the source set rather than
+//! of the iteration order — and since S45 there is only one order left to take,
+//! which is the one an operator numbered.
 
 use core::fmt;
 
@@ -48,116 +53,74 @@ use ts_rs::TS;
 
 use crate::{ExecutorId, SequenceId};
 
-/// Which playback: a desk executor, or a sequence playing on no fader.
+/// Which playback: **a cue list's**, and there is exactly one of them per list.
 ///
-/// See the module documentation for why there are two and when each exists.
+/// See the module documentation for how it got here and what B18 was.
+///
+/// A newtype over [`SequenceId`] rather than the same number under another name,
+/// for `crate::ids`' reason: a playback and a cue list are the same *thing* but
+/// not the same *fact*, and the places that take one take `impl Into<PlaybackId>`
+/// so a caller says which it means. A newtype struct is transparent to serde
+/// without being told, so a client reads a number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
-#[serde(tag = "t", rename_all_fields = "camelCase")]
-pub enum PlaybackId {
-    /// A slot on the desk: `page * 8 + slot` (**D7**).
-    Executor {
-        /// The executor.
-        executor_id: ExecutorId,
-    },
-    /// A cue list playing without an executor.
-    ///
-    /// Exists only while **no** executor holds this sequence — see the module
-    /// documentation.
-    Sequence {
-        /// The cue list.
-        sequence_id: SequenceId,
-    },
-}
+pub struct PlaybackId(SequenceId);
 
 impl PlaybackId {
-    /// The executor, if this is one.
+    /// The cue list this playback plays.
     #[must_use]
-    pub const fn executor(self) -> Option<ExecutorId> {
-        match self {
-            Self::Executor { executor_id } => Some(executor_id),
-            Self::Sequence { .. } => None,
-        }
+    pub const fn sequence(self) -> SequenceId {
+        self.0
     }
 
-    /// The sequence, if this is a sequence's own playback.
-    #[must_use]
-    pub const fn sequence(self) -> Option<SequenceId> {
-        match self {
-            Self::Sequence { sequence_id } => Some(sequence_id),
-            Self::Executor { .. } => None,
-        }
-    }
-
-    /// A wrapper for an executor number.
-    #[must_use]
-    pub const fn of_executor(executor_id: ExecutorId) -> Self {
-        Self::Executor { executor_id }
-    }
-
-    /// A wrapper for a sequence number.
+    /// The playback of one cue list.
     #[must_use]
     pub const fn of_sequence(sequence_id: SequenceId) -> Self {
-        Self::Sequence { sequence_id }
+        Self(sequence_id)
     }
 
     /// The ordering key, as one number.
     ///
     /// The engine packs this into a word it can publish with a single relaxed
     /// store (`prism_engine::readback`) and uses it as `docs/DMX_MERGE.md`
-    /// §2.2's LTP tie-break, so it has to be total, cheap and stable. Bit 32 is
-    /// the kind, which is what puts every sequence playback after every
-    /// executor.
+    /// §2.2's LTP tie-break, so it has to be total, cheap and stable. It was two
+    /// halves with a kind bit between them until S45; now that a playback is a
+    /// cue list, the number an operator gave the list is the whole of it.
     #[must_use]
     pub const fn key(self) -> u64 {
-        match self {
-            Self::Executor { executor_id } => executor_id.get() as u64,
-            Self::Sequence { sequence_id } => (1 << 32) | sequence_id.get() as u64,
-        }
+        self.0.get() as u64
     }
 
     /// The inverse of [`Self::key`].
+    ///
+    /// Truncating rather than fallible, because the only writer is
+    /// [`Self::key`] and the only reader is the readback's relaxed load: a word
+    /// that came back with rubbish in its top half is a torn read, and naming a
+    /// playback that does not exist is what the reader already tolerates.
     #[must_use]
     pub const fn from_key(key: u64) -> Self {
-        if key & (1 << 32) == 0 {
-            Self::Executor {
-                executor_id: ExecutorId::new(key as u32),
-            }
-        } else {
-            Self::Sequence {
-                sequence_id: SequenceId::new(key as u32),
-            }
-        }
+        Self(SequenceId::new(key as u32))
     }
 }
 
-/// **An executor *is* a playback**, so the conversion is free and implicit.
+/// A cue list **is** a playback since S45, so the conversion is free and
+/// implicit.
 ///
 /// This is what lets `PlaybackLayer`, `CueLayer` and `MergeBody` take
-/// `impl Into<PlaybackId>` and go on reading as they did before S40 at every
-/// call site that names an executor - which is nearly all of them. It converts
-/// in one direction only: [`PlaybackId::executor`] answers `None` for a
-/// sequence, and a caller that needs an executor number has to say what it
-/// means by one.
-impl From<ExecutorId> for PlaybackId {
-    fn from(executor_id: ExecutorId) -> Self {
-        Self::Executor { executor_id }
-    }
-}
-
-/// A cue list on no fader is a playback too - see the module documentation.
+/// `impl Into<PlaybackId>` and read as they always have at the call sites that
+/// name a sequence. There is deliberately **no** `From<ExecutorId>`: an executor
+/// is a handle on a list rather than a player, and resolving one to its list is
+/// `prism_core::Show::playback_of` — a fact about the show, which a client may
+/// not work out for itself (**D3**).
 impl From<SequenceId> for PlaybackId {
     fn from(sequence_id: SequenceId) -> Self {
-        Self::Sequence { sequence_id }
+        Self(sequence_id)
     }
 }
 
 impl fmt::Display for PlaybackId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Executor { executor_id } => write!(f, "executor {executor_id}"),
-            Self::Sequence { sequence_id } => write!(f, "sequence {sequence_id}"),
-        }
+        write!(f, "sequence {}", self.0)
     }
 }
 
@@ -230,53 +193,43 @@ mod tests {
     use proptest::prelude::*;
 
     #[test]
-    fn every_executor_sorts_before_every_sequence() {
+    fn playbacks_sort_by_the_number_an_operator_gave_the_list() {
         let mut ids = [
             PlaybackId::of_sequence(SequenceId::new(1)),
-            PlaybackId::of_executor(ExecutorId::new(u32::MAX)),
-            PlaybackId::of_executor(ExecutorId::new(2)),
+            PlaybackId::of_sequence(SequenceId::new(u32::MAX)),
             PlaybackId::of_sequence(SequenceId::new(0)),
         ];
         ids.sort();
         assert_eq!(
             ids,
             [
-                PlaybackId::of_executor(ExecutorId::new(2)),
-                PlaybackId::of_executor(ExecutorId::new(u32::MAX)),
                 PlaybackId::of_sequence(SequenceId::new(0)),
                 PlaybackId::of_sequence(SequenceId::new(1)),
+                PlaybackId::of_sequence(SequenceId::new(u32::MAX)),
             ]
         );
     }
 
     #[test]
     fn the_ordering_key_agrees_with_the_ordering() {
-        let executor = PlaybackId::of_executor(ExecutorId::new(u32::MAX));
-        let sequence = PlaybackId::of_sequence(SequenceId::new(0));
-        assert!(executor < sequence);
-        assert!(executor.key() < sequence.key());
+        let first = PlaybackId::of_sequence(SequenceId::new(0));
+        let second = PlaybackId::of_sequence(SequenceId::new(7));
+        assert!(first < second);
+        assert!(first.key() < second.key());
     }
 
     #[test]
-    fn the_two_halves_are_each_other_s_inverse() {
-        assert_eq!(PlaybackId::of_executor(ExecutorId::new(3)).sequence(), None);
-        assert_eq!(
-            PlaybackId::of_executor(ExecutorId::new(3)).executor(),
-            Some(ExecutorId::new(3))
-        );
-        assert_eq!(PlaybackId::of_sequence(SequenceId::new(3)).executor(), None);
+    fn a_playback_names_the_cue_list_it_plays_and_nothing_else() {
+        // S45: an executor is a handle, so there is no executor to ask a
+        // playback for. Which list an executor holds is `Show::playback_of`.
         assert_eq!(
             PlaybackId::of_sequence(SequenceId::new(3)).sequence(),
-            Some(SequenceId::new(3))
+            SequenceId::new(3)
         );
     }
 
     #[test]
     fn reads_as_words_an_operator_could_be_shown() {
-        assert_eq!(
-            PlaybackId::of_executor(ExecutorId::new(3)).to_string(),
-            "executor 3"
-        );
         assert_eq!(
             PlaybackId::of_sequence(SequenceId::new(7)).to_string(),
             "sequence 7"
@@ -296,11 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn an_executor_number_converts_into_a_playback_and_a_sequence_number_does_too() {
-        assert_eq!(
-            PlaybackId::from(ExecutorId::new(3)),
-            PlaybackId::of_executor(ExecutorId::new(3))
-        );
+    fn a_sequence_number_converts_into_a_playback() {
         assert_eq!(
             PlaybackId::from(SequenceId::new(3)),
             PlaybackId::of_sequence(SequenceId::new(3))
@@ -308,14 +257,21 @@ mod tests {
     }
 
     #[test]
-    fn serialises_as_a_tagged_object() {
+    fn a_playback_is_a_number_on_the_wire_and_a_target_is_still_tagged() {
+        // Transparent since S45: what used to be a two-variant tagged object is
+        // the cue list's own number. `PlaybackTarget` is untouched, because a
+        // *client* still says which of the three ways it means.
         assert_eq!(
-            serde_json::to_string(&PlaybackId::of_executor(ExecutorId::new(3))).unwrap(),
-            r#"{"t":"Executor","executorId":3}"#
+            serde_json::to_string(&PlaybackId::of_sequence(SequenceId::new(3))).unwrap(),
+            "3"
         );
         assert_eq!(
             serde_json::to_string(&PlaybackTarget::Selected).unwrap(),
             r#"{"t":"Selected"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&PlaybackTarget::of_executor(ExecutorId::new(1))).unwrap(),
+            r#"{"t":"Executor","executorId":1}"#
         );
     }
 
@@ -323,12 +279,8 @@ mod tests {
         /// The key is what crosses into the tick and comes back out of the
         /// readback, so it has to survive both ways for every playback there is.
         #[test]
-        fn the_key_round_trips(raw in any::<u32>(), sequence in any::<bool>()) {
-            let id = if sequence {
-                PlaybackId::of_sequence(SequenceId::new(raw))
-            } else {
-                PlaybackId::of_executor(ExecutorId::new(raw))
-            };
+        fn the_key_round_trips(raw in any::<u32>()) {
+            let id = PlaybackId::of_sequence(SequenceId::new(raw));
             prop_assert_eq!(PlaybackId::from_key(id.key()), id);
         }
     }

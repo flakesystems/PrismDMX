@@ -101,6 +101,8 @@ pub(crate) fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
         color: None,
         cues,
         looping: false,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }
@@ -196,11 +198,18 @@ pub(crate) fn migration_fixture() -> crate::ShowFile {
             ],
         ))
         .unwrap();
-    let mut running = executor(17, Some(5));
-    running.master_level = 40000;
-    running.is_active = true;
-    running.current_cue_index = Some(1);
-    file.show.store_executor(running).unwrap();
+    file.show.store_executor(executor(17, Some(5))).unwrap();
+    // The level is the cue list's since S45, and not its default: a saved and
+    // reloaded show has to carry the number an operator set.
+    //
+    // **What is running is deliberately not in here.** A version-1 file wrote
+    // `isActive` and `currentCueIndex` onto its executor; S45 moved both onto
+    // the cue list, and neither is migrated — a show reopens with nothing
+    // running, which is what `Sequence::is_active` has said since S40 and what
+    // makes `false` its default rather than a migration.
+    file.show
+        .set_sequence_master(SequenceId::new(5), 40000)
+        .unwrap();
     file
 }
 
@@ -212,9 +221,5 @@ pub(crate) fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
         fader_function: ExecutorFaderFunction::Master,
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
-        master_level: 65535,
-        speed: prism_domain::SPEED_UNITY,
-        is_active: false,
-        current_cue_index: None,
     }
 }

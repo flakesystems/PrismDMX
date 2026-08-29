@@ -361,24 +361,28 @@ fn a_running_executor_survives_an_oops() {
     assert_eq!(
         applied.effects,
         vec![Effect::ExecutorGo {
-            executor: ExecutorId::new(0).into(),
+            executor: prism_domain::PlaybackId::of_sequence(SequenceId::new(1)),
             direction: GoDirection::Next,
         }]
     );
-    // The engine has answered: the executor is running on cue 0.
+    // The engine has answered: the cue list is running on cue 0.
     file.show
-        .record_playback_state(ExecutorId::new(0).into(), true, Some(0))
+        .record_playback_state(
+            prism_domain::PlaybackId::of_sequence(SequenceId::new(1)),
+            true,
+            Some(0),
+        )
         .unwrap();
 
     // Two playback commands and a Go, and the journal has one entry: the patch.
     assert_eq!(file.journal.len(), 1);
     let applied = file.apply(&Command::Oops).unwrap();
 
-    let executor = file.show.executor(ExecutorId::new(0)).unwrap();
-    assert!(executor.is_active, "the Oops stopped the executor");
-    assert_eq!(executor.current_cue_index, Some(0));
+    let sequence = file.show.sequence(SequenceId::new(1)).unwrap();
+    assert!(sequence.is_active, "the Oops stopped the playback");
+    assert_eq!(sequence.current_cue_index, Some(0));
     assert_eq!(
-        executor.master_level, 32_768,
+        sequence.master_level, 32_768,
         "the Oops moved a master the operator had set"
     );
     assert!(

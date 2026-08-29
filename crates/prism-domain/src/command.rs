@@ -15,9 +15,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AttributeType, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup, FixtureId, GroupId,
-    JsonValue, MachineChange, OutputId, OutputInstance, OutputKind, PlaybackTarget, PresetId,
-    PresetPool, RgbColor, SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+    AttributeType, CueProperty, ExecutorButtonRef, ExecutorChange, ExecutorId, FeatureGroup,
+    FixtureId, GroupId, JsonValue, MachineChange, OutputId, OutputInstance, OutputKind,
+    PlaybackTarget, PresetId, PresetPool, RgbColor, SequenceId, StoreMode, UniverseId, ViewId,
+    WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -841,6 +842,41 @@ pub enum Command {
             proptest(strategy = "crate::arb::boxed()")
         )]
         sequence_id: Option<SequenceId>,
+    },
+    /// Say what one of an executor's controls does — **S45**, punch-list entry
+    /// B15.
+    ///
+    /// [`Self::AssignExecutor`] puts a cue list on a slot; this says what the
+    /// slot's fader, encoder and four keys *do* with it. Until S45 that was
+    /// decided by `prism_core::Show::assign_executor`'s defaults when the slot
+    /// was made and could not be changed from anywhere at all — not from a
+    /// window, not from the line, not from the desk.
+    ///
+    /// **It is a `Command` and not a `MachineChange`, and that was the
+    /// decision.** Both precedents were real and they point in opposite
+    /// directions: what an executor *carries* is show content (S11 — a show
+    /// survives the hall it was written in), and what a desk's keys *do* is not
+    /// (S38 — a show carried to another hall must not bring the old one's
+    /// F-keys). `docs/IPC_PROTOCOL.md` §5 has the argument written out. In
+    /// short: an executor is one of the six numbered things
+    /// [`crate::ObjectRef`] names, it is copied, moved, labelled and coloured by
+    /// show verbs, it is written into the `.prism` file — and a Web Remote with
+    /// no X-Touch anywhere near it still has eight of them with four keys each.
+    /// S38's table binds *this building's hardware*; this binds a show's own
+    /// object, and `ExecutorButtonRef` has kept the two apart since S34.
+    ///
+    /// Undoable, unlike every playback command (`ARCHITECTURE_SPEC.md` §6.1):
+    /// it is an edit to the show rather than something happening on a stage.
+    ConfigureExecutor {
+        /// The executor slot, `page * 8 + slot` (**D7**).
+        executor_id: ExecutorId,
+        /// Which control, and what it is to do. One at a time — see
+        /// [`ExecutorChange`].
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        change: ExecutorChange,
     },
     /// Step a playback.
     ///

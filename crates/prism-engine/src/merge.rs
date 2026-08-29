@@ -145,13 +145,13 @@ mod tests {
     use super::{
         FULL, SourceValue, apply_master, merge_htp, merge_ltp, merge_playbacks, merge_programmer,
     };
-    use prism_domain::{ExecutorId, MergeMode, PlaybackId};
+    use prism_domain::{MergeMode, PlaybackId, SequenceId};
     use proptest::prelude::*;
 
     fn source(activation: u64, value: u16, master: u16) -> SourceValue {
         SourceValue {
             activation,
-            executor: PlaybackId::of_executor(ExecutorId::new(activation as u32)),
+            executor: PlaybackId::of_sequence(SequenceId::new(activation as u32)),
             master,
             value,
         }
@@ -234,13 +234,13 @@ mod tests {
         let sources = [
             SourceValue {
                 activation: 3,
-                executor: PlaybackId::of_executor(ExecutorId::new(99)),
+                executor: PlaybackId::of_sequence(SequenceId::new(99)),
                 master: FULL,
                 value: 20_000,
             },
             SourceValue {
                 activation: 9,
-                executor: PlaybackId::of_executor(ExecutorId::new(1)),
+                executor: PlaybackId::of_sequence(SequenceId::new(1)),
                 master: FULL,
                 value: 45_000,
             },

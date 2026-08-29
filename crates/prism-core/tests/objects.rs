@@ -750,15 +750,18 @@ fn show_pool_of_four() -> prism_domain::PresetPool {
     prism_domain::PresetPool::Color
 }
 
-/// **An executor copies everything but its number and its playback state.**
-///
-/// A copy that carried `isActive` would claim a slot was running because another
-/// one was, and that state has one author — S34's tick.
+/// **An executor copies everything but its number**, and since S45 that is the
+/// whole of it: the playback state a copy must not carry is the cue list's, so
+/// there is nothing left on the row to carry it.
 #[test]
 fn a_copied_executor_takes_the_settings_and_not_the_playback() {
     let mut show = populated_show();
-    show.record_playback_state(ExecutorId::new(0).into(), true, Some(0))
-        .unwrap();
+    show.record_playback_state(
+        prism_domain::PlaybackId::of_sequence(SequenceId::new(1)),
+        true,
+        Some(0),
+    )
+    .unwrap();
 
     show.apply(&Command::Copy {
         from: executor_ref(0),
@@ -768,13 +771,17 @@ fn a_copied_executor_takes_the_settings_and_not_the_playback() {
     .unwrap();
 
     let copy = show.executor(ExecutorId::new(5)).unwrap();
+    let from = show.executor(ExecutorId::new(0)).unwrap();
     assert_eq!(copy.sequence_id, Some(SequenceId::new(1)));
-    assert_eq!(
-        copy.master_level,
-        show.executor(ExecutorId::new(0)).unwrap().master_level
-    );
-    assert!(!copy.is_active, "the copy claims to be running");
-    assert_eq!(copy.current_cue_index, None);
+    assert_eq!(copy.fader_function, from.fader_function);
+    assert_eq!(copy.button_functions, from.button_functions);
+    assert_eq!(copy.encoder_function, from.encoder_function);
+    // The copy is a second handle on the list that was already running, so what
+    // it shows is what the list is doing — which is the point of S45 rather than
+    // a leak.
+    let sequence = show.sequence(SequenceId::new(1)).unwrap();
+    assert!(sequence.is_active);
+    assert_eq!(sequence.current_cue_index, Some(0));
 }
 
 /// Labelling a preset, which is the one pool `label_object` reaches through the

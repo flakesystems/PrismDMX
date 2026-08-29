@@ -232,6 +232,7 @@ type Command =
   | { t: "Goto"; target: PlaybackTarget; cueNumber: string }
   | { t: "ExecutorOn"; target: PlaybackTarget }
   | { t: "AssignExecutor"; executorId: ExecutorId; sequenceId: SequenceId | null }
+  | { t: "ConfigureExecutor"; executorId: ExecutorId; change: ExecutorChange }
   | { t: "ExecutorGo"; target: PlaybackTarget; direction: "Next" | "Prev" }
   | { t: "ExecutorOff"; target: PlaybackTarget }
   | { t: "ExecutorButton"; executorId: ExecutorId; button: ExecutorButtonRef; pressed: boolean }
@@ -561,6 +562,106 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > rather than discover it when the light does not come up. The daemon says it on
 > the way up and again as a `Delta::Notice` whenever the rig changes.
 
+> **What an executor's controls do, and it is a `Command`** *(S45)*. Until this
+> session, what a fader and its four keys did was decided by
+> `prism_core::Show::assign_executor`'s defaults the moment a cue list was put on
+> the slot, and could not be changed from anywhere at all — not from a window,
+> not from the line, not from the desk. That is punch-list entry **B15**.
+>
+> ```typescript
+> type ExecutorChange =
+>   | { t: "Fader"; function: ExecutorFaderFunction }
+>   | { t: "Encoder"; function: ExecutorEncoderFunction }
+>   | { t: "Button"; index: number; function: ExecutorButtonFunction };
+> ```
+>
+> **One control at a time**, which is `OutputChange`'s rule and `CueProperty`'s
+> and `MachineChange`'s: a command carrying the whole executor would make a
+> client read it, change one member and send the rest back, and two operators
+> with the editor open would each undo the other. Which cue list stands on the
+> slot stays `AssignExecutor`, because that is a different act.
+>
+> ### The decision this session exists to make
+>
+> **A `Command`, not a `MachineChange`** — and both precedents were real, which
+> is why it is a decision and not a derivation:
+>
+> - what an executor **carries** is show content (**S11**: a show survives the
+>   hall it was written in, so the cue list on fader 3 travels with it);
+> - what a desk's keys **do** is not (**S38**: a show carried to another hall
+>   must not bring the last hall's F-keys, so the binding table lives in
+>   `MachineConfig` beside the rig and the MIDI port).
+>
+> An executor is both of those things at once. What settles it is that **an
+> executor is not a control of this building**. It is one of the six numbered
+> things `ObjectRef` names; it is copied, moved, labelled and coloured by show
+> verbs; it is written into the `.prism` file and has been since S1; and a Web
+> Remote with no X-Touch anywhere near it still has eight of them with four keys
+> each. S38's table binds *hardware* — this strip's third key, this F-key — and
+> `ExecutorButtonRef` has kept that apart from *what the third key does* since
+> S34: a profile row names a **position**, and the executor decides what a press
+> at that position means. S45 makes the second half editable and leaves the first
+> where S38 put it.
+>
+> The consequence is the one that makes the choice testable rather than tidy: an
+> executor's assignment **travels with the show**. Carry a show to another hall
+> and its Go keys are still Go keys; carry it to a desk with no X-Touch and they
+> still are.
+>
+> **Undoable**, unlike every playback command (`ARCHITECTURE_SPEC.md` §6.1): it
+> is an edit to the show rather than something happening on a stage. One image
+> per executor row covers it and `AssignExecutor` both.
+>
+> **The ninth button function carries a line** —
+> `ExecutorButtonFunction::CommandLine { line }`, the *custom row* of S45's
+> control editor. It is a variant rather than eight more variants somebody has to
+> invent, because the owner's answer in S43's third round was that every desk
+> needs a different number of them. `SurfaceAction::WriteCommandLine` is the same
+> answer for a key on the desk; this is it for a key on an executor, and it
+> shares that action's stop-gap — the daemon writes `Session::commandLine`, bumps
+> `Session::commandLineRun`, and the client holding the keyboard focus parses it,
+> until **S49** moves the parser into the daemon and the arrangement goes for
+> both at once.
+>
+> **No new `SurfaceAction` was added**, and that is the same test being applied:
+> a key that wants to say `Assign Executor 1 Fader Master` already has a way to
+> say it.
+
+> **A playback is a cue list's, and there is exactly one of them per list**
+> *(S45)*. `Delta::PlaybackState` carries a `PlaybackId`, which was a tagged pair
+> — an executor or a sequence — from S40 until this session and is now the cue
+> list's own number.
+>
+> Punch-list entry **B18** is why. Put one cue list on two executors and `Go` on
+> either started a playback of its own, each with its own cue pointer and its own
+> fade: two contributors to the same slots in the merge, and neither of them
+> wrong. S40 had already written down the rule its own two kinds obeyed — *two
+> players of one cue list would fight over the same slots* — and had only half of
+> it.
+>
+> So `Show::playback_of` resolves an **executor** to the list standing on it and
+> a **sequence** to itself, `MergeBody` is built with one playback per cue list,
+> and the master level, the rate, whether it is running and which cue it stands
+> on moved from `Executor` onto `Sequence`. An executor is a **handle**: which
+> list, what its fader does, what its encoder does, what each of its four keys
+> does — and nothing about what the list is doing.
+>
+> Two consequences worth naming:
+>
+> - **`AssignExecutor` no longer reaches the engine.** The set of playbacks does
+>   not mention slots, so putting a list on a fader moves a handle and nothing
+>   else — and taking one off does not stop the list, for the same reason a
+>   second executor still holding it would not. `Off` is the command that stops a
+>   playback.
+> - **An executor written before S45 loads and means the same thing.** The four
+>   fields are ignored on the way in, and the *level* it carried is read out of
+>   the same row and put on the cue list —
+>   `prism_core::ShowStore::carry_levels_onto_their_cue_lists`, which is the half
+>   a `#[serde(default)]` on the sequence cannot do. When two executors of one
+>   list carried different levels, the lowest-numbered one wins: the file records
+>   a state this model says cannot exist, and *the first fader* is the one an
+>   operator would point at.
+
 > **Four verbs over six things, and one command each** *(S40)*. `Delete`,
 > `Copy`, `Move` and `Label` name a **thing** rather than a pool:
 >
@@ -625,7 +726,7 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > of a page are `page * 8 + slot` arithmetic (**D7**) rather than rows. That is
 > also the exact inverse of the `AssignExecutor` that made the row, which is what
 > lets an Oops put the grid back rather than leaving a slot behind carrying a
-> deleted executor's master and buttons.
+> deleted executor's fader and buttons. (Its *master* has been the cue list's since S45, so a deleted slot never carried one.)
 
 > **A playback is no longer always an executor** *(S40)*. Every playback command
 > carried an executor number until S40, so `On Sequence 1` — a cue list nobody
@@ -638,18 +739,19 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 >   | { t: "Selected" };
 > ```
 >
-> A client sends one of these and the daemon resolves it, because both of the
-> interesting cases are facts a client may not know: a **sequence** becomes the
-> executor that holds it when one does — a client that worked that out would race
-> an `AssignExecutor` from a second client (**D3**) — and **Selected** becomes
-> whatever `Session::selectedSequence` names, which is session state a client
-> filling in would be sending a command whose meaning had already moved. The last
-> is what makes a bare `Go+` on the command line mean something.
+> A client sends one of these and the daemon resolves it, because all three cases
+> are facts a client may not know: an **executor** becomes the cue list standing
+> on it and a **sequence** becomes itself — a client that worked the first out
+> would race an `AssignExecutor` from a second client (**D3**) — and **Selected**
+> becomes whatever `Session::selectedSequence` names, which is session state a
+> client filling in would be sending a command whose meaning had already moved.
+> The last is what makes a bare `Go+` on the command line mean something.
 >
-> A sequence that **no** executor holds gets a playback of its own in the engine
-> (`prism_domain::PlaybackId`), with its master at full and no keys. The two are
-> never both live for one cue list: two players of one list would fight over the
-> same slots in the merge and neither would be wrong.
+> **Since S45 there is exactly one playback per cue list** and
+> `prism_domain::PlaybackId` is that list's own number. S40 had two kinds and a
+> rule keeping them apart — *two players of one list would fight over the same
+> slots in the merge and neither would be wrong* — and the rule was true of two
+> executors as well, which nothing enforced. See §5's S45 note above.
 >
 > **`Goto` is new at every layer.** There was no `Goto` in this list *and* none
 > in `prism_engine::TickCommand`, so `Goto Cue 5` needed a message all the way
@@ -988,9 +1090,9 @@ Deltas are ordered per connection. A client that has applied every delta since i
 >
 > It **does not arrive with the command that caused it**: an `ExecutorGo` is acknowledged with no delta at all, and the state follows a fraction of a second later. That is deliberate — until S34 the daemon wrote `isActive` on the way past because nothing else could, and with a readback that becomes two authors racing, whose symptom is a strip that lights, goes dark and lights again. `ARCHITECTURE_SPEC.md` §3.1.1 has the rest.
 >
-> **It was `ExecutorState` until S40**, and the rename is that session's playback change in one line: a cue list on no fader can now play, so what reports is a `PlaybackId` — an executor or a sequence — and the two fields are written into the row that playback belongs to. A strip gets exactly what it got before, because an executor reports as `{ t: "Executor", executorId }`.
+> **It was `ExecutorState` until S40**, and the rename is that session's playback change in one line: a cue list on no fader can now play, so what reports is a `PlaybackId` rather than an executor number. S40 made that a tagged pair; **S45 made it one number**, because a playback is a cue list's and there is exactly one of them per list — see §5. The two fields are therefore written onto the **sequence**, and an executor row draws them by reading through to the list standing on it, which is what makes the second executor of one cue list say the same thing as the first (punch-list entry B18).
 >
-> And it is **silent while a fade runs**. A cue index changes when a cue changes, not when a level does, so this delta does not move at playback rates — which matters because it moves the show *document*, and a client that re-asks a question on every show change (`Query::StorePreview`, §5.2) would otherwise be asking it per frame.
+> And it is **silent while a fade runs**. A cue index changes when a cue changes, not when a level does, so this delta does not move at playback rates — which matters because it moves the show *document*, and a client that re-asks a question on every show change (`Query::StorePreview`, §5.2) would otherwise be asking it per frame. **S45 narrowed one such dependency**: the cue viewer's store preview watched the whole `/sequences` subtree, which a cue advance now rewrites, so it watches that list's `cues` node instead — `ui/src/show/looks.ts::cuesDocument`.
 
 > **`OutputsChanged` carries the rig whole** *(S33)*, like `ProgrammerChanged`
 > and for the same reason: it is small and sparse, a rig is a handful of rows

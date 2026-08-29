@@ -239,17 +239,24 @@ function partRowsOf(cue: JsonValue): readonly CuePartRow[] {
 }
 
 /**
- * The `/sequences` subtree of the show, as it stands.
+ * The `cues` of one cue list, as they stand.
  *
  * **A dependency, not a reading.** `mirror/patch.ts` shares every container a
  * patch did not touch, so this node keeps its identity while anything else in
- * the show moves — and since S34 something else in the show moves whenever a
- * playback changes cue. A store preview asked on every show change would then be
- * asked on every cue of a chase, which is the warning S28 left in
- * `PROGRESS.md` §7 and S27 left before it about `PatchConflicts`.
+ * the show moves. A store preview asked on every show change would be asked on
+ * every cue of a chase, which is the warning S28 left in `PROGRESS.md` §7 and
+ * S27 left before it about `PatchConflicts`.
+ *
+ * **It was the whole `/sequences` subtree until S45**, and that stopped being
+ * narrow enough the moment a playback's state moved onto the cue list: advancing
+ * a cue rewrites `/sequences/<id>/currentCueIndex`, which rebuilds `/sequences`,
+ * which would ask the question again. The **cues** of the one list a store is
+ * aimed at are what a preview actually depends on — a store into cue 3 means
+ * something different once somebody has stored cue 3 — and they keep their
+ * identity across a cue advance.
  */
-export function sequencesDocument(show: JsonValue | null): JsonValue | null {
-  return valueAt(show, SEQUENCES);
+export function cuesDocument(show: JsonValue | null, sequenceId: number): JsonValue | null {
+  return valueAt(show, `${SEQUENCES}/${String(sequenceId)}/cues`);
 }
 
 /** The `/presets` subtree of the show. The same, for the pools. */
@@ -357,11 +364,20 @@ export function executorInForce(
     return { executorId: null, sequenceId: null, isActive: false, currentCueIndex: null };
   }
   const executor = valueAt(show, `${EXECUTORS}/${String(executorId)}`);
+  const sequenceId = numberAt(executor, "/sequenceId");
+  if (sequenceId === null) {
+    return { executorId, sequenceId: null, isActive: false, currentCueIndex: null };
+  }
+  // **The playback is the cue list's** (S45), so what an executor is doing is
+  // read through to the list standing on it. Two executors carrying one list
+  // therefore say the same thing rather than two, which is punch-list entry B18
+  // as the transport line meets it.
+  const sequence = valueAt(show, `${SEQUENCES}/${String(sequenceId)}`);
   return {
     executorId,
-    sequenceId: numberAt(executor, "/sequenceId"),
-    isActive: valueAt(executor, "/isActive") === true,
-    currentCueIndex: numberAt(executor, "/currentCueIndex"),
+    sequenceId,
+    isActive: valueAt(sequence, "/isActive") === true,
+    currentCueIndex: numberAt(sequence, "/currentCueIndex"),
   };
 }
 

@@ -137,17 +137,13 @@ impl ShowMirror {
                 is_active,
                 cue_index,
             } => {
-                // Which collection the two fields live in is the playback's own
-                // answer (S40): an executor's are on its row of the grid, and a
-                // cue list playing on no fader keeps them on the sequence.
-                let base = match playback {
-                    prism_domain::PlaybackId::Executor { executor_id } => {
-                        crate::show::pointer(crate::show::EXECUTORS, &executor_id.to_string())
-                    }
-                    prism_domain::PlaybackId::Sequence { sequence_id } => {
-                        crate::show::pointer(crate::show::SEQUENCES, &sequence_id.to_string())
-                    }
-                };
+                // **The cue list's row, always** (S45). A playback is a
+                // sequence's, so there is one place for the two fields and an
+                // executor draws them by reading through to the list standing on
+                // it — which is what makes two executors of one sequence say the
+                // same thing rather than two.
+                let base =
+                    crate::show::pointer(crate::show::SEQUENCES, &playback.sequence().to_string());
                 self.apply(&JsonPatchOp::Replace {
                     path: format!("{base}/isActive"),
                     value: JsonValue::Bool(*is_active),
@@ -508,7 +504,7 @@ fn is_inside(from: &str, path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{MirrorError, SessionMirror, ShowMirror};
-    use prism_domain::{Delta, ExecutorId, JsonPatchOp, JsonValue, PlaybackId};
+    use prism_domain::{Delta, JsonPatchOp, JsonValue, PlaybackId, SequenceId};
     use std::collections::BTreeMap;
 
     fn document() -> JsonValue {
@@ -862,10 +858,12 @@ mod tests {
         );
     }
 
+    /// S45: the two fields are the **cue list's**, so the row a delta writes is
+    /// the sequence's and an executor reads through to it.
     #[test]
-    fn executor_state_writes_the_two_fields_it_carries() {
+    fn playback_state_writes_the_two_fields_it_carries() {
         let mut mirror = ShowMirror::new(JsonValue::Object(BTreeMap::from([(
-            "executors".to_owned(),
+            "sequences".to_owned(),
             JsonValue::Object(BTreeMap::from([(
                 "3".to_owned(),
                 JsonValue::Object(BTreeMap::from([
@@ -876,29 +874,29 @@ mod tests {
         )])));
         mirror
             .apply_delta(&Delta::PlaybackState {
-                playback: PlaybackId::of_executor(ExecutorId::new(3)),
+                playback: PlaybackId::of_sequence(SequenceId::new(3)),
                 is_active: true,
                 cue_index: Some(2),
             })
             .unwrap();
         assert_eq!(
-            mirror.get("/executors/3/isActive").unwrap(),
+            mirror.get("/sequences/3/isActive").unwrap(),
             &JsonValue::Bool(true)
         );
         assert_eq!(
-            mirror.get("/executors/3/currentCueIndex").unwrap(),
+            mirror.get("/sequences/3/currentCueIndex").unwrap(),
             &JsonValue::Int(2)
         );
 
         mirror
             .apply_delta(&Delta::PlaybackState {
-                playback: PlaybackId::of_executor(ExecutorId::new(3)),
+                playback: PlaybackId::of_sequence(SequenceId::new(3)),
                 is_active: false,
                 cue_index: None,
             })
             .unwrap();
         assert_eq!(
-            mirror.get("/executors/3/currentCueIndex").unwrap(),
+            mirror.get("/sequences/3/currentCueIndex").unwrap(),
             &JsonValue::Null
         );
     }

@@ -99,15 +99,23 @@ describe("deltas", () => {
     store.applySnapshot(snapshot());
     store.applyDelta({
       t: "PlaybackState",
-      playback: { t: "Executor", executorId: 0 },
+      playback: 1,
       isActive: true,
       cueIndex: 2,
     });
     expect(store.getState().documents?.show).toEqual({
       fixtures: { "1": { name: "Front", universe: 1, address: 1 } },
       groups: {},
-      sequences: {},
-      executors: { "0": { isActive: true, currentCueIndex: 2, masterLevel: 65535 } },
+      sequences: {
+        "1": {
+          name: "Act 1",
+          isActive: true,
+          currentCueIndex: 2,
+          masterLevel: 65535,
+          speed: 1024,
+        },
+      },
+      executors: { "0": { sequenceId: 1, faderFunction: "Master", buttonFunctions: [] } },
     });
   });
 

@@ -58,6 +58,7 @@ import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import type { ExecutorButtonFunction, JsonValue } from "../bindings";
+import { buttonLabel, buttonName, commandLineOf } from "./functions";
 import { wholePercent } from "./level";
 import type { ExecutorStrip } from "./session";
 import { executorPage, pageStrips, selectedExecutor } from "./session";
@@ -208,8 +209,9 @@ function Strip({
                 className="strip-fader"
                 data-testid={`fader-${String(strip.slot)}`}
                 data-level={shown.level}
+                data-function={strip.faderFunction ?? "Empty"}
                 role="slider"
-                aria-label={`Master of executor ${String(strip.executorId)}`}
+                aria-label={`${strip.faderFunction ?? "Empty"} of executor ${String(strip.executorId)}`}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={percent}
@@ -219,7 +221,16 @@ function Strip({
                 <div className="strip-level" style={{ height: `${String(percent)}%` }} />
             </div>
             <span className="strip-percent" data-testid={`percent-${String(strip.slot)}`}>
-                {strip.assigned ? `${String(percent)}%` : "·"}
+                {/*
+                  A crossfade fader shows no figure: where it stands is a
+                  gesture in progress rather than show state, so there is
+                  nothing for the desk to have told this strip (S45).
+                */}
+                {strip.assigned && strip.faderFunction !== null && strip.faderFunction !== "Empty"
+                    ? strip.faderFunction === "XFade"
+                        ? "XF"
+                        : `${String(percent)}%`
+                    : "·"}
             </span>
             <div className="strip-buttons">
                 {strip.buttonFunctions.map((fn, index) => (
@@ -269,13 +280,21 @@ function FunctionButton({
     if (fn === "Empty") {
         return null;
     }
+    // **The custom row (S45)**: a key an operator gave a line to. `data-function`
+    // stays a word a test can select on, and the line is what the title says,
+    // because *Cmd* on its own tells an operator nothing about what will happen.
+    const line = commandLineOf(fn);
     return (
         <button
             type="button"
             className="strip-button"
             data-testid={`button-${String(slot)}-${String(index)}`}
-            data-function={fn}
-            title={`${LABELS[fn]} on executor ${String(executorId)}`}
+            data-function={line === null ? fn : "CommandLine"}
+            title={
+                line === null
+                    ? `${buttonName(fn)} on executor ${String(executorId)}`
+                    : `${line} — on executor ${String(executorId)}`
+            }
             onPointerDown={(event) => {
                 // The capture is what makes the release reliable: a finger that
                 // slides off a flash key must still put the master back.
@@ -289,22 +308,10 @@ function FunctionButton({
                 onButton(executorId, index, false);
             }}
         >
-            {LABELS[fn]}
+            {buttonLabel(fn)}
         </button>
     );
 }
-
-/** What a button says, which is shorter than what the show calls it. */
-const LABELS: Readonly<Record<ExecutorButtonFunction, string>> = {
-    Empty: "",
-    "Go+": "Go",
-    "Go-": "Bk",
-    LearnSpeed: "Lrn",
-    Off: "Off",
-    On: "On",
-    Flash: "Fl",
-    Toggle: "Tog",
-};
 
 /**
  * The fader: the daemon's level, and the pointer's while the button is down.
@@ -345,16 +352,23 @@ function useFader(
     }, [drag]);
 
     const begin = (event: ReactPointerEvent): void => {
-        // A slot with no executor has no master to move, and `SetExecutorMaster`
-        // on one is refused — so the gesture is not offered rather than sent and
-        // rejected.
-        if (event.button !== 0 || !strip.assigned) {
+        // A slot with no cue list on it has no number to move, and
+        // `SetExecutorMaster` on one is refused (S45) — so the gesture is not
+        // offered rather than sent and rejected. A fader with nothing assigned
+        // is the same case from the other side.
+        if (
+            event.button !== 0 ||
+            !strip.assigned ||
+            strip.sequenceId === null ||
+            strip.faderFunction === null ||
+            strip.faderFunction === "Empty"
+        ) {
             return;
         }
         event.preventDefault();
         const box = event.currentTarget.getBoundingClientRect();
         const started = new ValueDrag({
-            origin: strip.masterLevel,
+            origin: strip.faderLevel,
             from: event.clientY,
             travel: box.height,
             inverted: true,
@@ -366,5 +380,5 @@ function useFader(
         setShown(started.level);
     };
 
-    return { level: shown ?? strip.masterLevel, begin };
+    return { level: shown ?? strip.faderLevel, begin };
 }

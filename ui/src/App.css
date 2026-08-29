@@ -1281,23 +1281,131 @@
 /* ---- the Executors window (S43) ----------------------------------------- */
 
 /*
- * The strip, in a window rather than a band. It fills the window body, so eight
- * strips share whatever the operator gave the window — which is the same rule
- * they had in a band, with the width now under the operator's control instead of
- * the screen's.
+ * The strip, in a window rather than a band, with the control editor under it
+ * (S45). It fills the window body, so eight strips share whatever the operator
+ * gave the window — which is the same rule they had in a band, with the width
+ * now under the operator's control instead of the screen's.
+ *
+ * **One scroller, and it is here.** `CLAUDE.md`: nothing scrolls outside the
+ * canvas. The strip keeps whatever height is left and the editor takes what it
+ * needs up to a third of the window; when the window is smaller than the two of
+ * them, this column scrolls — never the page.
  */
 .executor-window {
     height: 100%;
     display: flex;
+    flex-direction: column;
     min-height: 0;
+    gap: 0.35rem;
+    overflow: auto;
 }
 
 .execbar {
     flex: 1 1 auto;
     min-width: 0;
+    min-height: 6rem;
     display: flex;
     align-items: stretch;
     gap: 0.25rem;
+}
+
+/* ---- the control editor (S45, punch-list B15) --------------------------- */
+
+/*
+ * Six rows: the fader, the encoder and the four keys. A list rather than a grid,
+ * because an operator reads it down the left-hand labels and because the custom
+ * row grows a text box that a grid column would have to be sized for.
+ */
+.exec-editor {
+    flex: 0 0 auto;
+    max-height: 40%;
+    overflow: auto;
+    border-top: 1px solid var(--edge);
+    padding-top: 0.3rem;
+}
+
+.exec-editor-empty {
+    margin: 0;
+    padding: 0.3rem 0.2rem;
+    color: var(--ink-dim);
+    font-size: 0.8rem;
+}
+
+.exec-editor-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding-bottom: 0.2rem;
+}
+
+.exec-editor-number {
+    font-weight: 600;
+}
+
+.exec-editor-name {
+    color: var(--ink-dim);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.exec-editor-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.1rem 0;
+}
+
+/*
+ * A fixed label column, so the six controls line up down the window: a console
+ * is read at two metres in the dark, and a ragged left edge is what stops that
+ * working (`CLAUDE.md` — fast recognition of sections before aesthetics).
+ */
+.exec-editor-label {
+    flex: 0 0 5.5rem;
+    color: var(--ink-dim);
+    font-size: 0.8rem;
+}
+
+.exec-editor-row select {
+    flex: 0 1 12rem;
+    min-width: 0;
+    background: var(--ground);
+    color: var(--ink);
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    font: inherit;
+    padding: 0.1rem 0.2rem;
+}
+
+.exec-editor-line {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 0.3rem;
+}
+
+.exec-editor-line input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--ground);
+    color: var(--ink);
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    font: inherit;
+    padding: 0.1rem 0.3rem;
+}
+
+.exec-editor-line button {
+    flex: 0 0 auto;
+    background: var(--ground);
+    color: var(--ink);
+    border: 1px solid var(--edge-lit);
+    border-radius: 3px;
+    font: inherit;
+    padding: 0.1rem 0.5rem;
+    cursor: pointer;
 }
 
 .execbar-page {

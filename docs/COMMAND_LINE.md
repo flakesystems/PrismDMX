@@ -24,6 +24,7 @@ Three shapes, and every control on the screen is one of them:
 | a whole command with no argument | `Clear` `Full` `Oops` `Update` | writes the word and runs it at once |
 | a command that needs arguments | `Store` `Edit` `Goto` `Move` `Copy` `Delete` `Label` `Assign` | writes the word and **waits** for you to finish the line |
 | an argument keyword | `Fixture` `Group` `Sequence` `Cue` `Preset` `View` `Executor` | appends the word to the line as it stands |
+| a **chooser** in a window | the `Executors` window's fader, encoder and key rows | writes the whole line and sends it, because the pointer has supplied every argument (S45) |
 
 So `Fixture` `1` `Enter` is three presses that build `Fixture 1`, and it is the
 same line you could have typed. Picking an item out of a **list** — a group in
@@ -120,10 +121,37 @@ has not said they want to move there.
 | `Move View 1 View 3` | swaps the two layouts; the numbers stay where they are |
 | `Copy Sequence 2 Sequence 6` | copies. The same for cues, groups, presets and views |
 | `Assign Sequence 5 Executor 1` | puts a cue list on a fader |
+| `Assign Executor 1 Fader Master` | says what that executor's fader does — `Empty`, `Master`, `Speed`, `XFade` |
+| `Assign Executor 1 Encoder Speed` | the same for its encoder — `Empty`, `Master`, `Speed` |
+| `Assign Executor 1 Button 2 Go+` | the same for one of its four keys, **numbered from one** |
+| `Assign Executor 1 Button 4 Command "Go+ Sequence 3"` | the custom row: that key sends this line |
 | `Oops` | takes the last edit back |
 
 **Update blinks** when there is an edit to put back. That is
 `Session::editingCue`, which is session state — so every screen blinks together.
+
+**One verb, two sentences** — S45. *Assign this list to that fader* and *assign
+this function to that control* are the same act on a desk and an operator says
+"assign" for both, so the parser tells them apart by the first noun: a
+**sequence** is being put on a fader, an **executor** is being given a function.
+The keys are numbered from **one** on the line, because that is how an operator
+counts the four keys under a fader; `ExecutorChange::Button` counts from zero the
+way the hardware does, and the one word between them is here.
+
+The function words are the enum spellings, and the parser does not read the
+*desk* any more than it reads the show (§4): every word it takes is one
+`prism_domain` declares, so a function added in Rust is a word here without this
+table being edited. **Quote a command line that has punctuation in it** —
+`go+`, `+` and `,` are rewritten by the tokeniser so that `1 + 2` and
+`go+ executor 0` mean what they say, and a quoted chunk is the one thing it keeps
+exactly as typed. So `Command clear` is a line and `Command "Go+ Sequence 3"` is
+a line, and `Command Go+ Sequence 3` is the first two words of one.
+
+**These are the lines the control editor writes.** The `Executors` window's
+choosers are keys like any other (§1, and `ARCHITECTURE_SPEC.md` §4.5): they
+write one of the lines above and send it, rather than sending a command of their
+own — so the window, the line and a bound X-Touch key are one path and cannot
+drift apart.
 
 ### 2.5 Playback
 
@@ -136,10 +164,12 @@ has not said they want to move there.
 | `Goto Executor 1 Cue 5` · `Goto Sequence 2 Cue 5` | the same, named |
 | `Page 2` | pages the fader bank |
 
-**A cue list that is on no fader still plays.** `On Sequence 1` starts it with
-its master at full; put it on an executor and the executor's own playback is the
-one that runs. See `prism_domain::PlaybackId` for why the two are never both
-live at once.
+**A cue list that is on no fader still plays**, and it is the *same* playback the
+fader would drive. `On Sequence 1` and a Go on the executor somebody later puts
+it on are one playback with one cue pointer, because since S45 a playback is a
+cue list's and an executor is a handle on it — see `prism_domain::PlaybackId`.
+Two executors on one list are therefore two handles, not two players: punch-list
+entry **B18**.
 
 ### 2.6 S26's lines, kept and unbroken
 

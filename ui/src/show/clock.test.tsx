@@ -22,16 +22,37 @@ import { ClockViewer } from "./clock";
  * Executor 2 is running with **no cue index**, which is the state a playback is
  * in between being switched on and the tick answering back — S26 and S28 both
  * had to draw a dash for it.
+ *
+ * **The playback state is on the cue lists** (S45): an executor is a handle, and
+ * executor 3 is stopped because *list 3* is, not because the slot says so. That
+ * is why executor 3 carries a list of its own rather than sharing executor 1's —
+ * two handles on one list are running or stopped together, which is exactly what
+ * punch-list entry B18 asked for and what this window now shows.
  */
 const SHOW: JsonValue = {
   executors: {
-    "1": { id: 1, sequenceId: 1, isActive: true, currentCueIndex: 0, masterLevel: 65535 },
-    "2": { id: 2, sequenceId: 2, isActive: true, currentCueIndex: null, masterLevel: 65535 },
-    "3": { id: 3, sequenceId: 1, isActive: false, currentCueIndex: null, masterLevel: 0 },
+    "1": { id: 1, sequenceId: 1, faderFunction: "Master" },
+    "2": { id: 2, sequenceId: 2, faderFunction: "Master" },
+    "3": { id: 3, sequenceId: 3, faderFunction: "Master" },
   },
   sequences: {
-    "1": { id: 1, name: "Act one", cues: [] },
-    "2": { id: 2, name: "", cues: [] },
+    "1": {
+      id: 1,
+      name: "Act one",
+      cues: [],
+      isActive: true,
+      currentCueIndex: 0,
+      masterLevel: 65535,
+    },
+    "2": { id: 2, name: "", cues: [], isActive: true, currentCueIndex: null, masterLevel: 65535 },
+    "3": {
+      id: 3,
+      name: "Act two",
+      cues: [],
+      isActive: false,
+      currentCueIndex: null,
+      masterLevel: 0,
+    },
   },
 };
 

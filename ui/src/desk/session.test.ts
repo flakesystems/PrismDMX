@@ -25,6 +25,7 @@ import { nullSink, setLogSink } from "../log/logger";
 import { DeskStore } from "../store/desk";
 import { bankParameters, touchedBanks, valueFor } from "./programmer";
 import {
+  EXECUTOR_BUTTONS,
   EXECUTORS_PER_PAGE,
   commandLine,
   encoderBank,
@@ -44,10 +45,11 @@ interface RecordedStrip {
   readonly executorId: number;
   readonly assigned: boolean;
   readonly name: string | null;
-  readonly masterLevel: number;
+  readonly faderLevel: number;
   readonly isActive: boolean;
   readonly currentCueIndex: number | null;
   readonly faderFunction: string;
+  readonly encoderFunction: string;
   readonly buttonFunctions: readonly string[];
 }
 
@@ -70,6 +72,7 @@ interface RecordedSession {
 
 interface Recording {
   readonly executorsPerPage: number;
+  readonly executorButtons: number;
   readonly encoderBanks: Readonly<Record<string, readonly string[]>>;
   readonly initialSnapshot: string;
   readonly steps: readonly {
@@ -176,11 +179,16 @@ describe("the readers, against a daemon's answers", () => {
           executorId: strip.executorId,
           assigned: strip.assigned,
           name: strip.name,
-          masterLevel: strip.masterLevel,
+          faderLevel: strip.faderLevel,
           isActive: strip.isActive,
           currentCueIndex: strip.currentCueIndex,
           faderFunction: strip.faderFunction ?? "",
-          buttonFunctions: strip.buttonFunctions,
+          encoderFunction: strip.encoderFunction ?? "",
+          // The custom row reads as the line it sends, in braces — the shape
+          // `prismd`'s recorder writes, so the two say the same thing.
+          buttonFunctions: strip.buttonFunctions.map((fn) =>
+            typeof fn === "string" ? fn : `{${fn.CommandLine.line}}`,
+          ),
         })),
         where,
       ).toEqual(entry.strips);
@@ -201,6 +209,9 @@ describe("the readers, against a daemon's answers", () => {
   /** The recording's own figure for **D7**, against the one written here. */
   it("has the daemon's number of executors per page", () => {
     expect(EXECUTORS_PER_PAGE).toBe(recording.executorsPerPage);
+    // S45: the control editor draws one row per key, and a client that assumed a
+    // different number would offer a key `Show::configure_executor` refuses.
+    expect(EXECUTOR_BUTTONS).toBe(recording.executorButtons);
     expect(executorIdAt(0, 0)).toBe(0);
     expect(executorIdAt(1, 1)).toBe(9);
     expect(executorIdAt(3, 7)).toBe(31);
@@ -276,7 +287,7 @@ describe("a document that is not one", () => {
   });
 
   it("keeps a page of eight even when the show is nonsense", () => {
-    const show = { executors: { "0": 5, "1": { masterLevel: "loud" } } };
+    const show = { executors: { "0": 5, "1": { faderFunction: "loud" } } };
     const session = { session: { executorPage: 0 } };
     const strips = pageStrips(session, show);
     expect(strips.length).toBe(EXECUTORS_PER_PAGE);
@@ -285,7 +296,7 @@ describe("a document that is not one", () => {
     // One whose level is a word is assigned, at zero, with nothing on it —
     // every field is read on its own, so one bad member does not lose a strip.
     expect(strips[1]?.assigned).toBe(true);
-    expect(strips[1]?.masterLevel).toBe(0);
+    expect(strips[1]?.faderLevel).toBe(0);
     expect(strips[1]?.faderFunction).toBeNull();
     expect(strips[1]?.buttonFunctions).toEqual([]);
   });
@@ -326,14 +337,70 @@ describe("a document that is not one", () => {
     expect(strips[5]?.color).toBeNull();
   });
 
-  it("leaves out a button function this build has never heard of", () => {
+  /**
+   * **A position, not a filtered list** — S45. An entry this build cannot read
+   * has to leave its place behind: dropping it would move every key after it
+   * one to the left, and the third key would send what the fourth was bound to.
+   */
+  it("draws a button function this build has never heard of as an empty key", () => {
     const show = {
-      executors: { "0": { masterLevel: 0, buttonFunctions: ["Go+", "Hologram", 7, "Off"] } },
+      executors: { "0": { buttonFunctions: ["Go+", "Hologram", 7, "Off"] } },
     };
     expect(pageStrips({ session: { executorPage: 0 } }, show)[0]?.buttonFunctions).toEqual([
       "Go+",
+      "Empty",
+      "Empty",
       "Off",
     ]);
+  });
+
+  /** S45's custom row, read out of a mirrored document. */
+  it("reads a key that carries a command line, and refuses a broken one", () => {
+    const show = {
+      executors: {
+        "0": {
+          buttonFunctions: [
+            { CommandLine: { line: "Go+ Sequence 3" } },
+            { CommandLine: { line: 7 } },
+            { CommandLine: "Go+" },
+          ],
+        },
+      },
+    };
+    expect(pageStrips({ session: { executorPage: 0 } }, show)[0]?.buttonFunctions).toEqual([
+      { CommandLine: { line: "Go+ Sequence 3" } },
+      "Empty",
+      "Empty",
+    ]);
+  });
+
+  /**
+   * **B18, as the strip reads it.** Two executors on one cue list read the same
+   * level, because there is one number and both of them point at it; a strip
+   * whose fader is a `Speed` reads the list's rate instead, and a crossfade
+   * reads nought because where it stands is a gesture rather than show state.
+   */
+  it("reads the number the strip's own fader function names, off the cue list", () => {
+    const show = {
+      sequences: { "1": { name: "Act 1", masterLevel: 20000, speed: 2048 } },
+      executors: {
+        "0": { sequenceId: 1, faderFunction: "Master" },
+        "1": { sequenceId: 1, faderFunction: "Master" },
+        "2": { sequenceId: 1, faderFunction: "Speed" },
+        "3": { sequenceId: 1, faderFunction: "XFade" },
+        "4": { sequenceId: 1, faderFunction: "Empty" },
+        "5": { faderFunction: "Master" },
+      },
+    };
+    const strips = pageStrips({ session: { executorPage: 0 } }, show);
+    expect(strips[0]?.faderLevel).toBe(20000);
+    expect(strips[1]?.faderLevel).toBe(20000);
+    expect(strips[2]?.faderLevel).toBe(2048);
+    expect(strips[3]?.faderLevel).toBe(0);
+    expect(strips[4]?.faderLevel).toBe(0);
+    // A slot with no cue list on it has no number to read at all.
+    expect(strips[5]?.faderLevel).toBe(0);
+    expect(strips[5]?.sequenceId).toBeNull();
   });
 
   it("falls back to the first bank when the session names one it does not know", () => {

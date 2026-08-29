@@ -13,8 +13,8 @@
 use std::sync::Arc;
 
 use prism_domain::{
-    AttributeDef, AttributeType, ExecutorId, Fixture, FixtureId, FixtureType, OutputHealth,
-    OutputId, UniverseId, Vec3,
+    AttributeDef, AttributeType, Fixture, FixtureId, FixtureType, OutputHealth, OutputId,
+    SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, TickCommand, command_queue,
@@ -94,7 +94,7 @@ impl Rig {
         let fixtures = [fixture(1, 1, 1), fixture(2, 2, 1)];
         let patch: Vec<(&Fixture, &FixtureType)> =
             fixtures.iter().map(|fixture| (fixture, &head)).collect();
-        let body = MergeBody::for_patch(&layout, patch, (1..=2).map(ExecutorId::new)).unwrap();
+        let body = MergeBody::for_patch(&layout, patch, (1..=2).map(SequenceId::new)).unwrap();
 
         let mut publisher = FramePublisher::new(Arc::new(layout));
         // Attached during set-up: `subscribe` allocates, so it must not happen
@@ -286,7 +286,7 @@ fn a_second_adapter_on_the_other_universe_gets_its_own_bytes() {
     let fixtures = [fixture(1, 1, 1), fixture(2, 2, 100)];
     let patch: Vec<(&Fixture, &FixtureType)> =
         fixtures.iter().map(|fixture| (fixture, &head)).collect();
-    let body = MergeBody::for_patch(&layout, patch, [ExecutorId::new(1)]).unwrap();
+    let body = MergeBody::for_patch(&layout, patch, [SequenceId::new(1)]).unwrap();
 
     let mut publisher = FramePublisher::new(Arc::new(layout));
     let mut runners = Vec::new();

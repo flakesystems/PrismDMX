@@ -22,8 +22,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use prism_domain::{
-    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, ExecutorId, Fixture, FixtureId,
-    FixtureType, GoDirection, Group, GroupId, Sequence, SequenceId, UniverseId, Vec3,
+    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, Fixture, FixtureId, FixtureType,
+    GoDirection, Group, GroupId, Sequence, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, SystemClock,
@@ -159,7 +159,7 @@ fn harness(universes: u32, subscribers: usize) -> Harness {
 /// frame up. Every step of that is on the real-time path.
 fn cycle<C: Clock>(harness: &mut Harness, clock: &C, index: u16) {
     let _ = harness.producer.push(TickCommand::SetExecutorLevel {
-        executor: ExecutorId::new(u32::from(index)).into(),
+        executor: SequenceId::new(u32::from(index)).into(),
         level: index,
     });
     let _ = harness.producer.push(TickCommand::SetGrandMaster(index));
@@ -342,19 +342,19 @@ fn merge_body(
     let mut body = MergeBody::for_patch(
         layout,
         patched.iter().map(|fixture| (fixture, head)),
-        (1..=executors).map(ExecutorId::new),
+        (1..=executors).map(SequenceId::new),
     )
     .unwrap();
     let slots = body.plan().slot_count();
     for executor in 1..=executors {
         let source = body
             .layer_mut()
-            .source_mut(ExecutorId::new(executor))
+            .source_mut(SequenceId::new(executor))
             .unwrap();
         for slot in 0..slots {
             source.set(slot, (slot as u16).wrapping_mul(executor as u16));
         }
-        body.layer_mut().activate(ExecutorId::new(executor));
+        body.layer_mut().activate(SequenceId::new(executor));
     }
     body
 }
@@ -378,7 +378,7 @@ fn a_tick_running_the_merge_makes_no_allocator_call_either() {
 
     let mut cycle =
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
-            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let executor = SequenceId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::SetExecutorActive {
                 executor: executor.into(),
                 on: index.is_multiple_of(2),
@@ -435,7 +435,7 @@ fn a_tick_running_the_encoder_as_well_makes_no_allocator_call_either() {
 
     let mut cycle =
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
-            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let executor = SequenceId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::SetExecutorActive {
                 executor: executor.into(),
                 on: index.is_multiple_of(2),
@@ -522,6 +522,8 @@ fn loaded_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
         color: None,
         cues,
         looping: true,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }
@@ -540,14 +542,14 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
     let mut body = MergeBody::for_patch(
         &layout,
         patched.iter().map(|fixture| (fixture, &head)),
-        (1..=8).map(ExecutorId::new),
+        (1..=8).map(SequenceId::new),
     )
     .unwrap();
     let slots = body.plan().slot_count();
     assert_eq!(slots, 128 * 6);
     for executor in 1..=8u32 {
         body.load_sequence(
-            ExecutorId::new(executor),
+            SequenceId::new(executor),
             &loaded_sequence(&head, 128, executor as u16),
         )
         .unwrap();
@@ -561,7 +563,7 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
 
     let mut cycle =
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
-            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let executor = SequenceId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::Go {
                 executor: executor.into(),
                 direction: if index % 16 < 8 {
@@ -573,7 +575,7 @@ fn a_tick_with_cues_and_running_fades_makes_no_allocator_call_either() {
             // And an executor going off and on underneath the fades, so the
             // release path and the activation path are measured too.
             let _ = producer.push(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(u32::from(index % 8) + 1).into(),
+                executor: SequenceId::new(u32::from(index % 8) + 1).into(),
                 on: !index.is_multiple_of(32),
             });
             engine.run_ticks(&clock, 1);
@@ -631,14 +633,14 @@ fn a_tick_with_the_programmer_and_the_masters_makes_no_allocator_call_either() {
     let mut body = MergeBody::for_patch(
         &layout,
         patched.iter().map(|fixture| (fixture, &head)),
-        (1..=8).map(ExecutorId::new),
+        (1..=8).map(SequenceId::new),
     )
     .unwrap();
     let slots = body.plan().slot_count();
     assert_eq!(slots, 128 * 6);
     for executor in 1..=8u32 {
         body.load_sequence(
-            ExecutorId::new(executor),
+            SequenceId::new(executor),
             &loaded_sequence(&head, 128, executor as u16),
         )
         .unwrap();
@@ -667,7 +669,7 @@ fn a_tick_with_the_programmer_and_the_masters_makes_no_allocator_call_either() {
 
     let mut cycle =
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
-            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let executor = SequenceId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::Go {
                 executor: executor.into(),
                 direction: GoDirection::Next,
@@ -764,12 +766,12 @@ fn a_tick_publishing_its_playbacks_makes_no_allocator_call_either() {
     let mut body = MergeBody::for_patch(
         &layout,
         patched.iter().map(|fixture| (fixture, &head)),
-        (1..=8).map(ExecutorId::new),
+        (1..=8).map(SequenceId::new),
     )
     .unwrap();
     for executor in 1..=8u32 {
         body.load_sequence(
-            ExecutorId::new(executor),
+            SequenceId::new(executor),
             &loaded_sequence(&head, 128, executor as u16),
         )
         .unwrap();
@@ -788,7 +790,7 @@ fn a_tick_publishing_its_playbacks_makes_no_allocator_call_either() {
 
     let mut cycle =
         |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
-            let executor = ExecutorId::new(u32::from(index % 8) + 1);
+            let executor = SequenceId::new(u32::from(index % 8) + 1);
             let _ = producer.push(TickCommand::Go {
                 executor: executor.into(),
                 direction: GoDirection::Next,

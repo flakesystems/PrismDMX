@@ -14,7 +14,15 @@
  * Two things asked for the move and they agree. The owner's skeleton has no band
  * under the canvas for executors; and punch-list **B15** wants the buttons and
  * the fader to become editable, which needs room a fixed-height band does not
- * have. **S45** is the session that builds the editor, into this window.
+ * have. **S45** built that editor, into this window: `./executoreditor.tsx` is
+ * the half below the strip, and it says what the *selected* executor's fader,
+ * encoder and four keys do.
+ *
+ * # One scroller, in the body
+ *
+ * `CLAUDE.md`: nothing scrolls outside the canvas. The strip is a fixed eight
+ * across and the editor is six rows, so the window body is what scrolls when it
+ * is made small — never the page, and never the canvas.
  *
  * # The bar is still §4.5's exception
  *
@@ -28,6 +36,7 @@ import { useCallback } from "react";
 
 import type { JsonValue } from "../bindings";
 import { ExecutorBar } from "./executorbar";
+import { ExecutorEditor } from "./executoreditor";
 import { objectLine, pick, useConsole } from "./consoleshell";
 import { useSend } from "../store/hooks";
 
@@ -98,6 +107,7 @@ export function ExecutorWindow({
         onMaster={onMaster}
         onButton={onButton}
       />
+      <ExecutorEditor session={session} show={show} />
     </div>
   );
 }

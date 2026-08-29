@@ -79,6 +79,7 @@
 import type {
   AttributeType,
   Command,
+  ExecutorChange,
   ObjectRef,
   OverwriteMode,
   PlaybackTarget,
@@ -87,8 +88,21 @@ import type {
   SequenceStoreMode,
   StoreMode,
 } from "../bindings";
-import { ATTRIBUTE_TYPE_VARIANTS, PRESET_POOL_VARIANTS } from "../bindings/variants";
+import {
+  ATTRIBUTE_TYPE_VARIANTS,
+  EXECUTOR_ENCODER_FUNCTION_VARIANTS,
+  EXECUTOR_FADER_FUNCTION_VARIANTS,
+  PRESET_POOL_VARIANTS,
+} from "../bindings/variants";
+import {
+  FIXED_BUTTON_FUNCTIONS,
+  buttonName,
+  commandLineOf,
+  encoderName,
+  faderName,
+} from "./functions";
 import { levelFromPercent } from "./level";
+import { EXECUTOR_BUTTONS } from "./session";
 
 /**
  * A line whose destination may already hold something.
@@ -328,6 +342,8 @@ function describe(command: Command): string {
       return `assign ${
         command.sequenceId === null ? "nothing" : `sequence ${String(command.sequenceId)}`
       } to executor ${String(command.executorId)}`;
+    case "ConfigureExecutor":
+      return `set the ${controlText(command.change)} of executor ${String(command.executorId)}`;
     case "ExecutorGo":
       return `${command.direction === "Next" ? "go" : "back"} on ${playbackText(command.target)}`;
     case "ExecutorOff":
@@ -372,6 +388,30 @@ export function objectText(target: ObjectRef): string {
       return `view ${String(target.viewId)}`;
     case "Executor":
       return `executor ${String(target.executorId)}`;
+  }
+}
+
+/**
+ * One control of an executor and what it is being given, in words — S45.
+ *
+ * The reading under the box, so an operator sees *set the fader to Master* before
+ * they press Enter rather than after.
+ */
+function controlText(change: ExecutorChange): string {
+  switch (change.t) {
+    case "Fader":
+      return `fader to ${faderName(change.function)}`;
+    case "Encoder":
+      return `encoder to ${encoderName(change.function)}`;
+    case "Button": {
+      // Counted from one, which is how an operator counts the keys under a
+      // fader; the command counts from zero the way the hardware does.
+      const key = `button ${String(change.index + 1)}`;
+      const line = commandLineOf(change.function);
+      return line === null
+        ? `${key} to ${buttonName(change.function)}`
+        : `${key} to send ${JSON.stringify(line)}`;
+    }
   }
 }
 
@@ -966,14 +1006,31 @@ function colorOf(word: Token | undefined): RgbColor | null | string {
   return `"${spoken(word.raw)}" is not a colour. Try ${COLOR_WORDS.join(", ")} or a hex triplet like #ff8800.`;
 }
 
-/** `assign sequence 5 executor 1`. */
+/**
+ * `assign sequence 5 executor 1`, and since S45 `assign executor 1 fader master`.
+ *
+ * **Two sentences under one verb, told apart by their first noun**, which is
+ * what makes them one word to learn rather than two: *assign this list to that
+ * fader* and *assign this function to that control* are the same act on a desk,
+ * and an operator says "assign" for both. `docs/COMMAND_LINE.md` §2.4 has the
+ * table.
+ */
 function assignLine(words: readonly Token[]): ConsoleResult {
   const sequence = readObject(words.slice(1));
   if (typeof sequence === "string") {
     return { kind: "error", message: sequence };
   }
+  // S45: `assign executor 1 <control> <function>` — punch-list entry B15, and
+  // the half of it that makes an assignment sayable rather than only clickable.
+  if (sequence.target.t === "Executor") {
+    return assignControlLine(sequence.target.executorId, sequence.rest);
+  }
   if (sequence.target.t !== "Sequence") {
-    return { kind: "error", message: 'assign takes a sequence. Try "assign sequence 5 executor 1".' };
+    return {
+      kind: "error",
+      message:
+        'assign takes a sequence or an executor. Try "assign sequence 5 executor 1" or "assign executor 1 fader master".',
+    };
   }
   const executor = readObject(sequence.rest);
   if (typeof executor === "string") {
@@ -994,6 +1051,146 @@ function assignLine(words: readonly Token[]): ConsoleResult {
         sequenceId: sequence.target.sequenceId,
       },
     ],
+  };
+}
+
+/**
+ * `assign executor 1 fader master`, `… button 2 go+`, `… encoder speed`, and
+ * `… button 3 command "Go+ Sequence 3"` — **S45**, punch-list entry B15.
+ *
+ * The control words are `fader`, `encoder` and `button <n>`; a button is
+ * numbered **from one**, because that is how an operator counts the keys under a
+ * fader, and `ExecutorChange::Button` counts from zero the way the hardware
+ * does. One word between the two, in one place.
+ *
+ * The function words are the enum spellings, lower-cased — the parser does not
+ * read the show (§4), so it does not read the *desk* either, and every word it
+ * accepts is one `prism_domain` declares. `command` is the ninth and takes a
+ * line. **Quote it when it has punctuation in it**: the tokeniser rewrites
+ * `go+`, `+` and `,` so that `1 + 2` and `go+ executor 0` mean what they say,
+ * and a quoted chunk is the one thing it keeps exactly as typed. So
+ * `command clear` is a line and `command "Go+ Sequence 3"` is a line, and
+ * `command Go+ Sequence 3` is the first two words of one.
+ */
+function assignControlLine(executorId: number, rest: readonly Token[]): ConsoleResult {
+  const control = rest[0];
+  if (control === undefined) {
+    return {
+      kind: "error",
+      message: 'assign what on it? Try "assign executor 1 fader master", or button, or encoder.',
+    };
+  }
+  switch (control.text) {
+    case "fader": {
+      const chosen = pickFunction(rest[1], EXECUTOR_FADER_FUNCTION_VARIANTS);
+      if (chosen === null) {
+        return noSuchFunction(rest[1], EXECUTOR_FADER_FUNCTION_VARIANTS, "a fader");
+      }
+      if (rest.length > 2) {
+        return tooMuch("assign", rest);
+      }
+      return changeCommand(executorId, { t: "Fader", function: chosen });
+    }
+    case "encoder": {
+      const chosen = pickFunction(rest[1], EXECUTOR_ENCODER_FUNCTION_VARIANTS);
+      if (chosen === null) {
+        return noSuchFunction(rest[1], EXECUTOR_ENCODER_FUNCTION_VARIANTS, "an encoder");
+      }
+      if (rest.length > 2) {
+        return tooMuch("assign", rest);
+      }
+      return changeCommand(executorId, { t: "Encoder", function: chosen });
+    }
+    case "button": {
+      const numbered = wholeNumber(rest[1]?.text ?? "");
+      if (numbered === null || numbered < 1 || numbered > EXECUTOR_BUTTONS) {
+        return {
+          kind: "error",
+          message: `which button? An executor has ${String(EXECUTOR_BUTTONS)}, numbered from one.`,
+        };
+      }
+      const index = numbered - 1;
+      // The custom row: everything after `command` is the line, joined back
+      // together as it was typed.
+      if (rest[2]?.text === "command") {
+        const line = joinName(rest.slice(3));
+        if (line === "") {
+          return {
+            kind: "error",
+            message:
+              'send which line? Try `assign executor 1 button 4 command "Go+ Sequence 3"`.',
+          };
+        }
+        return changeCommand(executorId, {
+          t: "Button",
+          index,
+          function: { CommandLine: { line } },
+        });
+      }
+      const chosen = pickFunction(rest[2], FIXED_BUTTON_FUNCTIONS);
+      if (chosen === null) {
+        return noSuchFunction(rest[2], FIXED_BUTTON_FUNCTIONS, "a button");
+      }
+      if (rest.length > 3) {
+        return tooMuch("assign", rest);
+      }
+      return changeCommand(executorId, { t: "Button", index, function: chosen });
+    }
+    default:
+      return {
+        kind: "error",
+        message: `"${control.raw}" is not one of an executor's controls. Try fader, encoder or button.`,
+      };
+  }
+}
+
+/** One `ConfigureExecutor`, which is what every arm above ends in. */
+function changeCommand(executorId: number, change: ExecutorChange): ConsoleResult {
+  return { kind: "commands", commands: [{ t: "ConfigureExecutor", executorId, change }] };
+}
+
+/**
+ * One function out of a list, matched case-insensitively against the generated
+ * spellings — or `null`.
+ *
+ * `null` rather than the complaint itself, and the distinction is not
+ * decoration: every one of these lists is a union of **strings**, so a function
+ * that answered `T | string` could not be told apart from its own error by
+ * anything but reading it.
+ */
+function pickFunction<T extends string>(
+  word: Token | undefined,
+  choices: readonly T[],
+): T | null {
+  return choices.find((choice) => functionWord(choice) === word?.text) ?? null;
+}
+
+/**
+ * A function's spelling **as a token**.
+ *
+ * `Go+` and `Go-` are the two the tokeniser rewrites — `go+` becomes `go` and
+ * `go-` becomes `goback`, so that `1 + 2` can mean what it says — and this puts
+ * an enum name through the same rewrite rather than keeping a second table that
+ * could disagree with it. Everything else is its own name, lower-cased.
+ */
+function functionWord(name: string): string {
+  return tokenise(name)[0]?.text ?? name.toLowerCase();
+}
+
+/** What an operator is told when a control was given a word it does not know. */
+function noSuchFunction(
+  word: Token | undefined,
+  choices: readonly string[],
+  what: string,
+): ConsoleResult {
+  // The **typed** spellings, not the tokenised ones: an operator types `go+`.
+  const list = choices.map((choice) => choice.toLowerCase()).join(", ");
+  return {
+    kind: "error",
+    message:
+      word === undefined
+        ? `${what} does what? Try ${list}.`
+        : `"${spoken(word.raw)}" is not something ${what} does. Try ${list}.`,
   };
 }
 

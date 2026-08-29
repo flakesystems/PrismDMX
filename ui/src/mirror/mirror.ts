@@ -29,10 +29,13 @@ export interface Documents {
   readonly programmer: ProgrammerState;
 }
 
-/** The pointer the executor collection lives at, matching `prism_core::show`. */
-const EXECUTORS = "executors";
-
-/** The other collection a playback writes into — S40. */
+/**
+ * The pointer a playback's state lives at, matching `prism_core::show`.
+ *
+ * The **cue list's**, and only the cue list's, since S45: a playback is a
+ * sequence's. It was two collections until then, and the executors are what
+ * punch-list entry B18 found two of.
+ */
 const SEQUENCES = "sequences";
 
 /**
@@ -73,10 +76,12 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
     case "ProgrammerChanged":
       return { ...documents, programmer: delta.state };
     case "PlaybackState": {
-      const base =
-        delta.playback.t === "Executor"
-          ? `/${EXECUTORS}/${String(delta.playback.executorId)}`
-          : `/${SEQUENCES}/${String(delta.playback.sequenceId)}`;
+      // **The cue list's row, always** — S45. A playback is a sequence's, so
+      // there is one place for the two fields; an executor row draws them by
+      // reading through to the list standing on it, which is what makes two
+      // executors of one sequence say the same thing. `prism_core::mirror` is
+      // the other end of this claim and writes the same pointer.
+      const base = `/${SEQUENCES}/${String(delta.playback)}`;
       const active = applyOp(documents.show, {
         op: "replace",
         path: `${base}/isActive`,

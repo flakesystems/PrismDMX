@@ -514,10 +514,10 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 
 | Control | Default | Acts on | Configurable |
 |---|---|---|---|
-| Strip fader 1–8 | `Master` of the executor on that strip | Engine | yes — Empty / Master / Speed / XFade |
-| Strip Rec / Solo / Mute / Select | `Go+` | Engine | yes — Empty / Go+ / Go− / LearnSpeed / Off / On / Flash / Toggle · **the binding is the button's *position* and the list above is the executor's own `buttonFunctions` (S34)**: `Command::ExecutorButton` carries which key was pressed, and `prism_core::Show::apply` resolves it. All eight are reachable |
-| Strip encoder | `Empty` | Engine | yes — Empty / Master / Speed |
-| Strip display | colour, name and value of the executor | — | — |
+| Strip fader 1–8 | `Master` of the cue list on that strip | Engine | yes — Empty / Master / Speed / XFade · **assignable from the desk since S45** (`Command::ConfigureExecutor`), and what it moves is the *cue list's* number, so two strips on one list move together — punch-list B18 |
+| Strip Rec / Solo / Mute / Select | `Go+` | Engine | yes — Empty / Go+ / Go− / LearnSpeed / Off / On / Flash / Toggle, **and a ninth that carries a command line** (S45) · **the binding is the button's *position* and the list above is the executor's own `buttonFunctions` (S34)**: `Command::ExecutorButton` carries which key was pressed, and `prism_core::Show::apply` resolves it. All nine are reachable, and since S45 all nine are **assignable** from the `Executors` window, from the command line and from a bound key |
+| Strip encoder | `Empty` | Engine | yes — Empty / Master / Speed · assignable from the desk since S45, like the fader and the four keys |
+| Strip display | colour and name of the cue list, and **what the strip's five controls do** | — | — · **changed in S45** — see the departure below |
 | Main fader | `XFade` of the selected executor | Engine | yes — Empty / Master / XFade · **one command, `SetExecutorMaster`, routed through the executor's own `faderFunction` (S34)** — so a fader set to `XFade` crossfades, one set to `Speed` moves the speed master, and one set to `Empty` does nothing |
 | Flip button | `Go+` of the selected executor | Engine | yes |
 | **Play / Stop / Forward / Backward** | On / Off / Go+ / Go− on the selected executor | Engine | yes — bound as written since **S34**, as `ExecutorButton` carrying the *function*, which is what a profile is allowed to name. **And this row is the one to spend carefully: it is the part of the panel that stays PrismDMX's in shared operation (§4.3), so it wants live-show functions, free assignments included** |
@@ -531,6 +531,46 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 | **F1–F8 (XKeys)** | free: open window, jump to view, macro, executor | **Session** or Engine | yes |
 | Save | save show file; **LED lit while unsaved changes exist** | Core | — |
 | Undo | `Oops` | Core | — |
+
+#### The strip display's lower line says what the strip does — S45
+
+The row above used to read *colour, name and **value** of the executor*, and the
+value was the master as a percentage. Punch-list entry **B15** is why it is not
+any more: what an operator cannot see on an X-Touch is **what the four keys do**,
+and the motor fader directly under the strip is already showing its own position.
+
+So the lower line is the strip's legend: the four keys as one character each,
+then the fader's. `prismd::surface::legend` is the table.
+
+| Character | Key | | Character | Fader |
+|---|---|---|---|---|
+| `>` | `Go+` | | `M` | `Master` |
+| `<` | `Go−` | | `S` | `Speed` |
+| `O` | `On` | | `X` | `XFade` |
+| `x` | `Off` | | `-` | `Empty` |
+| `F` | `Flash` | | | |
+| `T` | `Toggle` | | | |
+| `L` | `LearnSpeed` | | | |
+| `*` | a command line | | | |
+| `-` | `Empty` | | | |
+
+So `><x- M` is *Go, Back, Off, nothing — and a master fader*, which fits the
+seven characters a scribble strip has (`prism_surface::STRIP_CHARS`) with one to
+spare. A slot with no executor is **blank** rather than five dashes: the line
+above it already says `Ex 5`, and a row of punctuation under that would read as
+five controls somebody had switched off.
+
+The full words are on the screen, in the `Executors` window's editor. What the
+strip has to do is be readable at two metres in the dark, and a reassignment has
+to be visible there without an operator going to look for it — which is the half
+of B15 the desk owes.
+
+**The motor fader follows the function too.** It stands at whatever the strip's
+own `faderFunction` names — the list's master, the list's rate, or nought for a
+crossfade, whose position is a gesture in progress rather than show state
+(`docs/DMX_MERGE.md` §4.1.1). And because that number is the *cue list's* since
+S45, a level moved from one executor moves the other's motor fader: two handles,
+one number, one place for the shadow model to diff.
 
 ### 4.2 Profile shape
 
@@ -617,7 +657,7 @@ function needed, and what it got:
 | `On`, `Off` | `prism_engine::TickCommand::SetExecutorActive`, which already existed — "on a loaded executor this is *start the sequence* and *stop it*, not a raw activation" (S5) | `Effect::ExecutorOn` / `Effect::ExecutorOff` |
 | `Toggle` | The same command, with the **daemon** reading `isActive` — which the daemon may do and a client may not | `prism_core::Show::apply`, one line, and S26's mutation check still guards it |
 | `Flash` | A **temporary** master override that does not disturb the stored master: press raises, release restores | `PlaybackSource::set_flash` — a layer applied where `docs/DMX_MERGE.md` §2.1 applies the master, so the stored one is never written to |
-| `LearnSpeed` | Speed masters, named in `docs/DMX_MERGE.md` §4 item 3 with nothing implementing them | `Executor::speed`, `prism_domain::SPEED_UNITY`, and `CuePlayer`'s accumulated clock |
+| `LearnSpeed` | Speed masters, named in `docs/DMX_MERGE.md` §4 item 3 with nothing implementing them | `Sequence::speed` (`Executor::speed` until S45 moved it onto the cue list), `prism_domain::SPEED_UNITY`, and `CuePlayer`'s accumulated clock |
 | `XFade` on the fader | Something to read `faderFunction` | `prism_core::Show::apply` routes `SetExecutorMaster` through it; the crossfade replaces the transition's *clock* and nothing else |
 
 The command is `Command::ExecutorButton { executorId, button, pressed }`. The
@@ -708,9 +748,10 @@ show*, without taking the sound desk away from whoever is using it.
 §6, and `XTouch.txt`, which offers it on a strip's buttons but not on the
 selected executor's), and the speed masters it taps were named in
 `docs/DMX_MERGE.md` §4 item 3 with nothing implementing them and no domain type
-carrying one. S34 built both: `Executor::speed` is the rate, in units of
-`prism_domain::SPEED_UNITY`, and two taps inside four seconds mean *the running
-cue's transition should take that long*.
+carrying one. S34 built both: the rate is in units of `prism_domain::SPEED_UNITY`, and two taps
+inside four seconds mean *the running cue's transition should take that long*. It
+was `Executor::speed` then and is `Sequence::speed` since **S45**, which moved
+every playback's state onto the cue list it belongs to.
 
 It is therefore bindable on a transport key today —
 `{ "t": "ExecutorButton", "target": "Selected", "button": { "t": "Function", "function": "LearnSpeed" } }`
@@ -718,10 +759,11 @@ It is therefore bindable on a transport key today —
 because §4.1's five transport defaults are what the operator has seen so far and
 choosing their layout is theirs; the point is that the row can now be spent.
 
-What is still *not* here: a speed master that is not an executor's. `Executor::speed`
-is per executor, which is what the domain carries and what an X-Touch strip
-addresses. A named speed master shared by several executors is a bigger idea and
-nothing has asked for one.
+What is still *not* here: a speed master that is not a cue list's.
+`Sequence::speed` is per list, which is what the domain carries and what an
+X-Touch strip reaches through the executor standing on it — so two strips on one
+list share a rate, which is punch-list B18 and is the point. A **named** speed
+master shared by several *lists* is a bigger idea and nothing has asked for one.
 
 **SMPTE/Beats (note 53) is reserved and must never be bound.** In the combined
 mode **it is the button that switches the surface between the two hosts** — it is
@@ -891,6 +933,7 @@ why it is rate-limited rather than sent as fast as the port accepts.
 | Rule | How it is kept |
 |---|---|
 | **Touch suppression** (§5.1) | A touch sets a flag *and* **invalidates** what the shadow model believes about that fader, because the operator has just moved the motor. Nothing is queued for a touched fader; on release the fader is held for 150 ms and then queued once. The invalidation is what makes it **exactly one** rather than *one if the value happened to change* — a mutation that dropped it left the ordinary test green and only the fader-nobody-moved test red |
+| **The legend** (§4.1) | The lower line of each strip is redrawn from the executor's own assignment, so a key that was given a new function relabels its strip on the next diff — at most 33.3 ms later, inside the frame budget S26 measured. It costs nothing extra: the line was already diffed, and what changed is what is written into it |
 | **Coalescing** (§5.2) | The diff runs at most once per 33.3 ms, and a control is queued at most once per diff. 1000 changes in 100 ms cost at most three messages. Anything not sent is still different at the next frame, because the shadow moves only when a message goes out — so coalescing and dropping are the same mechanism |
 | **Priority** (§5.2) | The diff is walked in the documented order and the queue is sent in the order it was built, so the ordering is the loop rather than a comparison. Rings are LEDs; the 7-segment display is a display. Under pressure the tail is simply not reached, which is why meters are last |
 | **Pacing** (§2.7) | A floor of 1 ms between outbound messages, enforced against the caller's clock: pumping more often than that sends no faster. A full resync burst is 156 messages and therefore ~156 ms, spread across five frames |

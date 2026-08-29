@@ -218,8 +218,18 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     show: {
       fixtures: { "1": { name: "Front", universe: 1, address: 1 } },
       groups: {},
-      sequences: {},
-      executors: { "0": { isActive: false, currentCueIndex: null, masterLevel: 65535 } },
+      // The playback state is the cue list's since S45, and the executor is
+      // the handle on it: `Executor` carries the assignment and nothing else.
+      sequences: {
+        "1": {
+          name: "Act 1",
+          isActive: false,
+          currentCueIndex: null,
+          masterLevel: 65535,
+          speed: 1024,
+        },
+      },
+      executors: { "0": { sequenceId: 1, faderFunction: "Master", buttonFunctions: [] } },
     },
     session: {
       session: {

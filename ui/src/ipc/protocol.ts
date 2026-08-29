@@ -39,7 +39,7 @@ import type {
   OutputStatusInfo,
   PatchConflict,
   PatchPreview,
-  PlaybackId,
+  ExecutorButtonFunction,
   ProgrammerState,
   Query,
   ShowFileInfo,
@@ -51,7 +51,6 @@ import type {
 } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
-  EXECUTOR_BUTTON_FUNCTION_VARIANTS,
   EXECUTOR_TARGET_VARIANTS,
   EXIT_ACTION_VARIANTS,
   FEATURE_GROUP_VARIANTS,
@@ -85,6 +84,7 @@ import {
   asVariant,
   field,
 } from "./shape";
+import { FIXED_BUTTON_FUNCTIONS } from "../desk/functions";
 
 /**
  * The version this build speaks, incremented on any breaking change.
@@ -306,32 +306,6 @@ function readPatchOp(value: unknown, path: string): JsonPatchOp {
   }
 }
 
-/**
- * Which playback a `PlaybackState` is about — S40.
- *
- * A tagged pair rather than a number, because a cue list playing on no fader is
- * a playback of its own (`prism_domain::PlaybackId`). Narrowed rather than
- * asserted: the tag arrives as a `string` and `as` is a claim, not a check.
- */
-function readPlaybackId(value: unknown, path: string): PlaybackId {
-  const record = asRecord(value, path);
-  const tag = asString(field(record, "t"), `${path}.t`);
-  switch (tag) {
-    case "Executor":
-      return {
-        t: "Executor",
-        executorId: asInteger(field(record, "executorId"), `${path}.executorId`),
-      };
-    case "Sequence":
-      return {
-        t: "Sequence",
-        sequenceId: asInteger(field(record, "sequenceId"), `${path}.sequenceId`),
-      };
-    default:
-      throw new ProtocolFault(`${path}.t`, `a playback this build knows, not ${JSON.stringify(tag)}`);
-  }
-}
-
 /** The operations of a patch delta. */
 function readPatchOps(value: unknown, path: string): JsonPatchOp[] {
   return asArray(value, path).map((op, index) => readPatchOp(op, `${path}[${index}]`));
@@ -430,7 +404,11 @@ export function readDelta(value: unknown, path: string): Delta {
     case "PlaybackState":
       return {
         t: "PlaybackState",
-        playback: readPlaybackId(field(record, "playback"), `${path}.playback`),
+        // **A cue list number** since S45: a playback is a sequence's, and
+        // there is exactly one of them per list (`prism_domain::PlaybackId`).
+        // It was a tagged pair with an executor in one arm, and the executors
+        // are what punch-list entry B18 found two of.
+        playback: asInteger(field(record, "playback"), `${path}.playback`),
         isActive: asBoolean(field(record, "isActive"), `${path}.isActive`),
         cueIndex: asNullable(field(record, "cueIndex"), `${path}.cueIndex`, asInteger),
       };
@@ -785,15 +763,29 @@ function readExecutorButtonRef(value: unknown, path: string): ExecutorButtonRef 
     case "Function":
       return {
         t: "Function",
-        function: asVariant(
-          field(record, "function"),
-          `${path}.function`,
-          EXECUTOR_BUTTON_FUNCTION_VARIANTS,
-        ),
+        function: readExecutorButtonFunction(field(record, "function"), `${path}.function`),
       };
     default:
       throw new ProtocolFault(`${path}.t`, `a button this build knows, not ${JSON.stringify(tag)}`);
   }
+}
+
+/**
+ * What a key does: one of the eight fixed functions, or a line an operator
+ * wrote — S45's custom row.
+ *
+ * Narrowed rather than asserted, like every other reader here: the eight go
+ * through the generated table, and the ninth is checked member by member.
+ * `desk/functions.ts` owns that check, because the strip and the control editor
+ * make it against a mirrored document rather than against the wire.
+ */
+function readExecutorButtonFunction(value: unknown, path: string): ExecutorButtonFunction {
+  if (typeof value === "string") {
+    return asVariant(value, path, FIXED_BUTTON_FUNCTIONS);
+  }
+  const record = asRecord(value, path);
+  const custom = asRecord(field(record, "CommandLine"), `${path}.CommandLine`);
+  return { CommandLine: { line: asString(field(custom, "line"), `${path}.CommandLine.line`) } };
 }
 
 /** The control learn just named, if this delta is that moment. */

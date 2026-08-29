@@ -524,14 +524,22 @@ impl SurfaceLink {
             };
             let id = ExecutorId::from_page_and_slot(page, slot as u32);
             let executor = core.file.show.executor(id);
-            let level = executor.map_or(0, |executor| executor.master_level);
+            // The name, the colour, the level and the lamp all come off the cue
+            // list standing on the slot — S45. An executor is a handle, so a
+            // second one on the same list shows the same figures and its motor
+            // fader follows the first, which is punch-list entry B18 as an
+            // operator meets it.
+            let sequence = executor
+                .and_then(|executor| executor.sequence_id)
+                .and_then(|sequence| core.file.show.sequence(sequence));
+            let level = fader_reading(executor, sequence);
             self.controller.set_fader(Fader::Strip(index), level);
             self.controller.set_led(
                 ButtonId::Strip {
                     strip: index,
                     button: StripButton::Select,
                 },
-                if executor.is_some_and(|executor| executor.is_active) {
+                if sequence.is_some_and(|sequence| sequence.is_active) {
                     LedState::On
                 } else {
                     LedState::Off
@@ -541,9 +549,6 @@ impl SurfaceLink {
             // named. An executor with no sequence shows its own number, which is
             // what makes an empty strip readable rather than blank.
             self.text.clear();
-            let sequence = executor
-                .and_then(|executor| executor.sequence_id)
-                .and_then(|sequence| core.file.show.sequence(sequence));
             match sequence.map(|sequence| sequence.name.as_str()) {
                 Some(name) => self.text.push_str(name),
                 None => {
@@ -566,16 +571,31 @@ impl SurfaceLink {
                 None => self.controller.set_color(index, StripColor::White),
             }
             self.text.clear();
-            // §4.1's "value": the master as a percentage, which is what the
-            // fader beside it is showing.
-            let _ = write!(self.text, "{}%", percent(level));
+            // **§4.1's "value", read as *what this strip does*** — S45, and a
+            // departure from the row that is written down in
+            // `docs/MCU_MAPPING.md` §4.1. The percentage that used to be here is
+            // the position of the motor fader directly under it, which an
+            // operator can already see; what they cannot see on an X-Touch is
+            // what the four keys do, and that is exactly what B15 is about. So
+            // the lower line is the strip's **legend**: the four keys as one
+            // letter each, then the fader's own.
+            //
+            // Seven characters is what a scribble strip has (`STRIP_CHARS`), and
+            // this fits in six. The full words are on the screen, in the
+            // `Executors` window's editor.
+            let _ = write!(self.text, "{}", legend(executor));
             self.controller
                 .set_text(index, DisplayLine::Lower, &self.text);
         }
         let selected = session
             .selected_executor
             .and_then(|id| core.file.show.executor(id))
-            .map_or(0, |executor| executor.master_level);
+            .map_or(0, |executor| {
+                let sequence = executor
+                    .sequence_id
+                    .and_then(|sequence| core.file.show.sequence(sequence));
+                fader_reading(Some(executor), sequence)
+            });
         self.controller.set_fader(Fader::Main, selected);
         // §4.1: "Save | LED lit while unsaved changes exist".
         self.controller.set_led(
@@ -640,9 +660,70 @@ fn notice_for(health: SurfaceHealth) -> Option<Delta> {
     })
 }
 
-/// A level as whole per cent.
-fn percent(level: u16) -> u32 {
-    (u32::from(level) * 100).div_ceil(u32::from(u16::MAX))
+/// What a strip's motor fader stands at: the number its own function names.
+///
+/// **S45.** A fader was always the master before, because that was the only
+/// number an executor had. Now what it moves is `Executor::fader_function` and
+/// what it shows has to be the same thing, or an operator moves a speed fader
+/// and watches a master.
+///
+/// A crossfade reads **nought**: where a crossfade fader stands is a gesture in
+/// progress rather than show state (`prism_core::Effect::ExecutorXFade`), so
+/// there is nothing to put a motor at, and the resting end is the honest place
+/// for it. An empty fader and a slot with no cue list read nought for the same
+/// reason — there is no number.
+fn fader_reading(
+    executor: Option<&prism_domain::Executor>,
+    sequence: Option<&prism_domain::Sequence>,
+) -> u16 {
+    let (Some(executor), Some(sequence)) = (executor, sequence) else {
+        return 0;
+    };
+    match executor.fader_function {
+        prism_domain::ExecutorFaderFunction::Master => sequence.master_level,
+        prism_domain::ExecutorFaderFunction::Speed => sequence.speed,
+        prism_domain::ExecutorFaderFunction::XFade | prism_domain::ExecutorFaderFunction::Empty => {
+            0
+        }
+    }
+}
+
+/// The strip's legend: what its four keys do, then what its fader does.
+///
+/// One character each, because a scribble strip is seven wide and the words do
+/// not fit — `docs/MCU_MAPPING.md` §4.1 has the departure and the reason. A slot
+/// with no executor at all is blank rather than five dashes: an empty strip
+/// already says `Ex 5` on the line above, and a row of punctuation under it
+/// would read as something being switched off.
+fn legend(executor: Option<&prism_domain::Executor>) -> String {
+    use prism_domain::ExecutorButtonFunction as Button;
+    use prism_domain::ExecutorFaderFunction as Fader_;
+
+    let Some(executor) = executor else {
+        return String::new();
+    };
+    let mut legend = String::with_capacity(usize::from(prism_domain::EXECUTOR_BUTTONS) + 2);
+    for index in 0..usize::from(prism_domain::EXECUTOR_BUTTONS) {
+        legend.push(match executor.button_functions.get(index) {
+            Some(Button::GoForward) => '>',
+            Some(Button::GoBack) => '<',
+            Some(Button::On) => 'O',
+            Some(Button::Off) => 'x',
+            Some(Button::Flash) => 'F',
+            Some(Button::Toggle) => 'T',
+            Some(Button::LearnSpeed) => 'L',
+            Some(Button::CommandLine { .. }) => '*',
+            Some(Button::Empty) | None => '-',
+        });
+    }
+    legend.push(' ');
+    legend.push(match executor.fader_function {
+        Fader_::Master => 'M',
+        Fader_::Speed => 'S',
+        Fader_::XFade => 'X',
+        Fader_::Empty => '-',
+    });
+    legend
 }
 
 /// What the session knows, in the shape layer 3 asks for.
@@ -1106,7 +1187,7 @@ pub fn load_profile(path: &Path) -> Bindings {
 
 #[cfg(test)]
 mod tests {
-    use super::{SurfacePort, load_profile, notice_for, parameter_of, percent};
+    use super::{SurfacePort, legend, load_profile, notice_for, parameter_of};
     use prism_domain::{AttributeType, Delta, FeatureGroup, NoticeLevel};
     use prism_surface::{Bindings, SurfaceHealth};
 
@@ -1143,14 +1224,50 @@ mod tests {
         }
     }
 
+    /// **S45**: the strip's lower line says what its five controls do.
+    ///
+    /// It was the master as a percentage until then, and that is the reading the
+    /// motor fader directly under it already gives. What an operator cannot see
+    /// on an X-Touch is what the four keys do — which is punch-list entry B15 —
+    /// so the seven characters go to the legend instead.
+    /// `docs/MCU_MAPPING.md` §4.1 carries the departure.
     #[test]
-    fn a_level_reads_as_the_percentage_an_operator_expects() {
-        // Rounding up, so that anything above zero shows as at least 1 % and a
-        // fader off the stop is visibly not off.
-        assert_eq!(percent(0), 0);
-        assert_eq!(percent(u16::MAX), 100);
-        assert_eq!(percent(u16::MAX / 2), 50);
-        assert_eq!(percent(1), 1);
+    fn the_lower_line_says_what_the_five_controls_do() {
+        use prism_domain::{
+            ExecutorButtonFunction as Button, ExecutorEncoderFunction, ExecutorFaderFunction,
+            ExecutorId,
+        };
+        let mut executor = prism_domain::Executor {
+            id: ExecutorId::new(3),
+            sequence_id: None,
+            fader_function: ExecutorFaderFunction::Master,
+            button_functions: vec![
+                Button::GoForward,
+                Button::GoBack,
+                Button::Off,
+                Button::Empty,
+            ],
+            encoder_function: ExecutorEncoderFunction::Empty,
+        };
+        assert_eq!(legend(Some(&executor)), "><x- M");
+        // Seven is what a scribble strip has, and this is what has to fit in it.
+        assert!(legend(Some(&executor)).len() <= prism_surface::STRIP_CHARS);
+
+        // A reassignment relabels it, which is the whole point.
+        executor.button_functions[3] = Button::CommandLine {
+            line: "Go+ Sequence 3".to_owned(),
+        };
+        executor.fader_function = ExecutorFaderFunction::XFade;
+        assert_eq!(legend(Some(&executor)), "><x* X");
+
+        executor.button_functions = Vec::new();
+        executor.fader_function = ExecutorFaderFunction::Empty;
+        assert_eq!(legend(Some(&executor)), "---- -");
+
+        // A slot with no executor at all is blank rather than punctuation: the
+        // line above it already says `Ex 5`, and a row of dashes under that
+        // would read as five controls somebody had switched off.
+        assert_eq!(legend(None), "");
     }
 
     #[test]

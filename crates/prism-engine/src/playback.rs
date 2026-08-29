@@ -444,7 +444,7 @@ mod tests {
     use crate::plan::{MergeError, MergePlan};
     use crate::playback::{MAX_SOURCES, MergeScratch, PlaybackLayer};
     use crate::testkit::{attribute_def, fixture_type, moving_head};
-    use prism_domain::{AttributeType, ExecutorId, FixtureId, MergeMode};
+    use prism_domain::{AttributeType, FixtureId, MergeMode, SequenceId};
     use proptest::prelude::*;
 
     /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
@@ -454,7 +454,7 @@ mod tests {
     }
 
     fn layer(plan: &MergePlan, sources: u32) -> PlaybackLayer {
-        PlaybackLayer::new(plan, (1..=sources).map(ExecutorId::new)).unwrap()
+        PlaybackLayer::new(plan, (1..=sources).map(SequenceId::new)).unwrap()
     }
 
     fn resolved(plan: &MergePlan, layer: &PlaybackLayer) -> Vec<u16> {
@@ -486,12 +486,12 @@ mod tests {
         let pan = slot(&plan, 1, AttributeType::Pan);
         assert!(
             layer
-                .source_mut(ExecutorId::new(1))
+                .source_mut(SequenceId::new(1))
                 .unwrap()
                 .set(pan, 60_000)
         );
         assert_eq!(resolved(&plan, &layer)[pan], 32_768);
-        layer.activate(ExecutorId::new(1));
+        layer.activate(SequenceId::new(1));
         assert_eq!(resolved(&plan, &layer)[pan], 60_000);
     }
 
@@ -503,16 +503,16 @@ mod tests {
         // operator.
         let plan = plan();
         let mut layer = layer(&plan, 3);
-        assert!(layer.activate(ExecutorId::new(1)));
-        assert!(layer.activate(ExecutorId::new(2)));
-        let first = layer.source(ExecutorId::new(1)).unwrap().activation();
-        let second = layer.source(ExecutorId::new(2)).unwrap().activation();
+        assert!(layer.activate(SequenceId::new(1)));
+        assert!(layer.activate(SequenceId::new(2)));
+        let first = layer.source(SequenceId::new(1)).unwrap().activation();
+        let second = layer.source(SequenceId::new(2)).unwrap().activation();
         assert!(first < second);
 
         // Already active: no new stamp, and the answer is false.
-        assert!(!layer.activate(ExecutorId::new(1)));
+        assert!(!layer.activate(SequenceId::new(1)));
         assert_eq!(
-            layer.source(ExecutorId::new(1)).unwrap().activation(),
+            layer.source(SequenceId::new(1)).unwrap().activation(),
             first
         );
     }
@@ -522,14 +522,14 @@ mod tests {
         let plan = plan();
         let mut layer = layer(&plan, 2);
         let pan = slot(&plan, 2, AttributeType::Pan);
-        layer.source_mut(ExecutorId::new(1)).unwrap().set(pan, 100);
-        layer.source_mut(ExecutorId::new(2)).unwrap().set(pan, 200);
-        layer.activate(ExecutorId::new(1));
-        layer.activate(ExecutorId::new(2));
+        layer.source_mut(SequenceId::new(1)).unwrap().set(pan, 100);
+        layer.source_mut(SequenceId::new(2)).unwrap().set(pan, 200);
+        layer.activate(SequenceId::new(1));
+        layer.activate(SequenceId::new(2));
         assert_eq!(resolved(&plan, &layer)[pan], 200);
 
-        assert!(layer.deactivate(ExecutorId::new(1)));
-        assert!(layer.activate(ExecutorId::new(1)));
+        assert!(layer.deactivate(SequenceId::new(1)));
+        assert!(layer.activate(SequenceId::new(1)));
         assert_eq!(resolved(&plan, &layer)[pan], 100);
     }
 
@@ -537,9 +537,9 @@ mod tests {
     fn deactivating_a_source_that_is_already_off_changes_nothing() {
         let plan = plan();
         let mut layer = layer(&plan, 1);
-        assert!(!layer.deactivate(ExecutorId::new(1)));
-        assert!(!layer.source(ExecutorId::new(1)).unwrap().is_active());
-        assert_eq!(layer.source(ExecutorId::new(1)).unwrap().activation(), None);
+        assert!(!layer.deactivate(SequenceId::new(1)));
+        assert!(!layer.source(SequenceId::new(1)).unwrap().is_active());
+        assert_eq!(layer.source(SequenceId::new(1)).unwrap().activation(), None);
     }
 
     #[test]
@@ -550,17 +550,17 @@ mod tests {
         let pan = slot(&plan, 1, AttributeType::Pan);
         for (executor, value) in [(1u32, 10_000u16), (2, 20_000), (3, 30_000)] {
             layer
-                .source_mut(ExecutorId::new(executor))
+                .source_mut(SequenceId::new(executor))
                 .unwrap()
                 .set(pan, value);
-            layer.activate(ExecutorId::new(executor));
+            layer.activate(SequenceId::new(executor));
         }
         assert_eq!(resolved(&plan, &layer)[pan], 30_000);
-        layer.deactivate(ExecutorId::new(3));
+        layer.deactivate(SequenceId::new(3));
         assert_eq!(resolved(&plan, &layer)[pan], 20_000);
-        layer.deactivate(ExecutorId::new(2));
+        layer.deactivate(SequenceId::new(2));
         assert_eq!(resolved(&plan, &layer)[pan], 10_000);
-        layer.deactivate(ExecutorId::new(1));
+        layer.deactivate(SequenceId::new(1));
         assert_eq!(resolved(&plan, &layer)[pan], 32_768);
     }
 
@@ -572,12 +572,12 @@ mod tests {
         let dimmer = slot(&plan, 1, AttributeType::Dimmer);
         let pan = slot(&plan, 1, AttributeType::Pan);
         {
-            let source = layer.source_mut(ExecutorId::new(1)).unwrap();
+            let source = layer.source_mut(SequenceId::new(1)).unwrap();
             source.set(dimmer, FULL);
             source.set(pan, 45_000);
         }
-        layer.activate(ExecutorId::new(1));
-        assert!(layer.set_master(ExecutorId::new(1), 32_767));
+        layer.activate(SequenceId::new(1));
+        assert!(layer.set_master(SequenceId::new(1), 32_767));
 
         let values = resolved(&plan, &layer);
         assert_eq!(values[dimmer], 32_767);
@@ -593,16 +593,16 @@ mod tests {
         let mut layer = layer(&plan, 2);
         let dimmer = slot(&plan, 1, AttributeType::Dimmer);
         layer
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
         layer
-            .source_mut(ExecutorId::new(2))
+            .source_mut(SequenceId::new(2))
             .unwrap()
             .set(dimmer, 40_000);
-        layer.activate(ExecutorId::new(1));
-        layer.activate(ExecutorId::new(2));
-        layer.set_master(ExecutorId::new(1), 32_767);
+        layer.activate(SequenceId::new(1));
+        layer.activate(SequenceId::new(2));
+        layer.set_master(SequenceId::new(1), 32_767);
         assert_eq!(resolved(&plan, &layer)[dimmer], 40_000);
     }
 
@@ -613,17 +613,17 @@ mod tests {
         let mut layer = layer(&plan, 2);
         let dimmer = slot(&plan, 1, AttributeType::Dimmer);
         layer
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
         layer
-            .source_mut(ExecutorId::new(2))
+            .source_mut(SequenceId::new(2))
             .unwrap()
             .set(dimmer, FULL);
-        layer.activate(ExecutorId::new(1));
-        layer.activate(ExecutorId::new(2));
+        layer.activate(SequenceId::new(1));
+        layer.activate(SequenceId::new(2));
         for level in [FULL, 40_000, 20_000, 0] {
-            layer.set_master(ExecutorId::new(2), level);
+            layer.set_master(SequenceId::new(2), level);
             assert_eq!(resolved(&plan, &layer)[dimmer], FULL, "master {level}");
         }
     }
@@ -633,7 +633,7 @@ mod tests {
         let plan = plan();
         let mut layer = layer(&plan, 1);
         let pan = slot(&plan, 1, AttributeType::Pan);
-        let source = layer.source_mut(ExecutorId::new(1)).unwrap();
+        let source = layer.source_mut(SequenceId::new(1)).unwrap();
         assert!(source.is_empty());
         assert!(source.set(pan, 111));
         assert!(source.set(pan, 222));
@@ -650,13 +650,13 @@ mod tests {
         let plan = plan();
         let mut layer = layer(&plan, 1);
         let pan = slot(&plan, 1, AttributeType::Pan);
-        let source = layer.source_mut(ExecutorId::new(1)).unwrap();
+        let source = layer.source_mut(SequenceId::new(1)).unwrap();
         source.set(pan, 60_000);
         source.set(slot(&plan, 2, AttributeType::Pan), 60_000);
         source.clear();
         assert!(source.is_empty());
         assert_eq!(source.get(pan), None);
-        layer.activate(ExecutorId::new(1));
+        layer.activate(SequenceId::new(1));
         assert_eq!(resolved(&plan, &layer)[pan], 32_768);
     }
 
@@ -664,7 +664,7 @@ mod tests {
     fn a_slot_outside_the_plan_is_refused_rather_than_written() {
         let plan = plan();
         let mut layer = layer(&plan, 1);
-        let source = layer.source_mut(ExecutorId::new(1)).unwrap();
+        let source = layer.source_mut(SequenceId::new(1)).unwrap();
         assert!(!source.set(plan.slot_count(), 1));
         assert!(!source.set(usize::MAX, 1));
         assert!(source.is_empty());
@@ -675,21 +675,21 @@ mod tests {
     fn an_executor_the_layer_does_not_know_about_is_ignored() {
         let plan = plan();
         let mut layer = layer(&plan, 2);
-        assert!(layer.source(ExecutorId::new(9)).is_none());
-        assert!(layer.source_mut(ExecutorId::new(9)).is_none());
-        assert!(!layer.activate(ExecutorId::new(9)));
-        assert!(!layer.deactivate(ExecutorId::new(9)));
-        assert!(!layer.set_master(ExecutorId::new(9), 100));
+        assert!(layer.source(SequenceId::new(9)).is_none());
+        assert!(layer.source_mut(SequenceId::new(9)).is_none());
+        assert!(!layer.activate(SequenceId::new(9)));
+        assert!(!layer.deactivate(SequenceId::new(9)));
+        assert!(!layer.set_master(SequenceId::new(9), 100));
     }
 
     #[test]
     fn an_executor_listed_twice_becomes_one_source() {
         let plan = plan();
-        let ids = [1u32, 5, 1, 5, 5].map(ExecutorId::new);
+        let ids = [1u32, 5, 1, 5, 5].map(SequenceId::new);
         let layer = PlaybackLayer::new(&plan, ids).unwrap();
         assert_eq!(layer.source_count(), 2);
-        assert!(layer.source(ExecutorId::new(1)).is_some());
-        assert!(layer.source(ExecutorId::new(5)).is_some());
+        assert!(layer.source(SequenceId::new(1)).is_some());
+        assert!(layer.source(SequenceId::new(5)).is_some());
     }
 
     #[test]
@@ -698,16 +698,16 @@ mod tests {
         // switched on before anyone moves its fader must produce light.
         let plan = plan();
         let layer = layer(&plan, 1);
-        let source = layer.source(ExecutorId::new(1)).unwrap();
+        let source = layer.source(SequenceId::new(1)).unwrap();
         assert_eq!(source.master(), FULL);
         assert!(!source.is_active());
-        assert_eq!(source.id(), ExecutorId::new(1).into());
+        assert_eq!(source.id(), SequenceId::new(1).into());
     }
 
     #[test]
     fn an_absurd_number_of_sources_is_rejected_rather_than_allocated() {
         let plan = plan();
-        let ids = (0..=MAX_SOURCES as u32).map(ExecutorId::new);
+        let ids = (0..=MAX_SOURCES as u32).map(SequenceId::new);
         assert_eq!(
             PlaybackLayer::new(&plan, ids).unwrap_err(),
             MergeError::TooManySources(MAX_SOURCES + 1)
@@ -717,8 +717,8 @@ mod tests {
     #[test]
     fn a_layer_over_an_empty_plan_resolves_to_nothing() {
         let plan = MergePlan::build(std::iter::empty()).unwrap();
-        let mut layer = PlaybackLayer::new(&plan, [ExecutorId::new(1)]).unwrap();
-        layer.activate(ExecutorId::new(1));
+        let mut layer = PlaybackLayer::new(&plan, [SequenceId::new(1)]).unwrap();
+        layer.activate(SequenceId::new(1));
         assert!(resolved(&plan, &layer).is_empty());
     }
 
@@ -744,8 +744,8 @@ mod tests {
         let smaller = MergePlan::build([(FixtureId::new(1), &moving_head(), false)]).unwrap();
         let mut layer = layer(&plan, 1);
         let last = slot(&plan, 3, AttributeType::Pan);
-        layer.source_mut(ExecutorId::new(1)).unwrap().set(last, 999);
-        layer.activate(ExecutorId::new(1));
+        layer.source_mut(SequenceId::new(1)).unwrap().set(last, 999);
+        layer.activate(SequenceId::new(1));
 
         let mut scratch = MergeScratch::new(&smaller);
         let mut out = vec![7u16; plan.slot_count()];
@@ -762,10 +762,10 @@ mod tests {
         let mut layer = layer(&plan, 2);
         let dimmer = slot(&plan, 1, AttributeType::Dimmer);
         layer
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, 40_000);
-        layer.activate(ExecutorId::new(1));
+        layer.activate(SequenceId::new(1));
         let mut scratch = MergeScratch::new(&plan);
         let mut first = vec![0u16; plan.slot_count()];
         let mut second = vec![0u16; plan.slot_count()];
@@ -795,11 +795,11 @@ mod tests {
     fn load(plan: &MergePlan, specs: &[SourceSpec]) -> PlaybackLayer {
         let mut layer = PlaybackLayer::new(
             plan,
-            (0..specs.len() as u32).map(|index| ExecutorId::new(index + 1)),
+            (0..specs.len() as u32).map(|index| SequenceId::new(index + 1)),
         )
         .unwrap();
         for (index, (active, master, values)) in specs.iter().enumerate() {
-            let executor = ExecutorId::new(index as u32 + 1);
+            let executor = SequenceId::new(index as u32 + 1);
             layer.set_master(executor, *master);
             let source = layer.source_mut(executor).unwrap();
             for (slot, value) in values.iter().enumerate() {
@@ -900,10 +900,10 @@ mod tests {
             let pan = slot(&plan, 1, AttributeType::Pan);
             let mut layer = PlaybackLayer::new(
                 &plan,
-                (0..values.len() as u32).map(|index| ExecutorId::new(index + 1)),
+                (0..values.len() as u32).map(|index| SequenceId::new(index + 1)),
             ).unwrap();
             for (index, value) in values.iter().enumerate() {
-                let executor = ExecutorId::new(index as u32 + 1);
+                let executor = SequenceId::new(index as u32 + 1);
                 if let Some(source) = layer.source_mut(executor) {
                     source.set(pan, *value);
                 }
@@ -911,7 +911,7 @@ mod tests {
             }
             for (index, value) in values.iter().enumerate().rev() {
                 prop_assert_eq!(resolved(&plan, &layer).get(pan).copied(), Some(*value));
-                layer.deactivate(ExecutorId::new(index as u32 + 1));
+                layer.deactivate(SequenceId::new(index as u32 + 1));
             }
             prop_assert_eq!(resolved(&plan, &layer).get(pan).copied(), Some(32_768));
         }
@@ -930,12 +930,12 @@ mod tests {
             let plan = MergePlan::build([(FixtureId::new(1), &odd, false)]).unwrap();
             let mut layer = PlaybackLayer::new(
                 &plan,
-                [ExecutorId::new(1), ExecutorId::new(2)],
+                [SequenceId::new(1), SequenceId::new(2)],
             ).unwrap();
-            layer.source_mut(ExecutorId::new(1)).unwrap().set(0, a);
-            layer.source_mut(ExecutorId::new(2)).unwrap().set(0, b);
-            layer.activate(ExecutorId::new(1));
-            layer.activate(ExecutorId::new(2));
+            layer.source_mut(SequenceId::new(1)).unwrap().set(0, a);
+            layer.source_mut(SequenceId::new(2)).unwrap().set(0, b);
+            layer.activate(SequenceId::new(1));
+            layer.activate(SequenceId::new(2));
             prop_assert_eq!(resolved(&plan, &layer).first().copied(), Some(a.max(b)));
         }
     }

@@ -114,12 +114,9 @@ describe("deltas", () => {
       { t: "ShowPatch", ops: [{ op: "add", path: "/a", value: 1 }] },
       { t: "SessionPatch", ops: [] },
       { t: "ProgrammerChanged", state: emptyProgrammer() },
-      {
-        t: "PlaybackState",
-        playback: { t: "Executor", executorId: 2 },
-        isActive: true,
-        cueIndex: null,
-      },
+      // A playback is a cue list's number since S45 — the tagged pair, with an
+      // executor in one arm, is what punch-list entry B18 found two of.
+      { t: "PlaybackState", playback: 2, isActive: true, cueIndex: null },
       { t: "OutputHealth", outputId: 1, health: "Degraded" },
       { t: "DirtyFlag", unsavedChanges: false },
       { t: "Notice", level: "Warn", message: "careful" },

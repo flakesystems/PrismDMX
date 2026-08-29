@@ -182,9 +182,15 @@ struct RecordedPreset {
 struct RecordedExecutor {
     id: u32,
     sequence_id: Option<u32>,
+    /// Whether the cue list standing on this slot is running.
+    ///
+    /// **Read through the sequence since S45**: a playback is the cue list's, so
+    /// two executors carrying one list report the same thing rather than two —
+    /// which is punch-list entry B18, and is what this row asserts now.
     is_active: bool,
-    /// **Always `null`** until S34 builds the channel back from the tick — see
-    /// [`the_cue_index_is_a_number_now`].
+    /// **Always `null`** until S34 built the channel back from the tick — see
+    /// [`the_cue_index_is_a_number_now`]. The cue list's since S45, for
+    /// [`Self::is_active`]'s reason.
     current_cue_index: Option<u32>,
 }
 
@@ -977,17 +983,24 @@ fn executors_of(show: &JsonValue) -> Vec<RecordedExecutor> {
     };
     let mut rows: Vec<RecordedExecutor> = executors
         .iter()
-        .map(|(key, value)| RecordedExecutor {
-            id: key.parse().expect("an executor is keyed by its number"),
-            sequence_id: match member(value, "sequenceId") {
+        .map(|(key, value)| {
+            let sequence_id = match member(value, "sequenceId") {
                 Some(&JsonValue::Int(number)) => u32::try_from(number).ok(),
                 _ => None,
-            },
-            is_active: bool_at(value, "isActive"),
-            current_cue_index: match member(value, "currentCueIndex") {
-                Some(&JsonValue::Int(number)) => u32::try_from(number).ok(),
-                _ => None,
-            },
+            };
+            // What the slot is *doing* is the cue list's since S45.
+            let sequence = sequence_id
+                .and_then(|id| member(&member_or_null(show, "sequences"), &id.to_string()).cloned())
+                .unwrap_or(JsonValue::Null);
+            RecordedExecutor {
+                id: key.parse().expect("an executor is keyed by its number"),
+                sequence_id,
+                is_active: bool_at(&sequence, "isActive"),
+                current_cue_index: match member(&sequence, "currentCueIndex") {
+                    Some(&JsonValue::Int(number)) => u32::try_from(number).ok(),
+                    _ => None,
+                },
+            }
         })
         .collect();
     rows.sort_by_key(|row| row.id);

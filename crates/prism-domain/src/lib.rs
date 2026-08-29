@@ -56,8 +56,8 @@ pub use command::{
 };
 pub use delta::{Delta, NoticeLevel};
 pub use executor::{
-    EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction, ExecutorButtonRef,
-    ExecutorEncoderFunction, ExecutorFaderFunction, SPEED_UNITY,
+    EXECUTOR_BUTTONS, EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction, ExecutorButtonRef,
+    ExecutorChange, ExecutorEncoderFunction, ExecutorFaderFunction, SPEED_UNITY,
 };
 pub use export::{BINDINGS_DIR, export_bindings};
 pub use ids::{

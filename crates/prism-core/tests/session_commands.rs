@@ -47,7 +47,9 @@ fn the_session_commands_are_the_session_group() {
     // `common::machine_commands`.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        62
+        // Sixty-three since S45's `ConfigureExecutor`, which is a **show**
+        // command.
+        63
     );
 }
 

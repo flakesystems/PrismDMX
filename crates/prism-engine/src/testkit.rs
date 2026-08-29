@@ -117,6 +117,8 @@ pub(crate) fn sequence(cues: Vec<Cue>, looping: bool) -> Sequence {
         color: None,
         cues,
         looping,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }

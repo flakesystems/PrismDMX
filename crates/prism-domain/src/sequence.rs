@@ -292,13 +292,42 @@ pub struct Sequence {
     /// `loop`, as specified.
     #[serde(rename = "loop")]
     pub looping: bool,
-    /// Whether this cue list is running **on no executor** (S40).
+    /// The master level of this list's playback, `0..=65535` — **S45**.
     ///
-    /// The mirror of [`crate::Executor::is_active`] for the playback a sequence
-    /// has when nothing holds it — see [`crate::PlaybackId`]. Written only by
-    /// the tick's readback, exactly as the executor's is, and only ever true
-    /// while no executor plays this list: put it on a fader and the executor's
-    /// own state is the one that moves.
+    /// It was `Executor::master_level` until then, one per executor, and
+    /// punch-list entry B18 is what that cost: two faders on one cue list moved
+    /// independently, and one of them was always lying about the light. There is
+    /// one of these per list now, and every executor whose fader is
+    /// [`crate::ExecutorFaderFunction::Master`] is a handle on it.
+    ///
+    /// **Full is the default and the safe answer.** A cue list nobody has faded
+    /// has to produce light when it is switched on — the same rule
+    /// `prism_engine::PlaybackSource` has followed since S2 — so a list written
+    /// before S45 comes up at full, and `prism_core::store` overwrites that with
+    /// the level the executor carried when the file has one.
+    #[serde(default = "full_master")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(strategy = "0..=u16::MAX"))]
+    pub master_level: u16,
+    /// The rate this list plays at, in units of [`crate::SPEED_UNITY`] — S45.
+    ///
+    /// The *speed master* of `docs/DMX_MERGE.md` §4 item 3, moved off the
+    /// executor for [`Self::master_level`]'s reason. `0` freezes a playback,
+    /// [`crate::SPEED_UNITY`] is 1x, and `u16::MAX` is just under 64x.
+    ///
+    /// **Unity is the default**, because a list written before this field
+    /// existed was playing at the times its own cues carry, which is what unity
+    /// means.
+    #[serde(default = "unity_speed")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(strategy = "0..=u16::MAX"))]
+    pub speed: u16,
+    /// Whether this cue list is running (S40, and every playback of it since
+    /// S45).
+    ///
+    /// Written only by the tick's readback — `prism_engine::PlaybackReport`
+    /// through `prismd::Core::poll_playback`. A command that starts a playback
+    /// does not set it on the way past: the command has only been *queued* when
+    /// it is acknowledged, and two authors for one field means the loser is
+    /// whichever arrives second.
     ///
     /// `#[serde(default)]` because a `.prism` file keeps each sequence as a
     /// MessagePack document (S15) and one written before S40 does not carry it.
@@ -307,12 +336,26 @@ pub struct Sequence {
     /// migration.
     #[serde(default)]
     pub is_active: bool,
-    /// Which cue that playback is standing on, as an index into [`Self::cues`].
+    /// Which cue this list's playback is standing on, as an index into
+    /// [`Self::cues`].
     ///
-    /// The mirror of [`crate::Executor::current_cue_index`], with the same
-    /// author and the same reason for existing.
+    /// The same author and the same reason for existing, and it is the half
+    /// nothing could know before S34: what cue a playback is on lives on the
+    /// tick thread.
     #[serde(default)]
     pub current_cue_index: Option<u32>,
+}
+
+/// The level a cue list written before [`Sequence::master_level`] existed was
+/// playing at — full, because a playback nobody has faded has to make light.
+const fn full_master() -> u16 {
+    u16::MAX
+}
+
+/// The rate a cue list written before [`Sequence::speed`] existed was playing
+/// at, which is the only rate it could have been playing at.
+const fn unity_speed() -> u16 {
+    crate::SPEED_UNITY
 }
 
 #[cfg(test)]
@@ -417,6 +460,8 @@ mod tests {
             color: None,
             cues: vec![cue("1"), cue("2")],
             looping: true,
+            master_level: u16::MAX,
+            speed: crate::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
         };

@@ -489,7 +489,7 @@ mod tests {
         MergeBody::for_patch(
             &layout(),
             [(&fixture, &fixture_type)],
-            [prism_domain::ExecutorId::new(0)],
+            [prism_domain::SequenceId::new(0)],
         )
         .unwrap()
     }
@@ -585,7 +585,7 @@ mod tests {
 
         // An empty patch: nothing writes channel 1 at all any more.
         let empty =
-            MergeBody::for_patch(&layout(), [], [prism_domain::ExecutorId::new(0)]).unwrap();
+            MergeBody::for_patch(&layout(), [], [prism_domain::SequenceId::new(0)]).unwrap();
         engine.install(empty);
         until("the channel to go dark", || {
             frames.last_frame().is_some_and(|(_, data)| data[0] == 0)

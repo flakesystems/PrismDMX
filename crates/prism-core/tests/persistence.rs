@@ -162,6 +162,8 @@ fn saveable_file() -> ShowFile {
                 b: 0,
             }),
             looping: true,
+            master_level: u16::MAX,
+            speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
             cues: vec![
@@ -218,13 +220,16 @@ fn saveable_file() -> ShowFile {
                 ExecutorButtonFunction::Toggle,
             ],
             encoder_function: ExecutorEncoderFunction::Speed,
-            master_level: 40000,
-            // Not unity, so a saved and reloaded show has to carry the rate an
-            // operator set rather than the one the type defaults to.
-            speed: prism_domain::SPEED_UNITY * 2,
-            is_active: true,
-            current_cue_index: Some(1),
         })
+        .unwrap();
+    // The level and the rate are the **cue list's** since S45, and neither is
+    // its default: a saved and reloaded show has to carry what an operator set
+    // rather than what the type would have said.
+    file.show
+        .set_sequence_master(SequenceId::new(5), 40000)
+        .unwrap();
+    file.show
+        .set_sequence_speed(SequenceId::new(5), prism_domain::SPEED_UNITY * 2)
         .unwrap();
 
     // The session half, driven through the commands an operator would use.
@@ -304,6 +309,8 @@ fn second_file() -> ShowFile {
             name: "Chase".to_owned(),
             color: None,
             looping: false,
+            master_level: u16::MAX,
+            speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
             cues: (1..=40)
@@ -398,11 +405,13 @@ fn a_saved_show_comes_back_byte_identical() {
         sequence.cues[0].parts[0].preset_ref,
         Some(PresetId::new(12))
     );
+    // The level and the rate travel on the cue list since S45, and the
+    // assignment on the executor.
+    assert_eq!(sequence.master_level, 40000);
+    assert_eq!(sequence.speed, prism_domain::SPEED_UNITY * 2);
     let executor = show.executor(ExecutorId::new(17)).unwrap();
-    assert_eq!(executor.master_level, 40000);
-    assert!(executor.is_active);
-    assert_eq!(executor.current_cue_index, Some(1));
     assert_eq!(executor.button_functions.len(), 4);
+    assert_eq!(executor.sequence_id, Some(SequenceId::new(5)));
 
     // The session is in the file too — the exit criterion says "sessions
     // included", and S12's reason for putting the views in this half is that a
@@ -805,11 +814,11 @@ fn a_version_one_file_migrates_to_version_two() {
         file.show.sequence(SequenceId::new(5)).unwrap().cues.len(),
         2
     );
+    // The level a version-1 file wrote on its executor is the cue list's now —
+    // `ShowStore::carry_levels_onto_their_cue_lists`, which is the half a
+    // `serde(default)` on the sequence could not do.
     assert_eq!(
-        file.show
-            .executor(ExecutorId::new(17))
-            .unwrap()
-            .master_level,
+        file.show.sequence(SequenceId::new(5)).unwrap().master_level,
         40000
     );
     // And the half version 1 had nowhere to put is the session a fresh desk

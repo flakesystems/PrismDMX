@@ -16,14 +16,14 @@ mod common;
 
 use common::{cue, dimmer_type, fixture, group, par_type, sequence};
 use prism_core::Show;
-use prism_domain::{AttributeType, ExecutorId, FixtureId, GroupId, UniverseId};
+use prism_domain::{AttributeType, FixtureId, GroupId, SequenceId, UniverseId};
 use prism_engine::{DmxFrame, FrameLayout, MergeBody};
 use proptest::prelude::*;
 
 /// Everything the daemon does to turn a show into a running engine.
-fn body(show: &Show, executors: u32) -> Result<MergeBody, prism_engine::PatchError> {
+fn body(show: &Show, playbacks: u32) -> Result<MergeBody, prism_engine::PatchError> {
     let layout = FrameLayout::new(show.universes()).unwrap();
-    MergeBody::for_patch(&layout, show.patched(), (0..executors).map(ExecutorId::new))
+    MergeBody::for_patch(&layout, show.patched(), (0..playbacks).map(SequenceId::new))
 }
 
 /// The frame a body at rest writes.
@@ -58,8 +58,8 @@ fn a_show_built_through_the_model_becomes_a_running_engine() {
     // The three set-up doors, driven from the show's own pools.
     body.load_groups(&show.groups().cloned().collect::<Vec<_>>());
     body.load_sequence(
-        ExecutorId::new(0),
-        show.sequence(prism_domain::SequenceId::new(1)).unwrap(),
+        SequenceId::new(1),
+        show.sequence(SequenceId::new(1)).unwrap(),
     )
     .unwrap();
 
@@ -132,7 +132,9 @@ fn a_repatch_moves_the_revision_the_daemon_watches() {
     let steady = show.patch_revision();
     show.store_group(group(1, &[1])).unwrap();
     show.store_executor(common::executor(0, None)).unwrap();
-    show.set_executor_master(ExecutorId::new(0), 1).unwrap();
+    show.store_sequence(sequence(1, vec![cue("1", 1, AttributeType::Red, 1)]))
+        .unwrap();
+    show.set_sequence_master(SequenceId::new(1), 1).unwrap();
     assert_eq!(show.patch_revision(), steady);
 }
 

@@ -45,7 +45,7 @@ use std::time::Duration;
 
 use prism_core::{SessionMirror, Show, ShowFile, ShowMirror, ShowStore};
 use prism_domain::{
-    AttributeDef, AttributeType, Command, Executor, ExecutorButtonFunction,
+    AttributeDef, AttributeType, Command, Executor, ExecutorButtonFunction, ExecutorChange,
     ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FeatureGroup, Fixture, FixtureId,
     FixtureType, GoDirection, GroupId, JsonValue, MergeMode, ObjectRef, OverwriteMode,
     PlaybackTarget, PresetId, ProgrammerState, SelectionMode, Sequence, SequenceId,
@@ -181,6 +181,8 @@ fn desk_show() -> ShowFile {
                 }],
             }],
             looping: false,
+            master_level: u16::MAX,
+            speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
         })
@@ -232,12 +234,14 @@ fn desk_show() -> ShowFile {
             fader_function: fader,
             button_functions: buttons,
             encoder_function: encoder,
-            master_level: level,
-            speed: prism_domain::SPEED_UNITY,
-            is_active: false,
-            current_cue_index: None,
         })
         .expect("the sequence exists");
+        // The level is the cue list's since S45, so a slot with no list has
+        // none to set — which is what makes executor 9 draw as an empty strip.
+        if let Some(sequence) = sequence {
+            show.set_sequence_master(SequenceId::new(sequence), level)
+                .expect("the sequence exists");
+        }
     }
 
     ShowFile {
@@ -271,15 +275,25 @@ struct RecordedStrip {
     /// The sequence's name, which is what an operator named. `null` for a slot
     /// with no sequence — the bar shows the number instead.
     name: Option<String>,
-    /// `0..=65535`.
-    master_level: u16,
-    /// Whether it is running.
+    /// Where the fader stands, `0..=65535` — **the number its own function
+    /// names**, S45. It was the executor's master until then; a playback is the
+    /// cue list's now, so `Master` reads the list's level, `Speed` reads its
+    /// rate, and a crossfade or an empty fader reads nought.
+    fader_level: u16,
+    /// Whether the cue list on it is running.
     is_active: bool,
-    /// Which cue it is in, if any.
+    /// Which cue that list is in, if any.
     current_cue_index: Option<u32>,
     /// What its fader does.
     fader_function: String,
+    /// What its encoder does — S45, because the control editor draws it and a
+    /// recording that could not see it would not hold the editor to anything.
+    encoder_function: String,
     /// What its four buttons do, in hardware order: Rec, Solo, Mute, Select.
+    ///
+    /// The eight fixed functions read as their own name; S45's custom row reads
+    /// as the **line** it sends, in braces, so a recording says what a key will
+    /// do rather than only that it is custom.
     button_functions: Vec<String>,
 }
 
@@ -355,6 +369,10 @@ struct Recording {
     /// Executors per page — **D7**, recorded so an interface that assumed a
     /// different number would fail here rather than address the wrong executor.
     executors_per_page: u32,
+    /// Buttons per executor — S45, recorded for [`Self::executors_per_page`]'s
+    /// reason: the control editor draws one row per key, and an interface that
+    /// assumed a different number would offer a key the daemon refuses.
+    executor_buttons: u8,
     /// The attributes of each encoder bank, in the order the jog wheel walks
     /// them (`prismd::surface::parameter_of`). The interface has the same table
     /// generated into `ui/src/bindings/variants.ts`; recording it means the two
@@ -750,9 +768,34 @@ fn script() -> Vec<Scripted> {
             },
         ),
         (
+            "**say what its fader does** — S45, punch-list B15. Until then the \
+             defaults `assign_executor` chose were the whole of it",
+            Some((34, "assign executor 9 fader speed")),
+            Command::ConfigureExecutor {
+                executor_id: ExecutorId::new(9),
+                change: ExecutorChange::Fader {
+                    function: ExecutorFaderFunction::Speed,
+                },
+            },
+        ),
+        (
+            "and what one of its keys does, with the **custom row**: a line an \
+             operator wrote, which is every desk's own",
+            Some((35, "assign executor 9 button 4 command \"Go+ Sequence 4\"")),
+            Command::ConfigureExecutor {
+                executor_id: ExecutorId::new(9),
+                change: ExecutorChange::Button {
+                    index: 3,
+                    function: ExecutorButtonFunction::CommandLine {
+                        line: "Go+ Sequence 4".to_owned(),
+                    },
+                },
+            },
+        ),
+        (
             "empty the slot: the row goes and the *place* stays, because a place \
              is arithmetic (D7)",
-            Some((34, "delete executor 9")),
+            Some((36, "delete executor 9")),
             Command::Delete {
                 target: ObjectRef::Executor {
                     executor_id: ExecutorId::new(9),
@@ -770,7 +813,7 @@ fn script() -> Vec<Scripted> {
         (
             "store a preset with no pool in the line: the bank in force is the \
              desk's answer",
-            Some((35, "store preset 1 \"Warm\"")),
+            Some((37, "store preset 1 \"Warm\"")),
             Command::StorePreset {
                 preset_id: PresetId::new(1),
                 pool: None,
@@ -781,14 +824,14 @@ fn script() -> Vec<Scripted> {
         ),
         (
             "apply it back to the selection",
-            Some((36, "preset 1")),
+            Some((38, "preset 1")),
             Command::ApplyPreset {
                 preset_id: PresetId::new(1),
             },
         ),
         (
             "copy a whole cue list onto a free number",
-            Some((37, "copy sequence 1 sequence 5")),
+            Some((39, "copy sequence 1 sequence 5")),
             Command::Copy {
                 from: ObjectRef::Sequence {
                     sequence_id: SequenceId::new(1),
@@ -801,7 +844,7 @@ fn script() -> Vec<Scripted> {
         ),
         (
             "and move it, which brings every executor that played it along",
-            Some((38, "move sequence 5 sequence 6")),
+            Some((40, "move sequence 5 sequence 6")),
             Command::Move {
                 from: ObjectRef::Sequence {
                     sequence_id: SequenceId::new(5),
@@ -815,7 +858,7 @@ fn script() -> Vec<Scripted> {
         (
             "a view is the same four verbs one model along, and this one is \
              session state",
-            Some((39, "label view 1 \"Programmer\"")),
+            Some((41, "label view 1 \"Programmer\"")),
             Command::Label {
                 target: ObjectRef::View {
                     view_id: prism_domain::ViewId::new(1),
@@ -825,7 +868,7 @@ fn script() -> Vec<Scripted> {
         ),
         (
             "the selection to full, which is a whole command with no argument",
-            Some((40, "full")),
+            Some((42, "full")),
             Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
                 value: 65535,
@@ -835,17 +878,17 @@ fn script() -> Vec<Scripted> {
         (
             "**a line the daemon refuses**: there is no sequence 404, and the \
              parser was right to send it — D3",
-            Some((41, "delete sequence 404")),
+            Some((43, "delete sequence 404")),
             Command::Delete {
                 target: ObjectRef::Sequence {
                     sequence_id: SequenceId::new(404),
                 },
             },
         ),
-        ("take the last edit back", Some((42, "oops")), Command::Oops),
+        ("take the last edit back", Some((44, "oops")), Command::Oops),
         (
             "colour a cue list, which is the other thing a scribble strip shows",
-            Some((43, "color sequence 1 red")),
+            Some((45, "color sequence 1 red")),
             Command::Color {
                 target: ObjectRef::Sequence {
                     sequence_id: SequenceId::new(1),
@@ -855,7 +898,7 @@ fn script() -> Vec<Scripted> {
         ),
         (
             "and the same line through a **fader**, which colours the list on              it: executor 2 plays sequence 2",
-            Some((44, "color executor 2 #ff8800")),
+            Some((46, "color executor 2 #ff8800")),
             Command::Color {
                 target: ObjectRef::Executor {
                     executor_id: ExecutorId::new(2),
@@ -1049,6 +1092,7 @@ async fn record_the_desk_script_for_the_interface() {
             .to_owned(),
         protocol_version: prism_ipc::PROTOCOL_VERSION,
         executors_per_page: prism_domain::EXECUTORS_PER_PAGE,
+        executor_buttons: prism_domain::EXECUTOR_BUTTONS,
         encoder_banks: encoder_banks(),
         initial_snapshot: common::encode_base64(&initial_snapshot),
         steps,
@@ -1112,40 +1156,66 @@ fn strips_of(show: &JsonValue, session: &JsonValue) -> Vec<RecordedStrip> {
         .map(|slot| {
             let id = ExecutorId::from_page_and_slot(page, slot);
             let executor = show.get(&format!("/executors/{}", id.get())).ok();
-            let name = executor
+            // **Everything about the playback is the cue list's** — S45. An
+            // executor is a handle, so the recording reads through to the list
+            // standing on it, exactly as `ui/src/desk/session.ts` does.
+            let sequence = executor
                 .and_then(|value| member(value, "sequenceId"))
                 .and_then(|value| match value {
-                    JsonValue::Int(number) => Some(*number),
-                    _ => None,
-                })
-                .and_then(|sequence| show.get(&format!("/sequences/{sequence}/name")).ok())
-                .and_then(|value| match value {
-                    JsonValue::String(text) => Some(text.clone()),
+                    JsonValue::Int(number) => show.get(&format!("/sequences/{number}")).ok(),
                     _ => None,
                 });
+            let name = sequence.and_then(|value| match member(value, "name") {
+                Some(JsonValue::String(text)) => Some(text.clone()),
+                _ => None,
+            });
+            let fader_function =
+                executor.map_or_else(String::new, |value| string_at(value, "faderFunction"));
             RecordedStrip {
                 slot,
                 executor_id: id.get(),
                 assigned: executor.is_some(),
                 name,
-                master_level: executor.map_or(0, |value| {
-                    u16::try_from(int_at(value, "masterLevel")).unwrap_or(0)
+                fader_level: sequence.map_or(0, |value| {
+                    let member = match fader_function.as_str() {
+                        "Master" => "masterLevel",
+                        "Speed" => "speed",
+                        // A crossfade in progress is a gesture rather than show
+                        // state, and an empty fader has no number at all.
+                        _ => return 0,
+                    };
+                    u16::try_from(int_at(value, member)).unwrap_or(0)
                 }),
-                is_active: executor.is_some_and(|value| bool_at(value, "isActive")),
-                current_cue_index: executor.and_then(|value| {
+                is_active: sequence.is_some_and(|value| bool_at(value, "isActive")),
+                current_cue_index: sequence.and_then(|value| {
                     match member(value, "currentCueIndex") {
                         Some(JsonValue::Int(number)) => u32::try_from(*number).ok(),
                         _ => None,
                     }
                 }),
-                fader_function: executor
-                    .map_or_else(String::new, |value| string_at(value, "faderFunction")),
+                fader_function,
+                encoder_function: executor
+                    .map_or_else(String::new, |value| string_at(value, "encoderFunction")),
                 button_functions: executor
                     .map(|value| match member(value, "buttonFunctions") {
                         Some(JsonValue::Array(entries)) => entries
                             .iter()
                             .map(|entry| match entry {
                                 JsonValue::String(text) => text.clone(),
+                                // S45's custom row: `{ "CommandLine": { "line": … } }`.
+                                JsonValue::Object(fields) => {
+                                    match fields.get("CommandLine").and_then(
+                                        |custom| match custom {
+                                            JsonValue::Object(custom) => custom.get("line"),
+                                            _ => None,
+                                        },
+                                    ) {
+                                        Some(JsonValue::String(line)) => format!("{{{line}}}"),
+                                        other => {
+                                            panic!("a custom button row is malformed: {other:?}")
+                                        }
+                                    }
+                                }
                                 other => panic!("a button function is not a string: {other:?}"),
                             })
                             .collect(),
@@ -1422,7 +1492,7 @@ fn the_recording_is_of_a_desk_being_used() {
     // A master moves, an executor runs and stops, and a cue index appears.
     let levels: std::collections::BTreeSet<u16> = steps
         .iter()
-        .flat_map(|step| step.strips.iter().map(|strip| strip.master_level))
+        .flat_map(|step| step.strips.iter().map(|strip| strip.fader_level))
         .collect();
     assert!(levels.len() >= 3, "every master read the same: {levels:?}");
     assert!(

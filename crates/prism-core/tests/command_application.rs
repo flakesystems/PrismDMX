@@ -48,7 +48,11 @@ fn the_three_groups_together_are_the_whole_protocol() {
     // same reason the cabling does.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        62
+        // Sixty-three since S45's `ConfigureExecutor`, which is in the **show**
+        // group: what an executor's four keys and its fader do is show content,
+        // and `docs/IPC_PROTOCOL.md` §5 has the argument against the machine
+        // group in full.
+        63
     );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
@@ -109,10 +113,13 @@ fn every_show_command_is_decided_rather_than_ignored() {
         let applied = show
             .apply(&command)
             .unwrap_or_else(|error| panic!("{command:?} was refused: {error}"));
-        // An empty answer would be a command that was quietly dropped.
+        // An empty answer would be a command that was quietly dropped. An
+        // **effect or a delta**, because since S45 not every show command has to
+        // reach the engine: `AssignExecutor` and `ConfigureExecutor` move a
+        // handle, and a playback is the cue list's rather than the slot's.
         assert!(
-            !applied.effects.is_empty(),
-            "{command:?} produced no effect"
+            !applied.effects.is_empty() || !applied.deltas.is_empty(),
+            "{command:?} produced neither an effect nor a delta"
         );
     }
 }
@@ -298,10 +305,22 @@ fn a_direct_edit_that_is_refused_changes_nothing_either() {
     show.store_cue(SequenceId::new(1), cue("", 1, AttributeType::Red, 0))
         .unwrap_err();
     show.store_executor(executor(2, Some(99))).unwrap_err();
-    show.set_executor_master(ExecutorId::new(99), 0)
+    show.set_sequence_master(SequenceId::new(99), 0)
         .unwrap_err();
-    show.record_playback_state(ExecutorId::new(99).into(), true, None)
-        .unwrap_err();
+    show.set_sequence_speed(SequenceId::new(99), 0).unwrap_err();
+    show.configure_executor(
+        ExecutorId::new(99),
+        &prism_domain::ExecutorChange::Encoder {
+            function: prism_domain::ExecutorEncoderFunction::Speed,
+        },
+    )
+    .unwrap_err();
+    show.record_playback_state(
+        prism_domain::PlaybackId::of_sequence(SequenceId::new(99)),
+        true,
+        None,
+    )
+    .unwrap_err();
 
     assert_eq!(snapshot(&show), before);
 }
@@ -399,57 +418,40 @@ fn press(show: &mut Show, index: u8, pressed: bool) -> Vec<Effect> {
 #[test]
 fn every_button_function_resolves_to_the_effect_its_name_says() {
     use prism_domain::ExecutorButtonFunction as Fn;
-    let executor = ExecutorId::new(0);
+    // The playback `desk_with`'s executor resolves to — S45: an executor is a
+    // handle on the cue list standing on it, so what an effect names is the
+    // list.
+    let executor = prism_domain::PlaybackId::of_sequence(SequenceId::new(1));
     for (function, expected) in [
         (Fn::Empty, Vec::new()),
         (
             Fn::GoForward,
             vec![Effect::ExecutorGo {
-                executor: executor.into(),
+                executor,
                 direction: GoDirection::Next,
             }],
         ),
         (
             Fn::GoBack,
             vec![Effect::ExecutorGo {
-                executor: executor.into(),
+                executor,
                 direction: GoDirection::Prev,
             }],
         ),
-        (
-            Fn::On,
-            vec![Effect::ExecutorOn {
-                executor: executor.into(),
-            }],
-        ),
-        (
-            Fn::Off,
-            vec![Effect::ExecutorOff {
-                executor: executor.into(),
-            }],
-        ),
+        (Fn::On, vec![Effect::ExecutorOn { executor }]),
+        (Fn::Off, vec![Effect::ExecutorOff { executor }]),
         (
             Fn::Flash,
-            vec![Effect::ExecutorFlash {
-                executor: executor.into(),
-                on: true,
-            }],
+            vec![Effect::ExecutorFlash { executor, on: true }],
         ),
-        (
-            Fn::LearnSpeed,
-            vec![Effect::ExecutorTapSpeed {
-                executor: executor.into(),
-            }],
-        ),
+        (Fn::LearnSpeed, vec![Effect::ExecutorTapSpeed { executor }]),
         // Not running, so a toggle starts it. The other half is below.
-        (
-            Fn::Toggle,
-            vec![Effect::ExecutorOn {
-                executor: executor.into(),
-            }],
-        ),
+        (Fn::Toggle, vec![Effect::ExecutorOn { executor }]),
     ] {
-        let mut show = desk_with(vec![function], prism_domain::ExecutorFaderFunction::Master);
+        let mut show = desk_with(
+            vec![function.clone()],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
         assert_eq!(press(&mut show, 0, true), expected, "{function:?}");
     }
 }
@@ -464,35 +466,27 @@ fn every_button_function_resolves_to_the_effect_its_name_says() {
 #[test]
 fn a_toggle_reads_the_state_the_daemon_holds() {
     use prism_domain::ExecutorButtonFunction as Fn;
-    let executor = ExecutorId::new(0);
+    let executor = prism_domain::PlaybackId::of_sequence(SequenceId::new(1));
     let mut show = desk_with(
         vec![Fn::Toggle],
         prism_domain::ExecutorFaderFunction::Master,
     );
     assert_eq!(
         press(&mut show, 0, true),
-        vec![Effect::ExecutorOn {
-            executor: executor.into(),
-        }]
+        vec![Effect::ExecutorOn { executor }]
     );
 
     // Somebody — a tick readback, which is the only author — says it is running.
-    show.record_playback_state(executor.into(), true, Some(0))
-        .unwrap();
+    show.record_playback_state(executor, true, Some(0)).unwrap();
     assert_eq!(
         press(&mut show, 0, true),
-        vec![Effect::ExecutorOff {
-            executor: executor.into(),
-        }]
+        vec![Effect::ExecutorOff { executor }]
     );
 
-    show.record_playback_state(executor.into(), false, None)
-        .unwrap();
+    show.record_playback_state(executor, false, None).unwrap();
     assert_eq!(
         press(&mut show, 0, true),
-        vec![Effect::ExecutorOn {
-            executor: executor.into(),
-        }]
+        vec![Effect::ExecutorOn { executor }]
     );
 }
 
@@ -500,7 +494,7 @@ fn a_toggle_reads_the_state_the_daemon_holds() {
 #[test]
 fn a_release_is_half_a_flash_and_nothing_at_all_to_anything_else() {
     use prism_domain::ExecutorButtonFunction as Fn;
-    let executor = ExecutorId::new(0);
+    let executor = prism_domain::PlaybackId::of_sequence(SequenceId::new(1));
     let mut show = desk_with(
         vec![Fn::Flash, Fn::GoForward, Fn::Toggle, Fn::Empty],
         prism_domain::ExecutorFaderFunction::Master,
@@ -508,7 +502,7 @@ fn a_release_is_half_a_flash_and_nothing_at_all_to_anything_else() {
     assert_eq!(
         press(&mut show, 0, false),
         vec![Effect::ExecutorFlash {
-            executor: executor.into(),
+            executor,
             on: false,
         }]
     );
@@ -527,11 +521,11 @@ fn a_release_is_half_a_flash_and_nothing_at_all_to_anything_else() {
 #[test]
 fn a_named_function_is_resolved_here_as_well() {
     use prism_domain::ExecutorButtonFunction as Fn;
-    let executor = ExecutorId::new(0);
+    let executor = prism_domain::PlaybackId::of_sequence(SequenceId::new(1));
     let mut show = desk_with(Vec::new(), prism_domain::ExecutorFaderFunction::Master);
     let effects = |show: &mut Show, function| {
         show.apply(&Command::ExecutorButton {
-            executor_id: executor,
+            executor_id: ExecutorId::new(0),
             button: prism_domain::ExecutorButtonRef::Function { function },
             pressed: true,
         })
@@ -542,17 +536,12 @@ fn a_named_function_is_resolved_here_as_well() {
     // slot table: it is the profile's own row.
     assert_eq!(
         effects(&mut show, Fn::On),
-        vec![Effect::ExecutorOn {
-            executor: executor.into(),
-        }]
+        vec![Effect::ExecutorOn { executor }]
     );
-    show.record_playback_state(executor.into(), true, Some(0))
-        .unwrap();
+    show.record_playback_state(executor, true, Some(0)).unwrap();
     assert_eq!(
         effects(&mut show, Fn::Toggle),
-        vec![Effect::ExecutorOff {
-            executor: executor.into(),
-        }],
+        vec![Effect::ExecutorOff { executor }],
         "a named Toggle was not resolved against is_active"
     );
 }
@@ -619,45 +608,50 @@ fn a_button_on_an_executor_with_nothing_to_play_is_refused() {
 #[test]
 fn what_a_fader_does_is_the_executors_own_setting() {
     use prism_domain::ExecutorFaderFunction as Fader;
-    let executor = ExecutorId::new(0);
+    let slot = ExecutorId::new(0);
+    // What a fader moves is the cue list standing on the slot — S45.
+    let executor = prism_domain::PlaybackId::of_sequence(SequenceId::new(1));
 
     let mut master = desk_with(Vec::new(), Fader::Master);
     let applied = master
         .apply(&Command::SetExecutorMaster {
-            executor_id: executor,
+            executor_id: slot,
             level: 30_000,
         })
         .unwrap();
     assert_eq!(
         applied.effects,
         vec![Effect::SetExecutorMaster {
-            executor: executor.into(),
+            executor,
             level: 30_000
         }]
     );
-    assert_eq!(master.executor(executor).unwrap().master_level, 30_000);
     assert_eq!(
-        master.executor(executor).unwrap().speed,
+        master.sequence(SequenceId::new(1)).unwrap().master_level,
+        30_000
+    );
+    assert_eq!(
+        master.sequence(SequenceId::new(1)).unwrap().speed,
         prism_domain::SPEED_UNITY
     );
 
     let mut speed = desk_with(Vec::new(), Fader::Speed);
     let applied = speed
         .apply(&Command::SetExecutorMaster {
-            executor_id: executor,
+            executor_id: slot,
             level: 30_000,
         })
         .unwrap();
     assert_eq!(
         applied.effects,
         vec![Effect::ExecutorSpeed {
-            executor: executor.into(),
+            executor,
             speed: 30_000
         }]
     );
-    assert_eq!(speed.executor(executor).unwrap().speed, 30_000);
+    assert_eq!(speed.sequence(SequenceId::new(1)).unwrap().speed, 30_000);
     assert_eq!(
-        speed.executor(executor).unwrap().master_level,
+        speed.sequence(SequenceId::new(1)).unwrap().master_level,
         65_535,
         "the master moved"
     );
@@ -669,14 +663,14 @@ fn what_a_fader_does_is_the_executors_own_setting() {
     let before = snapshot(&crossfade);
     let applied = crossfade
         .apply(&Command::SetExecutorMaster {
-            executor_id: executor,
+            executor_id: slot,
             level: 30_000,
         })
         .unwrap();
     assert_eq!(
         applied.effects,
         vec![Effect::ExecutorXFade {
-            executor: executor.into(),
+            executor,
             position: 30_000
         }]
     );
@@ -689,7 +683,7 @@ fn what_a_fader_does_is_the_executors_own_setting() {
     let before = snapshot(&empty);
     let applied = empty
         .apply(&Command::SetExecutorMaster {
-            executor_id: executor,
+            executor_id: slot,
             level: 30_000,
         })
         .unwrap();
@@ -706,7 +700,7 @@ fn what_a_fader_does_is_the_executors_own_setting() {
 /// same cue list running out of step. `Show::playback_of` is where the two names
 /// meet, and it prefers the executor because that is the one with a fader.
 #[test]
-fn a_sequence_an_executor_holds_resolves_to_that_executor() {
+fn a_sequence_an_executor_holds_resolves_to_the_one_playback_it_has() {
     let mut show = populated_show();
     let applied = show
         .apply(&Command::ExecutorOn {
@@ -716,7 +710,7 @@ fn a_sequence_an_executor_holds_resolves_to_that_executor() {
     assert_eq!(
         applied.effects,
         vec![Effect::ExecutorOn {
-            executor: ExecutorId::new(0).into(),
+            executor: prism_domain::PlaybackId::of_sequence(SequenceId::new(1)),
         }]
     );
 }
@@ -784,7 +778,7 @@ fn a_goto_turns_the_number_an_operator_typed_into_an_index() {
     assert_eq!(
         applied.effects,
         vec![Effect::Goto {
-            executor: ExecutorId::new(0).into(),
+            executor: prism_domain::PlaybackId::of_sequence(SequenceId::new(1)),
             cue_index: 1,
         }]
     );

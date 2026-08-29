@@ -61,13 +61,13 @@
 //! PrismDMX, because guessing at a schema nobody here has seen is how a show
 //! gets quietly truncated.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use prism_domain::{
-    Delta, Executor, Fixture, FixtureType, Group, Preset, Sequence, Session, SessionId, View,
-    ViewId,
+    Delta, Executor, ExecutorId, Fixture, FixtureType, Group, Preset, Sequence, SequenceId,
+    Session, SessionId, View, ViewId,
 };
 use rusqlite::{Connection, OpenFlags, Transaction};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -428,13 +428,65 @@ impl ShowStore {
         Ok(effects)
     }
 
+    /// Moves the level and the rate a pre-S45 executor carried onto the cue
+    /// list standing on it.
+    ///
+    /// **The half `#[serde(default)]` cannot do.** S45 took `masterLevel` and
+    /// `speed` off `prism_domain::Executor` and put one of each on
+    /// `prism_domain::Sequence`, because a playback is a cue list's and two
+    /// executors on one list were moving two numbers (punch-list entry B18). A
+    /// default on the sequence answers *what does a file that never had one
+    /// say* — full, and unity — but it cannot answer *what did the operator
+    /// leave the fader at*, because that number is in the executor's row.
+    ///
+    /// So the row is read twice: once as an `Executor`, which now ignores the
+    /// two fields, and once as [`LegacyExecutorLevel`], which is only those two.
+    /// A `.prism` file keeps each row as a MessagePack **map** (`to_vec_named`,
+    /// S1), so a partial decode is an ordinary read rather than a trick.
+    ///
+    /// **The lowest-numbered executor wins** when two of them carry one list at
+    /// different levels. There is no right answer — the file records a state
+    /// this model says cannot exist — and *the first fader* is the one an
+    /// operator would point at. The other fader jumps to it on the next paint,
+    /// which is the whole point of the session.
+    ///
+    /// A file written by this build has neither field, so this reads nothing and
+    /// changes nothing.
+    fn carry_levels_onto_their_cue_lists(&self, show: &mut Show) -> Result<(), StoreError> {
+        let legacy: BTreeMap<ExecutorId, LegacyExecutorLevel> =
+            self.rows_by_id("executor", |row: &LegacyExecutorLevel| row.id)?;
+        let mut done: BTreeSet<SequenceId> = BTreeSet::new();
+        for (id, row) in legacy {
+            let Some(sequence_id) = show.executor(id).and_then(|executor| executor.sequence_id)
+            else {
+                continue;
+            };
+            if !done.insert(sequence_id) {
+                continue;
+            }
+            // The cue list is there — it is the one the executor names, and
+            // `Show::from_parts` has already been given both pools — so a
+            // refusal here is a file whose executor points at nothing, which is
+            // `Show::issues`' complaint rather than a reason not to open it.
+            if let Some(level) = row.master_level {
+                let _ = show.set_sequence_master(sequence_id, level);
+            }
+            if let Some(speed) = row.speed {
+                let _ = show.set_sequence_speed(sequence_id, speed);
+            }
+        }
+        // Reading a file is not an edit, and the levels were already in it.
+        show.mark_saved();
+        Ok(())
+    }
+
     /// Reads the file into a fresh [`ShowFile`].
     ///
     /// # Errors
     ///
     /// As [`Self::load`].
     pub fn read(&self) -> Result<ShowFile, StoreError> {
-        let show = Show::from_parts(
+        let mut show = Show::from_parts(
             self.rows_by_text("fixture_type", |fixture_type: &FixtureType| {
                 fixture_type.id.clone()
             })?,
@@ -444,6 +496,7 @@ impl ShowStore {
             self.rows_by_id("sequence", |sequence: &Sequence| sequence.id)?,
             self.rows_by_id("executor", |executor: &Executor| executor.id)?,
         );
+        self.carry_levels_onto_their_cue_lists(&mut show)?;
         let sessions: BTreeMap<SessionId, Session> =
             self.rows_by_id("session", |session: &Session| session.id)?;
         let views: BTreeMap<ViewId, View> =
@@ -635,6 +688,24 @@ fn sidecar(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.as_os_str().to_os_string();
     name.push(suffix);
     PathBuf::from(name)
+}
+
+/// The two fields S45 took off an executor, read back out of the same row.
+///
+/// Deserialise-only, and every field optional: a row written by this build
+/// carries neither, and a row written before S34 carries `masterLevel` without
+/// `speed`. See [`ShowStore::carry_levels_onto_their_cue_lists`].
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegacyExecutorLevel {
+    /// The executor the row is, which `rows_by_id` checks against the key.
+    id: ExecutorId,
+    /// The master this fader was left at.
+    #[serde(default)]
+    master_level: Option<u16>,
+    /// The rate it was playing at.
+    #[serde(default)]
+    speed: Option<u16>,
 }
 
 /// One document, decoded, with the row it came from named if it will not.
@@ -931,6 +1002,119 @@ mod tests {
         let mut store = ShowStore::open(directory.join("aula.prism")).unwrap();
         store.save(&mut file).unwrap();
         (store, file)
+    }
+
+    /// One executor row as a PrismDMX **before S45** wrote it: the assignment,
+    /// and the four fields that have since moved onto the cue list.
+    ///
+    /// Written out by hand rather than taken from a struct that no longer has
+    /// them, which is the point — a fixture built by the code under test cannot
+    /// say anything about a file that code has never written.
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct PreS45Executor {
+        id: u32,
+        sequence_id: Option<u32>,
+        fader_function: &'static str,
+        button_functions: Vec<&'static str>,
+        encoder_function: &'static str,
+        master_level: u16,
+        speed: u16,
+        is_active: bool,
+        current_cue_index: Option<u32>,
+    }
+
+    /// **S45's migration**: the level and the rate a pre-S45 executor carried
+    /// end up on the cue list standing on it.
+    ///
+    /// Two things a `#[serde(default)]` on `Sequence` cannot say, and this is
+    /// the test for both. The *rate* as well as the level, because a file
+    /// written between S34 and S45 carries one. And **the lowest-numbered
+    /// executor wins** when two of them hold one list at different levels: the
+    /// file records a state this model says cannot exist, there is no right
+    /// answer, and the first fader is the one an operator would point at.
+    #[test]
+    fn a_pre_s45_executor_puts_its_level_and_its_rate_on_the_cue_list() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("older.prism");
+        {
+            let mut store = ShowStore::open(&path).unwrap();
+            let mut file = crate::testkit::migration_fixture();
+            // A second executor on the same cue list, which is the state B18
+            // was about and which a file may perfectly well hold.
+            file.show
+                .store_executor(crate::testkit::executor(18, Some(5)))
+                .unwrap();
+            store.save(&mut file).unwrap();
+        }
+
+        // Rewrite the two executor rows the way a build before S45 wrote them.
+        // Executor 17 is the lower number and carries the levels that must win.
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            for row in [
+                PreS45Executor {
+                    id: 17,
+                    sequence_id: Some(5),
+                    fader_function: "Master",
+                    button_functions: vec!["Go+", "Go-"],
+                    encoder_function: "Speed",
+                    master_level: 12_345,
+                    speed: 2_048,
+                    is_active: true,
+                    current_cue_index: Some(1),
+                },
+                PreS45Executor {
+                    id: 18,
+                    sequence_id: Some(5),
+                    fader_function: "Master",
+                    button_functions: Vec::new(),
+                    encoder_function: "Empty",
+                    master_level: 60_000,
+                    speed: 512,
+                    is_active: false,
+                    current_cue_index: None,
+                },
+            ] {
+                connection
+                    .execute(
+                        "UPDATE executor SET document = ?2 WHERE id = ?1",
+                        rusqlite::params![i64::from(row.id), super::encode(&row).unwrap()],
+                    )
+                    .unwrap();
+            }
+        }
+
+        let read = ShowStore::open(&path).unwrap().read().unwrap();
+        let sequence = read
+            .show
+            .sequence(prism_domain::SequenceId::new(5))
+            .expect("cue list 5");
+        assert_eq!(sequence.master_level, 12_345, "the lower executor's level");
+        assert_eq!(sequence.speed, 2_048, "the lower executor's rate");
+        // What is *not* migrated: a show reopens with nothing running.
+        assert!(!sequence.is_active);
+        assert_eq!(sequence.current_cue_index, None);
+
+        // The executor rows survive as the assignments they are.
+        let executor = read
+            .show
+            .executor(prism_domain::ExecutorId::new(17))
+            .expect("executor 17");
+        assert_eq!(executor.sequence_id, Some(prism_domain::SequenceId::new(5)));
+        assert_eq!(
+            executor.button_functions,
+            vec![
+                prism_domain::ExecutorButtonFunction::GoForward,
+                prism_domain::ExecutorButtonFunction::GoBack
+            ]
+        );
+        assert_eq!(
+            executor.encoder_function,
+            prism_domain::ExecutorEncoderFunction::Speed
+        );
+        // Reading a file is not an edit.
+        assert!(!read.is_dirty());
     }
 
     /// The frozen version-1 file, opened where opening it does no harm.

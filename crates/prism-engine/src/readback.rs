@@ -202,17 +202,7 @@ mod tests {
 
     fn state(executor: u32, is_active: bool, cue_index: Option<u32>) -> PlaybackState {
         PlaybackState {
-            playback: PlaybackId::of_executor(prism_domain::ExecutorId::new(executor)),
-            is_active,
-            cue_index,
-        }
-    }
-
-    /// The same word carries a cue list playing on no fader (S40), and the two
-    /// kinds never collide - which is what the kind bit is for.
-    fn sequence_state(sequence: u32, is_active: bool, cue_index: Option<u32>) -> PlaybackState {
-        PlaybackState {
-            playback: PlaybackId::of_sequence(prism_domain::SequenceId::new(sequence)),
+            playback: PlaybackId::of_sequence(prism_domain::SequenceId::new(executor)),
             is_active,
             cue_index,
         }
@@ -226,24 +216,25 @@ mod tests {
             state(u32::MAX, true, Some(MAX_CUE_INDEX)),
             state(9, false, Some(3)),
             state(9, true, None),
-            sequence_state(0, false, None),
-            sequence_state(u32::MAX, true, Some(MAX_CUE_INDEX)),
-            sequence_state(9, true, Some(3)),
         ] {
             assert_eq!(unpack(pack(candidate)), candidate, "{candidate:?}");
         }
     }
 
-    /// Executor 9 and sequence 9 are two playbacks, and one word has to tell
-    /// them apart - S40.
+    /// Two cue lists are two playbacks, and one word has to tell them apart.
+    ///
+    /// It was *executor 9 and sequence 9* until S45, which is the collision the
+    /// kind bit existed for. A playback is a cue list now, so the number an
+    /// operator gave the list is the whole of the identity — and the thing that
+    /// still has to hold is that two of them never pack the same.
     #[test]
-    fn an_executor_and_a_sequence_with_the_same_number_pack_differently() {
+    fn two_cue_lists_with_different_numbers_pack_differently() {
         assert_ne!(
             pack(state(9, true, Some(1))),
-            pack(sequence_state(9, true, Some(1)))
+            pack(state(10, true, Some(1)))
         );
         assert_eq!(
-            unpack(pack(sequence_state(9, true, Some(1)))).playback,
+            unpack(pack(state(9, true, Some(1)))).playback,
             PlaybackId::of_sequence(prism_domain::SequenceId::new(9))
         );
     }

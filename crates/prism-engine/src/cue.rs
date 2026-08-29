@@ -885,11 +885,9 @@ mod tests {
             "9000000 cue parts exceeds the limit of 1048576"
         );
         assert_eq!(
-            CueError::UnknownPlayback(prism_domain::PlaybackId::of_executor(
-                prism_domain::ExecutorId::new(7)
-            ))
-            .to_string(),
-            "executor 7 is not in this patch"
+            CueError::UnknownPlayback(prism_domain::PlaybackId::of_sequence(SequenceId::new(7)))
+                .to_string(),
+            "sequence 7 is not in this patch"
         );
         let as_error: &dyn std::error::Error = &CueError::TooManyCues(1);
         assert!(!as_error.to_string().is_empty());

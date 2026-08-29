@@ -56,39 +56,15 @@ describe("the three documents", () => {
     expect(applyDelta(documents(), { t: "ProgrammerChanged", state }).programmer).toBe(state);
   });
 
-  it("writes the two fields a playback delta carries into the show", () => {
-    const next = applyDelta(documents(), {
-      t: "PlaybackState",
-      playback: { t: "Executor", executorId: 3 },
-      isActive: true,
-      cueIndex: 2,
-    });
-    expect(next.show).toEqual({
-      fixtures: { "1": { name: "Front" } },
-      executors: { "3": { isActive: true, currentCueIndex: 2 } },
-    });
-
-    const off = applyDelta(next, {
-      t: "PlaybackState",
-      playback: { t: "Executor", executorId: 3 },
-      isActive: false,
-      cueIndex: null,
-    });
-    expect(off.show).toEqual({
-      fixtures: { "1": { name: "Front" } },
-      executors: { "3": { isActive: false, currentCueIndex: null } },
-    });
-  });
-
   /**
-   * **A cue list on no fader keeps its playback state on the sequence** — S40.
+   * **A playback is a cue list's, so the two fields go on the sequence** — S45.
    *
-   * Which collection the two fields go into is the playback's own answer, and
-   * `prism_core::Show::record_playback_state` writes the same two places from
-   * the same delta. A mirror that wrote both into `/executors` would draw a
-   * sequence running on an executor nobody had assigned.
+   * It was two collections until then, chosen by the delta's own tag, and the
+   * executors are what punch-list entry B18 found two of.
+   * `prism_core::Show::record_playback_state` writes the same one place from the
+   * same delta, which is what keeps this mirror and the daemon agreeing.
    */
-  it("writes a sequence playback into the sequence rather than the grid", () => {
+  it("writes the two fields a playback delta carries onto the cue list", () => {
     const start: Documents = {
       show: { sequences: { "7": { name: "Act 2", isActive: false, currentCueIndex: null } } },
       session: {},
@@ -96,22 +72,32 @@ describe("the three documents", () => {
     };
     const next = applyDelta(start, {
       t: "PlaybackState",
-      playback: { t: "Sequence", sequenceId: 7 },
+      playback: 7,
       isActive: true,
       cueIndex: 1,
     });
     expect(next.show).toEqual({
       sequences: { "7": { name: "Act 2", isActive: true, currentCueIndex: 1 } },
     });
+
+    const off = applyDelta(next, {
+      t: "PlaybackState",
+      playback: 7,
+      isActive: false,
+      cueIndex: null,
+    });
+    expect(off.show).toEqual({
+      sequences: { "7": { name: "Act 2", isActive: false, currentCueIndex: null } },
+    });
   });
 
-  it("says so when an executor delta names one the show has never heard of", () => {
+  it("says so when a playback delta names a cue list the show has never heard of", () => {
     // Not silence: it means this client and the daemon disagree about the show,
     // and the answer to that is a fresh snapshot rather than a guess.
     expect(() =>
       applyDelta(documents(), {
         t: "PlaybackState",
-        playback: { t: "Executor", executorId: 9 },
+        playback: 9,
         isActive: true,
         cueIndex: 0,
       }),

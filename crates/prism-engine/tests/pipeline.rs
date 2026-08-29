@@ -18,9 +18,9 @@
 use std::sync::Arc;
 
 use prism_domain::{
-    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, ExecutorId, FeatureGroup, Fixture,
-    FixtureId, FixtureType, GoDirection, Group, GroupId, MergeMode, ProgrammerState,
-    ProgrammerValue, ProgrammerValueSource, Sequence, SequenceId, UniverseId, Vec3,
+    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, FeatureGroup, Fixture, FixtureId,
+    FixtureType, GoDirection, Group, GroupId, MergeMode, ProgrammerState, ProgrammerValue,
+    ProgrammerValueSource, Sequence, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Engine, FrameLayout, FramePublisher, FrameSubscriber, ManualClock, MergeBody, TickCommand,
@@ -115,6 +115,8 @@ fn sequence(fade: f64) -> Sequence {
             ],
         }],
         looping: false,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }
@@ -144,10 +146,10 @@ fn body(fade: f64) -> MergeBody {
     let mut body = MergeBody::for_patch(
         &FrameLayout::new([UniverseId::MIN]).unwrap(),
         patched.iter().map(|fixture| (fixture, &head)),
-        [ExecutorId::new(1), ExecutorId::new(2)],
+        [SequenceId::new(1), SequenceId::new(2)],
     )
     .unwrap();
-    body.load_sequence(ExecutorId::new(1), &sequence(fade))
+    body.load_sequence(SequenceId::new(1), &sequence(fade))
         .unwrap();
     body.load_groups(&[group(1, &[1])]);
     body
@@ -223,7 +225,7 @@ fn the_priority_stack_reaches_the_wire_one_layer_at_a_time() {
 
     // Playbacks: the cue runs, in zero time, and both heads take its values.
     rig.push(TickCommand::Go {
-        executor: ExecutorId::new(1).into(),
+        executor: SequenceId::new(1).into(),
         direction: GoDirection::Next,
     });
     let frame = rig.tick();
@@ -292,7 +294,7 @@ fn clearing_the_programmer_hands_the_attribute_back_to_the_playback_below_it() {
     let mut rig = rig(0.0);
     let pan = rig.slot(1, AttributeType::Pan) as u32;
     rig.push(TickCommand::Go {
-        executor: ExecutorId::new(1).into(),
+        executor: SequenceId::new(1).into(),
         direction: GoDirection::Next,
     });
     rig.push(TickCommand::SetProgrammerValue {
@@ -349,7 +351,7 @@ fn scripted_run(ticks: u64) -> Vec<Vec<u8>> {
     for index in 0..ticks {
         match index {
             0 => rig.push(TickCommand::Go {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 direction: GoDirection::Next,
             }),
             10 => rig.push(TickCommand::SetProgrammerValue {
@@ -417,7 +419,7 @@ fn a_fade_still_interpolates_underneath_the_masters() {
     let mut rig = rig(10.0);
     rig.push(TickCommand::SetGrandMaster(30_000));
     rig.push(TickCommand::Go {
-        executor: ExecutorId::new(1).into(),
+        executor: SequenceId::new(1).into(),
         direction: GoDirection::Next,
     });
 

@@ -884,3 +884,50 @@ fn the_reserved_list_is_smpte_beats_and_nothing_else() {
     // default profile leaves it alone — not a rule that it may not be bound.
     assert!(!X_TOUCH.is_reserved(GlobalButton::NameValue));
 }
+
+/// **S45's third way of saying an assignment**, and the one that closes the exit
+/// criterion.
+///
+/// *Every button and fader function is assignable from the window, from the
+/// command line and from a bound X-Touch key, and the three produce the same
+/// state.* The three converge on **one line**, and that is what makes it true by
+/// construction rather than by three code paths kept in step:
+///
+/// - the window writes `Assign Executor 1 Fader Master` and sends it
+///   (`ui/src/desk/executoreditor.test.tsx`);
+/// - the line parses to one `Command::ConfigureExecutor`
+///   (`ui/src/desk/console.test.ts`);
+/// - a bound key carries the same line here, and the daemon puts it in
+///   `Session::command_line` for the focused client to run — which is
+///   `SurfaceAction::WriteCommandLine`'s stop-gap, removed for all three in
+///   `IMPLEMENTATION_PLAN` S49.
+///
+/// No new `SurfaceAction` was needed and none was added: a key that says
+/// something the grammar can say already has a way to say it.
+#[test]
+fn a_bound_key_can_carry_an_assignment_and_carries_it_unchanged() {
+    let mut table = Bindings::defaults();
+    for (line, submit) in [
+        ("Assign Executor 1 Fader Master", true),
+        ("Assign Executor 1 Button 2 Go+", true),
+        ("Assign Executor 1 Encoder Speed", false),
+    ] {
+        table.set(
+            BoundControl::Global {
+                button: GlobalButton::F5,
+            },
+            Some(SurfaceAction::WriteCommandLine {
+                line: line.to_owned(),
+                submit,
+            }),
+        );
+        assert_eq!(
+            table.command(press(GlobalButton::F5), &context()),
+            Some(Command::CommandLineInput {
+                text: line.to_owned(),
+                run: submit,
+            }),
+            "{line}"
+        );
+    }
+}

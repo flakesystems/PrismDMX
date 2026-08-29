@@ -104,6 +104,8 @@ pub fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
         color: None,
         cues,
         looping: false,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }
@@ -141,10 +143,6 @@ pub fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
         fader_function: ExecutorFaderFunction::Master,
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
-        master_level: 65535,
-        speed: prism_domain::SPEED_UNITY,
-        is_active: false,
-        current_cue_index: None,
     }
 }
 
@@ -287,6 +285,15 @@ pub fn show_commands() -> Vec<Command> {
         Command::AssignExecutor {
             executor_id: ExecutorId::new(2),
             sequence_id: Some(SequenceId::new(1)),
+        },
+        // S45's. Executor 0 exists, and `common::executor` gives it a `Master`
+        // fader and no buttons — so a crossfade on it is a change rather than
+        // the function it already has, which is what this list asserts over.
+        Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: prism_domain::ExecutorChange::Fader {
+                function: ExecutorFaderFunction::XFade,
+            },
         },
         // S40's, each in a form the populated show accepts. `StoreGroup` is the
         // programmer's half like every other store, so the show accepts it and

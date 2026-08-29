@@ -840,7 +840,12 @@ fn assigning_a_sequence_to_an_empty_slot_makes_it_playable() {
     let made = file.show.executor(ExecutorId::new(5)).expect("executor 5");
     assert_eq!(made.sequence_id, Some(SequenceId::new(1)));
     assert_eq!(made.fader_function, ExecutorFaderFunction::Master);
-    assert_eq!(made.master_level, u16::MAX);
+    // The level a new slot plays at is the cue list's since S45, and a list
+    // nobody has faded rests at full.
+    assert_eq!(
+        file.show.sequence(SequenceId::new(1)).unwrap().master_level,
+        u16::MAX
+    );
     // The three the protocol can actually press, and a fourth left empty
     // because the five that have no command are S34's.
     assert_eq!(
@@ -861,7 +866,7 @@ fn assigning_a_sequence_to_an_empty_slot_makes_it_playable() {
         .expect("it can be fired now");
     assert!(
         applied.effects.contains(&Effect::ExecutorGo {
-            executor: ExecutorId::new(5).into(),
+            executor: prism_domain::PlaybackId::of_sequence(SequenceId::new(1)),
             direction: GoDirection::Next,
         }),
         "{:?}",
@@ -883,7 +888,11 @@ fn clearing_a_slot_keeps_it_and_an_oops_over_a_new_one_removes_it() {
     .expect("it is accepted");
     let kept = file.show.executor(ExecutorId::new(0)).expect("executor 0");
     assert_eq!(kept.sequence_id, None);
-    assert_eq!(kept.master_level, 65535, "the slot lost its master");
+    assert_eq!(
+        kept.fader_function,
+        ExecutorFaderFunction::Master,
+        "the slot lost its assignment"
+    );
 
     // A slot that never existed is created and then taken back to *not there*.
     let before = bytes(&file.show);

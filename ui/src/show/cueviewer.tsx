@@ -97,7 +97,7 @@ import {
   secondsText,
   sequenceInForce,
   sequenceRow,
-  sequencesDocument,
+  cuesDocument,
 } from "./looks";
 import { StoreRequester, isStorable, storeText } from "./store";
 import { StoreModeChooser } from "./storemode";
@@ -219,7 +219,7 @@ export function CueViewer({
       )}
       <StoreBar
         sequence={sequence}
-        sequencesDoc={sequencesDocument(show)}
+        cuesDoc={cuesDocument(show, sequence.id)}
         programmer={programmer}
         editing={editing}
         ask={ask}
@@ -292,21 +292,23 @@ function ExecutorLine({
 /** The Store button, which says what it will do before it is pressed. */
 function StoreBar({
   sequence,
-  sequencesDoc,
+  cuesDoc,
   programmer,
   editing,
   ask,
 }: {
   readonly sequence: SequenceRow;
   /**
-   * The `/sequences` subtree, as the dependency of the question below.
+   * This list's `cues` node, as the dependency of the question below.
    *
-   * Not `sequence`, which is a fresh object every render: since S34 the show
-   * document moves whenever a playback changes cue, so an effect keyed on it
-   * would ask the daemon what a store would do **once per cue of a chase**.
-   * This node's identity only changes when a sequence really does.
+   * Not `sequence`, which is a fresh object every render, and **not the whole
+   * `/sequences` subtree** since S45: a playback's state lives on the cue list
+   * now, so a chase advancing a cue rewrites that subtree and an effect keyed on
+   * it would ask the daemon what a store would do once per cue. This node's
+   * identity only changes when the *cues* really do — see
+   * `looks.ts::cuesDocument`.
    */
-  readonly sequencesDoc: JsonValue | null;
+  readonly cuesDoc: JsonValue | null;
   readonly programmer: ProgrammerState | null;
   /**
    * The cue the programmer is editing, or `null` — S39's update state.
@@ -332,18 +334,19 @@ function StoreBar({
       requester.current = null;
     };
   }, [ask]);
-  // Asked again whenever the cue number, the cue **lists** or the programmer
+  // Asked again whenever the cue number, this list's **cues** or the programmer
   // move, which is exactly when the answer can have changed: a store into cue 3
   // means something different once somebody has stored cue 3, and something
   // different again once they have touched another encoder. **Not** whenever
-  // the show moves — see `sequencesDoc`.
+  // the show moves, and since S45 not whenever the list *advances* either — see
+  // `cuesDocument`.
   useEffect(() => {
     requester.current?.request({ t: "Cue", sequenceId: sequence.id, cueNumber: wanted }, mode);
-    // `sequence` is deliberately absent: `sequence.id` and `sequencesDoc`
-    // between them say everything a preview depends on, and the row object is
-    // rebuilt on every render. `mode` is here because S39 made it part of the
-    // question — the counts on the button are what *that* mode would cost.
-  }, [mode, programmer, sequence.id, sequencesDoc, wanted]);
+    // `sequence` is deliberately absent: `sequence.id` and `cuesDoc` between
+    // them say everything a preview depends on, and the row object is rebuilt
+    // on every render. `mode` is here because S39 made it part of the question —
+    // the counts on the button are what *that* mode would cost.
+  }, [cuesDoc, mode, programmer, sequence.id, wanted]);
 
   return (
     <form

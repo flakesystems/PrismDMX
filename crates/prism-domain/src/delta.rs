@@ -216,8 +216,8 @@ pub enum Delta {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Delta, ExecutorId, JsonPatchOp, JsonValue, NoticeLevel, OutputHealth, OutputId,
-        OutputInstance, OutputKind, PlaybackId, ProgrammerState, SequenceId, UniverseId,
+        Delta, JsonPatchOp, JsonValue, NoticeLevel, OutputHealth, OutputId, OutputInstance,
+        OutputKind, PlaybackId, ProgrammerState, SequenceId, UniverseId,
     };
 
     #[test]
@@ -234,30 +234,31 @@ mod tests {
         );
     }
 
+    /// S45: a playback is a cue list's, so the delta names one number.
+    ///
+    /// It was a tagged object with an executor in one arm until then, and the
+    /// executors are exactly what B18 found two of. What a client draws on an
+    /// executor row it now reads through the list standing on it.
     #[test]
-    fn executor_state_reports_activity_and_cue_position() {
+    fn playback_state_reports_activity_and_cue_position_for_a_cue_list() {
         let delta = Delta::PlaybackState {
-            playback: PlaybackId::of_executor(ExecutorId::new(3)),
+            playback: PlaybackId::of_sequence(SequenceId::new(3)),
             is_active: true,
             cue_index: Some(2),
         };
         assert_eq!(
             serde_json::to_string(&delta).unwrap(),
-            r#"{"t":"PlaybackState","playback":{"t":"Executor","executorId":3},"isActive":true,"cueIndex":2}"#
+            r#"{"t":"PlaybackState","playback":3,"isActive":true,"cueIndex":null}"#
+                .replace("null", "2")
         );
-    }
-
-    /// S40: a cue list with no fader under it reports as itself.
-    #[test]
-    fn a_sequence_playing_on_no_executor_reports_as_a_sequence() {
-        let delta = Delta::PlaybackState {
+        let stopped = Delta::PlaybackState {
             playback: PlaybackId::of_sequence(SequenceId::new(7)),
-            is_active: true,
+            is_active: false,
             cue_index: None,
         };
         assert_eq!(
-            serde_json::to_string(&delta).unwrap(),
-            r#"{"t":"PlaybackState","playback":{"t":"Sequence","sequenceId":7},"isActive":true,"cueIndex":null}"#
+            serde_json::to_string(&stopped).unwrap(),
+            r#"{"t":"PlaybackState","playback":7,"isActive":false,"cueIndex":null}"#
         );
     }
 
@@ -323,7 +324,7 @@ mod tests {
                 state: ProgrammerState::default(),
             },
             Delta::PlaybackState {
-                playback: PlaybackId::of_executor(ExecutorId::new(0)),
+                playback: PlaybackId::of_sequence(SequenceId::new(0)),
                 is_active: false,
                 cue_index: None,
             },

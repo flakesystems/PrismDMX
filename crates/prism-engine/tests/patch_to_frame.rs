@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use prism_domain::{
-    AttributeDef, AttributeType, ExecutorId, Fixture, FixtureId, FixtureType, UniverseId, Vec3,
+    AttributeDef, AttributeType, Fixture, FixtureId, FixtureType, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     DmxFrame, Engine, FrameLayout, FramePublisher, FrameSubscriber, ManualClock, MergeBody,
@@ -144,7 +144,7 @@ fn body(
             (fixture, fixture_type)
         })
         .collect();
-    MergeBody::for_patch(layout, types, (1..=2).map(ExecutorId::new)).unwrap()
+    MergeBody::for_patch(layout, types, (1..=2).map(SequenceId::new)).unwrap()
 }
 
 /// The engine, its publisher and one driver's view of the output.
@@ -235,7 +235,7 @@ fn a_colour_channel_rests_open_at_the_wire() {
     );
     let fixtures = [fixture(1, "test.rgbw", 1, 1)];
     let types: Vec<(&Fixture, &FixtureType)> = fixtures.iter().map(|one| (one, &open)).collect();
-    let body = MergeBody::for_patch(&layout, types, (1..=2).map(ExecutorId::new)).unwrap();
+    let body = MergeBody::for_patch(&layout, types, (1..=2).map(SequenceId::new)).unwrap();
     let mut rig = engine(body, layout);
 
     assert_eq!(
@@ -256,7 +256,7 @@ fn an_active_executor_changes_exactly_the_channels_it_touches() {
     let plan = body.plan().clone();
     let slot = |fixture: u32, attribute| plan.index_of(FixtureId::new(fixture), attribute).unwrap();
     {
-        let source = body.layer_mut().source_mut(ExecutorId::new(1)).unwrap();
+        let source = body.layer_mut().source_mut(SequenceId::new(1)).unwrap();
         for fixture in [1, 2] {
             source.set(slot(fixture, AttributeType::Dimmer), 65_535);
             source.set(slot(fixture, AttributeType::Pan), 20_000);
@@ -268,7 +268,7 @@ fn an_active_executor_changes_exactly_the_channels_it_touches() {
 
     rig.producer
         .push(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         })
         .unwrap();
@@ -312,7 +312,7 @@ fn an_active_executor_changes_exactly_the_channels_it_touches() {
     // which is the determinism `docs/DMX_MERGE.md` §6.4 asks for.
     rig.producer
         .push(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: false,
         })
         .unwrap();
@@ -334,11 +334,11 @@ fn htp_between_two_executors_reaches_the_wire() {
         .unwrap();
 
     body.layer_mut()
-        .source_mut(ExecutorId::new(1))
+        .source_mut(SequenceId::new(1))
         .unwrap()
         .set(dimmer, 65_535);
     {
-        let second = body.layer_mut().source_mut(ExecutorId::new(2)).unwrap();
+        let second = body.layer_mut().source_mut(SequenceId::new(2)).unwrap();
         second.set(dimmer, 30_000);
         second.set(pan, 45_000);
     }
@@ -347,7 +347,7 @@ fn htp_between_two_executors_reaches_the_wire() {
     for executor in [1u32, 2] {
         rig.producer
             .push(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(executor).into(),
+                executor: SequenceId::new(executor).into(),
                 on: true,
             })
             .unwrap();
@@ -356,7 +356,7 @@ fn htp_between_two_executors_reaches_the_wire() {
     // maximum), which still beats executor 2's 30000.
     rig.producer
         .push(TickCommand::SetExecutorLevel {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             level: 32_767,
         })
         .unwrap();

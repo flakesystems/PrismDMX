@@ -42,17 +42,17 @@
 
 import type {
   BoundControl,
-  ExecutorButtonFunction,
   FeatureGroup,
   StripButton,
   SurfaceAction,
   WindowType,
 } from "../bindings";
 import {
-  EXECUTOR_BUTTON_FUNCTION_VARIANTS,
   FEATURE_GROUP_VARIANTS,
   WINDOW_TYPE_VARIANTS,
 } from "../bindings";
+import { FIXED_BUTTON_FUNCTIONS } from "../desk/functions";
+import type { FixedButtonFunction } from "../desk/functions";
 
 /**
  * Whether a string picked out of a `<select>` really is one of `list`.
@@ -229,7 +229,13 @@ export function detailOf(action: SurfaceAction): string {
     case "SetEncoderBank":
       return action.group;
     case "ExecutorButton":
-      return action.button.t === "Function" ? action.button.function : "";
+      // A profile row names one of the **eight fixed** functions or a hardware
+      // position. S45's custom row is not on this list and does not need to be:
+      // a key on the desk that sends a line is `WriteCommandLine`, which has
+      // been the way to say it since S43 and carries the *send* option too.
+      return action.button.t === "Function" && typeof action.button.function === "string"
+        ? action.button.function
+        : "";
     default:
       return "";
   }
@@ -343,7 +349,7 @@ export function actionOfKind(
         // `ExecutorButtonRef::Slot`, which is the whole of **D3** for playback.
         return { t: "ExecutorButton", target, button: { t: "Slot", index: slot } };
       }
-      return withFunction(target, oneOf<ExecutorButtonFunction>(detail, EXECUTOR_BUTTON_FUNCTION_VARIANTS));
+      return withFunction(target, oneOf<FixedButtonFunction>(detail, FIXED_BUTTON_FUNCTIONS));
     case "Select executor":
       return { t: "SelectExecutor", target };
     case "Clear programmer":
@@ -399,7 +405,7 @@ export function actionOfKind(
 /** An executor-button action naming a function outright, if the name is one. */
 function withFunction(
   target: Target,
-  chosen: ExecutorButtonFunction | null,
+  chosen: FixedButtonFunction | null,
 ): SurfaceAction | null {
   return chosen === null
     ? null

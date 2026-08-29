@@ -18,7 +18,7 @@ Every attribute value is resolved through a fixed stack, evaluated bottom to top
 ├─────────────────────────────┤
 │  Programmer                 │  absolute override where a value exists
 ├─────────────────────────────┤
-│  Playbacks (executors)      │  HTP for intensity, LTP for everything else
+│  Playbacks (cue lists)      │  HTP for intensity, LTP for everything else
 ├─────────────────────────────┤
 │  Home / default values      │  always present, never empty
 └─────────────────────────────┘
@@ -29,17 +29,35 @@ Two properties of this stack matter operationally:
 - **The bottom layer is never empty.** Every patched attribute has a home value, so an attribute with no active source resolves to a defined state rather than to zero. A moving head with no active cue sits at its home position, not slammed to pan 0.
 - **The programmer always wins.** If the operator has touched an attribute, that is what the fixture does. This is what makes live programming predictable: what you grab is what you see, regardless of what any playback is doing.
 
-**A flash is not a fourth layer** (S34). `ExecutorButtonFunction::Flash` raises an executor's *master* for as long as the key is held, and the master is applied inside the playback layer (§2.1) rather than above it — so a flashed executor still merges HTP against everything else, and a flash cannot take light away that another playback is providing. What makes it a flash rather than a fader move is that the **stored** master is never written to: `prism_engine::PlaybackSource` carries the held level beside the stored one, and releasing simply stops using it. A `SetExecutorMaster` that arrives *during* a flash therefore lands on the stored master and is what stands when the key comes up.
+**A playback is a cue list's, and there is exactly one of them per list**
+(S45). The stack's third row said *playbacks (executors)* until then, and it was
+literally true: `PlaybackLayer` had one source per executor, so one cue list
+on two executors was **two** sources of the same values, each with its own cue
+pointer, its own fade and its own master. Nothing rejected it and nothing merged
+it — this document saw two contributors and did what it was told, which is
+punch-list entry **B18**.
+
+So the row above says *cue lists*. An **executor is a handle** on one:
+it says which list, what its fader does, what its encoder does and what each of
+its four keys does, and nothing about what the list is doing. Two executors whose
+faders are both `Master` are therefore two handles on one number, and a `Master`
+and an `XFade` on that same list are two different handles that stay
+independent — which is what the entry asks for in as many words.
+
+`prism_domain::PlaybackId` carries the whole of it and
+`prism_core::Show::playback_of` is where an executor becomes one.
+
+**A flash is not a fourth layer** (S34). `ExecutorButtonFunction::Flash` raises the *master* of the cue list under the key for as long as it is held, and the master is applied inside the playback layer (§2.1) rather than above it — so a flashed playback still merges HTP against everything else, and a flash cannot take light away that another playback is providing. What makes it a flash rather than a fader move is that the **stored** master is never written to: `prism_engine::PlaybackSource` carries the held level beside the stored one, and releasing simply stops using it. A `SetExecutorMaster` that arrives *during* a flash therefore lands on the stored master and is what stands when the key comes up.
 
 ---
 
 ## 2. Merge modes per attribute
 
-The mode is a property of the attribute definition (`AttributeDef.mergeMode`), not of the fixture or the executor.
+The mode is a property of the attribute definition (`AttributeDef.mergeMode`), not of the fixture or the playback.
 
 | Attribute class | Mode | Reason |
 |---|---|---|
-| Dimmer / Intensity | **HTP** — highest takes precedence | Industry standard. An executor must never be able to remove light that another executor is providing. Fading out playback A cannot darken a fixture that playback B is holding up |
+| Dimmer / Intensity | **HTP** — highest takes precedence | Industry standard. A playback must never be able to remove light that another playback is providing. Fading out playback A cannot darken a fixture that playback B is holding up |
 | Pan, Tilt | **LTP** — latest takes precedence | A position is a single physical state; averaging or maximising two positions is meaningless |
 | Red, Green, Blue, White, Amber | **LTP** | Same reasoning. HTP on colour components would silently mix a third colour nobody programmed |
 | Iris, Zoom, Focus, Gobo, Prism, Shutter | **LTP** | Discrete or single-state parameters |
@@ -53,25 +71,25 @@ For all active playback sources providing a value for attribute *a* on fixture *
 value(f, a) = max( source_i.value * source_i.masterLevel )
 ```
 
-The executor's master level is applied **before** the maximum, not after. A cue at 100 % on an executor faded to 50 % contributes 50 %, and a second executor at 60 % with its master fully up wins.
+The playback's master level is applied **before** the maximum, not after. A cue at 100 % on a list faded to 50 % contributes 50 %, and a second list at 60 % with its master fully up wins.
 
 `source_i.masterLevel` is the level **in force**, which is the stored master unless a `Flash` is held over it (§1). That is the whole of the flash's place in this document: one substitution, in one term, of one factor that was already here.
 
 ### 2.2 LTP in detail
 
-For LTP, sources are ordered by **activation order** — the sequence in which executors were switched on — not by executor number, page, or the order they appear in any list.
+For LTP, sources are ordered by **activation order** — the order in which cue lists were switched on — not by number, page, or the order they appear in any list.
 
 ```
 value(f, a) = value from the most recently activated source that provides a
 ```
 
-Order is tracked with a monotonically increasing activation counter stamped on each executor when it goes active. Deactivating an executor removes it from consideration; the value then falls back to the next most recent source that still provides it, and ultimately to home.
+Order is tracked with a monotonically increasing activation counter stamped on each playback when it goes active. Deactivating a playback removes it from consideration; the value then falls back to the next most recent source that still provides it, and ultimately to home.
 
 This makes the behaviour deterministic and explainable to an operator: *the last thing you turned on wins*. It is also the reason activation order must be part of the persisted show state — reloading a show must reproduce the same output.
 
 ### 2.3 Master levels and LTP
 
-An executor master does **not** scale LTP attributes. Half a pan position is not a meaningful value. Master level affects intensity (HTP) and, where configured, fade progress — never position, colour or beam values.
+A playback master does **not** scale LTP attributes. Half a pan position is not a meaningful value. Master level affects intensity (HTP) and, where configured, fade progress — never position, colour or beam values.
 
 ---
 
@@ -111,10 +129,27 @@ Masters scale **intensity attributes only**. This is a deliberate constraint: a 
 
 Item 3 above was a sentence with nothing behind it from S3 until S34; `docs/MCU_MAPPING.md` §4.3 recorded twice that no domain type carried one. What it is now:
 
-- **A speed master is an executor's**, and it is `prism_domain::Executor::speed`, in units of `prism_domain::SPEED_UNITY` (1 024 = 1×, 0 = frozen, `u16::MAX` = just under 64×). That is the granularity the desk addresses: `ExecutorFaderFunction::Speed` and `ExecutorEncoderFunction::Speed` have named it since S1, and an X-Touch strip addresses one executor. A *named* speed master shared between executors is a bigger idea and nothing has asked for one.
+- **A speed master is a cue list's**, and it is `prism_domain::Sequence::speed`, in units of `prism_domain::SPEED_UNITY` (1 024 = 1×, 0 = frozen, `u16::MAX` = just under 64×). It was `Executor::speed` from S34 until **S45** moved it, with the master beside it, for the reason above: a rate is a property of the list that is running, and two faders set to `Speed` on one list are two handles on one rate. `ExecutorFaderFunction::Speed` and `ExecutorEncoderFunction::Speed` have named the control since S1; what they now move is the list's. A *named* speed master shared between cue lists is a bigger idea and nothing has asked for one.
 - **It is a rate on the playback's own clock, not on the tick.** `prism_engine::CuePlayer` accumulates `speed`/`SPEED_UNITY` of a tick per tick slot and carries the remainder, so at unity the arithmetic is exactly what it was before rates existed — every fade in this project is the number it was — and at any other rate a fade is the same curve sampled at a different rate. It advances by the number of tick *slots* that have passed rather than by one, so a tick the scheduler missed still moves the show forward by the time it really took.
 - **It changes no value.** A speed of zero freezes a fade where it stands; it does not stop the playback, black it out, or take it out of the merge. Nothing in §1's stack is aware of it.
 - **`LearnSpeed` is a tap against it.** Two taps inside `prism_engine::TAP_WINDOW` (four seconds) mean *the running cue's transition should take that long*, so the rate is that transition's own length over the tapped interval. Tapping at the rhythm a list is already keeping therefore changes nothing, a single tap changes nothing, and a tap against a cue with no time in it has no rate to learn.
+
+### 4.1.1 What an executor's fader moves, and how the desk knows
+
+One command — `SetExecutorMaster` — and four meanings, chosen by that executor's
+own `faderFunction` (`docs/MCU_MAPPING.md` §4.1). Since S45 all four resolve
+through the cue list standing on the slot:
+
+| `faderFunction` | What moves | Where it lives |
+|---|---|---|
+| `Master` | the list's master level | `Sequence::masterLevel`, show state |
+| `Speed` | the list's rate | `Sequence::speed`, show state |
+| `XFade` | the transition's clock (§4.2) | nowhere — a gesture in progress |
+| `Empty` | nothing | — |
+
+An executor with **no** cue list on it is refused rather than silently ignored:
+*executor 3 has no sequence* is a complaint an operator can act on, and a fader
+that wrote a number nobody could reach was what the old model allowed.
 
 ### 4.2 The crossfade is a clock, not a master
 
@@ -196,18 +231,22 @@ These are the properties `proptest` must verify. They are the contract of the me
 
 ## 7. Worked example
 
-Fixture 1, a moving head with a 16-bit dimmer and 16-bit pan. Two executors are active.
+Fixture 1, a moving head with a 16-bit dimmer and 16-bit pan. Two cue lists are playing.
 
 | Source | Activation | Dimmer | Pan | Master |
 |---|---|---|---|---|
 | Home | — | 0 | 32768 (centre) | — |
-| Executor 3 | counter 7 | 65535 | 20000 | 50 % |
-| Executor 5 | counter 9 | 30000 | 45000 | 100 % |
+| Cue list 3 | counter 7 | 65535 | 20000 | 50 % |
+| Cue list 5 | counter 9 | 30000 | 45000 | 100 % |
 | Programmer | — | — | 50000 | — |
+
+The two sources are two **cue lists** since S45, whatever they are being played
+from: an executor is a handle, and two of them on one list would be one source
+here, not two.
 
 Resolution:
 
-- **Dimmer** is HTP: executor 3 contributes `65535 × 0.5 = 32767`, executor 5 contributes `30000 × 1.0 = 30000`. Maximum is **32767**. No programmer value, so it stands. Grand master at full leaves it. Written as coarse `0x7F`, fine `0xFF`.
-- **Pan** is LTP: executor 5 has the higher activation counter and would win with 45000 — but the programmer holds 50000, which overrides everything. Result **50000**, written as coarse `0xC3`, fine `0x50`.
+- **Dimmer** is HTP: list 3 contributes `65535 × 0.5 = 32767`, list 5 contributes `30000 × 1.0 = 30000`. Maximum is **32767**. No programmer value, so it stands. Grand master at full leaves it. Written as coarse `0x7F`, fine `0xFF`.
+- **Pan** is LTP: list 5 has the higher activation counter and would win with 45000 — but the programmer holds 50000, which overrides everything. Result **50000**, written as coarse `0xC3`, fine `0x50`.
 
-Turning executor 5 off changes nothing about pan while the programmer holds it. Clearing the programmer drops pan to 45000 only if executor 5 is still active; otherwise it falls back to executor 3's 20000, and with both off, to home at 32768.
+Turning list 5 off changes nothing about pan while the programmer holds it. Clearing the programmer drops pan to 45000 only if list 5 is still active; otherwise it falls back to list 3's 20000, and with both off, to home at 32768.

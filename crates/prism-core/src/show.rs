@@ -28,9 +28,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use prism_domain::{
-    Cue, CueProperty, Executor, ExecutorButtonFunction, ExecutorEncoderFunction,
-    ExecutorFaderFunction, ExecutorId, Fixture, FixtureType, Group, GroupId, JsonPatchOp,
-    JsonValue, PlaybackId, Preset, PresetId, Sequence, SequenceId, UniverseId,
+    Cue, CueProperty, EXECUTOR_BUTTONS, Executor, ExecutorButtonFunction, ExecutorChange,
+    ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, Fixture, FixtureType, Group,
+    GroupId, JsonPatchOp, JsonValue, PlaybackId, Preset, PresetId, Sequence, SequenceId,
+    UniverseId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -76,6 +77,8 @@ pub enum ShowError {
     UnknownExecutor(ExecutorId),
     /// The executor exists but has no sequence to play.
     ExecutorHasNoSequence(ExecutorId),
+    /// An executor has four buttons and this was not one of them — S45.
+    NoSuchExecutorButton(u8),
     /// A fixture type must have a key: it is what a fixture references.
     EmptyFixtureTypeId,
     /// A footprint of zero channels controls nothing and cannot be addressed.
@@ -230,6 +233,10 @@ impl fmt::Display for ShowError {
             Self::UnknownSequence(id) => write!(f, "no sequence {id}"),
             Self::UnknownExecutor(id) => write!(f, "no executor {id}"),
             Self::ExecutorHasNoSequence(id) => write!(f, "executor {id} has no sequence"),
+            Self::NoSuchExecutorButton(index) => write!(
+                f,
+                "an executor has {EXECUTOR_BUTTONS} buttons, numbered from zero, and {index} is not one of them"
+            ),
             Self::EmptyFixtureTypeId => write!(f, "a fixture type needs a key"),
             Self::EmptyFootprint(id) => write!(f, "fixture type {id:?} has no channels"),
             Self::AttributeOutsideFootprint {
@@ -1105,6 +1112,8 @@ impl Show {
             color: None,
             cues: Vec::new(),
             looping: false,
+            master_level: u16::MAX,
+            speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
         })
@@ -1202,8 +1211,10 @@ impl Show {
     /// five functions that have no command yet are **S34**'s, and a default that
     /// put one there would ship a button the interface has to draw disabled.
     ///
-    /// The master starts at full: a newly assigned executor whose Go produced no
-    /// light would be indistinguishable from one that is broken.
+    /// The master is not among them since S45: it belongs to the cue list, and
+    /// a list nobody has faded rests at full for the reason a new executor used
+    /// to — a Go that produced no light would be indistinguishable from a desk
+    /// that is broken.
     ///
     /// Answers with no operations when that executor already plays that
     /// sequence.
@@ -1286,51 +1297,132 @@ impl Show {
         Ok(vec![op])
     }
 
-    /// Moves an executor's master.
+    /// Moves a cue list's master level.
+    ///
+    /// **It was the executor's until S45** and the move is punch-list entry
+    /// B18: one number per list, so two executors whose faders are both
+    /// `Master` are two handles on it rather than two opinions about it. Which
+    /// number a fader moves is `Show::apply`'s answer, from the executor's own
+    /// `fader_function`.
     ///
     /// # Errors
     ///
-    /// [`ShowError::UnknownExecutor`] if there is no such executor.
-    pub fn set_executor_master(
+    /// [`ShowError::UnknownSequence`] if there is no such cue list.
+    pub fn set_sequence_master(
         &mut self,
-        id: ExecutorId,
+        id: SequenceId,
         level: u16,
     ) -> Result<Vec<JsonPatchOp>, ShowError> {
-        let Some(executor) = self.executors.get_mut(&id) else {
-            return Err(ShowError::UnknownExecutor(id));
+        let Some(sequence) = self.sequences.get_mut(&id) else {
+            return Err(ShowError::UnknownSequence(id));
         };
-        executor.master_level = level;
+        sequence.master_level = level;
         self.touch();
         Ok(vec![JsonPatchOp::Replace {
-            path: format!("{}/masterLevel", pointer(EXECUTORS, &id.to_string())),
+            path: format!("{}/masterLevel", pointer(SEQUENCES, &id.to_string())),
             value: JsonValue::Int(i64::from(level)),
         }])
     }
 
-    /// Moves an executor's speed master — `docs/DMX_MERGE.md` §4 item 3.
+    /// Moves a cue list's speed master — `docs/DMX_MERGE.md` §4 item 3.
     ///
-    /// In units of `prism_domain::SPEED_UNITY`, and show state for the same
-    /// reason [`Self::set_executor_master`] is: a rate an operator set is part
-    /// of the show, and a reload that put every sequence back to 1x would be a
-    /// show that played differently the second time.
+    /// The same move as [`Self::set_sequence_master`] and the same reason: a
+    /// rate an operator set is part of the show, and two faders set to `Speed`
+    /// on one list are two handles on one rate.
     ///
     /// # Errors
     ///
-    /// [`ShowError::UnknownExecutor`] if there is no such executor.
-    pub fn set_executor_speed(
+    /// [`ShowError::UnknownSequence`] if there is no such cue list.
+    pub fn set_sequence_speed(
+        &mut self,
+        id: SequenceId,
+        speed: u16,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(sequence) = self.sequences.get_mut(&id) else {
+            return Err(ShowError::UnknownSequence(id));
+        };
+        sequence.speed = speed;
+        self.touch();
+        Ok(vec![JsonPatchOp::Replace {
+            path: format!("{}/speed", pointer(SEQUENCES, &id.to_string())),
+            value: JsonValue::Int(i64::from(speed)),
+        }])
+    }
+
+    /// Says what one of an executor's controls does — **S45**, punch-list entry
+    /// B15.
+    ///
+    /// One control at a time (`prism_domain::ExecutorChange`). Answers with no
+    /// operations when the control already does that, so a chooser that sent the
+    /// function already in force broadcasts nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownExecutor`] if the slot is empty — a function on a
+    /// fader that is not there is a line an operator can act on, where silence
+    /// is not. [`ShowError::NoSuchExecutorButton`] for an index past the four a
+    /// strip has: refused rather than clamped, because a desk that quietly
+    /// assigned a fifth key would be answering a question nobody asked.
+    pub fn configure_executor(
         &mut self,
         id: ExecutorId,
-        speed: u16,
+        change: &ExecutorChange,
     ) -> Result<Vec<JsonPatchOp>, ShowError> {
         let Some(executor) = self.executors.get_mut(&id) else {
             return Err(ShowError::UnknownExecutor(id));
         };
-        executor.speed = speed;
+        let path = pointer(EXECUTORS, &id.to_string());
+        let op = match change {
+            ExecutorChange::Fader { function } => {
+                if executor.fader_function == *function {
+                    return Ok(Vec::new());
+                }
+                executor.fader_function = *function;
+                JsonPatchOp::Replace {
+                    path: format!("{path}/faderFunction"),
+                    value: to_json(function)?,
+                }
+            }
+            ExecutorChange::Encoder { function } => {
+                if executor.encoder_function == *function {
+                    return Ok(Vec::new());
+                }
+                executor.encoder_function = *function;
+                JsonPatchOp::Replace {
+                    path: format!("{path}/encoderFunction"),
+                    value: to_json(function)?,
+                }
+            }
+            ExecutorChange::Button { index, function } => {
+                if *index >= EXECUTOR_BUTTONS {
+                    return Err(ShowError::NoSuchExecutorButton(*index));
+                }
+                // **The row is filled in rather than extended.** A slot made
+                // before S38's fourth default, or one an older file wrote with
+                // two entries, has a short list — and assigning the fourth key
+                // has to mean the fourth key rather than the third. The gap is
+                // filled with `Empty`, which is what those positions already do.
+                let slot = usize::from(*index);
+                while executor.button_functions.len() <= slot {
+                    executor
+                        .button_functions
+                        .push(ExecutorButtonFunction::Empty);
+                }
+                if executor.button_functions[slot] == *function {
+                    return Ok(Vec::new());
+                }
+                executor.button_functions[slot] = function.clone();
+                // The **whole row**, not the one entry: a list that had to grow
+                // to reach the index would leave a client's mirror with holes in
+                // it if only the last position were sent.
+                JsonPatchOp::Replace {
+                    path: format!("{path}/buttonFunctions"),
+                    value: to_json(&executor.button_functions)?,
+                }
+            }
+        };
         self.touch();
-        Ok(vec![JsonPatchOp::Replace {
-            path: format!("{}/speed", pointer(EXECUTORS, &id.to_string())),
-            value: JsonValue::Int(i64::from(speed)),
-        }])
+        Ok(vec![op])
     }
 
     /// Records what the engine reports about a running playback.
@@ -1340,42 +1432,33 @@ impl Show {
     /// delta so a client does not have to diff the show to draw a moving
     /// executor bar.
     ///
-    /// **Which row it is written into is the playback's own answer** (S40): an
-    /// executor's is on its row of the grid, and a cue list playing on no fader
-    /// keeps it on the sequence. `crate::mirror` writes it into the same two
-    /// places, from the same delta, which is what keeps a client's document and
-    /// the daemon's agreeing.
+    /// **It is written onto the cue list, and there is one row per list**
+    /// (S45). An executor draws its own row by reading through to the list
+    /// standing on it, which is what makes the second executor of one sequence
+    /// say the same thing as the first — punch-list entry B18. `crate::mirror`
+    /// writes it into the same place, from the same delta, which is what keeps a
+    /// client's document and the daemon's agreeing.
     ///
     /// Returns whether anything actually changed.
     ///
     /// # Errors
     ///
-    /// [`ShowError::UnknownExecutor`] or [`ShowError::UnknownSequence`] if the
-    /// playback is not in this show — which is ordinary rather than a fault: the
-    /// tick is one merge body behind for a poll after a rebuild.
+    /// [`ShowError::UnknownSequence`] if the playback is not in this show —
+    /// which is ordinary rather than a fault: the tick is one merge body behind
+    /// for a poll after a rebuild.
     pub fn record_playback_state(
         &mut self,
         playback: PlaybackId,
         is_active: bool,
         cue_index: Option<u32>,
     ) -> Result<bool, ShowError> {
-        let (was_active, was_index): (&mut bool, &mut Option<u32>) = match playback {
-            PlaybackId::Executor { executor_id } => {
-                let Some(executor) = self.executors.get_mut(&executor_id) else {
-                    return Err(ShowError::UnknownExecutor(executor_id));
-                };
-                (&mut executor.is_active, &mut executor.current_cue_index)
-            }
-            PlaybackId::Sequence { sequence_id } => {
-                let Some(sequence) = self.sequences.get_mut(&sequence_id) else {
-                    return Err(ShowError::UnknownSequence(sequence_id));
-                };
-                (&mut sequence.is_active, &mut sequence.current_cue_index)
-            }
+        let sequence_id = playback.sequence();
+        let Some(sequence) = self.sequences.get_mut(&sequence_id) else {
+            return Err(ShowError::UnknownSequence(sequence_id));
         };
-        let changed = *was_active != is_active || *was_index != cue_index;
-        *was_active = is_active;
-        *was_index = cue_index;
+        let changed = sequence.is_active != is_active || sequence.current_cue_index != cue_index;
+        sequence.is_active = is_active;
+        sequence.current_cue_index = cue_index;
         // Deliberately not marked dirty: a playback running is not an unsaved
         // edit, and a Save LED that lit up because a cue advanced would tell
         // the operator nothing.
@@ -1555,10 +1638,6 @@ fn default_executor(id: ExecutorId, sequence_id: Option<SequenceId>) -> Executor
             ExecutorButtonFunction::Empty,
         ],
         encoder_function: ExecutorEncoderFunction::Empty,
-        master_level: u16::MAX,
-        speed: prism_domain::SPEED_UNITY,
-        is_active: false,
-        current_cue_index: None,
     }
 }
 

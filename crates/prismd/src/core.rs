@@ -580,6 +580,22 @@ impl Core {
                     deltas.extend(self.carry_out_binding(*control, action.clone()));
                 }
                 Effect::SurfaceLearn(on) => deltas.push(self.set_learning(*on)),
+                // **S45's custom row, and it is S43's stop-gap reused rather
+                // than a second mechanism.** A key with a line on it cannot be
+                // resolved here, because the parser is still in the interface:
+                // the daemon writes the line into `Session::command_line` and
+                // bumps `Session::command_line_run`, and the client holding the
+                // keyboard focus turns it into commands — exactly what
+                // `SurfaceAction::WriteCommandLine` with *send* does.
+                //
+                // `IMPLEMENTATION_PLAN` S49 moves the parser into the daemon and
+                // removes the arrangement for both at once.
+                Effect::CommandLine(line) => {
+                    deltas.extend(self.apply(&Command::CommandLineInput {
+                        text: line.clone(),
+                        run: true,
+                    })?);
+                }
             }
         }
 
@@ -1366,76 +1382,41 @@ pub fn build_body(
     file: &ShowFile,
     report: &Arc<PlaybackReport>,
 ) -> Result<MergeBody, PatchError> {
-    let mut playbacks: Vec<PlaybackId> = file
-        .show
-        .executors()
-        .map(|executor| PlaybackId::of_executor(executor.id))
-        .collect();
-    // **A cue list on no fader gets a playback of its own** (S40), which is
-    // what makes `On Sequence 1` mean something for a sequence nobody has
-    // assigned. The two are never both live for one cue list — `playback_of`
-    // resolves a sequence to the executor that holds it whenever one does — so
-    // the set here is *executors, plus the sequences nothing plays*.
+    // **One playback per cue list, and that is the whole of it** (S45). It was
+    // *every executor, plus the sequences nothing plays* until then, and
+    // punch-list entry B18 is what that cost: two executors on one list were two
+    // players of it, each with its own cue pointer and its own fade, fighting
+    // over the same slots in the merge with neither of them wrong.
     //
-    // It is rebuilt with the body rather than allocated on demand, because
-    // allocating one is exactly what the tick may not do (§3.1): assigning a
-    // sequence to an executor answers `Effect::ReloadSequence`, which rebuilds,
-    // and the sequence's own source goes away in the same swap.
-    playbacks.extend(
-        file.show
-            .sequences()
-            .filter(|sequence| {
-                !file
-                    .show
-                    .executors()
-                    .any(|executor| executor.sequence_id == Some(sequence.id))
-            })
-            .map(|sequence| PlaybackId::of_sequence(sequence.id)),
-    );
+    // Nothing about which fader holds what appears here any more, which is why
+    // `Command::AssignExecutor` no longer asks for a rebuild: putting a list on
+    // a slot moves a handle, and the set below does not mention slots.
+    let playbacks: Vec<PlaybackId> = file
+        .show
+        .sequences()
+        .map(|sequence| PlaybackId::of_sequence(sequence.id))
+        .collect();
     let mut body = MergeBody::for_patch(layout, file.show.patched(), playbacks)?;
     body.report_into(Arc::clone(report));
 
     let groups: Vec<prism_domain::Group> = file.show.groups().cloned().collect();
     body.load_groups(&groups);
-    // An executor's master and its speed are **show** state (S14 relied on the
-    // first being so, S34 made the second), so a freshly built body reads them
-    // out of the show rather than starting at its constructor's defaults. Doing
-    // it here rather than in `Masters::apply_to` is what gives the *first* body
-    // — the one `daemon` builds before the tick starts — the levels a saved show
-    // was saved with.
-    for executor in file.show.executors() {
-        body.layer_mut()
-            .set_master(executor.id, executor.master_level);
-        if let Some(player) = body.cues_mut().player_mut(executor.id) {
-            player.set_speed(executor.speed);
-        }
-    }
-    for executor in file.show.executors() {
-        let Some(sequence_id) = executor.sequence_id else {
-            continue;
-        };
-        if let Some(sequence) = file.show.sequence(sequence_id)
-            && let Err(error) = body.load_sequence(executor.id, sequence)
-        {
-            // A sequence the engine will not compile is one executor that does
-            // nothing, and the rest of the rig is unaffected — which is why it
-            // is reported rather than refused.
-            log::warn(
-                "engine",
-                &format!("executor {} could not be loaded: {error}", executor.id),
-            );
-        }
-    }
-    // And the same for every cue list that is on no fader (S40). `load_sequence`
-    // answers `UnknownPlayback` for one that is, which is exactly the set the
-    // loop above has already covered — so the filter is the same one, written
-    // once by asking the body.
+    // A cue list's master and its rate are **show** state (S14 relied on the
+    // first being so, S34 made the second, S45 moved both off the executor), so
+    // a freshly built body reads them out of the show rather than starting at
+    // its constructor's defaults. Doing it here rather than in
+    // `Masters::apply_to` is what gives the *first* body — the one `daemon`
+    // builds before the tick starts — the levels a saved show was saved with.
     for sequence in file.show.sequences() {
         let playback = PlaybackId::of_sequence(sequence.id);
-        if body.cues().player(playback).is_none() {
-            continue;
+        body.layer_mut().set_master(playback, sequence.master_level);
+        if let Some(player) = body.cues_mut().player_mut(playback) {
+            player.set_speed(sequence.speed);
         }
         if let Err(error) = body.load_sequence(playback, sequence) {
+            // A sequence the engine will not compile is one cue list that does
+            // nothing, and the rest of the rig is unaffected — which is why it
+            // is reported rather than refused.
             log::warn(
                 "engine",
                 &format!("sequence {} could not be loaded: {error}", sequence.id),
@@ -1706,7 +1687,7 @@ mod tests {
         until("the client to be told", || {
             told.extend(core.poll_playback());
             told.contains(&Delta::PlaybackState {
-                playback: PlaybackId::of_executor(ExecutorId::new(0)),
+                playback: PlaybackId::of_sequence(SequenceId::new(1)),
                 is_active: true,
                 cue_index: Some(0),
             })
@@ -2075,6 +2056,337 @@ mod tests {
         driver.stop();
     }
 
+    // -- S45: one sequence, one playback, asserted on frames -----------------
+
+    /// A rig with **two** executors on one cue list, each with a fader function
+    /// the test chooses, playing a two-cue list on the dark dimmer at channel 5.
+    ///
+    /// Executor 3 is the first handle and executor 4 is the second. Channel 5 is
+    /// dark at home, so what a cue and a master do to it is visible; channel 1
+    /// sits at full whatever happens, which is what says the rig is alive.
+    fn desk_for_two_handles(
+        dir: &std::path::Path,
+        first: prism_domain::ExecutorFaderFunction,
+        second: prism_domain::ExecutorFaderFunction,
+    ) -> (Core, MockOutputHandle, OutputThread) {
+        use crate::testkit::{cue, executor, sequence};
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let mut file = show_file();
+        file.show
+            .store_sequence(sequence(
+                7,
+                vec![
+                    cue("1", 4, AttributeType::Dimmer, 65_535),
+                    cue("2", 4, AttributeType::Dimmer, 20_000),
+                ],
+            ))
+            .unwrap();
+        for (id, fader) in [(3, first), (4, second)] {
+            let mut slot = executor(id, Some(7));
+            slot.fader_function = fader;
+            slot.button_functions = vec![Fn::On, Fn::Off, Fn::GoForward, Fn::Empty];
+            file.show.store_executor(slot).unwrap();
+        }
+        file.show
+            .set_sequence_master(SequenceId::new(7), u16::MAX)
+            .unwrap();
+        file.show.mark_saved();
+        desk_with(dir, file)
+    }
+
+    /// Presses one of executor `id`'s four keys.
+    fn press_on(core: &mut Core, id: u32, index: u8) {
+        core.apply(&Command::ExecutorButton {
+            executor_id: ExecutorId::new(id),
+            button: prism_domain::ExecutorButtonRef::Slot { index },
+            pressed: true,
+        })
+        .expect("the executor plays a cue list");
+    }
+
+    /// **Exit criterion, punch-list B18.** Two executors on one cue list with
+    /// the same fader function move together *at the DMX output*.
+    ///
+    /// The frame is the only place the difference is real: a screen showing one
+    /// number twice is a screen, and what the entry is about is that the light
+    /// followed one fader and not the other.
+    #[test]
+    fn two_master_faders_on_one_cue_list_move_one_light() {
+        use prism_domain::ExecutorFaderFunction as Fader;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, frames, driver) =
+            desk_for_two_handles(dir.path(), Fader::Master, Fader::Master);
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+
+        // Executor 3 switches the list on, and its cue takes channel 5 to full.
+        press_on(&mut core, 3, 0);
+        until("the cue", || channel(&frames, 5) == Some(255));
+
+        // Executor 4's fader is a `Master` on the same list, so it is the same
+        // number: pulling it halves the light executor 3's Go put up.
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(4),
+            level: 32_768,
+        })
+        .unwrap();
+        until("the second fader to move the same light", || {
+            channel(&frames, 5) == Some(128)
+        });
+        // And it is one number rather than two that happen to agree.
+        assert_eq!(
+            core.file
+                .show
+                .sequence(SequenceId::new(7))
+                .unwrap()
+                .master_level,
+            32_768
+        );
+
+        // Back up from the *first* fader, which is the other direction of the
+        // same claim.
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(3),
+            level: u16::MAX,
+        })
+        .unwrap();
+        until("the first fader to move it back", || {
+            channel(&frames, 5) == Some(255)
+        });
+
+        driver.stop();
+    }
+
+    /// **The other half of B18**: a `Master` and an `XFade` on one cue list are
+    /// two different handles and stay independent.
+    ///
+    /// *Ist ein Fader XFade und ein Fader Master, sollten beide unabhängig
+    /// voneinander funktionieren* — the entry, in the owner's words. What
+    /// "independent" means on a frame is that each one moves the light in its
+    /// own way and neither writes the other's number: the crossfade drives the
+    /// transition's clock (`docs/DMX_MERGE.md` §4.2) and the master scales what
+    /// comes out of it, so the two compose rather than fight.
+    #[test]
+    fn a_master_and_a_crossfade_on_one_cue_list_are_two_handles() {
+        use prism_domain::ExecutorFaderFunction as Fader;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, frames, driver) =
+            desk_for_two_handles(dir.path(), Fader::Master, Fader::XFade);
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+
+        press_on(&mut core, 3, 0);
+        until("the cue", || channel(&frames, 5) == Some(255));
+
+        // Executor 4 is a crossfade: moving it takes the transition's clock off
+        // the engine and puts it on the fader, so the light moves. Engaging one
+        // takes the fader where it stands as the origin and heads for the far
+        // end (`prism_engine::Crossfade`), so this one is engaged below the
+        // middle and driven upwards.
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(4),
+            level: 20_000,
+        })
+        .unwrap();
+        until("the crossfade to take the transition over", || {
+            channel(&frames, 5) != Some(255)
+        });
+        // And it wrote **nothing** into the show: where a crossfade fader stands
+        // is a gesture in progress, so executor 3's master is exactly where the
+        // operator left it. A second `Master` would have written this number.
+        assert_eq!(
+            core.file
+                .show
+                .sequence(SequenceId::new(7))
+                .unwrap()
+                .master_level,
+            u16::MAX,
+            "the crossfade wrote the master"
+        );
+
+        // Driving the crossfade to its far end completes the cue, which puts the
+        // light back where the Go had it.
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(4),
+            level: u16::MAX,
+        })
+        .unwrap();
+        until("the crossfade to finish the cue", || {
+            channel(&frames, 5) == Some(255)
+        });
+
+        // The master still scales it, from its own handle and by its own factor
+        // — which is the two of them composing rather than one of them being
+        // the other.
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(3),
+            level: 32_768,
+        })
+        .unwrap();
+        until("the master to scale what the crossfade left", || {
+            channel(&frames, 5) == Some(128)
+        });
+
+        driver.stop();
+    }
+
+    /// **Exit criterion, B18's deeper half.** `Go` on either of two executors
+    /// carrying one cue list advances **one** cue pointer.
+    ///
+    /// Before S45 each executor was a playback of its own, so the second Go
+    /// started a second player at cue 1 while the first stood on cue 2 — two
+    /// contributors to the same slots, and `docs/DMX_MERGE.md` did what it was
+    /// told with both.
+    #[test]
+    fn a_go_on_either_handle_advances_one_cue_pointer() {
+        use prism_domain::ExecutorFaderFunction as Fader;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, frames, driver) =
+            desk_for_two_handles(dir.path(), Fader::Master, Fader::Master);
+        until("the rig at home", || channel(&frames, 1) == Some(255));
+
+        // On, from the first handle: cue 1 takes channel 5 to full.
+        press_on(&mut core, 3, 0);
+        until("the first cue", || {
+            core.poll_playback();
+            core.file
+                .show
+                .sequence(SequenceId::new(7))
+                .is_some_and(|sequence| sequence.current_cue_index == Some(0))
+        });
+
+        // Go, from the **second** handle: the same pointer moves to cue 2, and
+        // the light goes with it. A second playback would have entered cue 1
+        // again and held channel 5 at full.
+        press_on(&mut core, 4, 2);
+        until("the second cue", || {
+            core.poll_playback();
+            core.file
+                .show
+                .sequence(SequenceId::new(7))
+                .is_some_and(|sequence| sequence.current_cue_index == Some(1))
+        });
+        until("the second cue's level", || channel(&frames, 5) == Some(78));
+
+        // Both rows say the same thing, because there is one row and both
+        // executors read it — which is the half of the entry an operator sees.
+        for id in [3, 4] {
+            let sequence = core
+                .file
+                .show
+                .executor(ExecutorId::new(id))
+                .and_then(|executor| executor.sequence_id)
+                .and_then(|id| core.file.show.sequence(id))
+                .expect("both executors carry cue list 7");
+            assert_eq!(sequence.current_cue_index, Some(1), "executor {id}");
+            assert!(sequence.is_active, "executor {id}");
+        }
+
+        driver.stop();
+    }
+
+    /// **Exit criterion**: a custom row fires the line an operator wrote, and
+    /// firing it produces exactly what typing the line produces.
+    ///
+    /// *Exactly what typing produces* is `Command::CommandLineInput` with
+    /// `run: true` — the same command a keyboard sends — so the two arrive at
+    /// the same session and the same client behaviour. The parser is still in
+    /// the interface (`SurfaceAction::WriteCommandLine`'s stop-gap, removed for
+    /// both in `IMPLEMENTATION_PLAN` S49), which is why the assertion is on the
+    /// line and the counter rather than on a `Go`.
+    #[test]
+    fn a_key_with_a_line_on_it_fires_the_line() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, _frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+
+        core.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(3),
+            change: prism_domain::ExecutorChange::Button {
+                index: 1,
+                function: Fn::CommandLine {
+                    line: "Go+ Sequence 7".to_owned(),
+                },
+            },
+        })
+        .unwrap();
+
+        let before = core.file.session.session().command_line_run;
+        press(&mut core, 1, true);
+        let session = core.file.session.session();
+        assert_eq!(session.command_line, "Go+ Sequence 7");
+        assert_eq!(session.command_line_run, before + 1);
+
+        // Typing the same line by hand leaves the session in the same place,
+        // which is the whole of "exactly what typing the line produces".
+        let typed = {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut other, _frames, driver) = desk_for_buttons(
+                dir.path(),
+                vec![Fn::Empty, Fn::Empty, Fn::Empty, Fn::Empty],
+                prism_domain::ExecutorFaderFunction::Master,
+            );
+            other
+                .apply(&Command::CommandLineInput {
+                    text: "Go+ Sequence 7".to_owned(),
+                    run: true,
+                })
+                .unwrap();
+            let session = other.file.session.session().clone();
+            driver.stop();
+            session
+        };
+        assert_eq!(typed.command_line, session.command_line);
+        assert_eq!(typed.command_line_run, session.command_line_run);
+
+        driver.stop();
+    }
+
+    /// **Exit criterion**: a custom row survives a save and a restart.
+    ///
+    /// The `.prism` file keeps each executor as an opaque MessagePack document
+    /// (S15), and the eight fixed functions are bare strings in it — so the
+    /// ninth, which carries a line, is the one that had to be checked rather
+    /// than assumed.
+    #[test]
+    fn a_custom_row_survives_a_save_and_a_restart() {
+        use prism_domain::ExecutorButtonFunction as Fn;
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, _frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
+            prism_domain::ExecutorFaderFunction::Speed,
+        );
+        core.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(3),
+            change: prism_domain::ExecutorChange::Button {
+                index: 3,
+                function: Fn::CommandLine {
+                    line: "Go+ Sequence 7".to_owned(),
+                },
+            },
+        })
+        .unwrap();
+        core.apply(&Command::SaveShow).unwrap();
+        let read = core.store().read().unwrap();
+        driver.stop();
+
+        let executor = read.show.executor(ExecutorId::new(3)).expect("executor 3");
+        assert_eq!(
+            executor.button_functions[3],
+            Fn::CommandLine {
+                line: "Go+ Sequence 7".to_owned()
+            }
+        );
+        assert_eq!(executor.button_functions[0], Fn::On);
+        assert_eq!(
+            executor.fader_function,
+            prism_domain::ExecutorFaderFunction::Speed
+        );
+    }
+
     // -- S34: the eight button functions, asserted on frames ----------------
 
     /// A rig with **one** executor whose four buttons and fader are set by the
@@ -2101,8 +2413,10 @@ mod tests {
         let mut slot = executor(3, Some(7));
         slot.button_functions = buttons;
         slot.fader_function = fader;
-        slot.master_level = u16::MAX;
         file.show.store_executor(slot).unwrap();
+        file.show
+            .set_sequence_master(SequenceId::new(7), u16::MAX)
+            .unwrap();
         file.show.mark_saved();
         desk_with(dir, file)
     }
@@ -2267,7 +2581,7 @@ mod tests {
         assert_eq!(
             core.file
                 .show
-                .executor(ExecutorId::new(3))
+                .sequence(SequenceId::new(7))
                 .unwrap()
                 .master_level,
             49_151
@@ -2310,8 +2624,8 @@ mod tests {
             core.poll_playback();
             core.file
                 .show
-                .executor(ExecutorId::new(3))
-                .is_some_and(|executor| executor.is_active)
+                .sequence(SequenceId::new(7))
+                .is_some_and(|sequence| sequence.is_active)
         });
 
         // The first press of the toggle therefore **stops** it. A client that
@@ -2338,11 +2652,11 @@ mod tests {
         assert_eq!(
             core.file
                 .show
-                .executor(ExecutorId::new(3))
+                .sequence(SequenceId::new(7))
                 .unwrap()
                 .current_cue_index,
             None,
-            "a stopped executor is on no cue"
+            "a stopped playback is on no cue"
         );
 
         press(&mut core, 0, true);
@@ -2351,13 +2665,13 @@ mod tests {
                 || core
                     .file
                     .show
-                    .executor(ExecutorId::new(3))
-                    .is_some_and(|executor| executor.current_cue_index == Some(0))
+                    .sequence(SequenceId::new(7))
+                    .is_some_and(|sequence| sequence.current_cue_index == Some(0))
         });
         assert_eq!(
             core.file
                 .show
-                .executor(ExecutorId::new(3))
+                .sequence(SequenceId::new(7))
                 .unwrap()
                 .current_cue_index,
             Some(0)
@@ -2368,8 +2682,8 @@ mod tests {
             core.poll_playback();
             core.file
                 .show
-                .executor(ExecutorId::new(3))
-                .is_some_and(|executor| executor.current_cue_index == Some(1))
+                .sequence(SequenceId::new(7))
+                .is_some_and(|sequence| sequence.current_cue_index == Some(1))
         });
 
         press(&mut core, 1, true);
@@ -2377,8 +2691,8 @@ mod tests {
             core.poll_playback();
             core.file
                 .show
-                .executor(ExecutorId::new(3))
-                .is_some_and(|executor| executor.current_cue_index.is_none())
+                .sequence(SequenceId::new(7))
+                .is_some_and(|sequence| sequence.current_cue_index.is_none())
         });
 
         driver.stop();
@@ -2414,8 +2728,8 @@ mod tests {
                 || core
                     .file
                     .show
-                    .executor(ExecutorId::new(3))
-                    .is_some_and(|executor| executor.current_cue_index == Some(0))
+                    .sequence(SequenceId::new(7))
+                    .is_some_and(|sequence| sequence.current_cue_index == Some(0))
         });
 
         // Now the fade runs for a while, and the readback has nothing to say
@@ -2459,9 +2773,10 @@ mod tests {
                 level: 2_048,
             })
             .unwrap();
-            let executor = core.file.show.executor(ExecutorId::new(3)).unwrap();
-            assert_eq!(executor.speed, 2_048);
-            assert_eq!(executor.master_level, u16::MAX, "the master moved");
+            // The rate and the master are the cue list's since S45.
+            let sequence = core.file.show.sequence(SequenceId::new(7)).unwrap();
+            assert_eq!(sequence.speed, 2_048);
+            assert_eq!(sequence.master_level, u16::MAX, "the master moved");
             driver.stop();
         }
 
@@ -2474,7 +2789,7 @@ mod tests {
                 vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
                 Fader::XFade,
             );
-            let before = core.file.show.executor(ExecutorId::new(3)).unwrap().clone();
+            let before = core.file.show.sequence(SequenceId::new(7)).unwrap().clone();
             let deltas = core
                 .apply(&Command::SetExecutorMaster {
                     executor_id: ExecutorId::new(3),
@@ -2482,7 +2797,7 @@ mod tests {
                 })
                 .unwrap();
             assert!(deltas.is_empty(), "{deltas:?}");
-            assert_eq!(core.file.show.executor(ExecutorId::new(3)), Some(&before));
+            assert_eq!(core.file.show.sequence(SequenceId::new(7)), Some(&before));
             driver.stop();
         }
 
@@ -2496,7 +2811,7 @@ mod tests {
                 vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
                 Fader::Empty,
             );
-            let before = core.file.show.executor(ExecutorId::new(3)).unwrap().clone();
+            let before = core.file.show.sequence(SequenceId::new(7)).unwrap().clone();
             assert!(
                 core.apply(&Command::SetExecutorMaster {
                     executor_id: ExecutorId::new(3),
@@ -2505,7 +2820,7 @@ mod tests {
                 .unwrap()
                 .is_empty()
             );
-            assert_eq!(core.file.show.executor(ExecutorId::new(3)), Some(&before));
+            assert_eq!(core.file.show.sequence(SequenceId::new(7)), Some(&before));
             driver.stop();
         }
     }

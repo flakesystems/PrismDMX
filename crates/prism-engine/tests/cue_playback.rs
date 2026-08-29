@@ -16,8 +16,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use prism_domain::{
-    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, ExecutorId, Fixture, FixtureId,
-    FixtureType, GoDirection, Sequence, SequenceId, UniverseId, Vec3,
+    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, Fixture, FixtureId, FixtureType,
+    GoDirection, Sequence, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Clock, Engine, FrameLayout, FramePublisher, FrameSubscriber, ManualClock, MergeBody,
@@ -100,6 +100,8 @@ fn sequence(cues: Vec<Cue>) -> Sequence {
         color: None,
         cues,
         looping: false,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }
@@ -118,9 +120,9 @@ impl Rig {
         let layout = FrameLayout::new([UniverseId::MIN]).unwrap();
         let patched = fixture(&fixture_type.id);
         let mut body =
-            MergeBody::for_patch(&layout, [(&patched, fixture_type)], [ExecutorId::new(1)])
+            MergeBody::for_patch(&layout, [(&patched, fixture_type)], [SequenceId::new(1)])
                 .unwrap();
-        body.load_sequence(ExecutorId::new(1), &sequence(cues))
+        body.load_sequence(SequenceId::new(1), &sequence(cues))
             .unwrap();
 
         let mut publisher = FramePublisher::new(Arc::new(layout));
@@ -137,7 +139,7 @@ impl Rig {
     fn go(&mut self) {
         self.producer
             .push(TickCommand::Go {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 direction: GoDirection::Next,
             })
             .unwrap();
@@ -247,7 +249,7 @@ fn a_go_arriving_over_the_command_queue_runs_the_cue_list_to_the_wire() {
     // home value the patch gives it.
     rig.producer
         .push(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: false,
         })
         .unwrap();

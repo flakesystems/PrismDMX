@@ -806,6 +806,7 @@ impl Programmer {
             | Command::Label { .. }
             | Command::Color { .. }
             | Command::AssignExecutor { .. }
+            | Command::ConfigureExecutor { .. }
             | Command::ExecutorGo { .. }
             | Command::ExecutorOff { .. }
             | Command::ExecutorOn { .. }

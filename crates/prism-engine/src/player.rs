@@ -880,7 +880,7 @@ mod tests {
     use crate::player::{SPEED_UNITY, TAP_WINDOW};
     use crate::testkit::{cue, cue_part, moving_head, sequence};
     use prism_domain::{
-        AttributeType, Cue, CueTrigger, ExecutorId, FixtureId, GoDirection, PlaybackId, Sequence,
+        AttributeType, Cue, CueTrigger, FixtureId, GoDirection, PlaybackId, Sequence, SequenceId,
     };
 
     /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
@@ -902,7 +902,7 @@ mod tests {
     impl Rig {
         fn new(executors: u32) -> Self {
             let plan = plan();
-            let layer = PlaybackLayer::new(&plan, (1..=executors).map(ExecutorId::new)).unwrap();
+            let layer = PlaybackLayer::new(&plan, (1..=executors).map(SequenceId::new)).unwrap();
             let cues = CueLayer::for_layer(&layer);
             Self { plan, layer, cues }
         }
@@ -910,21 +910,21 @@ mod tests {
         fn load(&mut self, executor: u32, sequence: &Sequence) {
             let compiled = SequencePlan::build(&self.plan, sequence).unwrap();
             self.cues
-                .player_mut(ExecutorId::new(executor))
+                .player_mut(SequenceId::new(executor))
                 .unwrap()
                 .load(compiled);
         }
 
         fn go(&mut self, executor: u32, direction: GoDirection) -> bool {
             self.cues
-                .player_mut(ExecutorId::new(executor))
+                .player_mut(SequenceId::new(executor))
                 .unwrap()
                 .go(direction)
         }
 
         fn off(&mut self, executor: u32) -> bool {
             self.cues
-                .player_mut(ExecutorId::new(executor))
+                .player_mut(SequenceId::new(executor))
                 .unwrap()
                 .off()
         }
@@ -953,17 +953,17 @@ mod tests {
 
         fn current(&self, executor: u32) -> Option<usize> {
             self.cues
-                .player(ExecutorId::new(executor))
+                .player(SequenceId::new(executor))
                 .unwrap()
                 .current_cue()
         }
 
         fn activation(&self, executor: u32) -> Option<u64> {
-            self.layer.source(ExecutorId::new(executor))?.activation()
+            self.layer.source(SequenceId::new(executor))?.activation()
         }
 
         fn player(&mut self, executor: u32) -> &mut crate::player::CuePlayer {
-            self.cues.player_mut(ExecutorId::new(executor)).unwrap()
+            self.cues.player_mut(SequenceId::new(executor)).unwrap()
         }
     }
 
@@ -984,13 +984,13 @@ mod tests {
         let mut rig = Rig::new(2);
         let dimmer = slot(&rig.plan, 1, AttributeType::Dimmer);
         rig.layer
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, 40_000);
-        rig.layer.activate(ExecutorId::new(1));
+        rig.layer.activate(SequenceId::new(1));
         rig.run(0, 10);
         assert_eq!(rig.value(1, AttributeType::Dimmer), 40_000);
-        assert!(!rig.cues.player(ExecutorId::new(1)).unwrap().is_loaded());
+        assert!(!rig.cues.player(SequenceId::new(1)).unwrap().is_loaded());
     }
 
     #[test]
@@ -1088,8 +1088,8 @@ mod tests {
         let layer = PlaybackLayer::new(
             &plan,
             [
-                PlaybackId::of_executor(ExecutorId::new(1)),
-                PlaybackId::of_sequence(prism_domain::SequenceId::new(7)),
+                PlaybackId::of_sequence(SequenceId::new(1)),
+                PlaybackId::of_sequence(SequenceId::new(7)),
             ],
         )
         .unwrap();
@@ -1104,11 +1104,11 @@ mod tests {
         )
         .unwrap();
         rig.cues
-            .player_mut(PlaybackId::of_sequence(prism_domain::SequenceId::new(7)))
+            .player_mut(PlaybackId::of_sequence(SequenceId::new(7)))
             .unwrap()
             .load(compiled);
         rig.cues
-            .player_mut(PlaybackId::of_sequence(prism_domain::SequenceId::new(7)))
+            .player_mut(PlaybackId::of_sequence(SequenceId::new(7)))
             .unwrap()
             .go(GoDirection::Next);
 
@@ -1117,7 +1117,7 @@ mod tests {
         assert_eq!(rig.value(1, AttributeType::Dimmer), 40_000);
         assert_eq!(
             rig.layer
-                .source(PlaybackId::of_sequence(prism_domain::SequenceId::new(7)))
+                .source(PlaybackId::of_sequence(SequenceId::new(7)))
                 .and_then(crate::playback::PlaybackSource::activation),
             Some(0),
             "the sequence playback never went active"
@@ -1324,7 +1324,7 @@ mod tests {
                 false,
             ),
         );
-        let player = rig.cues.player_mut(ExecutorId::new(1)).unwrap();
+        let player = rig.cues.player_mut(SequenceId::new(1)).unwrap();
         assert!(player.on());
         rig.tick(0);
         assert_eq!(rig.current(1), Some(0));
@@ -1333,7 +1333,7 @@ mod tests {
         rig.tick(1);
         assert_eq!(rig.current(1), Some(1));
 
-        let player = rig.cues.player_mut(ExecutorId::new(1)).unwrap();
+        let player = rig.cues.player_mut(SequenceId::new(1)).unwrap();
         assert!(!player.on());
         rig.tick(2);
         assert_eq!(rig.current(1), Some(1));
@@ -1362,10 +1362,10 @@ mod tests {
 
         // Executor 2 goes on afterwards, so it is later in the LTP order.
         rig.layer
-            .source_mut(ExecutorId::new(2))
+            .source_mut(SequenceId::new(2))
             .unwrap()
             .set(slot(&rig.plan, 1, AttributeType::Pan), 50_000);
-        rig.layer.activate(ExecutorId::new(2));
+        rig.layer.activate(SequenceId::new(2));
         rig.tick(1);
         assert_eq!(rig.value(1, AttributeType::Pan), 50_000);
 
@@ -1384,7 +1384,7 @@ mod tests {
         rig.go(1, GoDirection::Next);
         rig.tick(0);
         let first = rig.activation(1).unwrap();
-        rig.layer.activate(ExecutorId::new(2));
+        rig.layer.activate(SequenceId::new(2));
         let second = rig.activation(2).unwrap();
         assert!(second > first);
 
@@ -1624,21 +1624,21 @@ mod tests {
         rig.tick(0);
         assert_eq!(rig.value(1, AttributeType::Dimmer), 50_000);
 
-        rig.cues.player_mut(ExecutorId::new(1)).unwrap().unload();
+        rig.cues.player_mut(SequenceId::new(1)).unwrap().unload();
         rig.tick(1);
-        assert!(!rig.cues.player(ExecutorId::new(1)).unwrap().is_loaded());
+        assert!(!rig.cues.player(SequenceId::new(1)).unwrap().is_loaded());
         assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
         assert_eq!(rig.activation(1), None);
         // And an unloaded player leaves the source alone from then on.
         rig.layer
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(slot(&rig.plan, 1, AttributeType::Dimmer), 12_345);
-        rig.layer.activate(ExecutorId::new(1));
+        rig.layer.activate(SequenceId::new(1));
         rig.tick(2);
         assert_eq!(rig.value(1, AttributeType::Dimmer), 12_345);
         // Unloading twice is not an error, and does not re-clear the source.
-        rig.cues.player_mut(ExecutorId::new(1)).unwrap().unload();
+        rig.cues.player_mut(SequenceId::new(1)).unwrap().unload();
         rig.tick(3);
         assert_eq!(rig.value(1, AttributeType::Dimmer), 12_345);
     }
@@ -1647,14 +1647,14 @@ mod tests {
     fn a_player_reports_the_value_it_is_holding_for_a_slot() {
         let mut rig = Rig::new(1);
         rig.load(1, &sequence(vec![dimmer_cue("1", 50_000, 10.0)], false));
-        let player = rig.cues.player(ExecutorId::new(1)).unwrap();
+        let player = rig.cues.player(SequenceId::new(1)).unwrap();
         assert_eq!(
             player.provides(slot(&rig.plan, 1, AttributeType::Dimmer)),
             None
         );
         rig.go(1, GoDirection::Next);
         rig.run(0, 220);
-        let player = rig.cues.player(ExecutorId::new(1)).unwrap();
+        let player = rig.cues.player(SequenceId::new(1)).unwrap();
         assert_eq!(
             player.provides(slot(&rig.plan, 1, AttributeType::Dimmer)),
             Some(25_000)
@@ -1664,7 +1664,7 @@ mod tests {
             None
         );
         assert_eq!(player.provides(usize::MAX), None);
-        assert_eq!(player.playback(), ExecutorId::new(1).into());
+        assert_eq!(player.playback(), SequenceId::new(1).into());
         assert!(player.sequence().is_some());
     }
 
@@ -1672,14 +1672,14 @@ mod tests {
     fn an_executor_the_layer_does_not_have_has_no_player() {
         let mut rig = Rig::new(2);
         assert_eq!(rig.cues.player_count(), 2);
-        assert!(rig.cues.player(ExecutorId::new(9)).is_none());
-        assert!(rig.cues.player_mut(ExecutorId::new(9)).is_none());
+        assert!(rig.cues.player(SequenceId::new(9)).is_none());
+        assert!(rig.cues.player_mut(SequenceId::new(9)).is_none());
     }
 
     #[test]
     fn a_player_with_no_sequence_answers_no_to_everything() {
         let mut rig = Rig::new(1);
-        let player = rig.cues.player_mut(ExecutorId::new(1)).unwrap();
+        let player = rig.cues.player_mut(SequenceId::new(1)).unwrap();
         assert!(!player.go(GoDirection::Next));
         assert!(!player.on());
         assert!(!player.off());
@@ -1708,7 +1708,7 @@ mod tests {
         );
         rig.go(1, GoDirection::Next);
         rig.tick(0);
-        let player = rig.cues.player(ExecutorId::new(1)).unwrap();
+        let player = rig.cues.player(SequenceId::new(1)).unwrap();
         assert_eq!(
             player.provides(slot(&rig.plan, 1, AttributeType::Pan)),
             None
@@ -1719,7 +1719,7 @@ mod tests {
         // Half way through the one-second fade out, the dimmer is on its way
         // down and the pan is still nobody's business.
         assert_eq!(rig.value(1, AttributeType::Dimmer), 32_768);
-        let player = rig.cues.player(ExecutorId::new(1)).unwrap();
+        let player = rig.cues.player(SequenceId::new(1)).unwrap();
         assert_eq!(
             player.provides(slot(&rig.plan, 1, AttributeType::Pan)),
             None
@@ -1759,12 +1759,12 @@ mod tests {
         // `CueLayer::advance` never calls these on an unloaded player. They are
         // reachable on their own, so they answer for themselves.
         let plan = plan();
-        let mut layer = PlaybackLayer::new(&plan, [ExecutorId::new(1)]).unwrap();
+        let mut layer = PlaybackLayer::new(&plan, [SequenceId::new(1)]).unwrap();
         let mut cues = CueLayer::for_layer(&layer);
-        let player = cues.player_mut(ExecutorId::new(1)).unwrap();
+        let player = cues.player_mut(SequenceId::new(1)).unwrap();
         assert_eq!(player.advance(7), Change::None);
 
-        let source = layer.source_mut(ExecutorId::new(1)).unwrap();
+        let source = layer.source_mut(SequenceId::new(1)).unwrap();
         source.set(0, 1_234);
         player.write(source);
         assert!(source.is_empty());

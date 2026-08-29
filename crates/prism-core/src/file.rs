@@ -697,6 +697,11 @@ impl ShowFile {
                 // for the reason a store does not rename one either.
                 color: None,
                 cues: Vec::new(),
+                // A list nobody has faded rests at full and plays at the times
+                // its own cues carry — S45's defaults, and the only two a new
+                // list could have.
+                master_level: u16::MAX,
+                speed: prism_domain::SPEED_UNITY,
                 looping: false,
                 is_active: false,
                 current_cue_index: None,
@@ -1093,7 +1098,12 @@ impl ShowFile {
                 images.push(self.cue_edit_image());
                 images
             }
-            Command::AssignExecutor { executor_id, .. } => vec![Image::Executor(
+            // Both of the commands that write an executor row, and one image
+            // covers both: an Oops of an assignment or of a control's function
+            // puts the whole row back as it was, which is the same shape
+            // `SetCueProperty` has for a cue.
+            Command::AssignExecutor { executor_id, .. }
+            | Command::ConfigureExecutor { executor_id, .. } => vec![Image::Executor(
                 *executor_id,
                 self.show.executor(*executor_id).cloned(),
             )],
@@ -1388,9 +1398,12 @@ impl ShowFile {
                         None => self.show.remove_executor(*id)?,
                     };
                     applied.deltas.push(Delta::ShowPatch { ops });
-                    applied.effects.push(Effect::ExecutorOff {
-                        executor: prism_domain::PlaybackId::of_executor(*id),
-                    });
+                    // **No `ExecutorOff` since S45.** It was there because the
+                    // executor *was* the playback, so an undone `AssignExecutor`
+                    // left one running on a cue list the slot no longer had. A
+                    // playback is the list's now, so putting the slot back moves
+                    // a handle and nothing else — and stopping a list an operator
+                    // is watching is exactly what §6.1 says an Oops must not do.
                 }
                 Image::Programmer(_)
                 | Image::ProgrammerPage { .. }

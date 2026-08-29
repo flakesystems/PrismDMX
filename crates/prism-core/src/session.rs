@@ -421,6 +421,7 @@ impl SessionState {
             | Command::Color { .. }
             | Command::SetCueProperty { .. }
             | Command::AssignExecutor { .. }
+            | Command::ConfigureExecutor { .. }
             | Command::SaveShow
             | Command::SaveShowAs { .. }
             | Command::OpenShow { .. }

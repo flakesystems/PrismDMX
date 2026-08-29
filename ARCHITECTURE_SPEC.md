@@ -116,11 +116,11 @@ Enforced by lint (`#![deny(clippy::unwrap_used, clippy::expect_used, clippy::pan
 
 ### 3.1.1 What comes back out (S34)
 
-The rules above are about what may go *into* the tick. What comes out of it is the frame, through the triple buffer — and, since S34, one thing more: **what each playback is doing**. `prism_engine::PlaybackReport` is a fixed table of atomic words, one per executor, published at the end of every tick with a relaxed store and sampled by `prismd`'s own loop at 25 ms. It obeys §3.1 by construction: sized when it is built, never resized, never locked, never waited on.
+The rules above are about what may go *into* the tick. What comes out of it is the frame, through the triple buffer — and, since S34, one thing more: **what each playback is doing**. `prism_engine::PlaybackReport` is a fixed table of atomic words, one per playback — which is one per cue list since S45 — published at the end of every tick with a relaxed store and sampled by `prismd`'s own loop at 25 ms. It obeys §3.1 by construction: sized when it is built, never resized, never locked, never waited on.
 
 Two consequences worth stating, because both are deliberate:
 
-- **A reader may be one tick out of date, and may never be wrong about a tick that happened.** One entry is written atomically, so an executor number, its cue index and whether it is running arrive together; two entries are not guaranteed to be from the same tick, and neither is the length. Making them so would need a seqlock, which would make the reader spin and buy nothing for feedback that drives a screen.
+- **A reader may be one tick out of date, and may never be wrong about a tick that happened.** One entry is written atomically, so a playback's number, its cue index and whether it is running arrive together; two entries are not guaranteed to be from the same tick, and neither is the length. Making them so would need a seqlock, which would make the reader spin and buy nothing for feedback that drives a screen.
 - **The tick is the only author of `Executor.isActive` and `Executor.currentCueIndex`.** The daemon used to write `isActive` on its way past a Go, because nothing else could; with a readback that would be a second author racing the first, and the symptom was a strip that lit, went dark on the next poll and lit again. The cost is that a `Toggle` pressed within a poll of somebody else's Go reads the state from just before it — which is the same latency any desk with two operators has, and much shorter than a person's reaction.
 
 ### 3.2 Frame rate, stated precisely
@@ -234,9 +234,11 @@ The **F1–F8 XKeys** are therefore freely assignable to "open Fixture Sheet", "
 
 > **There is a *selected sequence*, and S39 decided it should be one** *(S28, decided in S39)*. S28 met this and marked it: the Sequence Sheet and the Cue Viewer followed the sequence on `selectedExecutor`, which needed nothing added to §4.1, and choosing one was a `Command::AssignExecutor`. Both readings were defensible and only one could be right for `Store Cue 5` typed with no executor selected — so S39 added `Session::selectedSequence` and `Command::SelectSequence`, for the reasons in §4.1. What it costs is a second selection on the screen; what it buys is a cue list that can be written before anybody decides which fader it goes on. The one reader that had to change was `ui/src/show/looks.ts::executorInForce`, exactly as S28 predicted.
 
-> **Playback is addressed to a sequence as well as to an executor** *(S40)*. Every playback command named an executor until then, so `On Sequence 1` — a cue list nobody has put on a fader — had no representation at all. `PlaybackTarget` is the three ways a line can say which playback it means: an executor, a sequence, or *the selected one*; the daemon resolves the last two, because which executor holds a sequence is show state and which sequence is selected is session state, and a client that worked either out would be sending a command whose meaning had already moved. A cue list that **no** executor holds gets a playback of its own in the engine, with its master at full and no keys — and the two are never both live for one list, because two players of one cue list would fight over the same slots in the merge.
+> **Playback is addressed to a sequence as well as to an executor** *(S40)*. Every playback command named an executor until then, so `On Sequence 1` — a cue list nobody has put on a fader — had no representation at all. `PlaybackTarget` is the three ways a line can say which playback it means: an executor, a sequence, or *the selected one*; the daemon resolves all three, because which cue list an executor holds is show state and which sequence is selected is session state, and a client that worked either out would be sending a command whose meaning had already moved.
 >
 > This is the other half of S39's argument for `selectedSequence`: a cue list can be written before anybody decides which fader it goes on, and a list you can write but not hear is a list you cannot check.
+>
+> **And a playback is the cue list's, full stop** *(S45)*. S40 wrote down the rule — *two players of one cue list would fight over the same slots in the merge* — and kept it only between its own two kinds; put one list on two executors and each `Go` started a player of its own. That is punch-list entry **B18**. `PlaybackId` is now the list's own number, `Show::playback_of` resolves an executor to the list standing on it, and an executor is a **handle**: which list, and what its fader, encoder and four keys do. What those five controls do is itself editable, from a window, from the line and from a bound key — `Command::ConfigureExecutor`, punch-list entry **B15**, and `docs/IPC_PROTOCOL.md` §5 carries the decision that it is a *show* command.
 
 > **`SelectProgrammerParam` is relative and stays relative** *(S26)*. It steps, because `Zoom ◀▶` steps; there is no *set the parameter to n* command and the interface does not need one — clicking an encoder in the encoder bar composes the steps between where the highlight is and where it was clicked, which for a bank of at most six parameters is at most five commands. A thirteenth session command would have been a second way of saying the same thing, and the console could not issue it. The **upper** bound is the client's: `prism-core` deliberately does not know how many parameters a bank has (S13), so the bar stops offering *next* at the end of the bank rather than letting the index run past it, where the jog wheel would turn nothing at all.
 
@@ -281,6 +283,14 @@ from it that do not follow from the obvious alternative:
 - **`commandLine` is session state, so a second screen follows the first.** An
   operator part-way through a command is visible on every client, which is the
   same argument §4 makes for the active view.
+
+**S45 is the test being applied rather than assumed, in the other direction.**
+The `Executors` window grew a control editor (punch-list B15) and it is *not* an
+exception: the grammar was given the words — `Assign Executor 1 Fader Master`,
+`Assign Executor 1 Button 2 Go+` — so every chooser in it writes that line and
+sends it, exactly as a tile in a pool does. What that buys is the exit criterion
+for free: the window, a typed line and a bound X-Touch key converge on one line
+rather than three code paths that have to be kept in step.
 
 The exceptions are the ones a line cannot express and are deliberately small:
 the **executor keys and faders** (a Go is a gesture with timing in it, §4.3),
@@ -441,25 +451,39 @@ interface Sequence {
   id: SequenceId; name: string; cues: Cue[];
   color: RgbColor | null;      // what the scribble strip lights; null is no colour, not black
   loop: boolean;               // whether an automatic follow chain comes round —
-}                              // a **Go** always does, on every list
-
-type ExecutorButtonFunction =
-  | "Empty" | "Go+" | "Go-" | "LearnSpeed" | "Off" | "On" | "Flash" | "Toggle";
-type ExecutorFaderFunction   = "Empty" | "Master" | "Speed" | "XFade";
-type ExecutorEncoderFunction = "Empty" | "Master" | "Speed";
-
-interface Executor {
-  id: ExecutorId;              // page * 8 + slot  (D7: one page = 8 executors)
-  sequenceId: SequenceId | null;
-  faderFunction: ExecutorFaderFunction;
-  buttonFunctions: ExecutorButtonFunction[];  // Rec / Solo / Mute / Select
-  encoderFunction: ExecutorEncoderFunction;
+                               // a **Go** always does, on every list
+  // ---- the playback, and there is exactly one of it per list (S45) ----
   masterLevel: number;         // 0..65535
   speed: number;               // the speed master, in SPEED_UNITY (1024) units
                                // (S34; docs/DMX_MERGE.md §4.1)
   isActive: boolean;           // written only by the tick's readback (S34)
   currentCueIndex: number | null;   // the same
 }
+
+type ExecutorButtonFunction =
+  | "Empty" | "Go+" | "Go-" | "LearnSpeed" | "Off" | "On" | "Flash" | "Toggle"
+  // The **custom row** (S45): a key that sends a line the operator wrote.
+  | { CommandLine: { line: string } };
+type ExecutorFaderFunction   = "Empty" | "Master" | "Speed" | "XFade";
+type ExecutorEncoderFunction = "Empty" | "Master" | "Speed";
+
+// An executor is a **handle** on a cue list's playback (S45), not a player.
+interface Executor {
+  id: ExecutorId;              // page * 8 + slot  (D7: one page = 8 executors)
+  sequenceId: SequenceId | null;
+  faderFunction: ExecutorFaderFunction;
+  buttonFunctions: ExecutorButtonFunction[];  // Rec / Solo / Mute / Select
+  encoderFunction: ExecutorEncoderFunction;
+}
+
+// One control of an executor and what it is to do — `Command::ConfigureExecutor`
+// (S45, punch-list B15). One at a time, so two operators with the editor open
+// cannot undo each other. docs/IPC_PROTOCOL.md §5 has why it is a command
+// rather than a `MachineChange`.
+type ExecutorChange =
+  | { t: "Fader"; function: ExecutorFaderFunction }
+  | { t: "Encoder"; function: ExecutorEncoderFunction }
+  | { t: "Button"; index: number; function: ExecutorButtonFunction };
 
 // Which of an executor's buttons a press names (S34). A `Slot` is a hardware
 // position and what it does is `buttonFunctions`, resolved by prism-core and by

@@ -169,6 +169,19 @@ pub enum Effect {
         /// The new level.
         level: u16,
     },
+    /// Put a line into the command line and ask for it to be run — **S45**,
+    /// `ExecutorButtonFunction::CommandLine`.
+    ///
+    /// The custom row of the control editor, fired. The show model cannot run a
+    /// line — nothing in `prism-core` can, because the parser is still in the
+    /// interface — so it answers with the line and `prismd` does what
+    /// `SurfaceAction::WriteCommandLine` already does with one: writes
+    /// `Session::command_line` and bumps `Session::command_line_run`, which the
+    /// client holding the keyboard focus turns into commands.
+    ///
+    /// It is the same stop-gap, named the same way, and `IMPLEMENTATION_PLAN`
+    /// S49 removes it for both at once.
+    CommandLine(String),
     /// A profile out of the desk's library has to be copied into the show, and
     /// the show model has no library — the same shape as [`Self::Save`], which
     /// needs a disk.
@@ -306,6 +319,14 @@ impl Applied {
         Self {
             deltas: Vec::new(),
             effects: vec![effect],
+        }
+    }
+
+    /// An outcome that is a show edit and nothing else.
+    fn patch(ops: Vec<JsonPatchOp>) -> Self {
+        Self {
+            deltas: vec![Delta::ShowPatch { ops }],
+            effects: Vec::new(),
         }
     }
 
@@ -478,18 +499,30 @@ impl Show {
                 if ops.is_empty() {
                     return Ok(Applied::default());
                 }
-                Ok(Applied {
-                    deltas: vec![Delta::ShowPatch { ops }],
-                    // The executor grid is what the merge body binds sequences
-                    // to, so a slot that gained one has to be loaded exactly as
-                    // a sequence that gained a cue does.
-                    effects: match sequence_id {
-                        Some(sequence) => vec![Effect::ReloadSequence(*sequence)],
-                        None => vec![Effect::ExecutorOff {
-                            executor: PlaybackId::of_executor(*executor_id),
-                        }],
-                    },
-                })
+                // **The engine is not told, and that is S45.** A playback is a
+                // cue list's, so the set of them is one per list and putting a
+                // list on a fader adds nothing to it: what changed is which
+                // handle reaches which playback, which is a fact about the show
+                // and about nothing on the tick thread. It answered
+                // `ReloadSequence` before, because the executor *was* the
+                // playback and a slot that gained one had to be built.
+                //
+                // Taking a list off a fader therefore does not stop it either,
+                // for the same reason a second executor still holding it would
+                // not: `Off` is the command that stops a playback.
+                Ok(Applied::patch(ops))
+            }
+            Command::ConfigureExecutor {
+                executor_id,
+                change,
+            } => {
+                let ops = self.configure_executor(*executor_id, change)?;
+                if ops.is_empty() {
+                    // The function it already had. Nothing changed, so nothing
+                    // is broadcast — `RenumberFixture`'s rule.
+                    return Ok(Applied::default());
+                }
+                Ok(Applied::patch(ops))
             }
             Command::ExecutorGo { target, direction } => {
                 let executor = self.playback_of(target)?;
@@ -518,7 +551,7 @@ impl Show {
                 executor_id,
                 button,
                 pressed,
-            } => self.apply_executor_button(*executor_id, *button, *pressed),
+            } => self.apply_executor_button(*executor_id, button, *pressed),
             Command::SetExecutorMaster { executor_id, level } => {
                 self.apply_executor_fader(*executor_id, *level)
             }
@@ -674,11 +707,6 @@ impl Show {
         })
     }
 
-    /// Rejects a playback command on an executor that cannot play anything.
-    ///
-    /// An executor with no sequence is a fader that does nothing, and silence
-    /// is the wrong answer: "the Go did nothing" is a complaint an operator
-    /// cannot diagnose, where "executor 3 has no sequence" is one they can.
     /// Resolves a button press against the executor's own `button_functions`.
     ///
     /// **This is the whole of D3 for playback.** A client says *the third key of
@@ -694,7 +722,7 @@ impl Show {
     fn apply_executor_button(
         &mut self,
         executor_id: ExecutorId,
-        button: ExecutorButtonRef,
+        button: &ExecutorButtonRef,
         pressed: bool,
     ) -> Result<Applied, ShowError> {
         let Some(executor) = self.executor(executor_id) else {
@@ -706,25 +734,46 @@ impl Show {
             // per strip than this executor has assignments.
             ExecutorButtonRef::Slot { index } => executor
                 .button_functions
-                .get(usize::from(index))
-                .copied()
+                .get(usize::from(*index))
+                .cloned()
                 .unwrap_or_default(),
-            ExecutorButtonRef::Function { function } => function,
+            ExecutorButtonRef::Function { function } => function.clone(),
         };
-        let is_active = executor.is_active;
-        // A strip presses its own executor, which is one kind of playback since
-        // S40 - see `prism_domain::PlaybackId`.
-        let id = PlaybackId::of_executor(executor_id);
-        let effect = match (function, pressed) {
-            // A key with nothing on it, and the release of everything that is
-            // not momentary. Neither is a refusal: **the executor said so**, and
-            // that answer does not depend on whether it has a sequence — which
-            // is why this arm comes before the check below rather than after it.
+        // **Everything that needs no cue list is answered first**, and the order
+        // is what keeps `ExecutorHasNoSequence` for the presses that deserve it:
+        //
+        // - a key with **nothing** on it does nothing, whether or not the slot
+        //   has a list — the executor said so;
+        // - the **release** of anything but a `Flash` is not an instruction, so
+        //   refusing it would put a message on a screen for a gesture that had
+        //   already ended;
+        // - a key with a **line** on it fires on a slot with no cue list too,
+        //   deliberately: what the line says may be about anything at all — a
+        //   page change, another list, a blackout — which is the point of a
+        //   custom row.
+        match (&function, pressed) {
             (ExecutorButtonFunction::Empty, _) => return Ok(Applied::default()),
+            (ExecutorButtonFunction::CommandLine { line }, true) => {
+                return Ok(Applied::effect(Effect::CommandLine(line.clone())));
+            }
+            (ExecutorButtonFunction::Flash, _) => {}
+            (_, true) => {}
+            (_, false) => return Ok(Applied::default()),
+        }
+        // A strip presses its own executor, and what that resolves to is the cue
+        // list standing on it — S45, `prism_domain::PlaybackId`.
+        let id = self.playback_of(&PlaybackTarget::of_executor(executor_id))?;
+        // Whether the list is running, which is what a `Toggle` is resolved
+        // against. It is the *sequence's* since S45: two executors on one list
+        // are two handles on one playback, so a Toggle on either says the same
+        // thing about it.
+        let is_active = self
+            .sequence(id.sequence())
+            .is_some_and(|sequence| sequence.is_active);
+        let effect = match (function, pressed) {
             // Momentary: the release is half of the gesture rather than a
             // second press.
             (ExecutorButtonFunction::Flash, on) => Effect::ExecutorFlash { executor: id, on },
-            (_, false) => return Ok(Applied::default()),
             (ExecutorButtonFunction::GoForward, _) => Effect::ExecutorGo {
                 executor: id,
                 direction: GoDirection::Next,
@@ -742,11 +791,12 @@ impl Show {
             }
             (ExecutorButtonFunction::Toggle, _) => Effect::ExecutorOn { executor: id },
             (ExecutorButtonFunction::LearnSpeed, _) => Effect::ExecutorTapSpeed { executor: id },
+            // All three answered above, before the executor was asked for a cue
+            // list — the release of a key that is not a `Flash` among them.
+            (ExecutorButtonFunction::Empty | ExecutorButtonFunction::CommandLine { .. }, _) => {
+                return Ok(Applied::default());
+            }
         };
-        // Everything that got this far plays back a sequence, so the executor
-        // must have one — the same check `ExecutorGo` and `ExecutorOff` make,
-        // and the same refusal.
-        self.require_playable(executor_id)?;
         Ok(Applied::effect(effect))
     }
 
@@ -761,56 +811,63 @@ impl Show {
         let Some(executor) = self.executor(id) else {
             return Err(ShowError::UnknownExecutor(id));
         };
-        match executor.fader_function {
+        let function = executor.fader_function;
+        // A fader with nothing on it moves nothing, and it is answered before
+        // the cue list is asked for: an unassigned slot whose fader is `Empty`
+        // is an ordinary state of the desk, not a refusal.
+        if function == ExecutorFaderFunction::Empty {
+            return Ok(Applied::default());
+        }
+        // **Which number the fader moves is the cue list's, not this slot's** —
+        // S45, punch-list entry B18. Two executors whose faders are both
+        // `Master` write the same number and therefore move together; a `Master`
+        // and an `XFade` on that same list write different ones and do not.
+        let playback = self.playback_of(&PlaybackTarget::of_executor(id))?;
+        match function {
             ExecutorFaderFunction::Master => {
-                let ops = self.set_executor_master(id, level)?;
+                let ops = self.set_sequence_master(playback.sequence(), level)?;
                 Ok(Applied {
                     deltas: vec![Delta::ShowPatch { ops }],
                     effects: vec![Effect::SetExecutorMaster {
-                        executor: PlaybackId::of_executor(id),
+                        executor: playback,
                         level,
                     }],
                 })
             }
             ExecutorFaderFunction::Speed => {
-                let ops = self.set_executor_speed(id, level)?;
+                let ops = self.set_sequence_speed(playback.sequence(), level)?;
                 Ok(Applied {
                     deltas: vec![Delta::ShowPatch { ops }],
                     effects: vec![Effect::ExecutorSpeed {
-                        executor: PlaybackId::of_executor(id),
+                        executor: playback,
                         speed: level,
                     }],
                 })
             }
             ExecutorFaderFunction::XFade => Ok(Applied::effect(Effect::ExecutorXFade {
-                executor: PlaybackId::of_executor(id),
+                executor: playback,
                 position: level,
             })),
-            // A fader with nothing on it. Not a refusal: the executor says so.
+            // Answered above, before the cue list was asked for.
             ExecutorFaderFunction::Empty => Ok(Applied::default()),
         }
     }
 
-    fn require_playable(&self, id: ExecutorId) -> Result<(), ShowError> {
-        let Some(executor) = self.executor(id) else {
-            return Err(ShowError::UnknownExecutor(id));
-        };
-        if executor.sequence_id.is_none() {
-            return Err(ShowError::ExecutorHasNoSequence(id));
-        }
-        Ok(())
-    }
-
-    /// Which playback a command's target names — S40.
+    /// Which playback a command's target names — S40, and one of them since
+    /// S45.
     ///
-    /// **This is the whole of the sequence-addressed playback decision**, and it
-    /// is here rather than in a client because it is a fact about the *show*:
+    /// **This is where B18 was fixed**, and it is here rather than in a client
+    /// because it is a fact about the *show*:
     ///
-    /// - an **executor** is itself, and must have a cue list to play;
-    /// - a **sequence** is the executor that holds it if one does, and its own
-    ///   playback if none does. Resolving it to the executor is what stops two
-    ///   players of one cue list running side by side and fighting over the same
-    ///   slots in the merge — see `prism_domain::PlaybackId`.
+    /// - an **executor** is the cue list standing on it. Two executors carrying
+    ///   one list therefore name **one** playback, which is the whole of
+    ///   punch-list entry B18: one cue pointer, one fade, one master. An
+    ///   executor with no list is refused, because a fader with nothing on it
+    ///   has nothing to play;
+    /// - a **sequence** is itself, whether or not any fader holds it. `On
+    ///   Sequence 1` and a Go on the executor that holds sequence 1 are the same
+    ///   playback rather than two, which is what S40 wanted and could only get
+    ///   half of;
     /// - `Selected` never reaches here: [`crate::ShowFile`] has already turned
     ///   it into a sequence, because the selection is the *session's*.
     ///
@@ -825,20 +882,19 @@ impl Show {
     pub fn playback_of(&self, target: &PlaybackTarget) -> Result<PlaybackId, ShowError> {
         match target {
             PlaybackTarget::Executor { executor_id } => {
-                self.require_playable(*executor_id)?;
-                Ok(PlaybackId::of_executor(*executor_id))
+                let Some(executor) = self.executor(*executor_id) else {
+                    return Err(ShowError::UnknownExecutor(*executor_id));
+                };
+                executor
+                    .sequence_id
+                    .map(PlaybackId::of_sequence)
+                    .ok_or(ShowError::ExecutorHasNoSequence(*executor_id))
             }
             PlaybackTarget::Sequence { sequence_id } => {
                 if self.sequence(*sequence_id).is_none() {
                     return Err(ShowError::UnknownSequence(*sequence_id));
                 }
-                Ok(self
-                    .executors()
-                    .find(|executor| executor.sequence_id == Some(*sequence_id))
-                    .map_or_else(
-                        || PlaybackId::of_sequence(*sequence_id),
-                        |executor| PlaybackId::of_executor(executor.id),
-                    ))
+                Ok(PlaybackId::of_sequence(*sequence_id))
             }
             PlaybackTarget::Selected => Err(ShowError::NoSelectedSequence),
         }
@@ -856,13 +912,7 @@ impl Show {
     /// [`ShowError::UnknownSequence`], [`ShowError::UnknownCue`], or
     /// [`ShowError::ExecutorHasNoSequence`].
     fn cue_index_of(&self, playback: PlaybackId, cue_number: &str) -> Result<u16, ShowError> {
-        let sequence_id = match playback {
-            PlaybackId::Sequence { sequence_id } => sequence_id,
-            PlaybackId::Executor { executor_id } => self
-                .executor(executor_id)
-                .and_then(|executor| executor.sequence_id)
-                .ok_or(ShowError::ExecutorHasNoSequence(executor_id))?,
-        };
+        let sequence_id = playback.sequence();
         let Some(sequence) = self.sequence(sequence_id) else {
             return Err(ShowError::UnknownSequence(sequence_id));
         };
@@ -968,9 +1018,10 @@ mod tests {
     use crate::testkit::{cue, executor, fixture, par_type, preset, sequence};
     use crate::{Show, ShowError};
     use prism_domain::{
-        AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, JsonPatchOp,
-        NoticeLevel, PlaybackId, PlaybackTarget, PresetId, SelectionMode, SequenceId, StoreMode,
-        UniverseId,
+        AttributeType, Command, Delta, ExecutorButtonFunction, ExecutorButtonRef, ExecutorChange,
+        ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FixtureId, GoDirection,
+        JsonPatchOp, NoticeLevel, PlaybackId, PlaybackTarget, PresetId, SelectionMode, SequenceId,
+        StoreMode, UniverseId,
     };
 
     fn show() -> Show {
@@ -1073,8 +1124,12 @@ mod tests {
             .unwrap(),
             Applied {
                 deltas: vec![],
+                // **The cue list standing on executor 0**, not executor 0 —
+                // S45. This is the assertion punch-list entry B18 turns on: a
+                // second executor carrying sequence 1 resolves to this same
+                // playback, so a Go on either steps one cue pointer.
                 effects: vec![Effect::ExecutorGo {
-                    executor: ExecutorId::new(0).into(),
+                    executor: PlaybackId::of_sequence(SequenceId::new(1)),
                     direction: GoDirection::Next,
                 }],
             }
@@ -1086,7 +1141,7 @@ mod tests {
             .unwrap()
             .effects,
             vec![Effect::ExecutorOff {
-                executor: PlaybackId::of_executor(ExecutorId::new(0))
+                executor: PlaybackId::of_sequence(SequenceId::new(1))
             }]
         );
         // Playing an executor is not an edit.
@@ -1123,12 +1178,14 @@ mod tests {
         assert_eq!(
             applied.effects,
             vec![Effect::SetExecutorMaster {
-                executor: ExecutorId::new(0).into(),
+                executor: PlaybackId::of_sequence(SequenceId::new(1)),
                 level: 32768,
             }]
         );
+        // The number moved is the **cue list's** since S45, which is what makes
+        // a second `Master` fader on sequence 1 read the same figure.
         assert_eq!(
-            show.executor(ExecutorId::new(0)).unwrap().master_level,
+            show.sequence(SequenceId::new(1)).unwrap().master_level,
             32768
         );
         assert_eq!(
@@ -1137,6 +1194,173 @@ mod tests {
                 level: 0,
             }),
             Err(ShowError::UnknownExecutor(ExecutorId::new(9)))
+        );
+    }
+
+    /// Punch-list entry **B18**, at the level the show model can state it: two
+    /// executors carrying one cue list are two handles on one number.
+    #[test]
+    fn two_master_faders_on_one_cue_list_move_together_and_an_xfade_does_not() {
+        let mut show = show();
+        show.store_executor(executor(2, Some(1))).unwrap();
+        show.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(0),
+            level: 20_000,
+        })
+        .unwrap();
+        // Executor 2's fader is a `Master` as well, so it reads what executor 0
+        // wrote — there is nowhere else for either of them to read it from.
+        assert_eq!(
+            show.sequence(SequenceId::new(1)).unwrap().master_level,
+            20_000
+        );
+        show.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(2),
+            level: 40_000,
+        })
+        .unwrap();
+        assert_eq!(
+            show.sequence(SequenceId::new(1)).unwrap().master_level,
+            40_000
+        );
+
+        // Make executor 2 a crossfade instead. It now writes nothing into the
+        // show at all — a crossfade is a gesture in progress — so the master
+        // executor 0 set is untouched, which is the other half of the entry.
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(2),
+            change: ExecutorChange::Fader {
+                function: ExecutorFaderFunction::XFade,
+            },
+        })
+        .unwrap();
+        let applied = show
+            .apply(&Command::SetExecutorMaster {
+                executor_id: ExecutorId::new(2),
+                level: 65_535,
+            })
+            .unwrap();
+        assert_eq!(
+            applied.effects,
+            vec![Effect::ExecutorXFade {
+                executor: PlaybackId::of_sequence(SequenceId::new(1)),
+                position: 65_535,
+            }]
+        );
+        assert_eq!(
+            show.sequence(SequenceId::new(1)).unwrap().master_level,
+            40_000
+        );
+    }
+
+    /// **B15**, and the three things `ExecutorChange` has to get right.
+    #[test]
+    fn a_control_can_be_given_a_function_and_told_it_already_has_one() {
+        let mut show = show();
+        let id = ExecutorId::new(0);
+        let applied = show
+            .apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::Button {
+                    index: 3,
+                    function: ExecutorButtonFunction::Flash,
+                },
+            })
+            .unwrap();
+        assert!(applied.effects.is_empty(), "an assignment is a show edit");
+        assert_eq!(
+            show.executor(id).unwrap().button_functions,
+            vec![
+                ExecutorButtonFunction::Empty,
+                ExecutorButtonFunction::Empty,
+                ExecutorButtonFunction::Empty,
+                ExecutorButtonFunction::Flash,
+            ],
+            "the row is filled in to reach the index rather than appended to"
+        );
+        assert_eq!(
+            applied
+                .deltas
+                .iter()
+                .filter(|delta| matches!(delta, Delta::ShowPatch { .. }))
+                .count(),
+            1,
+            "one control, one patch: {:?}",
+            applied.deltas
+        );
+
+        // The function it already has changes nothing and says nothing.
+        assert_eq!(
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::Button {
+                    index: 3,
+                    function: ExecutorButtonFunction::Flash,
+                },
+            })
+            .unwrap(),
+            Applied::default()
+        );
+
+        // A fifth key is refused rather than clamped onto the fourth.
+        assert_eq!(
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: id,
+                change: ExecutorChange::Button {
+                    index: 4,
+                    function: ExecutorButtonFunction::Off,
+                },
+            }),
+            Err(ShowError::NoSuchExecutorButton(4))
+        );
+
+        // And a slot with no executor in it is a complaint, not a silence.
+        assert_eq!(
+            show.apply(&Command::ConfigureExecutor {
+                executor_id: ExecutorId::new(9),
+                change: ExecutorChange::Encoder {
+                    function: ExecutorEncoderFunction::Speed,
+                },
+            }),
+            Err(ShowError::UnknownExecutor(ExecutorId::new(9)))
+        );
+    }
+
+    /// The custom row: a key that sends a line an operator wrote.
+    #[test]
+    fn a_key_with_a_line_on_it_answers_with_the_line() {
+        let mut show = show();
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(1),
+            change: ExecutorChange::Button {
+                index: 0,
+                function: ExecutorButtonFunction::CommandLine {
+                    line: "Go+ Sequence 1".to_owned(),
+                },
+            },
+        })
+        .unwrap();
+        // Executor 1 has **no cue list**, and the line still fires: what it says
+        // may be about anything at all, which is the point of a custom row.
+        assert_eq!(
+            show.apply(&Command::ExecutorButton {
+                executor_id: ExecutorId::new(1),
+                button: ExecutorButtonRef::Slot { index: 0 },
+                pressed: true,
+            })
+            .unwrap()
+            .effects,
+            vec![Effect::CommandLine("Go+ Sequence 1".to_owned())]
+        );
+        // The release of a line is not a second press.
+        assert_eq!(
+            show.apply(&Command::ExecutorButton {
+                executor_id: ExecutorId::new(1),
+                button: ExecutorButtonRef::Slot { index: 0 },
+                pressed: false,
+            })
+            .unwrap(),
+            Applied::default()
         );
     }
 

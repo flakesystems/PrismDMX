@@ -246,10 +246,25 @@ export const FEATURE_GROUP_ATTRIBUTES: Readonly<
 /// The string literals of `export type <name> = "a" | "b";`, or `None` if the
 /// binding is anything else.
 ///
-/// Deliberately strict: one literal that is not a plain quoted string — an
-/// object member, a `number`, an escape — makes the whole type ineligible
-/// rather than half-listed. `JsonValue`, whose union ends in an index
-/// signature, is the case that has to come back `None`.
+/// Deliberately strict: an arm that is neither a plain quoted string nor an
+/// **object** — a `number`, a named type, an escape — makes the whole type
+/// ineligible rather than half-listed. `JsonValue`, whose union carries `null`,
+/// `boolean` and `number` beside an index signature, is the case that has to
+/// come back `None`, and `PlaybackId`, which is one named type since S45, is the
+/// other.
+///
+/// # Object arms are skipped, and that is S45's
+///
+/// `ExecutorButtonFunction` is eight fixed functions and a ninth that carries a
+/// line an operator wrote, so it is a union of eight literals and one object.
+/// The eight are still a table — a decoder still has to *check* that a string it
+/// was given is one of them, and the control editor still draws a list of them —
+/// and the ninth is not a choice, it is a choice plus a box to type in. So an
+/// object arm neither contributes a value nor disqualifies the type.
+///
+/// The vocabularies that are **only** objects — `Command`, `Delta`, `Query`,
+/// `ExecutorButtonRef`, `PlaybackTarget` — still come back `None`, because a
+/// table with nothing in it is not a table.
 fn string_union(source: &str, name: &str) -> Option<Vec<String>> {
     let head = format!("export type {name} = ");
     let start = source.find(&head)? + head.len();
@@ -258,7 +273,11 @@ fn string_union(source: &str, name: &str) -> Option<Vec<String>> {
 
     let mut values = Vec::new();
     for part in body.split('|') {
-        let literal = part.trim().strip_prefix('"')?.strip_suffix('"')?;
+        let part = part.trim();
+        if part.starts_with('{') {
+            continue;
+        }
+        let literal = part.strip_prefix('"')?.strip_suffix('"')?;
         if literal.contains(['"', '\\']) || literal.is_empty() {
             return None;
         }
@@ -480,14 +499,32 @@ mod tests {
             string_union("export type X = \"only\";", "X"),
             Some(vec!["only".to_owned()])
         );
-        // A number, an object member, an index signature, an escaped quote, an
-        // empty literal, and a type that is not there at all.
-        assert_eq!(string_union("export type X = number;", "X"), None);
-        assert_eq!(string_union("export type X = \"a\" | { b: 1 };", "X"), None);
+        // **An object arm is skipped rather than disqualifying** — S45, and
+        // `ExecutorButtonFunction` is the type it is for: eight fixed functions
+        // and a ninth carrying a line an operator wrote. The eight are still a
+        // table a decoder checks against; the ninth is not a choice.
         assert_eq!(
-            string_union("export type X = \"a\" | { [key in string]: X };", "X"),
+            string_union("export type X = \"a\" | { b: 1 };", "X"),
+            Some(vec!["a".to_owned()])
+        );
+        // A union of **only** objects is still not a table: `Command`,
+        // `PlaybackTarget` and `ExecutorButtonRef` are that shape.
+        assert_eq!(
+            string_union("export type X = { b: 1 } | { c: 2 };", "X"),
             None
         );
+        // A number, a named type, an escaped quote, an empty literal, and a type
+        // that is not there at all. `JsonValue`'s real shape is the first of
+        // these, and `PlaybackId`'s is the second.
+        assert_eq!(string_union("export type X = number;", "X"), None);
+        assert_eq!(
+            string_union(
+                "export type X = null | boolean | number | string | { [key in string]: X };",
+                "X"
+            ),
+            None
+        );
+        assert_eq!(string_union("export type X = SequenceId;", "X"), None);
         assert_eq!(string_union("export type X = \"a\\\"b\";", "X"), None);
         assert_eq!(string_union("export type X = \"\";", "X"), None);
         assert_eq!(string_union("export type Y = \"a\";", "X"), None);

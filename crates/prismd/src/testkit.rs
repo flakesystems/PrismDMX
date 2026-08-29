@@ -113,6 +113,8 @@ pub fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
         color: None,
         cues,
         looping: false,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     }
@@ -153,10 +155,6 @@ pub fn executor(id: u32, sequence_id: Option<u32>) -> Executor {
         fader_function: ExecutorFaderFunction::Master,
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
-        master_level: 40000,
-        speed: prism_domain::SPEED_UNITY,
-        is_active: false,
-        current_cue_index: None,
     }
 }
 

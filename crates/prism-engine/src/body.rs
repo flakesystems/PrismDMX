@@ -533,8 +533,8 @@ mod tests {
         command_queue,
     };
     use prism_domain::{
-        AttributeType, ExecutorId, Fixture, FixtureId, GoDirection, Group, GroupId,
-        ProgrammerState, ProgrammerValue, ProgrammerValueSource, UniverseId,
+        AttributeType, Fixture, FixtureId, GoDirection, Group, GroupId, ProgrammerState,
+        ProgrammerValue, ProgrammerValueSource, SequenceId, UniverseId,
     };
     use proptest::prelude::*;
     use std::sync::Arc;
@@ -557,7 +557,7 @@ mod tests {
         MergeBody::for_patch(
             &layout(),
             patched.iter().map(|fixture| (fixture, &head)),
-            (1..=executors).map(ExecutorId::new),
+            (1..=executors).map(SequenceId::new),
         )
         .unwrap()
     }
@@ -594,15 +594,15 @@ mod tests {
         let mut body = body(1, 2);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         });
         body.apply(TickCommand::SetExecutorLevel {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             level: 32_767,
         });
         body.resolve();
@@ -614,16 +614,16 @@ mod tests {
         let mut body = body(1, 2);
         let pan = slot(&body, 1, AttributeType::Pan);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(pan, 10_000);
         body.layer_mut()
-            .source_mut(ExecutorId::new(2))
+            .source_mut(SequenceId::new(2))
             .unwrap()
             .set(pan, 20_000);
         for executor in [1u32, 2] {
             body.apply(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(executor).into(),
+                executor: SequenceId::new(executor).into(),
                 on: true,
             });
         }
@@ -631,7 +631,7 @@ mod tests {
         assert_eq!(body.values().get(pan).copied(), Some(20_000));
 
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(2).into(),
+            executor: SequenceId::new(2).into(),
             on: false,
         });
         body.resolve();
@@ -643,11 +643,11 @@ mod tests {
         // A stale command from before a page change must not panic the tick.
         let mut body = body(1, 1);
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(77).into(),
+            executor: SequenceId::new(77).into(),
             on: true,
         });
         body.apply(TickCommand::SetExecutorLevel {
-            executor: ExecutorId::new(77).into(),
+            executor: SequenceId::new(77).into(),
             level: 1,
         });
         body.resolve();
@@ -661,11 +661,11 @@ mod tests {
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         let pan = slot(&body, 1, AttributeType::Pan);
         {
-            let source = body.layer_mut().source_mut(ExecutorId::new(1)).unwrap();
+            let source = body.layer_mut().source_mut(SequenceId::new(1)).unwrap();
             source.set(dimmer, FULL);
             source.set(pan, 20_000);
         }
-        body.layer_mut().activate(ExecutorId::new(1));
+        body.layer_mut().activate(SequenceId::new(1));
         body.resolve();
         body
     }
@@ -800,11 +800,11 @@ mod tests {
         let first = slot(&body, 1, AttributeType::Dimmer);
         let second = slot(&body, 2, AttributeType::Dimmer);
         {
-            let source = body.layer_mut().source_mut(ExecutorId::new(1)).unwrap();
+            let source = body.layer_mut().source_mut(SequenceId::new(1)).unwrap();
             source.set(first, FULL);
             source.set(second, FULL);
         }
-        body.layer_mut().activate(ExecutorId::new(1));
+        body.layer_mut().activate(SequenceId::new(1));
         body.load_groups(&[Group {
             id: GroupId::new(3),
             name: "Left".to_owned(),
@@ -892,10 +892,10 @@ mod tests {
         let head = moving_head_16();
         let patched = fixture(1, "test.movinghead16", 1, 1);
         let mut body =
-            MergeBody::for_patch(&layout(), [(&patched, &head)], [ExecutorId::new(1)]).unwrap();
+            MergeBody::for_patch(&layout(), [(&patched, &head)], [SequenceId::new(1)]).unwrap();
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
         body.load_groups(&[Group {
@@ -912,7 +912,7 @@ mod tests {
 
         for command in [
             TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 on: true,
             },
             TickCommand::SetProgrammerValue {
@@ -950,15 +950,15 @@ mod tests {
         let mut body = body(1, 1);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         });
         body.apply(TickCommand::Go {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             direction: GoDirection::Next,
         });
         body.render(&tick(0), &mut DmxFrame::new(&layout()));
@@ -970,7 +970,7 @@ mod tests {
         let mut body = body(1, 2);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.load_sequence(
-            ExecutorId::new(1),
+            SequenceId::new(1),
             &sequence(
                 vec![
                     cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 10_000)]),
@@ -984,7 +984,7 @@ mod tests {
         let mut frame = DmxFrame::new(&layout());
         for (index, expected) in [(0u64, 10_000u16), (1, 20_000)] {
             body.apply(TickCommand::Go {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 direction: GoDirection::Next,
             });
             body.render(&tick(index), &mut frame);
@@ -992,7 +992,7 @@ mod tests {
         }
         assert_eq!(
             body.cues()
-                .player(ExecutorId::new(1))
+                .player(SequenceId::new(1))
                 .unwrap()
                 .current_cue(),
             Some(1)
@@ -1007,7 +1007,7 @@ mod tests {
         let mut body = body(1, 1);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.load_sequence(
-            ExecutorId::new(1),
+            SequenceId::new(1),
             &sequence(
                 vec![cue(
                     "1",
@@ -1021,37 +1021,37 @@ mod tests {
 
         let mut frame = DmxFrame::new(&layout());
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         });
         body.render(&tick(0), &mut frame);
         assert_eq!(body.values().get(dimmer).copied(), Some(40_000));
 
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: false,
         });
         body.render(&tick(1), &mut frame);
         assert_eq!(body.values().get(dimmer).copied(), Some(0));
-        assert!(!body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+        assert!(!body.layer().source(SequenceId::new(1)).unwrap().is_active());
 
         // And a host can reach the same playback directly, which is how a
         // daemon takes a cue list back off an executor.
         body.cues_mut()
-            .player_mut(ExecutorId::new(1))
+            .player_mut(SequenceId::new(1))
             .unwrap()
             .unload();
         body.render(&tick(2), &mut frame);
-        assert!(!body.cues().player(ExecutorId::new(1)).unwrap().is_loaded());
+        assert!(!body.cues().player(SequenceId::new(1)).unwrap().is_loaded());
     }
 
     #[test]
     fn a_sequence_can_only_be_loaded_onto_a_playback_this_body_has() {
         let mut body = body(1, 2);
         assert_eq!(
-            body.load_sequence(ExecutorId::new(77), &sequence(Vec::new(), false))
+            body.load_sequence(SequenceId::new(77), &sequence(Vec::new(), false))
                 .unwrap_err(),
-            CueError::UnknownPlayback(ExecutorId::new(77).into())
+            CueError::UnknownPlayback(SequenceId::new(77).into())
         );
     }
 
@@ -1062,7 +1062,7 @@ mod tests {
         // the sequence and the body compiles it.
         let mut body = body(1, 1);
         body.load_sequence(
-            ExecutorId::new(1),
+            SequenceId::new(1),
             &sequence(
                 vec![cue(
                     "1",
@@ -1076,7 +1076,7 @@ mod tests {
             ),
         )
         .unwrap();
-        let player = body.cues().player(ExecutorId::new(1)).unwrap();
+        let player = body.cues().player(SequenceId::new(1)).unwrap();
         let compiled = player.sequence().unwrap();
         assert_eq!(compiled.unresolved(), 1);
         assert_eq!(compiled.slot_count(), 1);
@@ -1094,7 +1094,7 @@ mod tests {
         let mut body = body(1, 1);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.load_sequence(
-            ExecutorId::new(1),
+            SequenceId::new(1),
             &sequence(
                 vec![cue(
                     "1",
@@ -1114,7 +1114,7 @@ mod tests {
 
         producer
             .push(TickCommand::Go {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 direction: GoDirection::Next,
             })
             .unwrap();
@@ -1136,13 +1136,13 @@ mod tests {
         let head = moving_head_16();
         let patched = fixture(1, "test.movinghead16", 1, 1);
         let mut body =
-            MergeBody::for_patch(&layout(), [(&patched, &head)], [ExecutorId::new(1)]).unwrap();
+            MergeBody::for_patch(&layout(), [(&patched, &head)], [SequenceId::new(1)]).unwrap();
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, 12_345);
-        body.layer_mut().activate(ExecutorId::new(1));
+        body.layer_mut().activate(SequenceId::new(1));
 
         let mut frame = DmxFrame::new(&layout());
         body.render(&tick(0), &mut frame);
@@ -1172,7 +1172,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            MergeBody::new(plan, channels, [ExecutorId::new(1)]).unwrap_err(),
+            MergeBody::new(plan, channels, [SequenceId::new(1)]).unwrap_err(),
             PatchError::PlanMismatch {
                 plan: 4,
                 channels: 2,
@@ -1211,7 +1211,7 @@ mod tests {
         let mut body = body(1, 1);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
 
@@ -1222,13 +1222,13 @@ mod tests {
 
         producer
             .push(TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 on: true,
             })
             .unwrap();
         producer
             .push(TickCommand::SetExecutorLevel {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 level: 32_767,
             })
             .unwrap();
@@ -1257,28 +1257,28 @@ mod tests {
         let mut body = MergeBody::for_patch(
             &layout(),
             [(&patched, &head)],
-            [ExecutorId::new(3), ExecutorId::new(5)],
+            [SequenceId::new(3), SequenceId::new(5)],
         )
         .unwrap();
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         let pan = slot(&body, 1, AttributeType::Pan);
 
         {
-            let source = body.layer_mut().source_mut(ExecutorId::new(3)).unwrap();
+            let source = body.layer_mut().source_mut(SequenceId::new(3)).unwrap();
             source.set(dimmer, 65_535);
             source.set(pan, 20_000);
         }
         {
-            let source = body.layer_mut().source_mut(ExecutorId::new(5)).unwrap();
+            let source = body.layer_mut().source_mut(SequenceId::new(5)).unwrap();
             source.set(dimmer, 30_000);
             source.set(pan, 45_000);
         }
-        body.layer_mut().activate(ExecutorId::new(3));
-        body.layer_mut().activate(ExecutorId::new(5));
+        body.layer_mut().activate(SequenceId::new(3));
+        body.layer_mut().activate(SequenceId::new(5));
         // 50 % of full scale. 65535 is odd, so half of it is 32767 - which is
         // exactly the number the specification's "65535 x 0.5 = 32767" gives.
-        body.layer_mut().set_master(ExecutorId::new(3), 32_767);
-        body.layer_mut().set_master(ExecutorId::new(5), FULL);
+        body.layer_mut().set_master(SequenceId::new(3), 32_767);
+        body.layer_mut().set_master(SequenceId::new(5), FULL);
         body.resolve();
 
         // Dimmer is HTP: executor 3 contributes 65535 x 0.5 = 32767, executor 5
@@ -1310,7 +1310,7 @@ mod tests {
 
         // "Turning executor 5 off changes nothing about pan while the
         // programmer holds it."
-        body.layer_mut().deactivate(ExecutorId::new(5));
+        body.layer_mut().deactivate(SequenceId::new(5));
         body.render(&tick(2), &mut frame);
         assert_eq!(body.values().get(pan).copied(), Some(50_000));
         assert_eq!(frame.channel(0, 3), Some(0xC3));
@@ -1321,13 +1321,13 @@ mod tests {
         body.programmer_mut().clear(pan);
         body.resolve();
         assert_eq!(body.values().get(pan).copied(), Some(20_000));
-        body.layer_mut().activate(ExecutorId::new(5));
+        body.layer_mut().activate(SequenceId::new(5));
         body.resolve();
         assert_eq!(body.values().get(pan).copied(), Some(45_000));
 
         // "... and with both off, to home at 32768."
-        body.layer_mut().deactivate(ExecutorId::new(3));
-        body.layer_mut().deactivate(ExecutorId::new(5));
+        body.layer_mut().deactivate(SequenceId::new(3));
+        body.layer_mut().deactivate(SequenceId::new(5));
         body.resolve();
         assert_eq!(body.values().get(pan).copied(), Some(32_768));
         // And the dimmer falls back to its own home, which is dark.
@@ -1374,7 +1374,7 @@ mod tests {
     fn played(actions: &[Action]) -> MergeBody {
         let mut body = body(2, 4);
         for action in actions {
-            let executor = ExecutorId::new(action.executor);
+            let executor = SequenceId::new(action.executor);
             if let Some(source) = body.layer_mut().source_mut(executor) {
                 source.set(action.slot, action.value);
             }
@@ -1413,7 +1413,7 @@ mod tests {
         fn a_desk_with_nothing_running_resolves_to_home(actions in actions()) {
             let mut body = played(&actions);
             for executor in 1..=4 {
-                body.layer_mut().deactivate(ExecutorId::new(executor));
+                body.layer_mut().deactivate(SequenceId::new(executor));
             }
             body.resolve();
             let homes: Vec<u16> = body.plan().slots().iter().map(|slot| slot.home).collect();
@@ -1502,10 +1502,10 @@ mod tests {
         let head = moving_head_16();
         let patched = fixture(1, "test.movinghead16", 1, 1);
         let mut body =
-            MergeBody::for_patch(&layout(), [(&patched, &head)], [ExecutorId::new(1)]).unwrap();
+            MergeBody::for_patch(&layout(), [(&patched, &head)], [SequenceId::new(1)]).unwrap();
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
 
@@ -1519,11 +1519,11 @@ mod tests {
         // A quarter master on a running executor: a quarter of the light.
         for command in [
             TickCommand::SetExecutorActive {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 on: true,
             },
             TickCommand::SetExecutorLevel {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 level: 16_383,
             },
         ] {
@@ -1537,7 +1537,7 @@ mod tests {
             engine
                 .body()
                 .layer()
-                .source(ExecutorId::new(1))
+                .source(SequenceId::new(1))
                 .unwrap()
                 .master(),
             16_383
@@ -1546,7 +1546,7 @@ mod tests {
         // Held: full light, and the stored master has not moved.
         producer
             .push(TickCommand::SetExecutorFlash {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 on: true,
             })
             .unwrap();
@@ -1557,7 +1557,7 @@ mod tests {
             engine
                 .body()
                 .layer()
-                .source(ExecutorId::new(1))
+                .source(SequenceId::new(1))
                 .unwrap()
                 .master(),
             16_383,
@@ -1568,7 +1568,7 @@ mod tests {
         // the flash is on top — and the new level is what the release restores.
         producer
             .push(TickCommand::SetExecutorLevel {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 level: 49_151,
             })
             .unwrap();
@@ -1578,7 +1578,7 @@ mod tests {
 
         producer
             .push(TickCommand::SetExecutorFlash {
-                executor: ExecutorId::new(1).into(),
+                executor: SequenceId::new(1).into(),
                 on: false,
             })
             .unwrap();
@@ -1593,7 +1593,7 @@ mod tests {
             engine
                 .body()
                 .layer()
-                .source(ExecutorId::new(1))
+                .source(SequenceId::new(1))
                 .unwrap()
                 .master(),
             49_151
@@ -1608,39 +1608,39 @@ mod tests {
         let mut body = body(1, 2);
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         body.layer_mut()
-            .source_mut(ExecutorId::new(1))
+            .source_mut(SequenceId::new(1))
             .unwrap()
             .set(dimmer, FULL);
-        assert!(!body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+        assert!(!body.layer().source(SequenceId::new(1)).unwrap().is_active());
 
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         });
         body.resolve();
-        assert!(body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+        assert!(body.layer().source(SequenceId::new(1)).unwrap().is_active());
         assert_eq!(body.values()[dimmer], FULL);
 
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: false,
         });
         body.resolve();
-        assert!(!body.layer().source(ExecutorId::new(1)).unwrap().is_active());
+        assert!(!body.layer().source(SequenceId::new(1)).unwrap().is_active());
         assert_eq!(body.values()[dimmer], 0, "home is dark for this rig");
 
         // And an executor that was already on stays on: the release stops what
         // the flash started and nothing else.
-        body.layer_mut().activate(ExecutorId::new(2));
+        body.layer_mut().activate(SequenceId::new(2));
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(2).into(),
+            executor: SequenceId::new(2).into(),
             on: true,
         });
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(2).into(),
+            executor: SequenceId::new(2).into(),
             on: false,
         });
-        assert!(body.layer().source(ExecutorId::new(2)).unwrap().is_active());
+        assert!(body.layer().source(SequenceId::new(2)).unwrap().is_active());
     }
 
     /// **The channel S26 recorded as missing.** The tick publishes which cue
@@ -1653,11 +1653,11 @@ mod tests {
         let mut body = MergeBody::for_patch(
             &layout(),
             patched.iter().map(|fixture| (fixture, &head)),
-            [ExecutorId::new(1), ExecutorId::new(2)],
+            [SequenceId::new(1), SequenceId::new(2)],
         )
         .unwrap();
         body.load_sequence(
-            ExecutorId::new(1),
+            SequenceId::new(1),
             &sequence(
                 vec![
                     cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 40_000)]),
@@ -1678,7 +1678,7 @@ mod tests {
 
         let mut frame = DmxFrame::new(&layout());
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         });
         body.render(&tick(1), &mut frame);
@@ -1687,7 +1687,7 @@ mod tests {
         assert_eq!(report.get(1).unwrap().cue_index, None);
 
         body.apply(TickCommand::Go {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             direction: GoDirection::Next,
         });
         body.render(&tick(2), &mut frame);
@@ -1696,7 +1696,7 @@ mod tests {
         // Stopped: the cue index goes away with it, rather than being left
         // pointing at the cue that used to be running.
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: false,
         });
         body.render(&tick(3), &mut frame);
@@ -1711,8 +1711,8 @@ mod tests {
                 .map(|state| state.playback)
                 .collect::<Vec<_>>(),
             vec![
-                prism_domain::PlaybackId::from(ExecutorId::new(1)),
-                prism_domain::PlaybackId::from(ExecutorId::new(2))
+                prism_domain::PlaybackId::from(SequenceId::new(1)),
+                prism_domain::PlaybackId::from(SequenceId::new(2))
             ]
         );
     }
@@ -1723,13 +1723,13 @@ mod tests {
     fn the_report_and_the_bodys_own_reader_cannot_disagree() {
         let mut body = body(1, 2);
         assert!(body.report().is_none());
-        assert_eq!(body.playback_state(ExecutorId::new(9)), None);
+        assert_eq!(body.playback_state(SequenceId::new(9)), None);
 
         let report = Arc::new(crate::PlaybackReport::new(4));
         body.report_into(Arc::clone(&report));
         assert!(body.report().is_some());
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(2).into(),
+            executor: SequenceId::new(2).into(),
             on: true,
         });
         let mut frame = DmxFrame::new(&layout());
@@ -1740,7 +1740,7 @@ mod tests {
         assert!(
             report
                 .states()
-                .any(|state| state.playback == ExecutorId::new(2).into() && state.is_active)
+                .any(|state| state.playback == SequenceId::new(2).into() && state.is_active)
         );
     }
 
@@ -1752,11 +1752,11 @@ mod tests {
         let mut body = MergeBody::for_patch(
             &layout(),
             patched.iter().map(|fixture| (fixture, &head)),
-            [ExecutorId::new(1)],
+            [SequenceId::new(1)],
         )
         .unwrap();
         body.load_sequence(
-            ExecutorId::new(1),
+            SequenceId::new(1),
             &sequence(
                 vec![cue(
                     "1",
@@ -1771,7 +1771,7 @@ mod tests {
         let mut frame = DmxFrame::new(&layout());
 
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         });
         for index in 1..=40 {
@@ -1781,7 +1781,7 @@ mod tests {
         assert!(moving > 0 && moving < 65_535, "{moving}");
 
         body.apply(TickCommand::SetExecutorSpeed {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             speed: 0,
         });
         for index in 41..=200 {
@@ -1791,7 +1791,7 @@ mod tests {
         // And it is frozen rather than finished: the cue is still the one that
         // was running.
         assert_eq!(
-            body.playback_state(ExecutorId::new(1)).unwrap().cue_index,
+            body.playback_state(SequenceId::new(1)).unwrap().cue_index,
             Some(0)
         );
 
@@ -1799,14 +1799,14 @@ mod tests {
         // nothing and do not panic — the tick's answer to an impossible command
         // is to ignore it.
         body.apply(TickCommand::TapExecutorSpeed {
-            executor: ExecutorId::new(99).into(),
+            executor: SequenceId::new(99).into(),
         });
         body.apply(TickCommand::SetExecutorXFade {
-            executor: ExecutorId::new(99).into(),
+            executor: SequenceId::new(99).into(),
             position: 4,
         });
         body.apply(TickCommand::SetExecutorFlash {
-            executor: ExecutorId::new(99).into(),
+            executor: SequenceId::new(99).into(),
             on: true,
         });
         body.render(&tick(201), &mut frame);
@@ -1822,11 +1822,11 @@ mod tests {
         let mut body = MergeBody::for_patch(
             &layout(),
             patched.iter().map(|fixture| (fixture, &head)),
-            [ExecutorId::new(1)],
+            [SequenceId::new(1)],
         )
         .unwrap();
         body.load_sequence(
-            ExecutorId::new(1),
+            SequenceId::new(1),
             &sequence(
                 vec![
                     cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 0)]),
@@ -1840,23 +1840,23 @@ mod tests {
         let mut frame = DmxFrame::new(&layout());
 
         body.apply(TickCommand::SetExecutorXFade {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             position: 0,
         });
         body.apply(TickCommand::SetExecutorActive {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             on: true,
         });
         body.render(&tick(1), &mut frame);
         body.apply(TickCommand::Go {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             direction: GoDirection::Next,
         });
         body.render(&tick(2), &mut frame);
         assert_eq!(body.values()[dimmer], 0);
 
         body.apply(TickCommand::SetExecutorXFade {
-            executor: ExecutorId::new(1).into(),
+            executor: SequenceId::new(1).into(),
             position: 65_535,
         });
         body.render(&tick(3), &mut frame);

@@ -157,6 +157,7 @@ describe("what a line means", () => {
       "off sequence 1",
       "go+ executor 0",
       "assign sequence 4 executor 9",
+      "assign executor 9 fader speed",
       "preset 1",
       "full",
       "oops",
@@ -168,6 +169,85 @@ describe("what a line means", () => {
         `no recorded line starts with "${word}"`,
       ).toBe(true);
     }
+  });
+
+  /**
+   * **B15, at the grammar.** What a fader, an encoder and the four keys do is
+   * sayable, so the control editor can write a line rather than send a command
+   * of its own — which is `ARCHITECTURE_SPEC.md` §4.5's test applied rather than
+   * assumed.
+   */
+  it("assigns a function to one of an executor's controls", () => {
+    expect(parseCommandLine("assign executor 1 fader master")).toEqual({
+      kind: "commands",
+      commands: [
+        { t: "ConfigureExecutor", executorId: 1, change: { t: "Fader", function: "Master" } },
+      ],
+    });
+    expect(parseCommandLine("Assign Executor 9 Encoder Speed")).toEqual({
+      kind: "commands",
+      commands: [
+        { t: "ConfigureExecutor", executorId: 9, change: { t: "Encoder", function: "Speed" } },
+      ],
+    });
+    // A key is numbered **from one** on the line, because that is how an
+    // operator counts the keys under a fader, and from zero in the command,
+    // because that is how the hardware counts them.
+    expect(parseCommandLine("assign executor 3 button 1 go+")).toEqual({
+      kind: "commands",
+      commands: [
+        {
+          t: "ConfigureExecutor",
+          executorId: 3,
+          change: { t: "Button", index: 0, function: "Go+" },
+        },
+      ],
+    });
+    expect(parseCommandLine("assign executor 3 button 4 empty")).toEqual({
+      kind: "commands",
+      commands: [
+        {
+          t: "ConfigureExecutor",
+          executorId: 3,
+          change: { t: "Button", index: 3, function: "Empty" },
+        },
+      ],
+    });
+  });
+
+  /** The custom row — a key that sends a line an operator wrote. */
+  it("gives a key a command line, quoted or not", () => {
+    const expected = {
+      kind: "commands",
+      commands: [
+        {
+          t: "ConfigureExecutor",
+          executorId: 1,
+          change: {
+            t: "Button",
+            index: 3,
+            function: { CommandLine: { line: "Go+ Sequence 3" } },
+          },
+        },
+      ],
+    };
+    expect(parseCommandLine('assign executor 1 button 4 command "Go+ Sequence 3"')).toEqual(
+      expected,
+    );
+    // **A line with punctuation in it has to be quoted**, and that is the
+    // tokeniser's rule rather than this verb's: `go+` becomes `go` and `+`
+    // becomes a separator, so that `1 + 2` and `go+ executor 0` mean what they
+    // say. A quoted chunk is one token, kept exactly as it was typed.
+    expect(parseCommandLine("assign executor 1 button 4 command clear")).toEqual({
+      kind: "commands",
+      commands: [
+        {
+          t: "ConfigureExecutor",
+          executorId: 1,
+          change: { t: "Button", index: 3, function: { CommandLine: { line: "clear" } } },
+        },
+      ],
+    });
   });
 
   it("reads a range in the direction it is written, and does not repeat a fixture", () => {
@@ -323,6 +403,18 @@ describe("a line that is not one", () => {
     expect(message("goto sequence 1")).toContain("goto takes a cue");
     expect(message("assign cue 1 executor 1")).toContain("assign takes a sequence");
     expect(message("assign sequence 1 group 1")).toContain("assigned to an executor");
+    // S45's half of the verb, and the complaints an operator can act on.
+    expect(message("assign executor 1")).toContain("assign what on it");
+    expect(message("assign executor 1 knob master")).toContain("not one of an executor's controls");
+    expect(message("assign executor 1 fader")).toContain("a fader does what");
+    expect(message("assign executor 1 fader sideways")).toContain("not something a fader does");
+    expect(message("assign executor 1 encoder xfade")).toContain("not something an encoder does");
+    expect(message("assign executor 1 button")).toContain("which button");
+    expect(message("assign executor 1 button 5 go+")).toContain("which button");
+    expect(message("assign executor 1 button 0 go+")).toContain("which button");
+    expect(message("assign executor 1 button 1 hologram")).toContain("not something a button does");
+    expect(message("assign executor 1 button 1 command")).toContain("send which line");
+    expect(message("assign executor 1 fader master and then some")).toContain("says more");
     expect(message("store executor 1")).toContain("assigned rather than stored");
     expect(message("on group 1")).toContain("not something that plays back");
     expect(message("page")).toContain("which page");
@@ -469,6 +561,15 @@ describe("what the line says it will do", () => {
     );
     expect(readingText(parseCommandLine("assign sequence 5 executor 1"))).toBe(
       "assign sequence 5 to executor 1",
+    );
+    expect(readingText(parseCommandLine("assign executor 1 fader xfade"))).toBe(
+      "set the fader to Crossfade of executor 1",
+    );
+    expect(readingText(parseCommandLine("assign executor 1 button 3 flash"))).toBe(
+      "set the button 3 to Flash of executor 1",
+    );
+    expect(readingText(parseCommandLine('assign executor 1 button 4 command "Go+ Sequence 3"'))).toBe(
+      'set the button 4 to send "Go+ Sequence 3" of executor 1',
     );
     expect(readingText(parseCommandLine("on"))).toBe("on the selected sequence");
     expect(readingText(parseCommandLine("on sequence 2"))).toBe("on sequence 2");

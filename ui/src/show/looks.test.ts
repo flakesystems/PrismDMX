@@ -273,15 +273,25 @@ describe("the looks, read out of the show document", () => {
   });
 
   it("follows the selected executor, and says so when there is none", () => {
+    // **The playback is the cue list's** (S45), so executors 0 and 1 — two
+    // handles on list 5 — report the same thing, which is punch-list entry B18
+    // as the transport line meets it.
     const show: JsonValue = {
+      sequences: { "5": { name: "Act 1", isActive: true, currentCueIndex: null } },
       executors: {
-        "0": { sequenceId: 5, isActive: true, currentCueIndex: null },
-        "1": { sequenceId: 5, isActive: false, currentCueIndex: null },
-        "2": { sequenceId: null, isActive: false, currentCueIndex: null },
+        "0": { sequenceId: 5 },
+        "1": { sequenceId: 5 },
+        "2": { sequenceId: null },
       },
     };
     expect(executorInForce({ session: { selectedExecutor: 0 } }, show)).toEqual({
       executorId: 0,
+      sequenceId: 5,
+      isActive: true,
+      currentCueIndex: null,
+    });
+    expect(executorInForce({ session: { selectedExecutor: 1 } }, show)).toEqual({
+      executorId: 1,
       sequenceId: 5,
       isActive: true,
       currentCueIndex: null,

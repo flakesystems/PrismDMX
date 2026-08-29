@@ -115,6 +115,8 @@ pub fn show_file() -> ShowFile {
             }],
         }],
         looping: false,
+        master_level: u16::MAX,
+        speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
     })
@@ -125,10 +127,6 @@ pub fn show_file() -> ShowFile {
         fader_function: ExecutorFaderFunction::Master,
         button_functions: Vec::new(),
         encoder_function: ExecutorEncoderFunction::Empty,
-        master_level: 65535,
-        speed: prism_domain::SPEED_UNITY,
-        is_active: false,
-        current_cue_index: None,
     })
     .unwrap();
 

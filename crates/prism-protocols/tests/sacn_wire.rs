@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use prism_domain::{
-    AttributeDef, AttributeType, ExecutorId, Fixture, FixtureId, FixtureType, OutputId, UniverseId,
+    AttributeDef, AttributeType, Fixture, FixtureId, FixtureType, OutputId, SequenceId, UniverseId,
     Vec3,
 };
 use prism_engine::{
@@ -118,7 +118,7 @@ impl Rig {
         let fixtures = [fixture(1, 1, 1), fixture(2, 2, 1)];
         let patch: Vec<(&Fixture, &FixtureType)> =
             fixtures.iter().map(|fixture| (fixture, &head)).collect();
-        let body = MergeBody::for_patch(&layout, patch, (1..=2).map(ExecutorId::new)).unwrap();
+        let body = MergeBody::for_patch(&layout, patch, (1..=2).map(SequenceId::new)).unwrap();
 
         let mut publisher = FramePublisher::new(Arc::new(layout));
         let subscriber = publisher.subscribe();

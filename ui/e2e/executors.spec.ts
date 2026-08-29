@@ -38,6 +38,12 @@ import { join } from "node:path";
 import type { Daemon } from "./daemon.ts";
 import { buildDaemon, forget, openWindow, pressConsole, showFixture, startDaemon } from "./daemon.ts";
 
+/** Types a line into the console and sends it. */
+async function command(page: import("@playwright/test").Page, line: string): Promise<void> {
+  await page.getByTestId("command-input").fill(line);
+  await page.getByTestId("command-input").press("Enter");
+}
+
 /** A port of this spec's own, so no other suite's daemon is disturbed. */
 const PORT = 7401;
 
@@ -140,9 +146,15 @@ test("**a flash is a layer**: held it lights the rig, released it gives the mast
   await expect(page.getByTestId("button-2-3")).toHaveAttribute("data-function", "LearnSpeed");
   await expect(page.getByTestId("button-2-0")).toBeEnabled();
 
-  // **Its master is at zero**, which is what makes this a test of the flash
-  // rather than of a fader: the cue could not put light on the rig by itself.
-  await expect(page.getByTestId("percent-2")).toHaveText("0%");
+  // **Its fader cannot put light up**, which is what makes this a test of the
+  // flash rather than of a fader. It reads `XF` since S45 rather than `0%`: the
+  // strip is a crossfade, and where a crossfade fader stands is a gesture in
+  // progress rather than a level the show holds, so there is no percentage for
+  // it to have. The claim the reading used to carry — *a flash never writes the
+  // stored master* — is the same claim and is asserted on the byte in
+  // `prismd::core::tests::a_flash_is_a_layer_over_the_master`, where the master
+  // now lives (on the cue list).
+  await expect(page.getByTestId("percent-2")).toHaveText("XF");
 
   await openWindow(page, "DmxSheet");
   await expect.poll(async () => litPixels(page, METER_FULL), { timeout: 15_000 }).toBe(0);
@@ -153,20 +165,126 @@ test("**a flash is a layer**: held it lights the rig, released it gives the mast
   await flash.hover();
   await page.mouse.down();
   await expect.poll(async () => litPixels(page, METER_FULL), { timeout: 15_000 }).toBeGreaterThan(0);
-  // And the stored master has not moved while it is held — this is the byte the
-  // exit criterion is about, read where an operator reads it.
-  await expect(page.getByTestId("percent-2")).toHaveText("0%");
+  // And nothing about the strip has moved while it is held.
+  await expect(page.getByTestId("percent-2")).toHaveText("XF");
 
   // Released.
   await page.mouse.up();
   await expect.poll(async () => litPixels(page, METER_FULL), { timeout: 15_000 }).toBe(0);
-  await expect(page.getByTestId("percent-2")).toHaveText("0%");
 
   // A reload asks the daemon what it holds, with nothing of this browser's in
-  // the answer: the master is still what it was, so the flash left no trace.
+  // the answer: the rig is dark again, so the flash left no trace.
   await page.reload();
   await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  // The window is still open: which windows are on the canvas is session state
+  // and the daemon holds it, so a reload finds it there (§4.1).
+  await expect(page.getByTestId("percent-2")).toHaveText("XF");
+});
+
+/**
+ * **Punch-list B15, in a browser**: what a key and a fader do is set from the
+ * `Executors` window, and the strip above redraws.
+ *
+ * *Es passiert nichts wenn man einen Executor rechtsklickt* — the entry. The
+ * editor writes a command line and sends it (`ARCHITECTURE_SPEC.md` §4.5), so
+ * what is observed here is the whole chain: a chooser, a line, a command, a
+ * delta, and a strip that changed.
+ */
+test("**B15**: an executor's controls are assignable, and the strip follows", async ({ page }) => {
+  const started = await deskDaemon(PORT + 3);
+  daemon = started.daemon;
+  await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  await openWindow(page, "Executors");
+
+  // Nothing is selected on a fresh desk, so the editor says what to do rather
+  // than drawing a form with nothing behind it.
+  await expect(page.getByTestId("editor-none")).toContainText("Select an executor");
+
+  // The strip's head is the select target — a word and a number, so it writes
+  // `Executor 2` and sends it.
+  await page.getByTestId("select-2").click();
+  await expect(page.getByTestId("editor-executor")).toHaveAttribute("data-executor", "2");
+  await expect(page.getByTestId("editor-fader")).toHaveValue("XFade");
+  await expect(page.getByTestId("editor-button-0")).toHaveValue("Flash");
+
+  // Give the fader a master. The strip above says so, and the percentage comes
+  // back with it — the cue list's own level, which is where S45 put it.
+  await page.getByTestId("editor-fader").selectOption("Master");
+  await expect(page.getByTestId("fader-2")).toHaveAttribute("data-function", "Master");
   await expect(page.getByTestId("percent-2")).toHaveText("0%");
+
+  // And a key: the third one becomes a Go, and the strip relabels it.
+  await page.getByTestId("editor-button-2").selectOption("Go+");
+  await expect(page.getByTestId("button-2-2")).toHaveAttribute("data-function", "Go+");
+
+  // The custom row — a key that sends a line the operator wrote. Choosing it
+  // opens the box and sends nothing; the line is what sends it.
+  await page.getByTestId("editor-button-3").selectOption("Command");
+  await expect(page.getByTestId("button-2-3")).toHaveAttribute("data-function", "LearnSpeed");
+  await page.getByTestId("editor-line-3").fill("Go+ Sequence 2");
+  await page.getByTestId("editor-send-3").click();
+  await expect(page.getByTestId("button-2-3")).toHaveAttribute("data-function", "CommandLine");
+  await expect(page.getByTestId("button-2-3")).toHaveAttribute("title", /Go\+ Sequence 2/);
+
+  // A reload asks the daemon what it holds: the assignment is show state and
+  // survives, with nothing of this browser's in the answer.
+  await page.reload();
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  await expect(page.getByTestId("fader-2")).toHaveAttribute("data-function", "Master");
+  await expect(page.getByTestId("button-2-3")).toHaveAttribute("data-function", "CommandLine");
+});
+
+/**
+ * **Punch-list B18, in a browser**: two executors on one cue list are two
+ * handles on one number.
+ *
+ * *Wenn eine Sequence mehrere Executor hat, die die gleichen Button/Fader Typen
+ * haben, kann man diese unabhängig von einander bewegen* — the entry. Here a
+ * second fader is put on the list executor 0 already plays, and pulling one is
+ * read on the other. The frames are asserted in
+ * `prismd::core::tests::two_master_faders_on_one_cue_list_move_one_light`; what
+ * this adds is the half an operator sees.
+ */
+test("**B18**: two executors on one cue list read and move one master", async ({ page }) => {
+  const started = await deskDaemon(PORT + 4);
+  daemon = started.daemon;
+  await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  await openWindow(page, "Executors");
+  await openWindow(page, "CommandKeys");
+
+  // Executor 0 plays cue list 1 with a Master fader, at full.
+  await expect(page.getByTestId("percent-0")).toHaveText("100%");
+
+  // Put the same list on a second, empty slot and give it a Master too — the
+  // two lines S45 added, typed rather than clicked, which is the other way of
+  // saying the same thing.
+  await command(page, "Assign Sequence 1 Executor 1");
+  await command(page, "Assign Executor 1 Fader Master");
+  await expect(page.getByTestId("name-1")).toHaveText("Warm Wash");
+  // **It reads the list's level, not a fresh one of its own.**
+  await expect(page.getByTestId("percent-1")).toHaveText("100%");
+
+  // Move one of them from the line, and both say the new number.
+  await command(page, "Assign Executor 1 Fader Speed");
+  await expect(page.getByTestId("fader-1")).toHaveAttribute("data-function", "Speed");
+  await command(page, "Assign Executor 1 Fader Master");
+  await expect(page.getByTestId("percent-1")).toHaveText("100%");
+
+  // Drag the second fader to the bottom. The first shows it too, because there
+  // is one number and both of them point at it.
+  const fader = page.getByTestId("fader-1");
+  const box = await fader.boundingBox();
+  if (box === null) {
+    throw new Error("the fader has no box");
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height + 40);
+  await page.mouse.up();
+  await expect(page.getByTestId("percent-1")).toHaveText("0%");
+  await expect(page.getByTestId("percent-0")).toHaveText("0%");
 });
 
 test("**a toggle latches**, and the cue number comes back from the tick", async ({ page }) => {

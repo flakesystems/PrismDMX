@@ -291,11 +291,11 @@ it("draws the colour of the cue list on each fader, and nothing where there is n
     expect(screen.queryByTestId("color-0")).toBeNull();
     expect(screen.queryByTestId("color-2")).toBeNull();
 
-    answer(54);
+    answer(56);
     expect(screen.getByTestId("color-0").style.background).toBe("rgb(255, 0, 0)");
     expect(screen.queryByTestId("color-2")).toBeNull();
 
-    answer(55);
+    answer(57);
     expect(screen.getByTestId("color-2").style.background).toBe("rgb(255, 136, 0)");
     // An empty slot has no colour: there is no cue list to have one.
     expect(screen.queryByTestId("color-1")).toBeNull();

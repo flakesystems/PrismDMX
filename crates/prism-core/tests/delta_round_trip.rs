@@ -103,7 +103,7 @@ fn a_scripted_show_is_reproduced_operation_by_operation() {
     pair.feed(&ops);
     let ops = pair
         .show
-        .set_executor_master(ExecutorId::new(0), 12345)
+        .set_sequence_master(SequenceId::new(1), 12345)
         .unwrap();
     pair.feed(&ops);
 
@@ -111,12 +111,12 @@ fn a_scripted_show_is_reproduced_operation_by_operation() {
     // follow that too or it drifts on exactly those two fields.
     assert!(
         pair.show
-            .record_playback_state(ExecutorId::new(0).into(), true, Some(1))
+            .record_playback_state(SequenceId::new(1).into(), true, Some(1))
             .unwrap()
     );
     pair.mirror
         .apply_delta(&Delta::PlaybackState {
-            playback: PlaybackId::of_executor(ExecutorId::new(0)),
+            playback: PlaybackId::of_sequence(SequenceId::new(1)),
             is_active: true,
             cue_index: Some(1),
         })
@@ -162,7 +162,15 @@ fn the_command_path_produces_deltas_that_reproduce_the_show() {
         pair.feed(&show_patch_ops(&applied.deltas));
     }
 
-    let ops = pair.show.store_executor(executor(0, None)).unwrap();
+    // A fader moves the master of the cue list standing on it (S45), so the
+    // slot needs one — an executor with nothing on it has no number to move,
+    // and says so.
+    let ops = pair
+        .show
+        .store_sequence(sequence(2, vec![cue("1", 1, AttributeType::Red, 1)]))
+        .unwrap();
+    pair.feed(&ops);
+    let ops = pair.show.store_executor(executor(0, Some(2))).unwrap();
     pair.feed(&ops);
     let applied = pair
         .show
@@ -189,8 +197,8 @@ enum Edit {
     RemoveSequence(SequenceId),
     StoreCue(SequenceId, Cue),
     StoreExecutor(Executor),
-    SetMaster(ExecutorId, u16),
-    ExecutorState(ExecutorId, bool, Option<u32>),
+    SetMaster(SequenceId, u16),
+    PlaybackState(SequenceId, bool, Option<u32>),
 }
 
 /// Three profile keys, so an edit has a real chance of naming one that exists.
@@ -318,9 +326,9 @@ fn arb_edit() -> impl Strategy<Value = Edit> {
                 Edit::StoreExecutor(executor)
             }
         ),
-        (0u32..3, any::<u16>()).prop_map(|(id, level)| Edit::SetMaster(ExecutorId::new(id), level)),
+        (0u32..3, any::<u16>()).prop_map(|(id, level)| Edit::SetMaster(SequenceId::new(id), level)),
         (0u32..3, any::<bool>(), proptest::option::of(0u32..4)).prop_map(|(id, active, index)| {
-            Edit::ExecutorState(ExecutorId::new(id), active, index)
+            Edit::PlaybackState(SequenceId::new(id), active, index)
         }),
     ]
 }
@@ -360,14 +368,14 @@ proptest! {
                 Edit::RemoveSequence(id) => show.remove_sequence(id),
                 Edit::StoreCue(sequence, cue) => show.store_cue(sequence, cue),
                 Edit::StoreExecutor(executor) => show.store_executor(executor),
-                Edit::SetMaster(id, level) => show.set_executor_master(id, level),
-                Edit::ExecutorState(id, active, index) => {
+                Edit::SetMaster(id, level) => show.set_sequence_master(id, level),
+                Edit::PlaybackState(id, active, index) => {
                     // Not a JSON Patch: this one has its own delta.
                     if show.record_playback_state(id.into(), active, index).is_ok() {
                         applied += 1;
                         mirror
                             .apply_delta(&Delta::PlaybackState {
-                                playback: PlaybackId::of_executor(id),
+                                playback: PlaybackId::of_sequence(id),
                                                                 is_active: active,
                                 cue_index: index,
                             })

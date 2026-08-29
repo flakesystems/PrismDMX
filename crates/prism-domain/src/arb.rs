@@ -406,6 +406,12 @@ fn command_group_2() -> BoxedStrategy<crate::Command> {
                 sequence_id
             }
         ),
+        (any::<ExecutorId>(), any::<crate::ExecutorChange>()).prop_map(|(executor_id, change)| {
+            C::ConfigureExecutor {
+                executor_id,
+                change,
+            }
+        }),
     ]
     .boxed()
 }

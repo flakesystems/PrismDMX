@@ -98,14 +98,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Answer,
   BoundControl,
-  ExecutorButtonFunction,
   FeatureGroup,
   SurfaceAction,
   SurfaceControl,
   WindowType,
 } from "../bindings";
 import {
-  EXECUTOR_BUTTON_FUNCTION_VARIANTS,
   FEATURE_GROUP_VARIANTS,
   WINDOW_TYPE_VARIANTS,
 } from "../bindings";
@@ -126,6 +124,8 @@ import {
 import type { ActionKind, Target } from "./actions";
 import { profileDocument, readProfile } from "./controlfile";
 import { heldNote, isHeld } from "./settings";
+import { FIXED_BUTTON_FUNCTIONS } from "../desk/functions";
+import type { FixedButtonFunction } from "../desk/functions";
 
 const log = logger("controls");
 
@@ -836,7 +836,7 @@ function Detail({
         }}
       >
         <option value="">the key in this position (the executor decides)</option>
-        {EXECUTOR_BUTTON_FUNCTION_VARIANTS.map((option: ExecutorButtonFunction) => (
+        {FIXED_BUTTON_FUNCTIONS.map((option: FixedButtonFunction) => (
           <option key={option} value={option}>
             {option}
           </option>

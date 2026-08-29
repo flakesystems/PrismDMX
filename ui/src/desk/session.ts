@@ -27,15 +27,13 @@
 
 import type {
   ExecutorButtonFunction,
+  ExecutorEncoderFunction,
   ExecutorFaderFunction,
   FeatureGroup,
   JsonValue,
 } from "../bindings";
-import {
-  EXECUTOR_BUTTON_FUNCTION_VARIANTS,
-  EXECUTOR_FADER_FUNCTION_VARIANTS,
-  FEATURE_GROUP_VARIANTS,
-} from "../bindings/variants";
+import { FEATURE_GROUP_VARIANTS } from "../bindings/variants";
+import { buttonFunctionOf, isEncoderFunction, isFaderFunction } from "./functions";
 import { isArray, isObject } from "../mirror/patch";
 import { numberAt, stringAt, valueAt } from "../mirror/select";
 
@@ -48,6 +46,15 @@ import { numberAt, stringAt, valueAt } from "../mirror/select";
  * checked rather than one that is hoped for.
  */
 export const EXECUTORS_PER_PAGE = 8;
+
+/**
+ * Buttons per executor — Rec, Solo, Mute, Select (`docs/MCU_MAPPING.md` §2.1).
+ *
+ * `prism_domain::EXECUTOR_BUTTONS`, held to it the way the number above is: the
+ * desk recording carries it, and `session.test.ts` compares the two rather than
+ * letting an interface assume a number and offer a key the daemon refuses.
+ */
+export const EXECUTOR_BUTTONS = 4;
 
 /** Where the executor page lives in the session document. */
 export const EXECUTOR_PAGE = "/session/executorPage";
@@ -93,9 +100,21 @@ export interface ExecutorStrip {
    * the bar draws the colour an operator actually chose.
    */
   readonly color: string | null;
-  /** The master, `0..=65535`. */
-  readonly masterLevel: number;
-  /** Whether it is running. */
+  /** The cue list this strip's controls reach, or `null` when it has none. */
+  readonly sequenceId: number | null;
+  /**
+   * What the fader stands at, `0..=65535` — **the number its own function
+   * names**, S45.
+   *
+   * `Master` reads the cue list's master level and `Speed` reads its rate;
+   * both are the *list's* since S45, so two strips whose faders are both
+   * `Master` on one list draw the same figure and move together, which is
+   * punch-list entry B18. `XFade` and `Empty` read nought: where a crossfade
+   * fader stands is a gesture in progress rather than show state, and a fader
+   * with nothing on it has no number at all.
+   */
+  readonly faderLevel: number;
+  /** Whether the cue list on it is running. */
   readonly isActive: boolean;
   /**
    * Which cue it is in, or `null` when the playback is stopped.
@@ -110,6 +129,8 @@ export interface ExecutorStrip {
   readonly currentCueIndex: number | null;
   /** What its fader does, or `null` for an unassigned slot. */
   readonly faderFunction: ExecutorFaderFunction | null;
+  /** What its encoder does, or `null` for an unassigned slot. */
+  readonly encoderFunction: ExecutorEncoderFunction | null;
   /** What its four buttons do, in hardware order: Rec, Solo, Mute, Select. */
   readonly buttonFunctions: readonly ExecutorButtonFunction[];
 }
@@ -213,34 +234,65 @@ function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorSt
       slot,
       executorId,
       assigned: false,
+      sequenceId: null,
       name: null,
       color: null,
-      masterLevel: 0,
+      faderLevel: 0,
       isActive: false,
       currentCueIndex: null,
       faderFunction: null,
+      encoderFunction: null,
       buttonFunctions: [],
     };
   }
+  // **Everything the strip shows about the playback is the cue list's** — S45.
+  // The name and the colour always were; the level, whether it is running and
+  // which cue it stands on moved there, because a playback is a sequence's and
+  // two executors on one list must not be two opinions about it (B18).
   const sequenceId = numberAt(executor, "/sequenceId");
+  const sequence =
+    sequenceId === null ? null : `/sequences/${String(sequenceId)}`;
+  const faderFunction = faderFunctionOf(stringAt(executor, "/faderFunction"));
   return {
     slot,
     executorId,
     assigned: true,
-    name:
-      sequenceId === null
-        ? null
-        : stringAt(show, `/sequences/${String(sequenceId)}/name`),
-    color:
-      sequenceId === null
-        ? null
-        : hexAt(show, `/sequences/${String(sequenceId)}/color`),
-    masterLevel: numberAt(executor, "/masterLevel") ?? 0,
-    isActive: valueAt(executor, "/isActive") === true,
-    currentCueIndex: numberAt(executor, "/currentCueIndex"),
-    faderFunction: faderFunctionOf(stringAt(executor, "/faderFunction")),
+    sequenceId,
+    name: sequence === null ? null : stringAt(show, `${sequence}/name`),
+    color: sequence === null ? null : hexAt(show, `${sequence}/color`),
+    faderLevel: faderReading(show, sequence, faderFunction),
+    isActive: sequence !== null && valueAt(show, `${sequence}/isActive`) === true,
+    currentCueIndex:
+      sequence === null ? null : numberAt(show, `${sequence}/currentCueIndex`),
+    faderFunction,
+    encoderFunction: encoderFunctionOf(stringAt(executor, "/encoderFunction")),
     buttonFunctions: buttonFunctionsOf(valueAt(executor, "/buttonFunctions")),
   };
+}
+
+/**
+ * What a strip's fader stands at: the number its own function names.
+ *
+ * `prismd::surface::fader_reading` is the same answer for the motor fader on
+ * the X-Touch, and the two have to agree — a screen and a desk that disagreed
+ * about where a fader is would be the fault B18 is about, one layer up.
+ */
+function faderReading(
+  show: JsonValue | null,
+  sequence: string | null,
+  faderFunction: ExecutorFaderFunction | null,
+): number {
+  if (sequence === null) {
+    return 0;
+  }
+  switch (faderFunction) {
+    case "Master":
+      return numberAt(show, `${sequence}/masterLevel`) ?? 0;
+    case "Speed":
+      return numberAt(show, `${sequence}/speed`) ?? 0;
+    default:
+      return 0;
+  }
 }
 
 /**
@@ -271,9 +323,9 @@ function faderFunctionOf(value: string | null): ExecutorFaderFunction | null {
   return value !== null && isFaderFunction(value) ? value : null;
 }
 
-/** Whether a string is one of the fader functions this build knows. */
-function isFaderFunction(value: string): value is ExecutorFaderFunction {
-  return (EXECUTOR_FADER_FUNCTION_VARIANTS as readonly string[]).includes(value);
+/** An encoder function this build knows, or `null`. */
+function encoderFunctionOf(value: string | null): ExecutorEncoderFunction | null {
+  return value !== null && isEncoderFunction(value) ? value : null;
 }
 
 /** The button functions this build knows, in order; unknown ones are left out. */
@@ -283,9 +335,12 @@ function buttonFunctionsOf(value: JsonValue | null): readonly ExecutorButtonFunc
   }
   const functions: ExecutorButtonFunction[] = [];
   for (const entry of value) {
-    if (typeof entry === "string" && isButtonFunction(entry)) {
-      functions.push(entry);
-    }
+    // **Positions, not a filtered list** — S45. A row may now hold a custom
+    // command line as well as the eight fixed functions, and an entry this
+    // build cannot read has to leave its *place* behind: dropping it would move
+    // every key after it one to the left, and the third key would send what the
+    // fourth was bound to.
+    functions.push(buttonFunctionOf(entry) ?? "Empty");
   }
   return functions;
 }
@@ -295,7 +350,4 @@ export function isFeatureGroup(value: string): value is FeatureGroup {
   return (FEATURE_GROUP_VARIANTS as readonly string[]).includes(value);
 }
 
-/** Whether a string is one of the button functions this build knows. */
-function isButtonFunction(value: string): value is ExecutorButtonFunction {
-  return (EXECUTOR_BUTTON_FUNCTION_VARIANTS as readonly string[]).includes(value);
-}
+
