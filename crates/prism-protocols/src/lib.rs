@@ -35,6 +35,20 @@
 //!                                                                        / [`MockUdp`]
 //! ```
 //!
+//! Since **S46** there is one thread in this crate that is not an output at all:
+//!
+//! ```text
+//!                          ┌─────────────────┐   ArtPoll   ┌──────┐
+//!   the configured rig ───▶│ [`NodeDiscovery`]│ ──────────▶ │ node │
+//!                          │  own thread     │ ◀ArtPollReply└──────┘
+//!                          └─────────────────┘
+//!                                   │ [`UdpNode`]
+//!                                   ▼  [`SystemUdpNode`] / [`MockUdpNode`]
+//! ```
+//!
+//! It is a **second seam** rather than a `recv` on [`UdpSender`], because an
+//! output's thread must never be handed a call that can block — see `udp.rs`.
+//!
 //! The engine publishes at a fixed 44 Hz and never waits for an output. An
 //! output reads the *most recent* frame at whatever rate its hardware allows
 //! and re-sends it when the engine has published nothing new — a DMX line has
@@ -75,9 +89,11 @@
 )]
 
 mod artnet;
+mod artpoll;
 #[cfg(windows)]
 mod d2xx;
 mod device;
+mod discovery;
 mod ftdi;
 mod opendmx;
 mod output;
@@ -93,10 +109,18 @@ pub use artnet::{
     ArtNetOutput, Destination, OP_DMX, OP_SYNC, PROTOCOL_VERSION, PortAddress, art_sync,
     write_art_dmx,
 };
+pub use artpoll::{
+    ART_POLL_BYTES, ART_POLL_REPLY_BYTES, ART_POLL_REPLY_MIN, ArtPollReply, LONG_NAME_BYTES,
+    MAX_NODE_PORTS, OP_POLL, OP_POLL_REPLY, POLL_FLAG_REPLY_ON_CHANGE, SHORT_NAME_BYTES, art_poll,
+    parse_art_poll_reply,
+};
 #[cfg(windows)]
 pub use d2xx::D2xxBackend;
 pub use device::{
     AccessPath, AttachedDevice, DeviceDescriptor, DeviceProfile, DmxTiming, SH_RS09B,
+};
+pub use discovery::{
+    DiscoveredNode, DiscoveryConfig, DiscoveryCounters, NODE_TEXT_BYTES, NodeDiscovery,
 };
 pub use ftdi::{
     BITS_PER_SLOT, FlowControl, FtdiBackend, FtdiCall, FtdiError, MockFtdi, MockFtdiHandle, Parity,
@@ -117,6 +141,9 @@ pub use sacn::{
     source_name_field, write_e131_data,
 };
 pub use system::{FallbackFtdi, UnsupportedBackend, list_devices, system_backend};
-pub use udp::{MockUdp, MockUdpHandle, SystemUdp, UdpError, UdpSender, classify};
+pub use udp::{
+    MockUdp, MockUdpHandle, MockUdpNode, MockUdpNodeHandle, SystemUdp, SystemUdpNode, UdpError,
+    UdpNode, UdpSender, classify,
+};
 #[cfg(windows)]
 pub use vcp::VcpBackend;

@@ -195,6 +195,25 @@ pub struct Options {
     /// exactly that of every test, and this machine has a real SH-RS09B attached
     /// that the suite must not open.
     pub mock_devices: bool,
+    /// Whether to listen for Art-Net node discovery — S46.
+    ///
+    /// On unless it is turned off, and it opens a socket only once the rig has
+    /// an Art-Net output. Two reasons an operator turns it off, and neither of
+    /// them is *it went wrong*:
+    ///
+    /// **A second desk on one machine.** Art-Net's port is a fixed number, so
+    /// two `prismd` processes on one box cannot both hold it. The second one's
+    /// socket does not bind, which is a warning and a daemon that starts (S37's
+    /// rule for the WebSocket listener, and the same fixed-port argument) — but
+    /// an operator who *meant* to run two should be able to say so rather than
+    /// read the warning every morning.
+    ///
+    /// **A suite must not open a socket it does not use.** The discovery socket
+    /// is bound on every interface, because that is where a node's reply is
+    /// addressed; the test targets that start a daemon with a real Art-Net
+    /// output over loopback therefore turn it off, exactly as they turn off the
+    /// WebSocket listener and for the same sentence.
+    pub artnet_discovery: bool,
     /// Whether to open the named pipe or Unix domain socket, or `None` for the
     /// configured answer — S37.
     pub local: Option<bool>,
@@ -252,6 +271,7 @@ impl Default for Options {
             universes: None,
             outputs: Vec::new(),
             mock_devices: false,
+            artnet_discovery: true,
             local: None,
             websocket: Listen::Configured,
             token: None,
@@ -333,6 +353,7 @@ written, and the window says which flag is holding which row.
                         network forbids multicast (the port defaults to {})
   --open-dmx <N>        the Open DMX USB adapter, carrying universe N
   --mock-devices        open every configured output with a mock driver
+  --no-artnet-discovery do not listen for Art-Net nodes (a second desk on this machine)
                         instead of the real one, so a rig of adapters and
                         nodes can be driven with nothing plugged in
 
@@ -474,6 +495,7 @@ where
                 options.outputs.push(mock_output(id.get()));
             }
             "--mock-devices" => options.mock_devices = true,
+            "--no-artnet-discovery" => options.artnet_discovery = false,
             "--artnet" => {
                 let text = value()?;
                 let target = socket_address(&text, prism_protocols::ART_NET_PORT)?;
@@ -1017,6 +1039,16 @@ mod tests {
     }
 
     /// S33: the flag that lets a rig of real kinds be driven with no device.
+    /// Art-Net discovery is on by default and can be turned off by name — S46.
+    #[test]
+    fn art_net_discovery_is_on_unless_a_second_desk_says_otherwise() {
+        assert!(
+            Options::default().artnet_discovery,
+            "an installer should not have to ask to be told whether their nodes answer"
+        );
+        assert!(!options(&["--no-artnet-discovery"]).artnet_discovery);
+    }
+
     #[test]
     fn every_output_can_be_opened_with_a_mock_driver() {
         assert!(!Options::default().mock_devices, "off unless asked for");
@@ -1257,6 +1289,7 @@ mod tests {
             "--websocket",
             "--token",
             "--mock-devices",
+            "--no-artnet-discovery",
             "--surface-profile",
             "--mock-surface",
             "--blackout-on-exit",

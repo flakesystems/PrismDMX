@@ -144,6 +144,14 @@ pub trait ServerHandler: Send + Sync + 'static {
             Query::OutputStatus => Answer::OutputStatus {
                 outputs: Vec::new(),
             },
+            // And nothing listening, which is the honest answer for a handler
+            // with no machine behind it — and a different one from *no nodes*.
+            // The flag is what keeps the two apart (S46).
+            Query::ArtNetNodes => Answer::ArtNetNodes {
+                nodes: Vec::new(),
+                listening: false,
+                error: None,
+            },
             // And no surface, so no table. An empty list is the same shape a
             // desk with a table gives and is the honest answer for a handler
             // that has never had one (S38).

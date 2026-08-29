@@ -300,6 +300,26 @@ impl Daemon {
                 source_name: source_name.clone(),
             },
         );
+        // **The one place a listening socket is opened.** Not under
+        // `--mock-devices`, where nothing may touch a device or a network; not
+        // under `--no-artnet-discovery`, which is how a second desk on one
+        // machine gives the port to the first; and not at all until the rig has
+        // an Art-Net row — `Discovery::retarget` decides that, out of the rig
+        // `reconcile` is about to be given. S46.
+        if options.artnet_discovery && !options.mock_devices {
+            outputs.adopt_discovery(crate::discovery::Discovery::system());
+        } else {
+            // Told not to listen, which is a **reason** and not an absence: a
+            // panel that said *configure an Art-Net output and I will listen*
+            // would be telling an operator to do something that would not help.
+            outputs.adopt_discovery(crate::discovery::Discovery::disabled(
+                if options.mock_devices {
+                    "node discovery is off for this run (--mock-devices)"
+                } else {
+                    "node discovery is off for this run (--no-artnet-discovery)"
+                },
+            ));
+        }
         outputs.reconcile(&rig);
         let output_count = outputs.entries().len();
         // Said once on the way up, before anything is on stage: a universe the
@@ -916,9 +936,15 @@ impl Daemon {
         seen: &mut std::collections::BTreeMap<OutputId, OutputHealth>,
     ) -> Vec<Delta> {
         let mut deltas = Vec::new();
-        let entries = self.desk.core().outputs().entries();
+        let core = self.desk.core();
+        let entries = core.outputs().entries();
         for output in &entries {
-            let health = output.status.health();
+            // **The reported health, not the driver's** — S46. An Art-Net
+            // output whose nodes have stopped answering is `Degraded` here as
+            // well as in the settings panel, because a delta and an answer
+            // saying different things about one output is worse than either of
+            // them being wrong.
+            let health = core.outputs().reported_health(output.id);
             if seen.insert(output.id, health) != Some(health) {
                 log::info("output", &format!("{} is {health:?}", output.name));
                 deltas.push(Delta::OutputHealth {
@@ -931,6 +957,7 @@ impl Daemon {
         // not a health change — a client learns it has gone from
         // `Delta::OutputsChanged`, which is the fact rather than a symptom.
         seen.retain(|id, _| entries.iter().any(|output| output.id == *id));
+        drop(core);
         deltas
     }
 

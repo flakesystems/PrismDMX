@@ -23,6 +23,7 @@
 
 import type {
   Answer,
+  ArtNetNodeInfo,
   BoundControl,
   Command,
   Delta,
@@ -32,6 +33,7 @@ import type {
   MachineOverride,
   MidiPortInfo,
   MachineSettings,
+  NodeReach,
   OutputHealth,
   OutputId,
   OutputInstance,
@@ -58,6 +60,7 @@ import {
   GO_DIRECTION_VARIANTS,
   LOG_LEVEL_VARIANTS,
   MACHINE_OVERRIDE_VARIANTS,
+  NODE_HEALTH_VARIANTS,
   NOTICE_LEVEL_VARIANTS,
   OUTPUT_HEALTH_VARIANTS,
   PARAM_DIRECTION_VARIANTS,
@@ -595,6 +598,19 @@ export function readAnswer(value: unknown, path: string): Answer {
           readOutputStatusInfo(entry, `${path}.outputs[${index}]`),
         ),
       };
+    // S46. `listening` is read before `nodes` is, everywhere this answer is
+    // drawn: an empty list under a socket that never opened says nothing at all
+    // about the network, and reading it as *no nodes* would be punch-list B6's
+    // mistake pointed the other way.
+    case "ArtNetNodes":
+      return {
+        t: "ArtNetNodes",
+        nodes: asArray(field(record, "nodes"), `${path}.nodes`).map((node, index) =>
+          readArtNetNodeInfo(node, `${path}.nodes[${index}]`),
+        ),
+        listening: asBoolean(field(record, "listening"), `${path}.listening`),
+        error: readOptionalString(field(record, "error"), `${path}.error`),
+      };
     case "DarkUniverses":
       return {
         t: "DarkUniverses",
@@ -811,6 +827,77 @@ function readOutputStatusInfo(value: unknown, path: string): OutputStatusInfo {
       field(record, "lastErrorAgoMs"),
       `${path}.lastErrorAgoMs`,
     ),
+    // S46. Optional on the wire, and **empty** rather than absent when there is
+    // nothing to say: a daemon one version behind sends the row without it, and
+    // a settings window that refused to open over a missing field would be worse
+    // than one drawing a health column it cannot qualify.
+    nodes: asArray(field(record, "nodes") ?? [], `${path}.nodes`).map((node, index) =>
+      readNodeReach(node, `${path}.nodes[${index}]`),
+    ),
+  };
+}
+
+/**
+ * One node an output sends to, and whether anything there answers — S46.
+ *
+ * `lastReplyAgoMs` is an **age**, not a time: the daemon and a browser share no
+ * clock, so the daemon says how long ago and this renders it against the
+ * browser's own — S33's rule for `lastErrorAgoMs` one field along.
+ */
+function readNodeReach(value: unknown, path: string): NodeReach {
+  const record = asRecord(value, path);
+  return {
+    address: asString(field(record, "address"), `${path}.address`),
+    health: asVariant(field(record, "health"), `${path}.health`, NODE_HEALTH_VARIANTS),
+    name: readOptionalString(field(record, "name"), `${path}.name`),
+    lastReplyAgoMs: readOptionalInteger(
+      field(record, "lastReplyAgoMs"),
+      `${path}.lastReplyAgoMs`,
+    ),
+  };
+}
+
+/**
+ * One node that answered an `ArtPoll` — S46.
+ *
+ * `configured`, `unaddressedPorts` and `missingPorts` are **not** derived here
+ * and must not be: they are the rig intersected with the discovery table, and a
+ * client that did that intersection itself would be a second opinion about
+ * something the daemon holds both halves of. That is `PatchPreview`'s trap, one
+ * panel along, and the one that drifts the first time a port-address default
+ * changes.
+ */
+function readArtNetNodeInfo(value: unknown, path: string): ArtNetNodeInfo {
+  const record = asRecord(value, path);
+  const ports = (name: string): number[] =>
+    asArray(field(record, name), `${path}.${name}`).map((port, index) =>
+      asInteger(port, `${path}.${name}[${index}]`),
+    );
+  return {
+    address: asString(field(record, "address"), `${path}.address`),
+    ip: asString(field(record, "ip"), `${path}.ip`),
+    shortName: asString(field(record, "shortName"), `${path}.shortName`),
+    longName: asString(field(record, "longName"), `${path}.longName`),
+    mac: asString(field(record, "mac"), `${path}.mac`),
+    firmware: asInteger(field(record, "firmware"), `${path}.firmware`),
+    style: asInteger(field(record, "style"), `${path}.style`),
+    status1: asInteger(field(record, "status1"), `${path}.status1`),
+    status2: asInteger(field(record, "status2"), `${path}.status2`),
+    ports: ports("ports"),
+    inputs: ports("inputs"),
+    configured: asBoolean(field(record, "configured"), `${path}.configured`),
+    unaddressedPorts: ports("unaddressedPorts"),
+    missingPorts: ports("missingPorts"),
+    // The default port-address mapping run backwards, and the daemon's rather
+    // than this file's: `ARCHITECTURE_SPEC.md` §7.0 states it and `prism-domain`
+    // implements it, so a third spelling here would drift the first time it
+    // moved.
+    suggestedUniverses: asArray(
+      field(record, "suggestedUniverses"),
+      `${path}.suggestedUniverses`,
+    ).map((universe, index) => asInteger(universe, `${path}.suggestedUniverses[${index}]`)),
+    replies: asInteger(field(record, "replies"), `${path}.replies`),
+    lastReplyAgoMs: asInteger(field(record, "lastReplyAgoMs"), `${path}.lastReplyAgoMs`),
   };
 }
 

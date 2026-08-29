@@ -70,7 +70,8 @@ pub use machine::{
 };
 pub use midi::{MidiPortInfo, SurfaceHealth, SurfaceStatus};
 pub use output::{
-    ArtNetPort, OutputHealth, OutputInstance, OutputKind, OutputStatusInfo, SacnPort,
+    ArtNetNodeInfo, ArtNetPort, NodeHealth, NodeReach, OutputHealth, OutputInstance, OutputKind,
+    OutputStatusInfo, SacnPort,
 };
 pub use patch::{CHANNELS_PER_UNIVERSE, Fixture, Group, RgbColor, Vec3};
 pub use playback::{PlaybackId, PlaybackTarget};

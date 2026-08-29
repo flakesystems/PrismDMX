@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, PresetPool, SequenceId, SurfaceControl,
-    SurfaceStatus, UniverseId,
+    ArtNetNodeInfo, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId, PresetPool, SequenceId,
+    SurfaceControl, SurfaceStatus, UniverseId,
 };
 
 /// Two fixtures sharing DMX channels.
@@ -365,6 +365,31 @@ pub enum Query {
     /// than mirrored: S33 left this as the one thing a settings window would
     /// need and could not be told, and *asking* is the half it named.
     OutputStatus,
+    /// The Art-Net nodes this desk can hear — S46.
+    ///
+    /// # Why a question and not the rig, and not a delta
+    ///
+    /// A discovered node is neither show nor machine. The rig is
+    /// `prism_core::MachineConfig` because it is a decision somebody made and a
+    /// file has to remember; a discovered node is an **observation about the
+    /// network**, it changes while nobody does anything, no command causes it,
+    /// and it is gone at the next start. Writing it into the configuration would
+    /// mean a `machine.json` that changes because a node was switched off.
+    ///
+    /// That is [`Query::MidiPorts`]' argument exactly, one protocol along, and
+    /// the shape is the same: a settings window asks while it is open and stops
+    /// asking when it closes. It is **not** a delta for the reason
+    /// [`crate::OutputStatusInfo`] is not one — a table that moves at the poll
+    /// cadence, broadcast to every client whether or not anyone has the panel
+    /// open, to carry something only that panel draws.
+    ///
+    /// One thing differs from `MidiPorts` and is worth saying, because it is why
+    /// this could not simply be *enumerate on the asking thread*: there is no
+    /// call that answers *what is on this network*. Discovery is a conversation
+    /// over time — poll, wait, hear — so the daemon holds a table that its own
+    /// receive thread keeps, and the question reads it. What the query does
+    /// **not** do is send anything, which is §5.2's first rule.
+    ArtNetNodes,
     /// The binding table **in force**, control by control — S38.
     ///
     /// A question rather than a field of the snapshot, and the reason is this
@@ -462,6 +487,37 @@ pub enum Answer {
             proptest(strategy = "crate::arb::small_vec(3)")
         )]
         outputs: Vec<OutputStatusInfo>,
+    },
+    /// The Art-Net nodes this desk has heard from — S46.
+    ArtNetNodes {
+        /// One per node that has answered since the daemon started, in the
+        /// order they were first heard.
+        ///
+        /// A node that has since gone quiet **stays in the list** with its age
+        /// climbing, because *there was a node here and it stopped* is the fact
+        /// an installer is chasing, and a row that vanished would look like a
+        /// node that had never existed.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(2)")
+        )]
+        nodes: Vec<ArtNetNodeInfo>,
+        /// Whether the receive socket is bound.
+        ///
+        /// `false` is an ordinary answer with two ordinary causes: this desk has
+        /// no Art-Net output configured, so nothing is listening on its behalf;
+        /// or the socket would not bind. They are told apart by `error`. **A
+        /// panel must draw this before it draws the list**, because an empty
+        /// list under a socket that never opened says nothing at all about the
+        /// network, and reading it as *no nodes* would be exactly the mistake
+        /// B6 was.
+        listening: bool,
+        /// Why nothing is listening, in the daemon's own words, or `None`.
+        ///
+        /// Carried as words rather than derived by a client for
+        /// `Answer::MidiPorts`' reason: another Art-Net program already holding
+        /// port 6454 is the common cause and no client could guess it.
+        error: Option<String>,
     },
     /// The patched universes no output carries, in order — S37.
     DarkUniverses {

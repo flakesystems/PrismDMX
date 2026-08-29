@@ -444,3 +444,54 @@ test("the close button of a long notice is inside the notice", async ({ page }) 
   await expect(page.getByTestId("notices")).toHaveCount(0);
   await done(dataDir);
 });
+
+/**
+ * **Punch-list B6, and the half a browser can answer.**
+ *
+ * The entry is *Art-Net shows Health OK with no node plugged in*, and the whole
+ * of it cannot be tested here: the fault is a **node that does not answer**, and
+ * a node that does answer is a device this suite may not have. What a browser
+ * can answer, and what nothing else does, is that the panel **never draws a node
+ * list without saying whether this desk is listening at all** — because an empty
+ * list under a socket that never opened says nothing about the network, and
+ * reading it as *no nodes* is the same mistake B6 was, pointed the other way.
+ *
+ * The daemon here runs with `--mock-devices`, so it opens no socket of any kind.
+ * That is exactly the state the note exists for, and the reason it draws is the
+ * **daemon's own words** rather than a sentence this interface guessed.
+ */
+test("the node list never appears without saying whether the desk is listening", async ({
+  page,
+}) => {
+  const dataDir = await desk(page, PORT + 7);
+
+  const note = page.getByTestId("artnet-not-listening");
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("not listening for Art-Net nodes");
+  // The reason is the daemon's: this run was told not to listen, which is a
+  // different fact from a rig with no Art-Net row in it.
+  await expect(note).toContainText("--mock-devices");
+  // …and the panel does not claim the network is empty while it is deaf.
+  await expect(page.getByTestId("artnet-no-nodes")).toHaveCount(0);
+  await expect(page.getByTestId("artnet-node-0")).toHaveCount(0);
+
+  // Configuring an Art-Net output does not change that, because this daemon was
+  // told not to listen — which is what makes the note a *reason* rather than an
+  // instruction the operator has just followed for nothing.
+  await addOutput(page, {
+    id: "1",
+    name: "Bridge node",
+    kind: "ArtNet",
+    addresses: "127.0.0.1:6454",
+    universes: "1",
+  });
+  await expect(note).toBeVisible();
+  await expect(note).toContainText("--mock-devices");
+
+  // The health column is still the daemon's word and nothing is folded into it,
+  // because a desk that is not listening knows nothing about the far end.
+  await expect(page.getByTestId("output-health-1")).toHaveText("Ok");
+  await expect(page.getByTestId("output-nodes-1")).toHaveCount(0);
+
+  await done(dataDir);
+});

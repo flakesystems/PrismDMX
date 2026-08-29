@@ -900,6 +900,7 @@ type Query =
   | { t: "MidiPorts" }
   | { t: "DarkUniverses" }
   | { t: "OutputStatus" }
+  | { t: "ArtNetNodes" }
   | { t: "SurfaceBindings" };
 
 type StoreTarget =
@@ -914,6 +915,7 @@ type Answer =
   | { t: "MidiPorts"; ports: MidiPortInfo[]; configured: string | null;
       open: string | null; status: SurfaceStatus | null }
   | { t: "DarkUniverses"; universes: UniverseId[] }
+  | { t: "ArtNetNodes"; nodes: ArtNetNodeInfo[]; listening: boolean; error: string | null }
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
       profile: string | null; revision: number; learning: boolean };
 
@@ -926,6 +928,33 @@ interface SurfaceControl {               // S38 — one row of the binding table
 }
 
 interface MidiPortInfo { name: string; input: boolean; output: boolean }
+
+type NodeHealth =                         // S46 — whether a node answers
+  | "Answering"                           // a reply inside the timeout
+  | "NeverAnswered"                       // polled, and never heard from
+  | "Stopped";                            // answered once, and not lately
+
+interface NodeReach {                     // S46 — one node an output sends to
+  address: string;                        // as the rig spells it
+  health: NodeHealth;
+  name: string | null;                    // its short name, once it has given one
+  lastReplyAgoMs: number | null;          // an AGE, not a time
+}
+
+interface ArtNetNodeInfo {                // S46 — a node that answered ArtPoll
+  address: string;                        // where the reply came from
+  ip: string;                             // the address the node claims
+  shortName: string; longName: string;    // ShortName[18], LongName[64]
+  mac: string;                            // six hexadecimal pairs
+  firmware: number; style: number;
+  status1: number; status2: number;       // carried, not interpreted
+  ports: number[];                        // its OUTPUT port addresses, 15-bit
+  inputs: number[];                       // its input port addresses
+  configured: boolean;                    // the rig already addresses it
+  unaddressedPorts: number[];             // it outputs these; this desk sends none
+  missingPorts: number[];                 // this desk sends these; it lists none
+  replies: number; lastReplyAgoMs: number;
+}
 
 interface SurfaceStatus {                 // S37 — what the desk is doing
   health: "Disconnected" | "Connected" | "Live" | "Probing" | "Unresponsive";
@@ -1016,6 +1045,71 @@ interface StorePreview {
 > desk that has stopped sending is *reconnect*, and S20 established that
 > reconnecting is the one thing that cannot recover it (`docs/MCU_MAPPING.md`
 > §2.7). A client that wrote its own sentence would eventually write that one.
+
+> **`ArtNetNodes` is the variant S46 needed** *(S46)*. It answers **what is on
+> this network**, and it exists because `Health::Ok` on an Art-Net output has
+> meant *the socket accepted the datagram* since S9 — and UDP always accepts it.
+> That is punch-list **B6**, and it is not repairable inside the outputs: knowing
+> whether anything is listening needs an answer from the far end, which is
+> `ArtPoll` and `ArtPollReply` (Art-Net 4 §6).
+>
+> **Why a question rather than the rig.** A discovered node is neither show nor
+> machine. The rig lives in `prism_core::MachineConfig` because it is a decision
+> somebody made and a file has to remember; a discovered node is an *observation
+> about the network* — it changes while nobody does anything, no command causes
+> it, and it is gone at the next start. Writing it into the configuration would
+> mean a `machine.json` that changes because somebody switched a node off. That
+> is `MidiPorts`' argument exactly, one protocol along.
+>
+> **Why not a delta.** `OutputStatusInfo`'s reason: a table that moves at the poll
+> cadence, broadcast to every client whether or not anybody has the panel open,
+> to carry something only that panel draws.
+>
+> One thing differs from `MidiPorts` and is why this could not simply be
+> *enumerate on the asking thread*: there is no call that answers *what is on this
+> network*. Discovery is a conversation over time — poll, wait, hear — so the
+> daemon holds a table its own receive thread keeps and the question reads it. The
+> query still **sends nothing and changes nothing**, which is this section's first
+> rule.
+>
+> **`listening` must be read before `nodes` is.** `false` has two ordinary causes
+> — this desk has no Art-Net output, so nothing is listening on its behalf; or the
+> socket would not bind, which on a fixed port number is an everyday outcome — and
+> `error` tells them apart in the daemon's own words, for `MidiPorts`' remedy's
+> reason. An empty list under a socket that never opened says nothing at all about
+> the network, and reading it as *no nodes* would be B6's mistake pointed the
+> other way.
+>
+> **Both disagreements are the daemon's arithmetic.** `unaddressedPorts` and
+> `missingPorts` are the rig intersected with the discovery table, and a client
+> that did that intersection itself would be a second opinion about something the
+> daemon holds both halves of — `PatchPreview`'s trap, and the one that drifts the
+> first time a port-address default changes.
+
+> **`OutputStatus` grew `nodes`, and health grew a third value** *(S46)*. A row's
+> `nodes` is one `NodeReach` per configured node of an Art-Net output, in rig
+> order, and **empty for every other kind**: an Open DMX cable and an sACN stream
+> are told, never asked, so a `NeverAnswered` on one of them would be a state it
+> could enter and never leave. It is also empty while nothing is listening, which
+> is a different fact from *nothing answers*.
+>
+> `NodeHealth` is therefore a **second word** rather than three more
+> `OutputHealth` variants. What an output *reports* is still `OutputHealth`, and
+> the daemon folds the two: an Art-Net output whose driver says `Ok` while a node
+> of its is not answering is reported **`Degraded`** — it is sending, and it is not
+> sending cleanly, which is what that word has meant since S7. The fold happens in
+> the snapshot, in `Delta::OutputHealth` and in this answer, so a delta and an
+> answer cannot say different things about one output.
+>
+> The fold happens **only while the discovery is listening**. A desk that is not
+> listening knows nothing about the far end, and reporting `Degraded` out of
+> ignorance would be the same mistake in the other direction.
+>
+> The *stopped* state carries a **time**, and the time is the daemon's:
+> `lastReplyAgoMs` is an age in milliseconds, never a timestamp, because the daemon
+> and a browser share no clock — S33's rule for `lastErrorAgoMs` one field along.
+> Every age in one answer is measured against one `Instant::now()` on the daemon,
+> so two rows of one answer cannot disagree about *now*.
 
 > **`SurfaceBindings` is the variant S38 needed** *(S38)*. It answers what a
 > desk's keys **do**, and it is a question for this section's own rule: the table

@@ -49,6 +49,14 @@ fn options(dir: &Path) -> Options {
         // once would each be asking for it. A suite must not open a socket it
         // does not use.
         websocket: prismd::cli::Listen::Off,
+        // …and no Art-Net discovery either, for exactly the sentence above —
+        // S46. The discovery socket is bound on **every** interface, because
+        // that is where a node's reply is addressed, and a suite has no
+        // business doing that. It would also be heard by the loopback receiver
+        // the Art-Net test below binds: a fourteen-byte ArtPoll to the address
+        // the rig names is precisely what this desk sends, and that socket is
+        // standing in for a node without being one.
+        artnet_discovery: false,
         log_level: Some(prismd::log::Level::Warn),
         ..Options::default()
     }

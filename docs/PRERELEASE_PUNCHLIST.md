@@ -203,6 +203,16 @@ angezeigt wird.*
 - **Ergebnis:** ✅ **behoben in S45** — der Zustand liegt jetzt dort, wo eine Sequence nur einen davon haben kann. `PlaybackId` ist die Nummer der Cue-Liste, `Show::playback_of` löst einen Executor auf die Liste auf, die auf ihm steht, und `MergeBody` bekommt **ein** Playback pro Liste. Masterlevel, Rate, „läuft" und Cue-Zeiger sind vom `Executor` auf die `Sequence` gewandert; ein Executor ist ein **Griff**: welche Liste, was der Fader tut, was der Encoder tut, was die vier Tasten tun. Zwei Master-Fader auf einer Liste sind damit zwei Griffe an einer Zahl, ein Master und ein XFade bleiben unabhängig, und `Go` auf einem von beiden bewegt **einen** Cue-Zeiger. Auf Frames zugesichert: `two_master_faders_on_one_cue_list_move_one_light`, `a_master_and_a_crossfade_on_one_cue_list_are_two_handles` und `a_go_on_either_handle_advances_one_cue_pointer` in `crates/prismd/src/core.rs`, plus **B18** in `ui/e2e/executors.spec.ts` im Browser. Eine `.prism`-Datei von vorher öffnet unverändert, und das Level, das ihr Executor trug, wird auf die Liste übernommen (`ShowStore::carry_levels_onto_their_cue_lists`).
 
 
+### B36 — Crossfade falsch implementiert
+
+- **Wo:** Executor
+- **Schwere:** ärgerlich
+- **Was passiert:** Im Crossfade Modus wird ein Fadeover in einer Faderbewegung gemacht. Danach fährt er zurück auf 0 für den nächsten Fade. Das ist unpraktisch.
+- **Was passieren soll:** Es soll 2 Crossfadeade Modi geben: "Fade" und XFade": "Fade" soll beim hochfaden den aktuellen Cue ausfaden und beim runterfaden den nächsten Cue einfaden. "XFade" soll beim hochfaden zwischen dem aktuellen und dem nächsten crossfaden und beim runterfaden zwischen dem nächsten und übernächsten crossfaden, so dass man durch immer wieder hoch und runter faden durch die cuelist gehen kann. In keinem Fall soll der Fader nach einer Bewegung irgendwie zurück bewegt werden. Wenn der Fader in der Mitte anhält soll der Crossfade an dieser Stelle gehalten werden.
+- **So sieht man es:** Executor auf Crossfade stellen
+- **Ergebnis:** ☐ offen
+
+
 ## Programmer, Presets, Groups
 
 *Auswählen, Werte setzen, Speichern, Clear, die Pools.*
@@ -291,7 +301,11 @@ angezeigt wird.*
 - **Was passiert:** ArtNet Nodes werden als Health OK angezeigt, obwohl sie nich angeschlossen sind
 - **Was passieren soll:** Es sollte nur Health OK gezeigt werden, wenn tatsächlich eine Verbindung besteht
 - **So sieht man es:** Settings Outputs mit einer konfigurierten ArtNet Node öffnen, ohne tatsächlich eine ArtNet Node anzuschlißen
-- **Ergebnis:** ➡️ **wurde S46** — *Health* heißt heute *der Socket hat das Datagramm angenommen*, und UDP nimmt immer an. Zu wissen, ob eine Node zuhört, braucht einen **Empfangsweg**, den es im Code nirgends gibt: `ArtPoll` senden, `ArtPollReply` lesen, Namen und Port-Adressen daraus, und Health dreiwertig statt boolesch — *antwortet*, *hat nie geantwortet*, *antwortet seit 20:14 nicht mehr*. Das ist eine eigene Session, keine Zeile.
+- **Ergebnis:** ✅ **behoben in S46** — es gibt jetzt einen **Empfangsweg**, und damit eine Antwort statt einer Vermutung. `prism_protocols::artpoll` schreibt `ArtPoll` und liest `ArtPollReply` (Art-Net 4 §6): Kurz- und Langname, IP und MAC, die Port-Adress-Tabelle, die Statusbytes und die Firmware-Revision. `NodeDiscovery` fragt jede konfigurierte Node alle drei Sekunden und merkt sich, wer antwortet; der Daemon **faltet das in die gemeldete Health**, also liest ein Art-Net-Output, dessen Node schweigt, `Degraded` statt `Ok` — in der Momentaufnahme, im Delta und in der Antwort, damit die drei nicht auseinandergehen. Die Zeile darunter nennt die Node beim Namen, denn *Degraded* allein sagt einem Installateur nicht, zu welcher Kiste er laufen soll.
+
+  Vier Entscheidungen, die dahinterstehen. **Gepollt wird nur dorthin, wo dieses Pult ohnehin sendet** — unicast an die Adressen der Art-Net-Zeilen des Rigs, nie ein Broadcast: ein ArtPoll an eine Adresse, an die 44-mal pro Sekunde 530 Byte gehen, braucht keine neue Erlaubnis und erreicht nichts Neues (S9, S10). Der Preis steht daneben statt versteckt zu sein: eine Node, deren Adresse niemand getippt hat, wird nur gefunden, wenn sie sich **selbst meldet** — was Nodes beim Einschalten tun, und der Socket hört auf Art-Nets eigenem Port zu. **`NodeHealth` ist ein zweites Wort**, keine drei weiteren `OutputHealth`-Varianten: ein Open-DMX-Kabel und ein sACN-Strom haben keine Gegenrede und kämen aus *hat nie geantwortet* nie wieder heraus. Die dritte Form trägt die Zeit als **Alter** in Millisekunden neben sich, nie als Zeitstempel, weil Daemon und Browser keine gemeinsame Uhr haben (S33) — aus *vor 90 000 ms* macht das Panel *20:14*. Und **eine entdeckte Node wohnt nirgends dauerhaft**: sie ist eine Beobachtung über das Netz, also `Query::ArtNetNodes` und nicht `MachineConfig` — sonst änderte sich `machine.json`, weil jemand eine Node ausgeschaltet hat.
+
+  Im Panel stehen jetzt beide Listen und wo sie sich widersprechen: was konfiguriert ist, was im Netz antwortet, welche Universen eine Node ausgibt, auf die dieses Pult nichts sendet, und welche dieses Pult sendet, die die Node nicht hat. Eine entdeckte Node wird mit einem Klick zum Output — als **Formular**, nicht als Kommando, weil ein Panel nicht unaufgefordert das Rig einer laufenden Show ändert. Tests: `a_configured_node_that_never_answers_never_reads_ok` und fünf weitere in `crates/prismd/tests/artnet_nodes.rs` (über das Protokoll, an einem laufenden Daemon), `an_art_net_output_whose_node_never_answers_is_not_reported_ok` in `crates/prismd/src/outputs.rs`, die 21 in `crates/prism-protocols/src/discovery.rs`, `artpoll_wire.rs` über einen echten Loopback-Socket, `artpoll_fuzz.rs` mit einer Viertelmillion zufälliger Bytes und **null** Allokationen, und sieben in `ui/src/settings/settingswindow.test.tsx`.
 
 ### B19 — Keine doppelten Fixture Profile
 

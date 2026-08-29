@@ -913,6 +913,43 @@ reopening is the one thing that cannot recover it.
 - No test opens a real socket on a real network, and the tick is untouched — asserted on the frame sequence
 - Coverage on the new protocol code **> 95 %**
 
+**Done 2026-08-29.** Every criterion above, and punch-list **B6** closed at the
+line an installer reads. See `PROGRESS.md` §2.43 for the measurements. Five
+things are worth carrying forward.
+
+**A discovered node is a `Query`, not the rig.** It is an observation about the
+network — it changes while nobody does anything, no command causes it, and it is
+gone at the next start — so `Query::ArtNetNodes` and never `MachineConfig`, which
+is `Query::MidiPorts`' argument one protocol along. What differs from `MidiPorts`
+is why this could not be *enumerate on the asking thread*: there is no call that
+answers *what is on this network*, so the daemon listens continuously and the
+question **reads** a table its own receive thread keeps. The query still sends
+nothing.
+
+**Three-valued health is a second word.** `NodeHealth` belongs to a **node**,
+because an Open DMX cable and an sACN stream have no answer-back and would enter
+*never answered* and never leave. What an output *reports* goes on being
+`OutputHealth`, folded down by `prismd::outputs::reported_health` — and folded
+**only while the discovery is listening**, because reporting a fault a desk has
+not observed is the same mistake pointed the other way. The *stopped* state
+carries a time, and the time is an **age** from the daemon (S33's rule).
+
+**The receive seam is a second trait, exactly as `udp.rs` promised in S9.**
+`UdpNode` beside `UdpSender`, because an output's thread must never be handed a
+call that can block; `ArtNetOutput`, `SacnOutput` and `OpenDmxUsb` compile
+unchanged, which is the measurement that says the shape was right.
+
+**Nothing broadcasts.** The poll goes only where the rig already sends, so it
+needs no new permission and can reach nothing new — and the price is written down
+rather than hidden: a node at an address nobody has typed is found only when it
+announces itself, which is what a node does at power-up.
+
+**A test found the flag.** `wiring.rs` failed because a loopback socket standing
+in for a node received the poll, and behind that was a daemon binding
+`0.0.0.0:6454` inside a test suite. `--no-artnet-discovery` is on by default and
+off in the two targets that put a real Art-Net output on loopback — the same
+sentence `websocket: Listen::Off` has carried since S37.
+
 # Phase 8 — Settings and the control editor
 
 ## S37 · `ui` — the settings window
@@ -1126,10 +1163,10 @@ is, is the order the work was planned to make sense in.
 | 9 | **S36** `prism-midi` — the real MIDI port | The other half of the same statement: the desk in the rack is a device, not a mock. S33 left it the pattern for exactly this problem — the device behind a factory, a mock beside it, a flag that demands the mock, and the configured port in `MachineConfig`. **Done 2026-08-22**, CI green on run **32581376059** — see `PROGRESS.md` §2.36. The backend got a home rather than a second tool: `prism-midi` is §10.1's fourth exception, `midir` is target-gated so the ARM64 cross-check compiles none of it, and `prism-surface` gained no dependency at all. A configured port is a **name** that survives a replug; one that is not there is a warning and a daemon that starts; a cable pulled mid-show and put back costs the engine nothing. S20's finding is kept as a rule the port layer obeys — **a desk that has merely gone quiet is never reopened** — and the 🔌 half, the gate over a *real* port, is a row in `ARCHITECTURE_SPEC.md` §14 with the recipe |
 | 10 | **S37** `ui` — the settings window | Needs both of those to have something to configure, and now has it: S33's rig and S36's port are both `MachineConfig`'s, both reachable over the protocol, and three of the four panels need no protocol change at all. The fourth — show files — is the one that does. **Done 2026-08-23** — see `PROGRESS.md` §2.39. It went further than the fourth panel: **every operational `prismd` flag is a setting now**, so a venue's desk is configured where an operator can see it rather than in a shortcut nobody opens, and the WebSocket listener is on by default because the settings window, the Web Remote and the whole end-to-end suite all speak it. Three decisions are worth carrying: a flag still wins for its run and the panel is *told which rows a flag is holding*; a value a client must not choose — a token, a desk identity — is asked for rather than sent; and a counter that moves faster than any delta is a **query with a cadence of the client's own**, which is the gap S33 named on its way out |
 | 11 | **S38** `ui` — the interactive control editor | Needs the settings window to live in and the real port to learn from. S37 built half of the profile half already: the Devices panel names the binding file and re-reads it, so what is left is the table itself. **Done 2026-08-23**, CI green on run **32649175306** — see `PROGRESS.md` §2.40. All seventy-three controls are drawn with what each does, the whole vocabulary of §4 to choose from, and — because a client holds no device profile — which stay PrismDMX's in the combined Xctl+MC mode. **Learn** is S20's method rule run backwards: press the key you mean and the daemon names it, without firing it. Three decisions carry: the table lives in `MachineConfig` beside the rig and the port, a **profile file is an import** so a desk starts with the keys it was left with, and S22's rule split in two — a file that will not parse leaves *the table in force* standing. It also added **no command**: what a desk's keys do is one of this machine's settings, so it is two `MachineChange` variants |
-| 12 | **S43** `ui` — the punch list, the skeleton, and the first pre-release | After the last feature and before the first release, because that is the only moment the list is complete. Grew on 2026-08-24 from *cleanup and polish* into the session that makes the interface an operator's: an owner-written fault list (`docs/PRERELEASE_PUNCHLIST.md`), an owner-drawn layout (`design/skeleton/`, a Penpot export of flow and arrangement) and the cheap missing windows. It is also the **first interactive session** — agreed before it is built and driven by hand before it is called done. **Next** |
+| 12 | **S43** `ui` — the punch list, the skeleton, and the first pre-release | After the last feature and before the first release, because that is the only moment the list is complete. Grew on 2026-08-24 from *cleanup and polish* into the session that makes the interface an operator's: an owner-written fault list (`docs/PRERELEASE_PUNCHLIST.md`), an owner-drawn layout (`design/skeleton/`, a Penpot export of flow and arrangement) and the cheap missing windows. It is also the **first interactive session** — agreed before it is built and driven by hand before it is called done. **Open** — its third movement ends when the owner calls the interface fit for a pre-release |
 | 13 | **S45** core/engine/`ui` — the executor window, and one sequence one playback | Born out of S43 on 2026-08-27 from two punch-list entries that land on the same model: B15 (a button's action cannot be edited) and B18 (two executors of one sequence move independently). A UI session, so **before S29** — the interface is to be largely finished before it is wrapped in a shell |
-| 14 | **S46** protocols/`prismd`/`ui` — Art-Net node discovery | Born out of S43 on 2026-08-27 from punch-list B6: health means *the socket took it*, and UDP always takes it. Needs a receive path that does not exist yet, which is the session. Independent of S45, so it may equally run beside it |
-| 15 | **S48** domain/core/engine — tracking, and a cue list that lands in the same place twice | Asked for by the owner on 2026-08-27 out of S43's hand-testing, and it is the deepest thing that list turned up: today the output at a cue depends on how you got there, so a cue cannot be rehearsed. After S45 because it needs *one sequence, one playback* underneath it — a tracking state per playback of the same list is two answers to the question this session exists to give one answer to |
+| 14 | **S46** protocols/`prismd`/`ui` — Art-Net node discovery | Born out of S43 on 2026-08-27 from punch-list B6: health means *the socket took it*, and UDP always takes it. Needs a receive path that does not exist yet, which is the session. Independent of S45, so it may equally run beside it. **Done 2026-08-29** — see `PROGRESS.md` §2.43. The receive path is the first in the workspace and it got a seam of its own, which `udp.rs` had specified in S9; a node is *answering*, *never answered* or *stopped* with the age of its last reply, and the daemon folds that into the health every client is told. Nothing broadcasts: the poll goes where the rig already sends, and the cost of that is named rather than hidden |
+| 15 | **S48** domain/core/engine — tracking, and a cue list that lands in the same place twice | **Next.** Asked for by the owner on 2026-08-27 out of S43's hand-testing, and it is the deepest thing that list turned up: today the output at a cue depends on how you got there, so a cue cannot be rehearsed. After S45 because it needs *one sequence, one playback* underneath it — a tracking state per playback of the same list is two answers to the question this session exists to give one answer to |
 | 16 | **S49** domain/core/`ui` — the command line moves into the daemon | Born out of S43 on 2026-08-28: the owner asked for a bound key that *sends* its line, and a daemon with no parser cannot. S43 shipped the stop-gap and named it one. After S45 and S48 because those two add words to the grammar, and moving a grammar twice is moving it twice |
 | 17 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab. It also carries the **OS file dialogue** the owner asked for on 2026-08-28, which is here because a browser cannot name a path on the daemon's machine |
 | 18 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them |

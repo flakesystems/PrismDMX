@@ -42,7 +42,9 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use prism_domain::{Delta, OutputHealth, OutputId, OutputInstance, OutputKind, UniverseId};
+use prism_domain::{
+    Delta, NodeHealth, NodeReach, OutputHealth, OutputId, OutputInstance, OutputKind, UniverseId,
+};
 use prism_engine::{FrameEnrolment, SubscriberId};
 use prism_protocols::{
     ArtNetConfig, ArtNetOutput, Cid, Destination, DmxOutput, MockOutput, MockOutputHandle,
@@ -50,6 +52,7 @@ use prism_protocols::{
     SacnDestination, SacnOutput, SacnPort, SacnUniverse, SystemUdp, spawn, system_backend,
 };
 
+use crate::discovery::Discovery;
 use crate::log;
 use crate::server::OutputEntry;
 
@@ -358,6 +361,18 @@ pub struct OutputSupervisor {
     factory: Box<dyn OutputFactory>,
     context: OutputContext,
     running: Vec<Running>,
+    /// Whether anything answers at the far end of the Art-Net rows — S46.
+    ///
+    /// It lives here rather than beside the supervisor because the two are one
+    /// fact seen from two ends: **the rig decides where the polls go**, so a
+    /// supervisor holding one and a discovery holding the other would be two
+    /// opinions about which nodes this desk is addressed to. `reconcile` is the
+    /// one place either of them moves.
+    ///
+    /// [`Discovery::idle`] by default, which opens no socket: a daemon with no
+    /// Art-Net output, and every test in this workspace that starts one, has
+    /// nothing listening — see `crate::discovery`.
+    discovery: Discovery,
     /// When this supervisor was made — the origin every `OutputFault` age is
     /// measured against, so that a status panel says *four seconds ago* rather
     /// than a number from a clock the client does not have.
@@ -385,8 +400,34 @@ impl OutputSupervisor {
             factory,
             context,
             running: Vec::new(),
+            discovery: Discovery::idle(),
             started: Instant::now(),
         }
+    }
+
+    /// Gives this supervisor a discovery that can open a socket — S46.
+    ///
+    /// Called by the daemon with [`Discovery::system`] and by nobody else. A
+    /// supervisor that is never given one polls nothing and reports every
+    /// Art-Net node as unknown rather than as absent, which is the honest
+    /// answer for a desk that is not listening.
+    pub fn adopt_discovery(&mut self, discovery: Discovery) {
+        self.discovery.stop();
+        self.discovery = discovery;
+        let targets = art_net_targets(&self.instances());
+        self.discovery.retarget(targets);
+    }
+
+    /// What the discovery thread has heard — `Query::ArtNetNodes`' answer.
+    #[must_use]
+    pub fn discovered(&self) -> crate::discovery::DiscoveryTable {
+        self.discovery.table()
+    }
+
+    /// The discovery itself, for a test that has to wait for its thread.
+    #[cfg(test)]
+    pub(crate) const fn discovery_handle(&self) -> &Discovery {
+        &self.discovery
     }
 
     /// Brings the running drivers into line with `rig`.
@@ -446,7 +487,13 @@ impl OutputSupervisor {
             self.start_one(wanted);
         }
 
-        // 4. The buffers the tick gave up are freed here, on this thread.
+        // 4. Where the polls go is the rig's, so it moves with the rig — S46.
+        //    Every configured Art-Net row, **enabled or not**: an operator who
+        //    disables a row to work on the node is exactly the operator who
+        //    wants to know whether the node is there.
+        self.discovery.retarget(art_net_targets(rig));
+
+        // 5. The buffers the tick gave up are freed here, on this thread.
         self.enrolment.collect();
         self.running
             .sort_by_key(|running| running.instance.id.get());
@@ -528,6 +575,10 @@ impl OutputSupervisor {
 
     /// Stops everything, in output-number order. The shutdown path.
     pub fn stop_all(&mut self) {
+        // The listening socket first: it is the one thing here that is not
+        // driving a lamp, so nothing is dark for longer because of it, and the
+        // port is back before the process has finished stopping.
+        self.discovery.stop();
         for running in self.running.drain(..) {
             self.enrolment.unsubscribe(running.subscriber);
             running.thread.stop();
@@ -592,6 +643,70 @@ impl OutputSupervisor {
             .map_or(OutputHealth::Disconnected, |status| status.health())
     }
 
+    /// Whether the nodes one output sends to are answering — S46.
+    ///
+    /// **Empty for every kind but Art-Net**, and empty while nothing is
+    /// listening: an Open DMX cable cannot be asked, and a desk whose discovery
+    /// socket never bound does not know. Both are different facts from *nothing
+    /// answers*, which is why the answer is an empty list rather than a list of
+    /// `NeverAnswered`.
+    #[must_use]
+    pub fn node_reach(&self, output: &OutputInstance) -> Vec<NodeReach> {
+        let OutputKind::ArtNet { nodes, .. } = &output.kind else {
+            return Vec::new();
+        };
+        let table = self.discovery.table();
+        if !table.listening {
+            return Vec::new();
+        }
+        let now = Instant::now();
+        nodes
+            .iter()
+            .map(|&address| table.reach(address, now))
+            .collect()
+    }
+
+    /// The health one output is **reported** with — S46, and punch-list **B6**.
+    ///
+    /// The driver's own health, folded together with whether anything answers.
+    /// `OutputHealth::Ok` from an Art-Net driver means the socket took the
+    /// datagram and nothing more, and UDP always takes it; an output whose nodes
+    /// are silent is **`Degraded`** — it is sending, and it is not sending
+    /// cleanly, which is exactly what that word has meant since S7.
+    ///
+    /// The fold happens **only while the discovery is listening**. A desk that is
+    /// not listening knows nothing about the far end, and reporting `Degraded`
+    /// out of ignorance would be B6's mistake pointed the other way: `Ok` stands,
+    /// and the panel says nothing is listening. What is never done is reporting
+    /// `Ok` over silence this desk actually heard.
+    #[must_use]
+    pub fn reported_health(&self, id: OutputId) -> OutputHealth {
+        let driver = self.health(id);
+        if driver != OutputHealth::Ok {
+            return driver;
+        }
+        let Some(instance) = self
+            .running
+            .iter()
+            .find(|running| running.instance.id == id)
+            .map(|running| &running.instance)
+        else {
+            return driver;
+        };
+        let reach = self.node_reach(instance);
+        if reach.is_empty() {
+            return driver;
+        }
+        if reach
+            .iter()
+            .all(|node| node.health == NodeHealth::Answering)
+        {
+            OutputHealth::Ok
+        } else {
+            OutputHealth::Degraded
+        }
+    }
+
     /// How long this supervisor has been running — what an `OutputFault` age is
     /// measured against.
     #[must_use]
@@ -621,6 +736,56 @@ impl OutputSupervisor {
             .find(|running| running.instance.id == id)
             .and_then(|running| running.recording.clone())
     }
+}
+
+/// Every address the rig's Art-Net outputs send to, once each — S46.
+///
+/// **This is the whole of where a poll may go.** Nothing broadcasts, so
+/// discovery can reach nothing this desk was not already sending 530 bytes to
+/// forty-four times a second — the rule `prism_protocols::discovery` states and
+/// this function is the only place that could break.
+#[must_use]
+pub fn art_net_targets(rig: &[OutputInstance]) -> Vec<std::net::SocketAddr> {
+    let mut targets = Vec::new();
+    for output in rig {
+        if let OutputKind::ArtNet { nodes, .. } = &output.kind {
+            for &node in nodes {
+                if !targets.contains(&node) {
+                    targets.push(node);
+                }
+            }
+        }
+    }
+    targets
+}
+
+/// The port addresses this desk sends to one node — S46.
+///
+/// Half of *where the two disagree*: a node lists the universes it outputs and
+/// this is what the rig sends it, so the two differences are the two faults an
+/// installer is looking for. Matched on the **IP**, because two outputs to one
+/// box is an ordinary rig and both of them address the same node.
+#[must_use]
+pub fn desk_ports_to(rig: &[OutputInstance], address: std::net::SocketAddr) -> Vec<u16> {
+    let mut ports = Vec::new();
+    for output in rig {
+        let OutputKind::ArtNet {
+            nodes, ports: rows, ..
+        } = &output.kind
+        else {
+            continue;
+        };
+        if !nodes.iter().any(|node| node.ip() == address.ip()) {
+            continue;
+        }
+        for (_, port) in art_net_ports(output, rows) {
+            if !ports.contains(&port.get()) {
+                ports.push(port.get());
+            }
+        }
+    }
+    ports.sort_unstable();
+    ports
 }
 
 /// `1, 2, 5` — for a log line an installer reads.
@@ -657,6 +822,34 @@ mod tests {
         }
     }
 
+    /// Waits for a driver thread to have connected. A deadline, not a
+    /// measurement: `reconcile` starts a thread and the health it reports is
+    /// `Disconnected` until that thread has opened its double.
+    fn until_sending(supervisor: &OutputSupervisor, id: OutputId) {
+        let started = Instant::now();
+        while supervisor.health(id) != OutputHealth::Ok {
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "output {id} never started sending"
+            );
+            std::thread::yield_now();
+        }
+    }
+
+    /// An Art-Net output on `id`, addressed to the node at `127.0.0.<last>`.
+    fn art_net(id: u32, last: u8, universes: &[u32]) -> OutputInstance {
+        OutputInstance::new(
+            OutputId::new(id),
+            format!("Node {id}"),
+            OutputKind::ArtNet {
+                nodes: vec![crate::discovery::testing::node_at(last)],
+                sync: false,
+                ports: Vec::new(),
+            },
+            universes.iter().copied().map(UniverseId::new),
+        )
+    }
+
     fn mock(id: u32, universes: &[u32]) -> OutputInstance {
         OutputInstance::new(
             OutputId::new(id),
@@ -677,6 +870,170 @@ mod tests {
             Box::new(MockDevices::default()),
             context(),
         )
+    }
+
+    /// The whole of where a poll may go — S46.
+    #[test]
+    fn the_poll_targets_are_the_art_net_rows_of_the_rig_and_nothing_else() {
+        use crate::discovery::testing::node_at;
+        let rig = vec![
+            mock(1, &[1]),
+            art_net(2, 5, &[2, 3]),
+            // A second output to the same node: an ordinary rig, and not a
+            // reason to poll it twice.
+            art_net(3, 5, &[4]),
+            OutputInstance {
+                enabled: false,
+                ..art_net(4, 6, &[5])
+            },
+            OutputInstance::new(
+                OutputId::new(5),
+                "Gateway",
+                OutputKind::Sacn {
+                    receivers: vec![node_at(9)],
+                    ttl: 1,
+                    ports: Vec::new(),
+                },
+                [universe(6)],
+            ),
+        ];
+        assert_eq!(
+            super::art_net_targets(&rig),
+            vec![node_at(5), node_at(6)],
+            "every Art-Net node once, enabled or not, and nothing of another kind"
+        );
+    }
+
+    /// Half of *where the two disagree* — S46.
+    #[test]
+    fn the_ports_this_desk_sends_to_a_node_include_the_default_mapping() {
+        use crate::discovery::testing::node_at;
+        // Universes 2 and 3 with no rows of their own, so they take the default
+        // ARCHITECTURE_SPEC.md §7.0 states: universe N goes to port N - 1.
+        let rig = vec![
+            art_net(2, 5, &[2, 3]),
+            OutputInstance::new(
+                OutputId::new(3),
+                "Same box, other port",
+                OutputKind::ArtNet {
+                    nodes: vec![node_at(5)],
+                    sync: false,
+                    ports: vec![ArtNetPort {
+                        universe: universe(9),
+                        net: 0,
+                        sub_net: 1,
+                        port: 4,
+                    }],
+                },
+                [universe(9)],
+            ),
+            art_net(4, 6, &[7]),
+        ];
+        assert_eq!(
+            super::desk_ports_to(&rig, node_at(5)),
+            vec![1, 2, 0x14],
+            "both outputs to that box, the default mapping and the row that overrides it"
+        );
+        assert_eq!(super::desk_ports_to(&rig, node_at(6)), vec![6]);
+        assert!(super::desk_ports_to(&rig, node_at(7)).is_empty());
+    }
+
+    /// **Punch-list B6, at the layer that decides it.** An Art-Net output whose
+    /// node never answers must not report `Ok`, because `Ok` from the driver
+    /// means the socket took the datagram and UDP always takes it.
+    #[test]
+    fn an_art_net_output_whose_node_never_answers_is_not_reported_ok() {
+        use crate::discovery::testing::{MockSockets, config, node_at, reply_from, until};
+        let publisher = publisher();
+        let mut supervisor = supervisor(&publisher);
+        let (source, socket) = MockSockets::new();
+        supervisor.adopt_discovery(crate::discovery::Discovery::with_source(source, config()));
+
+        let rig = vec![art_net(1, 5, &[1]), mock(2, &[2])];
+        supervisor.reconcile(&rig);
+        until_sending(&supervisor, OutputId::new(1));
+        assert_eq!(
+            supervisor.health(OutputId::new(1)),
+            OutputHealth::Ok,
+            "the driver is perfectly happy, which is exactly the problem"
+        );
+        until(supervisor.discovery_handle(), |table| {
+            table.counters.polls_sent > 0
+        });
+
+        assert_eq!(
+            supervisor.reported_health(OutputId::new(1)),
+            OutputHealth::Degraded,
+            "it is sending, and it is not sending cleanly: nothing answers"
+        );
+        let reach = supervisor.node_reach(&rig[0]);
+        assert_eq!(reach.len(), 1);
+        assert_eq!(reach[0].health, prism_domain::NodeHealth::NeverAnswered);
+        assert_eq!(reach[0].address, node_at(5).to_string());
+        assert_eq!(reach[0].last_reply_ago_ms, None);
+
+        // The mock output beside it is untouched: nothing else this desk drives
+        // has an answer-back, so nothing else is folded.
+        assert_eq!(
+            supervisor.reported_health(OutputId::new(2)),
+            OutputHealth::Ok
+        );
+        assert!(supervisor.node_reach(&rig[1]).is_empty());
+
+        // And when the node answers, the row goes green.
+        socket.deliver(node_at(5), &reply_from(5, "Stage left", &[0]));
+        until(supervisor.discovery_handle(), |table| {
+            !table.nodes.is_empty()
+        });
+        assert_eq!(
+            supervisor.reported_health(OutputId::new(1)),
+            OutputHealth::Ok
+        );
+        assert_eq!(
+            supervisor.node_reach(&rig[0])[0].health,
+            prism_domain::NodeHealth::Answering
+        );
+    }
+
+    /// The fold is not made out of ignorance — S46.
+    #[test]
+    fn a_desk_that_is_not_listening_reports_the_drivers_own_health() {
+        let publisher = publisher();
+        let mut supervisor = supervisor(&publisher);
+        let rig = vec![art_net(1, 5, &[1])];
+        supervisor.reconcile(&rig);
+        until_sending(&supervisor, OutputId::new(1));
+        assert!(
+            !supervisor.discovered().listening,
+            "an idle supervisor opens no socket"
+        );
+        assert_eq!(
+            supervisor.reported_health(OutputId::new(1)),
+            OutputHealth::Ok,
+            "a desk that is not listening knows nothing about the far end, and \
+             reporting Degraded out of ignorance is B6 pointed the other way"
+        );
+        assert!(
+            supervisor.node_reach(&rig[0]).is_empty(),
+            "and it says nothing about the nodes rather than guessing"
+        );
+    }
+
+    /// A driver that is not sending is not made to look better by a node that
+    /// happens to answer.
+    #[test]
+    fn a_disconnected_output_stays_disconnected_whatever_the_nodes_say() {
+        let publisher = publisher();
+        let mut supervisor = supervisor(&publisher);
+        supervisor.reconcile(&[OutputInstance {
+            enabled: false,
+            ..art_net(1, 5, &[1])
+        }]);
+        assert_eq!(
+            supervisor.reported_health(OutputId::new(1)),
+            OutputHealth::Disconnected,
+            "a disabled output has no thread, and that is the truth"
+        );
     }
 
     /// The two paths a rig meets when it asks for more than there is: the

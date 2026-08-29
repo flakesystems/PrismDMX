@@ -62,6 +62,188 @@ impl OutputHealth {
     }
 }
 
+/// Whether an Art-Net node this desk is addressed to is **answering** - S46.
+///
+/// # Why this is a second word and not three more [`OutputHealth`] variants
+///
+/// [`OutputHealth`] is the *socket's* opinion, and for a network output that
+/// opinion is worth very little: UDP accepts every datagram it is handed, so an
+/// Art-Net output with no node on the far end reports `Ok` for ever. That is
+/// punch-list **B6**, and it cannot be repaired by renaming a variant, because
+/// the fact the operator is missing is one the socket does not have.
+///
+/// It is also not three more variants of `OutputHealth`, and that is the
+/// decision worth reading: an Open DMX cable and an sACN sender have no
+/// answer-back at all, so `NeverAnswered` would be a state they could enter and
+/// never leave. What answers is a **node**, so the word belongs to a node — and
+/// what an output reports goes on being `OutputHealth`, folded down from these
+/// by the daemon (`prismd::outputs::reported_health`).
+///
+/// # The third state carries a time, and the time is the daemon's
+///
+/// *Answering* and *never answered* are complete on their own; *stopped* is only
+/// useful with a moment attached, because an installer wants to know whether it
+/// stopped while they were walking to the rack. The moment travels as an **age**
+/// beside this value ([`NodeReach::last_reply_ago_ms`]) rather than as a
+/// timestamp inside it, which is S33's rule for `OutputStatusInfo::last_error`:
+/// the daemon and a browser share no clock, so the daemon says *how long ago*
+/// and the client renders that against its own.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum NodeHealth {
+    /// A reply arrived inside the timeout. The only value that means *there is
+    /// something out there listening*.
+    Answering,
+    /// Polled, and has never replied since this daemon started.
+    ///
+    /// The default, and deliberately so: the safe reading of silence is silence.
+    #[default]
+    NeverAnswered,
+    /// Answered once and has not answered since - see
+    /// [`NodeReach::last_reply_ago_ms`] for when.
+    Stopped,
+}
+
+impl NodeHealth {
+    /// Whether something is known to be listening at the far end.
+    #[must_use]
+    pub const fn is_answering(self) -> bool {
+        matches!(self, Self::Answering)
+    }
+}
+
+/// One address an output sends to, and whether anything there answers - S46.
+///
+/// One row per node of an `OutputKind::ArtNet`, in the order the rig names them.
+/// **Empty for every other kind**, because nothing else this desk drives has an
+/// answer-back: an Open DMX cable and an sACN stream are told, never asked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct NodeReach {
+    /// The configured address, as the rig spells it.
+    pub address: String,
+    /// Whether it answers.
+    pub health: NodeHealth,
+    /// The node's short name, once it has said one. `None` for a node that has
+    /// never answered - there is nothing to call it.
+    pub name: Option<String>,
+    /// How long ago the last reply was, in milliseconds, or `None` for a node
+    /// that has never answered.
+    ///
+    /// An **age** and not a time, for [`NodeHealth`]'s reason.
+    pub last_reply_ago_ms: Option<u64>,
+}
+
+/// A node that answered an `ArtPoll` - S46.
+///
+/// # A discovered node is not a configured one
+///
+/// The two lists answer different questions and an installer needs both: *what
+/// is out there* and *what this desk is addressed to*. `configured` is where
+/// they meet, and [`unaddressed_ports`](Self::unaddressed_ports) and
+/// [`missing_ports`](Self::missing_ports) are where they disagree - a node
+/// outputting a universe this desk sends nothing on is as much a fault as a
+/// configured node that never answers, and neither is visible from one list
+/// alone.
+///
+/// Both disagreements are **the daemon's arithmetic**, for `Query`'s own rule:
+/// a client that intersected the rig with the discovery table would be a second
+/// opinion about something the daemon already holds both halves of.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct ArtNetNodeInfo {
+    /// Where the reply came from - the address a new output would be given.
+    pub address: String,
+    /// The address the node says it has, which differs from `address` on a node
+    /// behind a translating router and is worth showing when it does.
+    pub ip: String,
+    /// `ShortName`, 18 bytes in the packet: what a node's front panel shows.
+    pub short_name: String,
+    /// `LongName`, 64 bytes.
+    pub long_name: String,
+    /// `MAC`, as six hexadecimal pairs. The one identifier that survives a node
+    /// being re-addressed.
+    pub mac: String,
+    /// `VersInfoH`/`VersInfoL` - the node's own firmware revision.
+    pub firmware: u16,
+    /// `Style`: what kind of device it says it is (`StNode`, `StController`, ...).
+    pub style: u8,
+    /// `Status1` and `Status2`, carried as numbers rather than read: they are a
+    /// bit field of the node's own diagnostics, and a desk that interpreted them
+    /// would be interpreting one vendor's spelling of them.
+    pub status1: u8,
+    /// See [`status1`](Self::status1).
+    pub status2: u8,
+    /// The node's **output** port addresses, fifteen bits each.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub ports: Vec<u16>,
+    /// The node's **input** port addresses - a node sending DMX *into* the
+    /// network, which this desk does not consume and which is worth showing so
+    /// an installer can see why a universe is being driven twice.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub inputs: Vec<u16>,
+    /// Whether the rig already addresses this node.
+    pub configured: bool,
+    /// Port addresses the node outputs that this desk sends it nothing on.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub unaddressed_ports: Vec<u16>,
+    /// Port addresses this desk sends to the node that the node does not list.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub missing_ports: Vec<u16>,
+    /// The universes an output for this node would carry if nobody said
+    /// otherwise — the deliverable's *one click*.
+    ///
+    /// The **inverse of the default mapping** ([`ArtNetPort::for_universe`]:
+    /// universe N goes to port address N − 1), applied to the port addresses the
+    /// node says it outputs. It is answered rather than worked out by a client
+    /// for `Query`'s rule: that mapping is stated in `ARCHITECTURE_SPEC.md` §7.0
+    /// and implemented twice in Rust already, and a third spelling of it in
+    /// TypeScript would drift the first time it moved.
+    ///
+    /// Empty for a node that lists no output ports, which is an ordinary state
+    /// for a node that has not been addressed yet: an output made from it would
+    /// carry nothing, and the operator types the universes instead.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub suggested_universes: Vec<UniverseId>,
+    /// How many replies have arrived since the daemon started.
+    pub replies: u64,
+    /// How long ago the last one was, in milliseconds - an age, not a time.
+    pub last_reply_ago_ms: u64,
+}
+
+impl ArtNetNodeInfo {
+    /// The desk universe a node's port address maps to by default.
+    ///
+    /// The inverse of [`ArtNetPort::for_universe`], and the one place it is
+    /// written: universe N goes to port address N − 1, so port address P is
+    /// universe P + 1. `None` outside [`UniverseId`]'s own range, which a
+    /// fifteen-bit port address reaches and this desk does not.
+    #[must_use]
+    pub fn universe_for_port(port: u16) -> Option<UniverseId> {
+        let universe = UniverseId::new(u32::from(port) + 1);
+        universe.is_in_range().then_some(universe)
+    }
+}
+
 /// Art-Net's fifteen-bit port address for one of this desk's universes.
 ///
 /// **A four-port node is four of these**, and that is what the type is for: an
@@ -392,12 +574,25 @@ pub struct OutputStatusInfo {
     /// How long ago that was — an **age**, not a time, because the daemon and a
     /// browser have no shared clock (S33).
     pub last_error_ago_ms: Option<u64>,
+    /// Whether the nodes this output sends to are answering — S46.
+    ///
+    /// One row per configured node of an Art-Net output, and **empty** for every
+    /// other kind, for [`NodeReach`]'s reason: nothing else this desk drives can
+    /// be asked. Also empty while the discovery socket is not bound, which is a
+    /// different fact from *nothing answers* — see `Answer::ArtNetNodes`.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(2)")
+    )]
+    #[serde(default)]
+    pub nodes: Vec<NodeReach>,
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        ArtNetPort, OutputHealth, OutputId, OutputInstance, OutputKind, SacnPort, UniverseId,
+        ArtNetNodeInfo, ArtNetPort, NodeHealth, NodeReach, OutputHealth, OutputId, OutputInstance,
+        OutputKind, OutputStatusInfo, SacnPort, UniverseId,
     };
     use ts_rs::{Config, TS};
 
@@ -419,6 +614,101 @@ mod tests {
     #[test]
     fn an_output_that_has_not_reported_yet_counts_as_disconnected() {
         assert_eq!(OutputHealth::default(), OutputHealth::Disconnected);
+    }
+
+    /// S38's rule kept: a type's own crate tests it, or the figure that says so
+    /// is somebody else's suite.
+    #[test]
+    fn a_node_is_answering_never_answered_or_stopped_and_nothing_else() {
+        for (health, text) in [
+            (NodeHealth::Answering, "\"Answering\""),
+            (NodeHealth::NeverAnswered, "\"NeverAnswered\""),
+            (NodeHealth::Stopped, "\"Stopped\""),
+        ] {
+            assert_eq!(serde_json::to_string(&health).unwrap(), text);
+        }
+        assert_eq!(
+            NodeHealth::inline(&Config::new()),
+            "\"Answering\" | \"NeverAnswered\" | \"Stopped\""
+        );
+    }
+
+    /// The safe reading of silence is silence — and only one value means *there
+    /// is something out there*, which is the whole of punch-list B6.
+    #[test]
+    fn a_node_nobody_has_heard_from_has_not_answered() {
+        assert_eq!(NodeHealth::default(), NodeHealth::NeverAnswered);
+        assert!(NodeHealth::Answering.is_answering());
+        assert!(!NodeHealth::NeverAnswered.is_answering());
+        assert!(!NodeHealth::Stopped.is_answering());
+    }
+
+    /// The age travels **beside** the value, never inside it — S33's rule for
+    /// `last_error_ago_ms`, one field along.
+    #[test]
+    fn a_node_row_carries_an_age_and_not_a_time() {
+        let reach = NodeReach {
+            address: "10.0.0.9:6454".to_owned(),
+            health: NodeHealth::Stopped,
+            name: Some("Stage left".to_owned()),
+            last_reply_ago_ms: Some(90_000),
+        };
+        let json = serde_json::to_string(&reach).unwrap();
+        assert!(json.contains(r#""lastReplyAgoMs":90000"#), "{json}");
+        assert!(json.contains(r#""health":"Stopped""#), "{json}");
+        assert_eq!(serde_json::from_str::<NodeReach>(&json).unwrap(), reach);
+
+        // A node that has never answered has nothing to be called and no age.
+        let silent = NodeReach {
+            address: "10.0.0.9:6454".to_owned(),
+            health: NodeHealth::NeverAnswered,
+            name: None,
+            last_reply_ago_ms: None,
+        };
+        let json = serde_json::to_string(&silent).unwrap();
+        assert!(json.contains(r#""name":null"#), "{json}");
+        assert_eq!(serde_json::from_str::<NodeReach>(&json).unwrap(), silent);
+    }
+
+    /// A status row from a daemon that never heard of nodes still decodes, and
+    /// the field it is missing means *nothing to say* rather than *nothing
+    /// answers*.
+    #[test]
+    fn an_output_status_row_without_nodes_still_opens() {
+        let row: OutputStatusInfo = serde_json::from_str(
+            r#"{"id":1,"health":"Ok","framesSent":42,"lastError":null,"lastErrorAgoMs":null}"#,
+        )
+        .unwrap();
+        assert!(row.nodes.is_empty());
+        assert_eq!(row.frames_sent, 42);
+    }
+
+    /// The default mapping run backwards, and the one place it is written.
+    #[test]
+    fn a_port_address_maps_back_to_the_universe_one_above_it() {
+        assert_eq!(
+            ArtNetNodeInfo::universe_for_port(0),
+            Some(UniverseId::new(1)),
+            "Art-Net counts from 0 and this desk counts from 1"
+        );
+        assert_eq!(
+            ArtNetNodeInfo::universe_for_port(63),
+            Some(UniverseId::new(64))
+        );
+        assert_eq!(
+            ArtNetNodeInfo::universe_for_port(64),
+            None,
+            "a fifteen-bit port address reaches further than this desk does"
+        );
+        assert_eq!(ArtNetNodeInfo::universe_for_port(0x7fff), None);
+        // …and it is the exact inverse of the mapping the rig uses.
+        for universe in [1u32, 2, 16, 17, 64] {
+            let row = ArtNetPort::for_universe(UniverseId::new(universe));
+            assert_eq!(
+                ArtNetNodeInfo::universe_for_port(row.address()),
+                Some(UniverseId::new(universe))
+            );
+        }
     }
 
     #[test]

@@ -280,6 +280,18 @@ impl Core {
         self.machine.outputs.stop_all();
     }
 
+    /// Gives this machine an Art-Net discovery — S46.
+    ///
+    /// The daemon gives the supervisor its own before this `Core` exists
+    /// (`prismd::daemon`), because the rig is reconciled on the way up and the
+    /// poll targets come out of that same rig. This is how a **test** gives one
+    /// to a daemon that is already running, which is what lets punch-list B6 be
+    /// asserted over the protocol — `Query::OutputStatus` on a configured node
+    /// that never answers — rather than only against a supervisor.
+    pub fn adopt_discovery(&mut self, discovery: crate::discovery::Discovery) {
+        self.machine.outputs.adopt_discovery(discovery);
+    }
+
     /// The engine, for the daemon's own timers and its shutdown.
     #[must_use]
     pub const fn engine(&self) -> &EngineThread {

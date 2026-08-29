@@ -23,6 +23,18 @@
 //! permission is granted in exactly one place, and that a test can assert the
 //! default configuration never asks for it.
 //!
+//! # The receive seam is a second trait, not a `recv` on the first *(S46)*
+//!
+//! Until S46 this module said, in as many words, that `ArtPoll` and node
+//! discovery *will need their own seam rather than a `recv` bolted onto this
+//! one*. [`UdpNode`] is that seam and the sentence was right: an output holds a
+//! socket it only ever writes to, on a thread whose whole job is to keep a DMX
+//! line fed, and giving [`UdpSender`] a `recv_from` would have put a blocking
+//! call within reach of three drivers that must never make one. Discovery is a
+//! different thread with a different shape — it waits, which an output may not —
+//! so it gets a different trait, and `ArtNetOutput`, `SacnOutput` and
+//! `OpenDmxUsb` are unchanged.
+//!
 //! # Why multicast is one method and not a group membership
 //!
 //! sACN sends to `239.255.x.x` (`ARCHITECTURE_SPEC.md` §7.2), and a *sender*
@@ -38,6 +50,7 @@ use std::collections::VecDeque;
 use std::io;
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 /// Why a datagram did not go out.
 ///
@@ -118,9 +131,10 @@ pub fn classify(kind: io::ErrorKind) -> UdpError {
 /// One UDP socket, as a network DMX output needs to use it.
 ///
 /// Deliberately small, for the same reason [`FtdiBackend`](crate::FtdiBackend)
-/// is: Art-Net output is transmit-only, so there is no receive here and no
-/// discovery. `ArtPoll` and node discovery are a later session's problem and
-/// will need their own seam rather than a `recv` bolted onto this one.
+/// is: Art-Net *output* is transmit-only, so there is no receive here and no
+/// discovery. Node discovery arrived in S46 and got the separate seam this
+/// paragraph promised it — [`UdpNode`] — rather than a `recv` bolted onto this
+/// one, so a driver thread still holds a socket it cannot block on.
 pub trait UdpSender: Send {
     /// Opens a socket on `local`, asking for broadcast permission if
     /// `broadcast` is set.
@@ -450,9 +464,386 @@ impl UdpSender for MockUdp {
     }
 }
 
+/// One UDP socket that **listens** as well as sends — S46.
+///
+/// The seam Art-Net node discovery needs, and deliberately not an addition to
+/// [`UdpSender`]: see this module's documentation for why a driver thread must
+/// not be handed a call that can block.
+///
+/// `recv_from` carries its own timeout rather than the socket carrying a mode.
+/// A discovery thread wants to be woken to send the next poll and to notice that
+/// it has been asked to stop, so *how long to wait* is a decision it makes per
+/// call; a socket in blocking mode would take the decision away and one in
+/// non-blocking mode would turn the loop into a spin.
+pub trait UdpNode: Send {
+    /// Opens a socket on `local`, asking for broadcast permission if
+    /// `broadcast` is set.
+    ///
+    /// # Errors
+    ///
+    /// [`UdpError::Bind`] if the address cannot be taken — which for discovery
+    /// is the ordinary case rather than a fault, because Art-Net's port is a
+    /// fixed number and another program on the machine may already hold it.
+    fn bind(&mut self, local: SocketAddr, broadcast: bool) -> Result<(), UdpError>;
+
+    /// Sends one datagram and answers how many bytes went.
+    ///
+    /// # Errors
+    ///
+    /// [`UdpError`] as the operating system reports it, classified by
+    /// [`classify`].
+    fn send_to(&mut self, datagram: &[u8], target: SocketAddr) -> Result<usize, UdpError>;
+
+    /// Waits at most `timeout` for one datagram.
+    ///
+    /// `Ok(None)` means the wait expired with nothing to read, which is what a
+    /// quiet network looks like and is not an error.
+    ///
+    /// # Errors
+    ///
+    /// [`UdpError::NotBound`] if there is no socket, or whatever the operating
+    /// system says about the read.
+    fn recv_from(
+        &mut self,
+        buffer: &mut [u8],
+        timeout: Duration,
+    ) -> Result<Option<(usize, SocketAddr)>, UdpError>;
+
+    /// The address this socket is listening on, once there is one.
+    fn local_addr(&self) -> Option<SocketAddr>;
+
+    /// Closes the socket. Infallible, for [`UdpSender::close`]'s reason.
+    fn close(&mut self);
+}
+
+/// A boxed node is a node — [`UdpSender`]'s reason, one trait along.
+impl<S: UdpNode + ?Sized> UdpNode for Box<S> {
+    fn bind(&mut self, local: SocketAddr, broadcast: bool) -> Result<(), UdpError> {
+        (**self).bind(local, broadcast)
+    }
+
+    fn send_to(&mut self, datagram: &[u8], target: SocketAddr) -> Result<usize, UdpError> {
+        (**self).send_to(datagram, target)
+    }
+
+    fn recv_from(
+        &mut self,
+        buffer: &mut [u8],
+        timeout: Duration,
+    ) -> Result<Option<(usize, SocketAddr)>, UdpError> {
+        (**self).recv_from(buffer, timeout)
+    }
+
+    fn local_addr(&self) -> Option<SocketAddr> {
+        (**self).local_addr()
+    }
+
+    fn close(&mut self) {
+        (**self).close();
+    }
+}
+
+/// The shortest read timeout a real socket will accept.
+///
+/// `UdpSocket::set_read_timeout` refuses a zero duration — it means *block for
+/// ever* to the operating system and the standard library turns it into an
+/// error rather than passing it on — so a caller asking not to wait at all is
+/// given the smallest wait there is instead of a failure.
+const MIN_READ_TIMEOUT: Duration = Duration::from_millis(1);
+
+/// The real listening socket: `std::net::UdpSocket`, and nothing else.
+///
+/// [`SystemUdp`]'s twin, and portable for the same reason: there is no `#[cfg]`
+/// in it, so the Linux CI job and the ARM64 cross-check test what Windows runs.
+#[derive(Debug, Default)]
+pub struct SystemUdpNode {
+    socket: Option<UdpSocket>,
+    /// The timeout currently set on the socket, so a loop asking for the same
+    /// one every pass does not make a system call to say so.
+    timeout: Option<Duration>,
+}
+
+impl SystemUdpNode {
+    /// A node socket with nothing open yet.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            socket: None,
+            timeout: None,
+        }
+    }
+}
+
+impl UdpNode for SystemUdpNode {
+    fn bind(&mut self, local: SocketAddr, broadcast: bool) -> Result<(), UdpError> {
+        // Dropped first, as `SystemUdp` does: a rebind that left the old socket
+        // behind would hold the port it is trying to take.
+        self.socket = None;
+        self.timeout = None;
+        let socket = UdpSocket::bind(local).map_err(|_| UdpError::Bind)?;
+        if broadcast {
+            socket.set_broadcast(true).map_err(|_| UdpError::Bind)?;
+        }
+        self.socket = Some(socket);
+        Ok(())
+    }
+
+    fn send_to(&mut self, datagram: &[u8], target: SocketAddr) -> Result<usize, UdpError> {
+        let Some(socket) = self.socket.as_ref() else {
+            return Err(UdpError::NotBound);
+        };
+        socket
+            .send_to(datagram, target)
+            .map_err(|error| classify(error.kind()))
+    }
+
+    fn recv_from(
+        &mut self,
+        buffer: &mut [u8],
+        timeout: Duration,
+    ) -> Result<Option<(usize, SocketAddr)>, UdpError> {
+        let wanted = timeout.max(MIN_READ_TIMEOUT);
+        let Some(socket) = self.socket.as_ref() else {
+            return Err(UdpError::NotBound);
+        };
+        if self.timeout != Some(wanted) {
+            socket
+                .set_read_timeout(Some(wanted))
+                .map_err(|error| classify(error.kind()))?;
+            self.timeout = Some(wanted);
+        }
+        match socket.recv_from(buffer) {
+            Ok(read) => Ok(Some(read)),
+            // The two names one platform or the other gives *the wait expired*.
+            // Neither is a fault: a lighting network is quiet nearly all the
+            // time, and this is the branch that runs on nearly every pass.
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) =>
+            {
+                Ok(None)
+            }
+            // A datagram nobody was listening for produces `ConnectionReset` on
+            // Windows from a *previous* send, which is not a reason to stop
+            // listening — see `discovery.rs`. It is classified as `Io`, and the
+            // caller's rule for `Io` is to carry on.
+            Err(error) => Err(classify(error.kind())),
+        }
+    }
+
+    fn local_addr(&self) -> Option<SocketAddr> {
+        self.socket
+            .as_ref()
+            .and_then(|socket| socket.local_addr().ok())
+    }
+
+    fn close(&mut self) {
+        self.socket = None;
+        self.timeout = None;
+    }
+}
+
+/// A listening socket whose inbound datagrams a test hands it.
+///
+/// [`MockUdp`] for the other direction: a loopback socket covers what a real one
+/// does, and this covers what one does when the far end is hostile, absent or
+/// slow — none of which can be arranged on demand, and the first of which is
+/// what `tests/artpoll_fuzz.rs` needs a million times over.
+#[derive(Debug)]
+pub struct MockUdpNode {
+    state: Arc<Mutex<MockNodeState>>,
+}
+
+/// A test's view of a [`MockUdpNode`], usable after the socket has been moved
+/// into a discovery and the discovery onto its thread.
+#[derive(Debug, Clone)]
+pub struct MockUdpNodeHandle {
+    state: Arc<Mutex<MockNodeState>>,
+}
+
+#[derive(Debug, Default)]
+struct MockNodeState {
+    sent: Vec<(SocketAddr, Vec<u8>)>,
+    binds: Vec<(SocketAddr, bool)>,
+    inbound: VecDeque<(SocketAddr, Vec<u8>)>,
+    open: bool,
+    closes: usize,
+    bind_faults: VecDeque<UdpError>,
+    send_faults: VecDeque<UdpError>,
+    recv_faults: VecDeque<UdpError>,
+}
+
+impl MockUdpNode {
+    /// A socket with nothing recorded and nothing to read.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(MockNodeState::default())),
+        }
+    }
+
+    /// A handle onto this socket.
+    #[must_use]
+    pub fn handle(&self) -> MockUdpNodeHandle {
+        MockUdpNodeHandle {
+            state: Arc::clone(&self.state),
+        }
+    }
+}
+
+impl Default for MockUdpNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MockUdpNodeHandle {
+    /// Queues one datagram for the next `recv_from`, as if from `from`.
+    pub fn deliver(&self, from: SocketAddr, datagram: &[u8]) {
+        lock(&self.state)
+            .inbound
+            .push_back((from, datagram.to_vec()));
+    }
+
+    /// Every datagram this socket has sent, with where it went.
+    #[must_use]
+    pub fn sent(&self) -> Vec<(SocketAddr, Vec<u8>)> {
+        lock(&self.state).sent.clone()
+    }
+
+    /// How many datagrams have been sent.
+    #[must_use]
+    pub fn sent_count(&self) -> usize {
+        lock(&self.state).sent.len()
+    }
+
+    /// Forgets what has been sent, so a test can assert on what happens next.
+    pub fn clear(&self) {
+        lock(&self.state).sent.clear();
+    }
+
+    /// Every `bind`, with the address and whether broadcast was asked for.
+    #[must_use]
+    pub fn binds(&self) -> Vec<(SocketAddr, bool)> {
+        lock(&self.state).binds.clone()
+    }
+
+    /// Whether a socket is open.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        lock(&self.state).open
+    }
+
+    /// How many times it has been closed.
+    #[must_use]
+    pub fn closes(&self) -> usize {
+        lock(&self.state).closes
+    }
+
+    /// Makes the next `times` binds fail.
+    pub fn fail_bind(&self, times: usize, error: UdpError) {
+        lock(&self.state)
+            .bind_faults
+            .extend(std::iter::repeat_n(error, times));
+    }
+
+    /// Makes the next `times` sends fail.
+    pub fn fail_send(&self, times: usize, error: UdpError) {
+        lock(&self.state)
+            .send_faults
+            .extend(std::iter::repeat_n(error, times));
+    }
+
+    /// Makes the next `times` reads fail.
+    pub fn fail_recv(&self, times: usize, error: UdpError) {
+        lock(&self.state)
+            .recv_faults
+            .extend(std::iter::repeat_n(error, times));
+    }
+}
+
+impl UdpNode for MockUdpNode {
+    fn bind(&mut self, local: SocketAddr, broadcast: bool) -> Result<(), UdpError> {
+        let mut state = lock(&self.state);
+        state.binds.push((local, broadcast));
+        match state.bind_faults.pop_front() {
+            Some(error) => {
+                state.open = false;
+                Err(error)
+            }
+            None => {
+                state.open = true;
+                Ok(())
+            }
+        }
+    }
+
+    fn send_to(&mut self, datagram: &[u8], target: SocketAddr) -> Result<usize, UdpError> {
+        let mut state = lock(&self.state);
+        if !state.open {
+            return Err(UdpError::NotBound);
+        }
+        match state.send_faults.pop_front() {
+            Some(UdpError::ShortSend { sent, expected }) => Ok(sent.min(expected)),
+            Some(error) => Err(error),
+            None => {
+                state.sent.push((target, datagram.to_vec()));
+                Ok(datagram.len())
+            }
+        }
+    }
+
+    fn recv_from(
+        &mut self,
+        buffer: &mut [u8],
+        timeout: Duration,
+    ) -> Result<Option<(usize, SocketAddr)>, UdpError> {
+        let mut state = lock(&self.state);
+        if !state.open {
+            return Err(UdpError::NotBound);
+        }
+        // Deliberately **not** recorded. `tests/artpoll_fuzz.rs` measures the
+        // allocator through this socket, and a `Vec` of every wait would be the
+        // mock growing under the gate rather than the code under test.
+        let _ = timeout;
+        if let Some(error) = state.recv_faults.pop_front() {
+            return Err(error);
+        }
+        let Some((from, datagram)) = state.inbound.pop_front() else {
+            return Ok(None);
+        };
+        // Truncated rather than refused, which is what a real socket does to an
+        // oversized datagram — and what the parser above therefore has to
+        // survive.
+        let len = datagram.len().min(buffer.len());
+        if let (Some(slot), Some(bytes)) = (buffer.get_mut(..len), datagram.get(..len)) {
+            slot.copy_from_slice(bytes);
+        }
+        Ok(Some((len, from)))
+    }
+
+    fn local_addr(&self) -> Option<SocketAddr> {
+        let state = lock(&self.state);
+        if !state.open {
+            return None;
+        }
+        state.binds.last().map(|&(local, _)| local)
+    }
+
+    fn close(&mut self) {
+        let mut state = lock(&self.state);
+        state.open = false;
+        state.closes += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MockUdp, SystemUdp, UdpError, UdpSender, classify};
+    use super::{
+        MockUdp, MockUdpNode, SystemUdp, SystemUdpNode, UdpError, UdpNode, UdpSender, classify,
+    };
     use std::io;
     use std::net::{SocketAddr, UdpSocket};
     use std::time::Duration;
@@ -685,6 +1076,210 @@ mod tests {
         assert!(!handle.is_open());
         assert_eq!(handle.closes(), 1);
         assert_eq!(sender.send_to(&[0; 4], loopback()), Err(UdpError::NotBound));
+    }
+
+    /// The node seam's own loopback tests — [`SystemUdp`]'s, one trait along.
+    ///
+    /// A `UdpSocket` on `127.0.0.1` is a real socket, so a datagram that goes
+    /// out of one and comes back into another has been through the operating
+    /// system's network stack. Loopback only, and never `0.0.0.0`: this whole
+    /// seam exists to bind Art-Net's fixed port on every interface, and a test
+    /// suite has no business doing that on the machine it runs on.
+    #[test]
+    fn a_real_node_socket_sends_and_receives_over_loopback() {
+        let mut node = SystemUdpNode::new();
+        assert_eq!(node.local_addr(), None);
+        node.bind(loopback(), false).unwrap();
+        let listening = node.local_addr().expect("a bound address");
+
+        let far = UdpSocket::bind(loopback()).unwrap();
+        let far_address = far.local_addr().unwrap();
+        assert_eq!(node.send_to(b"a poll", far_address), Ok(6));
+        let mut buffer = [0u8; 32];
+        let (len, from) = far.recv_from(&mut buffer).unwrap();
+        assert_eq!(&buffer[..len], b"a poll");
+        assert_eq!(from, listening);
+
+        far.send_to(b"a reply", listening).unwrap();
+        let mut inbound = [0u8; 32];
+        let read = node
+            .recv_from(&mut inbound, Duration::from_secs(5))
+            .unwrap()
+            .expect("a datagram is there");
+        assert_eq!(&inbound[..read.0], b"a reply");
+        assert_eq!(read.1, far_address);
+
+        node.close();
+        assert_eq!(node.local_addr(), None);
+    }
+
+    #[test]
+    fn a_real_node_socket_that_hears_nothing_says_so_rather_than_failing() {
+        // What a quiet lighting network looks like, which is nearly always.
+        let mut node = SystemUdpNode::default();
+        node.bind(loopback(), false).unwrap();
+        let mut buffer = [0u8; 32];
+        assert_eq!(
+            node.recv_from(&mut buffer, Duration::from_millis(20)),
+            Ok(None)
+        );
+        // The timeout is set once and not on every pass, so a second read with
+        // the same wait makes no second system call — and still answers.
+        assert_eq!(
+            node.recv_from(&mut buffer, Duration::from_millis(20)),
+            Ok(None)
+        );
+        // A caller asking not to wait at all gets the shortest wait there is,
+        // because a real socket refuses a zero read timeout outright.
+        assert_eq!(node.recv_from(&mut buffer, Duration::ZERO), Ok(None));
+    }
+
+    #[test]
+    fn a_real_node_socket_that_is_not_open_says_so_rather_than_pretending() {
+        let mut node = SystemUdpNode::new();
+        let mut buffer = [0u8; 8];
+        assert_eq!(
+            node.send_to(b"nowhere", loopback()),
+            Err(UdpError::NotBound)
+        );
+        assert_eq!(
+            node.recv_from(&mut buffer, Duration::from_millis(1)),
+            Err(UdpError::NotBound)
+        );
+        node.bind(loopback(), false).unwrap();
+        node.close();
+        assert_eq!(
+            node.recv_from(&mut buffer, Duration::from_millis(1)),
+            Err(UdpError::NotBound)
+        );
+        // Closing twice is not an error: it runs on the shutdown path.
+        node.close();
+    }
+
+    #[test]
+    fn a_real_node_socket_can_be_given_broadcast_permission() {
+        // Asked for and never exercised, exactly as `SystemUdp`'s is: nothing
+        // in this repository broadcasts, and Art-Net discovery least of all.
+        let mut node = SystemUdpNode::new();
+        node.bind(loopback(), true).unwrap();
+        assert!(node.local_addr().is_some());
+        // And an address this machine does not have is refused — TEST-NET-3,
+        // RFC 5737, which is documentation space and on no runner.
+        let elsewhere: SocketAddr = "203.0.113.1:0".parse().unwrap();
+        assert_eq!(node.bind(elsewhere, false), Err(UdpError::Bind));
+        assert_eq!(node.local_addr(), None, "a failed bind leaves no socket");
+    }
+
+    #[test]
+    fn a_mock_node_records_what_went_out_and_hands_back_what_was_delivered() {
+        let mut node = MockUdpNode::new();
+        let handle = node.handle();
+        assert!(!handle.is_open());
+        let mut buffer = [0u8; 16];
+        assert_eq!(
+            node.recv_from(&mut buffer, Duration::from_millis(1)),
+            Err(UdpError::NotBound)
+        );
+        assert_eq!(node.send_to(&[1, 2], loopback()), Err(UdpError::NotBound));
+        assert_eq!(node.local_addr(), None);
+
+        node.bind(loopback(), false).unwrap();
+        assert!(handle.is_open());
+        assert_eq!(handle.binds(), vec![(loopback(), false)]);
+        assert_eq!(node.local_addr(), Some(loopback()));
+
+        let target: SocketAddr = "127.0.0.5:6454".parse().unwrap();
+        assert_eq!(node.send_to(&[1, 2, 3], target), Ok(3));
+        assert_eq!(handle.sent_count(), 1);
+        assert_eq!(handle.sent(), vec![(target, vec![1, 2, 3])]);
+        handle.clear();
+        assert_eq!(handle.sent_count(), 0);
+
+        handle.deliver(target, b"a reply");
+        let (len, from) = node
+            .recv_from(&mut buffer, Duration::from_millis(1))
+            .unwrap()
+            .expect("what was delivered");
+        assert_eq!(&buffer[..len], b"a reply");
+        assert_eq!(from, target);
+        assert_eq!(node.recv_from(&mut buffer, Duration::ZERO), Ok(None));
+
+        node.close();
+        assert_eq!(handle.closes(), 1);
+        assert!(!handle.is_open());
+    }
+
+    #[test]
+    fn a_mock_node_can_be_told_to_fail_in_each_of_its_three_ways() {
+        let mut node = MockUdpNode::default();
+        let handle = node.handle();
+        handle.fail_bind(1, UdpError::Bind);
+        assert_eq!(node.bind(loopback(), false), Err(UdpError::Bind));
+        assert!(!handle.is_open());
+
+        node.bind(loopback(), false).unwrap();
+        handle.fail_send(1, UdpError::Unreachable);
+        assert_eq!(
+            node.send_to(&[0; 4], loopback()),
+            Err(UdpError::Unreachable)
+        );
+        handle.fail_send(
+            1,
+            UdpError::ShortSend {
+                sent: 2,
+                expected: 14,
+            },
+        );
+        assert_eq!(node.send_to(&[0; 14], loopback()), Ok(2));
+        assert_eq!(handle.sent_count(), 0, "neither datagram went");
+
+        handle.fail_recv(1, UdpError::Io);
+        let mut buffer = [0u8; 8];
+        assert_eq!(
+            node.recv_from(&mut buffer, Duration::from_millis(1)),
+            Err(UdpError::Io)
+        );
+    }
+
+    #[test]
+    fn a_mock_node_truncates_an_oversized_datagram_the_way_a_socket_does() {
+        // Which is why the parser above has to survive a truncated reply.
+        let mut node = MockUdpNode::new();
+        let handle = node.handle();
+        node.bind(loopback(), false).unwrap();
+        handle.deliver(loopback(), &[7u8; 64]);
+        let mut buffer = [0u8; 8];
+        let (len, _) = node
+            .recv_from(&mut buffer, Duration::from_millis(1))
+            .unwrap()
+            .expect("a datagram");
+        assert_eq!(len, 8);
+        assert_eq!(buffer, [7u8; 8]);
+    }
+
+    #[test]
+    fn a_boxed_node_is_a_node() {
+        // What lets the daemon hold a socket chosen at run time — the discovery
+        // thread's `SocketSource` answers with one of these.
+        let inner = MockUdpNode::new();
+        let handle = inner.handle();
+        let mut node: Box<dyn UdpNode> = Box::new(inner);
+        node.bind(loopback(), true).unwrap();
+        assert_eq!(handle.binds(), vec![(loopback(), true)]);
+        assert_eq!(node.send_to(&[7; 8], loopback()), Ok(8));
+        assert_eq!(node.local_addr(), Some(loopback()));
+
+        handle.deliver(loopback(), b"back");
+        let mut buffer = [0u8; 8];
+        let (len, _) = node
+            .recv_from(&mut buffer, Duration::from_millis(1))
+            .unwrap()
+            .expect("a datagram");
+        assert_eq!(&buffer[..len], b"back");
+
+        node.close();
+        assert_eq!(handle.closes(), 1);
+        assert_eq!(handle.sent_count(), 1);
     }
 
     #[test]

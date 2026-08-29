@@ -779,12 +779,290 @@ describe("the rows that are easy to leave untested", () => {
           framesSent: 4123,
           lastError: "the cable came out",
           lastErrorAgoMs: 4200,
+          nodes: [],
         },
       ],
     });
     expect(screen.getByTestId("output-frames-1").textContent).toBe("4123");
     expect(screen.getByTestId("output-health-1").textContent).toBe("Degraded");
     expect(screen.getByTestId("output-error-1").textContent).toBe("the cable came out (4 s ago)");
+    expect(screen.queryByTestId("output-nodes-1")).toBeNull();
+  });
+
+  /**
+   * **Punch-list B6, where an operator reads it** — S46.
+   *
+   * The health word is the daemon's; what this asserts is that the panel draws
+   * it *and* names the node, because `Degraded` on its own does not tell an
+   * installer which box to walk to.
+   */
+  it("never draws Ok over a node that has never answered, and says which one", async () => {
+    const { deliver, answerQuery } = await desk();
+    await deliver({
+      t: "OutputsChanged",
+      outputs: [
+        {
+          id: 1,
+          name: "Stage left",
+          kind: { t: "ArtNet", nodes: ["10.0.0.9:6454"], sync: false, ports: [] },
+          universes: [1],
+          enabled: true,
+        },
+      ],
+    });
+    await answerQuery("OutputStatus", {
+      t: "OutputStatus",
+      outputs: [
+        {
+          id: 1,
+          // What the daemon folds: the socket is happy and nothing answers.
+          health: "Degraded",
+          framesSent: 4123,
+          lastError: null,
+          lastErrorAgoMs: null,
+          nodes: [
+            {
+              address: "10.0.0.9:6454",
+              health: "NeverAnswered",
+              name: null,
+              lastReplyAgoMs: null,
+            },
+          ],
+        },
+      ],
+    });
+    expect(screen.getByTestId("output-health-1").textContent).toContain("Degraded");
+    expect(screen.getByTestId("output-health-1").textContent).not.toContain("Ok");
+    expect(screen.getByTestId("output-nodes-1").textContent).toBe(
+      "10.0.0.9:6454 has never answered",
+    );
+  });
+
+  /** The third state, and the time on it — S46. */
+  it("says when a node stopped answering, as a time of day", async () => {
+    const { deliver, answerQuery } = await desk();
+    await deliver({
+      t: "OutputsChanged",
+      outputs: [
+        {
+          id: 1,
+          name: "Stage left",
+          kind: { t: "ArtNet", nodes: ["10.0.0.9:6454"], sync: false, ports: [] },
+          universes: [1],
+          enabled: true,
+        },
+      ],
+    });
+    // Ninety seconds ago, on the daemon's clock. The panel turns the age into a
+    // time against its own, which is the half that is the client's.
+    const ago = 90_000;
+    await answerQuery("OutputStatus", {
+      t: "OutputStatus",
+      outputs: [
+        {
+          id: 1,
+          health: "Degraded",
+          framesSent: 4123,
+          lastError: null,
+          lastErrorAgoMs: null,
+          nodes: [
+            {
+              address: "10.0.0.9:6454",
+              health: "Stopped",
+              name: "Stage left",
+              lastReplyAgoMs: ago,
+            },
+          ],
+        },
+      ],
+    });
+    const at = new Date(Date.now() - ago);
+    const clock = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+    expect(screen.getByTestId("output-nodes-1").textContent).toBe(
+      `10.0.0.9:6454 stopped answering at ${clock}`,
+    );
+  });
+
+  /** A node that answers adds nothing to the row — S46. */
+  it("says nothing under the health of an output whose nodes all answer", async () => {
+    const { deliver, answerQuery } = await desk();
+    await deliver({
+      t: "OutputsChanged",
+      outputs: [
+        {
+          id: 1,
+          name: "Stage left",
+          kind: { t: "ArtNet", nodes: ["10.0.0.9:6454"], sync: false, ports: [] },
+          universes: [1],
+          enabled: true,
+        },
+      ],
+    });
+    await answerQuery("OutputStatus", {
+      t: "OutputStatus",
+      outputs: [
+        {
+          id: 1,
+          health: "Ok",
+          framesSent: 4123,
+          lastError: null,
+          lastErrorAgoMs: null,
+          nodes: [
+            {
+              address: "10.0.0.9:6454",
+              health: "Answering",
+              name: "Stage left",
+              lastReplyAgoMs: 120,
+            },
+          ],
+        },
+      ],
+    });
+    expect(screen.getByTestId("output-health-1").textContent).toBe("Ok");
+    expect(screen.queryByTestId("output-nodes-1")).toBeNull();
+  });
+
+  /**
+   * *Not listening* is drawn before the list is — S46.
+   *
+   * An empty list under a socket that never opened says nothing at all about
+   * the network, and reading it as *no nodes* would be B6 pointed the other way.
+   */
+  it("says it is not listening before it says there are no nodes", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", { t: "ArtNetNodes", nodes: [], listening: false, error: null });
+    expect(screen.getByTestId("artnet-not-listening").textContent).toContain(
+      "once an Art-Net output is configured",
+    );
+    expect(screen.queryByTestId("artnet-no-nodes")).toBeNull();
+  });
+
+  /** The other cause of *not listening*, and the one that has a reason — S46. */
+  it("says why it could not listen, in the daemon's own words", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      nodes: [],
+      listening: false,
+      error: "the local address could not be bound",
+    });
+    expect(screen.getByTestId("artnet-not-listening").textContent).toContain(
+      "the local address could not be bound",
+    );
+    expect(screen.queryByTestId("artnet-no-nodes")).toBeNull();
+  });
+
+  /** A desk that *is* listening and has heard nothing says a different thing. */
+  it("tells a silent network apart from a socket that never opened", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", { t: "ArtNetNodes", nodes: [], listening: true, error: null });
+    expect(screen.queryByTestId("artnet-not-listening")).toBeNull();
+    expect(screen.getByTestId("artnet-no-nodes")).toBeTruthy();
+  });
+
+  /**
+   * *Discovered is not configured*, and the one click — S46.
+   *
+   * The universes come from `suggestedUniverses`, which is the daemon's: the
+   * default port-address mapping run backwards. A panel that computed `port + 1`
+   * would be a third spelling of a rule stated in `ARCHITECTURE_SPEC.md` §7.0.
+   */
+  it("lists what is out there, where it disagrees, and adds one in a click", async () => {
+    const { answerQuery, commands } = await desk();
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      listening: true,
+      error: null,
+      nodes: [
+        {
+          address: "10.0.0.11:6454",
+          ip: "10.0.0.11",
+          shortName: "New node",
+          longName: "A node in the gallery",
+          mac: "00:1a:2b:3c:4d:5e",
+          firmware: 260,
+          style: 0,
+          status1: 208,
+          status2: 14,
+          ports: [3, 4],
+          inputs: [],
+          configured: false,
+          unaddressedPorts: [3, 4],
+          missingPorts: [],
+          suggestedUniverses: [4, 5],
+          replies: 2,
+          lastReplyAgoMs: 500,
+        },
+      ],
+    });
+
+    expect(screen.getByTestId("artnet-node-0").textContent).toContain("New node");
+    expect(screen.getByTestId("artnet-node-ports-0").textContent).toBe("3, 4");
+    expect(screen.getByTestId("artnet-node-state-0").textContent).toContain("not configured");
+    expect(screen.getByTestId("artnet-node-state-0").textContent).toContain(
+      "outputs 3, 4, which this desk sends nothing on",
+    );
+
+    const before = commands().length;
+    fireEvent.click(screen.getByTestId("artnet-node-add-0"));
+    expect(
+      commands(),
+      "the click fills the form; it does not change a rig on a stage",
+    ).toHaveLength(before);
+    expect(screen.getByTestId("output-draft-addresses")).toHaveProperty(
+      "value",
+      "10.0.0.11:6454",
+    );
+    expect(screen.getByTestId("output-draft-universes")).toHaveProperty("value", "4, 5");
+    expect(screen.getByTestId("output-draft-name")).toHaveProperty("value", "New node");
+    expect(screen.getByTestId("output-draft-kind")).toHaveProperty("value", "ArtNet");
+
+    // …and applying it is the ordinary Add, with nothing new in it.
+    fireEvent.submit(screen.getByTestId("output-form"));
+    expect(commands().at(-1)).toMatchObject({
+      t: "AddOutput",
+      output: {
+        name: "New node",
+        universes: [4, 5],
+        kind: { t: "ArtNet", nodes: ["10.0.0.11:6454"] },
+      },
+    });
+  });
+
+  /** The disagreement in the other direction — S46. */
+  it("says when this desk sends a node a universe the node does not have", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("ArtNetNodes", {
+      t: "ArtNetNodes",
+      listening: true,
+      error: null,
+      nodes: [
+        {
+          address: "10.0.0.9:6454",
+          ip: "10.0.0.9",
+          shortName: "Stage left",
+          longName: "Stage left node",
+          mac: "00:1a:2b:3c:4d:5e",
+          firmware: 260,
+          style: 0,
+          status1: 208,
+          status2: 14,
+          ports: [0],
+          inputs: [],
+          configured: true,
+          unaddressedPorts: [],
+          missingPorts: [9],
+          suggestedUniverses: [1],
+          replies: 12,
+          lastReplyAgoMs: 200,
+        },
+      ],
+    });
+    expect(screen.getByTestId("artnet-node-state-0").textContent).toContain("configured");
+    expect(screen.getByTestId("artnet-node-state-0").textContent).toContain(
+      "this desk sends 9, which it does not have",
+    );
+    expect(screen.getByTestId("artnet-node-add-0").textContent).toBe("Add another output");
   });
 
   it("changes the network settings one command at a time", async () => {

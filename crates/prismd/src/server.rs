@@ -73,9 +73,11 @@ fn output_snapshots(core: &Core) -> Vec<OutputSnapshot> {
             OutputSnapshot {
                 id: output.id,
                 name: output.name.clone(),
-                health: status.map_or(prism_domain::OutputHealth::Disconnected, |status| {
-                    status.health()
-                }),
+                // **The reported health, not the driver's** — S46. For an
+                // Art-Net output the driver's `Ok` means the socket took the
+                // datagram, and UDP always takes it; `reported_health` folds in
+                // whether anything at the far end answers. Punch-list B6.
+                health: supervisor.reported_health(output.id),
                 output: Some(output.clone()),
                 frames_sent: status.map_or(0, |status| status.frames_sent()),
                 last_error: fault.map(|fault| fault.error.to_string()),
@@ -378,9 +380,8 @@ impl Desk {
                             let fault = status.and_then(|status| status.last_error(elapsed));
                             prism_domain::OutputStatusInfo {
                                 id: output.id,
-                                health: status.map_or(prism_domain::OutputHealth::Disconnected, |status| {
-                                    status.health()
-                                }),
+                                // S46, and punch-list B6 — see `output_snapshots`.
+                                health: supervisor.reported_health(output.id),
                                 frames_sent: status.map_or(0, |status| status.frames_sent()),
                                 last_error: fault.map(|fault| fault.error.to_string()),
                                 #[expect(
@@ -388,9 +389,90 @@ impl Desk {
                                     reason = "a fault 584 million years ago is not the number that is wrong"
                                 )]
                                 last_error_ago_ms: fault.map(|fault| fault.ago.as_millis() as u64),
+                                // One row per configured node, and empty for
+                                // every kind that cannot be asked — S46.
+                                nodes: supervisor.node_reach(output),
                             }
                         })
                         .collect(),
+                }
+            }
+            // S46. Read rather than asked for on the spot, because there is no
+            // call that answers *what is on this network*: discovery is a
+            // conversation over time, so the daemon holds a table its own
+            // receive thread keeps and this reads it. The question sends
+            // nothing, which is §5.2's first rule.
+            //
+            // The two **disagreements** are worked out here and not by a
+            // client. A browser holding the rig and the discovery table could
+            // intersect them, and that is precisely `PatchPreview`'s trap: a
+            // second opinion about something the daemon already holds both
+            // halves of, which drifts the first time a port-address default
+            // changes.
+            Query::ArtNetNodes => {
+                let supervisor = core.outputs();
+                let table = supervisor.discovered();
+                let rig = core.machine().outputs();
+                let now = std::time::Instant::now();
+                Answer::ArtNetNodes {
+                    nodes: table
+                        .nodes
+                        .iter()
+                        .map(|node| {
+                            let desk = crate::outputs::desk_ports_to(rig, node.address);
+                            prism_domain::ArtNetNodeInfo {
+                                address: node.address.to_string(),
+                                ip: node.ip.to_string(),
+                                short_name: node.short_name.clone(),
+                                long_name: node.long_name.clone(),
+                                mac: node.mac.clone(),
+                                firmware: node.firmware,
+                                style: node.style,
+                                status1: node.status1,
+                                status2: node.status2,
+                                ports: node.ports.clone(),
+                                inputs: node.inputs.clone(),
+                                configured: rig.iter().any(|output| {
+                                    matches!(
+                                        &output.kind,
+                                        prism_domain::OutputKind::ArtNet { nodes, .. }
+                                            if nodes
+                                                .iter()
+                                                .any(|target| target.ip() == node.address.ip())
+                                    )
+                                }),
+                                unaddressed_ports: node
+                                    .ports
+                                    .iter()
+                                    .copied()
+                                    .filter(|port| !desk.contains(port))
+                                    .collect(),
+                                missing_ports: desk
+                                    .iter()
+                                    .copied()
+                                    .filter(|port| !node.ports.contains(port))
+                                    .collect(),
+                                suggested_universes: node
+                                    .ports
+                                    .iter()
+                                    .filter_map(|port| {
+                                        prism_domain::ArtNetNodeInfo::universe_for_port(*port)
+                                    })
+                                    .collect(),
+                                replies: node.replies,
+                                #[expect(
+                                    clippy::cast_possible_truncation,
+                                    reason = "a reply 584 million years ago is not the number that is wrong"
+                                )]
+                                last_reply_ago_ms: now
+                                    .saturating_duration_since(node.last_seen)
+                                    .as_millis()
+                                    as u64,
+                            }
+                        })
+                        .collect(),
+                    listening: table.listening,
+                    error: table.error.clone(),
                 }
             }
             // `filter_map` rather than a `match` with an unreachable arm:

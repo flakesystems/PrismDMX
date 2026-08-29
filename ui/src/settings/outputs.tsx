@@ -31,6 +31,30 @@
  * `Delta::OutputsChanged` whenever it moves, and a rig on the wire once a second
  * to carry a counter would be the wrong trade twice over.
  *
+ * # Health for a network output is not the socket's opinion — S46
+ *
+ * An Art-Net driver reports `Ok` as soon as its socket has accepted the
+ * datagram, and UDP accepts every datagram there is. This panel drew that word,
+ * which is punch-list **B6**: an installer read *OK* over an empty rack. The
+ * daemon now folds whether anything answers into the health it reports, so the
+ * cell says `Degraded`; what this file adds is the **sentence underneath it**,
+ * because *Degraded* alone does not tell somebody which node to go and look at.
+ *
+ * Nothing here decides any of it. `nodes` on the status row is one `NodeReach`
+ * per configured node, empty for every kind that cannot be asked and empty while
+ * nothing is listening — and *not listening* is drawn before the node list is,
+ * because an empty list under a socket that never opened says nothing about the
+ * network and reading it as *no nodes* would be B6 pointed the other way.
+ *
+ * # Discovered is not configured
+ *
+ * The second table is `Query::ArtNetNodes`: what is out there, as against what
+ * this desk is addressed to. The two **disagreements** — a node outputting a
+ * universe this desk sends nothing on, and a universe this desk sends that the
+ * node does not have — are the daemon's arithmetic and arrive as fields. A panel
+ * that intersected the rig with the discovery table itself would be a second
+ * opinion about something the daemon holds both halves of, which is D3.
+ *
  * # One field per command
  *
  * `ConfigureOutput` carries one member, so the form sends one command per field
@@ -42,7 +66,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { OutputInstance, OutputKind, OutputStatusInfo } from "../bindings";
+import type {
+  ArtNetNodeInfo,
+  NodeReach,
+  OutputInstance,
+  OutputKind,
+  OutputStatusInfo,
+} from "../bindings";
 import type { OutputSnapshot } from "../ipc/protocol";
 import { useAsk, useDesk, useSend } from "../store/hooks";
 import type { DeskState } from "../store/desk";
@@ -75,6 +105,51 @@ function kindLabel(kind: (typeof KINDS)[number]): string {
     case "Sacn":
       return "sACN (E1.31)";
   }
+}
+
+/**
+ * A wall-clock `HH:MM` from an age in milliseconds — S46.
+ *
+ * The daemon says *how long ago* because it and a browser share no clock (S33);
+ * turning that into a time of day is the client's half, and it is the half an
+ * operator actually reads: *stopped answering at 20:14* is a fact somebody can
+ * line up against what else happened in the hall, and *stopped answering 512
+ * seconds ago* is arithmetic they have to do standing on a ladder.
+ *
+ * Built from the parts rather than from `toLocaleTimeString`, so the string is
+ * the same in every locale the desk might be running under.
+ */
+function clockOf(agoMs: number, now: number): string {
+  const at = new Date(now - agoMs);
+  return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * What to say under an Art-Net row's health, or `null` when there is nothing to
+ * add — S46.
+ *
+ * `null` for a kind that cannot be asked, for a desk that is not listening, and
+ * for a rig where every node answers. Those three are drawn the same way on
+ * purpose: the line exists to name a fault, and a line that appeared when all
+ * was well would be one more thing to read past.
+ */
+function nodeNote(nodes: readonly NodeReach[], now: number): string | null {
+  if (nodes.length === 0) {
+    return null;
+  }
+  const silent = nodes.filter((node) => node.health !== "Answering");
+  if (silent.length === 0) {
+    return null;
+  }
+  const stopped = silent.find((node) => node.health === "Stopped");
+  if (stopped !== undefined) {
+    const at =
+      stopped.lastReplyAgoMs === null ? "" : ` at ${clockOf(stopped.lastReplyAgoMs, now)}`;
+    return `${stopped.address} stopped answering${at}`;
+  }
+  return nodes.length === 1
+    ? `${silent[0]?.address ?? "the node"} has never answered`
+    : `${String(silent.length)} of ${String(nodes.length)} nodes have never answered`;
 }
 
 /** The row being typed into. Local, and dropped when it is submitted. */
@@ -159,6 +234,17 @@ export function OutputsPanel() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [dark, setDark] = useState<readonly number[]>([]);
   const [status, setStatus] = useState<readonly OutputStatusInfo[]>([]);
+  // What is out there, as against what this desk is addressed to — S46.
+  // `listening` starts false and is read before `discovered` ever is: not
+  // listening and nothing answering are different facts.
+  const [discovered, setDiscovered] = useState<readonly ArtNetNodeInfo[]>([]);
+  const [listening, setListening] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  // **One moment for the whole panel.** Every age on the screen is measured
+  // against this, so two rows drawn from one answer cannot disagree about when
+  // *now* was — which is the same reason the daemon measures every age in one
+  // answer against one `Instant::now()`.
+  const [now, setNow] = useState(() => Date.now());
 
   // Which patched universes go nowhere — the daemon's answer, asked again
   // whenever the rig or the show moves, which is exactly when it can have
@@ -175,13 +261,25 @@ export function OutputsPanel() {
     };
   }, [ask, outputs, show]);
 
-  // …and what each driver is *doing*, which no delta carries.
+  // …and what each driver is *doing*, which no delta carries — together with
+  // what the network answers, which no delta carries either and for the same
+  // reason. **One timer for both**: they are drawn in the same panel at the same
+  // moment, and two timers would only make the two halves of one screen
+  // disagree about when *now* was.
   useEffect(() => {
     let current = true;
     const read = () => {
       void ask({ t: "OutputStatus" }).then((answer) => {
         if (current && answer !== null && answer.t === "OutputStatus") {
           setStatus(answer.outputs);
+        }
+      });
+      setNow(Date.now());
+      void ask({ t: "ArtNetNodes" }).then((answer) => {
+        if (current && answer !== null && answer.t === "ArtNetNodes") {
+          setDiscovered(answer.nodes);
+          setListening(answer.listening);
+          setDiscoveryError(answer.error);
         }
       });
     };
@@ -202,13 +300,14 @@ export function OutputsPanel() {
       (outputs ?? []).map((row) => {
         const reading = status.find((entry) => entry.id === row.id);
         return reading === undefined
-          ? row
+          ? { ...row, nodes: [] as readonly NodeReach[] }
           : {
               ...row,
               health: reading.health,
               framesSent: reading.framesSent,
               lastError: reading.lastError,
               lastErrorAgoMs: reading.lastErrorAgoMs,
+              nodes: reading.nodes,
             };
       }),
     [outputs, status],
@@ -234,6 +333,38 @@ export function OutputsPanel() {
       universes: "1",
     });
   }, [nextId]);
+
+  /**
+   * The deliverable's *one click*: a draft addressed to a node that is out
+   * there, with the universes it would carry already filled in.
+   *
+   * **A draft and not a command.** The row is put in the form rather than added
+   * to the rig, because what an operator wants next is almost always to name it
+   * and check the universes, and a panel that silently added an output to a
+   * running desk would be making a change on a stage on somebody's behalf. The
+   * typing it saves is the address and the universes, which is the typing that
+   * is easy to get wrong.
+   *
+   * `suggestedUniverses` is the **daemon's**: it is the default port-address
+   * mapping run backwards, and spelling that here would be a third copy of a
+   * rule `ARCHITECTURE_SPEC.md` §7.0 already states and `prism-domain` already
+   * implements.
+   */
+  const addDiscovered = useCallback(
+    (node: ArtNetNodeInfo) => {
+      setDraft({
+        id: nextId,
+        wasId: null,
+        name: node.shortName.trim() === "" ? `Output ${String(nextId)}` : node.shortName,
+        kind: "ArtNet",
+        serial: "",
+        addresses: node.address,
+        ttl: 1,
+        universes: writeUniverses(node.suggestedUniverses),
+      });
+    },
+    [nextId],
+  );
 
   const apply = useCallback(() => {
     if (draft === null) {
@@ -305,6 +436,7 @@ export function OutputsPanel() {
       )}
       <OutputTable
         rows={rows}
+        now={now}
         editing={draft?.wasId ?? null}
         onEdit={(row) => {
           setDraft(row.output === null ? null : draftOf(row.output));
@@ -327,21 +459,146 @@ export function OutputsPanel() {
           }}
         />
       )}
+      <NodeTable
+        nodes={discovered}
+        listening={listening}
+        error={discoveryError}
+        now={now}
+        onAdd={addDiscovered}
+      />
     </div>
+  );
+}
+
+/**
+ * What is on the network — S46.
+ *
+ * Drawn **after** the rig, because it is the second question an installer has:
+ * the first is *what have I configured*, and this is *what is actually out
+ * there*. `listening` is read before the list is, for the reason in this file's
+ * documentation.
+ */
+function NodeTable({
+  nodes,
+  listening,
+  error,
+  now,
+  onAdd,
+}: {
+  readonly nodes: readonly ArtNetNodeInfo[];
+  readonly listening: boolean;
+  readonly error: string | null;
+  readonly now: number;
+  readonly onAdd: (node: ArtNetNodeInfo) => void;
+}) {
+  return (
+    <section className="settings-section" data-testid="artnet-nodes">
+      <h3>Art-Net nodes on the network</h3>
+      {listening ? null : (
+        <p className="window-note" data-testid="artnet-not-listening" role="status">
+          {/* The reason is the daemon's when there is one, and there is no
+              reason at all when nothing is configured — an absence rather than
+              a fault. Guessing one here would be the mistake this panel makes
+              about health: saying something the program does not know. */}
+          {error === null
+            ? "This desk is not listening for Art-Net nodes, so nothing below is a statement about the network. It starts listening once an Art-Net output is configured."
+            : `This desk is not listening for Art-Net nodes: ${error}. The outputs are still sending, and this desk cannot tell whether anything receives them.`}
+        </p>
+      )}
+      {nodes.length === 0 ? (
+        listening ? (
+          <p className="window-note" data-testid="artnet-no-nodes">
+            No node has answered yet. A node answers within a few seconds of being
+            switched on; one that never answers is either at another address or on
+            another network.
+          </p>
+        ) : null
+      ) : (
+        <div className="sheet-scroll">
+          <table className="sheet">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Address</th>
+                <th scope="col">Universes</th>
+                <th scope="col">Last reply</th>
+                <th scope="col">In the rig</th>
+                <th scope="col" />
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((node, index) => (
+                <tr key={node.address} data-testid={`artnet-node-${String(index)}`}>
+                  <td title={node.longName}>
+                    {node.shortName.trim() === "" ? "(unnamed)" : node.shortName}
+                  </td>
+                  <td>
+                    {node.address}
+                    {/* The address a node *claims* differs from the one its
+                        reply came from when something between is translating,
+                        and an installer chasing a node that will not take
+                        frames has to be able to see that. */}
+                    {node.ip === node.address.split(":")[0] ? null : (
+                      <span className="settings-hint"> (says {node.ip})</span>
+                    )}
+                  </td>
+                  <td data-testid={`artnet-node-ports-${String(index)}`}>
+                    {node.ports.length === 0
+                      ? "—"
+                      : node.ports.map((port) => String(port)).join(", ")}
+                  </td>
+                  <td data-testid={`artnet-node-seen-${String(index)}`}>
+                    {clockOf(node.lastReplyAgoMs, now)}
+                  </td>
+                  <td data-testid={`artnet-node-state-${String(index)}`}>
+                    {node.configured ? "configured" : "not configured"}
+                    {node.unaddressedPorts.length === 0 ? null : (
+                      <div className="settings-warning">
+                        outputs {node.unaddressedPorts.map(String).join(", ")}, which this
+                        desk sends nothing on
+                      </div>
+                    )}
+                    {node.missingPorts.length === 0 ? null : (
+                      <div className="settings-warning">
+                        this desk sends {node.missingPorts.map(String).join(", ")}, which it
+                        does not have
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      data-testid={`artnet-node-add-${String(index)}`}
+                      onClick={() => {
+                        onAdd(node);
+                      }}
+                    >
+                      {node.configured ? "Add another output" : "Add as output"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
 /** The rig, one row per configured output. */
 function OutputTable({
   rows,
+  now,
   editing,
   onEdit,
   onEnabled,
   onRemove,
 }: {
-  readonly rows: readonly OutputSnapshot[];
+  readonly rows: readonly (OutputSnapshot & { readonly nodes: readonly NodeReach[] })[];
+  readonly now: number;
   readonly editing: number | null;
-  readonly onEdit: (row: OutputSnapshot) => void;
+  readonly onEdit: (row: OutputSnapshot & { readonly nodes: readonly NodeReach[] }) => void;
   readonly onEnabled: (id: number, enabled: boolean) => void;
   readonly onRemove: (id: number) => void;
 }) {
@@ -399,6 +656,20 @@ function OutputTable({
                 data-testid={`output-health-${String(row.id)}`}
               >
                 {row.health}
+                {/* **Punch-list B6's other half** — S46. The word above is the
+                    daemon's, folded from whether anything answers; this names
+                    the node, because *Degraded* alone does not tell an
+                    installer which box to walk to. Absent when every node
+                    answers, when the kind cannot be asked, and when this desk
+                    is not listening — all three are *nothing to add*. */}
+                {nodeNote(row.nodes, now) === null ? null : (
+                  <div
+                    className="settings-warning"
+                    data-testid={`output-nodes-${String(row.id)}`}
+                  >
+                    {nodeNote(row.nodes, now)}
+                  </div>
+                )}
               </td>
               <td data-testid={`output-frames-${String(row.id)}`}>{row.framesSent}</td>
               {/* An **age**, not a time: the daemon and a browser have no shared
