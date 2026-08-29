@@ -549,18 +549,49 @@ async fn a_surface_that_goes_away_is_reported_and_the_show_carries_on() {
     // **And it comes back** — S36. `docs/MCU_MAPPING.md` §5.3: a reconnect
     // invalidates the shadow model, so the whole picture is transmitted once as
     // the ordinary diff rather than as a special path. The engine hears about
-    // neither edge, which is asserted the same way it was above: the tick count
-    // moves and no tick is missed.
+    // neither edge.
+    //
+    // # The control window, and why this is not `assert_eq!` any more — S43
+    //
+    // It was `missed == missed_before` **exactly**, and it failed twice on a
+    // shared runner for a reason that has nothing to do with a cable: a two-core
+    // VM running the whole suite loses a tick to its own scheduler, and the
+    // measurement cannot tell that apart from a stall. S37 wrote the fault up
+    // (`PROGRESS.md` §2.39), said plainly that a tolerance would be the wrong
+    // answer, named the right one — *compare the replug against an equally long
+    // window with no replug in it*, which is S18's shape for the D2 gate — and
+    // left it for whoever next had reason to open the test. S43 had reason: the
+    // same line, the same symptom, a second red run.
+    //
+    // So the runner measures **itself** first. What a quiet window of the same
+    // length costs is this machine's own noise floor, and the replug has to be
+    // no worse than that. The one tick of slack on top is the isolated hiccup
+    // both failures were, and it is the *difference in kind* that carries the
+    // claim: a surface that had got onto the tick thread would lose the
+    // redraw's worth of ticks and not one.
+    const CONTROL: Duration = Duration::from_millis(400);
+    let quiet_before = daemon.desk().core().engine().health().missed();
+    daemon.run(Some(CONTROL), std::future::pending()).await;
+    let quiet = daemon.desk().core().engine().health().missed() - quiet_before;
+
     let missed = daemon.desk().core().engine().health().missed();
+    let ticks = daemon.desk().core().engine().health().ticks();
     surface.replug();
     run_until(&mut daemon, "the desk to be redrawn", || {
         surface.received().len() > 100
     })
     .await;
-    assert_eq!(
-        daemon.desk().core().engine().health().missed(),
-        missed,
-        "the tick never noticed a cable"
+    let during = daemon.desk().core().engine().health().missed() - missed;
+    assert!(
+        during <= quiet + 1,
+        "the tick noticed a cable: {during} missed across the replug against \
+         {quiet} across an equally long quiet window"
+    );
+    // And it really was running, rather than losing no ticks by not ticking:
+    // either claim alone is passed by a daemon broken in the other way.
+    assert!(
+        daemon.desk().core().engine().health().ticks() > ticks,
+        "the tick stopped altogether"
     );
     assert!(
         output.frames_sent() > frames,

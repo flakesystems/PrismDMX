@@ -2899,7 +2899,9 @@ Two things were done about it and a third is left open, deliberately:
   the missed ticks across an equally long window with no replug, which is the
   shape S18 used for the D2 gate (*either claim alone is passed by a daemon
   broken in the other way*). That is a change to S36's test and belongs to
-  whoever next has reason to open it.
+  whoever next has reason to open it. **S43 had the reason** — the same line
+  failed a second time on a documentation commit that changed no Rust at all —
+  and built the control. See §2.41.
 
 #### The numbers that had to stay where they were
 
@@ -3265,6 +3267,37 @@ which is the test written for exactly that pair and had been passing for a
 different reason. `ControlsPanel` now remembers what was in force when it armed
 and ignores it; the regression test is `does not bind the key the last learn
 named when a row arms`.
+
+#### The Windows job went red on a documentation commit, and it is S37's open item
+
+The commit after the feature one changed **no Rust at all** — markdown and two
+UI test files — and `crates/prismd/tests/surface_gate.rs::a_surface_that_goes_away_is_reported_and_the_show_carries_on`
+failed on it, with `missed()` reading one where the test demanded the number it
+had before. That is the **same test, the same line and the same symptom** S37
+recorded in §2.39, and this is its second red run.
+
+S37 wrote down what to do about it and deliberately did not do it: *the honest
+fix is not a tolerance but a control — compare the missed ticks across the replug
+against the missed ticks across an equally long window with no replug, which is
+the shape S18 used for the D2 gate. That is a change to S36's test and belongs to
+whoever next has reason to open it.* S43 had the reason.
+
+**The runner measures itself first.** A control window of 400 ms with no cable in
+it is what this machine costs when nothing at all is happening; the replug window
+has to be no worse than that. The one tick of slack on top is the isolated hiccup
+both failures were — and what carries the claim is not the slack but the
+**difference in kind**: a surface that had got onto the tick thread would lose
+the redraw's worth of ticks and not one of them. A second assertion stands beside
+it, because either alone is passed by a daemon broken in the other way: the tick
+count must have *moved*, or a daemon that lost no ticks by not ticking would
+pass.
+
+Two things this does **not** claim. It is not a real-time gate — that lives in
+§3, ten minutes at 64 universes under 100 % CPU load with 0 of 26 401 ticks
+missed — and it never had much power to catch a regression, because a surface
+poll that blocked the tick for five milliseconds would fit inside the 22.7 ms
+budget and miss nothing. What it is, and now reliably is, is a canary for gross
+blocking.
 
 #### Two stop-gaps, and both say so
 
@@ -5605,17 +5638,21 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**This one is different from the twelve before it.** S43 is the first
-*interactive* session: it is agreed with the owner before it is built, driven by
-hand before it is called done, and it asks its questions the moment they come up
-instead of guessing and writing the guess into a verification record. A model
-that runs it straight through to a commit without ever stopping has failed it,
-however green the gates are at the end.
+**The next session is S45, and not S29.** The running order in
+`IMPLEMENTATION_PLAN.md` puts the UI work before the shell — the interface is to
+be largely finished before it is wrapped in one — and S43 gave birth to S45, S46,
+S48 and S49 out of the owner's punch list. S45 is the first of them because two
+of its entries land on the same model and neither can be built without the other.
+
+**S43 is still open** while this is written: its third movement ends when the
+owner calls the interface fit for a pre-release. Whoever finishes it should read
+§2.41 first. That does not block S45 — S45's dependency is the *interface* S43
+built, which is built, green and pushed.
 
 ---
 
 ```
-PrismDMX — Session S43: `ui` — die Fehlerliste, das Skeleton, und der erste Pre-Release
+PrismDMX — Session S45: `prism-core` + `prism-engine` + `ui` — das Executor-Fenster, und eine Sequence, ein Playback
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
@@ -5623,142 +5660,108 @@ Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2, S18); das Pul
 bedient ihn ohne Oberfläche (D11, S22); die Oberfläche ist seit S23–S28, S44,
 S35, S34, S39 und S40 ein vollständiges Pult, dessen *eigentliche* Oberfläche
 die Kommandozeile ist (ARCHITECTURE_SPEC.md §4.5). Seit S33, S36, S37 und S38
-ist alles, was diese **Maschine** ausmacht, Daten statt Kommandozeilen-Flags —
-der Ausgangs-Patch, der MIDI-Port, die Netz-Freigabe, die Fixture-Bibliothek und
-die Bindungstabelle des Pults selbst — und es gibt ein Fenster, in dem ein
-Operator das einstellt.
+ist alles, was diese **Maschine** ausmacht, Daten statt Kommandozeilen-Flags.
+Und seit **S43** ist die Oberfläche entlang der Zeichnung des Eigentümers gebaut
+(`design/skeleton/`, zusammengefasst in ARCHITECTURE_SPEC.md §4.6): keine Bänder
+mehr um die Canvas, sondern Fenster, die ein Operator öffnet — darunter das
+`Executors`-Fenster, um das es hier geht.
 
-**Was fehlt, ist alles, was man einem Programm nicht ansieht, solange man es
-selbst gebaut hat.** Zwölf Sessions haben Funktionen gebaut und jede hat
-Kleinigkeiten aufgeschrieben und liegen lassen; der Eigentümer hat die
-Oberfläche benutzt und eine Fehlerliste geschrieben; und er hat gezeichnet, wie
-die Oberfläche eigentlich angeordnet sein soll. S43 ist die Session, die aus
-einer Bauherren-Oberfläche eine Operator-Oberfläche macht, und an deren Ende
-etwas steht, das man jemand anderem als **Pre-Release** in die Hand geben kann.
+**Was fehlt, ist ein Executor, den man zuweisen kann.** Was ein Fader und seine
+vier Tasten tun, wird heute beim Anlegen entschieden und ist danach von nirgends
+aus änderbar — nicht aus der Oberfläche, nicht aus der Zeile, nicht vom Pult.
+Und zwei Executors, die dieselbe Sequence tragen, bewegen sich unabhängig
+voneinander: `PlaybackId::of_executor` heißt, `Go` auf Executor 1 und `Go` auf
+Executor 9 starten **zwei** Playbacks derselben Cue-Liste, jedes mit eigenem
+Cue-Zeiger und eigener Blende. Nichts weist das zurück und nichts führt es
+zusammen.
+
+Das sind die Punkte **B15** und **B18** aus der Fehlerliste des Eigentümers, und
+sie sind eine Session, weil sie auf dasselbe Modell zeigen: B15 will ein Fenster,
+das sagt *diese Taste ist Go+*, und B18 sagt, dass der zweite Executor auf einer
+Sequence eine zweite Meinung über ein Playback ist, das es schon gibt — **D3**,
+angewandt aufs Pult statt auf einen Client. Den Editor zuerst zu bauen hieße, ein
+Panel über ein Modell zu zeichnen, das sich gleich ändert; den Zustand zuerst zu
+verschieben hieße, dem Operator keine Möglichkeit zu lassen, zu sehen, was sich
+verschoben hat. Was herauskommt, ist ein Satz: **ein Executor ist ein Griff an
+das Playback einer Sequence, und welcher Griff er ist, ist editierbar.**
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 
 1.  CLAUDE.md                     — verbindliche Qualitäts-, Architektur- und
-                                    Teststandards. Besonders die UI-Regel, die
-                                    diese Session zu ihrem Thema hat: **wie ein
-                                    Geräte-Bildschirm; nichts scrollt außerhalb
-                                    der Canvas; schnelles Erkennen von
-                                    Bereichen vor Ästhetik — aber nicht hässlich**.
-                                    Dazu ≥ 85 % Coverage global, > 95 % auf
-                                    engine/, programmer/ und protocols/, und
-                                    „kein Test darf ein Gerät brauchen"
-2.  IMPLEMENTATION_PLAN.md        — Session-Protokoll und **die Definition von
-                                    S43**. Die Deliverables und die neun
-                                    Exit-Kriterien dort sind die Anforderung,
-                                    wortwörtlich; der Abschnitt **Shape** dort
-                                    beschreibt die vier Bewegungen dieser
-                                    Session und ist genauso verbindlich. Danach
-                                    die Laufreihenfolge am Ende (S43 ist Nummer
-                                    12) und die Konvention **„Session-Nummern
-                                    sind Identität, die Reihenfolge ist der
-                                    Fahrplan"**
-3.  docs/PRERELEASE_PUNCHLIST.md  — **die Fehlerliste des Eigentümers.** Das ist
-                                    kein Hintergrundmaterial, das ist die halbe
-                                    Anforderung. Liegt die Datei nicht da:
-                                    **fragen**, nicht anfangen
-4.  design/skeleton/              — **das Layout des Eigentümers**, ein
-                                    Penpot-Export: pro Board ein PNG (ansehen)
-                                    und ein SVG (Beschriftungen und Positionen
-                                    genau lesen), dazu ein README, das sagt, was
-                                    jedes Board zeigt und was ein Pfeil im
-                                    Flowchart bedeutet. Es sagt **Fluss und
-                                    Anordnung** und ausdrücklich keine Details.
-                                    Was es nicht sagt, entscheidet diese Session
-                                    — und schreibt es auf
-5.  PROGRESS.md                   — §7 mit **allen** „Carried out of"-Listen,
-                                    von S38 bis hinunter zu S11: das ist die
-                                    zweite Fehlerliste, und sie ist von euch
-                                    selbst geschrieben. Dazu §5 (offene
-                                    Verifikationspunkte), §3 (Coverage- und
-                                    Performance-Tabellen mit den Zahlen, die
-                                    weiter stimmen müssen), §2.34 (S40 — die
-                                    Kommandozeile *ist* die Oberfläche), §2.30
-                                    (S35 — das Layout, das schon einmal korrigiert
-                                    wurde), §2.27 (S26 — die Canvas), §2.39 und
-                                    §2.40 (S37/S38 — die Einstellungen)
-6.  ARCHITECTURE_SPEC.md          — §4.5 (**die Kommandozeile ist die
-                                    Oberfläche, nicht eine von zweien** — ein
-                                    Umbau darf das nicht umdrehen), §4.4 und §6
-                                    (die elf Fenstertypen), §12 (Testtabelle),
-                                    §14 (offene Verifikationen), §2 (D3: kein
-                                    Client hat eine zweite Meinung; D11: das
-                                    Pult ändert den Daemon, die Oberfläche folgt)
-7.  ui/src/                       — die Rundreise durch das, was umgebaut wird:
-                                    `app.tsx`, `canvas/`, `command/`, `show/`,
-                                    `patch/`, `settings/`, `telemetry/`
-8.  ui/src/canvas/content.tsx     — die drei Fenster, die zugeben, dass sie
-                                    nicht gebaut sind. **`ClockViewer` gehört in
-                                    diese Session**; `Viewer3D` ist S30 und
-                                    `PhaserEditor` ist eine Engine, die es nicht
-                                    gibt
-9.  ui/e2e/                       — die elf Browser-Tests (heute 39 Stück). Sie
-                                    sind das, was ein Umbau als Erstes bricht,
-                                    und ihre `data-testid`s sind der Vertrag
-                                    zwischen Oberfläche und Suite
-10. docs/IPC_PROTOCOL.md          — §5 und §6, falls etwas aus der Fehlerliste
-                                    eine neue Nachricht braucht
+                                    Teststandards: Zero-Crash-Invariante des
+                                    DMX-Threads, ≥ 85 % Coverage global, > 95 %
+                                    auf engine/, programmer/ und protocols/,
+                                    „kein Test darf ein Gerät brauchen", und die
+                                    UI-Regel (wie ein Geräte-Bildschirm; nichts
+                                    scrollt außerhalb der Canvas)
+2.  IMPLEMENTATION_PLAN.md        — **die Definition von S45**. Die sieben
+                                    Deliverables und die sechs Exit-Kriterien
+                                    dort sind die Anforderung, wortwörtlich.
+                                    Danach die Laufreihenfolge am Ende (S45 ist
+                                    Nummer 13) und die Konvention
+                                    „Session-Nummern sind Identität, die
+                                    Reihenfolge ist der Fahrplan"
+3.  docs/DMX_MERGE.md             — §1 (die Prioritätsstapel), §4 (die Master,
+                                    und warum sie nur Intensität skalieren),
+                                    §3 (der Programmer). Das Modell, das diese
+                                    Session anfasst, steht dort
+4.  crates/prism-engine/src/      — `playback.rs` (`PlaybackId`,
+                                    `PlaybackSource`), `player.rs` (der
+                                    Cue-Zeiger, die Blende, `goto`),
+                                    `master.rs`, `body.rs`. **Hier liegt B18**
+5.  crates/prism-domain/src/executor.rs
+                                  — `Executor` mit `fader_function`,
+                                    `button_functions`, `encoder_function`,
+                                    `master_level`, `speed`, `is_active`,
+                                    `current_cue_index` — alle sieben **pro
+                                    Executor**, und genau das ist die Frage
+                                    dieser Session
+6.  ui/src/desk/executorwindow.tsx und executorbar.tsx
+                                  — das Fenster, wie S43 es hinterlassen hat:
+                                    eine **Lesung**. Was daraus wird, ist der
+                                    Editor
+7.  PROGRESS.md                   — §2.41 (S43 — was gerade gebaut wurde, und
+                                    die offenen Punkte), §2.32 (S34 — die
+                                    Executor-Tasten und der Tick-Readback),
+                                    §2.33 (S39 — Store-Modi und Cue-Editing),
+                                    §7 mit allen „Carried out of"-Listen, §3
+                                    (die Zahlen, die weiter stimmen müssen)
+8.  ARCHITECTURE_SPEC.md          — §4.1 (Session-State), §4.3 (das
+                                    Latenzbudget, und warum ein Go die eine
+                                    Ausnahme von §4.5 ist), §4.5 und §4.6, §2
+                                    (D3, D7, D11)
+9.  docs/MCU_MAPPING.md           — §4.1 (was welche Taste tut) und §5 (die
+                                    Feedback-Regeln): eine neu zugewiesene
+                                    Taste muss den Scribble-Strip umbeschriften
+10. docs/IPC_PROTOCOL.md          — §5 und §6, für die Entscheidung, die diese
+                                    Session ausdrücklich treffen und aufschreiben
+                                    soll: **Kommando oder `MachineChange`?**
 
-Aufgabe: Session S43 umsetzen.
+Aufgabe: Session S45 umsetzen.
 
-**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S43 sind
+**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S45 sind
 die Anforderung, vollständig und ohne Ausnahme.**
 
-## Ablauf — diese Session ist interaktiv, und das ist keine Höflichkeitsfloskel
+## Die eine Entscheidung, die diese Session treffen und begründen muss
 
-Keine der zwölf Sessions davor hat gefragt; diese fragt. Ihr Gegenstand — wie
-sich ein Programm bedienen lässt — steht in keinem Repository, sondern nur im
-Kopf des Menschen, der davorsitzt.
-
-1. **Fragerunde vor der Arbeit.** Erst alles lesen: die Fehlerliste, das
-   Skeleton, die „Carried out of"-Listen. Dann die genaue Umsetzung mit dem
-   Eigentümer **vereinbaren** — was aus der Liste wie behoben wird, was das
-   Skeleton an welcher Stelle bedeutet, was `ClockViewer` überhaupt zeigen soll
-   (es gibt in diesem Build weder Timecode-Quelle noch Uhrenobjekt, also ist das
-   eine echte Frage und keine rhetorische). Erst danach die erste Zeile Code.
-2. **Die Arbeit.** Fehler beheben, Oberfläche am Skeleton entlang umbauen, die
-   billigen fehlenden Fenster ergänzen.
-3. **Fragerunde nach der Arbeit.** Der Eigentümer bedient die gebaute Oberfläche
-   von Hand und sagt, was nicht stimmt. Beheben, zurückgeben, wiederholen — bis
-   er sagt, sie ist Pre-Release-reif. Das ist ein Exit-Kriterium und keine
-   Kür.
-4. **Die Tests.** Die Suite wieder auf den Stand von `CLAUDE.md` bringen, um
-   alles herum, was die beiden Runden verändert haben. Danach messen.
-
-**Fragen werden in dem Moment gestellt, in dem sie auftauchen** — nicht gesammelt,
-nicht umgangen, nicht durch eine Annahme ersetzt, die dann als Entscheidung im
-Verifikationsprotokoll steht. Eine Annahme, die niemand bestätigt hat, ist in
-dieser Session ein Fehler, auch wenn sie sich als richtig herausstellt.
-
-**Was zu groß ist, wird eine eigene Session.** Erweist sich ein Punkt der
-Fehlerliste oder ein Änderungswunsch als Session statt als Nachmittag: eine neue
-Session in `IMPLEMENTATION_PLAN.md` anlegen — **die nächste freie Nummer ist
-S45** —, mit Deliverables und prüfbaren Exit-Kriterien, einer Zeile in der
-Laufreihenfolge und einer Kante im Mermaid-Graphen; und der Punkt auf der
-Fehlerliste sagt, welche Session er geworden ist. Ist die neue Session
-UI-bezogen, wird sie **vor S29 (die Tauri-Shell) einsortiert**: die Oberfläche
-soll weitgehend fertig sein, bevor sie in eine Anwendung eingepackt wird. Was
-nicht erlaubt ist: einen Punkt still fallen zu lassen.
+Ob die Zuweisung eines Executors ein `Command` ist oder ein `MachineChange`.
+Beide Präzedenzfälle sind da und sie zeigen in verschiedene Richtungen: was ein
+Executor **trägt** ist Show-Inhalt (S11 — eine Show überlebt den Saal, in dem sie
+geschrieben wurde), was die Tasten eines Pults **tun** ist es nicht (S38 — eine
+Show, die in einen anderen Saal getragen wird, darf nicht die F-Tasten des alten
+mitbringen). Ein Executor ist beides zugleich, und deshalb ist das eine
+Entscheidung und keine Ableitung. Sie gehört mit ihrem Grund nach
+`docs/IPC_PROTOCOL.md` §5 und in den Entscheidungslog in PROGRESS.md §6.
 
 ## Randbedingungen
 
-- **Die `data-testid`s sind ein Vertrag.** Ein Umbau, der ein Element umbenennt,
-  bricht Browser-Tests, die eine Eigenschaft behaupten, die weiterhin gelten
-  soll. Dann wird der Test **nachgezogen**, nicht gelöscht — und wenn seine
-  Behauptung nicht mehr stimmt, wird in einem Satz gesagt, warum sie nicht mehr
-  stimmen soll. Ein Test, der verschwindet, weil er im Weg stand, ist die eine
-  Sache, die diese Session unbemerkt kaputt machen kann.
-- **Null React-Commits unter Telemetrie**, gemessen und seit S24 gehalten. Ein
-  Umbau der Oberfläche ist genau das, was diese Zahl bricht: ein Panel, das
-  einen *Pegel* in `useState` legt, rendert 30-mal pro Sekunde. Die Zahl wird
-  nach dem Umbau neu gemessen, mit allen Fenstertypen gleichzeitig offen.
-- **Nichts scrollt außerhalb der Canvas** — bei 1280 × 720 **und** bei 4K. Die
-  seit S37/S38 geltende Form: **ein Scroller pro Fenster**, im Fensterkörper,
-  nie in der Seite.
+- **Nichts scrollt außerhalb der Canvas** — bei 1280 × 720 **und** bei 4K. Ein
+  Scroller pro Fenster, im Fensterkörper, nie in der Seite.
+- **Die Kommandozeile ist die Oberfläche** (§4.5). Jede Taste schreibt eine
+  Zeile; seit S43 gilt das auch für die Kacheln der Pools
+  (`ui/src/desk/consoleshell.ts::pickOnto`, `docs/COMMAND_LINE.md` §3.1). Ein
+  neuer Editor, der Kommandos direkt schickt, dreht das um — es sei denn, er
+  fällt unter die ausdrücklichen Ausnahmen (§4.5 letzter Absatz).
 - **`ui/src/bindings/` wird aus Rust erzeugt** (`cargo test -p prism-domain`),
   nicht von Hand geschrieben.
 - **Ein neues Kommando braucht eine Heimat in allen drei Appliern** und in den
@@ -5767,23 +5770,23 @@ nicht erlaubt ist: einen Punkt still fallen zu lassen.
   zwei `MachineChange`-Varianten.
 - **Das Wertbaum-Budget ist gemessen und knapp**:
   `crates/prism-domain/src/wire.rs::a_generated_wire_value_fits_in_a_test_thread`
-  fällt bei **30 992** Byte, was der größte Baum ist, auf dem die Suite je
-  gelaufen ist. Wer es reißt: ein *Feld* boxen (`crate::arb::boxed()`), und für
-  ein **weites Unit-Enum** stattdessen `crate::arb::arbitrary_from_list!`, weil
-  ein Box den Baum nicht kleiner *baut*. Niemals `RUST_MIN_STACK`.
+  fällt bei **30 992** Byte. Wer es reißt: ein *Feld* boxen
+  (`crate::arb::boxed()`), und für ein **weites Unit-Enum** stattdessen
+  `crate::arb::arbitrary_from_list!`, weil ein Box den Baum nicht kleiner
+  *baut*. Niemals `RUST_MIN_STACK`.
 - **Eine neue Nachricht braucht ihren Leser in `ui/src/ipc/protocol.ts`**, und
   am besten einen Test, der sie durch den echten Decoder schickt.
 - **Ein neues Feld auf einem persistierten Typ braucht `#[serde(default)]`**,
-  sonst öffnet keine ältere Datei mehr.
+  sonst öffnet keine ältere Datei mehr — und der Default muss die **sichere**
+  Antwort sein. S43 hat das teuer gelernt: `Fixture::software_dimmer` steht auf
+  `true`, weil ein Fixture ohne ihn hell hochkommt.
 - **Kein Test darf ein Gerät berühren.** An dieser Maschine hängt ein echtes
   X-Touch (S20, Firmware V1.25, Seriennummer `0156406`) und ein echter
   SH-RS09B-Adapter; die Suite darf keines von beiden öffnen.
 - **Ein Test-Target, das einen Daemon startet, setzt `websocket: Listen::Off`.**
-  Der Listener ist seit S37 eine Einstellung und die Einstellung ist *an*; ein
-  Target, das nichts sagt, bindet 127.0.0.1:7373, und mehrere laufen gleichzeitig.
 - **Die Gates laufen einzeln.** `cargo test --workspace` und `npm run test`
   gleichzeitig lassen zwei UI-Tests durch Zeitüberschreitung fallen, die einzeln
-  grün sind — das ist S38 passiert und hat eine Stunde gekostet.
+  grün sind.
 - **Vor Zeitmessungen die Systemlast prüfen**, sonst sieht eine beschäftigte
   Maschine aus wie eine Regression:
   `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"`
@@ -5793,38 +5796,42 @@ nicht erlaubt ist: einen Punkt still fallen zu lassen.
   keine Messung.**
 - **Die sechs Recordings sind ein Satz.** Ändert sich das Protokoll, werden alle
   sechs neu erzeugt (`cargo test -p prismd --test ui_* -- --ignored`) und die
-  Diffs **strukturell** gelesen, nicht als Base64. Was sich außer `tickHz`,
-  `framesSent`, der Telemetrie-Sequenznummer, der Lage eines `PlaybackState` in
-  einer Delta-Liste und den drei Pro-Lauf-Werten (`machine.dataDir`,
-  `machine.deskId`, `showFile.path`) unterscheidet, muss erklärbar sein.
+  Diffs **strukturell** gelesen, nicht als Base64.
+- **Die `data-testid`s sind ein Vertrag** zwischen Oberfläche und den 41
+  Playwright-Tests. Ein umbenanntes Element zieht seinen Test **mit**; ein Test
+  wird nie gelöscht, weil er rot ist. Gilt seine Behauptung nicht mehr, steht in
+  einem Satz da, warum.
+- **Ein grüner Lauf auf einem geteilten Runner ist keine Zeitmessung.** Zwei
+  CI-Rotläufe dieses Projekts waren derselbe verpasste Tick auf einer
+  Zwei-Kern-VM. Wo eine Behauptung über den Tick nötig ist, wird sie gegen ein
+  **Kontrollfenster** gestellt und nicht gegen Null — siehe
+  `crates/prismd/tests/surface_gate.rs`.
 - **CI hat `channel = "stable"`**, also trifft sie jede neue Lint-Menge zuerst.
-  Ein grüner *inkrementeller* `cargo clippy` ist kein Beweis — vor dem Messen
-  `cargo clean -p` auf die geänderten Crates.
 
 ## Zum Schluss
 
 - Alle Gates grün: `cargo test --workspace`, `cargo clippy --workspace
   --all-targets -- -D warnings`, `cargo fmt --all --check`, und in `ui/`:
   `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build`, sowie
-  die Playwright-Tests (heute 39)
-- Die Zahlen aus S24–S28, S33, S34, S39, S40, S36, S37 und S38 müssen weiter
-  stimmen: null Allokationen im Tick (**acht** Pfade), das Tick-Deadline-Gate,
-  null React-Commits, das Telemetrie-Frame-Budget — die letzten beiden **neu
-  gemessen mit allen Fenstertypen gleichzeitig offen**
-- `docs/PRERELEASE_PUNCHLIST.md` selbst abgehakt: jeder Eintrag behoben,
-  begründet abgelehnt, oder mit der Nummer der Session versehen, die er geworden
-  ist
-- PROGRESS.md aktualisieren: S43-Status, ein §2.41-Verifikationsprotokoll mit
-  **jeder gemessenen Zahl** und mit der Runde der Handprüfung, die zum
-  Pre-Release-Urteil geführt hat; die Coverage- und Performance-Tabellen in §3;
-  in §7 die abgehakten „Carried out of"-Listen und eine neue Liste „Carried out
-  of S43"
-- `ARCHITECTURE_SPEC.md` §12 und §14 nachziehen, und jede Abweichung vom
-  Skeleton mit ihrem Grund dort, wo sie hingehört
-- PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt für die nächste
-  Session überschreiben — nach der Laufreihenfolge ist das **S29 (die
-  Tauri-Shell)**, es sei denn, in dieser Session ist eine UI-Session entstanden,
-  die davor einsortiert wurde; dann ist es diese
+  die Playwright-Tests (heute 41)
+- Die Zahlen aus S24–S28, S33, S34, S39, S40, S36, S37, S38 und S43 müssen
+  weiter stimmen: null Allokationen im Tick (**acht** Pfade — S48 fügt den
+  neunten hinzu, nicht diese Session), das Tick-Deadline-Gate, null
+  React-Commits, das Telemetrie-Frame-Budget
+- **Die Markdown-Dateien werden im selben Durchgang nachgezogen wie der Code**,
+  nicht in einem Folge-Commit. Der Eigentümer hat das am 2026-08-28
+  ausdrücklich verlangt. Betroffen sind je nach Änderung:
+  `ARCHITECTURE_SPEC.md` (Session-State, Schnittstellenregeln — und prüfe auf
+  **tote Querverweise**: der Code zitiert Abschnitte nach Nummer),
+  `docs/IPC_PROTOCOL.md` (Draht), `docs/DMX_MERGE.md` (was die Engine mit einem
+  Wert tut), `docs/MCU_MAPPING.md` (Bindungen), `docs/COMMAND_LINE.md`
+  (Grammatik), `docs/PRERELEASE_PUNCHLIST.md` (B15 und B18 abhaken)
+- PROGRESS.md aktualisieren: S45-Status, ein §2.42-Verifikationsprotokoll mit
+  **jeder gemessenen Zahl**, die Coverage- und Performance-Tabellen in §3, und
+  in §7 eine neue Liste „Carried out of S45"
+- PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt überschreiben —
+  nach der Laufreihenfolge ist das **S46** (Art-Net-Node-Discovery), das
+  unabhängig von S45 ist und ebenso gut daneben laufen kann
 - Mit einer Conventional-Commit-Nachricht committen, pushen, CI beobachten und
   das Ergebnis in PROGRESS.md festhalten
 ```
