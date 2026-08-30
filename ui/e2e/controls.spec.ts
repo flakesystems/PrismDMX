@@ -88,6 +88,18 @@ async function desk(page: Page, port: number): Promise<{ dataDir: string; keys: 
   await expect(page.getByTestId("settings")).toBeVisible();
   await page.getByTestId("settings-tab-controls").click();
   await expect(page.getByTestId("settings-controls")).toBeVisible();
+  // **And then wait for the table to have arrived**, which is not the same
+  // thing. The panel draws as soon as it is open and asks `Query::SurfaceBindings`
+  // on the way; until the answer lands every action's key list is empty and
+  // every chip cell reads `—`. A test that then took an `innerText()` would read
+  // that dash — which is what CI did on S48's commit, on a helper that had been
+  // one scheduling accident away from it since S38.
+  //
+  // The device name is the same answer's, so it is the honest signal that the
+  // answer is here; waiting on the panel's visibility is waiting on this
+  // client's own render. **When a suite reads a value the daemon owns, wait for
+  // it to stop moving** — S46's rule, in the third place it has applied.
+  await expect(page.getByTestId("controls-device")).toHaveText("Behringer X-Touch (MC mode)");
   return { dataDir: daemon.dataDir, keys };
 }
 

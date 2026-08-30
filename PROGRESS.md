@@ -3617,7 +3617,7 @@ got there.**
 | **The gates** | ✅ `cargo test --workspace` **2 110 tests, 0 failed** across 74 test binaries; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean; in `ui/`: `npx tsc -b --force` clean, `npm run lint` clean, `npm run test` **817 tests in 56 files** (809 at S46), `npm run build` clean. Run one at a time, per §3.1's note |
 | **Playwright** | ✅ **45 tests** (44 at S46), all green against a real `prismd` in mock-output mode. The new one is the whole session end to end in a browser: a cue stored, a second cue that names something else, the inherited cell carrying `(100%)`, the blocking mark on the first cue and not on the second, and a `Block` that turns the reading into an assertion — then a reload, because none of it is held in the browser |
 | **The ten-minute tick-deadline gate** | ☐ **measured, red, and the control says it is the machine.** Three ten-minute runs on this machine inside one hour: the full pipeline at **57 missed / p99.9 133 ms** (29 % busy) and **77 missed / p99.9 68.8 ms** (47 % busy), and the **bare tick with no merge body at all** at **47 missed / p99.9 74.9 ms**. A tick with nothing in it cannot be slower than one doing the merge, the encoder and eight cue lists, so the difference is not this session's arithmetic — and p99 is **1.1 ms** in every run, inside the 2 ms gate, with the failures a handful of multi-millisecond stalls. What *is* the engine is green and measured: **0 allocator calls on all nine paths**, and the short jitter gates CI runs pass on every job. §5 carries the recipe and the rule that the pair is the measurement, never the first number alone |
-| **CI green on the pushed commit** | CIROW |
+| **CI, and the one thing it caught** | CIROW |
 
 ---
 
@@ -4644,6 +4644,17 @@ Carried out of S48:
   `Sequence::cue_position`, which was public, tested and used by nobody once that
   lookup went. S19 and S21 wrote the rule; it is worth re-running the report
   after the first pass rather than after the last.
+- **A helper that waits for a panel to be *visible* has not waited for the
+  daemon.** CI went red on this session's commit in a test S48 did not touch:
+  `controls.spec.ts` opened the control editor, waited for it to be on the
+  screen, and read a key list with `innerText()` — which is `—` until
+  `Query::SurfaceBindings` answers. The race had been in that helper since S38
+  and CI lost it for the first time here. **The signal to wait on is a value out
+  of the answer**, not the client's own render: the device name comes from the
+  same reply, so waiting for it is waiting for the table. That is S46's rule —
+  *when a suite reads a value the daemon owns, wait for it to stop moving* — in
+  the third place it has applied, and the second time a runner found it before a
+  reader did.
 - **A test whose name says the opposite of what it asserts is worse than no
   name.** `the_jump_fails_the_old_way_without_the_tracking_state` asserted the
   **new** behaviour, and would have read to the next person as a test of a bug
