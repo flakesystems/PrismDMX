@@ -114,7 +114,7 @@ function canvas(documents: Documents) {
     // where the drawing is asserted; what this file needs is the canvas
     // element to be in the window. And a store, because the Patch window
     // sends commands and asks questions like every other part of the desk.
-    <Shell store={new DeskStore()} session={documents.session} show={documents.show}>
+    <Shell store={new DeskStore()} session={documents.session}>
       <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
         <Canvas
           session={documents.session}
@@ -263,7 +263,7 @@ describe("dragging a window", () => {
       ],
     });
     view.rerender(
-      <Shell store={new DeskStore()} session={moved.session} show={moved.show}>
+      <Shell store={new DeskStore()} session={moved.session}>
         <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
           <Canvas
             session={moved.session}

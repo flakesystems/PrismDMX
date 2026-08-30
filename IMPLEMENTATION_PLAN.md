@@ -793,6 +793,29 @@ S43's rebuild made that visible, because the owner asked for the obvious thing �
 - Every line `ui/src/desk/console.test.ts` covers parses to the same commands in Rust, as a table shared by both suites until the TypeScript one goes
 - The DMX thread is untouched: parsing happens on the command path and makes no allocator call on the tick
 
+**Done 2026-08-31** — see `PROGRESS.md` §2.45. The grammar was **moved and not
+rewritten**: the recording `crates/prismd/tests/ui_programmer.rs` writes off a
+running daemon is the table both suites read, and the Rust parser is held to it
+line for line, so *the same commands* is asserted against a real `prismd`'s
+answers rather than against a port of a port. `ui/src/desk/console.ts` and
+`exists.ts` are deleted.
+
+Three decisions carry. **No command was added**: `CommandLineInput::run` had
+meant *and run it* since S43 and every sender was already sending it, so what was
+missing was a daemon that could read a line rather than a way to ask — and the
+vocabulary stays at 64. **A line is one sentence**, which only became a decision
+once one message carried the whole of it: a refusal now stops the rest of the
+line, where the client-side loop went on to set a level on whatever had been
+selected before. And **the reading is a `Query`** carrying two things the parser
+cannot know — whether a store's destination is already there, and whether a
+pointer may finish the line — which is `PatchPreview`, `DarkUniverses` and
+`CueTracking` arriving at §5.2's rule from a fourth direction.
+
+The exit criterion that could not be written before is
+`a_key_with_a_line_on_it_fires_the_line`: an executor key carrying `On Sequence 7`
+is pressed and channel 5 reaches 255 **on the frames**, with no client attached at
+all.
+
 ## S29 · `prism-app` — Tauri shell
 **Size:** M · **Depends on:** S17, S23
 
@@ -1167,7 +1190,7 @@ is, is the order the work was planned to make sense in.
 | 13 | **S45** core/engine/`ui` — the executor window, and one sequence one playback | Born out of S43 on 2026-08-27 from two punch-list entries that land on the same model: B15 (a button's action cannot be edited) and B18 (two executors of one sequence move independently). A UI session, so **before S29** — the interface is to be largely finished before it is wrapped in a shell |
 | 14 | **S46** protocols/`prismd`/`ui` — Art-Net node discovery | Born out of S43 on 2026-08-27 from punch-list B6: health means *the socket took it*, and UDP always takes it. Needs a receive path that does not exist yet, which is the session. Independent of S45, so it may equally run beside it. **Done 2026-08-29** — see `PROGRESS.md` §2.43. The receive path is the first in the workspace and it got a seam of its own, which `udp.rs` had specified in S9; a node is *answering*, *never answered* or *stopped* with the age of its last reply, and the daemon folds that into the health every client is told. Nothing broadcasts: the poll goes where the rig already sends, and the cost of that is named rather than hidden |
 | 15 | **S48** domain/core/engine — tracking, and a cue list that lands in the same place twice | **Done 2026-08-30** — the byte-identical frame sequence is asserted both ways round and as a property over generated lists; `Query::CueTracking` is what a cue sheet reads and the only fold in the project. Asked for by the owner on 2026-08-27 out of S43's hand-testing, and it is the deepest thing that list turned up: today the output at a cue depends on how you got there, so a cue cannot be rehearsed. After S45 because it needs *one sequence, one playback* underneath it — a tracking state per playback of the same list is two answers to the question this session exists to give one answer to |
-| 16 | **S49** domain/core/`ui` — the command line moves into the daemon | **Next.** Born out of S43 on 2026-08-28: the owner asked for a bound key that *sends* its line, and a daemon with no parser cannot. S43 shipped the stop-gap and named it one. After S45 and S48 because those two add words to the grammar, and moving a grammar twice is moving it twice |
-| 17 | **S29** `prism-app` — Tauri shell | Independent throughout; it is what makes the rest an application rather than a browser tab. It also carries the **OS file dialogue** the owner asked for on 2026-08-28, which is here because a browser cannot name a path on the daemon's machine |
+| 16 | **S49** domain/core/`ui` — the command line moves into the daemon | **Done 2026-08-31** — see `PROGRESS.md` §2.45. Born out of S43 on 2026-08-28: the owner asked for a bound key that *sends* its line, and a daemon with no parser cannot. S43 shipped the stop-gap and named it one; the field it added is gone. There is one parser and it is `prism_core::console` — the same grammar, held to the same recording of what a real daemon accepted — and a bound key now fires its line with **no client attached at all**. It added **no command**: `run` had meant *and run it* since S43, so what was missing was a daemon that could read a line. After S45 and S48 because those two add words to the grammar, and moving a grammar twice is moving it twice |
+| 17 | **S29** `prism-app` — Tauri shell | **Next.** Independent throughout; it is what makes the rest an application rather than a browser tab. It also carries the **OS file dialogue** the owner asked for on 2026-08-28, which is here because a browser cannot name a path on the daemon's machine |
 | 18 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them |
 | 19 | **S41** docs · **S42** prismdmx.de | Last, because a manual written before the settings window would document a program that does not exist |

@@ -21,19 +21,16 @@ import type { DeskStore } from "../store/desk";
 export function Shell({
   store,
   session,
-  show,
   children,
 }: {
   readonly store: DeskStore;
   /** The session document, or nothing at all for a window that reads none. */
   readonly session?: JsonValue;
-  /** The show document, for the console's *is this already there* question. */
-  readonly show?: JsonValue;
   readonly children: ReactNode;
 }) {
   return (
     <DeskProvider store={store}>
-      <ConsoleProvider session={session ?? null} show={show ?? null}>
+      <ConsoleProvider session={session ?? null}>
         {children}
       </ConsoleProvider>
     </DeskProvider>

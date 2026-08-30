@@ -207,9 +207,7 @@ pub fn session() -> SessionState {
     let mut session = SessionState::new();
     session.set_executor_page(3).unwrap();
     session.set_programmer_page(2).unwrap();
-    session
-        .set_command_line("fixture 1 at full", false)
-        .unwrap();
+    session.set_command_line("fixture 1 at full").unwrap();
     session.mark_saved();
     session
 }

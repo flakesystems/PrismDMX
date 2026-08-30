@@ -896,11 +896,10 @@ fn the_reserved_list_is_smpte_beats_and_nothing_else() {
 /// - the window writes `Assign Executor 1 Fader Master` and sends it
 ///   (`ui/src/desk/executoreditor.test.tsx`);
 /// - the line parses to one `Command::ConfigureExecutor`
-///   (`ui/src/desk/console.test.ts`);
-/// - a bound key carries the same line here, and the daemon puts it in
-///   `Session::command_line` for the focused client to run — which is
-///   `SurfaceAction::WriteCommandLine`'s stop-gap, removed for all three in
-///   `IMPLEMENTATION_PLAN` S49.
+///   (`crates/prism-core/tests/console.rs`);
+/// - a bound key carries the same line here, and since S49 the daemon reads it
+///   itself — `prism_core::console`, reached through
+///   `Command::CommandLineInput { run: true }`.
 ///
 /// No new `SurfaceAction` was needed and none was added: a key that says
 /// something the grammar can say already has a way to say it.
@@ -926,6 +925,7 @@ fn a_bound_key_can_carry_an_assignment_and_carries_it_unchanged() {
             Some(Command::CommandLineInput {
                 text: line.to_owned(),
                 run: submit,
+                mode: None,
             }),
             "{line}"
         );

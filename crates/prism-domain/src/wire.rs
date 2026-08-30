@@ -96,6 +96,9 @@ round_trip! {
     cue_edit => crate::CueEdit,
     sequence => crate::Sequence,
     sequence_store_mode => crate::SequenceStoreMode,
+    command_line_mode => crate::CommandLineMode,
+    command_line_reading_kind => crate::CommandLineReadingKind,
+    command_line_question => crate::CommandLineQuestion,
 
     executor_button_function => crate::ExecutorButtonFunction,
     executor_change => crate::ExecutorChange,

@@ -26,6 +26,7 @@ import { TelemetrySink } from "../ipc/telemetry";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
+import { ranLines, settleReadings } from "../testing/console";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { TelemetryProvider } from "../telemetry/panel";
 import { ENCODERS_PER_PAGE } from "./programmer";
@@ -129,7 +130,10 @@ function desk() {
         { url: "ws://127.0.0.1:7373/ipc", socketFactory: network.factory, timer: clock.timer },
         events,
     );
-    store.attach((command) => connection.send(command));
+    store.attach(
+        (command) => connection.send(command),
+        (query) => connection.ask(query),
+    );
 
     const view = render(
         <DeskProvider store={store}>
@@ -159,13 +163,24 @@ function desk() {
   /**
    * The commands a gesture produced, without the line it wrote on the way.
    *
-   * A key writes into `Session::commandLine` and then runs the line (S40,
-   * `ARCHITECTURE_SPEC.md` §4.5), so every gesture sends a `CommandLineInput`
-   * before the command and another one clearing the line after it. What most of
-   * these tests are about is *which command*, and this is that.
+   * The three bars send plenty that is **not** a line and never was: an
+   * executor page, a fader position, an encoder step (`docs/COMMAND_LINE.md`
+   * §1 lists them as the deliberate exceptions). This is those.
    */
   const acted = (): Command[] =>
     commands().filter((command) => command.t !== "CommandLineInput");
+
+  /**
+   * The **lines** a gesture ran — S49.
+   *
+   * The keys that *are* lines go out as lines now, and the daemon reads them.
+   * Which line each key writes is what these tests were always about; what a
+   * line means is `crates/prism-core/tests/console.rs`.
+   */
+  const ran = (): string[] => ranLines(commands());
+
+  /** Answers every question about a line that is still outstanding. */
+  const settle = () => settleReadings(network.last);
 
     /** The daemon answers with the deltas of one recorded step. */
     const answer = (step: number): void => {
@@ -176,7 +191,7 @@ function desk() {
         });
     };
 
-    return { view, store, commands, acted, answer };
+    return { view, network, store, commands, acted, ran, answer, settle };
 }
 
 /** What the eight strips are showing, as `id:name` pairs. */
@@ -201,8 +216,8 @@ describe("the executor bar", () => {
      * The other half of the criterion — that the *console's* paging agrees — is
      * `ui/e2e/desk.spec.ts`, where a real console presses `Faderbank ▶`.
      */
-    it("shows exactly the current page, and pages by command", () => {
-        const { acted, answer } = desk();
+    it("shows exactly the current page, and pages by command", async () => {
+        const { ran, answer, settle } = desk();
         expect(strips()).toEqual([
             "0:Warm Wash",
             "1:",
@@ -216,7 +231,8 @@ describe("the executor bar", () => {
         expect(screen.getByTestId("page-number").textContent).toBe("0");
 
         fireEvent.click(screen.getByTestId("page-up"));
-        expect(acted()).toEqual([{ t: "SetExecutorPage", page: 1 }]);
+        await settle();
+        expect(ran()).toEqual(["Page 1"]);
         // Nothing has moved: the page is the session's.
         expect(screen.getByTestId("page-number").textContent).toBe("0");
         expect(strips()[0]).toBe("0:Warm Wash");
@@ -242,25 +258,28 @@ describe("the executor bar", () => {
         );
     });
 
-    it("cannot page below zero", () => {
-        const { acted } = desk();
+    it("cannot page below zero", async () => {
+        const { ran, settle } = desk();
         expect(screen.getByTestId("page-down").hasAttribute("disabled")).toBe(true);
         fireEvent.click(screen.getByTestId("page-down"));
-        expect(acted()).toEqual([]);
+        await settle();
+        expect(ran()).toEqual([]);
     });
 
-    it("pages back down once there is somewhere to go", () => {
-        const { acted, answer } = desk();
+    it("pages back down once there is somewhere to go", async () => {
+        const { ran, answer, settle } = desk();
         answer(0);
         expect(screen.getByTestId("page-down").hasAttribute("disabled")).toBe(false);
         fireEvent.click(screen.getByTestId("page-down"));
-        expect(acted()).toEqual([{ t: "SetExecutorPage", page: 0 }]);
+        await settle();
+        expect(ran()).toEqual(["Page 0"]);
     });
 
-it("asks for an executor to be selected rather than lighting it", () => {
-    const { acted, answer } = desk();
+it("asks for an executor to be selected rather than lighting it", async () => {
+    const { ran, answer, settle } = desk();
     fireEvent.click(screen.getByTestId("select-2"));
-    expect(acted()).toEqual([{ t: "SelectExecutor", executorId: 2 }]);
+    await settle();
+    expect(ran()).toEqual(["Executor 2"]);
     expect(screen.getByTestId("strip-2").dataset["selected"]).toBe("no");
     // Step 3 of the script is that very command.
     for (const step of [0, 1, 2, 3]) {
@@ -754,13 +773,14 @@ describe("the encoder bar", () => {
      * stage nought means *there is nothing to clear*, which is a **disabled key**
      * rather than a key that sends a command doing nothing.
      */
-    it("says what the next press would clear, and does nothing when there is nothing", () => {
-        const { acted, answer } = desk();
+    it("says what the next press would clear, and does nothing when there is nothing", async () => {
+        const { ran, answer, settle } = desk();
         const clear = () => screen.getByTestId("clear");
         expect(clear().dataset["stage"]).toBe("0");
         expect(clear().hasAttribute("disabled")).toBe(true);
         fireEvent.click(clear());
-        expect(acted()).toEqual([]);
+        await settle();
+        expect(ran()).toEqual([]);
 
         // With values in the programmer the key is live, and it says the next
         // press takes the values.
@@ -770,7 +790,8 @@ describe("the encoder bar", () => {
         expect(clear().dataset["stage"]).toBe("1");
         expect(clear().hasAttribute("disabled")).toBe(false);
         fireEvent.click(clear());
-        expect(acted()).toEqual([{ t: "ClearProgrammer" }]);
+        await settle();
+        expect(ran()).toEqual(["Clear"]);
 
         // **All four stages, from the daemon's own answers** — the recorded
         // script presses Clear three times over. The values go and the selection
@@ -787,47 +808,75 @@ describe("the encoder bar", () => {
 });
 
 describe("the command line", () => {
-    it("says what a line will do before it is sent", () => {
-        desk();
+    /**
+     * **The reading is the daemon's since S49**, so this asserts that the
+     * sentence it sends is the sentence under the box — not what the sentence
+     * says, which is `crates/prism-core/tests/console.rs::a_line_reads_back_in_words`.
+     */
+    it("says what a line will do before it is sent", async () => {
+        const { network } = desk();
         const input = screen.getByTestId("command-input");
         fireEvent.change(input, { target: { value: "1 thru 3 at 50" } });
+        await settleReadings(network.last, {
+            "1 thru 3 at 50": { reading: "select 1 + 2 + 3 · dimmer → 50%", commands: 2 },
+        });
         expect(screen.getByTestId("command-reading").textContent).toBe(
             "select 1 + 2 + 3 · dimmer → 50%",
         );
         fireEvent.change(input, { target: { value: "1 thru" } });
+        await settleReadings(network.last, {
+            "1 thru": {
+                kind: "Error",
+                reading: "thru what? A range is two numbers, as in 1 thru 4.",
+            },
+        });
         expect(screen.getByTestId("command-reading").textContent).toContain("thru what");
     });
 
-    it("sends a line's commands in order and clears the console line", () => {
-        const { commands } = desk();
+    /**
+     * **One command, and the daemon does the rest** — S49.
+     *
+     * Before it the interface sent the commands a line meant and then an empty
+     * line; a line that fell into two sent two. It sends the *line* now, and
+     * what comes back is the deltas of what the daemon did — including the
+     * clearing of `Session::commandLine`, which is why nothing empties it here.
+     */
+    it("sends the line and lets the daemon read it", async () => {
+        const { commands, network } = desk();
         const input = screen.getByTestId("command-input");
         fireEvent.change(input, { target: { value: "1 + 2" } });
         fireEvent.submit(input);
+        await settleReadings(network.last, { "1 + 2": { commands: 1 } });
         expect(commands()).toEqual([
             // The line is mirrored into the session as it is typed…
-            { t: "CommandLineInput", text: "1 + 2", run: false },
-            // …and executing it is the commands it meant, then an empty line.
-            { t: "SelectFixtures", ids: [1, 2], mode: "Set" },
-            { t: "CommandLineInput", text: "", run: false },
+            { t: "CommandLineInput", text: "1 + 2", run: false, mode: null },
+            // …and running it is that same line with `run` on it.
+            { t: "CommandLineInput", text: "1 + 2", run: true, mode: null },
         ]);
         expect((input as HTMLInputElement).value).toBe("");
     });
 
-    /** **The exit criterion**: a syntax error is a message and nothing is sent. */
-    it("refuses to send a line it could not read, without throwing", () => {
-        const { commands } = desk();
+    /** **The exit criterion**: a syntax error is a message and nothing is run. */
+    it("refuses to send a line it could not read, without throwing", async () => {
+        const { commands, network } = desk();
         const input = screen.getByTestId("command-input");
         fireEvent.change(input, { target: { value: "banana" } });
         fireEvent.submit(input);
+        await settleReadings(network.last, {
+            banana: { kind: "Error", reading: '"banana" is not a fixture number.' },
+        });
         expect(screen.getByTestId("command-reading").textContent).toContain("not a fixture number");
         // The line still reached the session — it is what the operator typed, and
-        // every client shows it — but no command was executed.
-        expect(commands()).toEqual([{ t: "CommandLineInput", text: "banana", run: false }]);
+        // every client shows it — but nothing was run.
+        expect(commands()).toEqual([
+            { t: "CommandLineInput", text: "banana", run: false, mode: null },
+        ]);
     });
 
-    it("sends nothing at all for an empty line", () => {
-        const { commands } = desk();
+    it("sends nothing at all for an empty line", async () => {
+        const { commands, network } = desk();
         fireEvent.submit(screen.getByTestId("command-input"));
+        await settleReadings(network.last);
         expect(commands()).toEqual([]);
     });
 
@@ -849,14 +898,14 @@ describe("the command line", () => {
             fireEvent.change(input, { target: { value: "1 t" } });
             fireEvent.change(input, { target: { value: "1 th" } });
             // One command for the burst, carrying the first keystroke.
-            expect(commands()).toEqual([{ t: "CommandLineInput", text: "1", run: false }]);
+            expect(commands()).toEqual([{ t: "CommandLineInput", text: "1", run: false, mode: null }]);
             act(() => {
                 vi.advanceTimersByTime(SEND_INTERVAL_MS);
             });
             // And one more carrying where the line actually got to.
             expect(commands()).toEqual([
-                { t: "CommandLineInput", text: "1", run: false },
-                { t: "CommandLineInput", text: "1 th", run: false },
+                { t: "CommandLineInput", text: "1", run: false, mode: null },
+                { t: "CommandLineInput", text: "1 th", run: false, mode: null },
             ]);
             // A burst that ended on the line already sent says nothing further.
             act(() => {
@@ -883,7 +932,7 @@ describe("the command line", () => {
             act(() => {
                 vi.advanceTimersByTime(SEND_INTERVAL_MS * 4);
             });
-            expect(commands()).toEqual([{ t: "CommandLineInput", text: "12", run: false }]);
+            expect(commands()).toEqual([{ t: "CommandLineInput", text: "12", run: false, mode: null }]);
         } finally {
             vi.useRealTimers();
         }

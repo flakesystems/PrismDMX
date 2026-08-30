@@ -1,6 +1,6 @@
 /**
  * The console shell: a key writes into the line, a prompt does not block, and
- * the history is this operator's own — S40.
+ * the history is this operator's own — S40, S49.
  *
  * # What this file is for that `desk.test.tsx` is not
  *
@@ -9,51 +9,120 @@
  * shapes of `ARCHITECTURE_SPEC.md` §4.5, the question a line holds when its
  * destination is taken, and the two client-local things beside it (§4.2).
  *
- * The store is real and the socket is not: what a gesture *sends* is the point,
- * so the commands are collected straight out of `DeskStore::attach`.
+ * # What it stopped asserting in S49, and why that is right
+ *
+ * It used to check that pressing `Clear` sent a `ClearProgrammer`. It cannot,
+ * because this interface no longer decides that: a line is **sent** as
+ * `CommandLineInput { run: true }` and the daemon reads it. So what is asserted
+ * here is that the right *line* goes out, once; what a line **means** is
+ * `crates/prism-core/tests/console.rs`, held to a recording of what a real
+ * `prismd` accepted, and that the two halves meet is `ui/e2e/console.spec.ts`
+ * against a running daemon.
+ *
+ * The store is real and the socket is not: a fake daemon answers
+ * `Query::CommandLineReading` out of the table below, because a *second* parser
+ * in TypeScript — even a test's — is the thing S49 removed.
  */
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { Command, JsonValue } from "../bindings";
+import type { Answer, Command, JsonValue } from "../bindings";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { DeskStore } from "../store/desk";
 import { CommandLine } from "./commandline";
-import { completions } from "./console";
 import { Keypad } from "./keypad";
 import { History } from "./history";
-import { appended, objectLine, useConsole } from "./consoleshell";
+import { unread, useConsole } from "./consoleshell";
+import type { CommandLineReading } from "./consoleshell";
 import { ConsoleProvider } from "./shell";
 
-/** A desk with one cue list, one preset, one group and one view already in it. */
-const SHOW: JsonValue = {
-  sequences: { "1": { id: 1, name: "Act 1", cues: [{ number: "1", name: "Cue 1" }] } },
-  presets: { "4": { id: 4, name: "Deep blue" } },
-  groups: { "3": { id: 3, name: "Front" } },
-  executors: { "0": { id: 0, sequenceId: 1 } },
-};
-
+/** A desk holding a cue list whose cue 1 is already there. */
 const SESSION: JsonValue = {
   session: { commandLine: "", selectedSequence: 1, encoderBank: "Color" },
   views: { "1": { id: 1, name: "View 1", windows: [] } },
 };
 
-/** The shell, with a way to read what it sent and a key of its own to press. */
-function shell(session: JsonValue = SESSION, show: JsonValue = SHOW) {
+/**
+ * What a daemon answers about the lines this file types.
+ *
+ * A table and not a parser: `prism_core::console` is the only parser there is
+ * since S49, and a test that grew a second one would be asserting against
+ * itself. Every entry is what a real `prismd` answers for that exact line —
+ * `cue 1` is in the show and `cue 9` is not, which is the whole difference
+ * between the two store lines below.
+ */
+const READINGS: Readonly<Record<string, Partial<CommandLineReading>>> = {
+  "": { kind: "Empty", completions: ["At", "Clear", "Store"] },
+  Clear: { kind: "Commands", commands: 1, reading: "clear", verb: true },
+  Oops: { kind: "Commands", commands: 1, reading: "oops", verb: true },
+  "Store ": { kind: "Error", reading: "which one?", verb: true, completions: ["Sequence"] },
+  "Store Cue ": { kind: "Error", reading: "cue which one?", verb: true },
+  "Cue ": { kind: "Error", reading: "a cue on its own is ambiguous." },
+  "Store Cue 1": {
+    kind: "Commands",
+    commands: 1,
+    reading: "store cue 1",
+    verb: true,
+    question: { what: "cue 1", modes: ["Merge", "Override", "Remove"] },
+  },
+  "Store Cue 9": { kind: "Commands", commands: 1, reading: "store cue 9", verb: true },
+  "1 thru 3": { kind: "Commands", commands: 1, reading: "select 1 + 2 + 3" },
+  "at 50": { kind: "Commands", commands: 1, reading: "dimmer → 50%" },
+  de: { kind: "Error", reading: '"de" is not a fixture number.', completions: ["Delete"] },
+  "Delete ": { kind: "Error", reading: "which one?", verb: true, completions: ["Sequence"] },
+  "Delete Sequence ": {
+    kind: "Error",
+    reading: "sequence which one?",
+    verb: true,
+    completions: ["Cue"],
+  },
+};
+
+/** The daemon's answer for a line, or the refusal it gives anything else. */
+function answerFor(text: string): Answer {
+  return {
+    ...unread(text),
+    reading: `"${text}" is not a command.`,
+    kind: "Error",
+    ...READINGS[text],
+    text,
+  };
+}
+
+/**
+ * The shell, with a way to read what it sent and a key of its own to press.
+ *
+ * The `enquire` half is what is new in S49: every question about a line is
+ * answered out of {@link READINGS}, one microtask later, exactly as a daemon
+ * answers one message later.
+ */
+function shell(session: JsonValue = SESSION) {
   const store = new DeskStore();
   const sent: Command[] = [];
+  let seq = 0;
   store.attach(
     (command) => {
       sent.push(command);
-      return sent.length;
+      seq += 1;
+      return seq;
     },
-    () => null,
+    (query) => {
+      seq += 1;
+      const id = seq;
+      if (query.t === "CommandLineReading") {
+        const answer = answerFor(query.text);
+        queueMicrotask(() => {
+          store.answered(id, answer);
+        });
+      }
+      return id;
+    },
   );
   render(
     <DeskProvider store={store}>
-      <ConsoleProvider session={session} show={show}>
+      <ConsoleProvider session={session}>
         <CommandLine daemonLine="" />
         {/*
           **The keys are a window since S43** (punch-list B12) and the line is a
@@ -67,14 +136,22 @@ function shell(session: JsonValue = SESSION, show: JsonValue = SHOW) {
       </ConsoleProvider>
     </DeskProvider>,
   );
-  /** What was sent, without the line it wrote on the way. */
-  const acted = (): Command[] => sent.filter((command) => command.t !== "CommandLineInput");
-  return { sent, acted };
+  /** The lines that were **run**, as opposed to the keystrokes mirrored on the way. */
+  const acted = (): string[] =>
+    sent.flatMap((command) =>
+      command.t === "CommandLineInput" && command.run ? [command.text] : [],
+    );
+  /** What was mirrored on the way, which is every keystroke. */
+  const written = (): string[] =>
+    sent.flatMap((command) =>
+      command.t === "CommandLineInput" && !command.run ? [command.text] : [],
+    );
+  return { sent, acted, written };
 }
 
 /** A button for each of the three shapes, so a test can press one directly. */
 function Probe() {
-  const { write, append, run, line } = useConsole();
+  const { write, append, run, line, reading } = useConsole();
   return (
     <>
       <button type="button" data-testid="probe-run" onClick={() => { run("Clear"); }}>
@@ -101,6 +178,7 @@ function Probe() {
         store free
       </button>
       <output data-testid="probe-line">{line}</output>
+      <output data-testid="probe-reading">{reading.reading}</output>
     </>
   );
 }
@@ -119,45 +197,55 @@ beforeEach(() => {
 });
 
 describe("a key writes a word into the line", () => {
-  /** §4.5's first shape: written and executed at once. */
-  it("runs a whole command with no argument", () => {
+  /** §4.5's first shape: written and run at once, as one command. */
+  it("runs a whole command with no argument", async () => {
     const { acted } = shell();
     fireEvent.click(screen.getByTestId("probe-run"));
-    expect(acted()).toEqual([{ t: "ClearProgrammer" }]);
+    await waitFor(() => {
+      expect(acted()).toEqual(["Clear"]);
+    });
     expect(input().value).toBe("");
   });
 
-  /** The second: written, and **nothing** sent. */
-  it("writes a command that needs arguments and waits", () => {
-    const { acted, sent } = shell();
+  /** The second: written, and **nothing** run. */
+  it("writes a command that needs arguments and waits", async () => {
+    const { acted, written } = shell();
     fireEvent.click(screen.getByTestId("probe-write"));
     expect(input().value).toBe("Store ");
-    expect(acted()).toEqual([]);
     // The line itself did go out, because `Session::commandLine` is session
     // state and every attached client draws it.
-    expect(sent).toEqual([{ t: "CommandLineInput", text: "Store ", run: false }]);
+    expect(written()).toContain("Store ");
+    await waitFor(() => {
+      expect(screen.getByTestId("probe-reading").textContent).toBe("which one?");
+    });
+    expect(acted()).toEqual([]);
   });
 
   /** The third: appended to the line as it stands. */
-  it("appends an argument keyword to what is already there", () => {
+  it("appends an argument keyword to what is already there", async () => {
     const { acted } = shell();
     fireEvent.click(screen.getByTestId("probe-write"));
     fireEvent.click(screen.getByTestId("probe-append"));
     expect(input().value).toBe("Store Cue ");
+    await waitFor(() => {
+      expect(screen.getByTestId("probe-reading").textContent).toBe("cue which one?");
+    });
     expect(acted()).toEqual([]);
   });
 
   /** And the keypad in the footer is those three shapes, spelled out. */
-  it("has a key for each of the three shapes, in the window they now live in", () => {
-    const { acted, sent } = shell();
+  it("has a key for each of the three shapes, in the window they now live in", async () => {
+    const { acted } = shell();
     fireEvent.click(screen.getByTestId("key-cue"));
     expect(input().value).toBe("Cue ");
     fireEvent.click(screen.getByTestId("key-store"));
     expect(input().value).toBe("Store ");
     expect(acted()).toEqual([]);
     fireEvent.click(screen.getByTestId("key-oops"));
-    expect(acted()).toEqual([{ t: "Oops" }]);
-    expect(sent.at(-1)).toEqual({ t: "CommandLineInput", text: "", run: false });
+    await waitFor(() => {
+      expect(acted()).toEqual(["Oops"]);
+    });
+    expect(input().value).toBe("");
   });
 });
 
@@ -165,54 +253,83 @@ describe("the question a line holds", () => {
   /**
    * **A store onto something that is there asks first**, and asks in the line
    * rather than in a window over the canvas (`CLAUDE.md`).
+   *
+   * **Whether there is anything to ask about is the daemon's since S49.** The
+   * client used to look in its own mirror; a client one delta behind would ask
+   * about a cue somebody had just deleted, and now it cannot.
    */
-  it("asks merge, override or cancel when the cue is already there", () => {
+  it("asks merge, override or cancel when the cue is already there", async () => {
     const { acted } = shell();
-    fireEvent.click(screen.getByTestId("probe-store"));
-    expect(acted()).toEqual([]);
-    expect(screen.getByTestId("command-prompt")).not.toBeNull();
+    // **Typed rather than pressed**, which is the ordinary way to reach a
+    // question — and it is the case that has a keystroke still owed to the
+    // daemon when the prompt goes up: the line has to reach the session anyway,
+    // because a question that stands is a line every screen should be showing.
+    fireEvent.change(input(), { target: { value: "Store Cue 1" } });
+    fireEvent.submit(input());
+    expect(await screen.findByTestId("command-prompt")).not.toBeNull();
     expect(screen.getByTestId("command-prompt-what").textContent).toContain("cue 1");
+    expect(acted()).toEqual([]);
 
     fireEvent.click(screen.getByTestId("prompt-Override"));
-    expect(acted()).toEqual([
-      { t: "StoreCue", sequenceId: null, cueNumber: "1", mode: "Override" },
-    ]);
+    await waitFor(() => {
+      expect(acted()).toEqual(["Store Cue 1"]);
+    });
+    expect(screen.queryByTestId("command-prompt")).toBeNull();
+  });
+
+  /**
+   * **The mode travels in the command** — S28's rule, and the reason the prompt
+   * exists at all rather than the daemon guessing an outcome nobody asked for.
+   */
+  it("sends the word the operator pressed", async () => {
+    const { sent } = shell();
+    fireEvent.click(screen.getByTestId("probe-store"));
+    fireEvent.click(await screen.findByTestId("prompt-Remove"));
+    await waitFor(() => {
+      expect(sent).toContainEqual({
+        t: "CommandLineInput",
+        text: "Store Cue 1",
+        run: true,
+        mode: "Remove",
+      });
+    });
   });
 
   /** **A cancelled prompt sends nothing at all**, and leaves the line standing. */
-  it("cancels without sending anything and keeps the line", () => {
+  it("cancels without sending anything and keeps the line", async () => {
     const { acted } = shell();
     fireEvent.click(screen.getByTestId("probe-store"));
-    fireEvent.click(screen.getByTestId("prompt-cancel"));
+    fireEvent.click(await screen.findByTestId("prompt-cancel"));
     expect(acted()).toEqual([]);
     expect(screen.queryByTestId("command-prompt")).toBeNull();
     expect(input().value).toBe("Store Cue 1");
   });
 
   /** Escape is the same answer from the keyboard. */
-  it("cancels on Escape", () => {
+  it("cancels on Escape", async () => {
     const { acted } = shell();
     fireEvent.click(screen.getByTestId("probe-store"));
+    await screen.findByTestId("command-prompt");
     fireEvent.keyDown(input(), { key: "Escape" });
     expect(acted()).toEqual([]);
     expect(screen.queryByTestId("command-prompt")).toBeNull();
   });
 
   /** And nothing is asked when the number is free: there is nothing to lose. */
-  it("does not ask about a number nobody has used", () => {
+  it("does not ask about a number nobody has used", async () => {
     const { acted } = shell();
     fireEvent.click(screen.getByTestId("probe-store-free"));
+    await waitFor(() => {
+      expect(acted()).toEqual(["Store Cue 9"]);
+    });
     expect(screen.queryByTestId("command-prompt")).toBeNull();
-    expect(acted()).toEqual([
-      { t: "StoreCue", sequenceId: null, cueNumber: "9", mode: "Merge" },
-    ]);
   });
 
   /** A new line is a new question: the old one was about a line that is gone. */
-  it("drops the question when the line is typed over", () => {
+  it("drops the question when the line is typed over", async () => {
     shell();
     fireEvent.click(screen.getByTestId("probe-store"));
-    expect(screen.getByTestId("command-prompt")).not.toBeNull();
+    await screen.findByTestId("command-prompt");
     fireEvent.change(input(), { target: { value: "1 thru 3" } });
     expect(screen.queryByTestId("command-prompt")).toBeNull();
   });
@@ -233,43 +350,91 @@ describe("the line follows the daemon", () => {
   });
 });
 
-describe("completion and history", () => {
+describe("the reading under the box", () => {
   /**
-   * **The strip of suggestions is gone — S43, punch-list B13.**
-   *
-   * It sat under the line at all times and was read as clutter rather than as
-   * help. What went is the *display*; `completions()` and Tab are untouched, and
-   * they are what this pair of tests holds now. The grammar claim survives with
-   * them: what is offered is the word `sequence`, never the sequences there are.
+   * **The sentence is the daemon's** — S49, and that is what makes a line
+   * refused at the console and a line refused on a screen read the same.
    */
-  it("offers the words that are legal at this point in the line, without drawing them", () => {
+  it("draws the daemon's sentence for the line that is in the box", async () => {
     shell();
+    fireEvent.change(input(), { target: { value: "at 50" } });
+    await waitFor(() => {
+      expect(screen.getByTestId("command-reading").textContent).toBe("dimmer → 50%");
+    });
     fireEvent.change(input(), { target: { value: "de" } });
-    expect(completions("de")).toContain("Delete");
-    expect(screen.queryByTestId("complete-delete")).toBeNull();
-    fireEvent.change(input(), { target: { value: "delete " } });
-    expect(completions("delete ")).toContain("Sequence");
-    expect(completions("delete ")).not.toContain("1");
+    await waitFor(() => {
+      expect(screen.getByTestId("command-reading").textContent).toContain(
+        "not a fixture number",
+      );
+    });
   });
 
-  it("takes a completion on Tab", () => {
+  /** A line that is not a command is not run, and says why instead. */
+  it("does not run a line that is not one", async () => {
+    const { acted } = shell();
+    fireEvent.change(input(), { target: { value: "de" } });
+    await waitFor(() => {
+      expect(screen.getByTestId("command-reading").textContent).not.toBe("");
+    });
+    fireEvent.submit(input());
+    await waitFor(() => {
+      expect(screen.getByTestId("command-reading").textContent).not.toBe("");
+    });
+    expect(acted()).toEqual([]);
+    expect(input().value).toBe("de");
+  });
+});
+
+describe("completion and history", () => {
+  /**
+   * **The strip of suggestions is gone — S43, punch-list B13**, and since S49
+   * the words themselves are the daemon's: they arrive with the reading, so the
+   * grammar claim survives without a grammar here. What is offered is the word
+   * `Sequence`, never the sequences there are.
+   */
+  it("takes a completion on Tab", async () => {
     // **Capitalised since B14**, so a completed word reads the way the same word
     // reads everywhere else in the desk. The line itself is still
     // case-insensitive — what changed is what it is *offered*.
     shell();
     fireEvent.change(input(), { target: { value: "de" } });
+    await waitFor(() => {
+      expect(screen.getByTestId("command-reading").textContent).not.toBe("");
+    });
+    expect(screen.queryByTestId("complete-delete")).toBeNull();
     fireEvent.keyDown(input(), { key: "Tab" });
     expect(input().value).toBe("Delete ");
+    await waitFor(() => {
+      expect(screen.getByTestId("command-reading").textContent).toBe("which one?");
+    });
     fireEvent.keyDown(input(), { key: "Tab" });
     expect(input().value).toBe("Delete Sequence ");
   });
 
-  it("walks back through the lines this operator typed", () => {
+  /**
+   * A completion is never offered for a line that has moved on — the answer
+   * carries the text it is about, and a reading that lost the race completes
+   * nothing.
+   */
+  it("offers nothing while the answer is about an older line", () => {
+    shell();
+    fireEvent.change(input(), { target: { value: "de" } });
+    fireEvent.keyDown(input(), { key: "Tab" });
+    expect(input().value).toBe("de");
+  });
+
+  it("walks back through the lines this operator typed", async () => {
     shell();
     fireEvent.change(input(), { target: { value: "1 thru 3" } });
     fireEvent.submit(input());
+    await waitFor(() => {
+      expect(input().value).toBe("");
+    });
     fireEvent.change(input(), { target: { value: "at 50" } });
     fireEvent.submit(input());
+    await waitFor(() => {
+      expect(input().value).toBe("");
+    });
 
     fireEvent.keyDown(input(), { key: "ArrowUp" });
     expect(input().value).toBe("at 50");
@@ -330,24 +495,6 @@ describe("the history itself", () => {
   });
 });
 
-describe("the two spellings a key uses", () => {
-  it("adds one space between words and one at the end", () => {
-    expect(appended("", "Fixture")).toBe("Fixture ");
-    expect(appended("Store ", "Cue")).toBe("Store Cue ");
-    expect(appended("Store", "Cue")).toBe("Store Cue ");
-  });
-
-  it("spells an object the way the parser reads it", () => {
-    expect(objectLine({ t: "Sequence", sequenceId: 4 })).toBe("Sequence 4");
-    expect(objectLine({ t: "Cue", sequenceId: null, cueNumber: "1.5" })).toBe("Cue 1.5");
-    expect(objectLine({ t: "Cue", sequenceId: 2, cueNumber: "1.5" })).toBe("Sequence 2 Cue 1.5");
-    expect(objectLine({ t: "Group", groupId: 3 })).toBe("Group 3");
-    expect(objectLine({ t: "Preset", presetId: 3 })).toBe("Preset 3");
-    expect(objectLine({ t: "View", viewId: 3 })).toBe("View 3");
-    expect(objectLine({ t: "Executor", executorId: 3 })).toBe("Executor 3");
-  });
-});
-
 describe("the line the daemon holds, and the one being typed", () => {
   /**
    * **A stale echo of our own line must not eat what has been typed since.**
@@ -376,7 +523,7 @@ describe("the line the daemon holds, and the one being typed", () => {
 
     const view = render(
       <DeskProvider store={store}>
-        <ConsoleProvider session={holding("")} show={SHOW}>
+        <ConsoleProvider session={holding("")}>
           <CommandLine daemonLine="" />
         </ConsoleProvider>
       </DeskProvider>,
@@ -389,7 +536,7 @@ describe("the line the daemon holds, and the one being typed", () => {
     // typed. It is a line this client sent, so it is an echo and not news.
     view.rerender(
       <DeskProvider store={store}>
-        <ConsoleProvider session={holding("1")} show={SHOW}>
+        <ConsoleProvider session={holding("1")}>
           <CommandLine daemonLine="1" />
         </ConsoleProvider>
       </DeskProvider>,
@@ -414,7 +561,7 @@ describe("the line the daemon holds, and the one being typed", () => {
     });
     const view = render(
       <DeskProvider store={store}>
-        <ConsoleProvider session={holding("")} show={SHOW}>
+        <ConsoleProvider session={holding("")}>
           <CommandLine daemonLine="" />
         </ConsoleProvider>
       </DeskProvider>,
@@ -423,7 +570,7 @@ describe("the line the daemon holds, and the one being typed", () => {
 
     view.rerender(
       <DeskProvider store={store}>
-        <ConsoleProvider session={holding("Group ")} show={SHOW}>
+        <ConsoleProvider session={holding("Group ")}>
           <CommandLine daemonLine="Group " />
         </ConsoleProvider>
       </DeskProvider>,

@@ -98,6 +98,7 @@
 
 mod command;
 mod conflict;
+pub mod console;
 mod desk;
 mod file;
 mod journal;
@@ -115,6 +116,7 @@ mod testkit;
 
 pub use command::{Applied, Effect, show_patch_ops};
 pub use conflict::{ShowIssue, dark_universes};
+pub use console::{ConsoleReading, ModeQuestion, ModeQuestionKind, parse_command_line};
 pub use desk::{
     DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, InvalidDeskId, MachineConfig, RECENT_SHOWS,
     RecentShows, Settings,

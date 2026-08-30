@@ -45,7 +45,7 @@ const { show, session } = ((): { show: JsonValue; session: JsonValue } => {
 /** Renders one window's body, inside the two providers every window sits in. */
 function body(type: WindowType, document: JsonValue = show): string {
   const view = render(
-    <Shell store={new DeskStore()} session={session} show={document}>
+    <Shell store={new DeskStore()} session={session}>
       <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
         <WindowContent
           window={{ instanceId: 1, type, x: 0, y: 0, w: 640, h: 480 }}
@@ -107,7 +107,7 @@ describe("a window's body", () => {
 
   it("puts the level view in the DMX sheet", () => {
     render(
-      <Shell store={new DeskStore()} session={session} show={show}>
+      <Shell store={new DeskStore()} session={session}>
         <TelemetryProvider channel={{ sink: new TelemetrySink(), surface: () => null }}>
           <WindowContent
             window={{ instanceId: 1, type: "DmxSheet", x: 0, y: 0, w: 640, h: 480 }}

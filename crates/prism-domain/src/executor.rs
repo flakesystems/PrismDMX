@@ -75,10 +75,10 @@ pub enum ExecutorButtonFunction {
     /// **It writes and runs**, unlike the surface's, which offers the choice. An
     /// executor key is not a keyboard: there is nothing to correct with before
     /// the next press, and a Go key that needed Enter afterwards is not a Go
-    /// key. Who runs it is `SurfaceAction::WriteCommandLine`'s stop-gap — the
-    /// daemon sets `Session::command_line` and bumps `command_line_run`, and the
-    /// client holding the keyboard focus parses it — until `IMPLEMENTATION_PLAN`
-    /// S49 moves the parser into the daemon and the arrangement goes.
+    /// key. Who runs it is the **daemon**, since S49: the press becomes
+    /// `Command::CommandLineInput { run: true }` and `prism_core::console` reads
+    /// the line. Before S49 the daemon could only write it down and hope a
+    /// client with the keyboard focus was watching.
     CommandLine {
         /// The line, exactly as it would be typed.
         line: String,

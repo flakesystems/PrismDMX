@@ -62,13 +62,14 @@
 //! table for one either, nor for the programmer or the journal.
 
 use prism_domain::{
-    AttributeType, ClearStage, Command, CueEdit, Delta, FixtureId, JsonPatchOp, NoticeLevel,
-    ObjectRef, PlaybackTarget, PresetId, PresetPool, Sequence, SequenceId, StoreMode, StorePreview,
-    StoreTarget,
+    AttributeType, ClearStage, Command, CommandLineMode, CueEdit, Delta, FixtureId, JsonPatchOp,
+    NoticeLevel, ObjectRef, PlaybackTarget, PresetId, PresetPool, Sequence, SequenceId, StoreMode,
+    StorePreview, StoreTarget,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::command::{Applied, Effect};
+use crate::console::{self, ConsoleReading};
 use crate::journal::{Image, Journal, JournalError, UndoRecord};
 use crate::programmer::{Programmer, ProgrammerError};
 use crate::session::{SessionError, SessionState};
@@ -394,6 +395,20 @@ impl ShowFile {
     /// [`ShowFileError`] if the command was refused. No half is changed after
     /// an error, and nothing is journaled.
     pub fn apply(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
+        // **A line that asked to be run is read here, before anything is
+        // routed** — S49. It is not a fourth kind of state and it does not want
+        // an applier of its own: it is a *line*, and what a line means is one or
+        // more of the commands below. This is the only type that holds the
+        // session and the show at once, which is what running one needs — the
+        // same reason `resolve` and `follow_cue_edit` are methods on it.
+        if let Command::CommandLineInput {
+            text,
+            run: true,
+            mode,
+        } = command
+        {
+            return self.run_command_line(text, *mode);
+        }
         // **Everything the session has to fill in, filled in first** (S40). A
         // line that names no cue list means the selected one and a playback
         // target of `Selected` means the same cue list; both are session state,
@@ -455,6 +470,129 @@ impl ShowFile {
             });
         }
         Ok(applied)
+    }
+
+    /// Reads a command line and carries out what it says — **S49**.
+    ///
+    /// # What comes back is what the daemon did
+    ///
+    /// A line falls into *commands* — `1 thru 3 at 50` is two — so what a client
+    /// gets back is the deltas of all of them, in order, and not an
+    /// acknowledgement of the line. That is the whole point of moving the parser
+    /// here: a key on the X-Touch bound to `Go+ Executor 1` fires it with no
+    /// client attached at all, which is impossible while the only parser is in a
+    /// browser.
+    ///
+    /// # Three shapes, and each does something different
+    ///
+    /// A line that **is** a command is run and the line is cleared, which is
+    /// what pressing Enter has always looked like. A line that is **not** one is
+    /// *written and left standing*: the reading under the box already says what
+    /// is wrong with it (`prism_domain::Query::CommandLineReading`), and an
+    /// operator who typed `Store` and clicked a pool tile wants the half-built
+    /// line to stay there rather than vanish. An **empty** line does nothing at
+    /// all — not even to the line, because writing whitespace into a field every
+    /// screen draws would be answering something nobody asked.
+    ///
+    /// # A refusal stops the rest of the line
+    ///
+    /// A line is one sentence. If `1 thru 4` is refused because the rig has no
+    /// fixture 4, then `at 50` must **not** go on to set a level on whatever was
+    /// selected before — which is something nobody asked for, and is what the
+    /// client-side loop did before S49 because it had already sent both. The
+    /// refusal travels as a `Delta::Notice`, because a fan-out has one outcome
+    /// and the sentence that was refused is inside it.
+    ///
+    /// # It cannot recurse
+    ///
+    /// Nothing `crate::console` produces is a `CommandLineInput`, so the two
+    /// calls to [`Self::apply`] below are one level deep by construction.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowFileError`] only from writing the line itself, which is a session
+    /// edit and fails only when it cannot be encoded.
+    fn run_command_line(
+        &mut self,
+        text: &str,
+        mode: Option<CommandLineMode>,
+    ) -> Result<Applied, ShowFileError> {
+        let commands = match console::parse_command_line(text) {
+            ConsoleReading::Commands { commands, .. } => commands,
+            // Not a command: the line is written and left for the operator.
+            ConsoleReading::Refused(_) => return self.apply(&written(text)),
+            // **An empty line does nothing at all, not even to the line.**
+            // Enter on an empty console is a key an operator pressed by habit,
+            // and a desk that answered it by writing whitespace into a field
+            // every screen draws would be answering something nobody asked.
+            ConsoleReading::Empty => return Ok(Applied::default()),
+        };
+        let commands = match mode {
+            Some(mode) => console::apply_mode(commands, mode),
+            None => commands,
+        };
+        let mut applied = Applied::default();
+        for command in &commands {
+            match self.apply(command) {
+                Ok(more) => {
+                    applied.deltas.extend(more.deltas);
+                    applied.effects.extend(more.effects);
+                }
+                Err(error) => {
+                    applied.deltas.push(Delta::Notice {
+                        level: NoticeLevel::Error,
+                        message: error.to_string(),
+                    });
+                    break;
+                }
+            }
+        }
+        // The line has been run, so the console line is cleared.
+        let cleared = self.apply(&written(""))?;
+        applied.deltas.extend(cleared.deltas);
+        Ok(applied)
+    }
+
+    /// Whether the show or the session already holds what this reference names
+    /// — **S49**.
+    ///
+    /// # This is not the parser reading the show
+    ///
+    /// S26's rule stands: [`crate::console`] does not consult the show, so
+    /// `Copy Sequence 2 Sequence 6` means the same thing whether or not sequence
+    /// 2 exists. What this answers is a different question — *should the desk
+    /// ask before running it* — and the answer is only ever a prompt, never a
+    /// meaning.
+    ///
+    /// It moved here from `ui/src/desk/exists.ts` with the parser. A client
+    /// could read its own mirror for it and did; the daemon can simply say, and
+    /// a client that is one delta behind can then no longer ask a question about
+    /// a cue that has just been deleted.
+    ///
+    /// What may **not** be answered from here is what a store would *cost* —
+    /// how many values it would replace or throw away — because that is
+    /// `Query::StorePreview`'s, which is a different question with a different
+    /// cadence.
+    ///
+    /// A **cue** that names no sequence means the selected one
+    /// (`ARCHITECTURE_SPEC.md` §4.1), and with nothing selected there is nothing
+    /// for it to be already holding — so the answer is `false` and the command
+    /// goes out to be refused, which is the split S26 wrote down.
+    #[must_use]
+    pub fn holds(&self, target: &ObjectRef) -> bool {
+        match target {
+            ObjectRef::Sequence { sequence_id } => self.show.sequence(*sequence_id).is_some(),
+            ObjectRef::Cue {
+                sequence_id,
+                cue_number,
+            } => sequence_id
+                .or(self.session.session().selected_sequence)
+                .is_some_and(|id| self.show.cue(id, cue_number.trim()).is_some()),
+            ObjectRef::Group { group_id } => self.show.group(*group_id).is_some(),
+            ObjectRef::Preset { preset_id } => self.show.preset(*preset_id).is_some(),
+            ObjectRef::View { view_id } => self.session.view(*view_id).is_some(),
+            ObjectRef::Executor { executor_id } => self.show.executor(*executor_id).is_some(),
+        }
     }
 
     /// Fills in what the **session** knows and the line did not say — S40.
@@ -1524,6 +1662,20 @@ fn touched(edit: CueEdit) -> CueEdit {
     }
 }
 
+/// The command that writes a line into the session and does **not** run it —
+/// S49.
+///
+/// One spelling rather than four literals, because the three fields of
+/// `CommandLineInput` mean three different things and only the first of them is
+/// what *writing a line* is.
+fn written(text: &str) -> Command {
+    Command::CommandLineInput {
+        text: text.to_owned(),
+        run: false,
+        mode: None,
+    }
+}
+
 /// A preview of a store that would be refused, in the refusal's own words.
 fn refused(name: Option<&str>, why: &str, mode: StoreMode) -> StorePreview {
     StorePreview {
@@ -1864,6 +2016,7 @@ mod tests {
             Command::CommandLineInput {
                 text: String::new(),
                 run: false,
+                mode: None,
             },
             // The four S28 added that write show content, and S39's four.
             Command::StorePreset {

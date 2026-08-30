@@ -92,9 +92,6 @@ const PROGRAMMER_PAGE: &str = "programmerPage";
 const PROGRAMMER_PARAM_INDEX: &str = "programmerParamIndex";
 /// Wire name of `Session::command_line`.
 const COMMAND_LINE: &str = "commandLine";
-
-/// Where the counter of bound lines that asked to be run lives — S43.
-const COMMAND_LINE_RUN: &str = "commandLineRun";
 /// Wire name of `Session::window_picker`.
 const WINDOW_PICKER: &str = "windowPicker";
 
@@ -387,7 +384,12 @@ impl SessionState {
             Command::SelectProgrammerParam { direction } => {
                 self.select_programmer_param(*direction)?
             }
-            Command::CommandLineInput { text, run } => self.set_command_line(text, *run)?,
+            // **The text, and only the text** — S49. Whether the line is also
+            // to be *run* is not the session's half of this command: running it
+            // reaches the show, the programmer and the engine, so it is
+            // `ShowFile::apply` that carries it out and this applier that says
+            // what an operator has in the box. See `crate::console`.
+            Command::CommandLineInput { text, .. } => self.set_command_line(text)?,
             // The twenty-four show commands, named rather than caught by a wildcard,
             // so this match is exhaustive and a command added to the protocol
             // is a compile error here as well as in `Show::apply`.
@@ -1124,29 +1126,14 @@ impl SessionState {
     /// field as the contents of the console line, and an append-only reading
     /// would leave no way to backspace or to clear it. **S19/S26 requirement:**
     /// the console and the command line widget send the line as it now reads,
-    /// and clearing it is `CommandLineInput { text: "", run: false }`.
+    /// and clearing it is `CommandLineInput { text: "" }`.
     ///
     /// # Errors
     ///
     /// [`SessionError::NotRepresentable`] only.
-    pub fn set_command_line(
-        &mut self,
-        text: &str,
-        run: bool,
-    ) -> Result<Vec<JsonPatchOp>, SessionError> {
+    pub fn set_command_line(&mut self, text: &str) -> Result<Vec<JsonPatchOp>, SessionError> {
         let mut next = self.session.clone();
         next.command_line = text.to_owned();
-        // **The counter is the edge a client watches for** — S43. A *bound* line
-        // that said *write and send* bumps it, and the client with the keyboard
-        // focus parses the line and sends what it means. A keystroke does not:
-        // an operator typing is not asking for anything to happen yet.
-        //
-        // Saturating rather than wrapping, which is the difference between a
-        // desk that stops running bound lines after four billion presses and one
-        // that runs the next one twice.
-        if run {
-            next.command_line_run = next.command_line_run.saturating_add(1);
-        }
         self.commit(next)
     }
 
@@ -1199,15 +1186,6 @@ impl SessionState {
         }
         if next.command_line != current.command_line {
             ops.push(replace(COMMAND_LINE, &next.command_line)?);
-        }
-        // **Its own comparison, not the line's** — S43. A bound line that asks
-        // to be run can carry the text that is already there (an operator
-        // pressing the same key twice), so a counter folded into the line's
-        // `if` would move in the session and not in the delta, and every mirror
-        // would sit one behind. `delta_round_trip.rs`'s property found exactly
-        // that within a minute of the field existing.
-        if next.command_line_run != current.command_line_run {
-            ops.push(replace(COMMAND_LINE_RUN, &next.command_line_run)?);
         }
         if next.window_picker != current.window_picker {
             ops.push(replace(WINDOW_PICKER, &next.window_picker)?);
@@ -1355,7 +1333,7 @@ mod tests {
         );
         assert!(session.set_executor_page(0).unwrap().is_empty());
         assert!(session.set_programmer_page(0).unwrap().is_empty());
-        assert!(session.set_command_line("", false).unwrap().is_empty());
+        assert!(session.set_command_line("").unwrap().is_empty());
         assert!(session.select_executor(None).unwrap().is_empty());
         // A jog wheel turned left at the first parameter.
         assert!(
@@ -2023,14 +2001,15 @@ mod tests {
     #[test]
     fn the_command_line_carries_the_whole_line() {
         let mut session = session();
-        session.set_command_line("1 thru 4 at ", false).unwrap();
+        session.set_command_line("1 thru 4 at ").unwrap();
         // A backspace is the shorter line, not a second command.
-        session.set_command_line("1 thru 4 at", false).unwrap();
+        session.set_command_line("1 thru 4 at").unwrap();
         assert_eq!(session.session().command_line, "1 thru 4 at");
         session
             .apply(&Command::CommandLineInput {
                 text: String::new(),
                 run: false,
+                mode: None,
             })
             .unwrap();
         assert!(session.session().command_line.is_empty());

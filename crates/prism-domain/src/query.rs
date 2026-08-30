@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    ArtNetCounters, ArtNetNodeInfo, AttributeType, FixtureId, MidiPortInfo, OutputStatusInfo,
-    PresetId, PresetPool, SequenceId, SurfaceControl, SurfaceStatus, UniverseId,
+    ArtNetCounters, ArtNetNodeInfo, AttributeType, CommandLineMode, FixtureId, MidiPortInfo,
+    OutputStatusInfo, PresetId, PresetPool, SequenceId, SurfaceControl, SurfaceStatus, UniverseId,
 };
 
 /// Two fixtures sharing DMX channels.
@@ -322,6 +322,53 @@ pub struct CueTrackingRow {
     pub blocks: bool,
 }
 
+/// What shape a command line turned out to have — **S49**.
+///
+/// Three, and a client draws each differently: nothing at all, a sentence saying
+/// what will happen, or a sentence saying what is wrong. It is a word rather
+/// than a flag beside the text because *an empty line* and *a line that says
+/// nothing is wrong with it* are different states of the box.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum CommandLineReadingKind {
+    /// Nothing has been typed. Enter does nothing.
+    #[default]
+    Empty,
+    /// The line is one or more commands.
+    Commands,
+    /// The line is not a command, and the reading says why.
+    Error,
+}
+
+/// The question a line is holding, and the words it offers — **S49**.
+///
+/// A store onto a cue that already holds something asks *merge, override or
+/// cancel*. Which words is the parser's (`prism_core::console`); **whether to
+/// ask at all** is the daemon's, because it is the daemon that knows whether
+/// anything is there. Before S49 a client looked in its own mirror to decide,
+/// which is the second opinion S49 exists to remove: this is `Some` exactly when
+/// the destination is occupied, so an interface draws the question and does not
+/// answer it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct CommandLineQuestion {
+    /// What is already there, in the words the operator typed — *cue 5 of
+    /// sequence 2*.
+    pub what: String,
+    /// The words to offer, in the order to offer them.
+    ///
+    /// The operator's answer travels back in
+    /// `crate::Command::CommandLineInput::mode`.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub modes: Vec<CommandLineMode>,
+}
+
 /// Something a client asks that changes nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -491,6 +538,35 @@ pub enum Query {
     CueTracking {
         /// The cue list to describe.
         sequence_id: SequenceId,
+    },
+    /// What the line under the operator's fingers would do — **S49**.
+    ///
+    /// # Why the daemon reads a line nobody has run
+    ///
+    /// `ARCHITECTURE_SPEC.md` §4.5 makes the command line the interface, and the
+    /// reading under the box is what makes it usable: a syntax error is visible
+    /// *before* Enter rather than as a refusal afterwards. S40 built that in
+    /// TypeScript because the parser was there. S49 moved the parser into the
+    /// daemon, and the reading had to follow it — a client that kept a parser
+    /// only for the readout would be exactly the second opinion the move exists
+    /// to remove, and the first line the two disagreed about would be one an
+    /// operator was told would do something else.
+    ///
+    /// So it is a question, for the reason [`Self::PatchPreview`] (S27),
+    /// [`Self::DarkUniverses`] (S37) and [`Self::CueTracking`] (S48) are: it is
+    /// **derived**, and the thing it is derived from lives here. It is not a
+    /// delta, because what one operator is part-way through typing is answered
+    /// to that operator and is not worth broadcasting at keystroke rate — the
+    /// *line itself* already travels, in `Session::command_line`.
+    ///
+    /// The answer carries one thing the parser cannot know and the daemon can:
+    /// whether the destination a store names is already occupied, which is what
+    /// decides whether a client asks *merge, override or cancel*.
+    CommandLineReading {
+        /// The line as it stands, exactly as typed — trailing space and all,
+        /// because whether one has been typed is what decides whether the
+        /// completions are for the word being written or for the next one.
+        text: String,
     },
 }
 
@@ -699,6 +775,67 @@ pub enum Answer {
             proptest(strategy = "crate::arb::small_vec(3)")
         )]
         cues: Vec<CueTrackingRow>,
+    },
+    /// What the line would do, and what it would ask first — S49.
+    CommandLineReading {
+        /// The line that was asked about, echoed.
+        ///
+        /// `StorePreview`'s rule: an answer that did not name its subject is one
+        /// a box whose contents have moved on cannot file. A client compares it
+        /// against what is in the input and ignores an answer that overtook a
+        /// keystroke.
+        text: String,
+        /// The sentence to put under the box: what the line will do, or what is
+        /// wrong with it.
+        ///
+        /// **The daemon's words in both cases**, which is what makes a line
+        /// refused at the console and a line refused on a screen read the same.
+        reading: String,
+        /// Which of the three shapes the line has.
+        kind: CommandLineReadingKind,
+        /// How many commands the line falls into.
+        ///
+        /// A number rather than the commands themselves: a client has nothing to
+        /// do with them — the daemon runs the line — and putting `Command` into
+        /// an `Answer` would put the whole protocol's value tree into this one
+        /// (`crate::wire`'s budget). What it is for is the reading's own claim
+        /// that `1 thru 3 at 50` is *two* things.
+        commands: u32,
+        /// Whether the line begins with a **verb** rather than a selection.
+        ///
+        /// What a click on a pool needs to know, and the client no longer has
+        /// the table: a line that begins with a verb is doing something to a
+        /// named object, so a tile appends itself to it; a line that does not is
+        /// a fixture selection, so the tile does its own thing.
+        /// `prism_core::console::VERB_WORDS` is the list.
+        verb: bool,
+        /// Whether that verb's **missing** last argument is itself an
+        /// instruction — `Label` and `Color`.
+        ///
+        /// Those two are the ones a pointer must never finish: a click that
+        /// silently wiped a name or a colour is the worst kind of shortcut, so
+        /// the words are appended and left standing for Enter.
+        clearing: bool,
+        /// The question the line is holding, or nothing.
+        ///
+        /// `Some` exactly when the line would write over something that is
+        /// **actually there** — see [`CommandLineQuestion`].
+        #[serde(default)]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        question: Option<CommandLineQuestion>,
+        /// The words that are legal at this point in the line, capitalised.
+        ///
+        /// A *grammar* answer and not a *show* answer: it offers the word
+        /// `Sequence`, never the sequences there are, for the same reason the
+        /// parser does not read the show. Tab takes the first.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        completions: Vec<String>,
     },
 }
 

@@ -197,6 +197,7 @@ fn the_session_survives_save_and_load() {
         Command::CommandLineInput {
             text: "1 thru 4 at full".to_owned(),
             run: false,
+            mode: None,
         },
     ] {
         session.apply(&command).unwrap();
@@ -294,15 +295,13 @@ fn client_local_state_is_absent_from_the_session_document() {
     // `prism_domain::Session::window_picker`: on this desk the X-Touch drives the
     // interface too, and the two are never allowed to be out of step.
     //
-    // **`commandLineRun` is S43's too, and it is the member that is here under
-    // protest.** It is a counter the daemon bumps when a *bound* line asked to
-    // be sent, and it is on the wire only because the command-line parser lives
-    // in the interface: the daemon writes the line, and the client with the
-    // keyboard focus is what turns it into commands. That is a stop-gap, it is
-    // written down as one in `SurfaceAction::WriteCommandLine`, and
-    // `IMPLEMENTATION_PLAN.md` S49 is the session that moves the parser and
-    // takes this member out again. A test that let it in silently would be the
-    // reason nobody remembered to.
+    // **`commandLineRun` was S43's and is gone since S49.** It was a counter the
+    // daemon bumped when a *bound* line asked to be sent, and it was on the wire
+    // only because the command-line parser lived in the interface: the daemon
+    // wrote the line, and the client with the keyboard focus turned it into
+    // commands. It was written down as a stop-gap at the time, and this list is
+    // where the removal is asserted — a member added or taken away without a
+    // sentence about it is the drift this test exists to catch.
     let session = populated_session();
     let document = serde_json::to_value(session.to_json().unwrap()).unwrap();
     let members: Vec<&str> = document["session"]
@@ -316,7 +315,6 @@ fn client_local_state_is_absent_from_the_session_document() {
         [
             "activeViewId",
             "commandLine",
-            "commandLineRun",
             "editingCue",
             "encoderBank",
             "executorPage",

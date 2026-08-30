@@ -585,24 +585,20 @@ pub enum SurfaceAction {
     /// is not a Go key. So [`Self::submit`] is the operator's answer, per
     /// binding, and the default is the old behaviour.
     ///
-    /// # Who runs it, since the daemon cannot
+    /// # Who runs it — the daemon, since S49
     ///
-    /// **The parser lives in the interface** (`ui/src/desk/console.ts`), not in
-    /// `prismd`, so a daemon handed a line has nothing to turn it into a command
-    /// with. Running one is therefore not something this action can do by
-    /// itself: it sets `Session::command_line` and bumps
-    /// `Session::command_line_run`, and the client that has the **keyboard
-    /// focus** parses the line and sends what it means. That is the same client
-    /// that would have run it if the operator had pressed Enter, and picking it
-    /// by focus is what stops two screens each sending the commands once — a
-    /// doubled Go being the failure worth designing against.
+    /// **The parser is `prism_core::console`** and it is reached by the command
+    /// this action resolves to, so a key bound with *send* fires with **no
+    /// client attached at all**. That is the whole of S49 and it is worth saying
+    /// where the action is declared, because the arrangement it replaced is the
+    /// one somebody reading an old profile would expect: until S49 this wrote
+    /// the line, bumped a `Session::command_line_run` counter and waited for
+    /// whichever client held the keyboard focus to parse it. On one screen that
+    /// was exactly right; on two focused screens on two machines it ran the line
+    /// twice, and a doubled Go is what the move was for.
     ///
-    /// It is a stop-gap and it is written down as one: moving the parser into
-    /// the daemon is `IMPLEMENTATION_PLAN.md` S49, after which the daemon runs
-    /// the line itself and no client is involved. Two focused screens on two
-    /// machines is the case this does not cover.
-    ///
-    /// Resolves to `Command::CommandLineInput`.
+    /// Resolves to `Command::CommandLineInput` with `run` carrying
+    /// [`Self::submit`] unchanged.
     WriteCommandLine {
         /// The line to write, exactly as it would be typed.
         line: String,

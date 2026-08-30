@@ -19,11 +19,13 @@ import { act } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "./App";
+import type { Command } from "./bindings";
 import { statusText } from "./status";
 import { Connection } from "./ipc/connection";
 import { nullSink, setLogSink } from "./log/logger";
 import { DeskProvider } from "./store/context";
 import { DeskStore, deskEvents } from "./store/desk";
+import { settleReadings } from "./testing/console";
 import {
     FakeNetwork,
     ManualTimer,
@@ -47,7 +49,10 @@ function desk() {
         { url: "ws://127.0.0.1:7373/ipc", socketFactory: network.factory, timer: clock.timer },
         events,
     );
-    store.attach((command) => connection.send(command));
+    store.attach(
+        (command) => connection.send(command),
+        (query) => connection.ask(query),
+    );
 
     render(
         <DeskProvider store={store}>
@@ -343,7 +348,7 @@ describe("the command line", () => {
      * - a **command that needs arguments** does the same and waits;
      * - a **whole command** runs at once.
      */
-    it("writes into the line with a key, and only the third shape acts", () => {
+    it("writes into the line with a key, and only the third shape acts", async () => {
         // **The keys are the `CommandKeys` window since S43** (punch-list B12):
         // they crowded the line, and the line *is* the interface. The rule they
         // are held to has not moved an inch — a key writes into the line and the
@@ -381,31 +386,45 @@ describe("the command line", () => {
         }
         fireEvent.change(input, { target: { value: "" } });
 
+        /**
+         * The lines a gesture **ran** — S49.
+         *
+         * It used to be *the commands a gesture sent*, and it cannot be: the
+         * daemon reads the line now, so what goes out is the line and `run`.
+         * Which line each key writes is what this test was always about; what a
+         * line means is `crates/prism-core/tests/console.rs`.
+         */
         const acted = (): string[] =>
             network.last.sent
                 .map((bytes) => decode(bytes))
                 .filter(
-                    (message): message is { t: "Command"; command: { t: string } } =>
+                    (message): message is { t: "Command"; command: Command } =>
                         typeof message === "object" &&
                         message !== null &&
                         (message as { t?: unknown }).t === "Command",
                 )
-                .map((message) => message.command.t)
-                .filter((t) => t !== "CommandLineInput");
+                .flatMap((message) =>
+                    message.command.t === "CommandLineInput" && message.command.run
+                        ? [message.command.text]
+                        : [],
+                );
 
         // An argument keyword: appended, and nothing acted.
         fireEvent.click(screen.getByTestId("key-fixture"));
         expect(input.value).toBe("Fixture ");
+        await settleReadings(network.last);
         expect(acted()).toEqual([]);
 
         // A command that needs arguments: written, and still nothing acted.
         fireEvent.click(screen.getByTestId("key-store"));
         expect(input.value).toBe("Store ");
+        await settleReadings(network.last);
         expect(acted()).toEqual([]);
 
-        // A whole command with no argument: executed at once.
+        // A whole command with no argument: run at once, as one line.
         fireEvent.click(screen.getByTestId("key-clear"));
-        expect(acted()).toEqual(["ClearProgrammer"]);
+        await settleReadings(network.last);
+        expect(acted()).toEqual(["Clear"]);
         expect(input.value).toBe("");
     });
 });

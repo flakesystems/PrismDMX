@@ -11,12 +11,14 @@
  * answered from the mirror rather than remembered.
  */
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Command, JsonValue, ProgrammerState } from "../bindings";
+import type { CommandLineReading } from "../desk/consoleshell";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskStore } from "../store/desk";
+import { attachDaemon, ranLines, writtenLine } from "../testing/console";
 import { Shell } from "../testing/shell";
 import { GroupPool } from "./grouppool";
 
@@ -64,31 +66,27 @@ function pool(
   show: JsonValue = SHOW,
   programmer: ProgrammerState | null = null,
   line = "",
+  readings: Readonly<Record<string, Partial<CommandLineReading>>> = {},
 ) {
   const store = new DeskStore();
   const sent: Command[] = [];
-  store.attach(
-    (command) => {
-      sent.push(command);
-      return sent.length;
-    },
-    () => null,
-  );
+  attachDaemon(store, sent, readings);
   render(
-    <Shell store={store} session={line === "" ? SESSION : withLine(line)} show={show}>
+    <Shell store={store} session={line === "" ? SESSION : withLine(line)}>
       <GroupPool show={show} programmer={programmer} />
     </Shell>,
   );
-  /** The whole traffic, and the half of it that is not the line being typed. */
+  /**
+   * The whole traffic, the **lines that were run**, and the last one written.
+   *
+   * *Which command* is no longer something this window decides — S49 moved the
+   * parser into the daemon, so a key writes a line and the daemon reads it.
+   * What a line means is `crates/prism-core/tests/console.rs`.
+   */
   return {
     sent,
-    acted: (): Command[] => sent.filter((command) => command.t !== "CommandLineInput"),
-    /** The last line the console wrote, which is what a *write* key leaves. */
-    line: (): string => {
-      const written = sent.filter((command) => command.t === "CommandLineInput");
-      const last = written.at(-1);
-      return last === undefined || last.t !== "CommandLineInput" ? "" : last.text;
-    },
+    acted: (): string[] => ranLines(sent),
+    line: (): string => writtenLine(sent),
   };
 }
 
@@ -124,7 +122,7 @@ describe("the pool draws the groups the show holds", () => {
 
 describe("every key writes a line", () => {
   /** §4.5's third case: the pointer supplied the argument, so it submits. */
-  it("switches a group with the same line, whichever way the switch is going", () => {
+  it("switches a group with the same line, whichever way the switch is going", async () => {
     // **The line has not changed and its meaning has** — S43, B27. `Toggle`
     // used to run every fixture of the group through the per-fixture toggle, so
     // a second group sharing a lamp with the first took that lamp back out; it
@@ -134,13 +132,17 @@ describe("every key writes a line", () => {
     // holding a second opinion about a selection.
     const { acted } = pool();
     fireEvent.click(screen.getByTestId("group-3"));
-    expect(acted()).toEqual([{ t: "SelectGroup", groupId: 3, mode: "Toggle" }]);
+    await waitFor(() => {
+      expect(acted()).toEqual(["+ Group 3"]);
+    });
 
     // And with the switch already down, the line is the same one: what it means
     // is the daemon's answer, not a second command this window picks.
     const off = pool(SHOW, programmerWith(3));
     fireEvent.click(screen.getAllByTestId("group-3").at(-1) as HTMLElement);
-    expect(off.acted()).toEqual([{ t: "SelectGroup", groupId: 3, mode: "Toggle" }]);
+    await waitFor(() => {
+      expect(off.acted()).toEqual(["+ Group 3"]);
+    });
   });
 
   /**
@@ -167,7 +169,7 @@ describe("every key writes a line", () => {
    * used to write; what changed is where they are reached from, and that a box
    * is now only the switch.
    */
-  it("deletes and renames from the menu, with the lines every pool shares", () => {
+  it("deletes and renames from the menu, with the lines every pool shares", async () => {
     const { acted } = pool();
     expect(screen.queryByTestId("group-delete-1")).toBeNull();
     expect(screen.queryByTestId("group-label-3")).toBeNull();
@@ -175,7 +177,9 @@ describe("every key writes a line", () => {
     fireEvent.contextMenu(screen.getByTestId("group-1"));
     expect(screen.getByTestId("group-menu").dataset["subject"]).toBe("1");
     fireEvent.click(screen.getByTestId("group-delete"));
-    expect(acted()).toEqual([{ t: "Delete", target: { t: "Group", groupId: 1 } }]);
+    await waitFor(() => {
+      expect(acted()).toEqual(["Delete Group 1"]);
+    });
 
     fireEvent.contextMenu(screen.getByTestId("group-3"));
     fireEvent.click(screen.getByTestId("group-rename"));
@@ -183,10 +187,8 @@ describe("every key writes a line", () => {
       target: { value: "Back truss" },
     });
     fireEvent.submit(screen.getByTestId("group-rename-input").closest("form") as HTMLFormElement);
-    expect(acted().at(-1)).toEqual({
-      t: "Label",
-      target: { t: "Group", groupId: 3 },
-      name: "Back truss",
+    await waitFor(() => {
+      expect(acted().at(-1)).toBe('Label Group 3 "Back truss"');
     });
   });
 
@@ -195,12 +197,14 @@ describe("every key writes a line", () => {
    * because the destination is the argument the operator still has to type.
    * Nothing is sent.
    */
-  it("writes a move line and sends nothing", () => {
+  it("writes a move line and sends nothing", async () => {
     const { acted, line } = pool();
     fireEvent.contextMenu(screen.getByTestId("group-3"));
     fireEvent.click(screen.getByTestId("group-move"));
+    await waitFor(() => {
+      expect(line()).toBe("Move Group 3 Group ");
+    });
     expect(acted()).toEqual([]);
-    expect(line()).toBe("Move Group 3 Group ");
   });
 });
 
@@ -227,7 +231,7 @@ describe("storing is the command line's", () => {
     // gone: a window that tells an operator to *store one below* when there is
     // no below is worse than one that says nothing.
     const { unmount } = render(
-      <Shell store={new DeskStore()} session={SESSION} show={{ groups: {} }}>
+      <Shell store={new DeskStore()} session={SESSION}>
         <GroupPool show={{ groups: {} }} programmer={null} />
       </Shell>,
     );
@@ -244,13 +248,17 @@ describe("storing is the command line's", () => {
    * at once rather than waiting for an Enter the operator has already committed
    * to — which is the second half of what was asked for.
    */
-  it("finishes a waiting line and sends it at once", () => {
-    const { acted } = pool(SHOW, null, "Delete");
+  it("finishes a waiting line and sends it at once", async () => {
+    const { acted } = pool(SHOW, null, "Delete", {
+      "Delete Group 3 ": { verb: true },
+    });
     fireEvent.click(screen.getByTestId("group-3"));
-    expect(acted()).toEqual([{ t: "Delete", target: { t: "Group", groupId: 3 } }]);
+    await waitFor(() => {
+      expect(acted()).toEqual(["Delete Group 3"]);
+    });
     // And it did **not** switch the group: an operator who typed a verb was
     // asking for an argument, not for a selection.
-    expect(acted().some((command) => command.t === "SelectGroup")).toBe(false);
+    expect(acted().some((line) => line.startsWith("+"))).toBe(false);
   });
 
   /**
@@ -261,10 +269,18 @@ describe("storing is the command line's", () => {
    * sends anything (S39, S40). *Sent at once* means *not waiting for Enter*, not
    * *skipping the question an overwrite raises*.
    */
-  it("asks before it overwrites, exactly as the typed line does", () => {
-    const { acted, line } = pool(SHOW, null, "Store");
+  it("asks before it overwrites, exactly as the typed line does", async () => {
+    const { acted, line } = pool(SHOW, null, "Store", {
+      "Store Group 3 ": { verb: true },
+      "Store Group 3": {
+        verb: true,
+        question: { what: "group 3", modes: ["Merge", "Override"] },
+      },
+    });
     fireEvent.click(screen.getByTestId("group-3"));
-    expect(line()).toBe("Store Group 3");
+    await waitFor(() => {
+      expect(line()).toBe("Store Group 3");
+    });
     expect(acted()).toEqual([]);
   });
 
@@ -275,10 +291,12 @@ describe("storing is the command line's", () => {
    * group is not a fixture, so `1 thru Group 3` is not a line and the click is
    * the switch it has always been.
    */
-  it("does the box's own thing when the line cannot take a group", () => {
+  it("does the box's own thing when the line cannot take a group", async () => {
     const { acted } = pool(SHOW, null, "1 thru");
     fireEvent.click(screen.getByTestId("group-3"));
-    expect(acted().at(-1)).toEqual({ t: "SelectGroup", groupId: 3, mode: "Toggle" });
+    await waitFor(() => {
+      expect(acted().at(-1)).toBe("+ Group 3");
+    });
   });
 
   /**
@@ -287,10 +305,14 @@ describe("storing is the command line's", () => {
    * that clears the name, so a pointer that sent it would wipe a name with one
    * click. It is appended and left standing for the operator to finish.
    */
-  it("leaves a clearing verb standing rather than sending it", () => {
-    const { acted, line } = pool(SHOW, null, "Label");
+  it("leaves a clearing verb standing rather than sending it", async () => {
+    const { acted, line } = pool(SHOW, null, "Label", {
+      "Label Group 3 ": { verb: true, clearing: true },
+    });
     fireEvent.click(screen.getByTestId("group-3"));
+    await waitFor(() => {
+      expect(line()).toBe("Label Group 3 ");
+    });
     expect(acted()).toEqual([]);
-    expect(line()).toBe("Label Group 3 ");
   });
 });

@@ -213,7 +213,7 @@ function PresetMenu({
         onClose={onClose}
         onSubmit={(text) => {
           // The colour words and the hex form are the console's own
-          // (`desk/console.ts`), and an empty answer takes the colour off —
+          // (`prism_core::console`), and an empty answer takes the colour off —
           // `Label`'s rule one verb along. It writes **only** the colour: a
           // store is what changes a preset's values, and a colour that took the
           // programmer with it would make an operator choose between

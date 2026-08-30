@@ -89,6 +89,48 @@ pub enum SequenceStoreMode {
     Merge,
 }
 
+/// The word an operator chose when a line asked what to do about what is
+/// already there — **S49**.
+///
+/// # One word for three modes, because an operator answers one question
+///
+/// A line that would write over something carries a mode, and *which* mode type
+/// depends on what it writes to: a cue and a preset take [`StoreMode`], a whole
+/// cue list takes [`SequenceStoreMode`], and a copy, a move or a group store
+/// takes [`OverwriteMode`]. Those three are the right types for the commands
+/// they sit on and there is no case for merging them.
+///
+/// What an operator does, though, is press one of two or three buttons in the
+/// command line, and that answer has to travel back with the line
+/// ([`Command::CommandLineInput::mode`]). This is that answer: the **word**, not
+/// the mode. `prism_core::console::apply_mode` puts it into whichever command of
+/// the line was waiting for one, and a word that does not fit the command it
+/// meets is **left alone** rather than forced in — a `Remove` cannot reach a
+/// `Copy`, an `Append` cannot reach a `StoreCue`, and the type is what says so.
+///
+/// It is deliberately not `Option`-shaped per kind and not three fields: the
+/// prompt is built from the command the daemon itself parsed, so the pairing is
+/// the daemon's from beginning to end.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum CommandLineMode {
+    /// Write into what is there and keep the rest — the one that cannot lose
+    /// anything, and the default every line carries until an operator says
+    /// otherwise.
+    #[default]
+    Merge,
+    /// Replace what is there.
+    Override,
+    /// Take the programmer's values back out — [`StoreMode::Remove`], and it
+    /// reaches nothing else.
+    Remove,
+    /// Add a cue at the end — [`SequenceStoreMode::Append`], and it reaches
+    /// nothing else.
+    Append,
+}
+
 /// Which way the programmer parameter selection moves.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
@@ -1340,21 +1382,55 @@ pub enum Command {
         )]
         direction: ParamDirection,
     },
-    /// Type into the command line.
+    /// Type into the command line — and, since **S49**, run it.
+    ///
+    /// # One command for typing and for Enter, and why no second one was added
+    ///
+    /// S49 had two shapes to choose between and the plan named both: a
+    /// `RunCommandLine` carrying the text, or this command's `run` flag
+    /// *resolved by the daemon*. The second is what shipped, and the reason is
+    /// that nothing on the wire had to change to make it work. S43 already gave
+    /// `run` the meaning *and run it*; what was missing was a daemon that could,
+    /// and every sender was already sending exactly this — a keyboard's Enter,
+    /// `SurfaceAction::WriteCommandLine` with *send*, and
+    /// `ExecutorButtonFunction::CommandLine`. A second command would have been a
+    /// second way to say a sentence the protocol already had, and would have had
+    /// to be given a home in the three appliers for something that is not a
+    /// fourth kind of state.
+    ///
+    /// It stays a **session** command: what it applies to the session is the
+    /// line. Running it is an [`crate::Delta`]-producing fan-out carried out by
+    /// `prism_core::ShowFile`, which is the one type that holds the session and
+    /// the show at once — the same place `Effect::Programmer` and `Effect::Undo`
+    /// are finished.
     CommandLineInput {
         /// The text entered.
         text: String,
-        /// Whether the desk should run it as well — S43.
+        /// Whether the desk should run it as well.
         ///
         /// A keystroke is `false`: the line is being typed and Enter is what
-        /// runs it. `true` is a **bound line** whose binding said *write and
-        /// send* (`SurfaceAction::WriteCommandLine::submit`), and what it does
-        /// is bump `Session::command_line_run` so that the client with the
-        /// keyboard focus parses the line and sends what it means. The daemon
-        /// cannot: the parser is in the interface. See that action for the whole
-        /// argument, and for the session that removes this arrangement.
+        /// runs it. `true` is Enter, or a **bound line** whose binding said
+        /// *write and send* (`SurfaceAction::WriteCommandLine::submit`), or an
+        /// executor key carrying a line. The daemon writes the line, parses it,
+        /// applies what it means and clears the line; a line that is not a
+        /// command is written and left standing, because the reading under the
+        /// box already says what is wrong with it.
         #[serde(default)]
         run: bool,
+        /// The mode an operator chose, when the line asked.
+        ///
+        /// `None` on every keystroke and on most Enters: a line that cannot
+        /// write over anything has nothing to ask. It is `Some` when the daemon
+        /// told a client — through `Answer::CommandLineReading::question` — that
+        /// the destination is already occupied, and the operator answered.
+        /// `prism_core::console::apply_mode` is where it lands, and a word that
+        /// does not fit the command it meets is ignored rather than forced in.
+        ///
+        /// **A line run with no answer carries the parser's own default**, which
+        /// is the mode that cannot lose anything — which is what makes a bound
+        /// key on a desk with no client attached safe to press.
+        #[serde(default)]
+        mode: Option<CommandLineMode>,
     },
 
     // ---- The machine's own rig (S33) ----
@@ -1876,6 +1952,7 @@ mod tests {
             Command::CommandLineInput {
                 text: "1 thru 4 at full".to_owned(),
                 run: false,
+                mode: None,
             },
             // S33's four. Neither the show's nor the session's — see
             // `Command::is_machine_command`.
@@ -2036,6 +2113,7 @@ mod tests {
             Command::CommandLineInput {
                 text: String::new(),
                 run: false,
+                mode: None,
             },
             // S40's four, each with a **view** as its target. The same four
             // commands naming anything else are show commands - see

@@ -172,15 +172,16 @@ pub enum Effect {
     /// Put a line into the command line and ask for it to be run — **S45**,
     /// `ExecutorButtonFunction::CommandLine`.
     ///
-    /// The custom row of the control editor, fired. The show model cannot run a
-    /// line — nothing in `prism-core` can, because the parser is still in the
-    /// interface — so it answers with the line and `prismd` does what
-    /// `SurfaceAction::WriteCommandLine` already does with one: writes
-    /// `Session::command_line` and bumps `Session::command_line_run`, which the
-    /// client holding the keyboard focus turns into commands.
+    /// The custom row of the control editor, fired. The **show** model cannot
+    /// run a line — it has no session to write one into and no programmer to
+    /// change — so it answers with the line, and the daemon sends it back in as
+    /// `Command::CommandLineInput { run: true }`, which is the same command a
+    /// keyboard's Enter and a bound X-Touch key send.
     ///
-    /// It is the same stop-gap, named the same way, and `IMPLEMENTATION_PLAN`
-    /// S49 removes it for both at once.
+    /// Since **S49** that command is read by [`crate::console`] at
+    /// [`ShowFile::apply`](crate::ShowFile::apply) and carried out. Before S49 it
+    /// bumped a counter and waited for whichever client held the keyboard focus
+    /// to parse the line, which is the stop-gap that session removed.
     CommandLine(String),
     /// A profile out of the desk's library has to be copied into the show, and
     /// the show model has no library — the same shape as [`Self::Save`], which

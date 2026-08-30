@@ -520,7 +520,12 @@ fn command_group_5() -> BoxedStrategy<crate::Command> {
 /// Group 6 of 6 — see [`command`].
 fn command_group_6() -> BoxedStrategy<crate::Command> {
     prop_oneof![
-        (any::<String>(), any::<bool>()).prop_map(|(text, run)| C::CommandLineInput { text, run }),
+        (
+            any::<String>(),
+            any::<bool>(),
+            any::<Option<crate::CommandLineMode>>()
+        )
+            .prop_map(|(text, run, mode)| C::CommandLineInput { text, run, mode }),
         any::<OutputInstance>().prop_map(|output| C::AddOutput { output }),
         (any::<OutputId>(), any::<OutputChange>())
             .prop_map(|(id, change)| C::ConfigureOutput { id, change }),

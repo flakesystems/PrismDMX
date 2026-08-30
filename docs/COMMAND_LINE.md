@@ -3,8 +3,19 @@
 **Status:** reference for operators and for the people who extend it.
 **Parent documents:** [`ARCHITECTURE_SPEC.md`](../ARCHITECTURE_SPEC.md) §4.5 (the
 decision), [`docs/IPC_PROTOCOL.md`](IPC_PROTOCOL.md) §5 (the commands).
-**Implemented by:** `ui/src/desk/console.ts` (the parser),
+**Implemented by:** `crates/prism-core/src/console.rs` (the parser),
+`crates/prism-core/src/file.rs::run_command_line` (running one),
 `ui/src/desk/shell.tsx` (the keys), `ui/src/desk/commandline.tsx` (the screen).
+
+> **The parser lives in the daemon since S49.** It was
+> `ui/src/desk/console.ts` from S40 until then, because that is where the
+> operator types — and the consequence was quiet and then loud: **a key on the
+> X-Touch cannot run a line** if the only parser is in a browser. S43 shipped a
+> stop-gap and wrote it down as one; S49 moved the grammar rather than
+> rewriting it, so every word below means exactly what it meant. What changed is
+> **who reads it**: a line is sent as `Command::CommandLineInput { run: true }`
+> and the daemon applies what it means, and what a line *would* do is asked as
+> `Query::CommandLineReading` and drawn under the box. §5 has both.
 
 ---
 
@@ -187,6 +198,9 @@ a *show* answer: it offers the word `sequence`, never the sequences there are,
 for the same reason the parser does not read the show (§4). A list of what
 exists is what the pools on the canvas are for.
 
+The words come **with the reading** since S49 — `Answer::CommandLineReading`
+carries them — so the completion table is the grammar's and lives beside it.
+
 The **up and down arrows** walk back through the lines you have typed. Both are
 client-local (`ARCHITECTURE_SPEC.md` §4.2): the line you are typing is shared,
 and what you typed *before* is not — two operators on two screens each have
@@ -207,24 +221,31 @@ sends it, because the pointer has supplied the argument the line was waiting for
 With nothing typed, the same click is a list pick and does what the box has
 always done.
 
-`ui/src/desk/consoleshell.ts::pickOnto` is the whole rule and it is a pure
-function of the line and the words. Two things it deliberately does **not** do:
+`ui/src/desk/consoleshell.ts::pickOnto` is the whole rule, and since **S49** it
+is three lines over one thing: the daemon's reading of the line the click *would*
+produce (`Query::CommandLineReading`). Appending a noun never changes a line's
+first word, so the candidate's own answer says everything.
 
-- **It does not read the grammar's argument table.** *Which* nouns a verb takes
-  is the parser's business, so `Store Fixture 5` is appended and left standing
-  with the parser's own complaint under it, rather than the typed `Store` being
-  quietly discarded and a fixture selected. Discarding what the operator typed is
-  the behaviour this rule exists to remove.
-- **It never sends `Label` or `Color`.** Both are valid commands without a last
-  word and both *take something away* — a name, a colour. A click that deletes a
-  name is the worst kind of shortcut, so those two are appended and left for
-  Enter. `CLEARING_VERBS` is the list, and it is two long.
+- **not a verb line** → the row does its own thing. A line that does not begin
+  with a verb is a fixture selection being built, so `1 thru` plus a click on a
+  group tile is a range in progress rather than a group being named; and *with
+  nothing typed* falls out of the same test rather than being a case of its own,
+  because `Group 3` on an empty line is not a verb line either.
+- **a clearing verb** → appended and left standing. `Label` and `Color` are valid
+  commands without a last word and both *take something away* — a name, a colour.
+  A click that deletes a name is the worst kind of shortcut.
+- **not yet a command** → appended and left standing, with the daemon's own
+  complaint under it. `Store Fixture 5` reads *"fixture" is not something to
+  name*, rather than the typed `Store` being quietly discarded and a fixture
+  selected. Discarding what the operator typed is the behaviour this rule exists
+  to remove.
 
-A line whose first word is **not** a verb is a fixture selection being built, so
-`1 thru` plus a click on a group tile is a range in progress rather than a group
-being named, and the tile does its own thing. `VERB_WORDS` is the head words of
-the parser's own `switch`, and `partitions every word the console knows` is the
-test that stops a verb entering the grammar without entering the table.
+Anything else is finished, so it is sent. **Which nouns a verb takes is not a
+table the interface holds**: it never was, and since S49 neither is the list of
+verbs — `verb` and `clearing` are two fields of the answer, out of
+`prism_core::console::VERB_WORDS` and `CLEARING_VERBS`.
+`the_verb_table_partitions_every_word_the_console_knows` is the test that stops a
+verb entering the grammar without entering the table.
 
 ---
 
@@ -237,13 +258,41 @@ than an exception. A parser that consulted the patch would be a parser that can
 be wrong about the daemon's state — which is decision **D3**, and S26 wrote it
 down first.
 
-The one thing the interface does read is whether a destination is already
-occupied, and only to decide whether to *ask*. That is `ui/src/desk/exists.ts`,
-which carries the argument for why reading it from the mirror is honest and
-reading what a store would **cost** would not be.
+The one thing that *is* read is whether a destination is already occupied, and
+only to decide whether to **ask**. Until S49 an interface read that out of its
+own mirror (`ui/src/desk/exists.ts`); it is `ShowFile::holds` now, answered
+beside the reading, so a client one delta behind can no longer ask a question
+about a cue somebody has just deleted. What may **not** be answered there is what
+a store would *cost* — that is `Query::StorePreview`, a different question with a
+different cadence.
 
-**The parser never throws.** Every string there is answers with commands or with
-a sentence somebody can be shown. `console.test.ts` runs ten thousand generated
-lines through it and asserts that none of them throws; that is an exit criterion
-rather than a precaution, because a console that threw would take the interface
-down over a typo in the middle of a show.
+**The parser never fails.** Every string there is answers with commands or with a
+sentence somebody can be shown. `crates/prism-core/tests/console.rs` runs ten
+thousand generated lines through it; that is an exit criterion rather than a
+precaution, and it is worth more since S49 than it was before, because the thing
+that would fall over is now the **daemon** rather than one browser tab.
+
+---
+
+## 5. What travels, and when
+
+Two messages, and neither of them is a parser in a client.
+
+| | Message | When |
+|---|---|---|
+| running a line | `Command::CommandLineInput { text, run: true, mode }` | Enter, a key that writes-and-runs, an item picked out of a list, a bound X-Touch key with *send*, an executor key carrying a line |
+| typing a line | `Command::CommandLineInput { text, run: false }` | every keystroke, paced at S25's cadence, because `Session::commandLine` is shared |
+| reading a line | `Query::CommandLineReading { text }` | as it is typed, and again before Enter if the answer in hand is about an older line |
+
+**What comes back from running one is the deltas of what the daemon did**, and a
+line can fall into more than one command: `1 thru 3 at 50` is a `SelectFixtures`
+and a `SetAttribute`. A line that is **not** a command is written into
+`Session::commandLine` and left standing — the reading already says what is wrong
+with it — and a line whose *first* command is refused stops there, because a line
+is one sentence and carrying out the second half of one whose first half was
+refused is doing something nobody asked for.
+
+`mode` is the operator's answer to the question in §2.3, when they were asked.
+Absent means *the mode that cannot lose anything*, which is what the parse
+already carries — and that is what makes a bound key on a desk with no client
+attached safe to press.

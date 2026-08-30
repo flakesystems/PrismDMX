@@ -81,7 +81,7 @@ export default function App() {
         // `ARCHITECTURE_SPEC.md` §4.5 — so the shell that holds it is above the
         // header as well as the canvas: the View Selector Bar's keys are lines
         // like any other, and so is the Clear key beside them.
-        <ConsoleProvider session={documents?.session ?? null} show={documents?.show ?? null}>
+        <ConsoleProvider session={documents?.session ?? null}>
             <main className="desk">
                 <header className="desk-header">
                     <h1>

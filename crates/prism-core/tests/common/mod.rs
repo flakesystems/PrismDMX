@@ -512,6 +512,7 @@ pub fn session_commands() -> Vec<Command> {
         Command::CommandLineInput {
             text: "1 thru 4 at full".to_owned(),
             run: false,
+            mode: None,
         },
     ]
 }

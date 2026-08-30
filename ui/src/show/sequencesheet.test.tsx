@@ -37,11 +37,12 @@ import { TelemetrySink } from "../ipc/telemetry";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
+import { ranLines, settleReadings } from "../testing/console";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { answerAbout, deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
 import { TelemetryProvider } from "../telemetry/panel";
-import { ConsoleContext } from "../desk/consoleshell";
-import type { ConsoleShell } from "../desk/consoleshell";
+import { ConsoleContext, unread } from "../desk/consoleshell";
+import type { CommandLineReading, ConsoleShell } from "../desk/consoleshell";
 import { CueViewer } from "./cueviewer";
 
 /**
@@ -143,13 +144,28 @@ async function desk(
   /**
    * The commands a gesture produced, without the line it wrote on the way.
    *
-   * A key writes into `Session::commandLine` and then runs the line (S40,
-   * `ARCHITECTURE_SPEC.md` §4.5), so every gesture sends a `CommandLineInput`
-   * before the command and another one clearing the line after it. What most of
-   * these tests are about is *which command*, and this is that.
+   * Some of this window's gestures are **not** lines and never were: a fade
+   * time, a trigger and a tracking mode carry a value rather than naming a
+   * place, so they are `SetCueProperty` and `SetCueTracking` sent directly
+   * (`docs/COMMAND_LINE.md` §1). This is those.
    */
   const acted = (): Command[] =>
     commands().filter((command) => command.t !== "CommandLineInput");
+
+  /**
+   * The **lines** a gesture ran — S49.
+   *
+   * Everything that *is* a line goes out as one now: a key writes into
+   * `Session::commandLine` and the daemon is what turns it into commands. Which
+   * line each gesture writes is what these tests were always about; what a line
+   * means is `crates/prism-core/tests/console.rs`, held to a recording of what a
+   * real `prismd` accepted.
+   */
+  const ran = (): string[] => ranLines(commands());
+
+  /** Answers every question about a line that is still outstanding. */
+  const settle = (readings: Readonly<Record<string, Partial<CommandLineReading>>> = {}) =>
+    settleReadings(network.last, readings);
 
   const queries = (): { seq: number; t: string }[] =>
     sent()
@@ -182,7 +198,7 @@ async function desk(
     });
   };
 
-  return { view, sent, commands, acted, queries, answerQuery, applyStep };
+  return { view, sent, commands, acted, ran, queries, answerQuery, applyStep, settle };
 }
 
 /** The show gets a cue list on executor 0, out of the recorded script. */
@@ -252,7 +268,7 @@ describe("the sequence sheet", () => {
    * menu rather than five commands only this window can send.
    */
   it("manages a cue list from a right-click, with the lines every pool shares", async () => {
-    const { acted, applyStep } = await desk("SequenceSheet");
+    const { ran, applyStep, settle } = await desk("SequenceSheet");
     await applyStep(...A_CUE_LIST);
     expect(screen.queryByTestId("sequence-menu")).toBeNull();
 
@@ -263,11 +279,8 @@ describe("the sequence sheet", () => {
     fireEvent.click(screen.getByTestId("sequence-rename"));
     type("sequence-rename-input", "Act one");
     fireEvent.submit(screen.getByTestId("sequence-rename-input").closest("form") as HTMLFormElement);
-    expect(acted().at(-1)).toEqual({
-      t: "Label",
-      target: { t: "Sequence", sequenceId: 1 },
-      name: "Act one",
-    });
+    await settle();
+    expect(ran().at(-1)).toBe('Label Sequence 1 "Act one"');
     // Choosing an item closes the menu.
     expect(screen.queryByTestId("sequence-menu")).toBeNull();
 
@@ -275,24 +288,18 @@ describe("the sequence sheet", () => {
     fireEvent.click(screen.getByTestId("sequence-colour"));
     type("sequence-colour-input", "blue");
     fireEvent.submit(screen.getByTestId("sequence-colour-input").closest("form") as HTMLFormElement);
-    expect(acted().at(-1)).toEqual({
-      t: "Color",
-      target: { t: "Sequence", sequenceId: 1 },
-      color: { r: 0, g: 0, b: 255 },
-    });
+    await settle();
+    expect(ran().at(-1)).toBe("Color Sequence 1 blue");
 
     fireEvent.contextMenu(screen.getByTestId("sequence-1"));
     fireEvent.click(screen.getByTestId("sequence-copy"));
-    expect(acted().at(-1)).toEqual({
-      t: "Copy",
-      from: { t: "Sequence", sequenceId: 1 },
-      to: { t: "Sequence", sequenceId: 2 },
-      mode: "Merge",
-    });
+    await settle();
+    expect(ran().at(-1)).toBe("Copy Sequence 1 Sequence 2");
 
     fireEvent.contextMenu(screen.getByTestId("sequence-1"));
     fireEvent.click(screen.getByTestId("sequence-delete"));
-    expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "Sequence", sequenceId: 1 } });
+    await settle();
+    expect(ran().at(-1)).toBe("Delete Sequence 1");
     // The box is still there: the pool is the daemon's.
     expect(screen.getByTestId("sequence-1")).toBeTruthy();
   });
@@ -311,6 +318,7 @@ describe("the sequence sheet", () => {
       t: "CommandLineInput",
       text: "Move Sequence 1 Sequence ",
       run: false,
+      mode: null,
     });
   });
 
@@ -323,11 +331,10 @@ describe("the sequence sheet", () => {
    * the command does both and the parser stays out of the show (S26).
    */
   it("makes a cue list with the line an operator could have typed", async () => {
-    const { acted } = await desk("SequenceSheet", 0, null);
+    const { ran, settle } = await desk("SequenceSheet", 0, null);
     fireEvent.click(screen.getByTestId("new-sequence"));
-    expect(acted()).toEqual([
-      { t: "StoreSequence", sequenceId: 1, name: "Sequence 1", mode: "Append" },
-    ]);
+    await settle();
+    expect(ran()).toEqual(["Store Sequence 1"]);
     // And nothing on the screen moved: the sheet still says there is nothing.
     expect(screen.getByTestId("sequence-count").textContent).toBe("0 sequences");
   });
@@ -335,21 +342,21 @@ describe("the sequence sheet", () => {
   it("makes one the same way with no executor selected", async () => {
     // **S39.** Before it this sent one command and left the operator with a cue
     // list they could not look at; a fader is a separate decision now.
-    const { acted } = await desk("SequenceSheet", null, null);
+    const { ran, settle } = await desk("SequenceSheet", null, null);
     fireEvent.click(screen.getByTestId("new-sequence"));
-    expect(acted()).toEqual([
-      { t: "StoreSequence", sequenceId: 1, name: "Sequence 1", mode: "Append" },
-    ]);
+    await settle();
+    expect(ran()).toEqual(["Store Sequence 1"]);
   });
 
   it("chooses a cue list with a command and not by remembering it", async () => {
-    const { acted, applyStep } = await desk("SequenceSheet", null, null);
+    const { ran, applyStep, settle } = await desk("SequenceSheet", null, null);
     await applyStep(...A_CUE_LIST);
     fireEvent.click(screen.getByTestId("sequence-1"));
+    await settle();
     // **The cue list in force is the session's** — S39's decision, and it is
     // why choosing one is a command rather than a click this interface
     // remembers. No executor is selected and the box is live all the same.
-    expect(acted()).toEqual([{ t: "SelectSequence", sequenceId: 1 }]);
+    expect(ran()).toEqual(["Sequence 1"]);
   });
 });
 
@@ -394,18 +401,13 @@ describe("the cue viewer", () => {
    * `CueProperty` lost its `Name` when the verb arrived.
    */
   it("names a cue with the verb every pool shares, under the number it started at", async () => {
-    const { acted, applyStep } = await desk();
+    const { ran, applyStep, settle } = await desk();
     await applyStep(...A_CUE_LIST);
     fireEvent.click(screen.getByTestId("cue-name-1"));
     type("cue-name-1-input", "Opening");
     fireEvent.keyDown(screen.getByTestId("cue-name-1-input"), { key: "Enter" });
-    expect(acted()).toEqual([
-      {
-        t: "Label",
-        target: { t: "Cue", sequenceId: 1, cueNumber: "1" },
-        name: "Opening",
-      },
-    ]);
+    await settle();
+    expect(ran()).toEqual(['Label Sequence 1 Cue 1 "Opening"']);
     // **And the cell still reads what the daemon said**, because the draft was
     // dropped rather than merged: what the cue is comes back as a `ShowPatch`.
     expect(screen.getByTestId("cue-name-1").textContent).toBe("—");
@@ -418,19 +420,17 @@ describe("the cue viewer", () => {
    * can type.
    */
   it("renumbers with a move, under the old number, which is the key the cue is filed by", async () => {
-    const { acted, applyStep } = await desk();
+    const { ran, applyStep, settle } = await desk();
     await applyStep(...A_CUE_LIST);
     fireEvent.click(screen.getByTestId("cue-number-2"));
+    // **The cell asks the daemon first** — S49. The number column offers itself
+    // to a half-typed verb before it opens an editor (`ConsoleShell::pick`),
+    // and since the grammar is the daemon's that is a round trip.
+    await settle();
     type("cue-number-2-input", "1.5");
     fireEvent.keyDown(screen.getByTestId("cue-number-2-input"), { key: "Enter" });
-    expect(acted()).toEqual([
-      {
-        t: "Move",
-        from: { t: "Cue", sequenceId: 1, cueNumber: "2" },
-        to: { t: "Cue", sequenceId: 1, cueNumber: "1.5" },
-        mode: "Merge",
-      },
-    ]);
+    await settle();
+    expect(ran()).toEqual(["Move Sequence 1 Cue 2 Sequence 1 Cue 1.5"]);
     // The list has not reordered: it reorders when the daemon says so.
     expect(cueNumbers()).toEqual(["1", "2"]);
   });
@@ -515,27 +515,25 @@ describe("the cue viewer", () => {
   });
 
   it("deletes a cue by the number the row started at", async () => {
-    const { acted, applyStep } = await desk();
+    const { ran, applyStep, settle } = await desk();
     await applyStep(...A_CUE_LIST);
     fireEvent.click(screen.getByTestId("cue-delete-2"));
-    expect(acted()).toEqual([
-      { t: "Delete", target: { t: "Cue", sequenceId: 1, cueNumber: "2" } },
-    ]);
+    await settle();
+    expect(ran()).toEqual(["Delete Sequence 1 Cue 2"]);
     // Still two rows: the list is the daemon's.
     expect(cueNumbers()).toEqual(["1", "2"]);
   });
 
   it("fires the executor the sheet is following, and only the three keys the protocol has", async () => {
-    const { acted, applyStep } = await desk();
+    const { ran, applyStep, settle } = await desk();
     await applyStep(...A_CUE_LIST);
     fireEvent.click(screen.getByTestId("looks-go"));
+    await settle();
     fireEvent.click(screen.getByTestId("looks-back"));
+    await settle();
     fireEvent.click(screen.getByTestId("looks-off"));
-    expect(acted()).toEqual([
-      { t: "ExecutorGo", target: { t: "Executor", executorId: 0 }, direction: "Next" },
-      { t: "ExecutorGo", target: { t: "Executor", executorId: 0 }, direction: "Prev" },
-      { t: "ExecutorOff", target: { t: "Executor", executorId: 0 } },
-    ]);
+    await settle();
+    expect(ran()).toEqual(["Go+ Executor 0", "Go- Executor 0", "Off Executor 0"]);
     // Nothing on the screen says it is running: `isActive` is the daemon's.
     expect(screen.getByTestId("looks-executor-state").textContent).toBe("stopped");
   });
@@ -624,17 +622,23 @@ describe("the store bar", () => {
   });
 
   it("stores into the number in the box, and offers the next one after that", async () => {
-    const { acted, applyStep } = await desk();
+    const { ran, commands, applyStep, settle } = await desk();
     await applyStep(...A_CUE_LIST);
     // Two cues, so the box offers 3.
     expect(numberIn("store-number")).toBe("3");
     type("store-number", "1");
     fireEvent.submit(screen.getByTestId("cue-store"));
-    expect(acted()).toEqual([
-      // **The mode is on the command** since S39, and it is the chooser's
-      // default rather than the daemon's assumption.
-      { t: "StoreCue", sequenceId: 1, cueNumber: "1", mode: "Merge" },
-    ]);
+    await settle();
+    expect(ran()).toEqual(["Store Sequence 1 Cue 1"]);
+    // **The mode travels with the line** since S39, and it is the chooser's
+    // default rather than the daemon's assumption: the bar has already been
+    // answered, so the line carries the word and raises no question.
+    expect(commands().at(-1)).toEqual({
+      t: "CommandLineInput",
+      text: "Store Sequence 1 Cue 1",
+      run: true,
+      mode: "Merge",
+    });
     // **Dropped, not kept**: the box goes back to offering the next number of
     // whatever the daemon ends up holding.
     expect(numberIn("store-number")).toBe("3");
@@ -646,7 +650,7 @@ describe("the store bar", () => {
     // because the counts beside the word are what *that* mode would cost. A bar
     // that changed the word without re-asking would put "Override" over a
     // Merge's numbers, which is worse than the hard-coded "Merge" S28 refused.
-    const { acted, queries, applyStep } = await desk();
+    const { commands, queries, applyStep, settle } = await desk();
     await applyStep(...A_CUE_LIST);
     const before = queries().filter((query) => query.t === "StorePreview").length;
 
@@ -667,10 +671,11 @@ describe("the store bar", () => {
     expect(queries().filter((query) => query.t === "StorePreview").length).toBe(before + 1);
 
     fireEvent.submit(screen.getByTestId("cue-store"));
-    expect(acted().at(-1)).toEqual({
-      t: "StoreCue",
-      sequenceId: 1,
-      cueNumber: "3",
+    await settle();
+    expect(commands().at(-1)).toEqual({
+      t: "CommandLineInput",
+      text: "Store Sequence 1 Cue 3",
+      run: true,
       mode: "Override",
     });
   });
@@ -699,13 +704,14 @@ describe("the store bar", () => {
     // window resolves: `EditCue` names the cue and the *daemon* fills the
     // programmer, and `Update` names nothing at all because which cue and which
     // mode are both the desk's.
-    const { acted, applyStep } = await desk();
+    const { ran, applyStep, settle } = await desk();
     await applyStep(...A_CUE_LIST);
     // No cue is loaded, so there is no key to press.
     expect(screen.queryByTestId("update-cue")).toBeNull();
 
     fireEvent.click(screen.getByTestId("cue-edit-1"));
-    expect(acted().at(-1)).toEqual({ t: "EditCue", sequenceId: 1, cueNumber: "1" });
+    await settle();
+    expect(ran().at(-1)).toBe("Edit Sequence 1 Cue 1");
     // **And the key still is not there**, because nothing about the update
     // state is held here: it arrives as a `SessionPatch`.
     expect(screen.queryByTestId("update-cue")).toBeNull();
@@ -722,7 +728,8 @@ describe("the store bar", () => {
     expect(screen.getByTestId("update-cue").className).toContain("update-blinking");
 
     fireEvent.click(screen.getByTestId("update-cue"));
-    expect(acted().at(-1)).toEqual({ t: "Update" });
+    await settle();
+    expect(ran().at(-1)).toBe("Update");
 
     // And a cleared programmer ends the edit, so the key goes.
     await applyStep("an Update after the programmer has been cleared");
@@ -1135,7 +1142,7 @@ async function renderViewerTracking(show: JsonValue, rows: Answer) {
 /** A console shell that records nothing: these tests press no cue key. */
 const NO_CONSOLE: ConsoleShell = {
   line: "",
-  reading: { kind: "empty" },
+  reading: unread(""),
   prompt: null,
   write: () => undefined,
   append: () => undefined,
@@ -1144,6 +1151,7 @@ const NO_CONSOLE: ConsoleShell = {
   submit: () => undefined,
   answer: () => undefined,
   recall: () => undefined,
+  pick: () => undefined,
 };
 
 /** A session with sequence 1 chosen and executor 0 selected. */

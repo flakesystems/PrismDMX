@@ -481,6 +481,7 @@ fn a_scripted_session_is_reproduced_command_by_command() {
     pair.apply(&Command::CommandLineInput {
         text: "1 thru 4 at full".to_owned(),
         run: false,
+        mode: None,
     });
 
     // Storing over a view, which is a replace rather than an add.
@@ -571,7 +572,15 @@ proptest! {
 
         // A run in which nothing was ever accepted would assert nothing, so the
         // property is closed with an edit that cannot be refused.
-        for delta in &session.apply(&Command::CommandLineInput { text: "go".to_owned(), run: false }).unwrap().deltas {
+        for delta in &session
+            .apply(&Command::CommandLineInput {
+                text: "go".to_owned(),
+                run: false,
+                mode: None,
+            })
+            .unwrap()
+            .deltas
+        {
             mirror.apply_delta(delta).unwrap();
         }
         applied += 1;

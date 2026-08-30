@@ -592,20 +592,18 @@ impl Core {
                     deltas.extend(self.carry_out_binding(*control, action.clone()));
                 }
                 Effect::SurfaceLearn(on) => deltas.push(self.set_learning(*on)),
-                // **S45's custom row, and it is S43's stop-gap reused rather
-                // than a second mechanism.** A key with a line on it cannot be
-                // resolved here, because the parser is still in the interface:
-                // the daemon writes the line into `Session::command_line` and
-                // bumps `Session::command_line_run`, and the client holding the
-                // keyboard focus turns it into commands — exactly what
-                // `SurfaceAction::WriteCommandLine` with *send* does.
-                //
-                // `IMPLEMENTATION_PLAN` S49 moves the parser into the daemon and
-                // removes the arrangement for both at once.
+                // **S45's custom row, fired.** A key with a line on it is a
+                // line, so it travels the way every other line does: the same
+                // `CommandLineInput { run: true }` a keyboard's Enter and a
+                // bound X-Touch key send, read and carried out by
+                // `prism_core::ShowFile` (S49). Before S49 this wrote the line
+                // and bumped a counter for a client to notice, which is the
+                // stop-gap that session removed.
                 Effect::CommandLine(line) => {
                     deltas.extend(self.apply(&Command::CommandLineInput {
                         text: line.clone(),
                         run: true,
+                        mode: None,
                     })?);
                 }
             }
@@ -2295,63 +2293,155 @@ mod tests {
         driver.stop();
     }
 
-    /// **Exit criterion**: a custom row fires the line an operator wrote, and
-    /// firing it produces exactly what typing the line produces.
+    /// **Exit criterion, and the whole of S49 in one test.** A key with a line
+    /// on it fires the line, and there is **no client attached at all**.
     ///
-    /// *Exactly what typing produces* is `Command::CommandLineInput` with
-    /// `run: true` — the same command a keyboard sends — so the two arrive at
-    /// the same session and the same client behaviour. The parser is still in
-    /// the interface (`SurfaceAction::WriteCommandLine`'s stop-gap, removed for
-    /// both in `IMPLEMENTATION_PLAN` S49), which is why the assertion is on the
-    /// line and the counter rather than on a `Go`.
+    /// Before S49 this test could only assert the line and a counter: the parser
+    /// was in the interface, so the daemon wrote `Session::command_line`, bumped
+    /// `Session::command_line_run` and waited for whichever browser held the
+    /// keyboard focus to turn it into commands. A desk with nobody watching a
+    /// screen did nothing; a desk with two watching did it twice, and a doubled
+    /// Go is the fault the session exists to remove.
+    ///
+    /// So the assertion is on the **frames** now, which is the only place that
+    /// can tell the two arrangements apart.
     #[test]
     fn a_key_with_a_line_on_it_fires_the_line() {
         use prism_domain::ExecutorButtonFunction as Fn;
         let dir = tempfile::tempdir().unwrap();
-        let (mut core, _frames, driver) = desk_for_buttons(
+        let (mut core, frames, driver) = desk_for_buttons(
             dir.path(),
-            vec![Fn::On, Fn::Empty, Fn::Empty, Fn::Empty],
+            vec![Fn::Empty, Fn::Empty, Fn::Empty, Fn::Empty],
             prism_domain::ExecutorFaderFunction::Master,
         );
+        until("the rig at home", || channel(&frames, 1) == Some(255));
 
         core.apply(&Command::ConfigureExecutor {
             executor_id: ExecutorId::new(3),
             change: prism_domain::ExecutorChange::Button {
                 index: 1,
                 function: Fn::CommandLine {
-                    line: "Go+ Sequence 7".to_owned(),
+                    line: "On Sequence 7".to_owned(),
                 },
             },
         })
         .unwrap();
 
-        let before = core.file.session.session().command_line_run;
         press(&mut core, 1, true);
-        let session = core.file.session.session();
-        assert_eq!(session.command_line, "Go+ Sequence 7");
-        assert_eq!(session.command_line_run, before + 1);
+        until("the bound line to put light on the rig", || {
+            channel(&frames, 5) == Some(255)
+        });
+        // And the line is cleared, exactly as it is when Enter runs one: a line
+        // that has been run is not a line an operator is still writing.
+        assert_eq!(core.file.session.session().command_line, "");
 
-        // Typing the same line by hand leaves the session in the same place,
-        // which is the whole of "exactly what typing the line produces".
+        // Typing the same line by hand leaves the desk in the same place, which
+        // is the whole of "exactly what typing the line produces" — and it is
+        // now a claim about the *show* rather than about a counter.
         let typed = {
             let dir = tempfile::tempdir().unwrap();
-            let (mut other, _frames, driver) = desk_for_buttons(
+            let (mut other, other_frames, driver) = desk_for_buttons(
                 dir.path(),
                 vec![Fn::Empty, Fn::Empty, Fn::Empty, Fn::Empty],
                 prism_domain::ExecutorFaderFunction::Master,
             );
             other
                 .apply(&Command::CommandLineInput {
-                    text: "Go+ Sequence 7".to_owned(),
+                    text: "On Sequence 7".to_owned(),
                     run: true,
+                    mode: None,
                 })
                 .unwrap();
+            until("the typed line to put light on the rig", || {
+                channel(&other_frames, 5) == Some(255)
+            });
             let session = other.file.session.session().clone();
+            let sequence = other
+                .file
+                .show
+                .sequence(SequenceId::new(7))
+                .unwrap()
+                .clone();
             driver.stop();
-            session
+            (session, sequence)
         };
-        assert_eq!(typed.command_line, session.command_line);
-        assert_eq!(typed.command_line_run, session.command_line_run);
+        let sequence = core.file.show.sequence(SequenceId::new(7)).unwrap();
+        assert_eq!(typed.0.command_line, "");
+        assert_eq!(typed.1.is_active, sequence.is_active);
+        assert_eq!(typed.1.current_cue_index, sequence.current_cue_index);
+
+        driver.stop();
+    }
+
+    /// **A line that is not one is written and left standing** — S49.
+    ///
+    /// The other half of running a line at the daemon, and the half a pointer
+    /// depends on: `Store` typed, a fixture tile clicked, and the candidate
+    /// `Store Fixture 5` is not a command. It must not vanish and it must not be
+    /// carried out — the operator sees what they built, with the daemon's own
+    /// complaint under it (`Query::CommandLineReading`), and corrects it.
+    #[test]
+    fn a_line_that_is_not_a_command_is_written_and_left_standing() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, _frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![prism_domain::ExecutorButtonFunction::Empty; 4],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+
+        core.apply(&Command::CommandLineInput {
+            text: "Store Fixture 5".to_owned(),
+            run: true,
+            mode: None,
+        })
+        .unwrap();
+        assert_eq!(core.file.session.session().command_line, "Store Fixture 5");
+        // Nothing was stored, which is what *left standing* has to mean.
+        assert!(core.file.show.sequence(SequenceId::new(7)).is_some());
+
+        driver.stop();
+    }
+
+    /// **A refusal stops the rest of the line** — S49, and it is a change from
+    /// what the client-side loop did.
+    ///
+    /// `1 thru 4 at 50` on a rig whose fixture 4 is not patched is one sentence
+    /// whose first half cannot be carried out. Before S49 a client sent both
+    /// commands and the second set a level on whatever happened to be selected;
+    /// now the line stops, and the refusal travels as a notice.
+    #[test]
+    fn a_refusal_stops_the_rest_of_the_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, _frames, driver) = desk_for_buttons(
+            dir.path(),
+            vec![prism_domain::ExecutorButtonFunction::Empty; 4],
+            prism_domain::ExecutorFaderFunction::Master,
+        );
+        let before = core.file.programmer.state().clone();
+
+        let deltas = core
+            .apply(&Command::CommandLineInput {
+                text: "404 at 50".to_owned(),
+                run: true,
+                mode: None,
+            })
+            .unwrap();
+
+        assert!(
+            deltas.iter().any(|delta| matches!(
+                delta,
+                Delta::Notice {
+                    level: prism_domain::NoticeLevel::Error,
+                    ..
+                }
+            )),
+            "the refusal is said out loud: {deltas:?}"
+        );
+        assert_eq!(
+            &before,
+            core.file.programmer.state(),
+            "the second half of the line was carried out"
+        );
 
         driver.stop();
     }

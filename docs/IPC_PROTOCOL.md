@@ -263,7 +263,7 @@ type Command =
   | { t: "SetEncoderBank"; group: FeatureGroup }
   | { t: "SetProgrammerPage"; page: number }
   | { t: "SelectProgrammerParam"; direction: "Prev" | "Next" }
-  | { t: "CommandLineInput"; text: string }
+  | { t: "CommandLineInput"; text: string; run: boolean; mode: CommandLineMode | null }
   // ---- This machine's own rig (S33) — neither the show's nor the session's ----
   | { t: "AddOutput"; output: OutputInstance }
   | { t: "ConfigureOutput"; id: OutputId; change: OutputChange }
@@ -276,6 +276,36 @@ type Command =
 ```
 
 The second group is the concrete form of **D11**. The console and the UI draw on one vocabulary; there is no separate surface command set to keep in sync.
+
+> **`CommandLineInput` runs the line as well as writing it** *(S49)*. `run: false`
+> is a keystroke — `Session::commandLine` is shared, so what an operator is
+> part-way through typing is mirrored at S25's cadence. `run: true` is Enter, a
+> key that writes-and-runs, an item picked out of a list, a bound X-Touch key
+> whose binding said *send* (`SurfaceAction::WriteCommandLine::submit`), or an
+> executor key carrying a line: the daemon parses it (`prism_core::console`),
+> applies what it means and clears the line, so what comes back is **the deltas
+> of what it did** — and a line can fall into more than one command.
+>
+> **No second command was added, and that was the decision.** S49's plan named
+> two shapes: a `RunCommandLine` carrying the text, or this command's `run` flag
+> resolved at the daemon. The second shipped because nothing on the wire had to
+> change to make it work — S43 had already given `run` the meaning *and run it*
+> and every sender was already sending exactly this; what was missing was a
+> daemon that could read a line. A second command would have been a second way to
+> say a sentence the protocol already had, and would have needed a home in the
+> three appliers for something that is not a fourth kind of state.
+>
+> A line that is **not** a command is written into `Session::commandLine` and
+> left standing — the reading (§5.2) already says what is wrong with it — and a
+> line whose first command is refused stops there, with the refusal as a
+> `Delta::Notice`: a line is one sentence, and carrying out the second half of
+> one whose first half was refused is doing something nobody asked for.
+>
+> `mode` is the operator's answer to the question a store raises when the
+> destination is occupied, and `null` everywhere else. Absent means *the mode
+> that cannot lose anything*, which is what the parse already carries — and that
+> is what makes a bound key on a desk with **no client attached** safe to press.
+> `docs/COMMAND_LINE.md` §5 has the table.
 
 > **Four commands for the venue's rig, and a third applier** *(S33)*. Until S33
 > an output was a `prismd` command-line flag built once at start-up, and every
@@ -618,11 +648,12 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > control editor. It is a variant rather than eight more variants somebody has to
 > invent, because the owner's answer in S43's third round was that every desk
 > needs a different number of them. `SurfaceAction::WriteCommandLine` is the same
-> answer for a key on the desk; this is it for a key on an executor, and it
-> shares that action's stop-gap — the daemon writes `Session::commandLine`, bumps
-> `Session::commandLineRun`, and the client holding the keyboard focus parses it,
-> until **S49** moves the parser into the daemon and the arrangement goes for
-> both at once.
+> answer for a key on the desk; this is it for a key on an executor. Since
+> **S49** both are read by the daemon: the press becomes
+> `CommandLineInput { run: true }` and `prism_core::console` turns it into
+> commands, so a key with a line on it fires with no client attached. Until then
+> the daemon could only write the line down, bump a `Session::commandLineRun`
+> counter and wait for whichever client held the keyboard focus.
 >
 > **No new `SurfaceAction` was added**, and that is the same test being applied:
 > a key that wants to say `Assign Executor 1 Fader Master` already has a way to
@@ -819,9 +850,10 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > silently cannot be stored into. `None` still means `Session::encoderBank`.
 >
 > Two session fields arrived with them and are documented in
-> `ARCHITECTURE_SPEC.md` §4.1: `commandLineRun`, a **counter** that asks the
-> focused client to run the line (a stop-gap S49 removes), and `windowPicker`,
-> which is session state because an X-Touch key opens the chooser. `ProgrammerState`
+> `ARCHITECTURE_SPEC.md` §4.1: `commandLineRun`, a **counter** that asked the
+> focused client to run the line — a stop-gap, and **removed in S49** now that
+> the daemon reads a line itself — and `windowPicker`, which is session state
+> because an X-Touch key opens the chooser. `ProgrammerState`
 > gained `selectedGroups` and `manualSelection`, both `#[serde(default)]`, because
 > *why* a fixture is in the selection is the fact a group deselect needs and
 > cannot recover from the selection alone.
@@ -927,7 +959,8 @@ type Query =
   | { t: "OutputStatus" }
   | { t: "ArtNetNodes" }
   | { t: "SurfaceBindings" }
-  | { t: "CueTracking"; sequenceId: SequenceId };
+  | { t: "CueTracking"; sequenceId: SequenceId }
+  | { t: "CommandLineReading"; text: string };
 
 type StoreTarget =
   | { t: "Cue"; sequenceId: SequenceId; cueNumber: string }
@@ -945,7 +978,41 @@ type Answer =
       counters: ArtNetCounters; remedy: string | null }
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
       profile: string | null; revision: number; learning: boolean }
-  | { t: "CueTracking"; sequenceId: SequenceId; cues: CueTrackingRow[] };
+  | { t: "CueTracking"; sequenceId: SequenceId; cues: CueTrackingRow[] }
+  | { t: "CommandLineReading"; text: string; reading: string;
+      kind: "Empty" | "Commands" | "Error"; commands: number;
+      verb: boolean; clearing: boolean;
+      question: CommandLineQuestion | null; completions: string[] };
+
+interface CommandLineQuestion {          // S49 — what a store would write over
+  what: string;                          // *cue 5 of sequence 2*, as typed
+  modes: CommandLineMode[];              // the words to offer, in order
+}
+
+type CommandLineMode = "Merge" | "Override" | "Remove" | "Append";
+
+> **`CommandLineReading` is the reading under the command line** *(S49)*. §4.5
+> makes the line the interface and the sentence under the box is what makes it
+> usable — a syntax error is visible *before* Enter rather than as a refusal
+> afterwards. S40 built that in TypeScript because the parser was there; S49
+> moved the parser into the daemon, and the reading had to follow it, or a client
+> keeping a parser only for the readout would be exactly the second opinion the
+> move removed. It is a question rather than a delta for `StorePreview`'s reason:
+> what one operator is part-way through typing is answered to that operator, and
+> the line *itself* already travels in `Session::commandLine`.
+>
+> Two fields are things only a daemon can say. **`question`** is `Some` exactly
+> when the destination a store names is already occupied — until S49 an interface
+> read that out of its own mirror, so a client one delta behind could ask about a
+> cue somebody had just deleted. **`verb` and `clearing`** are what a click on a
+> pool tile turns on (`docs/COMMAND_LINE.md` §3.1), because the list of verbs is
+> the grammar's and the grammar is here.
+>
+> **The commands are a count and not a list**, deliberately: a client has nothing
+> to do with them — the daemon runs the line — and putting `Command` inside an
+> `Answer` would put the whole protocol's value tree into this one
+> (`prism_domain::wire`'s budget). What the number is for is the reading's own
+> claim that `1 thru 3 at 50` is *two* things.
 
 interface CueTrackingRow {               // S48 — one cue of one list
   number: string;                        // the cue, as an operator typed it

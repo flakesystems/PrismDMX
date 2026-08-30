@@ -51,8 +51,8 @@ mod wire;
 
 pub use attribute::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
 pub use command::{
-    Command, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection, SelectionMode,
-    SequenceStoreMode,
+    Command, CommandLineMode, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection,
+    SelectionMode, SequenceStoreMode,
 };
 pub use delta::{Delta, NoticeLevel};
 pub use executor::{
@@ -81,8 +81,8 @@ pub use programmer::{
     ProgrammerValueSource, ProgrammerValues,
 };
 pub use query::{
-    Answer, CueTrackingRow, LibraryEntry, PatchConflict, PatchPreview, Query, StoreMode,
-    StorePreview, StoreTarget, TrackedValue,
+    Answer, CommandLineQuestion, CommandLineReadingKind, CueTrackingRow, LibraryEntry,
+    PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget, TrackedValue,
 };
 pub use sequence::{
     Cue, CueChange, CueEdit, CueKey, CuePart, CueProperty, CueTrack, CueTracking, CueTrackingMode,

@@ -209,7 +209,7 @@ function SequenceMenu({
         onClose={onClose}
         onSubmit={(text) => {
           // The colour words and the hex form are the console's own
-          // (`desk/console.ts`), and an empty answer takes the colour off —
+          // (`prism_core::console`), and an empty answer takes the colour off —
           // which is `Label`'s rule one verb along. Writing the line rather
           // than sending `Command::Color` is §4.5: what a picker would send,
           // an operator can also type.

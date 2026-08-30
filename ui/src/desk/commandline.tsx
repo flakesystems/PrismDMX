@@ -5,24 +5,28 @@
  *
  * - **what has been typed**, which is the shell's buffer and is mirrored into
  *   `Session::commandLine` at S25's cadence, so a second screen sees it;
- * - **what the line would mean** — the parser's answer, shown as you type, so a
- *   syntax error is visible *before* Enter rather than as a refusal afterwards;
+ * - **what the line would mean** — the **daemon's** answer since S49
+ *   (`Query::CommandLineReading`), shown as you type, so a syntax error is
+ *   visible *before* Enter rather than as a refusal afterwards;
  * - **the question**, when the line would write over something that is already
  *   there: *merge, override or cancel*, in the line rather than in a window over
  *   the canvas.
  *
  * # A syntax error is a message, never a throw
  *
- * `parseCommandLine` answers with commands or with a sentence, for every string
- * there is. This component shows the sentence and refuses to send; it does not
- * catch anything, because there is nothing to catch.
+ * `prism_core::console` answers with commands or with a sentence, for every
+ * string there is, and this component shows the sentence. It does not catch
+ * anything, because there is nothing to catch — and since S49 the sentence is
+ * the daemon's, so a line refused at the console and a line refused here read
+ * the same.
  *
  * # Two things left in S43, and both were the owner's
  *
- * **The row of suggestions is gone** (B13). `completions()` still exists and Tab
- * still completes against it — what went is the strip of them under the input,
- * which was on the screen at all times and was read as clutter rather than as
- * help. Tab is the gesture; a list of everything you could type next is not.
+ * **The row of suggestions is gone** (B13). The completions still arrive with
+ * the reading and Tab still takes the first — what went is the strip of them
+ * under the input, which was on the screen at all times and was read as clutter
+ * rather than as help. Tab is the gesture; a list of everything you could type
+ * next is not.
  *
  * **The keypad is a window** (B12). §4.5's three shapes are still buttons and
  * still write into this line rather than sending anything of their own — they
@@ -33,10 +37,8 @@
 
 import type { FormEvent, KeyboardEvent } from "react";
 
-import { completions } from "./console";
-import { readingText } from "./console";
 import { COMMAND_INPUT_ID } from "./commandinput";
-import { PROMPT_MODES, useConsole } from "./consoleshell";
+import { useConsole } from "./consoleshell";
 
 /** What the command line needs: the daemon's line, for the readout beside it. */
 export interface CommandLineProps {
@@ -48,7 +50,9 @@ export interface CommandLineProps {
 export function CommandLine({ daemonLine }: CommandLineProps) {
   const console_ = useConsole();
   const { line, reading, prompt } = console_;
-  const words = completions(line);
+  // The daemon's, and only when it is about the line in the box: an answer that
+  // overtook a keystroke completes a line nobody is typing.
+  const words = reading.text === line ? reading.completions : [];
 
   const submit = (event: FormEvent): void => {
     event.preventDefault();
@@ -107,8 +111,8 @@ export function CommandLine({ daemonLine }: CommandLineProps) {
         </button>
       </form>
       {prompt === null ? null : <PromptBar />}
-      <p className={`command-reading command-${reading.kind}`} id="command-reading">
-        <output data-testid="command-reading">{readingText(reading)}</output>
+      <p className={`command-reading command-${reading.kind.toLowerCase()}`} id="command-reading">
+        <output data-testid="command-reading">{reading.text === line ? reading.reading : ""}</output>
       </p>
       <p className="daemon-line">
         Engine: <output data-testid="command-line">{daemonLine}</output>
@@ -133,7 +137,7 @@ function PromptBar() {
   return (
     <p className="command-prompt" data-testid="command-prompt" role="group" aria-label="Overwrite">
       <span data-testid="command-prompt-what">{prompt.what} is already there.</span>
-      {PROMPT_MODES[prompt.kind].map((mode) => (
+      {prompt.modes.map((mode) => (
         <button
           key={mode}
           type="button"

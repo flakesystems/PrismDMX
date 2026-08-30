@@ -20,7 +20,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { JsonValue } from "../bindings";
-import { ConsoleContext } from "./consoleshell";
+import { ConsoleContext, unread } from "./consoleshell";
 import type { ConsoleShell } from "./consoleshell";
 import { ExecutorEditor } from "./executoreditor";
 import { nullSink, setLogSink } from "../log/logger";
@@ -54,7 +54,7 @@ function shell(): { readonly lines: string[]; readonly value: ConsoleShell } {
     lines,
     value: {
       line: "",
-      reading: { kind: "empty" },
+      reading: unread(""),
       prompt: null,
       write: () => undefined,
       append: () => undefined,
@@ -65,6 +65,7 @@ function shell(): { readonly lines: string[]; readonly value: ConsoleShell } {
       submit: () => undefined,
       answer: () => undefined,
       recall: () => undefined,
+      pick: () => undefined,
     },
   };
 }
@@ -126,7 +127,7 @@ describe("the control editor", () => {
     fireEvent.click(screen.getByTestId("editor-send-0"));
     // **Quoted**, because a line has spaces and punctuation in it and the
     // tokeniser keeps a quoted chunk exactly as it was typed — see
-    // `console.ts::assignControlLine`.
+    // `prism_core::console::assign_control_line`.
     expect(lines).toEqual(['Assign Executor 1 Button 1 Command "Go+ Sequence 3"']);
   });
 

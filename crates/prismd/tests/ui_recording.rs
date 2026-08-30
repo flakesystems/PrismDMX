@@ -195,6 +195,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
         7 => Command::CommandLineInput {
             text: format!("fixture {} at {}", rng.below(4), rng.below(101)),
             run: false,
+            mode: None,
         },
         8 => Command::SetEncoderBank {
             group: FeatureGroup::ALL[usize::try_from(rng.below(5)).unwrap_or(0)],
@@ -546,6 +547,7 @@ fn client_messages() -> Vec<ClientRecord> {
                 command: Command::CommandLineInput {
                     text: "fixture 1 thru 4 at full".to_owned(),
                     run: false,
+                    mode: None,
                 },
             },
         ),

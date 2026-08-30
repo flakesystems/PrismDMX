@@ -554,6 +554,7 @@ fn script() -> Vec<Scripted> {
             Command::CommandLineInput {
                 text: "1 thru 4 at ".to_owned(),
                 run: false,
+                mode: None,
             },
         ),
         (

@@ -27,6 +27,7 @@ import type {
   ArtNetNodeInfo,
   BoundControl,
   Command,
+  CommandLineQuestion,
   Delta,
   ExecutorButtonRef,
   ExecutorTarget,
@@ -56,6 +57,8 @@ import type {
 } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
+  COMMAND_LINE_MODE_VARIANTS,
+  COMMAND_LINE_READING_KIND_VARIANTS,
   EXECUTOR_TARGET_VARIANTS,
   EXIT_ACTION_VARIANTS,
   FEATURE_GROUP_VARIANTS,
@@ -632,6 +635,32 @@ export function readAnswer(value: unknown, path: string): Answer {
           readCueTrackingRow(row, `${path}.cues[${index}]`),
         ),
       };
+    // S49. What the line under the operator's fingers would do — the reading
+    // under the box, and the two things only the daemon can say about it:
+    // whether the destination a store names is already there, and which words
+    // to ask with. A client that worked either out would be the second opinion
+    // moving the parser was meant to remove.
+    case "CommandLineReading":
+      return {
+        t: "CommandLineReading",
+        text: asString(field(record, "text"), `${path}.text`),
+        reading: asString(field(record, "reading"), `${path}.reading`),
+        kind: asVariant(
+          field(record, "kind"),
+          `${path}.kind`,
+          COMMAND_LINE_READING_KIND_VARIANTS,
+        ),
+        commands: asInteger(field(record, "commands"), `${path}.commands`),
+        verb: asBoolean(field(record, "verb"), `${path}.verb`),
+        clearing: asBoolean(field(record, "clearing"), `${path}.clearing`),
+        question: readOptionalCommandLineQuestion(
+          field(record, "question"),
+          `${path}.question`,
+        ),
+        completions: asArray(field(record, "completions"), `${path}.completions`).map(
+          (word, index) => asString(word, `${path}.completions[${index}]`),
+        ),
+      };
     case "DarkUniverses":
       return {
         t: "DarkUniverses",
@@ -665,6 +694,32 @@ export function readAnswer(value: unknown, path: string): Answer {
     default:
       throw new ProtocolFault(`${path}.t`, `an answer this build knows, not ${JSON.stringify(tag)}`);
   }
+}
+
+/**
+ * The question a line is holding, or nothing at all — S49.
+ *
+ * Absent on almost every line, so it is read as optional rather than as a null:
+ * a daemon that sends nothing for it is a line with nothing to ask, which is the
+ * ordinary case and not a message this build could not read.
+ */
+function readOptionalCommandLineQuestion(
+  value: unknown,
+  path: string,
+): CommandLineQuestion | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const record = asRecord(value, path);
+  return {
+    what: asString(field(record, "what"), `${path}.what`),
+    // **Checked against the generated table**, never asserted: the words are
+    // what the prompt's buttons send back in `CommandLineInput.mode`, and a
+    // word this build does not know would be a button that means nothing.
+    modes: asArray(field(record, "modes"), `${path}.modes`).map((mode, index) =>
+      asVariant(mode, `${path}.modes[${index}]`, COMMAND_LINE_MODE_VARIANTS),
+    ),
+  };
 }
 
 /**

@@ -240,23 +240,17 @@ pub struct Session {
     /// Which parameter the jog wheel turns (Zoom left/right).
     pub programmer_param_index: u32,
     /// Contents of the command line.
+    ///
+    /// **The text, and nothing about running it** — S49. S43 had a
+    /// `command_line_run` counter beside this: a bound key wrote the line, bumped
+    /// the counter, and whichever client held the keyboard focus parsed the line
+    /// and sent what it meant, because the parser was in the interface. It was
+    /// written down as a stop-gap at the time and it is gone: the daemon parses
+    /// the line itself (`prism_core::console`), so *run it* is
+    /// `Command::CommandLineInput::run` and there is nothing for a client to
+    /// watch an edge on. A field a `.prism` file written before S49 still
+    /// carries is ignored, which is what serde does with a key nothing reads.
     pub command_line: String,
-    /// How many times a **bound** line has asked to be run — S43.
-    ///
-    /// A counter and not a flag, because what a client watches for is the
-    /// *edge*: two identical lines bound to two keys have to run twice, and a
-    /// boolean that was already `true` would run the second one never. It only
-    /// ever goes up, and it is reset by nothing.
-    ///
-    /// Why it exists at all: the command-line parser is in the interface, so a
-    /// key on the X-Touch bound to a line the operator marked *send* cannot be
-    /// carried out by the daemon. It writes the line, bumps this, and the client
-    /// holding the keyboard focus runs it. See
-    /// `SurfaceAction::WriteCommandLine` for the whole argument.
-    ///
-    /// `#[serde(default)]` for [`Self::window_picker`]'s reason.
-    #[serde(default)]
-    pub command_line_run: u32,
     /// Whether the operator is choosing a window to open.
     ///
     /// **S43, and it is session state on purpose.** The chooser it drives is a
@@ -293,7 +287,6 @@ impl Session {
             programmer_page: 0,
             programmer_param_index: 0,
             command_line: String::new(),
-            command_line_run: 0,
             window_picker: false,
         }
     }
@@ -335,7 +328,6 @@ mod tests {
             programmer_page: 0,
             programmer_param_index: 0,
             command_line: String::new(),
-            command_line_run: 4,
             window_picker: false,
         }
     }
@@ -362,7 +354,6 @@ mod tests {
             [
                 "activeViewId",
                 "commandLine",
-                "commandLineRun",
                 "editingCue",
                 "encoderBank",
                 "executorPage",

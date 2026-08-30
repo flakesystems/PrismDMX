@@ -407,6 +407,7 @@ async fn a_killed_client_comes_back_to_the_state_it_had_accumulated() {
         Command::CommandLineInput {
             text: "fixture 2 at 50".to_owned(),
             run: false,
+            mode: None,
         },
         Command::SetExecutorMaster {
             executor_id: ExecutorId::new(0),

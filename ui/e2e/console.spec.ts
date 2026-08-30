@@ -8,6 +8,15 @@
  * for the playback half — **light on the rig**, counted off the telemetry
  * canvas.
  *
+ * # And since S49, the parser is at the other end of the socket
+ *
+ * The lines below are unchanged and mean what they meant. What changed is who
+ * reads them: `prism_core::console`, reached by `CommandLineInput { run: true }`,
+ * so this file is now the only place in the interface's own suite where a line
+ * is read by the thing that will run it. `crates/prism-core/tests/console.rs`
+ * holds the grammar against a recording of what a real daemon accepted; this
+ * holds the *chain*.
+ *
  * Four things it is here to show, and each is an exit criterion:
  *
  * 1. **Every line in the vocabulary works**, including the ones that needed a
@@ -113,6 +122,50 @@ async function litPixels(
 }
 
 test.describe("the console shell", () => {
+  /**
+   * **The reading under the box is the daemon's, and a line runs as one
+   * command** — S49.
+   *
+   * Two claims that only a real daemon can settle. The sentence under the input
+   * is `Query::CommandLineReading`'s answer, so a line refused at the console
+   * and a line refused on a screen read the same words; and running one is a
+   * single `CommandLineInput { run: true }`, so a line that falls into two
+   * commands still crosses the wire once — which is what stops two screens
+   * running it twice.
+   */
+  test("reads the line at the daemon and runs it as one command", async ({ page, context }) => {
+    await desk(page);
+
+    // What the line *would* do, before Enter. Nothing in the browser worked
+    // this out: it is the sentence `prism_core::console::reading_text` wrote.
+    await input(page).fill("1 thru 3 at 50");
+    await expect(page.getByTestId("command-reading")).toHaveText(
+      "select 1 + 2 + 3 · dimmer → 50%",
+    );
+
+    // A line that is not one says why, in the daemon's words, and Enter runs
+    // nothing — the line is still there to be corrected.
+    await input(page).fill("1 thru");
+    await expect(page.getByTestId("command-reading")).toContainText("thru what");
+    await input(page).press("Enter");
+    await expect(input(page)).toHaveValue("1 thru");
+
+    // **A second screen sees the same half-typed line**, because it is session
+    // state — and it draws the same reading, because it asks the same daemon.
+    const second = await context.newPage();
+    await second.goto(`/?daemon=${encodeURIComponent(daemon?.url ?? "")}`);
+    await expect(second.getByTestId("connection-status")).toHaveText("Connected");
+    await expect(second.getByTestId("command-line")).toHaveText("1 thru");
+
+    // And a line that *is* one runs, on the daemon, once: the selection moves
+    // and the line is cleared by the daemon rather than by this browser.
+    await command(page, "1 thru 3");
+    await expect(page.getByTestId("selection")).toContainText("1");
+    await expect(page.getByTestId("command-line")).toHaveText("");
+    await expect(second.getByTestId("command-line")).toHaveText("");
+    await second.close();
+  });
+
   /**
    * **The whole vocabulary, in one show being built by typing.**
    *

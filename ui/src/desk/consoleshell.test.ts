@@ -3,153 +3,162 @@
  *
  * `pickOnto` is the whole of S43's second rebuild in one pure function, and it
  * is worth testing here rather than only through six windows: the windows all
- * call it the same way, and what varies is the *line*. This is that variation,
- * over the grammar the parser actually has.
+ * call it the same way, and what varies is the *line*.
+ *
+ * # What this file stopped being able to test, and where that went
+ *
+ * Until S49 the variation was over the grammar, because the grammar was in this
+ * directory. It is `prism_core::console` now, so what varies here is the
+ * **reading the daemon sent back** — three facts about the candidate line, and
+ * three answers. Which lines produce which facts is asserted where the rule
+ * lives (`crates/prism-core/tests/console.rs`:
+ * `a_clearing_verb_is_one_whose_absent_argument_is_an_instruction` and
+ * `a_line_that_is_a_selection_is_not_a_verb_line`), and that the two halves meet
+ * over a socket is `shell.test.tsx` and `ui/e2e/console.spec.ts`.
+ *
+ * That is a smaller test than the one it replaces, and deliberately so: a
+ * TypeScript table of which lines are verbs would be the second opinion S49
+ * exists to remove, restated as a fixture.
  */
 
+import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { CLEARING_VERBS, CONSOLE_WORDS, VERB_WORDS, parseCommandLine } from "./console";
-import { appended, objectLine, pickOnto } from "./consoleshell";
+import type { CommandLineReading } from "./consoleshell";
+import { appended, objectLine, pickOnto, unread, useConsole } from "./consoleshell";
+
+/** A daemon's reading of a candidate line, with the facts a pick turns on. */
+function reading(
+  text: string,
+  facts: Partial<Pick<CommandLineReading, "kind" | "verb" | "clearing">>,
+): CommandLineReading {
+  return { ...unread(text), commands: 1, ...facts };
+}
 
 describe("pointing at a data source", () => {
   /** The owner's own example, and the shape every window uses. */
-  it("appends the object and sends the line when it is whole", () => {
-    expect(pickOnto("Delete", "Sequence 2")).toEqual({
+  it("sends the line when the candidate is a whole command", () => {
+    expect(pickOnto(reading("Delete Sequence 2 ", { kind: "Commands", verb: true }))).toEqual({
       kind: "run",
       line: "Delete Sequence 2",
     });
-    expect(pickOnto("Edit", "Sequence 1 Cue 3")).toEqual({
-      kind: "run",
-      line: "Edit Sequence 1 Cue 3",
-    });
-    expect(pickOnto("Store", "Group 4")).toEqual({ kind: "run", line: "Store Group 4" });
+    expect(
+      pickOnto(reading("Edit Sequence 1 Cue 3 ", { kind: "Commands", verb: true })),
+    ).toEqual({ kind: "run", line: "Edit Sequence 1 Cue 3" });
   });
 
   /**
    * **A line that still wants a word is left standing** — which is what makes
-   * `Copy` two clicks rather than a guess about where the copy goes.
+   * `Copy` two clicks rather than a guess about where the copy goes, and what
+   * makes `Store Fixture 5` a line an operator can see and correct rather than
+   * a `Store` that was quietly discarded.
    */
-  it("leaves a line standing while it still wants a word", () => {
-    expect(pickOnto("Copy", "Sequence 1")).toEqual({
+  it("leaves a line standing while it is not yet a command", () => {
+    expect(pickOnto(reading("Copy Sequence 1 ", { kind: "Error", verb: true }))).toEqual({
       kind: "write",
       line: "Copy Sequence 1 ",
     });
-    // ...and the second click finishes it.
-    expect(pickOnto("Copy Sequence 1 ", "Sequence 2")).toEqual({
-      kind: "run",
-      line: "Copy Sequence 1 Sequence 2",
-    });
-  });
-
-  /**
-   * **The verbs whose missing word means *take it away*** — `CLEARING_VERBS`.
-   * `Label Group 3` and `Color Sequence 4` are both whole commands, and both of
-   * them undo something; a click that sent one would wipe a name or a colour
-   * with a single gesture.
-   */
-  it("never finishes a verb whose absent argument is an instruction", () => {
-    for (const verb of CLEARING_VERBS) {
-      const answer = pickOnto(verb, "Sequence 4");
-      expect(answer.kind, verb).toBe("write");
-    }
-    // The premise, asserted rather than assumed: each of them *would* have been
-    // sent, because each parses to a command with nothing after the object.
-    for (const verb of CLEARING_VERBS) {
-      expect(parseCommandLine(`${verb} Sequence 4`).kind, verb).toBe("commands");
-    }
-  });
-
-  /**
-   * **A line that is not a command leaves the row alone** — *passend*, and the
-   * answer is the verb. A selection takes fixtures, so a range being built is
-   * not a group being named.
-   */
-  it("hands the row back its own gesture when the line is a selection", () => {
-    expect(pickOnto("1 thru", "Group 3")).toEqual({ kind: "own" });
-    expect(pickOnto("5", "Sequence 2")).toEqual({ kind: "own" });
-    // And nonsense is not a command either.
-    expect(pickOnto("banana", "Group 1")).toEqual({ kind: "own" });
-  });
-
-  /**
-   * **A verb that cannot take *this* object leaves the line standing with the
-   * parser's complaint under it**, rather than throwing the verb away.
-   *
-   * Which nouns a verb takes is the grammar's business, and the grammar says so
-   * where an operator can read it. A click that silently discarded the `Store`
-   * and selected a fixture instead is the behaviour this whole function exists
-   * to remove.
-   */
-  it("leaves an impossible line standing rather than discarding the verb", () => {
-    expect(pickOnto("Store", "Fixture 5")).toEqual({
+    expect(pickOnto(reading("Store Fixture 5 ", { kind: "Error", verb: true }))).toEqual({
       kind: "write",
       line: "Store Fixture 5 ",
     });
-    expect(parseCommandLine("Store Fixture 5").kind).toBe("error");
-    // A line that is already whole is the same case: too many words is a line
-    // an operator can see and correct.
-    expect(pickOnto("Delete Sequence 2", "Sequence 3").kind).toBe("write");
   });
 
   /**
-   * **The verb table and the completion table agree** — the guard against a
-   * verb added to the grammar and not to {@link VERB_WORDS}, which would be a
-   * pool that quietly stopped offering it.
-   *
-   * Every word the console knows is one of three things: a verb, one of the six
-   * numbered nouns (plus `fixture`), or one of the handful of modifiers that
-   * only ever appear inside a line. A word that is none of them is a word this
-   * partition has not been told about.
+   * **The verbs whose missing word means *take it away*.** `Label Group 3` and
+   * `Color Sequence 4` are both whole commands, and both of them undo
+   * something; a click that sent one would wipe a name or a colour with a
+   * single gesture. The daemon says which those are — `clearing` — because the
+   * daemon is what knows the grammar.
    */
-  it("partitions every word the console knows", () => {
-    const nouns = ["fixture", "sequence", "cue", "group", "preset", "view", "executor"];
-    const modifiers = ["at", "thru"];
-    for (const word of CONSOLE_WORDS) {
-      const known =
-        VERB_WORDS.includes(word) || nouns.includes(word) || modifiers.includes(word);
-      expect(known, `${word} is neither a verb, a noun nor a modifier`).toBe(true);
-    }
-    // And every verb really is one: a word the parser does not know answers
-    // *not a command*, which is what `fixture` gets and what none of these may.
-    for (const verb of VERB_WORDS) {
-      const read = parseCommandLine(verb);
-      const message = read.kind === "error" ? read.message : "";
-      expect(message, verb).not.toContain("is not a command");
-    }
+  it("never finishes a verb whose absent argument is an instruction", () => {
+    const candidate = reading("Label Sequence 4 ", {
+      kind: "Commands",
+      verb: true,
+      clearing: true,
+    });
+    expect(pickOnto(candidate)).toEqual({ kind: "write", line: "Label Sequence 4 " });
   });
 
   /**
-   * **An empty line is the row's own gesture, always.**
-   *
-   * With nothing typed, a click on a group means *switch that group*, and the
-   * leading `+` the pools write is their decision (B27) rather than something
-   * this function should reinvent. Asked before anything else, so a pool never
-   * has to check for it.
+   * **A line that is not a verb line leaves the row alone** — *passend*, and
+   * the answer is the verb. A selection takes fixtures, so a range being built
+   * is not a group being named; and an empty line plus a noun is not a verb
+   * line either, which is how *with nothing typed a click on a group means
+   * switch that group* falls out rather than being a case of its own.
    */
-  it("does the row's own thing on an empty line", () => {
-    expect(pickOnto("", "Group 1")).toEqual({ kind: "own" });
-    expect(pickOnto("   ", "Sequence 1")).toEqual({ kind: "own" });
+  it("hands the row back its own gesture when the line is not a verb line", () => {
+    expect(pickOnto(reading("1 thru Group 3 ", { kind: "Error" }))).toEqual({ kind: "own" });
+    expect(pickOnto(reading("Group 1 ", { kind: "Commands" }))).toEqual({ kind: "own" });
+    expect(pickOnto(unread(""))).toEqual({ kind: "own" });
   });
 
-  /** What is sent is a line an operator could have typed, and they type no
-      trailing space. */
+  /**
+   * What is sent is a line an operator could have typed, and they type no
+   * trailing space; what is left standing keeps its space, so the next
+   * keystroke is a word rather than a correction.
+   */
   it("sends a trimmed line and leaves a standing one open", () => {
-    const sent = pickOnto("Delete", "View 2");
+    const sent = pickOnto(reading("Delete View 2 ", { kind: "Commands", verb: true }));
     expect(sent.kind === "run" ? sent.line : "").toBe("Delete View 2");
-    const standing = pickOnto("Move", "View 2");
+    const standing = pickOnto(reading("Move View 2 ", { kind: "Error", verb: true }));
     expect(standing.kind === "write" ? standing.line : "").toBe("Move View 2 ");
   });
+});
+
+describe("the two spellings a key uses", () => {
+  it("adds one space between words and one at the end", () => {
+    expect(appended("", "Fixture")).toBe("Fixture ");
+    expect(appended("Store ", "Cue")).toBe("Store Cue ");
+    expect(appended("Store", "Cue")).toBe("Store Cue ");
+  });
 
   /**
-   * The words a window appends are `objectLine`'s, and `pickOnto` joins them
-   * the way `appended` does — so the line a pointer builds is spelled exactly
-   * like the line a person types.
+   * The words a window appends are `objectLine`'s, and the candidate a pick
+   * reads is `appended`'s — so the line a pointer builds is spelled exactly
+   * like the line a person types, which is the whole of `ARCHITECTURE_SPEC.md`
+   * §4.5's *a pool is a key*.
    */
-  it("builds the same line the keys and the parser already agree on", () => {
-    const words = objectLine({ t: "Cue", sequenceId: 1, cueNumber: "3" });
-    expect(words).toBe("Sequence 1 Cue 3");
-    const answer = pickOnto("Goto", words);
-    expect(answer.kind === "run" ? answer.line : "").toBe(appended("Goto", words).trimEnd());
+  it("spells an object the way the grammar reads it", () => {
+    expect(objectLine({ t: "Sequence", sequenceId: 4 })).toBe("Sequence 4");
+    expect(objectLine({ t: "Cue", sequenceId: null, cueNumber: "1.5" })).toBe("Cue 1.5");
+    expect(objectLine({ t: "Cue", sequenceId: 2, cueNumber: "1.5" })).toBe("Sequence 2 Cue 1.5");
+    expect(objectLine({ t: "Group", groupId: 3 })).toBe("Group 3");
+    expect(objectLine({ t: "Preset", presetId: 3 })).toBe("Preset 3");
+    expect(objectLine({ t: "View", viewId: 3 })).toBe("View 3");
+    expect(objectLine({ t: "Executor", executorId: 3 })).toBe("Executor 3");
+    expect(appended("Goto", objectLine({ t: "Cue", sequenceId: 1, cueNumber: "3" }))).toBe(
+      "Goto Sequence 1 Cue 3 ",
+    );
+  });
+});
+
+describe("a reading nobody has answered yet", () => {
+  /**
+   * **A console that had not heard back must not complain about itself.** The
+   * empty reading is *nothing to say*, not *that is not a command*: a daemon
+   * that is slow, or not there at all, leaves the box quiet rather than red.
+   */
+  it("says nothing, offers nothing and asks nothing", () => {
+    const nothing = unread("1 thru 3");
+    expect(nothing.text).toBe("1 thru 3");
+    expect(nothing.reading).toBe("");
+    expect(nothing.kind).toBe("Empty");
+    expect(nothing.question).toBeNull();
+    expect(nothing.completions).toEqual([]);
+    expect(nothing.verb).toBe(false);
+  });
+});
+
+describe("a key pressed outside the shell", () => {
+  /**
+   * **It throws, and that is right.** Every key on the screen writes into one
+   * line (`ARCHITECTURE_SPEC.md` §4.5), so a key rendered outside the provider
+   * is a tree somebody built wrong rather than a state a running desk can be
+   * in — and a hook that answered `null` instead would leave the mistake to be
+   * found by a key that silently did nothing.
+   */
+  it("says so rather than answering with nothing", () => {
+    expect(() => renderHook(() => useConsole())).toThrow("outside the console shell");
   });
 });

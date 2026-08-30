@@ -334,6 +334,33 @@ impl Desk {
                 sequence_id: *sequence_id,
                 cues: core.file.show.cue_tracking(*sequence_id),
             },
+            // S49, and it is the reading under the command line: what the line
+            // an operator is typing *would* do. It is here for §5.2's rule — it
+            // is derived, and since S49 the thing it is derived from is here.
+            //
+            // Two of the fields the parser cannot supply and this can. The
+            // **question** is `Some` only when the destination is really
+            // occupied, which is the one thing an interface used to look up in
+            // its own mirror; and the parser deliberately does not read the
+            // show, so it says *what would be written* and this decides *whether
+            // to ask*.
+            Query::CommandLineReading { text } => {
+                let reading = prism_core::console::parse_command_line(text);
+                let question = reading
+                    .question()
+                    .filter(|question| core.file.holds(&question.at))
+                    .map(prism_core::ModeQuestion::question);
+                Answer::CommandLineReading {
+                    text: text.clone(),
+                    reading: prism_core::console::reading_text(&reading),
+                    kind: reading.kind(),
+                    commands: u32::try_from(reading.commands().len()).unwrap_or(u32::MAX),
+                    verb: prism_core::console::is_verb_line(text),
+                    clearing: prism_core::console::is_clearing_line(text),
+                    question,
+                    completions: prism_core::console::completions(text),
+                }
+            }
             // S37. Derived from the patch and from the rig, which is exactly
             // why it is a question: a client that intersected the two would be
             // a second opinion about something `prism_core::dark_universes`

@@ -133,9 +133,7 @@ pub fn show_file() -> ShowFile {
 
     let mut session = SessionState::new();
     session.set_executor_page(3).unwrap();
-    session
-        .set_command_line("fixture 1 at full", false)
-        .unwrap();
+    session.set_command_line("fixture 1 at full").unwrap();
 
     ShowFile {
         show,

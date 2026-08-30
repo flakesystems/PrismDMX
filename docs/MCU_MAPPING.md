@@ -832,6 +832,30 @@ Each row carries two facts that are the **device profile's** rather than the
 table's, because a client holds no profile: whether the control keeps reaching
 PrismDMX in the combined mode (§4.3) and whether it may be bound at all.
 
+#### A key can carry a command line, and since S49 the daemon runs it
+
+`SurfaceAction::WriteCommandLine { line, submit }` binds any line of
+`docs/COMMAND_LINE.md` to a key — punch-list **B4**, and the owner's answer to
+*every desk needs a different number of them*. The `submit` box is **B25**: a key
+on `Go Executor 1` that needs Enter afterwards is not a Go key, and a key that
+lays `Store Cue ` down to be finished is exactly right, so the binding decides.
+
+**Who runs it is the daemon.** The action resolves to
+`Command::CommandLineInput { text, run: submit }`, and `prism_core::console`
+reads the line — so a bound key fires **with no client attached at all**, which
+is the whole of S49 and is what an installed desk in a rack needs.
+
+Until S49 it could not: the parser was `ui/src/desk/console.ts`, so the daemon
+wrote the line into `Session::commandLine`, bumped a `Session::commandLineRun`
+counter and waited for whichever client held the keyboard focus to read it. On
+one screen that was exactly right; with no screen it did nothing, and with two
+focused screens on two machines it ran the line twice. It was written down as a
+stop-gap at the time and the field is gone.
+
+The mode a store may ask about is not asked here, and does not need to be: a key
+is pressed with nobody to answer, so the line runs with the mode its own parse
+carries — the one that cannot lose anything.
+
 #### Learn is §2.7's method rule, run backwards
 
 S20 established that the way to find out what a control sends is to **press it

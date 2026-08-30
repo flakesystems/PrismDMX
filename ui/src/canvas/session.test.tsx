@@ -36,6 +36,7 @@ import { TelemetrySink } from "../ipc/telemetry";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
+import { ranLines, settleReadings } from "../testing/console";
 import { FakeNetwork, ManualTimer, serverMessage, snapshot } from "../testing/fake-daemon";
 import { TelemetryProvider } from "../telemetry/panel";
 
@@ -94,7 +95,10 @@ function desk(served: Snapshot = recordedSnapshot()) {
     { url: "ws://127.0.0.1:7373/ipc", socketFactory: network.factory, timer: clock.timer },
     events,
   );
-  store.attach((command) => connection.send(command));
+  store.attach(
+    (command) => connection.send(command),
+    (query) => connection.ask(query),
+  );
 
   const view = render(
     <DeskProvider store={store}>
@@ -124,13 +128,25 @@ function desk(served: Snapshot = recordedSnapshot()) {
   /**
    * The commands a gesture produced, without the line it wrote on the way.
    *
-   * A key writes into `Session::commandLine` and then runs the line (S40,
-   * `ARCHITECTURE_SPEC.md` §4.5), so every gesture sends a `CommandLineInput`
-   * before the command and another one clearing the line after it. What most of
-   * these tests are about is *which command*, and this is that.
+   * The canvas's own gestures are **not** lines and never were: opening a
+   * window names a *type*, and dragging one carries four numbers
+   * (`docs/COMMAND_LINE.md` §1 lists both as deliberate exceptions). This is
+   * those.
    */
   const acted = (): Command[] =>
     commands().filter((command) => command.t !== "CommandLineInput");
+
+  /**
+   * The **lines** a gesture ran — S49.
+   *
+   * The View Selector Bar's keys *are* lines, and since S49 a line goes out as
+   * one: the daemon reads it. Which line each key writes is what these tests
+   * were always about; what a line means is `crates/prism-core/tests/console.rs`.
+   */
+  const ran = (): string[] => ranLines(commands());
+
+  /** Answers every question about a line that is still outstanding. */
+  const settle = () => settleReadings(network.last);
 
   /** The daemon answers with deltas. */
   const answer = (deltas: readonly Delta[]): void => {
@@ -141,7 +157,7 @@ function desk(served: Snapshot = recordedSnapshot()) {
     });
   };
 
-  return { network, store, view, commands, acted, answer };
+  return { network, store, view, commands, acted, ran, answer, settle };
 }
 
 /**
@@ -280,8 +296,8 @@ describe("opening and closing a window", () => {
 });
 
 describe("the View Selector Bar", () => {
-  it("lights the view the session says is active, and asks for another", () => {
-    const { acted, answer } = desk();
+  it("lights the view the session says is active, and asks for another", async () => {
+    const { ran, answer, settle } = desk();
     expect(screen.getByTestId("view-1").dataset["active"]).toBe("yes");
 
     // Store the canvas as view 2, so there are two. **By name**, because B10
@@ -292,16 +308,18 @@ describe("the View Selector Bar", () => {
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("no");
 
     fireEvent.click(screen.getByTestId("view-2"));
-    expect(acted().at(-1)).toEqual({ t: "SelectView", viewId: 2 });
+    await settle();
+    expect(ran().at(-1)).toBe("View 2");
     // Not lit yet: `activeViewId` is the daemon's.
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("no");
   });
 
-  it("stores the active view under the name it already has", () => {
-    const { acted, answer } = desk();
+  it("stores the active view under the name it already has", async () => {
+    const { ran, answer, settle } = desk();
     playThrough(answer, "store the canvas as view 2");
     fireEvent.click(screen.getByTestId("store-view"));
-    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 1, name: "View 1" });
+    await settle();
+    expect(ran().at(-1)).toBe('Store View 1 "View 1"');
   });
 
   /**
@@ -311,15 +329,17 @@ describe("the View Selector Bar", () => {
    * canvas. What has not changed is the number it picks — one past the highest,
    * never over somebody's layout.
    */
-  it("makes a new view one past the highest, rather than over somebody's layout", () => {
-    const { acted, answer } = desk();
+  it("makes a new view one past the highest, rather than over somebody's layout", async () => {
+    const { ran, answer, settle } = desk();
     fireEvent.click(screen.getByTestId("new-view"));
-    expect(acted().at(-1)).toEqual({ t: "NewView", viewId: 2, name: "View 2" });
+    await settle();
+    expect(ran().at(-1)).toBe('New View 2 "View 2"');
 
     // After view 2 exists, the next one is 3.
     playThrough(answer, "store the canvas as view 2");
     fireEvent.click(screen.getByTestId("new-view"));
-    expect(acted().at(-1)).toEqual({ t: "NewView", viewId: 3, name: "View 3" });
+    await settle();
+    expect(ran().at(-1)).toBe('New View 3 "View 3"');
   });
 });
 
@@ -461,8 +481,8 @@ describe("managing a view", () => {
     expect(screen.queryByTestId("view-menu")).toBeNull();
   });
 
-  it("renames by command, holding no name of its own", () => {
-    const { acted, answer } = desk();
+  it("renames by command, holding no name of its own", async () => {
+    const { ran, answer, settle } = desk();
     upTo(answer, "store the canvas as view 5");
     menuOver(5);
     fireEvent.click(screen.getByTestId("view-rename"));
@@ -472,13 +492,10 @@ describe("managing a view", () => {
     fireEvent.change(input, { target: { value: "Front of house" } });
     fireEvent.click(screen.getByTestId("view-rename-apply"));
 
-    // **`Label` over an `ObjectRef::View`** since S40: renaming a view is the
-    // same act as renaming a cue, a group or a preset, so it is the same word.
-    expect(acted().at(-1)).toEqual({
-      t: "Label",
-      target: { t: "View", viewId: 5 },
-      name: "Front of house",
-    });
+    // **`Label` over a view** since S40: renaming a view is the same act as
+    // renaming a cue, a group or a preset, so it is the same word.
+    await settle();
+    expect(ran().at(-1)).toBe('Label View 5 "Front of house"');
     // D3: the button still reads the daemon's name, and the typed one is gone.
     expect(bar()).toContain("5:Busking");
     expect(screen.queryByTestId("view-menu")).toBeNull();
@@ -488,15 +505,16 @@ describe("managing a view", () => {
     expect(bar()).toContain("5:Front of house");
   });
 
-  it("sends nothing for a rename that is only whitespace", () => {
-    const { acted, answer } = desk();
+  it("sends nothing for a rename that is only whitespace", async () => {
+    const { ran, answer, settle } = desk();
     upTo(answer, "store the canvas as view 5");
-    const before = acted().length;
+    const before = ran().length;
     menuOver(5);
     fireEvent.click(screen.getByTestId("view-rename"));
     fireEvent.change(screen.getByTestId("view-rename-input"), { target: { value: "   " } });
     fireEvent.click(screen.getByTestId("view-rename-apply"));
-    expect(acted().length).toBe(before);
+    await settle();
+    expect(ran().length).toBe(before);
     expect(screen.queryByTestId("view-menu")).toBeNull();
   });
 
@@ -506,8 +524,8 @@ describe("managing a view", () => {
    * different because the *numbers* moved. There is no order held here to be
    * wrong about.
    */
-  it("moves by command, and draws the order the daemon answers with", () => {
-    const { acted, answer } = desk();
+  it("moves by command, and draws the order the daemon answers with", async () => {
+    const { ran, answer, settle } = desk();
     upTo(answer, "rename view 5");
     expect(bar()).toEqual(["1:View 1", "2:Programming", "5:Front of house"]);
 
@@ -517,12 +535,8 @@ describe("managing a view", () => {
     // `MoveView` was relative until then; one absolute form covers both, and
     // turning *left* into *view 2* is the screen's job rather than the
     // protocol's — `ARCHITECTURE_SPEC.md` §4.5.
-    expect(acted().at(-1)).toEqual({
-      t: "Move",
-      from: { t: "View", viewId: 5 },
-      to: { t: "View", viewId: 2 },
-      mode: "Merge",
-    });
+    await settle();
+    expect(ran().at(-1)).toBe("Move View 5 View 2");
     // Nothing has moved: the order is the daemon's.
     expect(bar()).toEqual(["1:View 1", "2:Programming", "5:Front of house"]);
 
@@ -562,15 +576,16 @@ describe("managing a view", () => {
    * in a state the *daemon* defines: the interface sends `DeleteView` and draws
    * whatever comes back, and there is no code here that picks a successor.
    */
-  it("deletes by command and lets the daemon say what the canvas becomes", () => {
-    const { acted, answer } = desk();
+  it("deletes by command and lets the daemon say what the canvas becomes", async () => {
+    const { ran, answer, settle } = desk();
     upTo(answer, "select view 2 — which is now the layout");
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("yes");
     const before = drawn();
 
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-delete"));
-    expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "View", viewId: 2 } });
+    await settle();
+    expect(ran().at(-1)).toBe("Delete View 2");
     // Still there, still active, canvas untouched: nothing is applied here.
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("yes");
     expect(drawn()).toEqual(before);
@@ -584,17 +599,13 @@ describe("managing a view", () => {
     expect(screen.queryByTestId("view-menu")).toBeNull();
   });
 
-  it("moves the other way by the same command", () => {
-    const { acted, answer } = desk();
+  it("moves the other way by the same command", async () => {
+    const { ran, answer, settle } = desk();
     upTo(answer, "rename view 5");
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-move-next"));
-    expect(acted().at(-1)).toEqual({
-      t: "Move",
-      from: { t: "View", viewId: 2 },
-      to: { t: "View", viewId: 5 },
-      mode: "Merge",
-    });
+    await settle();
+    expect(ran().at(-1)).toBe("Move View 2 View 5");
     expect(bar()).toEqual(["1:View 1", "2:Programming", "5:Front of house"]);
   });
 
@@ -615,17 +626,19 @@ describe("managing a view", () => {
     expect(screen.queryByTestId("view-menu")).toBeNull();
   });
 
-  it("stores over a view and stores a new one, both by command", () => {
-    const { acted, answer } = desk();
+  it("stores over a view and stores a new one, both by command", async () => {
+    const { ran, answer, settle } = desk();
     upTo(answer, "store the canvas as view 5");
 
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-overwrite"));
-    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 2, name: "Programming" });
+    await settle();
+    expect(ran().at(-1)).toBe('Store View 2 "Programming"');
 
     menuOver(2);
     fireEvent.click(screen.getByTestId("view-store-new"));
+    await settle();
     // One past the highest, which is 5 — not 3, and not over anybody's layout.
-    expect(acted().at(-1)).toEqual({ t: "StoreView", viewId: 6, name: "View 6" });
+    expect(ran().at(-1)).toBe('Store View 6 "View 6"');
   });
 });

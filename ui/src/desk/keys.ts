@@ -6,7 +6,7 @@
  * its own rather than beside one of them. Two read it since S43 — the
  * `CommandKeys` window (`./keypad.tsx`) and the header's Clear key.
  *
- * Every word here is a word `parseCommandLine` takes. Pressing one **writes**,
+ * Every word here is a word `prism_core::console` takes. Pressing one **writes**,
  * it does not act: `docs/COMMAND_LINE.md` §1 is the whole design, and the shape
  * decides what writing means — run it at once, write it and wait, or append it
  * to the line as it stands. What a line *means* is the line's, never a key's.

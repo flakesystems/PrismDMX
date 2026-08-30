@@ -273,6 +273,7 @@ fn saveable_file() -> ShowFile {
         Command::CommandLineInput {
             text: "1 thru 4 at full".to_owned(),
             run: false,
+            mode: None,
         },
     ] {
         file.apply(&command).unwrap();
@@ -1006,7 +1007,7 @@ proptest! {
             }
         }
         file.show.store_sequence(sequence).unwrap();
-        file.session.set_command_line(&line, false).unwrap();
+        file.session.set_command_line(&line).unwrap();
 
         let expected = bytes(&file);
         let mut store = ShowStore::open(&path).unwrap();

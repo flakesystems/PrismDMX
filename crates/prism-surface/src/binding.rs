@@ -261,21 +261,28 @@ impl Resolve for SurfaceAction {
                 params: None,
             },
             Self::OpenWindowPicker => Command::SetWindowPicker { open: true },
-            // **Writes the line, does not run it** — see the variant's own
-            // documentation. `pressed()?` is what makes a key act on the press
-            // and stay quiet on the release, the way every non-momentary action
-            // here does; without it a bound line would be written twice.
+            // **Writes the line, and runs it when the binding said so** — see
+            // the variant's own documentation. `pressed()?` is what makes a key
+            // act on the press and stay quiet on the release, the way every
+            // non-momentary action here does; without it a bound line would be
+            // written twice.
             Self::WriteCommandLine { line, submit } => {
                 if !input.pressed().unwrap_or(true) {
                     return None;
                 }
-                // `run` carries the operator's answer through unchanged — S43.
-                // What it does at the far end is bump `Session::command_line_run`
-                // so the focused client parses the line; nothing here can, and
-                // the action's own documentation says why.
+                // `run` carries the operator's answer through unchanged, and
+                // since **S49** the daemon resolves it: it parses the line and
+                // applies what it means. Nothing here parses anything — the
+                // surface says which key was pressed and what it was bound to,
+                // and it is `prism_core::console` that reads a line.
+                //
+                // No mode: a key is pressed with nobody to ask, so the line runs
+                // with the mode that cannot lose anything, which is the one its
+                // parse already carries.
                 Command::CommandLineInput {
                     text: line,
                     run: submit,
+                    mode: None,
                 }
             }
             Self::SaveShow => Command::SaveShow,

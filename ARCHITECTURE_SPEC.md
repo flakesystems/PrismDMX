@@ -169,7 +169,6 @@ interface Session {
   programmerPage: number;              // Zoom ▲▼ — pages the encoder bar (S35)
   programmerParamIndex: number;        // Zoom ◀▶ — what the jog wheel turns
   commandLine: string;                 // contents of the console line
-  commandLineRun: number;              // a counter, bumped when a line is to be run (S43)
   windowPicker: boolean;               // whether the window chooser is up (S43)
 }
 ```
@@ -188,9 +187,7 @@ Sessions are persisted with the show file: reopening a show restores the console
 >
 > It is deliberately **not** coupled to `selectedExecutor`. An operator programming cue list 7 while executor 3 plays the show is the ordinary case on a console, not the edge case, and a desk that moved this every time a fader was selected would store into whatever was last touched. The two are separate selections and the interface draws both: the cue sheet follows this one and the transport line follows the executor.
 
-> **`commandLineRun` is a counter and not a flag, and it is here under protest** *(S43)*. An X-Touch key that means *run the line* has to reach a **parser**, and the parser lives in the interface — so the daemon asks the focused client to run what is already in `commandLine`. A flag could not say *again*: two Enters on the same text are two commands, and a boolean that was already true would swallow the second. Only a client with the keyboard focus obeys it, so a rig of screens does not run the line five times.
->
-> It is a **stop-gap with a session named against it**. S49 moves the parser into the daemon, at which point the key becomes an ordinary command and this field goes. It is written down here rather than left as a surprise, because a field that exists to work around where a component lives is exactly the kind of thing that quietly becomes permanent.
+> **`commandLineRun` is gone, and S49 is what took it** *(S43, removed in S49)*. It was a counter the daemon bumped when an X-Touch key meant *run the line*: running one needs a **parser**, the parser was in the interface, so the daemon wrote the line down and asked whichever client held the keyboard focus to read it. It was written down as a stop-gap at the time — *a field that exists to work around where a component lives is exactly the kind of thing that quietly becomes permanent* — and the session named against it did move the parser. The line is `commandLine`, running it is `CommandLineInput { run: true }`, and the daemon reads it: no client is involved, so there is no edge to watch and nothing for two focused screens to run twice. A `.prism` file written before S49 still carries the field, and nothing reads it.
 
 > **`windowPicker` is session state because the console opens it** *(S43)*. Whether a chooser is up looks like client-local state by §4.2's rule, and it is not: an X-Touch key opens it, and a key that opened a chooser on one screen and not the others would be a desk in two states. It is cleared by anything that empties the canvas, because it names windows to open on *this* view.
 
@@ -221,6 +218,8 @@ Routing through the UI (MIDI → daemon → UI → daemon) would add two IPC rou
 
 `SelectView`, `StoreView`, `OpenWindow`, `CloseWindow`, `FocusWindow`, `SetExecutorPage`, `SelectExecutor`, `SelectSequence`, `SetEncoderBank`, `SetProgrammerPage`, `SelectProgrammerParam`, `CommandLineInput`.
 
+> **`CommandLineInput` is the one of the twelve that reaches past the session** *(S49)*. It writes `Session::commandLine`, which is all it ever did; with `run` set it is also *and read it*, and reading a line is `prism_core::console` — so the command falls into the commands the line means and those go through the ordinary appliers. It stays in this list because what it applies **to the session** is the line, and the fan-out is an effect carried out by `prism_core::ShowFile`, which is the one type holding the session and the show at once. §4.5 has the argument for why no second command was added.
+
 These twelve are what the **console** issues — eleven since S12, plus `SelectSequence` (**S39**), which a console issues by typing `Sequence 5` on the command line. `PlaceWindow` (**S25**) is a session command that is deliberately not in this list, for one reason: a console never drags a window, but §4.1 puts a window's position in the session, so a client that kept it locally would be holding session state. It travels with the twelve, is journalled with them (that is, not at all — §6.1), and is specified in [`docs/IPC_PROTOCOL.md`](docs/IPC_PROTOCOL.md) §5.
 
 > **`Color` is `Label`'s mirror and is always a show command.** `Color Sequence 4 Red` and `Color Executor 1 Red` write the same colour onto the same cue list — an executor is a place and the colour belongs to the list standing in it, so a list moved to another fader takes it along. It reaches two of the six things `ObjectRef` names, because only a cue list is drawn on a scribble strip; the other four are refused with the noun that was typed. `docs/MCU_MAPPING.md` §2.3 has what the surface does with the twenty-four bits, and `null` is *no colour chosen* rather than black.
@@ -248,6 +247,8 @@ The **F1–F8 XKeys** are therefore freely assignable to "open Fixture Sheet", "
 ### 4.5 The command line is the primary interface *(S40)*
 
 **A key on the desk writes a word into the command line. It does not act.**
+
+> **And since S49 the *daemon* reads it.** The grammar was `ui/src/desk/console.ts` from S40 until then, because that is where the operator types, and the consequence was quiet and then loud: a key on the X-Touch cannot run a line if the only parser is in a browser. It is `prism_core::console` now, the line travels as `Command::CommandLineInput { run: true }`, and what a line *would* do travels back as `Query::CommandLineReading` — so an interface draws the reading and answers nothing. Two things follow that could not be had before: a bound key fires **with no client attached at all**, and two focused screens cannot each run one line. `docs/COMMAND_LINE.md` §5 is the wire form.
 
 That is the decision, and it is a decision about the whole interface rather than
 about one window. `Session::commandLine` is §4.1 state, so what an operator is
@@ -278,6 +279,9 @@ from it that do not follow from the obvious alternative:
 - **One path to test.** What a gesture means is what the line means, so a
   recording of lines is a recording of the whole interface — and a button that
   built a line nobody could have typed would be a second grammar with no parser.
+  Since **S49** this is sharper than it was: a window's test asserts *which line*
+  a tile writes and the parser's own suite asserts what that line means, so the
+  two claims are made once each rather than restated in TypeScript.
 - **The prompt has somewhere to live.** A store into a cue that exists asks
   *merge, override or cancel*; the question belongs in the line the store came
   from, and Escape cancels it (§4.4's rule that a prompt is not a modal).

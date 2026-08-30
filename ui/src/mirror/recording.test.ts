@@ -245,7 +245,7 @@ function messageFor(what: string): ClientMessage {
       return {
         t: "Command",
         seq: 8,
-        command: { t: "CommandLineInput", text: "fixture 1 thru 4 at full", run: false },
+        command: { t: "CommandLineInput", text: "fixture 1 thru 4 at full", run: false, mode: null },
       };
     case "SelectView":
       return { t: "Command", seq: 9, command: { t: "SelectView", viewId: 2 } };

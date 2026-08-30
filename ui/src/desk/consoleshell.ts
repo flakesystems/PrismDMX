@@ -4,8 +4,17 @@
  * The provider is `shell.tsx` and carries the reasoning — `ARCHITECTURE_SPEC.md`
  * §4.5's three shapes, why the line belongs to the daemon, and why a prompt is
  * not a modal. This is the half with **no component in it**: the context, the
- * hook, the words a prompt offers and the two pure functions a key uses to build
- * a line.
+ * hook, the reading the daemon sends back, and the two pure functions a key uses
+ * to build a line.
+ *
+ * # There is no parser here since S49
+ *
+ * There was one — `ui/src/desk/console.ts`, the whole grammar of S40 — and it
+ * has moved into `prism_core::console`. What a line *means* is asked
+ * (`Query::CommandLineReading`) and what a line *does* is sent
+ * (`Command::CommandLineInput { run: true }`); this file holds neither rule.
+ * That is what makes a key on the X-Touch able to run a line with no client
+ * attached at all, and what stops two focused screens running one twice.
  *
  * Split for `oxlint`'s `only-export-components`, which S39 recorded as being
  * right rather than a nuisance: a helper exported beside a component costs
@@ -14,26 +23,55 @@
 
 import { createContext, useContext } from "react";
 
-import type { Command, ObjectRef } from "../bindings";
-import { CLEARING_VERBS, VERB_WORDS, parseCommandLine } from "./console";
-import type { ConsoleResult, ModeQuestion } from "./console";
+import type { Answer, CommandLineMode, ObjectRef } from "../bindings";
 
-/** A question the line is holding, and the commands it is holding it for. */
+/**
+ * What the daemon says the line would do.
+ *
+ * The answer itself rather than a shape of this file's own: it carries the text
+ * it is about, so a reading that overtook a keystroke can be told from one that
+ * did not, and every field on it is something only a daemon can say.
+ */
+export type CommandLineReading = Extract<Answer, { t: "CommandLineReading" }>;
+
+/**
+ * The reading of a line nobody has answered about yet.
+ *
+ * A daemon that is not there answers nothing, and this is what the box shows
+ * meanwhile: the line says nothing, offers nothing and asks nothing. It is
+ * deliberately not *an error* — a console that complained because it had not
+ * heard back would be complaining about itself.
+ */
+export function unread(text: string): CommandLineReading {
+  return {
+    t: "CommandLineReading",
+    text,
+    reading: "",
+    kind: "Empty",
+    commands: 0,
+    verb: false,
+    clearing: false,
+    question: null,
+    completions: [],
+  };
+}
+
+/** A question the line is holding, and the line it is holding it for. */
 export interface Prompt {
-  /** Which words to offer. */
-  readonly kind: ModeQuestion["kind"];
   /** What is already there, in the words the operator typed. */
   readonly what: string;
-  /** The commands to send once a mode has been chosen. */
-  readonly commands: readonly Command[];
+  /** The words to offer, in the order the daemon offers them. */
+  readonly modes: readonly CommandLineMode[];
+  /** The line to run once one of them has been chosen. */
+  readonly line: string;
 }
 
 /** What every key on the desk talks to. */
 export interface ConsoleShell {
   /** The line as it stands, which is the daemon's unless a keystroke is in flight. */
   readonly line: string;
-  /** What the line would do, shown under the input as it is typed. */
-  readonly reading: ConsoleResult;
+  /** What the daemon says the line would do, shown under the input as it is typed. */
+  readonly reading: CommandLineReading;
   /** The question the line is holding, or nothing. */
   readonly prompt: Prompt | null;
   /** Replaces the line and leaves it there — a command that needs arguments. */
@@ -45,32 +83,28 @@ export interface ConsoleShell {
   /**
    * Writes a line and submits it with a mode **already chosen**.
    *
-   * The store bars on the canvas have a chooser beside the button (S39), so the
-   * question the line carries has been answered before it is sent and there is
-   * nothing to prompt about. It is the same line and the same command; what
+   * The store bar in the Cue Viewer has a chooser beside the button (S39), so
+   * the question the line carries has been answered before it is sent and there
+   * is nothing to prompt about. It is the same line and the same command; what
    * differs is only where the answer came from.
    */
-  runWithMode: (text: string, mode: string) => void;
+  runWithMode: (text: string, mode: CommandLineMode) => void;
   /** Submits whatever is in the line. The Enter key, wherever it is. */
   submit: () => void;
   /** Answers a prompt: a mode, or `null` for cancel. */
-  answer: (mode: string | null) => void;
+  answer: (mode: CommandLineMode | null) => void;
   /** Walks the history: `-1` for the up arrow, `1` for the down arrow. */
   recall: (direction: -1 | 1) => void;
+  /**
+   * Points at a data source with these words — see {@link pickOnto}.
+   *
+   * It asks the daemon what the line **would** be, which is why it is a method
+   * on the shell rather than a pure function a component calls: since S49 the
+   * grammar is not here, and a click is a gesture that can afford a round trip.
+   * `own` is the row's own behaviour, for a line that cannot take it.
+   */
+  pick: (words: string, own: () => void) => void;
 }
-
-/** The words each kind of prompt offers, in the order it offers them. */
-export const PROMPT_MODES: Readonly<Record<ModeQuestion["kind"], readonly string[]>> = {
-  // A cue or a preset: `StoreMode`, whose Remove is what takes values back out.
-  store: ["Merge", "Override", "Remove"],
-  // A whole cue list: `SequenceStoreMode`, whose Append is the one that cannot
-  // lose a cue and is therefore first.
-  sequence: ["Append", "Override", "Merge"],
-  // A copy, a move or a group store: `OverwriteMode`, which has two.
-  overwrite: ["Merge", "Override"],
-};
-
-
 
 /**
  * The context every key reads. `shell.tsx` is what puts a value in it.
@@ -122,72 +156,54 @@ export type Pick =
  *
  * That is `ARCHITECTURE_SPEC.md` §4.5 finished rather than extended. The rule
  * was already *every key writes a line*; what was missing is that the pools are
- * keys too. An operator who has typed a verb is **asking for an argument**, and
- * the fastest way to give one on a console is to point at it — which is what
- * the pool is for. Until now pointing at it did the pool's own thing instead,
- * so a half-typed verb was silently abandoned and the click selected something.
+ * keys too.
  *
- * # What makes a line *passend*, and why it is the verb
+ * # It reads the **candidate**, and that is what makes it three lines
  *
- * `passend` is the owner's word and the answer is {@link VERB_WORDS}: a line
- * that begins with a verb is doing something **to a named object**, and that is
- * exactly the line an object belongs in. A line that does not begin with one is
- * a fixture selection (`selectionLine`), and a selection takes fixtures — so
- * typing `1 thru` and clicking a group is a range being built, not a group being
- * named, and the group's box does what a group's box does.
+ * Before S49 this took the line, the words and a parser, and asked three
+ * questions of them. It now takes one thing: the daemon's reading of the line
+ * the click *would* produce. Appending a noun never changes a line's first word,
+ * so the candidate's own `verb` is the standing line's — and `Group 3` clicked
+ * onto an empty line is not a verb line, which is exactly *the pool does its own
+ * thing*.
  *
- * That is one comparison and no table of which verb takes which noun. Which
- * *nouns* a verb takes is the grammar's business and stays there: the candidate
- * line is read by the parser, and a verb that cannot take this object leaves the
- * line standing with the parser's own complaint under it — `Store Fixture 5`
- * reads *"fixture" is not something to name*. **Leaving it there is the point.**
- * The alternative is a click that silently discards the `Store` the operator
- * typed and selects a fixture instead, which is the behaviour this whole
- * function exists to remove; a line an operator can see and correct is better
- * than a gesture that quietly did something else.
+ * Three answers, and each is one of the reading's own facts:
  *
- * Then *finished*: a line that parses to commands is sent, because a console
- * that made an operator press Enter after a click they already committed to is
- * a console with a wasted keystroke in it. The exception is {@link
- * CLEARING_VERBS} — `Label` and `Color`, whose missing argument means *take it
- * away*. A click that wiped a name would be the worst kind of shortcut.
+ * - **not a verb line** — a selection is being built (`1 thru` and a group tile
+ *   is a range in progress), so the row does what a row does;
+ * - **a clearing verb** — `Label` and `Color`, whose missing last argument means
+ *   *take it away*. A click that wiped a name is the worst kind of shortcut, so
+ *   the words are appended and left standing for Enter;
+ * - **not yet a command** — `Store Fixture 5` is appended and left standing with
+ *   the daemon's own complaint under it, rather than the typed `Store` being
+ *   quietly discarded and a fixture selected. Discarding what the operator typed
+ *   is the behaviour this rule exists to remove.
  *
- * An **empty** line is `own` before anything else is asked: with nothing typed,
- * a click on a group means *switch that group*, and the `+` the pools write is
- * their own decision (B27) rather than something this function should reinvent.
+ * Anything else is finished, so it is sent: a console that made an operator
+ * press Enter after a click they already committed to is a console with a
+ * wasted keystroke in it.
  */
-export function pickOnto(line: string, words: string): Pick {
-  const verb = line.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-  if (verb === "" || !VERB_WORDS.includes(verb)) {
+export function pickOnto(candidate: CommandLineReading): Pick {
+  if (!candidate.verb) {
     return { kind: "own" };
   }
-  const candidate = appended(line, words);
-  const read = parseCommandLine(candidate);
-  if (read.kind === "commands" && !CLEARING_VERBS.includes(verb)) {
-    // Trimmed, because what is sent is a line an operator could have typed and
-    // nobody types a trailing space.
-    return { kind: "run", line: candidate.trimEnd() };
+  if (candidate.clearing || candidate.kind !== "Commands") {
+    return { kind: "write", line: candidate.text };
   }
-  return { kind: "write", line: candidate };
+  // Trimmed, because what is sent is a line an operator could have typed and
+  // nobody types a trailing space.
+  return { kind: "run", line: candidate.text.trimEnd() };
 }
 
 /**
  * {@link pickOnto} carried out against a shell.
  *
- * The half every caller writes identically, so it is written once: three cases,
- * three methods, and the row's own gesture as the fallback.
+ * The half every caller writes identically, so it is written once — and since
+ * S49 it is one call, because deciding which of the three it is needs the daemon
+ * and the shell is what has it.
  */
 export function pick(shell: ConsoleShell, words: string, own: () => void): void {
-  const answer = pickOnto(shell.line, words);
-  if (answer.kind === "own") {
-    own();
-    return;
-  }
-  if (answer.kind === "run") {
-    shell.run(answer.line);
-    return;
-  }
-  shell.write(answer.line);
+  shell.pick(words, own);
 }
 
 /**

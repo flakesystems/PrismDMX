@@ -100,6 +100,7 @@
 | S43 | The punch list, the skeleton, and the first pre-release | ▶ | | **In progress — see §2.41.** Built and green on CI run **33209652373** (`fcb884d`): the interface rebuilt along `design/skeleton/`, three rounds of the owner's hand-testing answered as `docs/PRERELEASE_PUNCHLIST.md` B1–B34, 1 967 Rust tests, 775 in jsdom, 41 end-to-end. **Open**: the owner has not yet called it fit for a pre-release, and the §7 *carried out of* lists have not been gone through. Added 2026-08-14; **grew on 2026-08-24** from *interface cleanup and polish*. The §7 *carried out of* lists gone through one entry at a time, **plus** the owner's own fault list (`docs/PRERELEASE_PUNCHLIST.md`), the interface rebuilt along the owner's drawing (`design/skeleton/`, a Penpot export of flow and arrangement), and the windows that are a morning's work — `ClockViewer`. The **first interactive session**: agreed before it is built, driven by hand before it is called done, and anything too big for an afternoon becomes a session of its own rather than a dropped line |
 | S45 | The executor window, and one sequence one playback | ✅ | 2026-08-29 | All exit criteria verified — see §2.42. **An executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list **B18**: a playback is the *list's* now, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — both asserted on the frames a mock output received, which is the only place the difference is real. Punch-list **B15**: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote — and the editor *writes that line* rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason: a **`Command`**, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building (`docs/IPC_PROTOCOL.md` §5). 1 980 Rust tests, 797 in jsdom, 43 end-to-end |
 | S48 | Tracking, and a cue list that lands in the same place twice | ✅ | 2026-08-30 | All exit criteria verified, CI green on run **33330027591** — see §2.44. **A cue is an edit, not a state, and what it does not name is now computed rather than accumulated.** Walking 1→2→3 and jumping 7→3 produce a **byte-identical frame sequence**, asserted on the bytes a driver receives, and as a property over generated lists rather than one worked example. `CuePart::tracking` gives an attribute a third thing to say — *asserts and carries forward*, *asserts and takes it back*, *inherits* — and `Command::SetCueTracking` says it for a whole cue, `Block` included, which writes what the cue inherits into it so nothing above reaches past. The state is **derived and never stored**: `prism_engine::SequencePlan` holds it, built on the core thread whenever a cue moves, and the tick only reads it — the **ninth** allocation-free path. Clients read `Query::CueTracking`, so no second fold exists anywhere. Punch-list **B21**'s other half. 2 110 Rust tests, 817 in jsdom, 45 end-to-end |
+| S49 | The command line moves into the daemon | ✅ | 2026-08-30 | All exit criteria verified — see §2.45. **There is one parser and it is the desk's.** `prism_core::console` is S40's whole grammar, moved rather than rewritten, and `ui/src/desk/console.ts` is deleted: a line travels as `Command::CommandLineInput { run: true }`, the daemon reads it and applies what it means, and what a line *would* do travels back as `Query::CommandLineReading`. So a key on the X-Touch bound to a line fires with **no client attached at all** — asserted on the frames — and two focused screens cannot run one twice, because no client runs one. `Session::commandLineRun` and the focus rule are gone. **No command was added**: `run` has meant *and run it* since S43 and every sender was already sending it; what was missing was a daemon that could read a line |
 | S29 | `prism-app` Tauri shell | ☐ | | Needs MSVC Build Tools |
 
 *Listed in running order; the numbers are identity rather than sequence — see `IMPLEMENTATION_PLAN.md`, Conventions.*
@@ -3619,6 +3620,37 @@ got there.**
 | **The ten-minute tick-deadline gate** | ☐ **measured, red, and the control says it is the machine.** Three ten-minute runs on this machine inside one hour: the full pipeline at **57 missed / p99.9 133 ms** (29 % busy) and **77 missed / p99.9 68.8 ms** (47 % busy), and the **bare tick with no merge body at all** at **47 missed / p99.9 74.9 ms**. A tick with nothing in it cannot be slower than one doing the merge, the encoder and eight cue lists, so the difference is not this session's arithmetic — and p99 is **1.1 ms** in every run, inside the 2 ms gate, with the failures a handful of multi-millisecond stalls. What *is* the engine is green and measured: **0 allocator calls on all nine paths**, and the short jitter gates CI runs pass on every job. §5 carries the recipe and the rule that the pair is the measurement, never the first number alone |
 | **CI, and the one thing it caught** | ✅ run **33330027591** on `d69d0b9` — **all five jobs**: Windows full build and test 13 m 42 s, Linux platform-neutral 5 m 08 s, UI end-to-end against a daemon 3 m 51 s, UI typecheck/lint/test/build 2 m 13 s, Linux ARM64 cross-compile 30 s. **The first run, 33329439983 on `f914d32`, was four of five**: everything this session wrote passed — the whole Windows suite, both Linux jobs and the UI job — and the end-to-end job failed in a test S48 did not touch. `controls.spec.ts` opened the S38 control editor, waited for the panel to be **visible**, and read a key list with `innerText()`; that list is `—` until `Query::SurfaceBindings` answers, and the dash is what the runner read. The race had been in that helper since S38 and CI lost it here for the first time — all 45 passed locally on the same tree. The fix went into the shared `desk()` helper rather than into the one test that failed: it waits for `controls-device`, which comes out of the same answer, so waiting for it is waiting for the table. `--repeat-each=3` over the spec: **15 passed**. S46's rule in its third place — *when a suite reads a value the daemon owns, wait for it to stop moving* |
 
+### 2.45 S49 verification record
+
+Measured on 2026-08-31. A session about one sentence that had been true since
+S40 and should not have been: **there was a parser, and it was in a browser.**
+
+| Check | Result |
+|---|---|
+| **A key on the X-Touch fires its line with no client attached at all** | ✅ `crates/prismd/src/core.rs::a_key_with_a_line_on_it_fires_the_line`, and the assertion is on the **frames**. An executor key is given `CommandLine { line: "On Sequence 7" }`, the key is pressed, and channel 5 reaches **255** on the mock output — light on the rig with nothing but a daemon running. Before S49 the same test could only assert the line and a counter, because the daemon wrote the line down and waited for a browser to read it; the frames are the only place that can tell the two arrangements apart. Typing the same line by hand leaves the same cue pointer and the same `is_active`, which is the whole of *exactly what typing the line produces* |
+| **The commands are sent once, because no client sends them** | ✅ structural, and that is the strongest form the claim has: `ConsoleShell.run` sends **one** `Command::CommandLineInput { run: true }` and nothing else — `ui/src/desk/desk.test.tsx::sends the line and lets the daemon read it` asserts exactly two commands on the wire for `1 + 2`, the mirrored keystroke and the run. There is no edge for a second screen to watch and no parser for it to run, so two focused screens on two machines cannot double a Go. `Session::commandLineRun` is gone from the domain, from `prism-core`, from the interface and from `ARCHITECTURE_SPEC.md` §4.1; `session_commands.rs`'s member list is where its absence is asserted |
+| **Every line the recording carries parses to the same commands in Rust** | ✅ `crates/prism-core/tests/console.rs::every_recorded_line_means_what_the_daemon_was_sent` — **the same table**, not a copy of one. It reads `ui/tests/fixtures/desk-recording.json`, which `crates/prismd/tests/ui_programmer.rs` writes by driving a real `prismd`, decodes the recorded MessagePack payloads and compares them with the parser's answer for that line: **47 typed lines**, one of which falls into two commands. `the_recording_covers_the_whole_vocabulary` holds the thirty-two shapes of S40's list against it, so the central test is a check on the whole grammar rather than on six shapes |
+| **…and every other case `console.test.ts` made** | ✅ ported rather than dropped: **26 tests** in `crates/prism-core/tests/console.rs` against 25 in the file it replaces. The refusal table is the same seventy-odd lines, written out by hand for `prism-surface`'s reason (S19) — a table derived from the parser would pass for any parser — and the three added at the far end are the ones only Rust could ask: `+ view 2`, `new sequence 5`, and the completion table |
+| **The parser never fails** | ✅ `it_never_fails_for_any_line_there_is`: **10 000 generated lines** from a seeded xorshift over an alphabet of keywords, digits, separators, control characters, a lone quote, an unterminated quote, `1e400`, `NaN` and an emoji — each one parsed, read back as a sentence, completed against, and asked the two pointer questions. It is worth more in Rust than it was in TypeScript, because the thing that would fall over is now the **daemon** rather than one browser tab |
+| **The reading under the box is a question** | ✅ `Query::CommandLineReading`, answered by `prismd::server`. It carries the daemon's sentence, which shape the line has, how many commands it falls into, the two facts a pointer turns on, the completions, and — the one thing the parser cannot know — whether the destination a store names is **already there**. `ui/src/desk/exists.ts` is deleted: an interface that read its own mirror for that could ask about a cue somebody had just deleted, and `ShowFile::holds` cannot |
+| **…and the interface does not answer it** | ✅ `ui/src/desk/console.ts` and `console.test.ts` are **deleted**, and nothing replaced them: `consoleshell.ts` holds the context, two string helpers and a three-line `pickOnto` over the daemon's answer. `shell.test.tsx` and every window's test now assert *which line* a key writes and answer the reading out of a table that says only *yes, that is a command* — a table of meanings in a test double would be the second opinion this session removed, restated as scenery |
+| **The parser's errors are the daemon's sentences** | ✅ one text, two paths: the sentence under the box is `reading_text` over the daemon's own parse, and a line refused at the console is the same function. `ui/e2e/console.spec.ts::reads the line at the daemon and runs it as one command` types `1 thru 3 at 50` into a browser and reads `select 1 + 2 + 3 · dimmer → 50%` off the screen — a string no TypeScript in this repository can produce |
+| **A line that is not one is written and left standing** | ✅ `crates/prismd/src/core.rs::a_line_that_is_not_a_command_is_written_and_left_standing`. It is the half a pointer depends on: `Store` typed and a fixture tile clicked gives `Store Fixture 5`, which must not vanish and must not be carried out. Asserted end to end as well — Enter on `1 thru` leaves `1 thru` in the box |
+| **A refusal stops the rest of the line** | ✅ `a_refusal_stops_the_rest_of_the_line`, and it is a **change** from what the client-side loop did rather than a preservation of it. `404 at 50` on a rig with no fixture 404 used to send both commands, so the level landed on whatever was selected before; the line stops at the refusal now and the refusal travels as a `Delta::Notice`. A line is one sentence |
+| **The mode an operator chose still travels in the command** | ✅ `Command::CommandLineInput::mode`, and `CommandLineMode` is one word for three mode types — a word that does not fit the command it meets is left alone rather than forced in (`the_chosen_word_reaches_the_command_that_has_a_mode_for_it`, six commands and four words). The prompt is unchanged from an operator's side: `ui/src/desk/shell.test.tsx::sends the word the operator pressed` asserts `mode: "Remove"` on the wire, and the end-to-end store test still asks *merge, override or cancel* and still changes nothing when cancelled |
+| **The command count is still 64** | ✅ `the_three_groups_together_are_the_whole_protocol` unchanged. **No command was added, and that is the decision** (§6): `run` has meant *and run it* since S43, every sender was already sending exactly this command, and a second one would have needed a home in three appliers for something that is not a fourth kind of state. What grew is one field |
+| **The tick is untouched** | ✅ `crates/prism-engine/tests/tick_allocations.rs` green on all **nine** paths — **0 allocator calls**, and no tenth path was added, because parsing happens on the command path and `prism-engine` was not opened this session |
+| **The wire budget** | ✅ `a_generated_wire_value_fits_in_a_test_thread` green. `CommandLineMode` and `CommandLineReadingKind` are four- and three-value unit enums, `CommandLineQuestion` is a string and a small vector, and `CommandLineInput` gained a field rather than the vocabulary gaining a slot — which is exactly why no group of `arb::command` needed splitting. `Answer::CommandLineReading` carries a **count** of commands and not the commands: putting `Command` inside an `Answer` would have put the whole protocol's value tree into this one |
+| **The generated bindings** | ✅ three new files written by `cargo test -p prism-domain` — `CommandLineMode.ts`, `CommandLineQuestion.ts`, `CommandLineReadingKind.ts` — and `commandLineRun` gone from `Session.ts`. `COMMAND_LINE_MODE_VARIANTS` and `COMMAND_LINE_READING_KIND_VARIANTS` are in `variants.ts`, and both are what the decoder narrows with rather than an `as` |
+| **The answer goes through the real decoder** | ✅ `ui/src/ipc/protocol.ts::readAnswer` reads the new shape field by field, with the modes checked against the generated table; the question is read as **optional**, because a line with nothing to ask is the ordinary case and not a message this build could not read |
+| **The recordings** | ✅ all six regenerated (`cargo test -p prismd --test ui_* -- --ignored`) and the diffs read **structurally** rather than as base64. **Step counts unchanged** — 58, 61, 22 and 24 — so no `typedLine` renumbering and none of the hard-coded step indices in `ui/src/desk/desk.test.tsx` moved. Every difference is one of three things: `commandLineRun` gone from every snapshot's session, `"mode": null` on the one recorded `CommandLineInput` payload, and the desk identity and temporary path each run invents. The four `.prism` fixtures changed for the first of those |
+| **Coverage on the new code** | ✅ **`prism-core::console.rs` 99.60 % lines**, 99.39 % regions, 98.43 % functions — and `file.rs`, where a line is *run*, at **99.47 % lines** (99.53 % at S48, over more code). `prism-domain::query.rs` and `session.rs` read **100 % on every column** and `command.rs` 99.57 %; the crate **99.78 % lines**. `prism-core` as a whole is **98.81 % lines** (98.45 % at S48), 97.74 % regions, 98.31 % functions. Measured after `cargo llvm-cov clean --workspace`, per §3's caveat. Workspace total **97.97 % lines**, 97.55 % regions, 98.03 % functions over 45 360 lines — unchanged to two decimal places. `ui/src` **97.66 % lines**, 90.90 % branches, 98.08 % functions, with `shell.tsx` at **99.22 %** and `consoleshell.ts` at 100 % |
+| **The gates** | ✅ `cargo test --workspace` **2 163 tests, 0 failed** across 76 test binaries; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean; in `ui/`: `npx tsc -b --force` clean, `npm run lint` clean, `npm run test` **760 tests in 54 files**, `npm run build` clean. Run one at a time, per §3.1's note. **The jsdom count fell from 817**, and the fall is the session: `console.test.ts` (25) and `exists.test.ts` (6) are deleted and their claims are in Rust, where the rule they test now lives |
+| **Playwright** | ✅ **46 tests** (45 at S48), all green against a real `prismd` in mock-output mode. The new one is the chain in a browser: the daemon's sentence under the box, a line that is not one left standing after Enter, a second screen drawing the same half-typed line, and a line that *is* one running and being cleared **by the daemon** |
+| **Zero React commits, and the frame budget** | ✅ the `<Profiler>` gate is one of the 760 and passed over a tree whose console provider now holds an asked-for reading — which is the shape that would cost a commit per telemetry frame if it were subscribed to the wrong thing, and does not. Telemetry: **0.20 ms median, 0.40 ms p99 over 156 frames at 30.5 Hz**, nothing lost and nothing dropped |
+| **The ten-minute tick-deadline gate** | ☐ **not re-measured, and deliberately.** The session opened neither `prism-engine` nor any output driver: parsing is on the command path, the allocation gate reads **0 on all nine paths** unchanged, and the short jitter gates CI runs are green on every job. §5 carries S48's reading, the control beside it, and the rule that the pair is the measurement |
+| **CI** | PLACEHOLDER_CI |
+
 ---
 
 ## 3. Coverage tracking
@@ -3650,11 +3682,37 @@ history in each cell. S43 measured the workspace in one run instead, after
 `cargo llvm-cov clean --workspace`, because it changed nine crates and the
 question worth asking was `CLAUDE.md`'s global one.
 
-**Workspace total: 97.98 % lines, 97.54 % regions, 98.01 % functions** (S48,
-re-measured over 43 990 lines counted by `llvm-cov`'s own roll-up — unchanged to
-two decimal places on a workspace that grew by 736 lines, which is what a session
-that adds a whole vocabulary and tests it wants this figure to say) — against a
-target of ≥ 85 % global. Rolled up per crate from the same run:
+**Workspace total: 97.97 % lines, 97.55 % regions, 98.03 % functions** (S49,
+re-measured over 45 360 lines counted by `llvm-cov`'s own roll-up — unchanged to
+two decimal places on a workspace 1 370 lines larger, which is a whole grammar
+and its tests arriving in Rust and a parser's worth of TypeScript leaving) —
+against a target of ≥ 85 % global. Rolled up per crate from the same run:
+
+| Crate | Lines | Regions | Functions |
+|---|---|---|---|
+| `prism-domain` | **99.78 %** | 98.90 % | 99.78 % |
+| `prism-engine` | **99.27 %** | 99.26 % | 99.10 % |
+| `prism-surface` | **99.10 %** | 98.46 % | 98.45 % |
+| `prism-core` | **98.81 %** | 97.74 % | 98.31 % |
+| `prism-protocols` | **98.37 %** | 97.78 % | 97.50 % |
+| `prism-ipc` | **96.44 %** | 96.76 % | 99.20 % |
+| `prismd` | **94.47 %** | 94.80 % | 96.93 % |
+| `prism-midi` | **90.09 %** | 89.55 % | 85.57 % |
+| `prism-app` | 0.00 % | 0.00 % | 0.00 % |
+
+The three `CLAUDE.md` names its stricter target for are all above it: the engine
+at **99.27 %**, which this session did not open at all, the programmer — which
+lives in `prism-core` — at **97.03 %**, and the protocols at 98.37 %. The two
+files this session wrote are `prism-core`'s: `console.rs` at **99.60 % lines**
+and the `run_command_line` half of `file.rs` at **99.47 %**, which is what took
+the crate from 98.45 % to **98.81 %**. What is uncovered in `prism-protocols` and
+`prism-midi` is the same known shape it has been since S10 and S36: the
+open-a-real-device path, which `CLAUDE.md` forbids a test to reach. `prism-app`
+is the empty Tauri crate S29 fills.
+
+Before that: **97.98 % lines, 97.54 % regions, 98.01 % functions** (S48,
+re-measured over 43 990 lines counted by `llvm-cov`'s own roll-up). Rolled up per
+crate from **that** run:
 
 | Crate | Lines | Regions | Functions |
 |---|---|---|---|
@@ -3667,14 +3725,6 @@ target of ≥ 85 % global. Rolled up per crate from the same run:
 | `prismd` | **94.66 %** | 95.02 % | 97.03 % |
 | `prism-midi` | **90.09 %** | 89.55 % | 85.57 % |
 | `prism-app` | 0.00 % | 0.00 % | 0.00 % |
-
-The three `CLAUDE.md` names its stricter target for are all above it: the engine
-at **99.27 %**, which is where this session's tracking table and player live, the
-programmer — which lives in `prism-core` — at **98.20 %**, and the protocols at
-98.37 %. What is uncovered in `prism-protocols` and `prism-midi` is the same known
-shape it has been since S10 and S36: the open-a-real-device path, which
-`CLAUDE.md` forbids a test to reach. `prism-app` is the empty Tauri crate S29
-fills.
 
 Before that: **97.98 % lines, 97.53 % regions, 98.01 % functions** (S46,
 re-measured over 43 254 lines counted by `llvm-cov`'s own roll-up — the figure
@@ -3720,13 +3770,13 @@ regression visible; the one above it is this session's.)
 | Tick jitter | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 588 µs, **0 of 26 401 ticks missed** — at the thread priority `ARCHITECTURE_SPEC.md` §3 specifies. See the note below. **S45 could not re-measure this on the machine it ran on, and says so rather than reporting a number taken under load.** The short gates CI runs are clean — 3 s at 64 universes with four drivers: **0 of 133 missed, p99 200 µs, p99.9 500 µs, max 435 µs**; the whole pipeline in a tick period: **0 of 133 missed, p99 400 µs, p99.9 1.3 ms, max 1.27 ms**, both inside the 2 ms budget. The ten-minute run read 58 missed with p99.9 179 ms and, on a second attempt taken while this session's own suites were compiling, 148 missed with p99.9 80.6 ms. **The control settles it**: `the_tick_alone_holds_its_deadline_for_ten_minutes` — the bare tick with **no merge body at all** — missed **956** of 26 401 with p99.9 **162 ms** on the same machine in the same hour, six times worse than the full pipeline. The misses are the scheduler's, not the merge's, and this machine idles at 35 % with a live audio stack on it (`voicemeeter8`, `audiodg`). The figure above stands and the re-measurement is an open item — §5 | 2026-08-10 |
 | Tick jitter, re-measured on this machine at S48 | p99.9 < 2 ms, 64 universes, 10 min | ☐ **red on this machine, and the control says why.** Full pipeline **57 missed of 26 344, p50 100 µs, p99 1.1 ms, p99.9 133 ms** (29 % busy) and **77 missed of 26 324, p99.9 68.8 ms** (47 % busy); the **bare tick with no merge body at all** in the same hour **47 missed of 26 354, p99 1.1 ms, p99.9 74.9 ms**. The pair is the reading: a tick doing nothing cannot be slower than one doing the merge, the encoder and eight cue lists. p99 is inside the gate in all three, and the failures are a handful of multi-millisecond stalls — a scheduler preempting a thread, not arithmetic. See §5 | 2026-08-30 |
 | Tick jitter under 100 % CPU load | p99.9 < 2 ms, 64 universes, 10 min | **p99.9 = 600 µs**, p50 100 µs, p99 200 µs, max 3.55 ms, **0 of 26 401 ticks missed**, 0 panics, 79 616 commands over 600.02 s — re-measured at S34 with the accumulated player clock, the flash layer and the readback all in the pipeline. **The first attempt failed and the harness was the reason, not the code:** run through `cargo test` the process gets no priority elevation, and the machine was compiling and running other suites at the time — 816 missed, p99.9 187 ms. In the configuration `realtime.rs` documents (release exe at High priority, one normal-priority burner per core, nothing else running) it is the figure above. S6's measurement: **p99.9 = 200 µs**, p50 and p99 ≤ 100 µs, max 464 µs, 0 of 26 401 missed. **The load has to come from outside the process** — see §3.1 and the decision log | 2026-08-20 (S34) |
-| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** on all **nine** paths (S48, which added the ninth: a `Go` and a `GotoCue` in rotation over eight cue lists whose every cue touches every one of 768 slots and every second cue holds its values cue-only, so the tracking table is read with a binary search per slot on every cue entry — **0 in 1 000 ticks**, 1 000 commands, 0 panics). Before that: **0** on all **eight** paths, re-run at **S46** and unchanged — the session touched neither `prism-engine` nor any `DmxOutput` implementation, because the receive path is a **second** seam and a thread of its own; the nine tests of `tick_allocations.rs` are green. Before that: **0 allocator calls** on all **eight** paths, re-run at S45 and unchanged — the session touched the tick in two places and neither allocates: `TickCommand` gave back the kind byte it grew in S40 (`MAX_ENCODED` is 7 again, because a playback is one number), and the playback set is built per cue list rather than per executor at *rebuild* time, which is a core-thread job. **0 allocator calls** on all **eight** paths, re-run at S38 and unchanged — the engine is never told what a desk's keys do, which is why an editor costs the tick nothing. **0 allocator calls** on all **eight** paths, re-run at S37 and unchanged — the engine is never told what this machine is set to, which is the whole of why a settings window costs the tick nothing. **0 allocator calls** on all **eight** paths, re-run at S36 and unchanged — nothing this session went near the tick, which is the point: `docs/MCU_MAPPING.md` §5.3's rule is that the engine is never told about a cable, and the hot-plug edge S36 added is asserted to cost **0 missed ticks** in both directions. **0 allocator calls** on all **eight** paths (S33, which added the eighth: a tick that **takes on four subscribers and gives up four** at once, then runs 100 more at 64 universes with twice the subscribers. That is hot output reconfiguration measured rather than argued, and the first attempt read **1** — the retirement vector's first `push`, on the tick thread, which `Vec::with_capacity(MAX_SUBSCRIBERS)` fixed. The seven S40 measured are unchanged): **0 allocator calls** on all **seven** paths (S40, re-measured after every playback was rekeyed from `ExecutorId` to `PlaybackId`, which is the change that could have cost it): a warm tick over 64 universes and 4 subscribers, the merge over 8 sources, the encoder over 768 slots, 8 cue lists fading, the programmer and the masters, the readback with S34's commands, and 44 ticks on the real system clock. **0 allocator calls** in 1 000 ticks with the **readback publishing and all four of S34's commands** — flash, speed, tap and crossfade — on top of 8 cue lists over 768 slots, the programmer filling and clearing and the grand master moving, with eight playbacks reported and every one of them on a cue afterwards, so it is not a measurement of a rig at rest; **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick; **0** in 1 000 ticks with **8 cue lists running** — every cue touching all 768 slots, ten-second fades, cues following on by themselves, Gos and on/off over the queue; and **0** in 1 000 ticks with the **programmer and the masters** as well — values arriving and being cleared on the tick, 16 group masters and the grand master moving | 2026-08-21 |
+| Tick allocations | zero inside the tick after warm-up | **0 allocator calls** on all **nine** paths, re-run at **S49** and unchanged — the session moved the command-line parser into `prism_core` and opened `prism-engine` not at all, which is the point: parsing happens on the *command* path, so a desk that can now read a line costs the tick nothing and no tenth path was added. Before that: **0 allocator calls** on all **nine** paths (S48, which added the ninth: a `Go` and a `GotoCue` in rotation over eight cue lists whose every cue touches every one of 768 slots and every second cue holds its values cue-only, so the tracking table is read with a binary search per slot on every cue entry — **0 in 1 000 ticks**, 1 000 commands, 0 panics). Before that: **0** on all **eight** paths, re-run at **S46** and unchanged — the session touched neither `prism-engine` nor any `DmxOutput` implementation, because the receive path is a **second** seam and a thread of its own; the nine tests of `tick_allocations.rs` are green. Before that: **0 allocator calls** on all **eight** paths, re-run at S45 and unchanged — the session touched the tick in two places and neither allocates: `TickCommand` gave back the kind byte it grew in S40 (`MAX_ENCODED` is 7 again, because a playback is one number), and the playback set is built per cue list rather than per executor at *rebuild* time, which is a core-thread job. **0 allocator calls** on all **eight** paths, re-run at S38 and unchanged — the engine is never told what a desk's keys do, which is why an editor costs the tick nothing. **0 allocator calls** on all **eight** paths, re-run at S37 and unchanged — the engine is never told what this machine is set to, which is the whole of why a settings window costs the tick nothing. **0 allocator calls** on all **eight** paths, re-run at S36 and unchanged — nothing this session went near the tick, which is the point: `docs/MCU_MAPPING.md` §5.3's rule is that the engine is never told about a cable, and the hot-plug edge S36 added is asserted to cost **0 missed ticks** in both directions. **0 allocator calls** on all **eight** paths (S33, which added the eighth: a tick that **takes on four subscribers and gives up four** at once, then runs 100 more at 64 universes with twice the subscribers. That is hot output reconfiguration measured rather than argued, and the first attempt read **1** — the retirement vector's first `push`, on the tick thread, which `Vec::with_capacity(MAX_SUBSCRIBERS)` fixed. The seven S40 measured are unchanged): **0 allocator calls** on all **seven** paths (S40, re-measured after every playback was rekeyed from `ExecutorId` to `PlaybackId`, which is the change that could have cost it): a warm tick over 64 universes and 4 subscribers, the merge over 8 sources, the encoder over 768 slots, 8 cue lists fading, the programmer and the masters, the readback with S34's commands, and 44 ticks on the real system clock. **0 allocator calls** in 1 000 ticks with the **readback publishing and all four of S34's commands** — flash, speed, tap and crossfade — on top of 8 cue lists over 768 slots, the programmer filling and clearing and the grand master moving, with eight playbacks reported and every one of them on a cue afterwards, so it is not a measurement of a rig at rest; **0 allocator calls** in 2 000 ticks, 64 universes, 4 subscribers; **0** in 1 000 ticks with the merge active — 768 slots, 8 loaded sources, executors switching; **0** in 1 000 ticks with merge **and** encoding — the same 768 slots patched 16-bit over 4 universes, half the fixtures inverted, 1 536 channel writes per tick; **0** in 1 000 ticks with **8 cue lists running** — every cue touching all 768 slots, ten-second fades, cues following on by themselves, Gos and on/off over the queue; and **0** in 1 000 ticks with the **programmer and the masters** as well — values arriving and being cleared on the tick, 16 group masters and the grand master moving | 2026-08-21 |
 | Tick drift | < one tick period after 100 000 ticks | within one period, and the error does not grow with the tick count | 2026-08-10 |
 | Triple buffer integrity | no torn frame under concurrent load | 1 000 000 frames × 64 universes → 4 readers, clean; 3 `loom` models | 2026-08-10 |
 | Frame determinism | identical input → byte-identical frames | three runs of the same 100-tick script compared byte for byte on the driver's frames, 8 command changes, > 20 distinct frames | 2026-08-11 |
 | Open DMX frame rate | measure real rate on SH-RS09B | **35.53 Hz** over 60 s through D2XX (2 132 frames), **38.35 Hz** through the virtual COM port. Both with the frame timing corrected; before the correction the same code reported 43.1 Hz, and that figure was the *symptom* — see the decision log. `DeviceProfile::SH_RS09B` now carries `verified: true` | 2026-08-11 (S8) |
-| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits** (S45, re-checked with the executor control editor in the tree — six `<select>`s and a text box whose value follows the show document, which is exactly the shape that would cost a commit per delta if it were subscribed to the wrong thing). **0 React commits** (S38, re-checked with a control editor in the tree — a panel that put a seventy-three-row table into `useState` on every delta would not move this number, and one that put a *level* there would). **0 React commits** (S37, re-checked with a settings window in the tree — a panel that polled its counters into `useState` at 1 Hz would not move this number, and one that put a *level* there would; the guard is what says the difference is understood). **0 React commits** (S36, re-checked with `DeskState` carrying the configured surface port — a field that changes when an operator picks a desk and never at frame rate, which is why it costs nothing). **0 React commits** (S40, re-checked with every key on the desk routed through the console shell — a provider above the whole tree is exactly the shape that could have cost a commit per keystroke, and does not). **0 React commits over 300 frames** — re-checked at S34 with the cue index arriving from the tick, which moves the *show* document while a playback runs and would show up here if it reached the telemetry path. Re-checked at S35 with the two bars rebuilt into one band above the canvas, and with the encoder bar paging. **0 React commits over 300 frames** — re-checked at S27 with the Fixture Sheet's **second** canvas in the interface, which is what says the output column is outside React: a sheet that put a level into a `useState` would turn this red. Re-checked at S26 with the executor bar, the encoder bar and the command line on the screen as well, and at S25 with the panel **inside a window**, so the count is of an interface that has a canvas, a window frame and a View Selector Bar in it. Originally: **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-21 |
-| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.10 ms median, 0.30 ms p99 over 155 frames at 30.5 Hz (S45)**, nothing lost and nothing dropped, re-measured with the `Executors` window carrying a control editor. **0.20 ms median, 0.70 ms p99 over 153 frames at 29.9 Hz (S38)**, re-measured with the control editor built and a fifth settings panel in the tree. **0.20 ms median, 1.00 ms p99 over 155 frames at 30.4 Hz (S37)**, re-measured with the settings window built and its counter poll running. **0.20 ms median, 1.10 ms p99 over 154 frames at 29.8 Hz (S36)**, re-measured because a surface poll now asks a port whether it is still there — once a second, not once a millisecond, which is the point of the figure being unchanged. Two frames lost, which is §8's coalescing; **zero dropped**, which is what is asserted. **0.10 ms mean, 0.30 ms p99 over 155 frames at 30.3 Hz (S40)**, re-measured with the console shell above the canvas. **0.20 ms median, 0.70 ms p99 over 153 frames at 30.1 Hz (S39)**, re-measured with the store bars asking a fourth kind of question and the cue sheet drawing two more keys per row. **0.20 ms median, 0.60 ms p99 over 164 frames at 30.4 Hz (S34)**, nothing lost and nothing dropped, with the readback moving the show document while a playback runs. **0.20 ms median, 1.50 ms p99 over 154 frames at 30.2 Hz (S35)**, with both bars rebuilt into one band above the canvas; three consecutive runs of the gate alone read **30.4 Hz with nothing lost**. **⚠ This gate is a throughput measurement on a desktop and it reads a busy machine as a code regression** — taken at 80–96 % CPU it reports 15–19 Hz with 138–152 frames lost, which is indistinguishable from a real fault. Check the load first: `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"` (the `Get-Counter` path is localised and fails on a German install). See the decision log. S44's measurement: **0.20 ms median, 0.50 ms p99 over 154 frames at 30.3 Hz (S44)**, with the fixture library in the daemon. S27's measurement: **0.20 ms median, 0.40 ms p99 over 160 frames at 30.0 Hz**, with the patch module built and a second telemetry loop in the interface. S26's measurement: **0.20 ms median, 0.40 ms p99 over 156 frames at 30.4 Hz**, re-measured with the executor bar and the encoder bar rendering above the canvas — two more bands in the same column, and the figure does not move. S25's measurement: **0.20 ms median, 0.50 ms p99 over 155 frames at 30.2 Hz**, with the DMX Sheet **opened through the interface** — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn, and a canvas sized by the window rather than by `34vh`. S24's measurement: **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-21 |
+| Telemetry render | 64 universes @ 30 Hz, zero React re-renders | **0 React commits** (S49, re-checked with the console provider holding an **asked-for** reading — a piece of state that arrives from the daemon and is set on every keystroke, which is exactly the shape that would cost a commit per telemetry frame if it were subscribed to the wrong thing). **0 React commits** (S45, re-checked with the executor control editor in the tree — six `<select>`s and a text box whose value follows the show document, which is exactly the shape that would cost a commit per delta if it were subscribed to the wrong thing). **0 React commits** (S38, re-checked with a control editor in the tree — a panel that put a seventy-three-row table into `useState` on every delta would not move this number, and one that put a *level* there would). **0 React commits** (S37, re-checked with a settings window in the tree — a panel that polled its counters into `useState` at 1 Hz would not move this number, and one that put a *level* there would; the guard is what says the difference is understood). **0 React commits** (S36, re-checked with `DeskState` carrying the configured surface port — a field that changes when an operator picks a desk and never at frame rate, which is why it costs nothing). **0 React commits** (S40, re-checked with every key on the desk routed through the console shell — a provider above the whole tree is exactly the shape that could have cost a commit per keystroke, and does not). **0 React commits over 300 frames** — re-checked at S34 with the cue index arriving from the tick, which moves the *show* document while a playback runs and would show up here if it reached the telemetry path. Re-checked at S35 with the two bars rebuilt into one band above the canvas, and with the encoder bar paging. **0 React commits over 300 frames** — re-checked at S27 with the Fixture Sheet's **second** canvas in the interface, which is what says the output column is outside React: a sheet that put a level into a `useState` would turn this red. Re-checked at S26 with the executor bar, the encoder bar and the command line on the screen as well, and at S25 with the panel **inside a window**, so the count is of an interface that has a canvas, a window frame and a View Selector Bar in it. Originally: **0 React commits over 300 frames** of the recorded 64-universe frame — ten seconds at §7's rate, counted with a `<Profiler>` round the whole interface, with 300 paints recorded on the surface over the same run. See the note below | 2026-08-21 |
+| Telemetry frame budget | < 8 ms per frame at 64 universes | **0.20 ms median, 0.40 ms p99 over 156 frames at 30.5 Hz (S49)**, nothing lost and nothing dropped, re-measured with the reading under the command line arriving as an answer rather than as arithmetic. **0.10 ms median, 0.30 ms p99 over 155 frames at 30.5 Hz (S45)**, nothing lost and nothing dropped, re-measured with the `Executors` window carrying a control editor. **0.20 ms median, 0.70 ms p99 over 153 frames at 29.9 Hz (S38)**, re-measured with the control editor built and a fifth settings panel in the tree. **0.20 ms median, 1.00 ms p99 over 155 frames at 30.4 Hz (S37)**, re-measured with the settings window built and its counter poll running. **0.20 ms median, 1.10 ms p99 over 154 frames at 29.8 Hz (S36)**, re-measured because a surface poll now asks a port whether it is still there — once a second, not once a millisecond, which is the point of the figure being unchanged. Two frames lost, which is §8's coalescing; **zero dropped**, which is what is asserted. **0.10 ms mean, 0.30 ms p99 over 155 frames at 30.3 Hz (S40)**, re-measured with the console shell above the canvas. **0.20 ms median, 0.70 ms p99 over 153 frames at 30.1 Hz (S39)**, re-measured with the store bars asking a fourth kind of question and the cue sheet drawing two more keys per row. **0.20 ms median, 0.60 ms p99 over 164 frames at 30.4 Hz (S34)**, nothing lost and nothing dropped, with the readback moving the show document while a playback runs. **0.20 ms median, 1.50 ms p99 over 154 frames at 30.2 Hz (S35)**, with both bars rebuilt into one band above the canvas; three consecutive runs of the gate alone read **30.4 Hz with nothing lost**. **⚠ This gate is a throughput measurement on a desktop and it reads a busy machine as a code regression** — taken at 80–96 % CPU it reports 15–19 Hz with 138–152 frames lost, which is indistinguishable from a real fault. Check the load first: `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"` (the `Get-Counter` path is localised and fails on a German install). See the decision log. S44's measurement: **0.20 ms median, 0.50 ms p99 over 154 frames at 30.3 Hz (S44)**, with the fixture library in the daemon. S27's measurement: **0.20 ms median, 0.40 ms p99 over 160 frames at 30.0 Hz**, with the patch module built and a second telemetry loop in the interface. S26's measurement: **0.20 ms median, 0.40 ms p99 over 156 frames at 30.4 Hz**, re-measured with the executor bar and the encoder bar rendering above the canvas — two more bands in the same column, and the figure does not move. S25's measurement: **0.20 ms median, 0.50 ms p99 over 155 frames at 30.2 Hz**, with the DMX Sheet **opened through the interface** — an `OpenWindow` out and a `SessionPatch` back before the first frame is drawn, and a canvas sized by the window rather than by `34vh`. S24's measurement: **0.30 ms median, 1.10 ms p99** over 163 frames (and 0.20 / 1.00 on the run before). Decode **and** paint, `performance.now()`, in Chromium against a real `prismd` on the 64-universe rig at 30.2 Hz. **On the CI runner: 0.20 ms median, 0.40 ms p99 over 164 frames at 30.3 Hz** — Linux, software rasteriser, debug daemon, nothing lost and nothing dropped. See the note below | 2026-08-21 |
 
 **Thread priority is part of the tick jitter figure.** The same ten-minute run at
 the shell's default priority missed 45 ticks and had a p99.9 of 54 ms. The engine
@@ -4044,7 +4094,7 @@ Every one is recorded as plain data so verification is a data update, not a refa
 | sACN against a real receiver | nothing — S10 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received and the group address over the whole 1…63999 range. What only a gateway and a real switch can answer is whether the **multicast path** works end to end — IGMP snooping on the switch, and whether a hop limit of 1 reaches the venue's nodes. Both are held as data (`SacnDestination`, `SacnConfig::multicast_ttl`), so verifying them is a configuration change. **No test sends multicast on purpose:** a suite that put sACN on the network it runs on is the same fault as one that broadcasts. `ARCHITECTURE_SPEC.md` §14 |
 | ArtNet against a real node | nothing — S9 is complete without it | ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted, including the datagram as received. What only a node can answer is whether it agrees about the port-address mapping (0-based or 1-based on that front panel) and whether it wants ArtSync. Both are held as data — `PortAddress` per universe and `ArtNetConfig::sync` — so verifying them is a configuration change, not a code change. **S46 made the first half answerable without reading a front panel:** a node that answers `ArtPoll` states its own port-address table, and the Outputs panel names the universes the two sides disagree about in both directions. `ARCHITECTURE_SPEC.md` §14 |
 | ~~Art-Net **discovery** against a real node~~ | — | ✅ **verified 2026-08-30 (S46)** — an **SGM** node at `2.16.10.66`, directly on Ethernet with no switch between. It answers a **unicast** `ArtPoll`, which is what this desk sends, so *poll where you already send* holds against real hardware and the broadcast this desk refuses to send was not needed. Discovered, named and shown; one reply per poll. **Two faults were found getting there and both are fixed** — a reply padded past 239 bytes discarded on Windows, and this machine's inbound firewall rule covering the wrong network profile — and the second is now something the desk says out loud rather than something an operator has to guess. The old text: ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted with nothing on the network: a mock node on loopback is polled, answers, is named and shown (`artpoll_wire.rs`, over a real `UdpSocket`); one that stops reads *stopped* with the age, inside one poll interval; one that never answers never reads well, over the protocol against a running daemon (`crates/prismd/tests/artnet_nodes.rs`); and a quarter of a million random bytes produce no panic and **zero** allocator calls. What only a real node can answer is two things, and both are about **other people's firmware**: whether it replies to a **unicast** `ArtPoll` rather than only to a broadcast one — §6 says it must, and this desk deliberately sends no broadcast — and whether it announces itself at power-up, which is what makes an unconfigured node appear at all. If a venue's nodes turn out to answer only broadcasts, the change is one address and one permission flag in `DiscoveryConfig`, not a code change. `ARCHITECTURE_SPEC.md` §14 |
-| The ten-minute tick-deadline gate, on **this** machine | nothing — the short gates CI runs are green | ☐ **measured, red, and the control says it is the machine and not the code.** S48 put a binary search per slot into every cue entry, so the ten-minute gate was re-run — and beside it, in the same hour and on the same machine, the **bare tick with no merge body at all** (`the_tick_alone_holds_its_deadline_for_ten_minutes`). **The full pipeline** — 64 universes, four drivers — missed **57** of 26 344 ticks over 600 s with p50 **100 µs**, p99 **1.1 ms** and p99.9 **133 ms**, on a machine reading 29 % busy; an earlier run of the same test at 47 % busy missed **77** of 26 324 with p99.9 **68.8 ms**. **The bare tick**, with no merge body at all, missed **47** of 26 354 in the same hour with p50 100 µs, p99 **1.1 ms** and p99.9 **74.9 ms**.  **A tick with nothing in it cannot be slower than a tick doing the merge, the encoder and eight cue lists, so the difference is not the engine**: this machine was carrying `GeoGuessr`, `Discord`, `firefox` and a live audio stack (`voicemeeter8`, `audiodg`) throughout, and the p99 of **1.1 ms** is inside the gate in every run — what fails it is a handful of multi-millisecond stalls, which is a scheduler preempting a thread and not arithmetic taking too long. It is the same finding S45 recorded at 35 % busy, measured this time with the control beside it rather than against nothing. What *is* the engine is measured and green: the allocation gate reads **0 on all nine paths**, and the short jitter gates CI runs are green on every job. **Re-run it on a quiet machine**: `cargo test -p prism-engine --release --test realtime -- --ignored the_tick_holds_its_deadline_for_ten_minutes --nocapture`, and run the bare-tick control beside it whenever the answer is not zero — the pair is the measurement, never the first number alone. §3.1 has the harness, §3's note has why the numbers move |
+| The ten-minute tick-deadline gate, on **this** machine | nothing — the short gates CI runs are green | ☐ **measured at S48, red, and the control says it is the machine and not the code. Not re-measured at S49**, which opened neither `prism-engine` nor any output driver: parsing a line happens on the command path, the allocation gate reads 0 on all nine paths unchanged, and there is nothing this session could have made slower.** S48 put a binary search per slot into every cue entry, so the ten-minute gate was re-run — and beside it, in the same hour and on the same machine, the **bare tick with no merge body at all** (`the_tick_alone_holds_its_deadline_for_ten_minutes`). **The full pipeline** — 64 universes, four drivers — missed **57** of 26 344 ticks over 600 s with p50 **100 µs**, p99 **1.1 ms** and p99.9 **133 ms**, on a machine reading 29 % busy; an earlier run of the same test at 47 % busy missed **77** of 26 324 with p99.9 **68.8 ms**. **The bare tick**, with no merge body at all, missed **47** of 26 354 in the same hour with p50 100 µs, p99 **1.1 ms** and p99.9 **74.9 ms**.  **A tick with nothing in it cannot be slower than a tick doing the merge, the encoder and eight cue lists, so the difference is not the engine**: this machine was carrying `GeoGuessr`, `Discord`, `firefox` and a live audio stack (`voicemeeter8`, `audiodg`) throughout, and the p99 of **1.1 ms** is inside the gate in every run — what fails it is a handful of multi-millisecond stalls, which is a scheduler preempting a thread and not arithmetic taking too long. It is the same finding S45 recorded at 35 % busy, measured this time with the control beside it rather than against nothing. What *is* the engine is measured and green: the allocation gate reads **0 on all nine paths**, and the short jitter gates CI runs are green on every job. **Re-run it on a quiet machine**: `cargo test -p prism-engine --release --test realtime -- --ignored the_tick_holds_its_deadline_for_ten_minutes --nocapture`, and run the bare-tick control beside it whenever the answer is not zero — the pair is the measurement, never the first number alone. §3.1 has the harness, §3's note has why the numbers move |
 | ~~SH-RS09B USB VID/PID and real frame rate~~ | — | ✅ **verified 2026-08-11 (S8)** — `0403:6001`, serial `B0037HIY`, `FT232R USB UART`, 35.5 Hz over 60 s. `DeviceProfile::SH_RS09B` carries `verified: true` and the tests assert the measurements. **Holding it as data paid for itself:** the whole verification was three fields and one test, with no code changed anywhere else — see `ARCHITECTURE_SPEC.md` §14 |
 
 ---
@@ -4055,6 +4105,10 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-08-31 | S49 | **What arrives on the wire: `CommandLineInput { run }` resolved at the daemon, and no second command.** The plan named two shapes and decided neither — a `Command::RunCommandLine` carrying the text, or this. Three things settled it. **Nothing on the wire had to change**: S43 already gave `run` the meaning *and run it*, and every sender was already sending exactly this command — a keyboard's Enter, `SurfaceAction::WriteCommandLine` with *send*, and `ExecutorButtonFunction::CommandLine`; what was missing was a daemon that could read a line, not a way to ask. **A second command would have needed a home in the three appliers** for something that is not a fourth kind of state: a line is not show state, session state or machine state, it is a *sentence about* them. And the vocabulary stays at **64**, which matters more than it sounds — `crate::wire`'s budget is measured in slots and a session that adds a command spends one | `CommandLineInput` keeps its place among §4.4's twelve session commands, because what it applies **to the session** is the line; running it is a fan-out carried out by `prism_core::ShowFile`, the one type that holds the session and the show at once — the same place `Effect::Programmer` and `Effect::Undo` are finished. What grew is **one field**: `mode`, the word an operator pressed when a store asked. **The general shape: before adding a command, ask what the one you have already means** — S38 added none for two new things, S45 one with an argument, S46 none, S48 one |
+| 2026-08-31 | S49 | **What comes back is the deltas of what the daemon did, and a line is one sentence.** A line can fall into more than one command, so the fan-out had to decide what happens when the *second* is refused. The client-side loop it replaces sent every command and let each be refused on its own — so `1 thru 4 at 50` on a rig with no fixture 4 selected nothing and then set a level on **whatever was selected before** | It **stops at the first refusal**, and the refusal travels as a `Delta::Notice`. Carrying out the second half of a sentence whose first half was refused is doing something nobody asked for, and it is only visible as a decision now that one message covers the whole line. Two shapes fell out with it: a line that is **not** a command is written into `Session::commandLine` and left standing — the reading under the box is already saying what is wrong with it, and an operator who typed `Store` and clicked a tile wants what they built to stay there — and an **empty** line does nothing at all, not even to the line, because writing whitespace into a field every screen draws would be answering a key somebody pressed out of habit |
+| 2026-08-31 | S49 | **The reading under the box is a query, and it carries two things the parser cannot know.** *What would this line do* had to follow the parser or the interface would have kept a grammar only for the readout — the second opinion the move exists to remove, and the first line the two disagreed about would be one an operator was told would do something else | `Query::CommandLineReading`, which is `Query::PatchPreview` (S27), `DarkUniverses` (S37) and `CueTracking` (S48) arriving at the same rule from a fourth direction: it is **derived**, and the thing it is derived from lives at the daemon. Two of its fields are the interesting part. **`question` is `Some` only when the destination is really occupied** — an interface used to read its own mirror for that (`ui/src/desk/exists.ts`, now deleted) and could ask about a cue somebody had just deleted. **`verb` and `clearing`** are what a click on a pool tile turns on, because the list of verbs is the grammar's. And it carries a **count** of commands rather than the commands: putting `Command` inside an `Answer` would put the whole protocol's value tree into that one, which is `crate::wire`'s budget said from the other end |
+| 2026-08-31 | S49 | **A window's test asserts the line; the parser's test asserts what the line means.** Forty jsdom tests broke on the move, all of them saying *this tile sends a `Delete { Group 2 }`* — a claim the interface no longer makes | They assert `Delete Group 2`, and `crates/prism-core/tests/console.rs` asserts that `Delete Group 2` is that command, against a recording of what a real `prismd` accepted. **Two claims made once each rather than restated in TypeScript**, which is `ARCHITECTURE_SPEC.md` §4.5's *one path to test* sharpened. The test double that answers the reading says only *yes, that is a command* and never what one means: a table of meanings in scenery would be the second opinion put back as a fixture |
 | 2026-08-30 | S48 | **The tracking state is derived, and where it lives is what makes that true.** The session had three plausible homes for it and only one survives the rule it exists to serve. In the `.prism` file: a file that stored the resolved state is a file that cannot be corrected by editing cue 2, which is the fault, not the fix. On the `Cue`: the same thing with extra steps, stale the moment an earlier cue moves. Recomputed in the tick: forbidden, because building it allocates and the tick may not | **In `prism_engine::SequencePlan`**, built by `SequencePlan::build` on the core thread — which is already where a sequence is compiled, and a sequence is already recompiled whenever a cue is stored, edited, deleted, renumbered or moved. So the answer to *when is it rebuilt* needed no new machinery at all: it is rebuilt exactly when the thing it is derived from changes. The tick **reads** it, one binary search per slot, zero allocator calls — the ninth measured path. Clients read it through `Query::CueTracking`, which is `DarkUniverses` (S37) and `ArtNetNodes` (S46) arriving at the same rule from two other directions. **The general shape: a derived state belongs on the thread that owns what it is derived from, and everybody else asks** |
 | 2026-08-30 | S48 | **The table is held by attribute and not by cue, and that is the whole of why it fits.** The obvious structure is a grid — what is each slot at, at each cue — and it is an index rather than a search, which on the tick is worth something. It is also `cues × slots` cells, most of them copies of the cell above: a three-thousand-cue list over a two-thousand-slot rig is tens of megabytes rebuilt on every cue edit, on a machine `ARCHITECTURE_SPEC.md` §10.2 says may be a Raspberry Pi | **One entry per *change*, grouped by slot**, and a `partition_point` over that slot's own run to read it. The size is then bounded by the number of cue parts — *the same size as the edits it is derived from*, which is the session's own sentence turning up in an allocation — and no new limit had to be invented, because `MAX_CUE_PARTS` already bounds it. `a_tracking_table_is_the_size_of_the_edits_not_of_the_grid` holds the claim at 101 cues and 2 entries, and the allocation test holds the other end, where every cue touches every slot and the table **is** the grid |
 | 2026-08-30 | S48 | **Resolving *always* was the change that made it one rule instead of two.** The obvious implementation is to leave `Go` alone and give `Goto` a special path — it is the one that was wrong. It would have been two answers to *what does this cue put out*, which is the shape of the fault rather than the fix, and the two would have drifted the first time a fade rule changed | `begin()` sets **every** entry's target from the tracking table, whatever brought the playback into the cue. It is safe because it is a no-op for the walk: the state at cue *i* is the state at *i−1* with cue *i*'s parts over it, which is exactly what the old accumulation produced — so every fade in the project is the number it was, and the existing suite says so without a line changing. A Go backwards and a start became correct for free, which is what says the rule was the right one |
@@ -4585,13 +4639,68 @@ things a cue can say about it — assert and carry forward, assert and hand back
 or say nothing — and a cue that inherits nothing is a **blocking** cue, made by
 an edit rather than by a flag. Punch-list **B21**'s other half.
 
-**Begin S49** (the command line moves into the daemon — see §8 for the prompt
-that starts it, and the running order below). It has both of the things it was
-waiting for: S45's *one sequence, one playback* and S48's tracking vocabulary,
-both of which add words to the grammar it moves — and moving a grammar twice is
-moving it twice. **S29** (the Tauri shell) is still waiting behind the UI work
-with one loose end named for it: S37's autostart switch is written down, read
-back and reported, and **acted on by nobody**.
+**There is one parser and it is the desk's.** `prism_core::console` is S40's
+whole grammar — the same words, the same refusals, the same table of lines held
+against a recording of what a real `prismd` accepted — and `ui/src/desk/console.ts`
+is deleted rather than left as a second opinion. A line travels as
+`Command::CommandLineInput { run: true }`, the daemon reads it and applies what
+it means, and what a line *would* do travels back as
+`Query::CommandLineReading`. Two things follow that could not be had before: a
+key on the X-Touch bound to a line fires it with **no client attached at all**,
+asserted on the frames, and two focused screens cannot run one twice because no
+client runs one. `Session::commandLineRun` and the focus rule are gone, and
+punch-list **B25**'s stop-gap with them.
+
+**Begin S29** (the Tauri shell — see §8 for the prompt that starts it, and the
+running order below). It is the last thing before the interface stops being a
+browser tab, and it carries the **OS file dialogue** the owner asked for on
+2026-08-28 along with one loose end named for it: S37's autostart switch is
+written down, read back and reported, and **acted on by nobody**.
+
+Carried out of S49:
+- **Before adding a command, ask what the one you already have means.** The plan
+  named two shapes for what arrives on the wire and this session added neither a
+  command nor a message: `CommandLineInput::run` had meant *and run it* since
+  S43, and every sender was already sending it. What was missing was a daemon
+  that could read a line, which is not something a protocol can be asked for.
+  S38 added no command for two new things, S45 one with an argument, S46 none,
+  S48 one — the question is worth asking every time.
+- **A stop-gap with a session named against it is the only kind that goes.** S43
+  wrote `commandLineRun` down as a work-around in four places — the field, the
+  action, the spec and the punch list — and every one of them named the session
+  that would remove it. The removal was a morning's work *because* of that, and
+  the field would otherwise have become permanent by the ordinary route: nobody
+  reading it later would have known it was not meant.
+- **A line is one sentence, and that only becomes visible when one message
+  carries it.** The client-side loop sent every command of a line and let each be
+  refused on its own, so the second half of a refused sentence went on being
+  carried out. Nobody had decided that; it was what a `for` loop does. Moving the
+  fan-out to one place made it a decision, and the decision is to stop.
+- **Deleting a rule is not the same as moving it, and the tests say which.**
+  Forty jsdom tests asserted *this tile sends a `Delete { Group 2 }`*, which the
+  interface no longer decides. They assert the **line** now and the parser's own
+  suite asserts what the line means — two claims made once each. A test that had
+  been quietly making both is a test that would have gone on passing after the
+  move for the wrong reason.
+- **A test double that models a rule is a second opinion in a costume.** The fake
+  daemon that answers the reading says only *yes, that is a command*, and every
+  interesting case is one line named in the test that needs it. The tempting
+  version — a small verb list in the scenery — would have been the grammar
+  restated in TypeScript with nothing to hold it to the real one.
+- **Coverage found two dead branches inherited from the port, and they were
+  deleted rather than covered** (S19's and S21's rule, and S48's). `join_name`
+  stripped quotes a second time and could not fire, because a token that begins
+  with one has already had it taken off; `replace_ignoring_case` guarded against
+  a fold that changes a string's length, which an **ASCII** fold cannot do — and
+  the guard was hiding the fact that the keypad rewrites were simply not applied
+  to a line containing `İ`. A port carries the shape of the language it came
+  from, and the coverage report is where that shows.
+- **An unreachable arm is usually a check in the wrong place.**
+  `keyword_selection` refused a bare `Cue 5` before reading it, which left the
+  arm that handles a cue reference unreachable — and left `Sequence 5 Cue 3`
+  falling through to *"sequence" is not a fixture number*. Reading first and
+  refusing after covers the arm and gives the better message, which is the usual
+  shape of that finding.
 
 Carried out of S48:
 - **A default that compiles is not the same as a default that means what the old
@@ -6227,55 +6336,36 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**The next session is S49, and not S29.** The running order in
-`IMPLEMENTATION_PLAN.md` puts it at number 16, and it now has both of the things
-it was waiting for: S45's *one sequence, one playback* and S48's tracking
-vocabulary. Both add words to the grammar the command line has to speak, and
-moving a grammar twice is moving it twice — which is the whole reason S49 waited.
+**The next session is S29.** The running order in `IMPLEMENTATION_PLAN.md` puts
+it at number 17, and it is the last one before the extended features: everything
+ahead of it is built, and the interface is a browser tab until this session wraps
+it in a window. It also carries a feature the owner asked for on 2026-08-28 —
+the operating system's own file dialogue — which was deferred **to** S29 on the
+owner's own stated condition, and one loose end named for it since S37: the
+autostart switch is written down, read back and reported, and acted on by nobody.
 
 **S43 is still open** while this is written: its third movement ends when the
 owner calls the interface fit for a pre-release. Whoever finishes it should read
-§2.41 first. That does not block S49, which deletes an interface file rather than
-adding one.
-
-**The punch list has one entry left open and it is not S49's**: **B36**, added by
-the owner after S45 — the crossfade fader should not spring back, and there should
-be two modes. It is an executor question and belongs to whoever picks it up next.
-
-**One thing this session added and the next one must not undo**:
-`Command::SetCueTracking` is three words the parser has to learn, and
-`Query::CueTracking` is a reading the command line's *what would this do* box may
-one day want. Both are in `docs/IPC_PROTOCOL.md` §5 and §5.2.
+§2.41 first. It does not block S29, which builds a shell around an interface it
+does not change.
 
 ---
 
-```
-PrismDMX — Session S49: `prism-domain` + `prism-core` + `ui` — die Kommandozeile
-zieht in den Daemon
+PrismDMX — Session S29: `prism-app` — die Tauri-Schale
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2, S18); das Pult
 bedient ihn ohne Oberfläche (D11, S22); die Oberfläche ist seit S23–S28, S34,
-S35, S39, S40, S43, S44, S45, S46 und S48 ein vollständiges Pult. Seit **S48**
-gilt: ein Cue ist eine *Bearbeitung*, kein Zustand, und was er nicht nennt, wird
-aus der Liste **ausgerechnet** statt angesammelt — der Sprung auf Cue 3 ergibt
-zweimal dasselbe Licht.
+S35, S39, S40, S43, S44, S45, S46, S48 und S49 ein vollständiges Pult, und seit
+**S49** liegt der Parser der Kommandozeile im Daemon — eine gebundene Taste am
+X-Touch führt ihre Zeile aus, ohne dass irgendein Client verbunden ist.
 
-**Was fehlt, ist ein Pult, das eine Zeile lesen kann.**
-`ARCHITECTURE_SPEC.md` §4.5 hat die Kommandozeile zur *primären* Schnittstelle
-erklärt, und S40 hat die ganze Grammatik gebaut — **in TypeScript**, in
-`ui/src/desk/console.ts`, weil dort der Operator tippt. Der Daemon hat nie einen
-Parser gehabt, und die Folge war bis S43 still: **eine Taste am X-Touch kann
-keine Zeile ausführen.** `SurfaceAction::WriteCommandLine` schreibt sie hin und
-hört auf; die eigene Dokumentation sagt das seit S43.
-
-Was S43 stattdessen ausgeliefert hat, ist ein **ausdrücklich als solcher
-aufgeschriebener Notbehelf**: der Daemon zählt `Session::command_line_run` hoch,
-und derjenige Client, der gerade den Tastaturfokus hat, parst die Zeile und
-schickt, was sie bedeutet. Auf einem Bildschirm ist das genau richtig. Auf zwei
-fokussierten Bildschirmen auf zwei Maschinen läuft die Zeile **zweimal**, und ein
-doppeltes Go ist der Fehler, für dessen Beseitigung diese Session existiert.
+**Was fehlt, ist ein Programm.** Was heute existiert, ist ein Daemon und ein
+Browser-Tab: `crates/prism-app` ist eine leere Kiste (0 % Coverage, und das ist
+in `PROGRESS.md` §3 so vermerkt), `npm run dev` serviert die Oberfläche, und wer
+das Pult starten will, startet zwei Dinge von Hand. Ein Fenster zu schließen
+beendet nichts — was richtig ist und nirgends zugesichert.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 
@@ -6286,90 +6376,105 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                     „kein Test darf ein Gerät brauchen", und die
                                     UI-Regel (wie ein Geräte-Bildschirm; nichts
                                     scrollt außerhalb der Canvas)
-2.  IMPLEMENTATION_PLAN.md        — **die Definition von S49**. Die fünf
-                                    Deliverables und die vier Exit-Kriterien dort
-                                    sind die Anforderung, wortwörtlich. Danach
-                                    die Laufreihenfolge am Ende (S49 ist Nummer
-                                    16) und die Konvention „Session-Nummern sind
-                                    Identität, die Reihenfolge ist der Fahrplan"
-3.  docs/COMMAND_LINE.md          — die Grammatik, wie sie heute gilt. Sie wird
-                                    **umgezogen und nicht neu erfunden**
-4.  ui/src/desk/console.ts und console.test.ts
-                                  — der Parser, der verschwindet, und die Tabelle
-                                    von Zeilen, die beide Suiten teilen müssen,
-                                    bis die TypeScript-Seite geht
-5.  crates/prism-domain/src/command.rs
-                                  — die 64 Kommandos, in die eine Zeile zerfällt,
-                                    und `CommandLineInput`
-6.  crates/prism-domain/src/session.rs und crates/prism-core/src/session.rs
-                                  — `Session::command_line`, `command_line_run`
-                                    und die Fokusregel, die **verschwindet**
-7.  crates/prism-surface/src/binding.rs
-                                  — `SurfaceAction::WriteCommandLine { submit }`,
-                                    dessen `submit` heute niemand auflöst
-8.  PROGRESS.md                   — §2.44 (S48 — was gerade gebaut wurde), §2.41
-                                    (S43 — woher der Notbehelf kommt), §2.34 (S40
-                                    — die Grammatik), §7 mit allen „Carried out
-                                    of"-Listen, §3 (die Zahlen, die weiter
+2.  IMPLEMENTATION_PLAN.md        — **die Definition von S29**. Die Deliverables
+                                    und die fünf Exit-Kriterien dort sind die
+                                    Anforderung, wortwörtlich — samt der langen
+                                    Begründung, warum der **Datei-Dialog des
+                                    Betriebssystems** hierher verschoben wurde
+                                    und nicht in S37 gehörte. Danach die
+                                    Laufreihenfolge am Ende (S29 ist Nummer 17)
+3.  ARCHITECTURE_SPEC.md          — §10.3 (Autostart ohne Administratorrechte,
+                                    die drei Stufen, die Sperrdatei und was S17
+                                    davon schon gebaut hat), §10.1 (was
+                                    plattformabhängig sein darf und wo), §10.2
+                                    (der Raspberry Pi), **D9** und **D10** in §1
+4.  crates/prismd/src/lock.rs und paths.rs
+                                  — die Sperr- und die Fundstelle: `prismd.guard`
+                                    hält die Sperre, `prismd.lock` sagt einem
+                                    Client, wo der Daemon zu erreichen ist. Das
+                                    ist der Mechanismus, an dem *anhängen statt
+                                    starten* hängt
+5.  crates/prism-core/src/desk.rs — `MachineConfig` und `Settings`: **hier steht
+                                    der Autostart-Schalter**, und niemand handelt
+                                    danach
+6.  ui/src/settings/machine.tsx und settings/showfiles.tsx
+                                  — das Kästchen, das ihn schreibt, und das
+                                    Textfeld, in das heute ein Pfad **getippt**
+                                    werden muss
+7.  crates/prism-app/            — die leere Kiste
+8.  PROGRESS.md                   — §2.39 (S37 — woher der Schalter kommt und
+                                    warum die Schale ihn ausführen muss), §2.41
+                                    (S43 — und **B31**, der Datei-Dialog, mit dem
+                                    Wortlaut des Eigentümers), §2.45 (S49 — was
+                                    gerade gebaut wurde), §7 mit allen „Carried
+                                    out of"-Listen, §3 (die Zahlen, die weiter
                                     stimmen müssen), §5 (die offenen
                                     Verifikationen)
-9.  ARCHITECTURE_SPEC.md          — §4.5 (die Kommandozeile ist die
-                                    Schnittstelle), §4.1 (was Sitzungszustand
-                                    ist), §3.1 (was in den Tick darf)
-10. docs/PRERELEASE_PUNCHLIST.md  — der Wortlaut des Eigentümers, und **B36**,
-                                    das offen ist und **nicht** deins
+9.  docs/PRERELEASE_PUNCHLIST.md  — **B31**, und der Grund, warum er hierher
+                                    verschoben wurde statt abgelehnt zu werden
+10. docs/IPC_PROTOCOL.md          — §2.1 (wie ein Client den Daemon findet, und
+                                    das Token), §2.2 (die Sperrdatei als
+                                    Fundstelle)
 
-Aufgabe: Session S49 umsetzen.
+Aufgabe: Session S29 umsetzen.
 
-**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S49 sind
+**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S29 sind
 die Anforderung, vollständig und ohne Ausnahme.**
 
 ## Die Entscheidungen, die diese Session treffen und begründen muss
 
-**Erstens: was auf der Leitung ankommt.** `Command::RunCommandLine` mit dem Text,
-oder `CommandLineInput { run }` am Daemon aufgelöst — der Plan nennt beide und
-entscheidet keine. Die Wahl gehört mit dem Grund in den Entscheidungslog in
-PROGRESS.md §6, und sie hat eine Folge, die man vorher aussprechen sollte: was
-zurückkommt, sind **die Deltas dessen, was der Daemon getan hat**, und eine Zeile
-kann in mehr als ein Kommando zerfallen.
+**Erstens: was die Schale startet und was sie findet.** *Spawn or attach* ist ein
+Satz und zwei Fälle. Der Mechanismus liegt schon da (`prismd.guard` /
+`prismd.lock`, S17), und die Schale ist der erste Anrufer, der ihn wirklich
+braucht. Was zu entscheiden ist: was passiert, wenn die Sperrdatei einen Daemon
+nennt, den die Schale nicht erreichen kann — und was, wenn der Daemon zu einer
+**anderen** Installation gehört. Beides gehört mit dem Grund in den
+Entscheidungslog in PROGRESS.md §6.
 
-**Zweitens: wo die Lesung unter dem Kasten herkommt.** Was die Zeile *täte*,
-während sie getippt wird, steht heute im Frontend, weil der Parser dort steht.
-Nach dem Umzug ist es ein `Query` — die Oberfläche muss es weiter anzeigen und
-darf es nicht selbst beantworten. Das ist dieselbe Regel, aus der
-`Query::PatchPreview` (S27), `Query::DarkUniverses` (S37) und `Query::CueTracking`
-(S48) entstanden sind.
+**Zweitens: wo der Datei-Dialog endet.** Der Eigentümer hat ihn am 2026-08-28
+verlangt und die Bedingung selbst genannt: *sollte das erst mit der Desktop
+Umgebung gehen, muss das Feature in diese Session verschoben werden.* Der Grund
+ist kein Komfort, sondern eine Wand: **ein Browser kann keinen Pfad auf der
+Maschine des Daemons benennen** — `showOpenFilePicker` gibt einer Seite ein
+*Handle*, niemals einen Pfad, und der Daemon ist das, was die Datei öffnet. Ein
+Tauri-Kommando gibt den gewählten Pfad als Zeichenkette zurück, das
+Einstellungsfenster setzt ihn in das Feld, das es schon hat, und `OpenShow`
+reist unverändert. **Am Protokoll ändert sich nichts** — und das Textfeld
+**bleibt**, weil das Web Remote (S31) ein Browser ist und bleibt.
 
-**Drittens: was mit `Session::command_line_run` und der Fokusregel geschieht.**
-Der Plan sagt *entfernt*. Prüfe, was daran hängt — `ui/src/desk/session.ts`,
-`consoleshell.ts` und die Ende-zu-Ende-Tests in `ui/e2e/console.spec.ts` —, und
-entferne es in einem Zug statt es stehen zu lassen: ein Notbehelf, der neben
-seinem Ersatz weiterläuft, ist zwei Antworten auf eine Frage.
+**Drittens: was der Autostart-Schalter auslöst.** `MachineConfig` hält ihn seit
+S37, und niemand befolgt ihn. Die Schale ist der einzige Prozess, der einen
+`HKCU\…\Run`-Eintrag oder eine systemd-User-Unit schreiben kann. Zu entscheiden
+ist, **wann** sie es tut: beim Setzen des Schalters, beim Start, oder beim
+Beenden — und was passiert, wenn der Eintrag von Hand entfernt wurde. Ein
+Schalter, der eine Lüge anzeigt, ist schlechter als keiner.
 
 ## Randbedingungen
 
-- **Der Tick bleibt unberührt.** Parsen geschieht auf dem Kommandopfad, und die
-  **neun** allokationsfreien Pfade (`crates/prism-engine/tests/tick_allocations.rs`)
-  müssen unverändert null messen. Diese Session sollte keinen zehnten hinzufügen.
-- **Eine Zeile, die beide Suiten parsen, ist eine Tabelle und keine zwei.** Bis
-  `ui/src/desk/console.ts` gelöscht ist, muss jede Zeile aus
-  `console.test.ts` in Rust zu **denselben** Kommandos werden — als geteilte
-  Tabelle, nicht als zweite Meinung.
+- **Der Tick bleibt unberührt.** Die **neun** allokationsfreien Pfade
+  (`crates/prism-engine/tests/tick_allocations.rs`) müssen unverändert null
+  messen. Diese Session sollte keinen zehnten hinzufügen.
+- **§10.1 ist die Regel für Plattformcode**: `#[cfg(target_os = …)]` **nur** in
+  der neuen Kiste und in den drei bestehenden Ausnahmen. Der ARM64-Cross-Check
+  in CI ist das, was das durchsetzt — er compiliert die Schale nicht.
+- **Kein Test darf ein Fenster brauchen.** Was eine Schale entscheidet — anhängen
+  statt starten, einen Autostart-Eintrag schreiben oder entfernen, einen Pfad
+  weiterreichen — ist Logik, und Logik gehört in eine Funktion, die ein Test ohne
+  Tauri aufrufen kann. Was wirklich ein Fenster braucht, ist eine Zeile in
+  `ARCHITECTURE_SPEC.md` §14 mit dem Rezept, so wie S36 und S20 es gemacht haben.
 - **Ein neues Kommando braucht eine Heimat in allen drei Appliern** und in den
   fest verdrahteten Zählungen (heute **64**) — aber prüfe zuerst, ob es eines
   braucht: S38 wollte zwei neue Dinge sagen und hat **kein** Kommando
-  hinzugefügt, S45 eines und hat es begründet, S46 keines, S48 eines.
+  hinzugefügt, S45 eines und hat es begründet, S46 keines, S48 eines, S49
+  **keines**. Ein Datei-Dialog ist ein Tauri-Kommando und kein Protokoll-Kommando
+  — `OpenShow` gibt es schon.
 - **Das Wertbaum-Budget ist gemessen und knapp**:
   `crates/prism-domain/src/wire.rs::a_generated_wire_value_fits_in_a_test_thread`
   fällt bei **30 992** Byte. Wer es reißt: ein *Feld* boxen
   (`crate::arb::boxed()`), und für ein **weites Unit-Enum** stattdessen
-  `crate::arb::arbitrary_from_list!`. Ein neues Kommando kostet einen Platz in
-  einer der **sechs** Gruppen von `crate::arb::command`. Niemals `RUST_MIN_STACK`.
+  `crate::arb::arbitrary_from_list!`. Niemals `RUST_MIN_STACK`.
 - **`ui/src/bindings/` wird aus Rust erzeugt** (`cargo test -p prism-domain`),
-  nicht von Hand geschrieben. Wer einem String-Enum eine Variante **mit Feld**
-  gibt, schaut vorher in `ui/src/bindings/variants.ts` — S45 hat gelernt, warum.
-- **Eine neue Nachricht braucht ihren Leser in `ui/src/ipc/protocol.ts`**, und
-  am besten einen Test, der sie durch den echten Decoder schickt.
+  nicht von Hand geschrieben.
 - **Ein neues Feld auf einem persistierten Typ braucht `#[serde(default)]`**,
   und der Default muss die Bedeutung tragen, die die alte Datei schon hatte —
   nicht bloß eine, die compiliert (S48).
@@ -6377,54 +6482,50 @@ seinem Ersatz weiterläuft, ist zwei Antworten auf eine Frage.
   und, sobald ein echter Art-Net-Output auf Loopback konfiguriert wird,
   `artnet_discovery: false` — sonst bindet der Daemon `0.0.0.0:6454`.
 - **Die Gates laufen einzeln.** `cargo test --workspace` und `npm run test`
-  gleichzeitig lassen zwei UI-Tests durch Zeitüberschreitung fallen, die einzeln
+  gleichzeitig lassen UI-Tests durch Zeitüberschreitung fallen, die einzeln
   grün sind.
 - **Vor Zeitmessungen die Systemlast prüfen**, sonst sieht eine beschäftigte
   Maschine aus wie eine Regression:
   `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"`
   — der `Get-Counter`-Weg ist lokalisiert und schlägt auf einer deutschen
   Installation fehl. **Und stelle jede Behauptung über den Tick gegen ein
-  Kontrollfenster**, nie gegen Null — siehe §5 und die Zeile zum
-  Zehn-Minuten-Gate.
+  Kontrollfenster**, nie gegen Null — siehe §5.
 - **Eine Coverage-Messung ohne `cargo llvm-cov clean --workspace` davor ist
   keine Messung**, und zwischen zwei Crates ebenso.
 - **Die sechs Recordings sind ein Satz.** Ändert sich das Protokoll, werden alle
   sechs neu erzeugt (`cargo test -p prismd --test ui_* -- --ignored`) und die
-  Diffs **strukturell** gelesen, nicht als Base64. Wer einen Schritt in ein
-  Skript einfügt, nummeriert die folgenden `typedLine`-Nummern nach und prüft
-  die hartkodierten Schritt-Indizes in `ui/src/desk/desk.test.tsx`.
-- **Die `data-testid`s sind ein Vertrag** zwischen Oberfläche und den 45
+  Diffs **strukturell** gelesen, nicht als Base64.
+- **Die `data-testid`s sind ein Vertrag** zwischen Oberfläche und den 46
   Playwright-Tests. Ein umbenanntes Element zieht seinen Test **mit**; ein Test
   wird nie gelöscht, weil er rot ist. Gilt seine Behauptung nicht mehr, steht in
   einem Satz da, warum.
 - **CI hat `channel = "stable"`**, also trifft sie jede neue Lint-Menge zuerst.
+  Und sie hat **keinen** Tauri-Job: was eine Schale braucht, um zu bauen, muss
+  entweder in die Jobs aufgenommen oder ausdrücklich als nicht gebaut vermerkt
+  werden — stillschweigend ungetestet ist keine Option.
 
 ## Zum Schluss
 
 - Alle Gates grün: `cargo test --workspace`, `cargo clippy --workspace
   --all-targets -- -D warnings`, `cargo fmt --all --check`, und in `ui/`:
   `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build`, sowie
-  die Playwright-Tests (heute 45)
-- Die Zahlen aus S24–S28, S33, S34, S39, S40, S36, S37, S38, S43, S45, S46 und
-  S48 müssen weiter stimmen: null Allokationen im Tick (**neun** Pfade), null
-  React-Commits, das Telemetrie-Frame-Budget
+  die Playwright-Tests (heute 46)
+- Die Zahlen aus S24–S28, S33, S34, S39, S40, S36, S37, S38, S43, S45, S46, S48
+  und S49 müssen weiter stimmen: null Allokationen im Tick (**neun** Pfade),
+  null React-Commits, das Telemetrie-Frame-Budget
 - **Die Markdown-Dateien werden im selben Durchgang nachgezogen wie der Code**,
-  nicht in einem Folge-Commit. Der Eigentümer hat das am 2026-08-28
-  ausdrücklich verlangt. Betroffen sind je nach Änderung:
-  `ARCHITECTURE_SPEC.md` (§4.5, §4.1 — und prüfe auf **tote Querverweise**: der
-  Code zitiert Abschnitte nach Nummer), `docs/COMMAND_LINE.md` (die Grammatik
-  und wo sie jetzt wohnt), `docs/IPC_PROTOCOL.md` (Draht),
-  `docs/MCU_MAPPING.md` (`WriteCommandLine`), `docs/PRERELEASE_PUNCHLIST.md`
-  (den Eintrag abhaken, der dazugehört)
-- PROGRESS.md aktualisieren: S49-Status, ein §2.45-Verifikationsprotokoll mit
-  **jeder gemessenen Zahl**, die Coverage- und Performance-Tabellen in §3, die
-  Zeile zum Zehn-Minuten-Gate in §5, und in §7 eine neue Liste
-  „Carried out of S49"
+  nicht in einem Folge-Commit. Der Eigentümer hat das am 2026-08-28 ausdrücklich
+  verlangt. Betroffen sind je nach Änderung: `ARCHITECTURE_SPEC.md` (§10.3, §10.1,
+  §9 — und prüfe auf **tote Querverweise**: der Code zitiert Abschnitte nach
+  Nummer), `docs/IPC_PROTOCOL.md` (§2.2, die Fundstelle),
+  `docs/PRERELEASE_PUNCHLIST.md` (**B31** abhaken)
+- PROGRESS.md aktualisieren: S29-Status, ein §2.46-Verifikationsprotokoll mit
+  **jeder gemessenen Zahl**, die Coverage- und Performance-Tabellen in §3, und in
+  §7 eine neue Liste „Carried out of S29"
 - PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt überschreiben —
-  nach der Laufreihenfolge ist das **S29** (die Tauri-Shell), das als einziges
-  vor der Oberfläche noch aussteht und einen losen Faden von S37 aufnimmt: der
-  Autostart-Schalter wird geschrieben, zurückgelesen, gemeldet — und von
-  niemandem befolgt
+  nach der Laufreihenfolge ist das Nummer 18, die erweiterten Funktionen (S30
+  3D-Viewer, S31 Web Remote, S32 PSN/OSC, S47 Timecode, S50 Makros), in der
+  Reihenfolge, die ein Veranstaltungsort verlangt. Wähle eine und begründe die
+  Wahl im Prompt
 - Mit einer Conventional-Commit-Nachricht committen, pushen, CI beobachten und
   das Ergebnis in PROGRESS.md festhalten
-```

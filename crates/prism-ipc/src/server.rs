@@ -173,6 +173,20 @@ pub trait ServerHandler: Send + Sync + 'static {
                 revision: 0,
                 learning: false,
             },
+            // And no parser: reading a line is `prism_core::console`'s, which a
+            // protocol crate deliberately does not depend on. An empty reading
+            // is the same shape an empty line gives, and it is the honest answer
+            // for a handler that holds nothing to read one against (S49).
+            Query::CommandLineReading { text } => Answer::CommandLineReading {
+                text,
+                reading: String::new(),
+                kind: prism_domain::CommandLineReadingKind::Empty,
+                commands: 0,
+                verb: false,
+                clearing: false,
+                question: None,
+                completions: Vec::new(),
+            },
             // The mode is **echoed**, not chosen: a handler with no show still
             // has to answer about the mode it was asked about, or a client
             // would draw a refusal beside a word nobody typed (S39).

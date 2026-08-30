@@ -8,12 +8,13 @@
  */
 
 import { decode } from "@msgpack/msgpack";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "../App";
 import type { Answer, Command, JsonValue } from "../bindings";
+import type { CommandLineReading } from "../desk/consoleshell";
 import { Connection } from "../ipc/connection";
 import type { Snapshot } from "../ipc/protocol";
 import { TelemetrySink } from "../ipc/telemetry";
@@ -21,6 +22,7 @@ import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { Shell } from "../testing/shell";
 import { DeskStore, deskEvents } from "../store/desk";
+import { attachDaemon, ranLines, settleReadings, writtenLine } from "../testing/console";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
 import { TelemetryProvider } from "../telemetry/panel";
@@ -102,15 +104,19 @@ async function desk() {
       .map((message) => message.command);
 
   /**
-   * The commands a gesture produced, without the line it wrote on the way.
+   * The **lines** a gesture ran — S49.
    *
-   * A key writes into `Session::commandLine` and then runs the line (S40,
-   * `ARCHITECTURE_SPEC.md` §4.5), so every gesture sends a `CommandLineInput`
-   * before the command and another one clearing the line after it. What most of
-   * these tests are about is *which command*, and this is that.
+   * It used to be *the commands a gesture produced*, and it cannot be: a key
+   * writes into `Session::commandLine` and the line is what is sent, so the
+   * daemon is what turns one into commands. Which line each gesture writes is
+   * what these tests were always about; what a line means is
+   * `crates/prism-core/tests/console.rs`.
    */
-  const acted = (): Command[] =>
-    commands().filter((command) => command.t !== "CommandLineInput");
+  const acted = (): string[] => ranLines(commands());
+
+  /** Answers every question about a line that is still outstanding. */
+  const settle = (readings: Readonly<Record<string, Partial<CommandLineReading>>> = {}) =>
+    settleReadings(network.last, readings);
 
   const queries = (): { seq: number; t: string }[] =>
     sent()
@@ -141,7 +147,7 @@ async function desk() {
     });
   };
 
-  return { commands, acted, queries, answerQuery, applyStep };
+  return { commands, acted, queries, answerQuery, applyStep, settle };
 }
 
 /** The recorded script up to the point where preset 1 exists. */
@@ -187,27 +193,17 @@ const MENU_SESSION: JsonValue = { session: { commandLine: "" }, views: {} };
 function menu() {
   const store = new DeskStore();
   const sent: Command[] = [];
-  store.attach(
-    (command) => {
-      sent.push(command);
-      return sent.length;
-    },
-    () => null,
-  );
+  attachDaemon(store, sent);
   render(
-    <Shell store={store} session={MENU_SESSION} show={MENU_SHOW}>
+    <Shell store={store} session={MENU_SESSION}>
       <PresetPool show={MENU_SHOW} />
     </Shell>,
   );
   return {
-    /** Everything but the line being typed. */
-    acted: (): Command[] => sent.filter((command) => command.t !== "CommandLineInput"),
+    /** The lines that were run. */
+    acted: (): string[] => ranLines(sent),
     /** The last line a *write* key left standing. */
-    line: (): string => {
-      const written = sent.filter((command) => command.t === "CommandLineInput");
-      const last = written.at(-1);
-      return last === undefined || last.t !== "CommandLineInput" ? "" : last.text;
-    },
+    line: (): string => writtenLine(sent),
   };
 }
 
@@ -246,12 +242,13 @@ describe("the preset pools", () => {
   });
 
   it("applies a preset by number, and holds nothing about the answer", async () => {
-    const { acted, applyStep } = await desk();
+    const { acted, applyStep, settle } = await desk();
     await applyStep(...A_PRESET);
     fireEvent.click(screen.getByTestId("preset-1"));
-    // A number and no pool: `ApplyPreset` is unambiguous because preset numbers
-    // are unique across pools.
-    expect(acted()).toEqual([{ t: "ApplyPreset", presetId: 1 }]);
+    await settle();
+    // A number and no pool: the line is unambiguous because preset numbers are
+    // unique across pools, and `Preset 1` is what applies one.
+    expect(acted()).toEqual(["Preset 1"]);
   });
 
   /**
@@ -288,22 +285,24 @@ describe("the preset pools", () => {
    * rather than waiting for an Enter the operator already committed to.
    */
   it("finishes a waiting line and sends it at once", async () => {
-    const { acted, applyStep } = await desk();
+    const { acted, applyStep, settle } = await desk();
     await applyStep(...A_PRESET);
     type("command-input", "Delete");
     fireEvent.click(screen.getByTestId("preset-1"));
-    expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "Preset", presetId: 1 } });
+    await settle({ "Delete Preset 1 ": { verb: true } });
+    expect(acted().at(-1)).toBe("Delete Preset 1");
     // And it did **not** apply the preset: an operator who typed a verb was
     // asking for an argument.
-    expect(acted().some((command) => command.t === "ApplyPreset")).toBe(false);
+    expect(acted().includes("Preset 1")).toBe(false);
   });
 
   /** With nothing typed, the box is the box: a preset is applied. */
   it("applies the preset when nothing is waiting for an argument", async () => {
-    const { acted, applyStep } = await desk();
+    const { acted, applyStep, settle } = await desk();
     await applyStep(...A_PRESET);
     fireEvent.click(screen.getByTestId("preset-1"));
-    expect(acted().at(-1)).toEqual({ t: "ApplyPreset", presetId: 1 });
+    await settle();
+    expect(acted().at(-1)).toBe("Preset 1");
   });
 
   /**
@@ -313,7 +312,7 @@ describe("the preset pools", () => {
    * menu writes is one an operator could have typed.
    */
   describe("the menu over a preset", () => {
-    it("renames, copies and deletes with the lines every pool shares", () => {
+    it("renames, copies and deletes with the lines every pool shares", async () => {
       const { acted } = menu();
       expect(screen.queryByTestId("preset-menu")).toBeNull();
 
@@ -322,11 +321,8 @@ describe("the preset pools", () => {
       fireEvent.click(screen.getByTestId("preset-copy"));
       // The free number is the pool's own arithmetic and 2 is taken, so the
       // copy lands on 3 — and the line names both ends, as `Copy` requires.
-      expect(acted().at(-1)).toEqual({
-        t: "Copy",
-        from: { t: "Preset", presetId: 1 },
-        to: { t: "Preset", presetId: 3 },
-        mode: "Merge",
+      await waitFor(() => {
+        expect(acted().at(-1)).toBe("Copy Preset 1 Preset 3");
       });
 
       fireEvent.contextMenu(screen.getByTestId("preset-1"));
@@ -337,15 +333,15 @@ describe("the preset pools", () => {
       fireEvent.submit(
         screen.getByTestId("preset-rename-input").closest("form") as HTMLFormElement,
       );
-      expect(acted().at(-1)).toEqual({
-        t: "Label",
-        target: { t: "Preset", presetId: 1 },
-        name: "Deep red",
+      await waitFor(() => {
+        expect(acted().at(-1)).toBe('Label Preset 1 "Deep red"');
       });
 
       fireEvent.contextMenu(screen.getByTestId("preset-2"));
       fireEvent.click(screen.getByTestId("preset-delete"));
-      expect(acted().at(-1)).toEqual({ t: "Delete", target: { t: "Preset", presetId: 2 } });
+      await waitFor(() => {
+        expect(acted().at(-1)).toBe("Delete Preset 2");
+      });
     });
 
     /**
@@ -358,7 +354,7 @@ describe("the preset pools", () => {
      * An empty answer takes the colour off, which is `Label`'s rule one verb
      * along.
      */
-    it("sets a colour without touching the values, and clears it with nothing", () => {
+    it("sets a colour without touching the values, and clears it with nothing", async () => {
       const { acted } = menu();
       fireEvent.contextMenu(screen.getByTestId("preset-1"));
       fireEvent.click(screen.getByTestId("preset-colour"));
@@ -368,10 +364,8 @@ describe("the preset pools", () => {
       fireEvent.submit(
         screen.getByTestId("preset-colour-input").closest("form") as HTMLFormElement,
       );
-      expect(acted().at(-1)).toEqual({
-        t: "Color",
-        target: { t: "Preset", presetId: 1 },
-        color: { r: 255, g: 0, b: 0 },
+      await waitFor(() => {
+        expect(acted().at(-1)).toBe("Color Preset 1 red");
       });
 
       fireEvent.contextMenu(screen.getByTestId("preset-1"));
@@ -379,10 +373,12 @@ describe("the preset pools", () => {
       fireEvent.submit(
         screen.getByTestId("preset-colour-input").closest("form") as HTMLFormElement,
       );
-      expect(acted().at(-1)).toEqual({
-        t: "Color",
-        target: { t: "Preset", presetId: 1 },
-        color: null,
+      // **The empty answer takes the colour off**, and the menu says it out
+      // loud: `none` is the word for it (`docs/COMMAND_LINE.md` §2.4), so what
+      // the line does is legible on the line rather than implied by a word that
+      // is not there.
+      await waitFor(() => {
+        expect(acted().at(-1)).toBe("Color Preset 1 none");
       });
     });
 
@@ -391,11 +387,13 @@ describe("the preset pools", () => {
      * because the destination is the argument the operator still has to type.
      * Nothing is sent.
      */
-    it("writes a move line and sends nothing", () => {
+    it("writes a move line and sends nothing", async () => {
       const { acted, line } = menu();
       fireEvent.contextMenu(screen.getByTestId("preset-1"));
       fireEvent.click(screen.getByTestId("preset-move"));
-      expect(line()).toBe("Move Preset 1 Preset ");
+      await waitFor(() => {
+        expect(line()).toBe("Move Preset 1 Preset ");
+      });
       expect(acted()).toEqual([]);
     });
   });
