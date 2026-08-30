@@ -56,6 +56,8 @@ desktop.ini
 
 # Playwright
 ui/test-results/
+# And one at the root, for a Playwright run started from the wrong directory.
+/test-results/
 ui/playwright-report/
 ui/coverage/
 ui/blob-report/
