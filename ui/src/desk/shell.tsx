@@ -184,16 +184,30 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
    * deltas of the two commands it applied. The line is cleared here as well as
    * there, because an input that waited for a round trip before emptying would
    * show the operator a line they have already run.
+   *
+   * # It empties the box only if the box still holds the line
+   *
+   * **CI found this and nothing on a fast machine could.** Running a line is
+   * asynchronous since S49: Enter asks the daemon what the line means and
+   * dispatches when the answer comes back. An operator — or a test — who has
+   * started the *next* line in that gap would have it wiped by an emptying that
+   * belongs to the line before it, and the Enter after that would run an empty
+   * box. Six end-to-end tests failed for it, all of them on the second command
+   * of a sequence and none of them here.
+   *
+   * So the clear is a comparison rather than an assignment, which is the same
+   * rule the echo guard above obeys one message along: **what this client is
+   * writing wins over anything about a line it has finished with.**
    */
   const dispatch = useCallback(
     (line: string, mode: CommandLineMode | null) => {
       send({ t: "CommandLineInput", text: line, run: true, mode });
       history.current.remember(line);
-      setTyped("");
       setPrompt(null);
-      // Nothing owed and nothing outstanding: the daemon clears the line itself
-      // when it runs one, so the next session delta is news rather than an echo.
-      mirror.reset();
+      setTyped((current) => (current === line ? "" : current));
+      // And the keystroke still owed goes with it, for the same reason and under
+      // the same condition — see `cancel`.
+      mirror.cancel(line);
     },
     [mirror, send],
   );
@@ -325,7 +339,7 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 function useMirror(send: (command: Command) => void): {
   readonly soon: (text: string) => void;
   readonly now: (text: string) => void;
-  readonly reset: () => void;
+  readonly cancel: (line: string) => void;
   readonly outstanding: { current: string[] };
 } {
   const sent = useRef("");
@@ -367,21 +381,31 @@ function useMirror(send: (command: Command) => void): {
       flush(text);
     };
     /**
-     * Forgets everything in flight — S49.
+     * Drops a keystroke about a line that has been **run** — S49.
      *
-     * Called when a line has been **run**, because the daemon clears the line
-     * itself as part of running it: a keystroke still owed would put half of it
-     * back, and an echo still outstanding would make this client ignore the
-     * clearing it is waiting for.
+     * The daemon clears the line itself as part of running it, so a flush still
+     * owed for that line would put half of what was typed back into a box the
+     * operator has finished with.
+     *
+     * **Only for that line.** What is owed may already be the *next* one: Enter
+     * is asynchronous since S49, and an operator does not stop typing while a
+     * round trip is in flight. Cancelling it then would leave the second screen
+     * and the X-Touch's display showing a line nobody is writing any more.
+     *
+     * It leaves `outstanding` alone in either case. The queue is what stops a
+     * late echo of a line *this* client sent being adopted as news — S43's
+     * defect — and running a line does not make the echoes of the keystrokes
+     * that built it stop arriving.
      */
-    const reset = (): void => {
+    const cancel = (line: string): void => {
+      if (owed.current !== null && owed.current !== line) {
+        return;
+      }
       if (timer.current !== null) {
         clearTimeout(timer.current);
         timer.current = null;
       }
       owed.current = null;
-      sent.current = "";
-      outstanding.current.length = 0;
     };
     const soon = (text: string): void => {
       if (sent.current === text) {
@@ -403,6 +427,6 @@ function useMirror(send: (command: Command) => void): {
         }
       }, SEND_INTERVAL_MS);
     };
-    return { soon, now, reset, outstanding };
+    return { soon, now, cancel, outstanding };
   }, [send]);
 }

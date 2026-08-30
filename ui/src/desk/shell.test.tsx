@@ -495,6 +495,92 @@ describe("the history itself", () => {
   });
 });
 
+describe("running a line takes a round trip, and the operator does not wait", () => {
+  /**
+   * **The box is emptied only if it still holds the line that ran** — S49, and
+   * CI found it in six tests at once.
+   *
+   * Enter is asynchronous now: it asks the daemon what the line means and
+   * dispatches when the answer comes back. An operator typing the next line in
+   * that gap — which is exactly what `command()` does in `ui/e2e/console.spec.ts`,
+   * twice a second — would have it wiped by an emptying that belongs to the line
+   * before it, and the Enter after that would run an empty box. Every one of the
+   * six failures was on the **second** command of a sequence, and none of them
+   * was reproducible on this machine.
+   *
+   * The daemon here answers only when the test says so, so the gap is the
+   * subject rather than the weather.
+   */
+  it("does not empty a box the operator has already refilled", async () => {
+    const store = new DeskStore();
+    const sent: Command[] = [];
+    const waiting: (() => void)[] = [];
+    let seq = 0;
+    store.attach(
+      (command) => {
+        sent.push(command);
+        seq += 1;
+        return seq;
+      },
+      (query) => {
+        seq += 1;
+        const id = seq;
+        if (query.t === "CommandLineReading") {
+          const answer = answerFor(query.text);
+          waiting.push(() => {
+            store.answered(id, answer);
+          });
+        }
+        return id;
+      },
+    );
+    /** Lets every question asked so far be answered. */
+    const settle = (): void => {
+      for (const answer of waiting.splice(0)) {
+        answer();
+      }
+    };
+    /** The lines that were run, in order. */
+    const ran = (): string[] =>
+      sent.flatMap((command) =>
+        command.t === "CommandLineInput" && command.run ? [command.text] : [],
+      );
+    render(
+      <DeskProvider store={store}>
+        <ConsoleProvider session={SESSION}>
+          <CommandLine daemonLine="" />
+        </ConsoleProvider>
+      </DeskProvider>,
+    );
+
+    // The first line is typed and Enter is pressed. Nothing is answered yet, so
+    // nothing has run.
+    fireEvent.change(input(), { target: { value: "Clear" } });
+    fireEvent.submit(input());
+    expect(input().value).toBe("Clear");
+
+    // **The operator starts the next line while the answer is in flight.**
+    fireEvent.change(input(), { target: { value: "1 thru 3" } });
+    expect(input().value).toBe("1 thru 3");
+
+    // Now the daemon answers. The first line runs — and the box keeps what is
+    // being written into it.
+    settle();
+    await waitFor(() => {
+      expect(ran()).toEqual(["Clear"]);
+    });
+    expect(input().value).toBe("1 thru 3");
+
+    // And Enter on it runs *that* line rather than an empty box.
+    fireEvent.submit(input());
+    settle();
+    await waitFor(() => {
+      expect(ran()).toEqual(["Clear", "1 thru 3"]);
+    });
+    expect(input().value).toBe("");
+  });
+});
+
 describe("the line the daemon holds, and the one being typed", () => {
   /**
    * **A stale echo of our own line must not eat what has been typed since.**
@@ -542,6 +628,74 @@ describe("the line the daemon holds, and the one being typed", () => {
       </DeskProvider>,
     );
     expect(input().value).toBe("1 thru 3 red at 100");
+  });
+
+  /**
+   * **And running a line does not stop the echoes of the keystrokes that built
+   * it arriving** — S49, and CI found it.
+   *
+   * Running a line clears `Session::commandLine` at the daemon, so the shell
+   * drops the keystroke it still owed. The first version dropped the
+   * **outstanding queue** with it — and the queue is the whole of the rule
+   * above. On a machine slow enough for the echo of the line just run to arrive
+   * *after* the operator started typing the next one, the input went back to the
+   * finished line and the next command was typed over. Every command after the
+   * first in `ui/e2e/console.spec.ts` failed for it, and nothing on this machine
+   * ever did.
+   */
+  it("does not adopt the echo of a line it has just run", async () => {
+    const store = new DeskStore();
+    const holding = (line: string): JsonValue => ({
+      ...(SESSION as Record<string, JsonValue>),
+      session: { commandLine: line, selectedSequence: 1, encoderBank: "Color" },
+    });
+    let seq = 0;
+    store.attach(
+      () => {
+        seq += 1;
+        return seq;
+      },
+      (query) => {
+        seq += 1;
+        const id = seq;
+        if (query.t === "CommandLineReading") {
+          const answer = answerFor(query.text);
+          queueMicrotask(() => {
+            store.answered(id, answer);
+          });
+        }
+        return id;
+      },
+    );
+    const view = render(
+      <DeskProvider store={store}>
+        <ConsoleProvider session={holding("")}>
+          <CommandLine daemonLine="" />
+        </ConsoleProvider>
+      </DeskProvider>,
+    );
+
+    // A line is typed and run.
+    fireEvent.change(input(), { target: { value: "Clear" } });
+    fireEvent.submit(input());
+    await waitFor(() => {
+      expect(input().value).toBe("");
+    });
+
+    // The next one is typed before the daemon has said anything at all.
+    fireEvent.change(input(), { target: { value: "1 thru 3" } });
+    expect(input().value).toBe("1 thru 3");
+
+    // **Now the echo of the first line arrives**, which is what a loaded runner
+    // does. It is a line this client sent, so it is not news.
+    view.rerender(
+      <DeskProvider store={store}>
+        <ConsoleProvider session={holding("Clear")}>
+          <CommandLine daemonLine="Clear" />
+        </ConsoleProvider>
+      </DeskProvider>,
+    );
+    expect(input().value).toBe("1 thru 3");
   });
 
   /**

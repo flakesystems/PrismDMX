@@ -3645,11 +3645,44 @@ S40 and should not have been: **there was a parser, and it was in a browser.**
 | **The answer goes through the real decoder** | ✅ `ui/src/ipc/protocol.ts::readAnswer` reads the new shape field by field, with the modes checked against the generated table; the question is read as **optional**, because a line with nothing to ask is the ordinary case and not a message this build could not read |
 | **The recordings** | ✅ all six regenerated (`cargo test -p prismd --test ui_* -- --ignored`) and the diffs read **structurally** rather than as base64. **Step counts unchanged** — 58, 61, 22 and 24 — so no `typedLine` renumbering and none of the hard-coded step indices in `ui/src/desk/desk.test.tsx` moved. Every difference is one of three things: `commandLineRun` gone from every snapshot's session, `"mode": null` on the one recorded `CommandLineInput` payload, and the desk identity and temporary path each run invents. The four `.prism` fixtures changed for the first of those |
 | **Coverage on the new code** | ✅ **`prism-core::console.rs` 99.60 % lines**, 99.39 % regions, 98.43 % functions — and `file.rs`, where a line is *run*, at **99.47 % lines** (99.53 % at S48, over more code). `prism-domain::query.rs` and `session.rs` read **100 % on every column** and `command.rs` 99.57 %; the crate **99.78 % lines**. `prism-core` as a whole is **98.81 % lines** (98.45 % at S48), 97.74 % regions, 98.31 % functions. Measured after `cargo llvm-cov clean --workspace`, per §3's caveat. Workspace total **97.97 % lines**, 97.55 % regions, 98.03 % functions over 45 360 lines — unchanged to two decimal places. `ui/src` **97.66 % lines**, 90.90 % branches, 98.08 % functions, with `shell.tsx` at **99.22 %** and `consoleshell.ts` at 100 % |
-| **The gates** | ✅ `cargo test --workspace` **2 163 tests, 0 failed** across 76 test binaries; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean; in `ui/`: `npx tsc -b --force` clean, `npm run lint` clean, `npm run test` **760 tests in 54 files**, `npm run build` clean. Run one at a time, per §3.1's note. **The jsdom count fell from 817**, and the fall is the session: `console.test.ts` (25) and `exists.test.ts` (6) are deleted and their claims are in Rust, where the rule they test now lives |
+| **The gates** | ✅ `cargo test --workspace` **2 163 tests, 0 failed** across 76 test binaries; `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all --check` clean; in `ui/`: `npx tsc -b --force` clean, `npm run lint` clean, `npm run test` **762 tests in 54 files**, `npm run build` clean. Run one at a time, per §3.1's note. **The jsdom count fell from 817**, and the fall is the session: `console.test.ts` (25) and `exists.test.ts` (6) are deleted and their claims are in Rust, where the rule they test now lives |
 | **Playwright** | ✅ **46 tests** (45 at S48), all green against a real `prismd` in mock-output mode. The new one is the chain in a browser: the daemon's sentence under the box, a line that is not one left standing after Enter, a second screen drawing the same half-typed line, and a line that *is* one running and being cleared **by the daemon** |
-| **Zero React commits, and the frame budget** | ✅ the `<Profiler>` gate is one of the 760 and passed over a tree whose console provider now holds an asked-for reading — which is the shape that would cost a commit per telemetry frame if it were subscribed to the wrong thing, and does not. Telemetry: **0.20 ms median, 0.40 ms p99 over 156 frames at 30.5 Hz**, nothing lost and nothing dropped |
+| **Zero React commits, and the frame budget** | ✅ the `<Profiler>` gate is one of the 762 and passed over a tree whose console provider now holds an asked-for reading — which is the shape that would cost a commit per telemetry frame if it were subscribed to the wrong thing, and does not. Telemetry: **0.20 ms median, 0.40 ms p99 over 156 frames at 30.5 Hz**, nothing lost and nothing dropped |
 | **The ten-minute tick-deadline gate** | ☐ **not re-measured, and deliberately.** The session opened neither `prism-engine` nor any output driver: parsing is on the command path, the allocation gate reads **0 on all nine paths** unchanged, and the short jitter gates CI runs are green on every job. §5 carries S48's reading, the control beside it, and the rule that the pair is the measurement |
-| **CI** | PLACEHOLDER_CI |
+| **CI, and what it caught that nothing here could** | ✅ run **PLACEHOLDER_RUN2** on `PLACEHOLDER_SHA2` — **all five jobs**. The first run, **33341197841** on `8553703`, was **four of five**: the whole Windows suite, both Linux jobs and the UI job passed, and the end-to-end job failed **six tests** — every one of them on the *second* command of a sequence, and all 46 green on this machine. See below |
+
+#### The thing that is only visible on a slow machine, and it is S49's own shape
+
+Enter is **asynchronous** since S49. It asks the daemon what the line means and
+dispatches when the answer comes back, and between those two moments an operator
+does not stop typing — nor does a test: `command()` in `ui/e2e/console.spec.ts`
+fills the box and presses Enter, and the next `command()` starts filling it
+again without waiting for anything.
+
+`dispatch` emptied the box unconditionally, because that is what pressing Enter
+has always looked like. On a machine where the answer came back before the next
+`fill`, it emptied a box that still held the line it had just run and nothing was
+ever seen. On the CI runner the answer came back **after**, so it wiped the line
+being typed — and the Enter that followed ran an empty box. Every failure was the
+second command of a sequence: `Store Group 1` on a selection nothing had
+selected, `Store Cue 1` on a programmer nothing had filled, a cue viewer reading
+*0 cues*.
+
+The fix is a comparison rather than an assignment — `setTyped(current =>
+current === line ? "" : current)` — and it is the rule the echo guard beside it
+has obeyed since S43, one message along: **what this client is writing wins over
+anything about a line it has finished with.** The keystroke still owed goes under
+the same condition, so a second screen is not left drawing a line nobody is
+writing.
+
+`does not empty a box the operator has already refilled` is the regression test,
+and it reproduces the runner rather than describing it: the fake daemon answers
+only when the test says so, so the gap is the subject rather than the weather. It
+is red on the old code and green on the new. **A test that needed a slow machine
+to fail is a test that had the wrong thing under its control**, which is the same
+finding S43 recorded three times and S48 once — and this is the first time it was
+the *interface* that had become asynchronous rather than a helper that forgot to
+wait.
 
 ---
 
@@ -4682,6 +4715,16 @@ Carried out of S49:
   suite asserts what the line means — two claims made once each. A test that had
   been quietly making both is a test that would have gone on passing after the
   move for the wrong reason.
+- **An interface that became asynchronous needs every "and then clear it" read
+  again.** Enter used to be one synchronous step and is a round trip now, and the
+  one line that did not survive the change was `dispatch` emptying the command
+  line: on a machine where the answer came back after the operator had started
+  the next line, it wiped what they were typing. CI found it in six end-to-end
+  tests and this machine in none. **The rule the fix restores was already there**
+  — the echo guard has said since S43 that what this client is writing wins over
+  anything about a line it has finished with — so the question to ask after
+  making a path asynchronous is *which of my assignments were only ever safe
+  because nothing could happen in between*.
 - **A test double that models a rule is a second opinion in a costume.** The fake
   daemon that answers the reading says only *yes, that is a command*, and every
   interesting case is one line named in the test that needs it. The tempting
