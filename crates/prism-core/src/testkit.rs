@@ -89,6 +89,7 @@ pub(crate) fn cue(number: &str, fixture: u32, attribute: AttributeType, value: u
             attribute,
             value,
             preset_ref: None,
+            tracking: prism_domain::CueTracking::Track,
         }],
     }
 }

@@ -100,6 +100,7 @@ pub fn cue(number: &str, fixture: u32, attribute: AttributeType, value: u16) -> 
             attribute,
             value,
             preset_ref: None,
+            tracking: prism_domain::CueTracking::Track,
         }],
     }
 }

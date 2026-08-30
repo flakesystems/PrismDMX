@@ -163,8 +163,8 @@ pub use body::{MergeBody, NO_PLAYBACKS};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use command::TickCommand;
 pub use cue::{
-    CueError, CuePlan, CueSlot, CueValue, MAX_CUE_PARTS, MAX_CUES, SequencePlan, interpolate,
-    ticks_from_seconds,
+    CueError, CuePlan, CueSlot, CueValue, MAX_CUE_PARTS, MAX_CUES, SequencePlan, TrackPoint,
+    interpolate, ticks_from_seconds,
 };
 pub use encode::{ChannelPlan, ChannelTarget, PatchError, coarse_byte, fine_byte, invert};
 pub use frame::{DmxFrame, FrameLayout, LayoutError, MAX_UNIVERSES, UNIVERSE_CHANNELS};

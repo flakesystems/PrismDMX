@@ -353,8 +353,54 @@ describe("an answer", () => {
     expect(readAnswer(preview, "a")).toEqual(preview);
   });
 
+  /**
+   * S48. The one answer whose whole content is arithmetic no client may repeat:
+   * what each cue of a list **inherits**. It goes through the real decoder here
+   * because a message this build could not read would look like a daemon
+   * sending nonsense, and the connection would resynchronise rather than the cue
+   * sheet drawing a column.
+   */
+  it("reads what every cue of a list inherits", () => {
+    const tracking = {
+      t: "CueTracking",
+      sequenceId: 3,
+      cues: [
+        { number: "1", inherited: [], blocks: true },
+        {
+          number: "2",
+          inherited: [{ fixture: 7, attribute: "Pan", value: 32768 }],
+          blocks: false,
+        },
+      ],
+    };
+    expect(readAnswer(tracking, "a")).toEqual(tracking);
+  });
+
   it("names the field that was not what it should be", () => {
     expect(faultPath(() => readAnswer({ t: "Elsewhere" }, "a"))).toBe("a.t");
+    // And the S48 answer field by field, including the attribute — which is a
+    // **checked** string and not an `as`, because `CLAUDE.md` forbids the claim.
+    expect(
+      faultPath(() => readAnswer({ t: "CueTracking", sequenceId: 1 }, "a")),
+    ).toBe("a.cues");
+    expect(
+      faultPath(() =>
+        readAnswer(
+          {
+            t: "CueTracking",
+            sequenceId: 1,
+            cues: [
+              {
+                number: "1",
+                inherited: [{ fixture: 1, attribute: "Nonsense", value: 0 }],
+                blocks: false,
+              },
+            ],
+          },
+          "a",
+        ),
+      ),
+    ).toBe("a.cues[0].inherited[0].attribute");
     expect(faultPath(() => readAnswer({ t: "PatchConflicts" }, "a"))).toBe("a.conflicts");
     expect(
       faultPath(() =>

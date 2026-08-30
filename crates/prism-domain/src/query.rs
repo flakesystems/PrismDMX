@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    ArtNetCounters, ArtNetNodeInfo, FixtureId, MidiPortInfo, OutputStatusInfo, PresetId,
-    PresetPool, SequenceId, SurfaceControl, SurfaceStatus, UniverseId,
+    ArtNetCounters, ArtNetNodeInfo, AttributeType, FixtureId, MidiPortInfo, OutputStatusInfo,
+    PresetId, PresetPool, SequenceId, SurfaceControl, SurfaceStatus, UniverseId,
 };
 
 /// Two fixtures sharing DMX channels.
@@ -269,6 +269,59 @@ pub struct StorePreview {
     pub removed: u32,
 }
 
+/// One attribute of one fixture, held at a value — **S48**.
+///
+/// What a tracking state is made of. Deliberately not a `CuePart`: a part is an
+/// **edit** a cue carries, with a preset link and a tracking mode of its own,
+/// and a tracked value is the *result* of every edit down to a cue. Carrying a
+/// part here would put a `presetRef` on a value no cue wrote and invite a client
+/// to store it back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct TrackedValue {
+    /// The fixture.
+    pub fixture: FixtureId,
+    /// The attribute.
+    pub attribute: AttributeType,
+    /// What the list holds it at while this cue is playing, `0..=65535`.
+    pub value: u16,
+}
+
+/// What one cue of a list inherits, and whether anything reaches past it -
+/// **S48**.
+///
+/// One row per cue, in playback order. The cue's own values are **not** here:
+/// a client already has them, and sending them back would be the daemon
+/// answering a question about the client's own copy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct CueTrackingRow {
+    /// The cue, by the number an operator typed.
+    pub number: String,
+    /// Every attribute the list holds at this cue that the cue does **not**
+    /// name, with the value a walk from the top would leave it at.
+    ///
+    /// This is the half a cue sheet cannot work out for itself and the half that
+    /// answers the question the window is opened with: *what does cue 7 change,
+    /// and what does it leave standing?*
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub inherited: Vec<TrackedValue>,
+    /// Whether this cue asserts **everything** — a blocking cue.
+    ///
+    /// Derived rather than stored, which is `crate::CueTrackingMode::Block`'s
+    /// whole argument: it is true exactly when [`Self::inherited`] is empty, so
+    /// a later edit that gives an earlier cue a new attribute correctly stops
+    /// the mark. **The first cue of a list blocks by construction** — there is
+    /// nothing above it to inherit from — and that is worth drawing rather than
+    /// hiding, because it is what makes the top of a list a rehearsable place.
+    pub blocks: bool,
+}
+
 /// Something a client asks that changes nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -410,6 +463,35 @@ pub enum Query {
     /// `Query::MidiPorts` and `Delta::SurfaceChanged`'s shape one layer along,
     /// and what makes two editors on two screens draw one table.
     SurfaceBindings,
+    /// What each cue of a list **inherits** from the cues above it — S48.
+    ///
+    /// # Why a question rather than a field of the cue
+    ///
+    /// It is this section's own rule, met by the deepest derived thing in the
+    /// project. A tracking state is computed from every cue above the one being
+    /// asked about, so a `Cue` that carried it would be a stored copy of
+    /// something the cues already say — and a stale one the moment cue 2 is
+    /// edited. Writing it into the `.prism` file would be worse still: a file
+    /// that stored the resolved state is a file that cannot be corrected by
+    /// editing cue 2, which is exactly the fault `Query::DarkUniverses` (S37) and
+    /// `Query::ArtNetNodes` (S46) were shaped to avoid one panel along.
+    ///
+    /// # And why the daemon answers rather than the cue sheet working it out
+    ///
+    /// A client has every cue of the list in its mirror, so it *could* fold them
+    /// itself. It must not, and the reason is the reason `PatchPreview` exists: a
+    /// second implementation of a rule is a second opinion about it, and this
+    /// rule — what a cue-only value falls back to, what a cue that names an
+    /// attribute twice means, which order cues play in — is the one the engine
+    /// resolves a `Goto` through. Two answers to *where am I* is the fault this
+    /// session exists to remove, not one to reintroduce in TypeScript.
+    ///
+    /// Asked when a cue sheet opens and again whenever that list's document
+    /// moves.
+    CueTracking {
+        /// The cue list to describe.
+        sequence_id: SequenceId,
+    },
 }
 
 /// The daemon's answer to a [`Query`].
@@ -599,6 +681,24 @@ pub enum Answer {
         /// Whether learn is armed — the next control touched will be named
         /// rather than obeyed (`crate::Command::SetSurfaceLearn`).
         learning: bool,
+    },
+    /// What every cue of one list inherits, in playback order — S48.
+    CueTracking {
+        /// The list that was asked about, echoed the way `StorePreview` echoes
+        /// the mode: an answer that did not name its subject is one a window
+        /// with two lists open cannot file.
+        sequence_id: SequenceId,
+        /// One row per cue, in the order the list plays them — by cue number
+        /// and not by position in the file.
+        ///
+        /// Empty for a list with no cues, and for a sequence that is not there:
+        /// a question about a list somebody has just deleted is a race rather
+        /// than a mistake, and an empty list of rows is what it means.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        cues: Vec<CueTrackingRow>,
     },
 }
 

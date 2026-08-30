@@ -224,6 +224,7 @@ type Command =
   | { t: "EditCue"; sequenceId: SequenceId | null; cueNumber: string }
   | { t: "Update" }
   | { t: "SetCueProperty"; sequenceId: SequenceId | null; cueNumber: string; property: CueProperty }
+  | { t: "SetCueTracking"; sequenceId: SequenceId | null; cueNumber: string; tracking: CueTrackingMode }
   | { t: "Delete"; target: ObjectRef }
   | { t: "Copy"; from: ObjectRef; to: ObjectRef; mode: OverwriteMode }
   | { t: "Move"; from: ObjectRef; to: ObjectRef; mode: OverwriteMode }
@@ -831,6 +832,30 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 >
 > *(`CreateSequence` was absorbed into `StoreSequence` in **S40** — see the S40 note above. What it did:)* it makes an **empty** cue list and is refused when the number is taken — a *create* that replaced a running cue list would empty a playback that is on stage. It is deliberately not S39's `StoreSequence`, which is a different act with a mode on it: that one stores the *programmer* into a sequence.
 >
+> **`SetCueTracking` says what a whole cue does about tracking** *(S48)*. Three
+> answers to one question, and `CueTrackingMode` carries which: `Track` — every
+> value in the cue carries forward, which is what a stored cue does; `CueOnly` —
+> every value is taken back when the list leaves the cue; `Block` — the cue
+> asserts **everything**, so nothing above it reaches past it and the list can be
+> cut into sections an operator can rehearse from. `docs/DMX_MERGE.md` §2.4 is
+> what each one means at the output.
+>
+> One command rather than three, for `ExecutorButton`'s reason: an operator picks
+> one of three, and a grammar with three verbs for one act is three things to
+> learn. It is **not** a `CueProperty`, and that is the interesting half: two of
+> the modes rewrite every part's `tracking`, and `Block` writes new *parts* —
+> which is exactly what `CueProperty` excludes, because what a cue sets comes
+> from the programmer and not from a client. This is the exception that proves
+> that rule rather than a hole in it: **the values a block writes are the
+> daemon's own**, folded out of the cues above by `prism_domain::CueTrack`, and
+> the command carries none of them. A client that sent them would be authoring
+> the show, which is the thing being prevented.
+>
+> A **show edit**, therefore undoable, and it rebuilds the merge body because it
+> changes what the list puts out. A mode that changes nothing produces **no
+> operations at all** — `SetCueProperty`'s rule, and an Oops step an operator
+> would otherwise press and watch do nothing.
+
 > `SetCueProperty` carries **one field** (`CueProperty`: number, name, fade in, fade out, delay, trigger). The alternative — one command carrying every editable field — makes a client read the cue, change one member and send the rest back, which is a read-modify-write over state the daemon owns; two operators editing two different columns would then each undo the other. What a cue *sets* is not among the fields, for the reason `PatchFixture` carries no channels: values come from the programmer.
 >
 > *(`DeleteCue` became `Delete` over an `ObjectRef::Cue` in **S40**; the rule did not move with it.)* It does not renumber what is left. A cue number is what an operator has written on a running order and what a Goto names.
@@ -901,7 +926,8 @@ type Query =
   | { t: "DarkUniverses" }
   | { t: "OutputStatus" }
   | { t: "ArtNetNodes" }
-  | { t: "SurfaceBindings" };
+  | { t: "SurfaceBindings" }
+  | { t: "CueTracking"; sequenceId: SequenceId };
 
 type StoreTarget =
   | { t: "Cue"; sequenceId: SequenceId; cueNumber: string }
@@ -918,7 +944,16 @@ type Answer =
   | { t: "ArtNetNodes"; nodes: ArtNetNodeInfo[]; listening: boolean; error: string | null;
       counters: ArtNetCounters; remedy: string | null }
   | { t: "SurfaceBindings"; controls: SurfaceControl[]; device: string;
-      profile: string | null; revision: number; learning: boolean };
+      profile: string | null; revision: number; learning: boolean }
+  | { t: "CueTracking"; sequenceId: SequenceId; cues: CueTrackingRow[] };
+
+interface CueTrackingRow {               // S48 — one cue of one list
+  number: string;                        // the cue, as an operator typed it
+  inherited: TrackedValue[];             // what it holds that it does not name
+  blocks: boolean;                       // it asserts everything — derived
+}
+
+interface TrackedValue { fixture: FixtureId; attribute: AttributeType; value: number }
 
 interface SurfaceControl {               // S38 — one row of the binding table
   control: BoundControl;                 // which control
@@ -1018,6 +1053,35 @@ interface StorePreview {
 > **An empty `ports` is an ordinary answer.** A laptop with nothing attached and a
 > build with no MIDI backend produce the same one, because from a client's side
 > they are the same fact.
+
+> **`CueTracking` is the variant S48 needed** *(S48)*, and it is this section's
+> own rule met by the deepest derived thing in the project. What a cue
+> **inherits** is folded out of every cue above it: everything an earlier cue
+> asserted and nothing since has overwritten, with the cue-only values of the cue
+> before it handed back. A `Cue` that carried it would be a stored copy of
+> something the cues already say, and a stale one the moment cue 2 is edited;
+> writing it into the `.prism` file would be worse still, because a file that
+> stored the resolved state is a file that cannot be corrected by editing cue 2.
+>
+> A client **has** every cue of the list in its mirror, so it could fold them
+> itself — and must not, for the reason `PatchPreview` exists. That fold is the
+> rule `prism_engine` resolves a `Goto` through: what a cue-only value falls back
+> to, what a cue naming one attribute twice means, which order cues play in. Two
+> answers to *where am I* is the fault S48 exists to remove, not one to
+> reintroduce in TypeScript.
+>
+> The answer carries **only what is inherited**, because the cue's own values are
+> already the client's; and `blocks` beside it, which is the daemon's reading of
+> *this cue asserts everything*. The **first cue of a list blocks by
+> construction** — there is nothing above it — and that is drawn rather than
+> hidden, because it is what makes the top of a list a rehearsable place. A
+> sequence that is not there answers with **no rows**: a window asking about a
+> list somebody has just deleted is a race and not a mistake, and this section
+> has no refusal shape by design.
+>
+> Asked when a cue sheet opens and again when that list's **cues** move — not
+> when the show moves, and not when a playback advances a cue, which is S45's
+> finding one window along.
 
 > **`DarkUniverses` is the variant S37 needed** *(S37)*. It is
 > `prism_core::ShowIssue::UniverseNotOutput` as a question rather than as the

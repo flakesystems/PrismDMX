@@ -511,6 +511,7 @@ fn loaded_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
                             .wrapping_mul(u32::from(number))
                             .wrapping_add(u32::from(seed)) as u16,
                         preset_ref: None,
+                        tracking: prism_domain::CueTracking::Track,
                     })
                 })
                 .collect(),
@@ -527,6 +528,140 @@ fn loaded_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
         is_active: false,
         current_cue_index: None,
     }
+}
+
+/// The same list, with every fourth cue holding its values **cue-only** — S48.
+///
+/// A cue-only value is the one thing that makes the tracking table interesting:
+/// it puts a `None` breakpoint in a slot's run, so the ninth path below is
+/// measured over a table that releases attributes as well as one that sets them.
+fn tracked_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
+    let mut sequence = loaded_sequence(head, fixtures, seed);
+    for (index, cue) in sequence.cues.iter_mut().enumerate() {
+        if index.is_multiple_of(4) {
+            continue;
+        }
+        for part in &mut cue.parts {
+            part.tracking = prism_domain::CueTracking::CueOnly;
+        }
+    }
+    sequence
+}
+
+/// **S48's criterion, and the ninth path.**
+///
+/// A `Goto` is where the tracking state is read: every slot of the playback's
+/// own sequence is asked what a walk from the top of the list would leave it at,
+/// and every one of those is a binary search over a flat table. That is the one
+/// piece of arithmetic this session put on the tick, and it is the one that had
+/// to be counted rather than argued — a table held cue-by-slot would have been
+/// an index and no search, and a table built *in* the tick would have been an
+/// allocation per Go.
+///
+/// So this measures Gos and Gotos together, in rotation, over eight lists whose
+/// every cue touches every slot and every second cue takes its values back.
+#[test]
+fn a_tick_resolving_the_tracking_state_makes_no_allocator_call_either() {
+    let head = fixture_type(6, false);
+    let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
+    let patched = patch(&layout, &head, 128);
+    let mut body = MergeBody::for_patch(
+        &layout,
+        patched.iter().map(|fixture| (fixture, &head)),
+        (1..=8).map(SequenceId::new),
+    )
+    .unwrap();
+    let slots = body.plan().slot_count();
+    for executor in 1..=8u32 {
+        body.load_sequence(
+            SequenceId::new(executor),
+            &tracked_sequence(&head, 128, executor as u16),
+        )
+        .unwrap();
+    }
+    // The table is one entry per *change* rather than one per cue per slot.
+    // These lists are the worst case for it by construction — every cue touches
+    // every slot, so every cell **is** a change and the two numbers meet. That
+    // is the point of measuring it here: this is the largest table a list of
+    // this size can produce, and it is the one the searches below are timed
+    // over. `cue.rs::a_tracking_table_is_the_size_of_the_edits_not_of_the_grid`
+    // is the other end, where a list that touches a slot twice costs two
+    // entries whatever its length.
+    let table: usize = body
+        .cues()
+        .players()
+        .iter()
+        .filter_map(prism_engine::CuePlayer::sequence)
+        .map(prism_engine::SequencePlan::track_len)
+        .sum();
+    println!(
+        "tracking table entries across 8 lists: {table}, and {} cells in the grid",
+        4 * slots * 8
+    );
+    assert_eq!(
+        table,
+        4 * slots * 8,
+        "every cue touches every slot here, so the table is the grid"
+    );
+
+    let mut publisher = FramePublisher::new(Arc::new(layout));
+    let mut subscriber = publisher.subscribe();
+    let (mut producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle =
+        |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
+            let executor = SequenceId::new(u32::from(index % 8) + 1);
+            // A Go and a Goto in rotation: both enter a cue, and both resolve
+            // every slot through the tracking table on the way in.
+            if index.is_multiple_of(2) {
+                let _ = producer.push(TickCommand::Go {
+                    executor: executor.into(),
+                    direction: GoDirection::Next,
+                });
+            } else {
+                let _ = producer.push(TickCommand::GotoCue {
+                    executor: executor.into(),
+                    cue_index: index % 4,
+                });
+            }
+            engine.run_ticks(&clock, 1);
+            subscriber.refresh();
+        };
+
+    for index in 0..200 {
+        cycle(&mut engine, &mut producer, index);
+    }
+    engine.reset_stats();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, &mut producer, index);
+        }
+    });
+
+    println!("allocator calls in 1000 ticks resolving tracking over {slots} slots: {calls}");
+    assert_eq!(
+        calls, 0,
+        "resolving the tracking state called the allocator {calls} times"
+    );
+    assert_eq!(engine.stats().ticks, 1_000);
+    assert_eq!(engine.stats().commands, 1_000);
+    assert_eq!(engine.stats().panics, 0);
+    assert!(
+        subscriber.frame().channels().iter().any(|&byte| byte != 0),
+        "nothing reached the frame, so the measurement is meaningless"
+    );
+    assert!(
+        engine
+            .body()
+            .cues()
+            .players()
+            .iter()
+            .any(|player| player.current_cue().is_some()),
+        "no cue was running, so the measurement is meaningless"
+    );
 }
 
 #[test]

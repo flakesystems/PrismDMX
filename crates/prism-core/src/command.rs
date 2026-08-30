@@ -463,6 +463,18 @@ impl Show {
                 let ops = self.set_cue_property(sequence_id, cue_number, property)?;
                 Ok(sequence_changed(sequence_id, ops))
             }
+            // S48. It reaches the engine for `SetCueProperty`'s reason and one
+            // more: what a cue asserts is what a jump into it resolves through,
+            // so a body built before the edit would answer the old question.
+            Command::SetCueTracking {
+                sequence_id,
+                cue_number,
+                tracking,
+            } => {
+                let sequence_id = require_sequence(*sequence_id)?;
+                let ops = self.set_cue_tracking(sequence_id, cue_number, *tracking)?;
+                Ok(sequence_changed(sequence_id, ops))
+            }
             // S40's four generic verbs. `crate::objects` is the applier and
             // carries what each of them means pool by pool; here is only the
             // engine-side consequence, which is the same question in all four:

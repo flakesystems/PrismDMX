@@ -381,6 +381,16 @@ fn command_group_2() -> BoxedStrategy<crate::Command> {
                 cue_number,
                 property
             }),
+        (
+            any::<Option<SequenceId>>(),
+            any::<String>(),
+            any::<crate::CueTrackingMode>()
+        )
+            .prop_map(|(sequence_id, cue_number, tracking)| C::SetCueTracking {
+                sequence_id,
+                cue_number,
+                tracking
+            }),
         any::<ObjectRef>().prop_map(|target| C::Delete { target }),
         (
             any::<ObjectRef>(),

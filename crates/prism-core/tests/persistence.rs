@@ -180,6 +180,7 @@ fn saveable_file() -> ShowFile {
                         attribute: AttributeType::Red,
                         value: 65535,
                         preset_ref: Some(PresetId::new(12)),
+                        tracking: prism_domain::CueTracking::Track,
                     }],
                 },
                 Cue {
@@ -196,12 +197,14 @@ fn saveable_file() -> ShowFile {
                             attribute: AttributeType::Pan,
                             value: 12345,
                             preset_ref: None,
+                            tracking: prism_domain::CueTracking::Track,
                         },
                         CuePart {
                             fixture: FixtureId::new(2),
                             attribute: AttributeType::Dimmer,
                             value: 65535,
                             preset_ref: None,
+                            tracking: prism_domain::CueTracking::Track,
                         },
                     ],
                 },
@@ -327,6 +330,7 @@ fn second_file() -> ShowFile {
                         attribute: AttributeType::Red,
                         value: 65535,
                         preset_ref: None,
+                        tracking: prism_domain::CueTracking::Track,
                     }],
                 })
                 .collect(),

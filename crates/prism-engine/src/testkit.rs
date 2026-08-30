@@ -92,6 +92,7 @@ pub(crate) fn cue_part(fixture: u32, attribute: AttributeType, value: u16) -> Cu
         attribute,
         value,
         preset_ref: None,
+        tracking: prism_domain::CueTracking::Track,
     }
 }
 

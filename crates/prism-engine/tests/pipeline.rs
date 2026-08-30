@@ -128,6 +128,7 @@ fn part(fixture: u32, attribute: AttributeType, value: u16) -> CuePart {
         attribute,
         value,
         preset_ref: None,
+        tracking: prism_domain::CueTracking::Track,
     }
 }
 

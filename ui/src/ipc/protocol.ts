@@ -50,6 +50,8 @@ import type {
   SurfaceControl,
   SurfaceStatus,
   StoreMode,
+  CueTrackingRow,
+  TrackedValue,
   StorePreview,
 } from "../bindings";
 import {
@@ -618,6 +620,18 @@ export function readAnswer(value: unknown, path: string): Answer {
         // appears. `Answer::MidiPorts`' remedy is the precedent (S37).
         remedy: readOptionalString(field(record, "remedy"), `${path}.remedy`),
       };
+    // S48. What every cue of one list **inherits**, which is the one thing a
+    // cue sheet cannot work out for itself: folding the cues would be a second
+    // implementation of the rule the engine resolves a `Goto` through, and two
+    // answers to *where am I* is the fault S48 exists to remove.
+    case "CueTracking":
+      return {
+        t: "CueTracking",
+        sequenceId: asInteger(field(record, "sequenceId"), `${path}.sequenceId`),
+        cues: asArray(field(record, "cues"), `${path}.cues`).map((row, index) =>
+          readCueTrackingRow(row, `${path}.cues[${index}]`),
+        ),
+      };
     case "DarkUniverses":
       return {
         t: "DarkUniverses",
@@ -651,6 +665,35 @@ export function readAnswer(value: unknown, path: string): Answer {
     default:
       throw new ProtocolFault(`${path}.t`, `an answer this build knows, not ${JSON.stringify(tag)}`);
   }
+}
+
+/**
+ * What one cue inherits, and whether anything reaches past it — S48.
+ *
+ * `blocks` is the daemon's own reading and not `inherited.length === 0` worked
+ * out here. The two agree today and the client must not be the one deciding
+ * that they do: what counts as *asserting everything* is the tracking rule's
+ * answer, and this file has no tracking rule in it — deliberately.
+ */
+function readCueTrackingRow(value: unknown, path: string): CueTrackingRow {
+  const record = asRecord(value, path);
+  return {
+    number: asString(field(record, "number"), `${path}.number`),
+    inherited: asArray(field(record, "inherited"), `${path}.inherited`).map((entry, index) =>
+      readTrackedValue(entry, `${path}.inherited[${index}]`),
+    ),
+    blocks: asBoolean(field(record, "blocks"), `${path}.blocks`),
+  };
+}
+
+/** One attribute of one fixture, held at a value — S48. */
+function readTrackedValue(value: unknown, path: string): TrackedValue {
+  const record = asRecord(value, path);
+  return {
+    fixture: asInteger(field(record, "fixture"), `${path}.fixture`),
+    attribute: asVariant(field(record, "attribute"), `${path}.attribute`, ATTRIBUTE_TYPE_VARIANTS),
+    value: asInteger(field(record, "value"), `${path}.value`),
+  };
 }
 
 /**

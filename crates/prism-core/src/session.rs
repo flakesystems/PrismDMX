@@ -420,6 +420,7 @@ impl SessionState {
             | Command::Label { .. }
             | Command::Color { .. }
             | Command::SetCueProperty { .. }
+            | Command::SetCueTracking { .. }
             | Command::AssignExecutor { .. }
             | Command::ConfigureExecutor { .. }
             | Command::SaveShow

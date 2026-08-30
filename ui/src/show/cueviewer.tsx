@@ -19,17 +19,40 @@
  * # What a cell can say, and why a range is honest
  *
  * A cue sets one value per **fixture and** attribute, so a column holds as many
- * values as the cue has fixtures. Three cases, and each is drawn as itself:
+ * values as the cue has fixtures. Four cases since S48, and each is drawn as
+ * itself:
  *
- * - **untouched** — a dash. The cue does not mention this attribute at all, so
- *   whatever a previous cue left stands. This is the reading the whole rebuild
- *   is for.
- * - **one value** — the percentage, whether one fixture carries it or twenty
- *   agree on it. The fixture count is in the title.
+ * - **asserted** — the percentage, in S43's *overriding* language: brighter,
+ *   bold, and a bar down the right-hand edge. Three signals rather than one,
+ *   because a desk is read from two metres away in the dark and not everybody
+ *   sees colour the same way (`CLAUDE.md`). One value, whether one fixture
+ *   carries it or twenty agree on it; the fixture count is in the title.
  * - **several** — the range, `10–80%`, with the count. Not an average, which
  *   would be a number no fixture is at; not the first, which would be a lie
  *   about the other nineteen. The title lists them fixture by fixture, which is
  *   where the detail went rather than where it was lost.
+ * - **cue-only** — asserted, and marked `·` because it is handed back when the
+ *   list leaves the cue. It is still an assertion while the cue is current,
+ *   which is why it is drawn as one and not as an absence.
+ * - **inherited** — the value the list holds there anyway, drawn resting: dim,
+ *   in brackets, no bar. This is the half that is new. It used to be a dash,
+ *   and a dash answers *this cue does not set it* without answering *so what
+ *   comes out?* — which is the question an operator opens this window with.
+ *
+ * A cue that inherits nothing at all is a **blocking** cue: nothing above it
+ * reaches past it, so the list can be rehearsed from there. The row says so, and
+ * the mark is derived rather than stored — see `Query::CueTracking`.
+ *
+ * # The inherited values are the daemon's and are not folded here
+ *
+ * Every cue of the list is in this client's mirror, so this window *could* work
+ * out what cue 7 inherits. It must not, and it is worth being plain about why:
+ * that fold is the rule `prism_engine` resolves a `Goto` through — what a
+ * cue-only value falls back to, what a cue naming one attribute twice means,
+ * which order cues play in — and a second implementation of it here would be a
+ * second opinion about the one thing S48 exists to give a single answer to. So
+ * the window asks `Query::CueTracking` and draws what comes back, which is the
+ * rule `PatchPreview` has followed since S27.
  *
  * # Every cue edit is here, and what a cue *sets* still is not
  *
@@ -78,13 +101,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AttributeType,
   CueProperty,
+  CueTrackingMode,
+  CueTrackingRow,
   CueTrigger,
   JsonValue,
   ProgrammerState,
   StoreMode,
   StorePreview,
+  TrackedValue,
 } from "../bindings";
-import { ATTRIBUTE_TYPE_VARIANTS, CUE_TRIGGER_VARIANTS } from "../bindings/variants";
+import {
+  ATTRIBUTE_TYPE_VARIANTS,
+  CUE_TRACKING_MODE_VARIANTS,
+  CUE_TRIGGER_VARIANTS,
+} from "../bindings/variants";
 import { objectLine, pick, useConsole } from "../desk/consoleshell";
 import { percentOfLevel } from "../desk/level";
 import { useAsk, useSend } from "../store/hooks";
@@ -145,6 +175,16 @@ export function CueViewer({
     [show, inForce.sequenceId],
   );
   const presets = useMemo(() => presetRows(show), [show]);
+  const cuesDoc = useMemo(
+    () => (chosen === null ? null : cuesDocument(show, chosen)),
+    [show, chosen],
+  );
+  // **What every cue of this list inherits**, asked of the daemon and never
+  // folded here — S48. The dependency is this list's `cues` node and not
+  // `/sequences`, which is S45's finding said one window along: a playback's
+  // state lives on the cue list, so a chase advancing a cue rewrites that
+  // subtree and an effect keyed on it would ask this question once per cue.
+  const tracking = useCueTracking(ask, chosen, cuesDoc);
   // The attributes this cue list touches, in the one order the desk has —
   // `AttributeType::ALL`, which is also the order the encoder banks walk. A
   // column order invented here would put pan beside dimmer on one screen and
@@ -205,6 +245,7 @@ export function CueViewer({
             sequence={sequence}
             columns={columns}
             presets={presets}
+            tracking={tracking}
             currentCueIndex={
               // The playback marker only where the two are looking at the same
               // list: an executor running sequence 3 says nothing about which
@@ -219,13 +260,58 @@ export function CueViewer({
       )}
       <StoreBar
         sequence={sequence}
-        cuesDoc={cuesDocument(show, sequence.id)}
+        cuesDoc={cuesDoc}
         programmer={programmer}
         editing={editing}
         ask={ask}
       />
     </div>
   );
+}
+
+/**
+ * What every cue of one list inherits, asked of the daemon - **S48**.
+ *
+ * Asked when the window opens on a list and again whenever that list's **cues**
+ * really move, which is the dependency S45 had to learn the hard way: a playback
+ * advancing a cue rewrites the `/sequences` subtree, so an effect keyed on that
+ * would put one question on the wire per cue of a chase. `cuesDocument` is the
+ * node whose identity only changes when the cues do.
+ *
+ * An answer that arrives after a later question, or after the window has gone,
+ * is dropped - `StoreRequester`'s rule, and for its reason. Kept as a `Map` by
+ * cue number so a row looks its own answer up rather than scanning a list per
+ * cell.
+ */
+function useCueTracking(
+  ask: ReturnType<typeof useAsk>,
+  sequenceId: number | null,
+  cuesDoc: JsonValue | null,
+): ReadonlyMap<string, CueTrackingRow> {
+  const [rows, setRows] = useState<ReadonlyMap<string, CueTrackingRow>>(new Map());
+  useEffect(() => {
+    if (sequenceId === null) {
+      setRows(new Map());
+      return undefined;
+    }
+    let live = true;
+    void ask({ t: "CueTracking", sequenceId }).then((answer) => {
+      if (!live) {
+        return;
+      }
+      // The answer names the list it is about, so one that was overtaken by a
+      // change of list is dropped rather than drawn against the wrong cues -
+      // `StorePreview`'s echo, one question along.
+      if (answer === null || answer.t !== "CueTracking" || answer.sequenceId !== sequenceId) {
+        return;
+      }
+      setRows(new Map(answer.cues.map((row) => [row.number, row])));
+    });
+    return () => {
+      live = false;
+    };
+  }, [ask, cuesDoc, sequenceId]);
+  return rows;
 }
 
 /**
@@ -410,11 +496,22 @@ function CueGrid({
   sequence,
   columns,
   presets,
+  tracking,
   currentCueIndex,
 }: {
   readonly sequence: SequenceRow;
   readonly columns: readonly AttributeType[];
   readonly presets: readonly PresetRow[];
+  /**
+   * What each cue inherits, by cue number - the daemon's answer to
+   * `Query::CueTracking` (S48).
+   *
+   * Empty until the first answer arrives, and empty is drawn as *nothing is
+   * inherited* rather than as a spinner: the cells the cue itself asserts are
+   * right either way, and a cue sheet that would not draw until a round trip
+   * came back would flash on every cue edit.
+   */
+  readonly tracking: ReadonlyMap<string, CueTrackingRow>;
   /**
    * Which row the playback is standing on, or nothing when it is stopped.
    *
@@ -502,6 +599,7 @@ function CueGrid({
           <th scope="col">Out</th>
           <th scope="col">Delay</th>
           <th scope="col">Trigger</th>
+          <th scope="col">Track</th>
           {columns.map((attribute) => (
             <th scope="col" key={attribute} data-testid={`cue-column-${attribute}`}>
               {attribute}
@@ -553,12 +651,31 @@ function CueGrid({
                 }}
               />
             </td>
+            <td>
+              <TrackingCell
+                cueNumber={cue.number}
+                blocks={tracking.get(cue.number)?.blocks ?? false}
+                cueOnly={
+                  cue.parts.length > 0 &&
+                  cue.parts.every((part) => part.tracking === "CueOnly")
+                }
+                onChoose={(mode) => {
+                  send({
+                    t: "SetCueTracking",
+                    sequenceId: sequence.id,
+                    cueNumber: cue.number,
+                    tracking: mode,
+                  });
+                }}
+              />
+            </td>
             {columns.map((attribute) => (
               <ValueCell
                 key={attribute}
                 cue={cue}
                 attribute={attribute}
                 presets={presets}
+                inherited={inheritedOf(tracking.get(cue.number), attribute)}
               />
             ))}
             <td className="cue-keys">
@@ -601,35 +718,152 @@ function ValueCell({
   cue,
   attribute,
   presets,
+  inherited,
 }: {
   readonly cue: CueRow;
   readonly attribute: AttributeType;
   readonly presets: readonly PresetRow[];
+  /**
+   * What the list holds this attribute at anyway, for the fixtures this cue does
+   * not name — the daemon's, out of `Query::CueTracking`.
+   */
+  readonly inherited: readonly TrackedValue[];
 }) {
   const parts = cue.parts.filter((part) => part.attribute === attribute);
   const testId = `cue-${cue.number}-${attribute}`;
   if (parts.length === 0) {
-    // **The reading the rebuild is for.** This cue says nothing about this
-    // attribute, so whatever came before stands — which is what tracking is,
-    // and what S45 makes deterministic.
+    // **The reading the rebuild is for**, and since S48 it carries a number.
+    // This cue says nothing about this attribute, so whatever an earlier cue
+    // left stands — and *what* that is, is what an operator came here to read.
+    // A dash is still the answer where nothing is held at all, which is a
+    // different fact: an attribute no cue of this list has ever asserted rests
+    // at its home value and this list is not the one deciding it.
+    if (inherited.length === 0) {
+      return (
+        <td
+          className="cue-untouched"
+          data-testid={testId}
+          data-set="no"
+          data-inherited="no"
+          title="no cue of this list sets it"
+        >
+          —
+        </td>
+      );
+    }
     return (
-      <td className="cue-untouched" data-testid={testId} data-set="no" title="not set by this cue">
-        —
+      <td
+        className="cue-untouched cue-inherited"
+        data-testid={testId}
+        data-set="no"
+        data-inherited="yes"
+        title={inheritedTitle(inherited)}
+      >
+        ({trackedText(inherited)})
       </td>
     );
   }
   const linked = parts.some((part) => part.presetRef !== null);
+  // **Cue-only is still an assertion**, and is marked rather than dimmed: while
+  // the cue is current this is what goes out, and the dot says that the list
+  // hands it back afterwards.
+  const oneOff = parts.every((part) => part.tracking === "CueOnly");
   return (
     <td
-      className={linked ? "cue-value cue-linked" : "cue-value"}
+      className={`cue-value${linked ? " cue-linked" : ""}${oneOff ? " cue-one-off" : ""}`}
       data-testid={testId}
       data-set="yes"
+      data-inherited="no"
       data-linked={linked ? "yes" : "no"}
-      title={cellTitle(parts, presets)}
+      data-one-off={oneOff ? "yes" : "no"}
+      title={`${cellTitle(parts, presets)}${oneOff ? " · taken back when the list leaves this cue" : ""}`}
     >
       {cellText(parts)}
+      {oneOff ? <span aria-hidden="true"> ·</span> : null}
     </td>
   );
+}
+
+/**
+ * What a cue says about tracking, and the three things an operator can say back.
+ *
+ * One control with three choices rather than three keys, because they are three
+ * answers to one question — and `Command::SetCueTracking` is one command for the
+ * same reason.
+ *
+ * **Blocking is drawn from the daemon's reading and set as an edit**, which is
+ * not a contradiction: `blocks` is true when the cue inherits nothing, and
+ * choosing *Block* is what writes the inherited values in so that it becomes
+ * true. Choosing it again on a cue that already blocks costs nothing at all —
+ * `Show::set_cue_tracking` answers with no operations.
+ */
+function TrackingCell({
+  cueNumber,
+  blocks,
+  cueOnly,
+  onChoose,
+}: {
+  readonly cueNumber: string;
+  readonly blocks: boolean;
+  readonly cueOnly: boolean;
+  readonly onChoose: (mode: CueTrackingMode) => void;
+}) {
+  const chosen: CueTrackingMode = cueOnly ? "CueOnly" : blocks ? "Block" : "Track";
+  return (
+    <select
+      className="cell-input cell-input-narrow"
+      data-testid={`cue-tracking-${cueNumber}`}
+      data-blocks={blocks ? "yes" : "no"}
+      aria-label={`What cue ${cueNumber} does about tracking`}
+      title={TRACKING_TITLES[chosen]}
+      value={chosen}
+      onChange={(event) => {
+        const wanted = event.target.value;
+        if (isTrackingMode(wanted)) {
+          onChoose(wanted);
+        }
+      }}
+    >
+      <option value="Track">Track</option>
+      <option value="CueOnly">Cue only</option>
+      <option value="Block">Block</option>
+    </select>
+  );
+}
+
+/** What each choice means, in one line an operator can read from the title. */
+const TRACKING_TITLES: Record<CueTrackingMode, string> = {
+  Track: "Values carry forward to the cues after this one",
+  CueOnly: "Values are taken back when the list leaves this cue",
+  Block: "This cue asserts everything: nothing above it reaches past it",
+};
+
+/** Whether a string is one of the three tracking modes this build knows. */
+function isTrackingMode(value: string): value is CueTrackingMode {
+  return (CUE_TRACKING_MODE_VARIANTS as readonly string[]).includes(value);
+}
+
+/** The inherited values of one attribute, out of a tracking row. */
+function inheritedOf(
+  row: CueTrackingRow | undefined,
+  attribute: AttributeType,
+): readonly TrackedValue[] {
+  return row === undefined ? [] : row.inherited.filter((value) => value.attribute === attribute);
+}
+
+/** One percentage, or the range the inherited fixtures span. `cellText`'s rule. */
+function trackedText(values: readonly TrackedValue[]): string {
+  const percents = values.map((value) => percentOfLevel(value.value));
+  const low = Math.min(...percents);
+  const high = Math.max(...percents);
+  return low === high ? `${String(low)}%` : `${String(low)}–${String(high)}%`;
+}
+
+/** Where an inherited value came from, fixture by fixture. */
+function inheritedTitle(values: readonly TrackedValue[]): string {
+  return `inherited · ${values
+    .map((value) => `fixture ${String(value.fixture)} ${String(percentOfLevel(value.value))}%`)
+    .join(", ")}`;
 }
 
 /**

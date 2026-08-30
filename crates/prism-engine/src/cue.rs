@@ -32,7 +32,9 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
-use prism_domain::{Cue, CueTrigger, GoDirection, MergeMode, PlaybackId, Sequence, SequenceId};
+use prism_domain::{
+    Cue, CueChange, CueTrack, CueTrigger, GoDirection, MergeMode, PlaybackId, Sequence, SequenceId,
+};
 
 use crate::plan::MergePlan;
 use crate::tick::TICK_HZ;
@@ -145,6 +147,24 @@ pub struct CueValue {
     pub value: u16,
 }
 
+/// Where a slot's **tracked** value changes, and what it changes to — S48.
+///
+/// One of these per cue at which the value a walk from the top of the list would
+/// leave a slot at moves. Everything between two of them is the same value, so a
+/// list of a thousand cues over a slot two of them touch is two entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrackPoint {
+    /// The cue, by playback index, from which the value below is in force.
+    pub cue: u32,
+    /// What the list holds the slot at from that cue on.
+    ///
+    /// `None` is **not held at all** — a `prism_domain::CueTracking::CueOnly`
+    /// value taken back with nothing underneath it. A slot a playback does not
+    /// provide falls through to whatever is below it in the merge, which is a
+    /// different thing from being held at zero.
+    pub value: Option<u16>,
+}
+
 /// One cue, compiled: times in ticks, parts as a range.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CuePlan {
@@ -211,6 +231,12 @@ pub struct SequencePlan {
     slots: Box<[CueSlot]>,
     cues: Box<[CuePlan]>,
     parts: Box<[CueValue]>,
+    /// The tracking table, grouped by slot and ordered by cue within a slot.
+    track: Box<[TrackPoint]>,
+    /// Where each slot's run of [`Self::track`] starts; `slot_count + 1` long,
+    /// so a slot's range is `track_index[i]..track_index[i + 1]` and the last
+    /// one needs no special case.
+    track_index: Box<[u32]>,
     looping: bool,
     unresolved: usize,
 }
@@ -274,7 +300,7 @@ impl SequencePlan {
         let mut cues: Vec<CuePlan> = Vec::with_capacity(order.len());
         let mut parts: Vec<CueValue> = Vec::with_capacity(resolved);
         let mut scratch: BTreeMap<u32, u16> = BTreeMap::new();
-        for cue in order {
+        for cue in &order {
             scratch.clear();
             for part in &cue.parts {
                 let Some(position) = plan
@@ -304,14 +330,91 @@ impl SequencePlan {
             });
         }
 
+        // **The tracking table** — S48. Built here, on the core thread, because
+        // this is where a sequence is compiled and a sequence is compiled
+        // whenever it changes: at load, and again when a cue is stored, edited,
+        // deleted, renumbered or moved. The tick reads it; the tick never builds
+        // it.
+        //
+        // It is held **by slot** rather than by cue, and that is the whole
+        // reason it fits. A cue-by-slot table is `cues x slots` cells — forty
+        // megabytes for a large list over a large rig, most of them repeats of
+        // the cell above. Held the other way round it is one entry per *change*,
+        // which is bounded by the number of cue parts and is therefore the same
+        // size as the edits it is derived from. Reading one slot at one cue is
+        // then a binary search over that slot's own run rather than an index,
+        // and it is allocation-free either way.
+        let mut runs: Vec<Vec<TrackPoint>> = vec![Vec::new(); positions.len()];
+        let mut walk = CueTrack::new();
+        let mut changes: Vec<CueChange> = Vec::new();
+        for (index, cue) in order.iter().enumerate() {
+            walk.enter(cue, &mut changes);
+            for change in &changes {
+                let Some(position) = plan
+                    .index_of(change.fixture, change.attribute)
+                    .and_then(|slot| positions.get(&slot))
+                else {
+                    continue;
+                };
+                let Some(run) = runs.get_mut(*position as usize) else {
+                    continue;
+                };
+                run.push(TrackPoint {
+                    cue: index as u32,
+                    value: change.value,
+                });
+            }
+        }
+        let mut track: Vec<TrackPoint> = Vec::new();
+        let mut track_index: Vec<u32> = Vec::with_capacity(runs.len() + 1);
+        for run in runs {
+            track_index.push(track.len() as u32);
+            track.extend(run);
+        }
+        track_index.push(track.len() as u32);
+
         Ok(Self {
             id: sequence.id,
             slots: slots.into_values().collect::<Vec<_>>().into_boxed_slice(),
             cues: cues.into_boxed_slice(),
             parts: parts.into_boxed_slice(),
+            track: track.into_boxed_slice(),
+            track_index: track_index.into_boxed_slice(),
             looping: sequence.looping,
             unresolved,
         })
+    }
+
+    /// What a walk from the first cue down to `cue` leaves slot `position` at -
+    /// **S48**, and the answer this whole session exists to have.
+    ///
+    /// `position` is an index into [`Self::slots`], the same one
+    /// [`Self::parts_of`] yields; `cue` is a playback index. `None` means the
+    /// list does not hold that slot at that cue at all — either no cue up to
+    /// there has named it, or the one that did took it back
+    /// (`prism_domain::CueTracking::CueOnly`). A slot the playback does not hold
+    /// falls through to whatever is under it in the merge, which is not the same
+    /// answer as zero.
+    ///
+    /// **This runs on the tick** and makes no allocator call: a binary search
+    /// over one slot's run of the flat table, and nothing else. It is the ninth
+    /// path `crates/prism-engine/tests/tick_allocations.rs` measures.
+    #[must_use]
+    pub fn tracked(&self, position: usize, cue: usize) -> Option<u16> {
+        let from = *self.track_index.get(position)? as usize;
+        let to = *self.track_index.get(position.checked_add(1)?)? as usize;
+        let run = self.track.get(from..to)?;
+        // The last point at or before this cue. `partition_point` is a binary
+        // search that allocates nothing and cannot panic on an empty slice.
+        let found = run.partition_point(|point| point.cue as usize <= cue);
+        run.get(found.checked_sub(1)?)?.value
+    }
+
+    /// How many entries the tracking table holds, for the measurement in
+    /// `PROGRESS.md`: it is the number of *changes*, not `cues x slots`.
+    #[must_use]
+    pub const fn track_len(&self) -> usize {
+        self.track.len()
     }
 
     /// Which sequence this is.
@@ -454,7 +557,7 @@ impl SequencePlan {
 #[cfg(all(test, not(loom)))]
 mod tests {
     use crate::cue::{
-        CueError, MAX_CUE_PARTS, MAX_CUES, SequencePlan, interpolate, ticks_from_seconds,
+        CueError, CuePlan, MAX_CUE_PARTS, MAX_CUES, SequencePlan, interpolate, ticks_from_seconds,
     };
     use crate::plan::MergePlan;
     use crate::testkit::{cue, cue_part, moving_head, sequence};
@@ -470,6 +573,22 @@ mod tests {
 
     fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
         plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+    }
+
+    /// Where one attribute sits in a compiled sequence's own slot table, which
+    /// is what `SequencePlan::tracked` is indexed by — not the merge plan's.
+    fn position(
+        compiled: &SequencePlan,
+        plan: &MergePlan,
+        fixture: u32,
+        attribute: AttributeType,
+    ) -> usize {
+        let wanted = slot(plan, fixture, attribute);
+        compiled
+            .slots()
+            .iter()
+            .position(|entry| entry.slot == wanted)
+            .expect("the sequence touches that attribute")
     }
 
     #[test]
@@ -529,6 +648,203 @@ mod tests {
     fn fading_down_is_the_mirror_of_fading_up() {
         assert_eq!(interpolate(65_535, 0, 220, 440), 32_768);
         assert_eq!(interpolate(60_000, 20_000, 1, 4), 50_000);
+    }
+
+    /// The tracking state, read the way the player reads it: by slot position
+    /// and cue index, off a table built when the sequence was compiled.
+    #[test]
+    fn a_slot_a_later_cue_never_names_keeps_the_value_the_earlier_one_gave_it() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![
+                    cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 32_768)]),
+                    cue("2", 0.0, vec![cue_part(2, AttributeType::Dimmer, 65_535)]),
+                    cue("3", 0.0, vec![cue_part(3, AttributeType::Dimmer, 20_000)]),
+                    cue("4", 0.0, vec![cue_part(1, AttributeType::Dimmer, 65_535)]),
+                ],
+                false,
+            ),
+        )
+        .unwrap();
+        let one = position(&compiled, &plan, 1, AttributeType::Dimmer);
+
+        // Cue 1 sets it, cues 2 and 3 do not mention it, cue 4 sets it again.
+        assert_eq!(compiled.tracked(one, 0), Some(32_768));
+        assert_eq!(compiled.tracked(one, 1), Some(32_768));
+        assert_eq!(compiled.tracked(one, 2), Some(32_768));
+        assert_eq!(compiled.tracked(one, 3), Some(65_535));
+
+        // And **nothing before the cue that first names it**, which is a
+        // different answer from zero: a slot the playback does not hold falls
+        // through to whatever is under it in the merge.
+        let three = position(&compiled, &plan, 3, AttributeType::Dimmer);
+        assert_eq!(compiled.tracked(three, 0), None);
+        assert_eq!(compiled.tracked(three, 1), None);
+        assert_eq!(compiled.tracked(three, 2), Some(20_000));
+    }
+
+    /// The one-off, in the table: a cue-only value is in force at its own cue
+    /// and gone at the next, back to whatever an earlier cue left underneath it.
+    #[test]
+    fn a_cue_only_value_is_in_the_table_at_its_own_cue_and_nowhere_else() {
+        let plan = plan();
+        let mut list = sequence(
+            vec![
+                cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 32_768)]),
+                cue("2", 0.0, vec![cue_part(1, AttributeType::Dimmer, 65_535)]),
+                cue("3", 0.0, vec![cue_part(2, AttributeType::Dimmer, 10_000)]),
+                cue("4", 0.0, vec![cue_part(2, AttributeType::Dimmer, 20_000)]),
+            ],
+            false,
+        );
+        list.cues[1].parts[0].tracking = prism_domain::CueTracking::CueOnly;
+        // And one with nothing underneath it at all, so the table has to carry a
+        // release rather than a value.
+        list.cues[2].parts[0].tracking = prism_domain::CueTracking::CueOnly;
+        let compiled = SequencePlan::build(&plan, &list).unwrap();
+
+        let one = position(&compiled, &plan, 1, AttributeType::Dimmer);
+        assert_eq!(compiled.tracked(one, 0), Some(32_768));
+        assert_eq!(compiled.tracked(one, 1), Some(65_535));
+        assert_eq!(
+            compiled.tracked(one, 2),
+            Some(32_768),
+            "the cue-only value did not go back to what was underneath it"
+        );
+
+        let two = position(&compiled, &plan, 2, AttributeType::Dimmer);
+        assert_eq!(compiled.tracked(two, 2), Some(10_000));
+        assert_eq!(
+            compiled.tracked(two, 3),
+            Some(20_000),
+            "cue 4 asserts it, so the take-back is overwritten rather than empty"
+        );
+
+        // Take cue 4 away and the release is what is left: nothing held.
+        list.cues.pop();
+        let shorter = SequencePlan::build(&plan, &list).unwrap();
+        let two = position(&shorter, &plan, 2, AttributeType::Dimmer);
+        assert_eq!(shorter.tracked(two, 2), Some(10_000));
+        assert_eq!(shorter.cue_count(), 3);
+    }
+
+    /// **The table is the size of the edits, not of the grid.**
+    ///
+    /// The reason the tracking state is held by slot rather than by cue. A
+    /// hundred cues over six slots is six hundred cells; if two of those cues
+    /// touch one slot, that slot costs **two** entries and not a hundred.
+    #[test]
+    fn a_tracking_table_is_the_size_of_the_edits_not_of_the_grid() {
+        let plan = plan();
+        let mut cues = vec![cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 100)])];
+        for number in 2..=100u32 {
+            // Ninety-nine cues that name nothing at all.
+            cues.push(cue(&number.to_string(), 0.0, Vec::new()));
+        }
+        cues.push(cue(
+            "101",
+            0.0,
+            vec![cue_part(1, AttributeType::Dimmer, 200)],
+        ));
+        let compiled = SequencePlan::build(&plan, &sequence(cues, false)).unwrap();
+        assert_eq!(compiled.cue_count(), 101);
+        assert_eq!(compiled.slot_count(), 1);
+        assert_eq!(
+            compiled.track_len(),
+            2,
+            "the table grew with the cues rather than with the changes"
+        );
+        let one = position(&compiled, &plan, 1, AttributeType::Dimmer);
+        assert_eq!(compiled.tracked(one, 50), Some(100));
+        assert_eq!(compiled.tracked(one, 100), Some(200));
+    }
+
+    /// A slot or a cue that is not there answers `None` rather than panicking:
+    /// this runs on the tick, and `prism-engine` denies itself `unwrap`
+    /// (`ARCHITECTURE_SPEC.md` section 3.1).
+    #[test]
+    fn asking_the_table_about_something_that_is_not_there_is_not_a_panic() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 100)])],
+                false,
+            ),
+        )
+        .unwrap();
+        assert_eq!(compiled.tracked(99, 0), None);
+        assert_eq!(compiled.tracked(0, usize::MAX), Some(100));
+        assert_eq!(compiled.tracked(usize::MAX, 0), None);
+
+        // And a sequence with no cues at all has no table and no opinion.
+        let empty = SequencePlan::build(&plan, &sequence(Vec::new(), false)).unwrap();
+        assert_eq!(empty.track_len(), 0);
+        assert_eq!(empty.tracked(0, 0), None);
+    }
+
+    /// Cues are tracked in **playback** order, which is by number: `1`, `1.5`,
+    /// `2`, `10`. A cue inserted between two others therefore inherits from the
+    /// one above it in the running order rather than from the one above it in
+    /// the file.
+    #[test]
+    fn the_table_follows_cue_numbers_and_not_the_order_of_the_file() {
+        let plan = plan();
+        let compiled = SequencePlan::build(
+            &plan,
+            &sequence(
+                vec![
+                    cue("2", 0.0, vec![cue_part(2, AttributeType::Dimmer, 2)]),
+                    cue("10", 0.0, vec![cue_part(2, AttributeType::Dimmer, 10)]),
+                    cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 1)]),
+                ],
+                false,
+            ),
+        )
+        .unwrap();
+        let one = position(&compiled, &plan, 1, AttributeType::Dimmer);
+        let two = position(&compiled, &plan, 2, AttributeType::Dimmer);
+        // Playback order is 1, 2, 10 - so fixture 1 is held from the *first*
+        // played cue on, which is the one written last in the file.
+        assert_eq!(compiled.cue(0).map(CuePlan::number), Some("1"));
+        assert_eq!(compiled.tracked(one, 0), Some(1));
+        assert_eq!(compiled.tracked(two, 0), None);
+        assert_eq!(compiled.tracked(two, 1), Some(2));
+        assert_eq!(compiled.tracked(two, 2), Some(10));
+    }
+
+    /// A cue that names one attribute twice says the second thing, and the
+    /// second part is what decides whether it tracks — it is the one that was
+    /// written last, exactly as a second keystroke would be.
+    #[test]
+    fn the_last_part_of_a_cue_wins_and_its_tracking_is_what_governs() {
+        let plan = plan();
+        let mut list = sequence(
+            vec![
+                cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 100)]),
+                cue(
+                    "2",
+                    0.0,
+                    vec![
+                        cue_part(1, AttributeType::Dimmer, 200),
+                        cue_part(1, AttributeType::Dimmer, 300),
+                    ],
+                ),
+                cue("3", 0.0, vec![cue_part(2, AttributeType::Dimmer, 1)]),
+            ],
+            false,
+        );
+        list.cues[1].parts[1].tracking = prism_domain::CueTracking::CueOnly;
+        let compiled = SequencePlan::build(&plan, &list).unwrap();
+        let one = position(&compiled, &plan, 1, AttributeType::Dimmer);
+        assert_eq!(compiled.tracked(one, 1), Some(300));
+        assert_eq!(
+            compiled.tracked(one, 2),
+            Some(100),
+            "the first part's tracking mode was used instead of the last part's"
+        );
     }
 
     #[test]

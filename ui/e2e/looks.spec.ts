@@ -542,3 +542,69 @@ test("a cue sheet of four hundred rows scrolls inside its own window", async ({ 
   // demanded zeros everywhere would pass for a sheet that had clipped its rows.
   expect(overflow.cues[1]).toBeGreaterThan(0);
 });
+
+/**
+ * **S48, in a browser against a real daemon: what a cue asserts and what it
+ * inherits.**
+ *
+ * The engine's `tests/cue_tracking.rs` asserts the *output* — the same cue
+ * reached two ways puts out the same frames. This asserts the *reading*, and it
+ * is the only place where the whole path runs: a cue stored from the programmer,
+ * a `Query::CueTracking` on the wire, the daemon folding the list, and a cell
+ * carrying a number no cue in it names.
+ *
+ * The last third is the edit. Blocking cue 2 writes what it inherits into it, so
+ * the cell that was a reading becomes an assertion — and that is the whole of
+ * what a blocking cue is.
+ */
+test("a cue sheet says what a cue asserts and what it inherits from the cues above", async ({
+  page,
+}) => {
+  await desk(page, PORT);
+  await openWindow(page, "SequenceSheet");
+  await openWindow(page, "CueViewer");
+  await openWindow(page, "Executors");
+  await page.getByTestId("select-3").click();
+  await page.getByTestId("new-sequence").click();
+  await command(page, "Assign Sequence 1 Executor 3");
+
+  // Cue 1 sets red on three PARs. Cue 2 sets **green** and says nothing at all
+  // about red — which is the shape the whole session is about.
+  await command(page, "1 thru 3 red at 100");
+  await page.getByTestId("store-number").fill("1");
+  await page.getByTestId("store-cue").click();
+  await expect(page.getByTestId("cue-row-1")).toBeVisible();
+
+  await clearProgrammer(page);
+  await command(page, "1 thru 3 green at 50");
+  await page.getByTestId("store-number").fill("2");
+  await page.getByTestId("store-cue").click();
+  await expect(page.getByTestId("cue-row-2")).toBeVisible();
+
+  // **The reading the session exists for.** Cue 2 does not set red, and the
+  // cell says what the list holds it at anyway — in brackets and resting,
+  // because it is a reading rather than this cue's assertion. Nothing in this
+  // browser worked that out: it is the daemon's answer to `Query::CueTracking`.
+  const inherited = page.getByTestId("cue-2-Red");
+  await expect(inherited).toHaveAttribute("data-set", "no");
+  await expect(inherited).toHaveAttribute("data-inherited", "yes");
+  await expect(inherited).toHaveText("(100%)");
+
+  // Cue 1 inherits nothing — there is nothing above it — so it blocks by
+  // construction, and cue 2 does not.
+  await expect(page.getByTestId("cue-tracking-1")).toHaveAttribute("data-blocks", "yes");
+  await expect(page.getByTestId("cue-tracking-2")).toHaveAttribute("data-blocks", "no");
+
+  // **The edit.** Blocking cue 2 writes the red it inherits into it, so nothing
+  // above it reaches past it — and the cell that was a reading is now an
+  // assertion carrying the same number.
+  await page.getByTestId("cue-tracking-2").selectOption("Block");
+  await expect(page.getByTestId("cue-2-Red")).toHaveAttribute("data-set", "yes");
+  await expect(page.getByTestId("cue-2-Red")).toHaveText("100%");
+  await expect(page.getByTestId("cue-tracking-2")).toHaveAttribute("data-blocks", "yes");
+
+  // And none of it is held here: a reload finds the cue the daemon wrote.
+  await page.reload();
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  await expect(page.getByTestId("cue-2-Red")).toHaveAttribute("data-set", "yes");
+});

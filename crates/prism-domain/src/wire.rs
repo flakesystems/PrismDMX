@@ -87,6 +87,10 @@ round_trip! {
 
     cue_trigger => crate::CueTrigger,
     cue_property => crate::CueProperty,
+    cue_tracking => crate::CueTracking,
+    cue_tracking_mode => crate::CueTrackingMode,
+    tracked_value => crate::TrackedValue,
+    cue_tracking_row => crate::CueTrackingRow,
     cue_part => crate::CuePart,
     cue => crate::Cue,
     cue_edit => crate::CueEdit,

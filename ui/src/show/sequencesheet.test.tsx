@@ -29,7 +29,7 @@ import { act } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "../App";
-import type { Answer, Command, JsonValue, WindowType } from "../bindings";
+import type { Answer, AttributeType, Command, JsonValue, WindowType } from "../bindings";
 import { ATTRIBUTE_TYPE_VARIANTS } from "../bindings/variants";
 import { Connection } from "../ipc/connection";
 import type { Snapshot } from "../ipc/protocol";
@@ -748,6 +748,36 @@ describe("the store bar", () => {
   });
 });
 
+/**
+ * What every cue of a list inherits, as the daemon would answer it — S48.
+ *
+ * Written here rather than recorded because what is being checked is the
+ * **reading**: a cue sheet given these rows has to draw them, and a script that
+ * happened to produce them would be checking the script.
+ */
+function trackingAnswer(rows: { number: string; inherited: Inherited[] }[]): Answer {
+  return {
+    t: "CueTracking",
+    sequenceId: 1,
+    cues: rows.map((row) => ({
+      number: row.number,
+      inherited: row.inherited,
+      // The daemon's own reading, and this test writes it the way the daemon
+      // computes it — a cue that inherits nothing asserts everything.
+      blocks: row.inherited.length === 0,
+    })),
+  };
+}
+
+/** One inherited value, as the answer carries it. */
+interface Inherited {
+  readonly fixture: number;
+  readonly attribute: AttributeType;
+  readonly value: number;
+}
+
+
+
 /** What is in a text box. */
 function numberIn(testId: string): string {
   const field = screen.getByTestId(testId);
@@ -756,6 +786,162 @@ function numberIn(testId: string): string {
   }
   return field.value;
 }
+
+describe("what a cue inherits", () => {
+  beforeEach(() => {
+    setLogSink(nullSink);
+  });
+
+  /**
+   * **The question, and the reason it is a question at all.** Every cue of this
+   * list is in the client's mirror, so the window could fold them itself — and
+   * must not: that fold is the rule the engine resolves a `Goto` through, and a
+   * second implementation of it here would be a second answer to the one thing
+   * S48 exists to give a single answer to.
+   */
+  it("asks the daemon what each cue inherits rather than folding the cues itself", async () => {
+    const { queries, applyStep } = await desk("CueViewer");
+    await applyStep(...A_CUE_LIST);
+    expect(queries().some((query) => query.t === "CueTracking")).toBe(true);
+  });
+
+  /**
+   * S45's finding, one window along: a playback advancing a cue rewrites the
+   * `/sequences` subtree, so an effect keyed on that would put this question on
+   * the wire once per cue of a chase. The dependency is the list's `cues` node.
+   */
+  it("does not ask again when a playback advances a cue", async () => {
+    const { queries, applyStep } = await desk("CueViewer");
+    await applyStep(...A_CUE_LIST);
+    const before = queries().filter((query) => query.t === "CueTracking").length;
+    expect(before).toBeGreaterThan(0);
+
+    await applyStep("fire the list", "step it again");
+    expect(screen.getByTestId("looks-executor-cue").textContent).toBe("cue 2");
+    expect(queries().filter((query) => query.t === "CueTracking").length).toBe(before);
+  });
+
+  /**
+   * **The half that is new.** It used to be a dash, and a dash answers *this cue
+   * does not set it* without answering *so what comes out?* — which is the
+   * question this window is opened with.
+   */
+  it("draws the inherited value where a cue leaves an attribute to track", async () => {
+    // Cue 1 sets Red, cue 2 sets Green and says nothing about Red — so Red at
+    // cue 2 is the inherited reading, and it is the **daemon** that says what
+    // was inherited.
+    const show = showWith(
+      [{ fixture: 1, attribute: "Red", value: 65535, presetRef: null }],
+      [{ fixture: 1, attribute: "Green", value: 65535, presetRef: null }],
+    );
+    const { unmount } = await renderViewerTracking(
+      show,
+      trackingAnswer([
+        { number: "1", inherited: [] },
+        { number: "2", inherited: [{ fixture: 1, attribute: "Red", value: 65535 }] },
+      ]),
+    );
+    const cell = screen.getByTestId("cue-2-Red");
+    expect(cell.dataset["set"]).toBe("no");
+    expect(cell.dataset["inherited"]).toBe("yes");
+    // In brackets and resting, because it is not this cue's assertion — and it
+    // carries the number, which is the whole point.
+    expect(cell.textContent).toBe("(100%)");
+    expect(cell.getAttribute("title")).toContain("fixture 1 100%");
+    unmount();
+  });
+
+  /**
+   * A dash still means something, and it is a different thing: **no cue of this
+   * list has ever set it**, so the list is not the one deciding it and the
+   * attribute rests at its home value.
+   */
+  it("keeps the dash where nothing at all is held", async () => {
+    // The same two cues, and a daemon that says cue 2 inherits nothing —
+    // because cue 1 held its Red **cue-only** and handed it back. The cell is a
+    // dash, and it means something different from the one above it: no cue of
+    // this list is deciding that attribute, so it rests at its home value.
+    const show = showWith(
+      [{ fixture: 1, attribute: "Red", value: 65535, presetRef: null, tracking: "CueOnly" }],
+      [{ fixture: 1, attribute: "Green", value: 65535, presetRef: null }],
+    );
+    const { unmount } = await renderViewerTracking(
+      show,
+      trackingAnswer([
+        { number: "1", inherited: [] },
+        { number: "2", inherited: [] },
+      ]),
+    );
+    const cell = screen.getByTestId("cue-2-Red");
+    expect(cell.dataset["inherited"]).toBe("no");
+    expect(cell.textContent).toBe("—");
+    unmount();
+  });
+
+  /**
+   * A cue that inherits nothing asserts everything, and the row says so. It is
+   * the daemon's reading and not `inherited.length === 0` worked out here — what
+   * counts as *asserting everything* is the tracking rule's answer.
+   */
+  it("marks a cue that inherits nothing as a blocking cue", async () => {
+    const { answerQuery, applyStep } = await desk("CueViewer");
+    await applyStep(...A_CUE_LIST);
+    await answerQuery(
+      "CueTracking",
+      trackingAnswer([
+        { number: "1", inherited: [] },
+        { number: "2", inherited: [{ fixture: 1, attribute: "Red", value: 32768 }] },
+      ]),
+    );
+    expect(screen.getByTestId("cue-tracking-1").dataset["blocks"]).toBe("yes");
+    expect(screen.getByTestId("cue-tracking-2").dataset["blocks"]).toBe("no");
+  });
+
+  /** The three answers to one question, as one command. */
+  it("sends SetCueTracking when a cue is told what to do about tracking", async () => {
+    const { acted, applyStep } = await desk("CueViewer");
+    await applyStep(...A_CUE_LIST);
+    const chooser = screen.getByTestId("cue-tracking-2");
+    fireEvent.change(chooser, { target: { value: "CueOnly" } });
+    expect(acted().at(-1)).toEqual({
+      t: "SetCueTracking",
+      sequenceId: 1,
+      cueNumber: "2",
+      tracking: "CueOnly",
+    });
+
+    fireEvent.change(chooser, { target: { value: "Block" } });
+    expect(acted().at(-1)).toEqual({
+      t: "SetCueTracking",
+      sequenceId: 1,
+      cueNumber: "2",
+      tracking: "Block",
+    });
+  });
+
+  /**
+   * **A cue-only value is still an assertion**, and is drawn as one: while the
+   * cue is current this is what goes out. The mark says the list hands it back
+   * afterwards, which a dimmed cell would not.
+   */
+  it("marks a cue-only value rather than drawing it as an absence", async () => {
+    const show = showWith([
+      { fixture: 1, attribute: "Red", value: 65535, presetRef: null, tracking: "CueOnly" },
+      { fixture: 1, attribute: "Green", value: 65535, presetRef: null },
+    ]);
+    const { unmount } = renderViewer(show);
+    const oneOff = screen.getByTestId("cue-1-Red");
+    expect(oneOff.dataset["set"]).toBe("yes");
+    expect(oneOff.dataset["oneOff"]).toBe("yes");
+    expect(oneOff.getAttribute("title")).toContain("taken back");
+    // And a part with no `tracking` at all — a daemon one version behind —
+    // reads as the tracking value it was, rather than being dropped.
+    const tracked = screen.getByTestId("cue-1-Green");
+    expect(tracked.dataset["set"]).toBe("yes");
+    expect(tracked.dataset["oneOff"]).toBe("no");
+    unmount();
+  });
+});
 
 describe("the cue grid", () => {
   /**
@@ -909,6 +1095,41 @@ function renderViewer(show: JsonValue) {
       </ConsoleContext.Provider>
     </DeskProvider>,
   );
+}
+
+/**
+ * The same window, over a store whose one outstanding question is answered with
+ * `rows`.
+ *
+ * The inherited half of a cell is the **daemon's** answer, so a test of the
+ * reading has to supply one. `DeskStore::ask` resolves when `answered` is
+ * called with the sequence number the enquiry returned, which is the same path a
+ * real answer takes — this stands in for the socket and for nothing else.
+ */
+async function renderViewerTracking(show: JsonValue, rows: Answer) {
+  const store = new DeskStore();
+  let asked: number | null = null;
+  store.attach(
+    () => null,
+    () => {
+      asked = 1;
+      return asked;
+    },
+  );
+  const view = render(
+    <DeskProvider store={store}>
+      <ConsoleContext.Provider value={NO_CONSOLE}>
+        <CueViewer show={show} session={SELECTED} programmer={null} />
+      </ConsoleContext.Provider>
+    </DeskProvider>,
+  );
+  await act(async () => {
+    if (asked !== null) {
+      store.answered(asked, rows);
+    }
+    await Promise.resolve();
+  });
+  return view;
 }
 
 /** A console shell that records nothing: these tests press no cue key. */

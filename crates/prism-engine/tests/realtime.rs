@@ -510,6 +510,7 @@ fn stress_sequence(fixture_type: &FixtureType, fixtures: u32, seed: u16) -> Sequ
                             .wrapping_mul(u32::from(number) + 1)
                             .wrapping_add(u32::from(seed)) as u16,
                         preset_ref: None,
+                        tracking: prism_domain::CueTracking::Track,
                     })
                 })
                 .collect(),

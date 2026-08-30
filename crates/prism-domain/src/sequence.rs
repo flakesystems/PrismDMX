@@ -5,6 +5,7 @@
 //! without a float ever entering the show file.
 
 use core::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -28,6 +29,51 @@ pub enum CueTrigger {
     Sound,
 }
 
+/// What a cue says about one attribute it names — **S48**.
+///
+/// # Three states, and only two of them are written down
+///
+/// A cue is *an edit, not a state* (`docs/DMX_MERGE.md` section 3): it carries
+/// what was in the programmer when it was stored and nothing else, and
+/// everything it does not name keeps whatever the cue before it left. Until S48
+/// that gave an attribute two states — the cue names it, or it does not — and
+/// the second one is *inherits*, said by an absence rather than by a value.
+///
+/// The third is here. A cue may name an attribute and **take it back when the
+/// list leaves the cue**, which is what an operator means by a one-off: a
+/// blinder on cue 12 that is not still on at cue 13, without cue 13 having to
+/// know it happened. So: [`Self::Track`] asserts and carries forward,
+/// [`Self::CueOnly`] asserts and hands the attribute back to whatever was
+/// underneath it, and *inherits* stays what it always was — no part at all.
+///
+/// This is the other half of punch-list **B21** (S43). What the programmer marks
+/// as *overriding* is exactly what a cue has to assert for a jump into it to
+/// produce the same light twice, and a value that is taken back at the end is
+/// still an assertion **while the cue is current**.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum CueTracking {
+    /// The value stands until a later cue says otherwise.
+    ///
+    /// **The default, and the meaning every cue written before S48 already
+    /// had.** `#[serde(default)]` on [`CuePart::tracking`] is what makes an
+    /// older `.prism` file open, and this is why the default is the right one
+    /// rather than merely a compiling one: tracking is what a cue has always
+    /// done here.
+    #[default]
+    Track,
+    /// The value is taken back when the list leaves this cue.
+    ///
+    /// Back to *what was underneath*, which is whatever the tracking state held
+    /// for that attribute before this cue asserted it — and to nothing at all
+    /// when no earlier cue held it, in which case the playback stops providing
+    /// it and the merge falls through to whatever is below (`docs/DMX_MERGE.md`
+    /// section 1).
+    CueOnly,
+}
+
 /// One attribute value inside a cue.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
@@ -42,6 +88,15 @@ pub struct CuePart {
     /// Link to the preset this value came from, which keeps the cue
     /// live-updatable when the preset is edited later.
     pub preset_ref: Option<PresetId>,
+    /// Whether the value carries forward or is taken back at the end of the cue
+    /// - **S48**.
+    ///
+    /// `#[serde(default)]`, and the default is [`CueTracking::Track`] because
+    /// that is what a cue stored before this field existed did. A `.prism` file
+    /// keeps each sequence as its own MessagePack document (S15), so an older
+    /// file simply has no such key and reads as the tracking cue it was.
+    #[serde(default)]
+    pub tracking: CueTracking,
 }
 
 /// Which cue the programmer is editing, and whether it has moved since (S39).
@@ -143,6 +198,18 @@ pub struct Cue {
 }
 
 impl Cue {
+    /// Which attributes this cue asserts, whether they track or are taken back.
+    ///
+    /// The set a cue sheet draws in S43's *overriding* language, and the one
+    /// [`CueTrack::inherited`] is the complement of.
+    #[must_use]
+    pub fn asserts(&self) -> BTreeSet<CueKey> {
+        self.parts
+            .iter()
+            .map(|part| (part.fixture, part.attribute))
+            .collect()
+    }
+
     /// Orders two cue numbers the way an operator reads them: `1`, `1.5`, `2`,
     /// `10` — not the lexical order `1`, `1.5`, `10`, `2`.
     ///
@@ -157,6 +224,229 @@ impl Cue {
             (Err(_), Err(_)) => left.cmp(right),
         }
     }
+}
+
+/// What one attribute of one fixture is held at, as a tracking state names it.
+///
+/// A pair rather than a struct because it is a **key**: [`CueTrack`] holds its
+/// state in a map ordered by it, and the order is the one every attribute table
+/// in the desk uses — fixture number, then `AttributeType`'s own order.
+pub type CueKey = (FixtureId, AttributeType);
+
+/// One attribute whose held value moved when a cue was entered.
+///
+/// `value` is `None` for an attribute the list has stopped holding — a
+/// [`CueTracking::CueOnly`] value taken back with nothing underneath it. That is
+/// a different fact from *held at zero*, and the merge treats it differently: an
+/// attribute a playback does not provide falls through to whatever is below it,
+/// and one held at zero wins its slot at zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CueChange {
+    /// The fixture.
+    pub fixture: FixtureId,
+    /// The attribute.
+    pub attribute: AttributeType,
+    /// What it is held at from this cue on, or `None` for no longer held.
+    pub value: Option<u16>,
+}
+
+/// The tracking rule, written once — **S48**.
+///
+/// # What this exists to decide
+///
+/// A cue list walked from the top produces, at every cue, a full set of
+/// attribute values: the ones that cue asserts, plus everything an earlier cue
+/// asserted and nothing has overwritten since. That set is the **tracking
+/// state**, and until S48 nothing in this project computed it — so a cue reached
+/// by a `Goto` kept whatever the operator happened to be looking at, and cue 3
+/// produced one output when walked into and another when jumped to.
+///
+/// It is **derived and never stored**. A `.prism` file keeps the *edits*,
+/// because a file that stored the resolved state would be a file that could not
+/// be corrected by editing cue 2 - which is `Query::DarkUniverses` (S37) and
+/// `Query::ArtNetNodes` (S46) arriving at the same rule from two other
+/// directions.
+///
+/// # The fold, and why it needs two states rather than an undo
+///
+/// The obvious way to take a [`CueTracking::CueOnly`] value back is to remember
+/// what it covered and put that back. That is a stack, it is per attribute, and
+/// it is wrong the first time two cue-only cues touch one attribute in a row.
+///
+/// So there is no undo. Two states are carried instead:
+///
+/// - `tracked` — the state built from [`CueTracking::Track`] parts **only**. A
+///   cue-only part never enters it, so it never covered anything and there is
+///   nothing to restore.
+/// - `visible` — `tracked` with the current cue's cue-only parts laid over it.
+///   This is what the playback holds while that cue is the one being played.
+///
+/// Leaving a cue is then not an operation at all: the next cue's overlay
+/// replaces this one's, and every attribute that was only ever in the overlay
+/// falls back to `tracked` by construction.
+///
+/// # Who uses it
+///
+/// `prism_engine::SequencePlan` walks it once per compile to build the table its
+/// player reads on the tick; `prism_core` walks it to answer
+/// `crate::Query::CueTracking` and to write a blocking cue. **One rule, three
+/// readers** — a second implementation in TypeScript is exactly what the query
+/// exists to prevent.
+#[derive(Debug, Clone, Default)]
+pub struct CueTrack {
+    /// The state built from tracking parts only.
+    tracked: BTreeMap<CueKey, u16>,
+    /// `tracked` with the current cue's cue-only parts over it.
+    visible: BTreeMap<CueKey, u16>,
+    /// What the current cue holds cue-only.
+    overlay: BTreeMap<CueKey, u16>,
+    /// Reused between cues, so a long list is not a long list of allocations.
+    touched: BTreeSet<CueKey>,
+    /// The current cue's parts, last-wins, for the same reason.
+    here: BTreeMap<CueKey, (u16, CueTracking)>,
+}
+
+impl CueTrack {
+    /// A walk that has not entered a cue yet: nothing is held.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Enters `cue` and reports every attribute whose held value moved.
+    ///
+    /// `changes` is cleared first and left holding the difference, in [`CueKey`]
+    /// order. It is a **difference** rather than the whole state because that is
+    /// what makes compiling a long list linear in the number of cue parts rather
+    /// than quadratic in the number of cues: only the attributes this cue names
+    /// and the ones the *previous* cue held cue-only can have moved.
+    ///
+    /// A cue that names one attribute twice says the second thing, exactly as a
+    /// second keystroke would — and the second part's [`CuePart::tracking`] is
+    /// what governs, because it is the one that was written last.
+    pub fn enter(&mut self, cue: &Cue, changes: &mut Vec<CueChange>) {
+        changes.clear();
+        let Self {
+            tracked,
+            visible,
+            overlay,
+            touched,
+            here,
+        } = self;
+
+        touched.clear();
+        here.clear();
+        touched.extend(overlay.keys().copied());
+        for part in &cue.parts {
+            let key = (part.fixture, part.attribute);
+            touched.insert(key);
+            here.insert(key, (part.value, part.tracking));
+        }
+
+        overlay.clear();
+        for (key, (value, tracking)) in here.iter() {
+            match tracking {
+                CueTracking::Track => tracked.insert(*key, *value),
+                CueTracking::CueOnly => overlay.insert(*key, *value),
+            };
+        }
+
+        for key in touched.iter() {
+            let now = overlay.get(key).or_else(|| tracked.get(key)).copied();
+            if visible.get(key).copied() == now {
+                continue;
+            }
+            match now {
+                Some(value) => visible.insert(*key, value),
+                None => visible.remove(key),
+            };
+            changes.push(CueChange {
+                fixture: key.0,
+                attribute: key.1,
+                value: now,
+            });
+        }
+    }
+
+    /// What the list holds while the cue just entered is being played.
+    ///
+    /// The cue's own values, everything an earlier cue asserted and nothing has
+    /// overwritten, and the current cue's cue-only values over the top.
+    #[must_use]
+    pub const fn visible(&self) -> &BTreeMap<CueKey, u16> {
+        &self.visible
+    }
+
+    /// What the list would hand on to the **next** cue.
+    ///
+    /// [`Self::visible`] without the current cue's cue-only overlay, which is
+    /// the same thing said the other way round: a cue-only value is not handed
+    /// on, and that is the whole of what makes it cue-only.
+    #[must_use]
+    pub const fn tracked(&self) -> &BTreeMap<CueKey, u16> {
+        &self.tracked
+    }
+
+    /// Which of the attributes now held this cue does **not** name — what it
+    /// inherits.
+    ///
+    /// The list a cue sheet draws in the resting style beside the ones the cue
+    /// asserts, and the list a blocking cue writes into itself.
+    #[must_use]
+    pub fn inherited(&self, cue: &Cue) -> Vec<(CueKey, u16)> {
+        let named = cue.asserts();
+        self.visible
+            .iter()
+            .filter(|(key, _)| !named.contains(*key))
+            .map(|(key, value)| (*key, *value))
+            .collect()
+    }
+}
+
+/// What an operator is saying about a whole cue — **S48**.
+///
+/// The command argument behind `crate::Command::SetCueTracking`, and
+/// deliberately **not** [`CueTracking`]: that type is what one part of a cue
+/// carries, and this is one of three things a person does to a cue. Two of them
+/// set every part's [`CuePart::tracking`]; the third writes values.
+///
+/// # Why blocking is here and not a flag on [`Cue`]
+///
+/// A blocking cue is one that **asserts everything** — nothing reaches past it,
+/// so a list can be cut into sections an operator can rehearse from. There are
+/// two ways to build one and only one of them survives contact with this
+/// session's own rule.
+///
+/// A `block: bool` on the cue would be a *mode*, and the engine would have to
+/// honour it by treating the inherited values as if the cue had named them. But
+/// those values are derived from the cues before it, so editing cue 2 would
+/// still change what a blocking cue 5 puts out — which is precisely what
+/// blocking is asked for to stop.
+///
+/// So blocking is an **edit**: [`Self::Block`] writes the inherited values into
+/// the cue as ordinary parts. After it, the cue names everything, nothing before
+/// it reaches past it, and the file is self-contained. What the desk *shows* as
+/// a blocking cue is then derived rather than stored — a cue that inherits
+/// nothing — so a later edit that gives cue 2 a new attribute correctly stops
+/// the mark, because the cue no longer asserts everything.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum CueTrackingMode {
+    /// Every value this cue holds carries forward — the default a cue is stored
+    /// in.
+    #[default]
+    Track,
+    /// Every value this cue holds is taken back when the list leaves it.
+    CueOnly,
+    /// The cue asserts everything: what it inherits is written into it, and
+    /// every value it holds carries forward.
+    ///
+    /// A cue-only value **becomes a tracking one**, because a value that is
+    /// taken back at the end is not an assertion and a cue that asserts
+    /// everything cannot have one.
+    Block,
 }
 
 /// One field of a cue, changed on its own.
@@ -346,6 +636,40 @@ pub struct Sequence {
     pub current_cue_index: Option<u32>,
 }
 
+impl Sequence {
+    /// The cues in **playback order**, which is by number and not by position in
+    /// the file.
+    ///
+    /// `1`, `1.5`, `2`, `10` is the order an operator reads and the order
+    /// `prism_engine::SequencePlan` compiles, and inserting a cue between two
+    /// others is the entire reason cue numbers are decimal strings. Stable, so
+    /// two cues with the same number keep their file order.
+    #[must_use]
+    pub fn ordered_cues(&self) -> Vec<&Cue> {
+        let mut order: Vec<&Cue> = self.cues.iter().collect();
+        order.sort_by(|left, right| Cue::compare_numbers(&left.number, &right.number));
+        order
+    }
+
+    /// What a walk from the first cue down to `index` holds, cue by cue.
+    ///
+    /// Answers one [`CueTrack`] per cue of [`Self::ordered_cues`], each carrying
+    /// the state **while that cue is being played**. Walked once rather than
+    /// re-folded per cue, so a list of a thousand cues costs one pass.
+    #[must_use]
+    pub fn tracking(&self) -> Vec<CueTrack> {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        self.ordered_cues()
+            .into_iter()
+            .map(|cue| {
+                track.enter(cue, &mut changes);
+                track.clone()
+            })
+            .collect()
+    }
+}
+
 /// The level a cue list written before [`Sequence::master_level`] existed was
 /// playing at — full, because a playback nobody has faded has to make light.
 const fn full_master() -> u16 {
@@ -361,8 +685,8 @@ const fn unity_speed() -> u16 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AttributeType, Cue, CuePart, CueProperty, CueTrigger, FixtureId, RgbColor, Sequence,
-        SequenceId,
+        AttributeType, Cue, CuePart, CueProperty, CueTrack, CueTracking, CueTrackingMode,
+        CueTrigger, FixtureId, RgbColor, Sequence, SequenceId,
     };
 
     /// **The number is trimmed on both sides**, because an operator typed one
@@ -396,6 +720,7 @@ mod tests {
                 attribute: AttributeType::Dimmer,
                 value: 65535,
                 preset_ref: None,
+                tracking: CueTracking::Track,
             }],
         }
     }
@@ -509,6 +834,279 @@ mod tests {
             serde_json::from_str(r#"{"id":1,"name":"Main","cues":[],"loop":false}"#).unwrap();
         assert!(!sequence.is_active);
         assert_eq!(sequence.current_cue_index, None);
+    }
+
+    /// **A cue written before S48 tracks**, which is what it did when it was
+    /// written. The field is `#[serde(default)]` and the default carries the
+    /// meaning the old file already had, so a `.prism` from S47 opens and means
+    /// the same thing.
+    #[test]
+    fn a_cue_part_written_before_tracking_reads_as_a_tracking_one() {
+        let part: CuePart = serde_json::from_str(
+            r#"{"fixture":1,"attribute":"Dimmer","value":65535,"presetRef":null}"#,
+        )
+        .unwrap();
+        assert_eq!(part.tracking, CueTracking::Track);
+
+        // A whole cue out of an older file, through MessagePack, which is what a
+        // `.prism` actually keeps (S15).
+        let packed = rmp_serde::to_vec_named(&serde_json::json!({
+            "number": "1",
+            "name": "Look",
+            "fadeIn": 3.0,
+            "fadeOut": 3.0,
+            "delay": 0.0,
+            "trigger": "Go",
+            "triggerTime": null,
+            "parts": [{
+                "fixture": 1,
+                "attribute": "Dimmer",
+                "value": 65535,
+                "presetRef": null,
+            }],
+        }))
+        .unwrap();
+        let older: Cue = rmp_serde::from_slice(&packed).unwrap();
+        assert_eq!(older.parts[0].tracking, CueTracking::Track);
+
+        // And a cue-only part survives the round trip it was added for.
+        let one_off = CuePart {
+            tracking: CueTracking::CueOnly,
+            ..older.parts[0].clone()
+        };
+        let text = serde_json::to_string(&one_off).unwrap();
+        assert!(text.contains(r#""tracking":"CueOnly""#), "{text}");
+        assert_eq!(serde_json::from_str::<CuePart>(&text).unwrap(), one_off);
+    }
+
+    /// The three words an operator says about a cue, on the wire.
+    #[test]
+    fn the_three_tracking_modes_are_named_on_the_wire() {
+        for (mode, text) in [
+            (CueTrackingMode::Track, "\"Track\""),
+            (CueTrackingMode::CueOnly, "\"CueOnly\""),
+            (CueTrackingMode::Block, "\"Block\""),
+        ] {
+            assert_eq!(serde_json::to_string(&mode).unwrap(), text);
+        }
+        assert_eq!(CueTrackingMode::default(), CueTrackingMode::Track);
+    }
+
+    fn valued(fixture: u32, value: u16, tracking: CueTracking) -> CuePart {
+        CuePart {
+            fixture: FixtureId::new(fixture),
+            attribute: AttributeType::Dimmer,
+            value,
+            preset_ref: None,
+            tracking,
+        }
+    }
+
+    fn look(number: &str, parts: Vec<CuePart>) -> Cue {
+        Cue {
+            parts,
+            number: number.to_owned(),
+            ..cue(number)
+        }
+    }
+
+    fn held(track: &CueTrack, fixture: u32) -> Option<u16> {
+        track
+            .visible()
+            .get(&(FixtureId::new(fixture), AttributeType::Dimmer))
+            .copied()
+    }
+
+    /// The rule itself: what a cue does not name keeps what an earlier cue left.
+    #[test]
+    fn a_walk_down_a_list_carries_every_value_an_earlier_cue_asserted() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+
+        track.enter(
+            &look("1", vec![valued(1, 32_768, CueTracking::Track)]),
+            &mut changes,
+        );
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].value, Some(32_768));
+        assert_eq!(held(&track, 1), Some(32_768));
+
+        // A cue that names something else leaves fixture 1 exactly where it was
+        // - and says so by reporting no change for it.
+        track.enter(
+            &look("2", vec![valued(2, 10_000, CueTracking::Track)]),
+            &mut changes,
+        );
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].fixture, FixtureId::new(2));
+        assert_eq!(held(&track, 1), Some(32_768));
+        assert_eq!(held(&track, 2), Some(10_000));
+
+        // And a cue that names nothing at all changes nothing at all.
+        track.enter(&look("3", Vec::new()), &mut changes);
+        assert!(changes.is_empty());
+        assert_eq!(held(&track, 1), Some(32_768));
+    }
+
+    /// A cue-only value is handed back to **what was underneath it**, which is
+    /// what makes it an undo of one edit rather than a blackout.
+    #[test]
+    fn a_cue_only_value_is_handed_back_to_whatever_was_under_it() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look("1", vec![valued(1, 32_768, CueTracking::Track)]),
+            &mut changes,
+        );
+        track.enter(
+            &look("2", vec![valued(1, 65_535, CueTracking::CueOnly)]),
+            &mut changes,
+        );
+        assert_eq!(held(&track, 1), Some(65_535));
+        // It is **visible** and not **tracked**: that difference is the whole
+        // type, and it is why leaving the cue needs no undo.
+        assert_eq!(
+            track
+                .tracked()
+                .get(&(FixtureId::new(1), AttributeType::Dimmer))
+                .copied(),
+            Some(32_768)
+        );
+
+        track.enter(&look("3", Vec::new()), &mut changes);
+        assert_eq!(held(&track, 1), Some(32_768));
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].value, Some(32_768));
+    }
+
+    /// Two cue-only cues in a row over one attribute, which is the case an undo
+    /// stack gets wrong: the second one covers the first, and leaving the second
+    /// goes back to what neither of them wrote.
+    #[test]
+    fn two_cue_only_cues_in_a_row_both_hand_back_to_the_tracked_value() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look("1", vec![valued(1, 100, CueTracking::Track)]),
+            &mut changes,
+        );
+        track.enter(
+            &look("2", vec![valued(1, 200, CueTracking::CueOnly)]),
+            &mut changes,
+        );
+        track.enter(
+            &look("3", vec![valued(1, 300, CueTracking::CueOnly)]),
+            &mut changes,
+        );
+        assert_eq!(held(&track, 1), Some(300));
+        track.enter(&look("4", Vec::new()), &mut changes);
+        assert_eq!(held(&track, 1), Some(100));
+    }
+
+    /// A cue-only value with nothing under it stops being held at all, which is
+    /// a different fact from *held at zero*: the merge falls through to whatever
+    /// is below the playback rather than to the playback writing a nought.
+    #[test]
+    fn a_cue_only_value_with_nothing_under_it_stops_being_held() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look("1", vec![valued(1, 65_535, CueTracking::CueOnly)]),
+            &mut changes,
+        );
+        assert_eq!(held(&track, 1), Some(65_535));
+        track.enter(&look("2", Vec::new()), &mut changes);
+        assert_eq!(held(&track, 1), None);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].value, None, "a release was reported as a value");
+    }
+
+    /// A cue that asserts a value the list already holds moves nothing, and the
+    /// walk says so by reporting **no change** — which is what keeps compiling a
+    /// long list linear in the edits rather than in the cues.
+    #[test]
+    fn a_cue_that_asserts_what_is_already_held_reports_no_change() {
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        track.enter(
+            &look("1", vec![valued(1, 100, CueTracking::Track)]),
+            &mut changes,
+        );
+        assert_eq!(changes.len(), 1);
+        // The same value again, said by a different cue: the attribute is in
+        // `touched` because the cue names it, and it is not in `changes`
+        // because nothing about the output moved.
+        track.enter(
+            &look("2", vec![valued(1, 100, CueTracking::Track)]),
+            &mut changes,
+        );
+        assert!(changes.is_empty(), "{changes:?}");
+        assert_eq!(held(&track, 1), Some(100));
+        // And what the cue asserts is what it names, whatever the value is.
+        assert_eq!(
+            look("2", vec![valued(1, 100, CueTracking::Track)]).asserts(),
+            [(FixtureId::new(1), AttributeType::Dimmer)]
+                .into_iter()
+                .collect()
+        );
+    }
+
+    /// What a cue **inherits** is the complement of what it asserts, and it is
+    /// the list a blocking cue writes into itself.
+    #[test]
+    fn what_a_cue_inherits_is_everything_held_that_it_does_not_name() {
+        let sequence = Sequence {
+            id: SequenceId::new(1),
+            name: "Main".to_owned(),
+            color: None,
+            cues: vec![
+                look("1", vec![valued(1, 100, CueTracking::Track)]),
+                look("2", vec![valued(2, 200, CueTracking::Track)]),
+                look("3", vec![valued(3, 300, CueTracking::Track)]),
+            ],
+            looping: false,
+            master_level: u16::MAX,
+            speed: crate::SPEED_UNITY,
+            is_active: false,
+            current_cue_index: None,
+        };
+        let states = sequence.tracking();
+        assert_eq!(states.len(), 3);
+
+        // **The first cue of a list inherits nothing** — there is nothing above
+        // it — so it blocks by construction, and that is worth drawing rather
+        // than hiding.
+        assert!(states[0].inherited(&sequence.cues[0]).is_empty());
+        assert_eq!(
+            states[2].inherited(&sequence.cues[2]),
+            vec![
+                ((FixtureId::new(1), AttributeType::Dimmer), 100),
+                ((FixtureId::new(2), AttributeType::Dimmer), 200),
+            ]
+        );
+    }
+
+    /// The playback order is the number order, and a cue is found by the number
+    /// an operator typed — trimmed, because they typed it.
+    #[test]
+    fn cues_are_walked_in_number_order_whatever_order_the_file_holds_them() {
+        let sequence = Sequence {
+            id: SequenceId::new(1),
+            name: "Main".to_owned(),
+            color: None,
+            cues: vec![look("10", Vec::new()), look("2", Vec::new()), cue("1.5")],
+            looping: false,
+            master_level: u16::MAX,
+            speed: crate::SPEED_UNITY,
+            is_active: false,
+            current_cue_index: None,
+        };
+        let numbers: Vec<&str> = sequence
+            .ordered_cues()
+            .iter()
+            .map(|cue| cue.number.as_str())
+            .collect();
+        assert_eq!(numbers, ["1.5", "2", "10"]);
     }
 
     /// A cue property is one field, tagged like every other message.

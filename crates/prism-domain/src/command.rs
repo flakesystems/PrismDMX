@@ -15,10 +15,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AttributeType, CueProperty, ExecutorButtonRef, ExecutorChange, ExecutorId, FeatureGroup,
-    FixtureId, GroupId, JsonValue, MachineChange, OutputId, OutputInstance, OutputKind,
-    PlaybackTarget, PresetId, PresetPool, RgbColor, SequenceId, StoreMode, UniverseId, ViewId,
-    WindowInstanceId, WindowType,
+    AttributeType, CueProperty, CueTrackingMode, ExecutorButtonRef, ExecutorChange, ExecutorId,
+    FeatureGroup, FixtureId, GroupId, JsonValue, MachineChange, OutputId, OutputInstance,
+    OutputKind, PlaybackTarget, PresetId, PresetPool, RgbColor, SequenceId, StoreMode, UniverseId,
+    ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -608,6 +608,43 @@ pub enum Command {
             proptest(strategy = "crate::arb::boxed()")
         )]
         property: CueProperty,
+    },
+    /// Say what a whole cue does about tracking — **S48**.
+    ///
+    /// Three things an operator does to a cue, and [`crate::CueTrackingMode`]
+    /// carries which: every value in it carries forward, every value in it is
+    /// taken back when the list leaves it, or the cue asserts **everything**
+    /// and nothing before it reaches past it.
+    ///
+    /// # Why one command and not three, and why not a [`CueProperty`]
+    ///
+    /// It is not a *field* of a cue. Two of the three modes rewrite every part's
+    /// [`crate::CueTracking`], and the third writes new parts — which is exactly
+    /// what [`CueProperty`] excludes in as many words, because what a cue *does*
+    /// comes from the programmer and not from a client. This one is the
+    /// exception that proves that rule rather than a hole in it: the values a
+    /// block writes are the daemon's own, folded out of the cues above, and the
+    /// command carries none of them. A client that sent them would be authoring
+    /// the show, which is the thing being prevented.
+    ///
+    /// It is one command rather than three for `Command::ExecutorButton`'s
+    /// reason: the three are one question with three answers, an operator picks
+    /// one, and a grammar with three verbs for one act is three things to learn.
+    ///
+    /// A **show edit**, therefore undoable, and it rebuilds the merge body
+    /// because it changes what the list puts out.
+    SetCueTracking {
+        /// The sequence the cue is in, or `None` for the selected one.
+        #[serde(default)]
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::boxed()")
+        )]
+        sequence_id: Option<SequenceId>,
+        /// The cue, by the number it has now.
+        cue_number: String,
+        /// What the cue should say.
+        tracking: CueTrackingMode,
     },
     /// Empty a place on the desk — S40's `Delete`.
     ///

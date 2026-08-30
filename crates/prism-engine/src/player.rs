@@ -17,12 +17,35 @@
 //! playback behaviour is folded into an implementation is a console nobody can
 //! predict.
 //!
-//! **Cues track.** A cue holds the values it names and nothing else; an
-//! attribute it does not mention keeps whatever the playback was already holding
-//! it at. The alternative — every cue is a complete look — is not available:
-//! `Command::StoreCue` stores the programmer, which `docs/DMX_MERGE.md` §3 makes
-//! sparse by specification, so a cue recorded after moving one head would black
-//! the rest of the stage out.
+//! **Cues track, and tracking is computed rather than accumulated** (S48). A cue
+//! holds the values it names and nothing else; an attribute it does not mention
+//! keeps whatever an *earlier cue of the same list* left it at. The alternative —
+//! every cue is a complete look — is not available: `Command::StoreCue` stores
+//! the programmer, which `docs/DMX_MERGE.md` §3 makes sparse by specification, so
+//! a cue recorded after moving one head would black the rest of the stage out.
+//!
+//! What changed in S48 is the second half of that sentence. Until then an
+//! unmentioned attribute kept whatever *this playback happened to be holding*,
+//! which is the same thing only if the list was walked from the top. Jump to cue
+//! 7 and then to cue 3, and cue 3 put out cue 5's values for everything it did
+//! not name — the same cue, two outputs, and which one you got depended on where
+//! you had been. So every cue entry now resolves through
+//! [`SequencePlan::tracked`]: a table built off the tick that says, for each slot
+//! and each cue, what a walk from the first cue would leave it at.
+//!
+//! **Resolving always is what makes it one rule rather than two.** A forward Go
+//! lands on exactly the values it landed on before — the tracking state at cue
+//! *i* is the state at *i−1* with cue *i*'s own parts over it, which is what the
+//! old accumulation produced — so nothing about walking a list moved. A `Goto`,
+//! a backwards Go and a start now land there too, and that is the whole session.
+//!
+//! **An attribute that leaves the tracking state is released, not held.** A
+//! `prism_domain::CueTracking::CueOnly` value taken back, or a jump to a cue
+//! above the one that introduced it, ends the playback's claim on that slot: an
+//! intensity fades to home over the incoming cue's fade time and everything else
+//! holds where it is, which is §2.3's asymmetry applied per attribute rather than
+//! per playback. When that fade is over the slot is dropped and the merge falls
+//! through to whatever is under it.
 //!
 //! **A Go during a running fade overtakes it.** Every attribute re-bases from
 //! the value it is holding at that instant and moves to the new cue's target
@@ -176,6 +199,19 @@ struct Entry {
     value: u16,
     /// Ticks the transition takes.
     duration: u64,
+    /// Whether this transition ends with the playback letting the slot go —
+    /// S48.
+    ///
+    /// Set when an attribute leaves the tracking state: a cue-only value taken
+    /// back, or a jump to a cue above the one that first asserted it. The
+    /// transition runs like any other and [`Entry::live`] goes false when it is
+    /// over, which is what hands the slot back to the merge.
+    ///
+    /// It is per **entry** and not per player on purpose. `off` releases the
+    /// whole playback at once and keeps its own all-or-nothing rule, because a
+    /// playback that left the merge one attribute at a time would take its LTP
+    /// slots away in an order nobody chose.
+    releasing: bool,
 }
 
 /// What a tick's worth of playback did to the source's place in the merge.
@@ -600,21 +636,34 @@ impl CuePlayer {
             _ => None,
         };
         for entry in entries.iter_mut().filter(|entry| entry.live) {
-            entry.value = match manual {
-                Some(progress) => interpolate(
-                    entry.from,
-                    entry.to,
-                    u64::from(progress),
-                    u64::from(u16::MAX),
-                ),
-                None if elapsed < *delay => entry.from,
-                None => interpolate(
-                    entry.from,
-                    entry.to,
-                    elapsed.saturating_sub(*delay),
-                    entry.duration,
-                ),
+            // Whether this entry's transition is over as well as where it has
+            // got to, because an entry that is releasing leaves the merge when
+            // it is — S48. One expression rather than a second pass, so the two
+            // answers cannot be taken from different clocks.
+            let arrived = match manual {
+                Some(progress) => {
+                    entry.value = interpolate(
+                        entry.from,
+                        entry.to,
+                        u64::from(progress),
+                        u64::from(u16::MAX),
+                    );
+                    progress == u16::MAX
+                }
+                None if elapsed < *delay => {
+                    entry.value = entry.from;
+                    false
+                }
+                None => {
+                    let since = elapsed.saturating_sub(*delay);
+                    entry.value = interpolate(entry.from, entry.to, since, entry.duration);
+                    since >= entry.duration
+                }
             };
+            if entry.releasing && arrived {
+                entry.live = false;
+                entry.releasing = false;
+            }
         }
 
         // Follow and Time, once per tick at most. `follow_step` and not `step`:
@@ -714,35 +763,62 @@ impl CuePlayer {
     }
 }
 
-/// Starts cue `index`: every held attribute re-bases from where it is now, and
-/// the cue's own attributes take their new targets. Returns the cue's delay.
+/// Starts cue `index`: every held attribute re-bases from where it is now and
+/// takes the target the **tracking state** at that cue gives it. Returns the
+/// cue's delay.
 ///
-/// Attributes the cue does not mention keep their targets and move on to the new
-/// cue's time base — one transition has one clock.
+/// # This is the whole of S48, and it is four lines of it
+///
+/// The cue's own parts are not read here at all any more. [`SequencePlan::tracked`]
+/// already has them — the tracking state at a cue is everything earlier cues
+/// asserted with that cue's own values over the top — so asking it once per slot
+/// answers *what this cue asserts* and *what it inherits* in one question, and
+/// there is no order in which the two could disagree.
+///
+/// Every attribute **fades from where it is**, not from where the tracking state
+/// says it was. That is the deliverable about fades across the boundary, and it
+/// falls out of `from = entry.value`: an attribute inherited from four cues back
+/// and now asserted has been sitting at its inherited value, so that is where its
+/// fade starts. The tracking state is where a cue is *going*, never where it is
+/// coming from.
+///
+/// An attribute the state does not hold at this cue is **released** rather than
+/// left: `to` is home for an intensity and where it stands for everything else,
+/// and [`Entry::releasing`] is what drops it when that fade is over.
 fn begin(plan: &SequencePlan, entries: &mut [Entry], index: usize) -> u64 {
     let Some(cue) = plan.cue(index) else {
         return 0;
     };
     let fade = cue.fade_in();
-    for entry in entries.iter_mut().filter(|entry| entry.live) {
-        entry.from = entry.value;
-        entry.duration = fade;
-    }
-    for part in plan.parts_of(index) {
-        let position = part.slot as usize;
-        let (Some(entry), Some(slot)) = (entries.get_mut(position), plan.slot(position)) else {
-            continue;
-        };
-        if !entry.live {
-            // An attribute this playback was not holding fades in from the value
-            // it falls back to, so a cue with a fade time fades rather than
-            // snapping on its first tick.
-            entry.live = true;
-            entry.from = slot.home;
-            entry.value = slot.home;
+    for (position, entry) in entries.iter_mut().enumerate() {
+        let home = plan.slot(position).map_or(0, |slot| slot.home);
+        match plan.tracked(position, index) {
+            Some(value) => {
+                if !entry.live {
+                    // An attribute this playback was not holding fades in from
+                    // the value it falls back to, so a cue with a fade time
+                    // fades rather than snapping on its first tick.
+                    entry.live = true;
+                    entry.from = home;
+                    entry.value = home;
+                } else {
+                    entry.from = entry.value;
+                }
+                entry.to = value;
+                entry.duration = fade;
+                entry.releasing = false;
+            }
+            None if entry.live => {
+                entry.from = entry.value;
+                entry.to = match plan.slot(position) {
+                    Some(slot) if slot.htp => home,
+                    _ => entry.value,
+                };
+                entry.duration = fade;
+                entry.releasing = true;
+            }
+            None => {}
         }
-        entry.to = part.value;
-        entry.duration = fade;
     }
     cue.delay()
 }
@@ -761,6 +837,10 @@ fn release(plan: &SequencePlan, entries: &mut [Entry], outgoing: usize) {
             _ => entry.value,
         };
         entry.duration = fade;
+        // The whole playback is going, so the all-at-once rule below takes over
+        // from the per-attribute one: an entry that was releasing on its own
+        // stops doing so and leaves with the rest.
+        entry.releasing = false;
     }
 }
 

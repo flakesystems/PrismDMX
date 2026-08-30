@@ -90,6 +90,7 @@ fn two_part_cue() -> ShowFile {
         attribute: AttributeType::Green,
         value: 2000,
         preset_ref: None,
+        tracking: prism_domain::CueTracking::Track,
     });
     sequence.cues[0].name = "Opening".to_owned();
     sequence.cues[0].fade_in = 4.5;

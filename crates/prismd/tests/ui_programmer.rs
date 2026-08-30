@@ -178,6 +178,7 @@ fn desk_show() -> ShowFile {
                     attribute: AttributeType::Dimmer,
                     value: 65535,
                     preset_ref: None,
+                    tracking: prism_domain::CueTracking::Track,
                 }],
             }],
             looping: false,

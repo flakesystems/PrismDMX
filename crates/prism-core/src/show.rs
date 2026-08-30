@@ -28,10 +28,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use prism_domain::{
-    Cue, CueProperty, EXECUTOR_BUTTONS, Executor, ExecutorButtonFunction, ExecutorChange,
-    ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, Fixture, FixtureType, Group,
-    GroupId, JsonPatchOp, JsonValue, PlaybackId, Preset, PresetId, Sequence, SequenceId,
-    UniverseId,
+    Cue, CuePart, CueProperty, CueTrack, CueTracking, CueTrackingMode, CueTrackingRow,
+    EXECUTOR_BUTTONS, Executor, ExecutorButtonFunction, ExecutorChange, ExecutorEncoderFunction,
+    ExecutorFaderFunction, ExecutorId, Fixture, FixtureType, Group, GroupId, JsonPatchOp,
+    JsonValue, PlaybackId, Preset, PresetId, Sequence, SequenceId, TrackedValue, UniverseId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1161,6 +1161,139 @@ impl Show {
         }
         next.cues
             .sort_by(|left, right| Cue::compare_numbers(&left.number, &right.number));
+        let op = put(pointer(SEQUENCES, &sequence_id.to_string()), &next, true)?;
+        self.sequences.insert(sequence_id, next);
+        self.touch();
+        Ok(vec![op])
+    }
+
+    /// What every cue of one list inherits, in playback order — **S48**.
+    ///
+    /// The answer to `prism_domain::Query::CueTracking`, computed here so that
+    /// no client computes it. Each row carries the attributes the list holds at
+    /// that cue which the cue does **not** name, and whether the cue asserts
+    /// everything — which is the same fact said twice, because a cue that
+    /// inherits nothing is a blocking cue and there is no third way to be one.
+    ///
+    /// An unknown sequence answers with **no rows** rather than an error: a
+    /// window asking about a list somebody has just deleted is a race and not a
+    /// mistake, and `Query` has no refusal shape by design (`docs/IPC_PROTOCOL.md`
+    /// section 5.2).
+    #[must_use]
+    pub fn cue_tracking(&self, sequence_id: SequenceId) -> Vec<CueTrackingRow> {
+        let Some(sequence) = self.sequences.get(&sequence_id) else {
+            return Vec::new();
+        };
+        let order = sequence.ordered_cues();
+        let mut track = CueTrack::new();
+        let mut changes = Vec::new();
+        order
+            .into_iter()
+            .map(|cue| {
+                track.enter(cue, &mut changes);
+                let inherited: Vec<TrackedValue> = track
+                    .inherited(cue)
+                    .into_iter()
+                    .map(|((fixture, attribute), value)| TrackedValue {
+                        fixture,
+                        attribute,
+                        value,
+                    })
+                    .collect();
+                CueTrackingRow {
+                    number: cue.number.clone(),
+                    blocks: inherited.is_empty(),
+                    inherited,
+                }
+            })
+            .collect()
+    }
+
+    /// Says what a whole cue does about tracking — **S48**.
+    ///
+    /// Two of the three modes rewrite every part's
+    /// [`prism_domain::CueTracking`]. The third, [`CueTrackingMode::Block`],
+    /// **writes the values the cue inherits into it**, so that nothing above it
+    /// reaches past it and a list can be cut into sections an operator can
+    /// rehearse from. That is an edit and not a mode, for the reason
+    /// [`CueTrackingMode`] gives in full: a flag honoured at playback time would
+    /// still be computed from the cues above, so editing cue 2 would go on
+    /// changing what a blocking cue 5 puts out — which is the one thing blocking
+    /// is asked for to stop.
+    ///
+    /// The values a block writes are the daemon's own, folded out of the cues
+    /// above by `prism_domain::CueTrack`, and they carry **no preset link**: an
+    /// inherited value is the result of somebody else's edit, and copying the
+    /// link would make a later `StorePreset` rewrite a cue nobody stored into.
+    /// A cue-only part **becomes a tracking one**, because a value that is taken
+    /// back at the end is not an assertion and a blocking cue asserts
+    /// everything.
+    ///
+    /// Answers with **no operations at all** when nothing moved -
+    /// [`Self::set_cue_property`]'s rule, and for its reason.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownSequence`] or [`ShowError::UnknownCue`].
+    pub fn set_cue_tracking(
+        &mut self,
+        sequence_id: SequenceId,
+        cue_number: &str,
+        tracking: CueTrackingMode,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(sequence) = self.sequences.get(&sequence_id) else {
+            return Err(ShowError::UnknownSequence(sequence_id));
+        };
+        let wanted = cue_number.trim();
+        let Some(index) = sequence
+            .cues
+            .iter()
+            .position(|cue| cue.number.trim() == wanted)
+        else {
+            return Err(ShowError::UnknownCue {
+                sequence: sequence_id,
+                number: wanted.to_owned(),
+            });
+        };
+        // What a cue inherits is decided by the cues that play **before** it, so
+        // the walk is over `ordered_cues` — the playback order — and not over
+        // the file. The two differ the moment a cue is inserted between two
+        // others, which is the entire reason cue numbers are decimal strings.
+        let inherited: Vec<(prism_domain::CueKey, u16)> = match tracking {
+            CueTrackingMode::Block => sequence
+                .tracking()
+                .into_iter()
+                .zip(sequence.ordered_cues())
+                .filter(|(_, cue)| cue.number.trim() == wanted)
+                .take(1)
+                .flat_map(|(track, cue)| track.inherited(cue))
+                .collect(),
+            CueTrackingMode::Track | CueTrackingMode::CueOnly => Vec::new(),
+        };
+
+        let mut next = sequence.clone();
+        let cue = &mut next.cues[index];
+        let want = match tracking {
+            CueTrackingMode::CueOnly => CueTracking::CueOnly,
+            CueTrackingMode::Track | CueTrackingMode::Block => CueTracking::Track,
+        };
+        let mut moved = false;
+        for part in &mut cue.parts {
+            moved |= replace(&mut part.tracking, want);
+        }
+        for ((fixture, attribute), value) in inherited {
+            cue.parts.push(CuePart {
+                fixture,
+                attribute,
+                value,
+                preset_ref: None,
+                tracking: CueTracking::Track,
+            });
+            moved = true;
+        }
+        if !moved {
+            return Ok(Vec::new());
+        }
         let op = put(pointer(SEQUENCES, &sequence_id.to_string()), &next, true)?;
         self.sequences.insert(sequence_id, next);
         self.touch();

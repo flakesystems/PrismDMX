@@ -325,6 +325,15 @@ impl Desk {
                     status: self.surface_status(),
                 }
             }
+            // S48, and the deepest derived thing in the project: what a cue
+            // inherits is folded out of every cue above it, so a client that
+            // worked it out would be a second opinion about the rule the engine
+            // resolves a Goto through — and two answers to *where am I* is the
+            // fault S48 exists to remove, not one to reintroduce in TypeScript.
+            Query::CueTracking { sequence_id } => Answer::CueTracking {
+                sequence_id: *sequence_id,
+                cues: core.file.show.cue_tracking(*sequence_id),
+            },
             // S37. Derived from the patch and from the rig, which is exactly
             // why it is a question: a client that intersected the two would be
             // a second opinion about something `prism_core::dark_universes`

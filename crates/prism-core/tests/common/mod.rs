@@ -92,6 +92,7 @@ pub fn cue(number: &str, fixture: u32, attribute: AttributeType, value: u16) -> 
             attribute,
             value,
             preset_ref: None,
+            tracking: prism_domain::CueTracking::Track,
         }],
     }
 }
@@ -308,6 +309,14 @@ pub fn show_commands() -> Vec<Command> {
             sequence_id: Some(SequenceId::new(1)),
             cue_number: "1".to_owned(),
             property: prism_domain::CueProperty::FadeIn { seconds: 7.5 },
+        },
+        // S48. The show group, beside `SetCueProperty`: what a cue asserts is
+        // show content, and a `Block` writes values the daemon folded out of the
+        // cues above it.
+        Command::SetCueTracking {
+            sequence_id: Some(SequenceId::new(1)),
+            cue_number: "1".to_owned(),
+            tracking: prism_domain::CueTrackingMode::CueOnly,
         },
         Command::Copy {
             from: ObjectRef::Preset {

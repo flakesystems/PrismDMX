@@ -113,6 +113,7 @@ Enforced by lint (`#![deny(clippy::unwrap_used, clippy::expect_used, clippy::pan
 - **No synchronous logging.** Log records go into a lock-free ring; a separate writer thread drains it.
 - **Absolute deadlines** via `Instant` so error does not accumulate; `sleep(deadline − 1 ms)` followed by a spin for the remainder.
 - **`panic = "unwind"`** in the release profile. The panic hook marks the module *degraded* rather than terminating the process.
+- **Nothing derived is computed here — it is read.** The rule the allocation gate enforces has a second half the gate cannot see: anything the tick needs that is a *function of the show* is built on the core thread and handed over as a table. The tracking state (S48, §6.0) is the case that made this worth writing down — a cue entry resolves every attribute the list touches through a table `SequencePlan::build` prepared, which is a binary search per slot and no allocation; building it inside a `Goto` would have allocated once per key press on the one thread that may not.
 
 ### 3.1.1 What comes back out (S34)
 
@@ -430,12 +431,19 @@ interface Preset {
   values: Array<{ fixture: FixtureId; attribute: AttributeType; value: number }>;
 }
 
+// What a cue says about one attribute it names — S48. *Inherits* is the third
+// state and is written as no part at all.
+type CueTracking = "Track" | "CueOnly";
+
 interface CuePart {
   fixture: FixtureId; attribute: AttributeType;
   value: number;               // 0..65535
   presetRef: PresetId | null;  // preset link keeps the cue live-updatable:
                                // storing the preset rewrites this part's value
                                // (prism_core::Show::relink, S28)
+  tracking: CueTracking;       // carries forward, or is taken back when the list
+                               // leaves the cue (S48; docs/DMX_MERGE.md §2.4).
+                               // `#[serde(default)]` — an older file tracks
 }
 
 interface Cue {
@@ -542,6 +550,39 @@ The `Command` and `Delta` wire types are specified in [`docs/IPC_PROTOCOL.md`](d
 
 > **A Go always comes round, and `loop` is a different question.** `Go+` on the last cue of a list enters the first, and `Go-` on the first enters the last, whether or not the list loops — a Go is a key somebody pressed, and a desk that did nothing would look broken in the dark. Nothing goes to black on the way: the wrap enters that cue with its own fade, exactly as any other Go into it would. `Sequence.loop` governs the **automatic** chain instead — whether `Follow` and `Time` cues run off the end and round again, which is a list that never stops on its own. `prism_engine::SequencePlan` answers the two with `step` and `follow_step`, and the split is the type: a Go always has somewhere to go, and a follow chain can end.
 
+### 6.0 Tracking is derived, and lives nowhere in this model *(S48)*
+
+The one piece of show state that is **not** in the model above, deliberately.
+
+A cue list walked from the top produces, at every cue, a full set of attribute
+values: the ones that cue asserts, plus everything an earlier cue asserted and
+nothing has overwritten. That is the **tracking state**, it is what a `Goto`
+resolves through, and it is computed from the cues rather than stored beside
+them — `docs/DMX_MERGE.md` §2.4 is the specification.
+
+**A `.prism` file keeps the edits.** A file that stored the resolved state would
+be a file that could not be corrected by editing cue 2, which is the same rule
+`Query::DarkUniverses` (S37) and `Query::ArtNetNodes` (S46) are built on one
+panel along. So:
+
+- **The engine's copy** is `prism_engine::SequencePlan`, built by the core thread
+  in `SequencePlan::build` — at load, and again whenever a cue is stored, edited,
+  deleted, renumbered or moved, because that is when a sequence is recompiled.
+  The tick **reads** it and never builds it (§3.1), with one binary search per
+  slot and no allocator call.
+- **The rule itself** is `prism_domain::CueTrack`, written once and used by the
+  engine to compile the table, by `prism_core` to answer the query, and by
+  `Command::SetCueTracking`'s `Block` to write a cue's inherited values into it.
+- **Clients ask.** `Query::CueTracking` answers, per cue, what it inherits and
+  whether it blocks. A client folding the cues itself would be a second opinion
+  about the rule the engine resolves a `Goto` through, which is exactly the trap
+  `PatchPreview` was built to avoid.
+
+Held **by attribute** rather than by cue, and that is what makes it fit: a
+cue-by-attribute grid is `cues × attributes` cells, most of them repeats of the
+cell above, while one entry per *change* is bounded by the number of cue parts —
+the same size as the edits it is derived from.
+
 ### 6.1 Oops (undo/redo)
 
 Applying a command produces a compact `UndoRecord` holding the inverse and the affected scope, kept in a 200-entry ring buffer.
@@ -568,7 +609,7 @@ filed against knows nothing about, and it would do it in the middle of a show,
 on a desk somebody is playing. `MachineChange::SurfaceLearn` is excluded twice
 over: it is a machine change, and it writes nothing down at all.
 
-**Four commands are undoable only sometimes** *(S40)*. `Delete`, `Copy`, `Move` and `Label` are show edits when they name a sequence, a cue, a group, a preset or an executor, and **session** commands when they name a view (§4.4) — so an Oops takes back a deleted cue and never a deleted view. That is the same rule applied through a payload rather than a variant, and `crates/prism-core/tests/objects.rs` holds it on the show's bytes. Their scope is wider than the two things they name: a move of a sequence images every executor that played it and a move of a preset images every cue that linked to it, because both are repointed by the move and an undo that put half of it back would leave a fader pointing at a cue list that is gone. The show edits S28 added — `StorePreset`, `SetCueProperty`, `AssignExecutor`, and the two S40 folded into `StoreSequence` and `Delete` — **are** undoable, and a `StorePreset` images the sequences its preset reaches as well as the preset itself: storing a preset rewrites the cue parts linked to it, so restoring the pool alone would take the edit back in one place and leave it standing in every cue. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
+**Four commands are undoable only sometimes** *(S40)*. `Delete`, `Copy`, `Move` and `Label` are show edits when they name a sequence, a cue, a group, a preset or an executor, and **session** commands when they name a view (§4.4) — so an Oops takes back a deleted cue and never a deleted view. That is the same rule applied through a payload rather than a variant, and `crates/prism-core/tests/objects.rs` holds it on the show's bytes. Their scope is wider than the two things they name: a move of a sequence images every executor that played it and a move of a preset images every cue that linked to it, because both are repointed by the move and an undo that put half of it back would leave a fader pointing at a cue list that is gone. The show edits S28 added — `StorePreset`, `SetCueProperty`, `AssignExecutor`, and the two S40 folded into `StoreSequence` and `Delete` — **are** undoable, as is S48's `SetCueTracking`, whose scope is `SetCueProperty`'s: that sequence and the update state, because a `Block` rewrites the cue and the same two things can move, and a `StorePreset` images the sequences its preset reaches as well as the preset itself: storing a preset rewrites the cue parts linked to it, so restoring the pool alone would take the edit back in one place and leave it standing in every cue. Undo during a running show must neither change light the operator is currently driving nor pull windows out from under them.
 
 S39's three are undoable for the same reason: `StoreSequence` and `Update` are stores, and `EditCue` fills the programmer. **`StoreSequence` carries the selection too** *(S40)*: a store onto a free number *makes* the cue list and puts it in force, because `Store Cue 1` names no list and means the selected one (§4.1) — so an Oops that took the cue list back and left the desk pointing at a sequence that no longer exists would restore half a state, in exactly the way the update state below does. A store into a list that already exists moves no selection and images none. **Their scope carries the update state** (`Session::editingCue`), which does not contradict the exclusion of the session *commands* above — that exclusion is about an undo pulling windows out from under an operator, and this is the cursor into the cue the programmer came from. An Oops over an `EditCue` that put the programmer back and left the desk claiming to be editing cue 3 would restore half a state, and the half it left standing is the one the Update key acts on. `DeleteCue` and a renumber carry it too, because both can move it.
 

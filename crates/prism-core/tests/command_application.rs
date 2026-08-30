@@ -48,11 +48,11 @@ fn the_three_groups_together_are_the_whole_protocol() {
     // same reason the cabling does.
     assert_eq!(
         show_commands().len() + session_commands().len() + machine_commands().len(),
-        // Sixty-three since S45's `ConfigureExecutor`, which is in the **show**
-        // group: what an executor's four keys and its fader do is show content,
-        // and `docs/IPC_PROTOCOL.md` §5 has the argument against the machine
-        // group in full.
-        63
+        // Sixty-**four** since S48's `SetCueTracking`, which is in the **show**
+        // group for the same reason S45's `ConfigureExecutor` is — what a cue
+        // asserts is show content, and `docs/IPC_PROTOCOL.md` §5 has the
+        // argument against the machine group in full.
+        64
     );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");

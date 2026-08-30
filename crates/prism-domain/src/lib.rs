@@ -81,9 +81,13 @@ pub use programmer::{
     ProgrammerValueSource, ProgrammerValues,
 };
 pub use query::{
-    Answer, LibraryEntry, PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget,
+    Answer, CueTrackingRow, LibraryEntry, PatchConflict, PatchPreview, Query, StoreMode,
+    StorePreview, StoreTarget, TrackedValue,
 };
-pub use sequence::{Cue, CueEdit, CuePart, CueProperty, CueTrigger, Sequence};
+pub use sequence::{
+    Cue, CueChange, CueEdit, CueKey, CuePart, CueProperty, CueTrack, CueTracking, CueTrackingMode,
+    CueTrigger, Sequence,
+};
 pub use session::{
     CANVAS_HEIGHT, CANVAS_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, Session, View,
     WindowInstance, WindowType,

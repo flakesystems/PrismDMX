@@ -531,6 +531,15 @@ impl ShowFile {
                 cue_number: cue_number.clone(),
                 property: property.clone(),
             },
+            Command::SetCueTracking {
+                sequence_id,
+                cue_number,
+                tracking,
+            } => Command::SetCueTracking {
+                sequence_id: cue_list(*sequence_id)?,
+                cue_number: cue_number.clone(),
+                tracking: *tracking,
+            },
             Command::Delete { target } => Command::Delete {
                 target: object(target)?,
             },
@@ -1055,7 +1064,8 @@ impl ShowFile {
             // The update state is in the scope of the two that can move it: a
             // deleted cue clears it and a renumbered cue carries it, so an Oops
             // over either has to put it back where it was (S39).
-            Command::SetCueProperty { sequence_id, .. } => match sequence_id {
+            Command::SetCueProperty { sequence_id, .. }
+            | Command::SetCueTracking { sequence_id, .. } => match sequence_id {
                 Some(id) => vec![self.sequence_image(*id), self.cue_edit_image()],
                 None => Vec::new(),
             },

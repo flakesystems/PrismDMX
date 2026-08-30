@@ -154,6 +154,13 @@ pub trait ServerHandler: Send + Sync + 'static {
                 counters: prism_domain::ArtNetCounters::default(),
                 remedy: None,
             },
+            // And no cue list, so no rows. An empty list is the same shape a
+            // sequence with no cues gives, which is what a handler with no show
+            // honestly has (S48).
+            Query::CueTracking { sequence_id } => Answer::CueTracking {
+                sequence_id,
+                cues: Vec::new(),
+            },
             // And no surface, so no table. An empty list is the same shape a
             // desk with a table gives and is the honest answer for a handler
             // that has never had one (S38).

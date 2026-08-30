@@ -91,6 +91,70 @@ This makes the behaviour deterministic and explainable to an operator: *the last
 
 A playback master does **not** scale LTP attributes. Half a pan position is not a meaningful value. Master level affects intensity (HTP) and, where configured, fade progress — never position, colour or beam values.
 
+### 2.4 What a playback holds between cues — tracking (S48)
+
+§2 says how a *set* of contributions merges. It does not say where a playback's
+own contribution comes from, and until S48 the answer was accumulated rather
+than computed — which made it depend on history.
+
+**A cue is an edit, not a state.** It carries what was in the programmer when it
+was stored and nothing else (§3 below is where that comes from), so everything a
+cue does not name keeps whatever an earlier cue of the same list left it at. That
+is **tracking**, it is the right default, and it is not what changed.
+
+What changed is that it is now **derived from the list** rather than from what
+the playback happened to be holding. The two are the same thing when a list is
+walked from the top, and they were not the same thing at all when it was not:
+
+> Cue 1 puts a wash at 50 %. Cue 5 puts it at 100 %. Cue 3 mentions neither.
+> Walk 1→2→3 and the wash is at 50 %; go to cue 7 and then `Goto` cue 3 and it is
+> at 100 %. **The same cue, two outputs.**
+
+An operator cannot rehearse cue 3 like that, and a show cannot be handed to
+anybody else. So `prism_engine::SequencePlan` carries a **tracking table**: for
+each attribute the list touches and each cue, what a walk from the first cue
+would leave it at. Every cue entry — a Go forwards, a Go backwards, a `Goto`, a
+start — resolves through it, and a forward Go therefore lands exactly where it
+landed before.
+
+**Three states, per attribute, per cue** (`prism_domain::CueTracking`):
+
+| What the cue says | How it is written | What the playback holds afterwards |
+|---|---|---|
+| **asserts, and it carries forward** | a part with `tracking: "Track"` | the value, until a later cue says otherwise |
+| **asserts, and takes it back** | a part with `tracking: "CueOnly"` | whatever was underneath it — the value an earlier *tracking* cue left, or nothing at all |
+| **inherits** | no part | whatever is already held |
+
+A cue-only value with nothing underneath it leaves the playback holding
+**nothing** for that attribute, which is not the same as holding it at zero: an
+attribute a playback does not provide falls through to whatever is below it in
+§1's stack, and one held at zero wins its slot at zero.
+
+**A cue that inherits nothing is a blocking cue** — it asserts everything, so a
+list can be cut into sections an operator can rehearse from. It is made by an
+edit rather than by a flag (`Command::SetCueTracking` with `Block` writes the
+inherited values into the cue), for the reason the whole of this section turns
+on: a flag honoured at playback time would still be *computed from the cues
+above*, so editing cue 2 would go on changing what a blocking cue 5 puts out,
+which is the one thing blocking is asked for to stop.
+
+**Where the state lives, and where it does not.** It is derived, so it is never
+in the `.prism` file: a file that stored the resolved state would be a file that
+could not be corrected by editing cue 2. It is built on the **core thread**, in
+`SequencePlan::build`, at load and again whenever a cue is stored, edited,
+deleted, renumbered or moved — and the tick only ever *reads* it, with one binary
+search per slot and no allocator call (`ARCHITECTURE_SPEC.md` §3.1). Clients read
+it through `Query::CueTracking` rather than folding the cues themselves, which is
+`PatchPreview`'s rule (S27): a second implementation of this fold would be a
+second answer to the question this section exists to give one answer to.
+
+**A fade across the boundary starts where the light is.** An attribute inherited
+from four cues back and now asserted fades from the value it has been sitting at,
+not from anything the tracking state says: the state is where a cue is *going*,
+never where it is coming from. An attribute that leaves the state is released the
+way §2.3 releases a playback — an intensity fades to home, everything else holds
+— and is dropped when that fade is over.
+
 ---
 
 ## 3. The programmer layer
@@ -100,6 +164,17 @@ The programmer holds every value the operator has touched but not yet stored. It
 - A programmer value **overrides** the merged playback result for that fixture and attribute.
 - An attribute with **no** programmer value is unaffected — the programmer is sparse, not a full frame.
 - `ProgrammerValue.source` distinguishes `Manual`, `Preset` and `Recalled` for display and for store behaviour, but all three have identical merge priority.
+
+**The sparseness is the same fact a cue's is** (S48, punch-list **B21**). What
+the programmer marks as *overriding* — an attribute it holds, which goes out
+whatever the playbacks say — is exactly what a cue has to **assert** for a jump
+into that cue to produce the same light twice. `Command::StoreCue` carries the
+programmer into a cue, so a cue is sparse because the programmer is; §2.4 is
+what makes that computable instead of guessed. A stored cue **tracks**, which is
+what an operator storing a look means; a cue-only cue is made by saying so
+afterwards rather than by a mode on the store, because what is being decided is
+about the *cue* and not about that store — the same programmer stored twice may
+be tracking in one cue and a one-off in another.
 
 ### 3.1 Three-stage clear
 
@@ -226,6 +301,27 @@ These are the properties `proptest` must verify. They are the contract of the me
 - Identical input state produces byte-identical output frames across runs
 - No allocation occurs during a tick — asserted with a counting allocator in tests
 - p99.9 tick jitter stays under 2 ms with 64 universes under full CPU load, over a 10-minute run (`criterion`, CI gate)
+
+### 6.5 Tracking properties (S48)
+
+The contract of §2.4, and the reason it is a property rather than a worked
+example: *the same cue reached two ways* is a claim about every cue of every
+list, and one list somebody chose is a fixed bug rather than a rule.
+
+- **Route-independent:** for every cue of a generated list, walking to it from
+  the top and jumping to it from the end of the list produce the same frame —
+  asserted on the bytes a driver would receive, not on what the player holds
+- **The walk is unchanged:** a forward Go lands on exactly the values it landed
+  on before the tracking table existed, which is what says resolving *always* is
+  one rule rather than two
+- **A cue-only value is handed back to what was underneath it**, and to *nothing
+  held* where nothing was — which is a different output from zero
+- **Derived, not stored:** editing cue 2 changes what cue 5 puts out, without
+  cue 5 being touched
+- **A fade starts where the light is**, never at the tracked value of the cue
+  being left
+- Reading the tracking state makes **no** allocator call — the ninth measured
+  path
 
 ---
 

@@ -38,9 +38,17 @@
  * nobody would notice until a show.
  */
 
-import type { AttributeType, CueTrigger, JsonValue, PresetPool, RgbColor } from "../bindings";
+import type {
+  AttributeType,
+  CueTracking,
+  CueTrigger,
+  JsonValue,
+  PresetPool,
+  RgbColor,
+} from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
+  CUE_TRACKING_VARIANTS,
   CUE_TRIGGER_VARIANTS,
   PRESET_POOL_VARIANTS,
 } from "../bindings/variants";
@@ -72,6 +80,17 @@ export interface CuePartRow {
    * what makes the link *visible*, and what a later session will make clickable.
    */
   readonly presetRef: number | null;
+  /**
+   * Whether the value carries forward or is taken back when the list leaves the
+   * cue — **S48**.
+   *
+   * Read with a **default** rather than skipped when it is missing, and the
+   * default is the same one `#[serde(default)]` gives the field in Rust: a
+   * daemon one version behind sends a part without it, and a cue sheet that
+   * dropped such a part would draw a cue as empty because it was written last
+   * week.
+   */
+  readonly tracking: CueTracking;
 }
 
 /** One line of a cue sheet. */
@@ -228,11 +247,13 @@ function partRowsOf(cue: JsonValue): readonly CuePartRow[] {
     if (!isObject(entry) || attribute === null || !isAttributeType(attribute)) {
       continue;
     }
+    const tracking = stringAt(entry, "/tracking");
     rows.push({
       fixture: numberAt(entry, "/fixture") ?? 0,
       attribute,
       value: numberAt(entry, "/value") ?? 0,
       presetRef: numberAt(entry, "/presetRef"),
+      tracking: isCueTracking(tracking) ? tracking : "Track",
     });
   }
   return rows;
@@ -582,4 +603,9 @@ function isCueTrigger(value: string): value is CueTrigger {
 /** Whether a string is one of the attributes this build knows. */
 function isAttributeType(value: string): value is AttributeType {
   return (ATTRIBUTE_TYPE_VARIANTS as readonly string[]).includes(value);
+}
+
+/** Whether a string is one of the two things a cue part says about tracking. */
+function isCueTracking(value: string | null): value is CueTracking {
+  return value !== null && (CUE_TRACKING_VARIANTS as readonly string[]).includes(value);
 }

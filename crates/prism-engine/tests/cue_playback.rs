@@ -89,6 +89,7 @@ fn cue(number: &str, value: u16, fade: f64) -> Cue {
             attribute: AttributeType::Dimmer,
             value,
             preset_ref: None,
+            tracking: prism_domain::CueTracking::Track,
         }],
     }
 }

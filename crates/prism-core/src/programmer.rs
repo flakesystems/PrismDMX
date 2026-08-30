@@ -681,6 +681,14 @@ impl Programmer {
                 // put there stays, exactly as `Show::remove_preset` leaves the
                 // cue parts that referenced it.
                 preset_ref: value.preset_ref.filter(|&id| show.preset(id).is_some()),
+                // **A stored cue tracks** (S48), which is what a cue has always
+                // done here and what an operator storing a look means. A cue-only
+                // cue is made by saying so afterwards — `Command::SetCueTracking`
+                // — rather than by a mode on the store, because what an operator is
+                // deciding is about the *cue* and not about this store: the same
+                // programmer stored twice into two cues may be tracking in one and
+                // a one-off in the other.
+                tracking: prism_domain::CueTracking::Track,
             })
             .collect()
     }
@@ -800,6 +808,7 @@ impl Programmer {
             // compile error here as well as in `Show::apply` and
             // `SessionState::apply`.
             Command::SetCueProperty { .. }
+            | Command::SetCueTracking { .. }
             | Command::Delete { .. }
             | Command::Copy { .. }
             | Command::Move { .. }
@@ -2106,12 +2115,14 @@ mod tests {
                         attribute: AttributeType::Red,
                         value: 11,
                         preset_ref: None,
+                        tracking: prism_domain::CueTracking::Track,
                     },
                     prism_domain::CuePart {
                         fixture: FixtureId::new(2),
                         attribute: AttributeType::Red,
                         value: 22,
                         preset_ref: None,
+                        tracking: prism_domain::CueTracking::Track,
                     },
                 ],
             }],
