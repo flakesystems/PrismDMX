@@ -7,9 +7,49 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# `PrismDMX` rather than `prism-app`, because this is the name a Windows Start
+# menu, a task manager and a `HKCU\...\Run` entry show a person. The crate keeps
+# its own name for `cargo`, which is what every other reference to it uses.
+[[bin]]
+name = "PrismDMX"
+path = "src/main.rs"
+
+[lib]
+name = "prism_app"
+path = "src/lib.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
 [dependencies]
+prism-core = { path = "../prism-core" }
 prism-domain = { path = "../prism-domain" }
 prism-ipc = { path = "../prism-ipc" }
+# The daemon, as a **library**, and only for two things: where its files are
+# (`prismd::paths`) and what it publishes about itself (`prismd::lock`). The
+# alternative is a second copy of the discovery document's shape and of the data
+# directory's rules, and the whole point of `docs/IPC_PROTOCOL.md` §2.2 is that
+# there is one. It is the same argument `tools/xtouch-probe` makes for depending
+# on `prism-surface`: what goes on the wire is the shipping code's, not a
+# transcription of it.
+prismd = { path = "../prismd" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+
+# The one platform dependency, and the reason `ARCHITECTURE_SPEC.md` §10.1 lets
+# this crate have `#[cfg(target_os = ...)]` at all: an opt-in autostart is a
+# value under `HKCU\...\Run`, and §10.3 requires it to need no administrator
+# rights. Declared per target, the way S36 declared `midir`, so the ARM64
+# cross-check compiles none of it — and that job does not compile this crate at
+# all, which is the other half of the same rule.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

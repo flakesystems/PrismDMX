@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PrismDMX",
+  "identifier": "de.prismdmx.desk",
+  "build": {
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm --prefix ../ui run dev",
+    "beforeBuildCommand": "npm --prefix ../ui run build"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ws://127.0.0.1:* ws://localhost:* ws://[::1]:* ipc: http://ipc.localhost; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "category": "Utility",
+    "shortDescription": "PrismDMX lighting console",
+    "longDescription": "PrismDMX — a DMX lighting console for venues and schools. The desk and its engine in one program.",
+    "copyright": "MIT licensed",
+    "publisher": "PrismDMX",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../../target/release/prismd.exe": "prismd.exe",
+      "../../profiles/surface/xtouch.json": "profiles/surface/xtouch.json",
+      "../../profiles/fixtures/": "profiles/fixtures/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "German"
+        ],
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

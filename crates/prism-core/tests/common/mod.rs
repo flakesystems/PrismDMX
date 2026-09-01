@@ -417,6 +417,20 @@ pub fn machine_commands() -> Vec<Command> {
     ]
 }
 
+/// The commands that belong to **the process** rather than to any of the three
+/// models — S29, and there is one.
+///
+/// It has no applier and it is not an oversight that it has none: `Shutdown`
+/// changes no state anywhere, produces no delta and puts nothing on the journal,
+/// so `prismd`'s own handler reads it before anything is routed and this crate
+/// never sees one. The list exists so that
+/// `the_three_groups_together_are_the_whole_protocol` still fails when a command
+/// is added with no home — a fourth kind whose membership was implicit would be
+/// a hole exactly the size of the check.
+pub fn daemon_commands() -> Vec<Command> {
+    vec![Command::Shutdown]
+}
+
 /// Every command the session applier accepts, each in a form that changes
 /// something in a [`populated_session`].
 ///

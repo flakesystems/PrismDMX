@@ -729,11 +729,25 @@ impl Daemon {
             .collect();
 
         let deadline = run_for.map(|duration| tokio::time::Instant::now() + duration);
+        // S29: the third way this loop ends, and the one §10.3 names first.
+        // Taken out of the desk before the loop so the arm's future borrows an
+        // `Arc` rather than `self`, which the other arms need mutably.
+        let asked_to_stop = self.desk.stop_signal();
         tokio::pin!(stop);
         loop {
             tokio::select! {
                 () = &mut stop => {
                     log::info("daemon", "stopping on request");
+                    return;
+                }
+                // `Command::Shutdown` — the tray menu of `ARCHITECTURE_SPEC.md`
+                // §10.3, and the only explicit instruction a daemon with no
+                // console of its own could not be given until S29. What happens
+                // next is `Daemon::shutdown`, which is the same path Ctrl-C
+                // takes: clients told first, then the exit action, then the
+                // drivers.
+                () = asked_to_stop.notified() => {
+                    log::info("daemon", "stopping because a client asked it to");
                     return;
                 }
                 () = async {

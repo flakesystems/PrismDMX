@@ -10,7 +10,7 @@
 
 import { Connection } from "./ipc/connection";
 import type { ConnectionOptions } from "./ipc/connection";
-import { daemonUrl } from "./ipc/endpoint";
+import { daemonToken, daemonUrl } from "./ipc/endpoint";
 import { TelemetrySink } from "./ipc/telemetry";
 import { DeskStore, deskEvents } from "./store/desk";
 
@@ -39,8 +39,16 @@ export function createDesk(options: DeskOptions = {}): Desk {
   const events = deskEvents(store, (reason) => {
     connection.resync(reason);
   });
+  const search = locationSearch();
   const connection = new Connection(
-    { ...options, url: options.url ?? daemonUrl({ search: locationSearch() }) },
+    {
+      ...options,
+      url: options.url ?? daemonUrl({ search }),
+      // S29: the desktop shell read the discovery document and passed on what a
+      // listener off loopback requires (`docs/IPC_PROTOCOL.md` §2.1). `null`
+      // everywhere else, which is what a loopback listener asks for.
+      token: options.token ?? daemonToken({ search }),
+    },
     {
       ...events,
       onStatus: (status) => {

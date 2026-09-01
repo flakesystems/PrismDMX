@@ -14,8 +14,8 @@
 mod common;
 
 use common::{
-    cue, executor, fixture, group, machine_commands, par_type, patch_command, populated_show,
-    preset, sequence, session_commands, show_commands,
+    cue, daemon_commands, executor, fixture, group, machine_commands, par_type, patch_command,
+    populated_show, preset, sequence, session_commands, show_commands,
 };
 use prism_core::{Effect, Show, ShowError};
 use prism_domain::{
@@ -46,13 +46,24 @@ fn the_three_groups_together_are_the_whole_protocol() {
     // is in exactly one of the three. The machine group grew a fifth in S36 —
     // the control surface's MIDI port, which belongs to the building for the
     // same reason the cabling does.
+    //
+    // **And a fourth kind since S29**, which has no applier and is not an
+    // oversight for having none: `Shutdown` acts on the *process*, changes no
+    // state anywhere and produces no delta, so `prismd`'s own handler reads it
+    // before anything is routed. It is counted here rather than left out,
+    // because a kind whose membership was implicit would be a hole exactly the
+    // size of this check.
     assert_eq!(
-        show_commands().len() + session_commands().len() + machine_commands().len(),
+        show_commands().len()
+            + session_commands().len()
+            + machine_commands().len()
+            + daemon_commands().len(),
         // Sixty-**four** since S48's `SetCueTracking`, which is in the **show**
         // group for the same reason S45's `ConfigureExecutor` is — what a cue
         // asserts is show content, and `docs/IPC_PROTOCOL.md` §5 has the
-        // argument against the machine group in full.
-        64
+        // argument against the machine group in full; sixty-**five** since
+        // S29's `Shutdown`.
+        65
     );
     for command in show_commands() {
         assert!(!command.is_session_command(), "{command:?}");
@@ -64,6 +75,13 @@ fn the_three_groups_together_are_the_whole_protocol() {
     }
     for command in machine_commands() {
         assert!(command.is_machine_command(), "{command:?}");
+        assert!(!command.is_session_command(), "{command:?}");
+    }
+    // The fourth kind answers **no** to both, which is the whole of what makes
+    // it a fourth kind rather than a member of one of the three with a bug in
+    // its predicate.
+    for command in daemon_commands() {
+        assert!(!command.is_machine_command(), "{command:?}");
         assert!(!command.is_session_command(), "{command:?}");
     }
 }

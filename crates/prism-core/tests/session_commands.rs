@@ -11,7 +11,8 @@
 mod common;
 
 use common::{
-    machine_commands, populated_session, populated_show, session_commands, show_commands,
+    daemon_commands, machine_commands, populated_session, populated_show, session_commands,
+    show_commands,
 };
 use prism_core::{SessionError, SessionState, ShowFile, session_patch_ops};
 use prism_domain::{
@@ -46,10 +47,14 @@ fn the_session_commands_are_the_session_group() {
     // applier of its own, and the machine group grew a fifth in S36: see
     // `common::machine_commands`.
     assert_eq!(
-        show_commands().len() + session_commands().len() + machine_commands().len(),
+        show_commands().len()
+            + session_commands().len()
+            + machine_commands().len()
+            + daemon_commands().len(),
         // Sixty-**four** since S48's `SetCueTracking`, which is a **show**
-        // command.
-        64
+        // command, and sixty-**five** since S29's `Shutdown`, which is a fourth
+        // kind with no applier at all.
+        65
     );
 }
 

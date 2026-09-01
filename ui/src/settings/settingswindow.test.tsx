@@ -37,6 +37,21 @@ import {
 } from "../testing/fake-daemon";
 import { TelemetryProvider } from "../telemetry/panel";
 
+/**
+ * What Tauri puts on `window` when the interface is inside the desktop shell —
+ * S29, and the whole of what `shell/bridge.ts` looks for.
+ */
+function installShell(
+  invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>,
+) {
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { invoke };
+}
+
+/** …and taking it away again, so no other test in this file finds one. */
+function removeShell() {
+  delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+}
+
 /** A snapshot with a Settings window open and nothing else on the canvas. */
 function withSettings(overrides: Partial<Snapshot> = {}): Snapshot {
   const base = baseSnapshot(overrides);
@@ -493,6 +508,74 @@ describe("the Show files panel", () => {
     fireEvent.submit(screen.getByTestId("show-form"));
     expect(commands().at(-1)).toEqual({ t: "ImportShow", path: "aula.json" });
   });
+
+  /**
+   * **Punch-list B31, in the browser half.** There is no shell here, so there is
+   * no dialogue to offer and no button offering one — a *Browse…* that did
+   * nothing would be the fault S37's *held by a flag* rows exist to prevent.
+   * The box is what makes this panel work in a browser, and it is still here.
+   */
+  it("offers no file dialogue in a browser, and the box still works", async () => {
+    const { openPanel, commands } = await desk();
+    openPanel("show-files");
+    fireEvent.click(screen.getByTestId("show-OpenShow"));
+    expect(screen.queryByTestId("show-form-browse")).toBeNull();
+    fireEvent.change(screen.getByTestId("show-path-input"), { target: { value: "typed.prism" } });
+    fireEvent.submit(screen.getByTestId("show-form"));
+    expect(commands().at(-1)).toEqual({ t: "OpenShow", path: "typed.prism" });
+  });
+
+  /**
+   * **Punch-list B31, in the shell half.** The dialogue fills the box; the
+   * command is the same one, carrying the same field, and it is still the Apply
+   * button that sends it — so a path picked by mistake is corrected exactly the
+   * way a path typed by mistake is.
+   */
+  it("puts what the operating system's dialogue returned into the box the daemon is sent", async () => {
+    const asked: { kind?: unknown; start?: unknown } = {};
+    installShell((command, args) => {
+      Object.assign(asked, args);
+      expect(command).toBe("choose_path");
+      return Promise.resolve("D:/shows/panto.prism");
+    });
+    try {
+      const { openPanel, commands } = await desk();
+      openPanel("show-files");
+      fireEvent.click(screen.getByTestId("show-SaveShowAs"));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("show-form-browse"));
+      });
+      // The dialogue opened where the show already is, rather than wherever
+      // some other program was last used.
+      expect(asked).toEqual({ kind: "SaveShowAs", start: "D:/shows/aula.prism" });
+      expect((screen.getByTestId("show-path-input") as HTMLInputElement).value).toBe(
+        "D:/shows/panto.prism",
+      );
+      // Nothing has been sent yet: the form still has its Apply button.
+      expect(commands().at(-1)).not.toEqual({ t: "SaveShowAs", path: "D:/shows/panto.prism" });
+
+      fireEvent.submit(screen.getByTestId("show-form"));
+      expect(commands().at(-1)).toEqual({ t: "SaveShowAs", path: "D:/shows/panto.prism" });
+    } finally {
+      removeShell();
+    }
+  });
+
+  it("leaves the box alone when the operator cancels the dialogue", async () => {
+    installShell(() => Promise.resolve(null));
+    try {
+      const { openPanel } = await desk();
+      openPanel("show-files");
+      fireEvent.click(screen.getByTestId("show-OpenShow"));
+      fireEvent.change(screen.getByTestId("show-path-input"), { target: { value: "half-typed" } });
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("show-form-browse"));
+      });
+      expect((screen.getByTestId("show-path-input") as HTMLInputElement).value).toBe("half-typed");
+    } finally {
+      removeShell();
+    }
+  });
 });
 
 describe("the This machine panel", () => {
@@ -540,6 +623,62 @@ describe("the This machine panel", () => {
     await deliver({ t: "MachineChanged", settings: next });
     expect(screen.getByTestId("machine-log-level")).toHaveProperty("value", "Debug");
     expect(screen.getByTestId("machine-autostart")).toHaveProperty("checked", true);
+  });
+
+  /**
+   * **S37's switch, acted on at last.** In a browser there is nothing to act,
+   * and the row says so rather than drawing a tick beside a start-up entry it
+   * cannot see.
+   */
+  it("says a browser cannot see this machine's start-up entry", async () => {
+    const { openPanel } = await desk();
+    openPanel("this-machine");
+    expect(screen.getByTestId("autostart-entry").textContent).toContain("browser");
+  });
+
+  /**
+   * **The switch writes two things, and the second one waits for the daemon.**
+   * The box sends `ConfigureMachine` and nothing else; the start-up entry is
+   * written when the *delta* comes back, because the setting is the daemon's
+   * and a second window — or a Web Remote — can turn it on just as well. A
+   * shell that wrote the registry on its own click would be acting on a value it
+   * does not own, and would write one for a command that was refused.
+   */
+  it("writes the start-up entry when the daemon confirms the setting, not when the box is clicked", async () => {
+    const calls: { command: string; args?: Record<string, unknown> }[] = [];
+    installShell((command, args) => {
+      calls.push({ command, args });
+      return Promise.resolve({
+        supported: true,
+        installed: command === "autostart_apply" && args?.wanted === true,
+        command: '"C:\PrismDMX\PrismDMX.exe" --hidden',
+        matchesThisInstall: true,
+      });
+    });
+    try {
+      const { openPanel, commands, deliver } = await desk();
+      openPanel("this-machine");
+      // Read on the way in, and **read** rather than written: an entry somebody
+      // deleted in Task Manager would otherwise be repaired by opening a panel,
+      // and nobody would learn it had gone.
+      expect(calls).toEqual([{ command: "autostart_state", args: {} }]);
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("machine-autostart"));
+      });
+      expect(commands().at(-1)).toEqual({
+        t: "ConfigureMachine",
+        change: { t: "Autostart", autostart: true },
+      });
+      expect(calls).toHaveLength(1);
+
+      await deliver({ t: "MachineChanged", settings: machine({ autostart: true }) });
+      // The delta is what writes it, and the row then says what the machine has.
+      expect(calls.at(-1)).toEqual({ command: "autostart_apply", args: { wanted: true } });
+      expect(screen.getByTestId("autostart-entry").textContent).toContain("in place");
+    } finally {
+      removeShell();
+    }
   });
 
   /**

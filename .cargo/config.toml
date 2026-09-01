@@ -1,28 +1,49 @@
 # Workspace-wide cargo configuration.
 #
-# There is exactly one setting here, and it exists because of one dependency.
+# There is exactly one setting here, and S29 is where it changed shape.
 #
-# `prism-protocols` links FTDI's D2XX library statically on Windows
-# (ARCHITECTURE_SPEC.md 7.1). Static linking is not a preference: `ftd2xx.dll`
-# ships with FTDI's driver package, and a dynamically linked daemon on a machine
-# without it would fail to start *at all* rather than falling back to the
-# virtual COM port - the import is resolved when the process loads, long before
-# any of our code can decide anything.
+# **The problem, since S7.** `prism-protocols` links FTDI's D2XX library
+# statically on Windows (ARCHITECTURE_SPEC.md 7.1). Static linking is not a
+# preference: `ftd2xx.dll` ships with FTDI's driver package, and a dynamically
+# linked daemon on a machine without it would fail to start *at all* rather than
+# falling back to the virtual COM port - the import is resolved when the process
+# loads, long before any of our code can decide anything. FTDI's static library
+# is built against the **static** C runtime and the rest of the build used the
+# dynamic one, so the linker reported LNK4098; that is a rustc lint
+# (`linker_messages`), so with `-D warnings` it was an error rather than a note.
 #
-# FTDI's static library is built against the static C runtime and the rest of
-# the build uses the dynamic one, so the linker reports LNK4098. That is a
-# rustc lint (`linker_messages`), so with `-D warnings` it is an error rather
-# than a note. Excluding LIBCMT is the standard resolution and the correct one
-# here: everything then resolves against the dynamic runtime, and nothing in
-# this codebase frees memory that FTDI's library allocated.
+# Until S29 the answer was `/NODEFAULTLIB:LIBCMT`, which excluded the static
+# runtime and let everything resolve against the dynamic one. This file recorded
+# the alternative and named the session that would decide between them:
+# *the other way to make the two agree is to build everything with
+# `-C target-feature=+crt-static` ... that is a decision about the whole
+# workspace and belongs with the shell, not here.*
 #
-# Note for packaging (S29): the other way to make the two agree is to build
-# everything with `-C target-feature=+crt-static`, which would also remove the
-# VC++ redistributable from the list of things a school has to install. That is
-# a decision about the whole workspace and belongs with the shell, not here.
+# **S29 took the second way, and had to.** The shell links a second static
+# library - `WebView2LoaderStatic.lib`, by way of `webview2-com-sys` - and it is
+# built against the static runtime as well. With LIBCMT excluded it lost
+# `operator new`, `operator delete`, `_Init_thread_header` and twenty-one other
+# symbols, and no amount of ordering fixes that: one link cannot both have the
+# static runtime and not have it. Making the *whole workspace* static is what
+# makes all three agree, and it is the one of the two that gets better as the
+# program is installed rather than run from a checkout:
+#
+# - **Nothing has to be installed alongside it.** A dynamically linked build
+#   needs the Visual C++ redistributable, which is a per-machine install and
+#   therefore needs administrator rights - on a desk whose whole installer was
+#   built not to (ARCHITECTURE_SPEC.md 10.3). A school laptop that cannot
+#   install the redistributable could not have run the program at all.
+# - **It is one rule rather than one exception per library.** Any future static
+#   dependency agrees with this build by default instead of needing its own line
+#   here.
+#
+# The price is a larger binary and a C runtime that is not patched by Windows
+# Update. Both are accepted deliberately: the desk is a few megabytes either
+# way, and a lighting console whose behaviour changes under it on a Tuesday is
+# not obviously the safer of the two.
 #
 # CI passes RUSTFLAGS in the environment, which *replaces* these rather than
-# adding to them, so `.github/workflows/ci.yml` repeats this argument in the
-# Windows job. Both places carry the same comment.
+# adding to them, so `.github/workflows/ci.yml` and `release.yml` repeat this
+# argument in their Windows jobs. Every place carries the same comment.
 [target.'cfg(windows)']
-rustflags = ["-Clink-arg=/NODEFAULTLIB:LIBCMT"]
+rustflags = ["-Ctarget-feature=+crt-static"]

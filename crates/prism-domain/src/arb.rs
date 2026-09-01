@@ -534,6 +534,7 @@ fn command_group_6() -> BoxedStrategy<crate::Command> {
             .prop_map(|(id, enabled)| C::SetOutputEnabled { id, enabled }),
         any::<Option<String>>().prop_map(|port| C::SetSurfacePort { port }),
         any::<MachineChange>().prop_map(|change| C::ConfigureMachine { change }),
+        Just(C::Shutdown),
     ]
     .boxed()
 }

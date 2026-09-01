@@ -118,6 +118,25 @@ pub struct Desk {
     /// configured has nothing to report, and a desk that is switched off has a
     /// health and a set of counters that happen to be zero.
     surface_status: Mutex<Option<prism_domain::SurfaceStatus>>,
+    /// Raised when a client asked the daemon to stop — S29.
+    ///
+    /// `ARCHITECTURE_SPEC.md` §10.3 has said since S17 that the daemon *exits
+    /// only on explicit instruction — tray menu, CLI, service stop*, and named
+    /// an ordering that only an orderly stop can honour: clients told first,
+    /// then a blackout or a hold published as a frame, then the drivers. Until
+    /// S29 the only thing that could ask for it was Ctrl-C on the daemon's own
+    /// console, which a daemon spawned by a desktop shell has not got.
+    ///
+    /// A `Notify` rather than a flag the housekeeping tick picks up — which is
+    /// how `take_surface_change` and its three companions travel — because this
+    /// one is a **gesture with an answer an operator is waiting for**, and half
+    /// a second of a menu item that has visibly done nothing is half a second
+    /// in which it gets clicked again.
+    ///
+    /// It is on the `Desk` rather than on the `Core` because it changes no
+    /// state: the `Core` is what a command reaches when it has something to
+    /// change, and this one has the **process** as its subject.
+    stop: Arc<tokio::sync::Notify>,
 }
 
 impl Desk {
@@ -128,7 +147,27 @@ impl Desk {
             core: Mutex::new(core),
             open_surface: Mutex::new(None),
             surface_status: Mutex::new(None),
+            stop: Arc::new(tokio::sync::Notify::new()),
         }
+    }
+
+    /// What `Daemon::run` waits on to learn that somebody asked it to stop —
+    /// S29.
+    ///
+    /// Handed out as an `Arc` rather than awaited through the desk, because the
+    /// run loop's other arms need the daemon mutably and a future borrowing it
+    /// would stop them.
+    #[must_use]
+    pub fn stop_signal(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.stop)
+    }
+
+    /// Asks the daemon to stop — S29, and [`Command::Shutdown`]'s whole effect.
+    ///
+    /// Idempotent, and deliberately: a `Notify` holds one permit, so a menu item
+    /// pressed three times stops the daemon once.
+    pub fn request_stop(&self) {
+        self.stop.notify_one();
     }
 
     /// Records which MIDI port the surface is open on — S36.
@@ -258,6 +297,18 @@ impl Desk {
     /// read, and it changed nothing — which is §5, and which `prism-core`
     /// asserts on the serialised bytes rather than claiming.
     pub fn command(&self, command: Command) -> CommandOutcome {
+        // **The fourth kind of command, read before anything is routed** — S29.
+        // It is not the show's, the session's or the machine's; its subject is
+        // this process, so there is no applier to hand it to and no delta to
+        // broadcast. Answered `Applied` with nothing in it, which is the honest
+        // shape: the daemon accepted the instruction, and what follows is the
+        // shutdown `ARCHITECTURE_SPEC.md` §10.3 describes rather than a change
+        // any client could be told about.
+        if matches!(command, Command::Shutdown) {
+            log::info("daemon", "a client asked the desk to stop");
+            self.request_stop();
+            return CommandOutcome::Applied { deltas: Vec::new() };
+        }
         let mut core = self.core();
         match core.apply(&command) {
             Ok(deltas) => CommandOutcome::Applied { deltas },

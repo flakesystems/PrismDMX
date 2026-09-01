@@ -655,6 +655,12 @@ impl Show {
             | Command::SetOutputEnabled { .. }
             | Command::SetSurfacePort { .. }
             | Command::ConfigureMachine { .. } => Err(ShowError::NotAShowCommand),
+            // S29's one, and it is the fourth kind rather than a fifth applier:
+            // it acts on the **process**, changes no state anywhere, and never
+            // reaches this crate at all — `prismd::Core::apply` reads it before
+            // it routes. Named here rather than caught by a wildcard for the
+            // same reason as everything above it.
+            Command::Shutdown => Err(ShowError::NotAShowCommand),
         }
     }
 

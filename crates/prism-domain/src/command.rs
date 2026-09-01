@@ -1536,6 +1536,56 @@ pub enum Command {
         )]
         change: MachineChange,
     },
+
+    // ---- The daemon itself (S29) ----
+    /// Stops the daemon, in the order `ARCHITECTURE_SPEC.md` §10.3 lays down —
+    /// S29.
+    ///
+    /// # Why this is a command and not a signal
+    ///
+    /// §10.3 has said since S17 that the daemon *exits only on explicit
+    /// instruction — tray menu, CLI, service stop*, and it names the ordering
+    /// that makes an orderly stop worth having: clients are told first, then a
+    /// blackout or a hold is published as a frame and the outputs are given time
+    /// to send it, and only then do the driver threads stop — which is where
+    /// `DmxOutput::shutdown` ends the sACN streams carrying that last look. Until
+    /// S29 the only thing that could ask for that was Ctrl-C on the daemon's own
+    /// console, and a shell-spawned daemon has no console. The shell could have
+    /// killed the process instead; a kill skips every step above, so a venue's
+    /// sACN receivers would hold the last look until their own timeout ran out
+    /// and then do whatever they do when a source disappears.
+    ///
+    /// So the tray menu §10.3 names needs a way to say it, and the protocol is
+    /// the way this project says things. **The shell sends it over the local
+    /// transport** — the named pipe or the Unix domain socket of
+    /// `docs/IPC_PROTOCOL.md` §2, which is the desktop shell's transport and is
+    /// reachable only from this machine and this user.
+    ///
+    /// # It is a fourth kind of command, and it has no applier
+    ///
+    /// The three appliers are the show, the session and the machine, and this is
+    /// none of them: it changes no state at all, it produces no delta, and there
+    /// is nothing for an Oops to take back. `prismd::Core::apply` reads it before
+    /// it routes anything, exactly as `ShowFile::apply` reads a line that asked
+    /// to be run, and hands it to the run loop. A daemon that is not being hosted
+    /// by anything — a `prism-core` test, a Web Remote's fake — never sees one.
+    ///
+    /// # Who may send it
+    ///
+    /// Anyone who is connected, and that is a smaller set than it sounds: the
+    /// local transport is this machine and this user, and the WebSocket listener
+    /// is loopback unless somebody moved it, in which case §2.1 makes it need a
+    /// token. **No client interface offers it** — only the shell's tray does,
+    /// which is what §10.3 asks for. When the Web Remote arrives (S31) it must
+    /// not grow a button for it: a phone in the auditorium is exactly the place
+    /// from which a show must not be stoppable, and that is the same line §2.1
+    /// draws about the machine panel.
+    ///
+    /// The command line has no word for it either, and that is deliberate rather
+    /// than missing: `ARCHITECTURE_SPEC.md` §4.5 makes the console *the*
+    /// interface and lists the exceptions, and a mistyped line that took a
+    /// venue's rig off the air would be the worst of them.
+    Shutdown,
 }
 
 impl Command {
@@ -1681,6 +1731,10 @@ impl Command {
                 | Self::NewShow { .. }
                 | Self::ExportShow { .. }
                 | Self::ImportShow { .. }
+                // S29's, and the plainest case on this list: there is nothing
+                // to take back, and there would be nobody left to read the
+                // entry.
+                | Self::Shutdown
         ) && !self.is_session_command()
             && !self.is_machine_command()
     }
@@ -1690,10 +1744,10 @@ impl Command {
 mod tests {
     use crate::{
         AttributeType, Command, CueProperty, ExecutorButtonRef, ExecutorId, FeatureGroup,
-        FixtureId, GoDirection, GroupId, JsonValue, ObjectRef, OutputChange, OutputId,
-        OutputInstance, OutputKind, OverwriteMode, ParamDirection, PlaybackTarget, PresetId,
-        PresetPool, RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode, UniverseId,
-        ViewId, WindowInstanceId, WindowType,
+        FixtureId, GoDirection, GroupId, JsonValue, MachineChange, ObjectRef, OutputChange,
+        OutputId, OutputInstance, OutputKind, OverwriteMode, ParamDirection, PlaybackTarget,
+        PresetId, PresetPool, RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode,
+        UniverseId, ViewId, WindowInstanceId, WindowType,
     };
     use std::collections::BTreeMap;
 
@@ -1982,8 +2036,20 @@ mod tests {
             Command::SetSurfacePort {
                 port: Some("X-Touch".to_owned()),
             },
+            // S37's one, which finished the job S33 started: everything the
+            // command line used to be told is a setting now. It had been
+            // missing from this list since S37 — this list is compiled by hand
+            // and that is the whole check, so a gap in it is a gap in the
+            // check.
+            Command::ConfigureMachine {
+                change: MachineChange::Autostart { autostart: true },
+            },
+            // S29's one, and the fourth kind: it acts on neither the show, the
+            // session nor the machine, but on the process. See
+            // `Command::Shutdown`.
+            Command::Shutdown,
         ];
-        assert_eq!(commands.len(), 49);
+        assert_eq!(commands.len(), 51);
 
         // Every command must survive the wire, and the tag must be stable.
         for command in commands {
@@ -2058,6 +2124,25 @@ mod tests {
         ] {
             assert!(!command.is_machine_command(), "{command:?}");
         }
+    }
+
+    /// S29's one is the fourth kind, and the three predicates say so by all
+    /// answering no.
+    ///
+    /// It is asserted rather than described because the routing is written as
+    /// *not machine, therefore the show's*: a `Shutdown` that answered yes to
+    /// any of these would be handed to an applier that has nothing to do with
+    /// it, and a `Shutdown` that answered `is_undoable` would put an entry on a
+    /// journal for a process that is no longer there to read it.
+    #[test]
+    fn stopping_the_daemon_is_neither_the_shows_nor_the_sessions_nor_the_machines() {
+        let stop = Command::Shutdown;
+        assert!(!stop.is_machine_command());
+        assert!(!stop.is_session_command());
+        assert!(!stop.is_undoable());
+        // And it carries nothing, which is the other half of *changes no state*:
+        // there is no argument that could make one stop mean something else.
+        assert_eq!(serde_json::to_string(&stop).unwrap(), r#"{"t":"Shutdown"}"#);
     }
 
     #[test]

@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { Answer, MidiPortInfo, SurfaceStatus } from "../bindings";
+import { choosePath, inShell } from "../shell/bridge";
 import { useAsk, useDesk, useSend } from "../store/hooks";
 import type { DeskState } from "../store/desk";
 import { counterRows, healthText, heldNote, isHeld } from "./settings";
@@ -279,6 +280,21 @@ function ProfileRow() {
             }}
           />
         </label>
+        {inShell() && !held ? (
+          <button
+            type="button"
+            data-testid="profile-browse"
+            onClick={() => {
+              void choosePath("SurfaceProfile", path).then((chosen) => {
+                if (chosen !== null) {
+                  setTyped(chosen);
+                }
+              });
+            }}
+          >
+            Browse&hellip;
+          </button>
+        ) : null}
       </fieldset>
       <p className="settings-hint" data-testid="profile-note">
         {held

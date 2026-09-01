@@ -24,16 +24,21 @@ jobs:
     # A hung test costs a whole job otherwise. S16 pushed one that blocked on a
     # message a two-core runner never delivered, and the run sat there until it
     # was cancelled by hand; the fix was in the test, and this is so the next
-    # one of those fails in twenty minutes instead of six hours.
-    timeout-minutes: 20
+    # one of those fails inside the hour instead of after six.
+    #
+    # Raised from 20 in S29, and for a reason rather than because it was tight:
+    # `--workspace` now includes `prism-app`, so a cold cache compiles the whole
+    # Tauri dependency tree before a single test runs.
+    timeout-minutes: 45
     env:
       # RUSTFLAGS from the environment replaces .cargo/config.toml's rustflags
-      # rather than adding to them, so the link argument has to be repeated
-      # here. It excludes the static C runtime that FTDI's statically linked
-      # D2XX library asks for; without it the linker reports LNK4098, which is
-      # a rustc lint and therefore an error under -D warnings. The reasoning is
-      # written out in .cargo/config.toml.
-      RUSTFLAGS: "-D warnings -Clink-arg=/NODEFAULTLIB:LIBCMT"
+      # rather than adding to them, so the static C runtime has to be asked for
+      # again here. Everything on Windows is linked against it since S29, so
+      # that FTDI's statically linked D2XX library, WebView2's static loader and
+      # the rest of the build all agree - and so that nothing has to be
+      # installed alongside the desk. The reasoning is written out in
+      # .cargo/config.toml.
+      RUSTFLAGS: "-D warnings -Ctarget-feature=+crt-static"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -157,8 +162,92 @@ jobs:
 
       # This catches the realistic failure - platform-specific code leaking
       # into a crate that is supposed to be neutral.
+      #
+      # `prism-app` is excluded, and that exclusion **is** section 10.1 rather
+      # than an exception to it (S29). The shell is one of the four crates the
+      # rule allows platform code, it is the only one whose platform code is the
+      # whole point of it, and building it needs a webview toolkit this job has
+      # no business installing. What the job is for is catching platform code
+      # leaking into a crate that is supposed to be neutral - and the shell is
+      # the crate it is supposed to leak *into*. Everything below it is still
+      # checked here, which is the claim that matters.
       - name: Check
-        run: cargo check --workspace --target aarch64-unknown-linux-gnu
+        run: cargo check --workspace --exclude prism-app --target aarch64-unknown-linux-gnu
+
+  shell:
+    name: Windows - the desktop shell and its installer
+    runs-on: windows-latest
+    # A release build of the daemon plus a webview bundle, both with LTO and one
+    # codegen unit. It is a job of its own so the fast checks are not held up
+    # behind it, and it is here at all because an installer that only ever
+    # builds on one person's machine is a file rather than a release (S29).
+    timeout-minutes: 60
+    env:
+      # As in the Windows job above, and for the reason .cargo/config.toml
+      # gives: RUSTFLAGS from the environment replaces its rustflags rather
+      # than adding to them.
+      RUSTFLAGS: "-D warnings -Ctarget-feature=+crt-static"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: Swatinem/rust-cache@v2
+
+      # The bundle carries the library as a resource, so it has to be here
+      # before the bundler looks for it (S44, profiles/fixtures/SOURCE.md).
+      - name: Install the fixture library
+        shell: pwsh
+        run: tools/fetch-fixtures/fetch-fixtures.ps1
+
+      - name: Install the interface's dependencies
+        working-directory: ui
+        run: npm ci
+
+      # `prismd.exe` in release, because the bundle carries it beside the shell:
+      # `prism_app::spawn::daemon_beside` looks there, and so does
+      # `prismd::paths::installed_library_dir` for the profiles.
+      - name: Build the engine
+        run: cargo build --release -p prismd
+
+      # This also builds the interface - `beforeBuildCommand` in
+      # crates/prism-app/tauri.conf.json - and then the shell, and then the
+      # NSIS installer.
+      # `shell: bash` on purpose. The default on a Windows runner is PowerShell,
+      # which will not execute the extensionless shell script npm puts in
+      # `node_modules/.bin`; bash is present on every Windows runner and is the
+      # same invocation the README gives a developer.
+      - name: Build the installer
+        working-directory: crates/prism-app
+        shell: bash
+        run: ../../ui/node_modules/.bin/tauri build
+
+      # Not "did it exit zero" but "is the file there and does it carry what an
+      # installed desk needs". A bundler that quietly dropped a resource would
+      # produce an installer that installs a program which cannot find its own
+      # engine.
+      - name: What the bundle contains
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe |
+            Select-Object -First 1
+          if (-not $setup) { Write-Error "no installer was produced"; exit 1 }
+          Write-Output "$($setup.Name)  $([math]::Round($setup.Length / 1MB, 1)) MB"
+          foreach ($needed in @(
+            "target/release/PrismDMX.exe",
+            "target/release/prismd.exe"
+          )) {
+            if (-not (Test-Path $needed)) { Write-Error "$needed is missing"; exit 1 }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prismdmx-installer-ci
+          path: target/release/bundle/nsis/*-setup.exe
+          retention-days: 7
 
   ui:
     name: UI - typecheck, lint, test, build

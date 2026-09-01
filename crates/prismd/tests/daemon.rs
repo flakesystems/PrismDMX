@@ -400,3 +400,57 @@ async fn a_daemon_with_no_show_makes_one_and_still_drives_dmx() {
     let store = ShowStore::open(dir.path().join("aula.prism")).unwrap();
     store.integrity_check().unwrap();
 }
+
+/// **S29's exit criterion, the daemon's half.** A client asks the desk to stop
+/// and the run loop ends — the tray menu of `ARCHITECTURE_SPEC.md` §10.3, which
+/// until S29 had nothing to say it with.
+///
+/// The claim is deliberately about `run` **returning** rather than about the
+/// process: a daemon spawned by a shell has no console, so Ctrl-C was not
+/// reachable, and what a tray item needs is exactly this — the same ending
+/// Ctrl-C produces, reached over the transport the desktop shell already uses.
+/// `Daemon::shutdown` afterwards is the ordering §10.3 lays down and is asserted
+/// where it always was; what is new here is that something can ask for it.
+#[tokio::test]
+async fn a_client_can_ask_the_desk_to_stop_and_the_run_loop_ends() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    common::write_show(&dir.path().join("aula.prism"));
+
+    let mut options = options(dir.path());
+    options.local = Some(true);
+    let mut daemon = Daemon::start(&options).await.unwrap();
+
+    let address = common::local_address(dir.path());
+    let asking = tokio::spawn(async move {
+        let wire = prism_ipc::local::connect(&address).await.unwrap();
+        let (mut client, _snapshot) = Client::handshake(wire, Hello::new(ClientKind::Desktop))
+            .await
+            .unwrap();
+        client.send(Command::Shutdown).await.unwrap();
+        // Held open, because a daemon that stopped only because its last client
+        // went away would pass this test without the command existing.
+        client
+    });
+
+    // Ten seconds is a deadline rather than an expectation: if the command does
+    // nothing, `run` sits here until it and the test says which of the two
+    // happened instead of hanging the job.
+    let stopped = tokio::time::timeout(
+        Duration::from_secs(10),
+        daemon.run(None, std::future::pending()),
+    )
+    .await;
+    assert!(
+        stopped.is_ok(),
+        "the run loop has to end when a client asks the desk to stop"
+    );
+    let client = asking.await.unwrap();
+    drop(client);
+
+    daemon.shutdown().await;
+    assert!(
+        !dir.path().join("prismd.lock").exists(),
+        "a desk stopped from a tray menu leaves no more behind than one stopped with Ctrl-C"
+    );
+}

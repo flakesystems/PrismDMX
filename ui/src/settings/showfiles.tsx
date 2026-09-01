@@ -17,17 +17,25 @@
  * window type, so this panel sends commands the way the canvas sends
  * `OpenWindow`. A path is not a word an operator types into a console line.
  *
- * # The path is typed, and that is a decision
+ * # The path is typed, and — since S29 — it can also be picked
  *
  * A browser cannot show a file dialogue that names a path on the *daemon's*
  * machine — the two may not even be the same machine — so what an operator types
  * is a path the daemon resolves: absolute as given, relative against its data
- * directory. The desktop shell (S29) can offer a real dialogue and put the
- * result in this box; the box is what makes the panel work everywhere until then.
+ * directory. **The desktop shell offers a real dialogue and puts the result in
+ * this box** (punch-list B31), and the box is what makes the panel work in a
+ * browser, which is where the Web Remote (S31) will always be.
+ *
+ * So the *Browse…* button is drawn only where there is something behind it —
+ * `shell/bridge.ts`'s {@link inShell} — and nothing else about this panel
+ * changes. Nothing about the protocol changes either: what is sent is the same
+ * `OpenShow`, `SaveShowAs`, `NewShow`, `ExportShow` and `ImportShow` carrying
+ * the same `path`, whether a person typed it or picked it.
  */
 
 import { useCallback, useState } from "react";
 
+import { choosePath, inShell } from "../shell/bridge";
 import { useDesk, useSend } from "../store/hooks";
 import type { DeskState } from "../store/desk";
 import { fileName } from "./settings";
@@ -72,6 +80,26 @@ export function ShowFilesPanel() {
     setAsking(what);
     setPath("");
   }, []);
+
+  /**
+   * The operating system's own dialogue, for the row that is open.
+   *
+   * It fills the box rather than sending the command, deliberately: the form
+   * still has its Apply button, so a path picked by mistake is corrected the
+   * same way a path typed by mistake is, and the hint under the box — which is
+   * the only place *Open never creates one* is written down — is still read
+   * before anything happens.
+   */
+  const browse = useCallback(() => {
+    if (asking === null) {
+      return;
+    }
+    void choosePath(asking, path.trim() === "" ? showFile?.path : path.trim()).then((chosen) => {
+      if (chosen !== null) {
+        setPath(chosen);
+      }
+    });
+  }, [asking, path, showFile]);
 
   const submit = useCallback(() => {
     if (asking === null || path.trim() === "") {
@@ -164,6 +192,11 @@ export function ShowFilesPanel() {
                 }}
               />
             </label>
+            {inShell() ? (
+              <button type="button" data-testid="show-form-browse" onClick={browse}>
+                Browse&hellip;
+              </button>
+            ) : null}
           </fieldset>
           <p className="settings-hint" data-testid="show-form-hint">
             {ASKS[asking].hint} A relative name is taken as being in the desk&rsquo;s own data

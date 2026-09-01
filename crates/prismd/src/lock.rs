@@ -281,6 +281,70 @@ impl Drop for DaemonLock {
     }
 }
 
+/// What somebody looking in a data directory finds — S29.
+///
+/// The shell's *spawn or attach* is this question and nothing else, which is
+/// why it is answered here rather than there: the guard is the single-instance
+/// guarantee, and a second opinion about whether a daemon is running is exactly
+/// the thing this module exists to prevent.
+#[derive(Debug)]
+pub enum Presence {
+    /// Nobody is holding the guard, so no daemon is running in this directory.
+    Nobody,
+    /// A daemon is running, and this is what it published about itself. The
+    /// document is `Default` — a pid of nought and no endpoints — when a daemon
+    /// is holding the guard but its document cannot be read, which is the state
+    /// of a daemon in the first moments of starting.
+    Running(Box<LockDocument>),
+}
+
+/// Looks for a running daemon in `data_dir`, without disturbing it — S29.
+///
+/// The lock taken here is a **shared** one and it is let go before this function
+/// returns. Shared for the reason the whole two-file arrangement exists: an
+/// exclusive lock is what a daemon holds, and a client that took one — even for
+/// a moment — would be a client that could stop a daemon starting. A shared lock
+/// cannot be taken while an exclusive one is held, which is the answer this
+/// function wants, and cannot displace one that is not.
+///
+/// The guard file is opened **read-only and never created**, which is the other
+/// half of *without disturbing it*: a client asking a question leaves no files
+/// behind in a directory a daemon has never used.
+///
+/// # There is a window here, and it is the right size
+///
+/// Between this answer and the caller acting on it, a daemon can start or stop.
+/// That is not a race this function can close and it does not have to: the
+/// caller's two actions are *attach*, which fails as an ordinary connection
+/// failure, and *spawn*, which loses to [`DaemonLock::acquire`] and is told
+/// where the winner is. **Two daemons cannot both hold the guard**, so the worst
+/// outcome of a stale answer is a message rather than a rig with two desks on
+/// it.
+///
+/// # Errors
+///
+/// [`io::Error`] if the guard exists and cannot be opened or asked about. A
+/// guard that is not there is [`Presence::Nobody`] rather than an error: a
+/// machine where a daemon has never run has no such file.
+pub fn look(data_dir: &Path) -> io::Result<Presence> {
+    let guard_path = crate::paths::guard_path(data_dir);
+    let guard = match File::open(&guard_path) {
+        Ok(guard) => guard,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Presence::Nobody),
+        Err(error) => return Err(error),
+    };
+    match guard.try_lock_shared() {
+        Ok(()) => {
+            let _ = guard.unlock();
+            Ok(Presence::Nobody)
+        }
+        Err(TryLockError::WouldBlock) => Ok(Presence::Running(Box::new(
+            read_document(&crate::paths::lock_path(data_dir)).unwrap_or_default(),
+        ))),
+        Err(TryLockError::Error(error)) => Err(error),
+    }
+}
+
 /// Reads the discovery document, or `None` if there is not one to read.
 ///
 /// A document that will not parse is treated as absent rather than as an error:
@@ -449,6 +513,58 @@ mod tests {
         // cleaned up.
         super::remove_stale_socket(Some(r"\\.\pipe\prismd-nothing"));
         super::remove_stale_socket(None);
+    }
+
+    /// **S29's half of *spawn or attach*.** The question a shell asks before it
+    /// starts anything, answered three ways round.
+    #[test]
+    fn looking_for_a_daemon_finds_one_only_while_it_is_running() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // A directory a daemon has never used. No guard file, so no daemon —
+        // and, because the question is read-only, still no guard file after
+        // asking.
+        assert!(matches!(
+            super::look(dir.path()).unwrap(),
+            super::Presence::Nobody
+        ));
+        assert!(
+            !crate::paths::guard_path(dir.path()).exists(),
+            "asking whether a daemon is running must not leave files behind"
+        );
+
+        let mut lock = DaemonLock::acquire(dir.path()).unwrap();
+        lock.publish(&websocket()).unwrap();
+        let super::Presence::Running(document) = super::look(dir.path()).unwrap() else {
+            panic!("a daemon holding the guard has to be found");
+        };
+        assert_eq!(document.pid, std::process::id());
+        assert_eq!(document.websocket.as_deref(), Some("127.0.0.1:7373"));
+
+        // …and the shared lock the question takes is let go again, so it is not
+        // the thing that stops the next daemon starting.
+        drop(lock);
+        assert!(matches!(
+            super::look(dir.path()).unwrap(),
+            super::Presence::Nobody
+        ));
+        DaemonLock::acquire(dir.path()).expect("the guard is free after a look");
+    }
+
+    /// A guard held with no readable document beside it is still a daemon — the
+    /// state a daemon is in for the moment between taking the lock and writing
+    /// the file, and the state one is left in by a disk that filled up.
+    #[test]
+    fn a_daemon_whose_document_cannot_be_read_is_still_a_daemon() {
+        let dir = tempfile::tempdir().unwrap();
+        let _held = DaemonLock::acquire(dir.path()).unwrap();
+        std::fs::write(crate::paths::lock_path(dir.path()), b"{\"pid\": ").unwrap();
+
+        let super::Presence::Running(document) = super::look(dir.path()).unwrap() else {
+            panic!("the guard is held, so a daemon is running whatever the document says");
+        };
+        assert_eq!(document.pid, 0, "nothing was read, so nothing is claimed");
+        assert_eq!(document.endpoints(), "no endpoint");
     }
 
     #[test]

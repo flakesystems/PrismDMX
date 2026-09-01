@@ -1306,6 +1306,9 @@ impl ShowFile {
             // S36's, for the same reason: a port name is not show content.
             | Command::SetSurfacePort { .. }
             | Command::ConfigureMachine { .. }
+            // S29's, for the plainest reason on this list: there is nothing to
+            // take back, and the process the journal belongs to is stopping.
+            | Command::Shutdown
             => Vec::new(),
         }
     }

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the desk window is allowed to ask the shell for. The commands this crate defines are its own and need no entry here; what this grants is the core set every Tauri window needs to exist at all. The dialogue is opened from Rust rather than from the page (see `dialogs.rs`), so the page is given no file-system permission of any kind.",
+  "windows": ["desk"],
+  "permissions": ["core:default"]
+}

@@ -29,6 +29,7 @@ import type {
   SurfaceHealth,
   SurfaceStatus,
 } from "../bindings";
+import type { AutostartReport } from "../shell/bridge";
 
 /**
  * The panels, in the order the window draws them.
@@ -247,4 +248,38 @@ export function readUniverses(text: string): number[] | null {
 /** The same list, written out the way it is typed in. */
 export function writeUniverses(universes: readonly number[]): string {
   return universes.join(", ");
+}
+
+/**
+ * What the row says about the entry itself.
+ *
+ * Five answers, and the two that matter are the ones where the setting and the
+ * machine disagree. Here rather than in the panel, so a test
+ * can hold every one of them without rendering anything — which is where the
+ * other readings in this file live for the same reason.
+ */
+export function autostartEntryText(wanted: boolean, entry: AutostartReport | null): string {
+  if (entry === null) {
+    return "This interface is running in a browser, so it cannot see this machine's start-up entry. The desktop shell writes it.";
+  }
+  if (!entry.supported) {
+    return "This build cannot write a start-up entry on this platform, so the setting is stored and nothing acts on it.";
+  }
+  // **The setting is read first, and that ordering is the whole of the row's
+  // manners.** An entry belonging to another copy of the program is
+  // interesting only where the operator asked for one; where they asked for
+  // none, *there is still an entry* is what they need to be told, and whose it
+  // is does not change what to do about it.
+  if (!wanted) {
+    return entry.installed
+      ? "The setting is off and a start-up entry is still there. Untick the box again to remove it."
+      : "There is no start-up entry, which is what the setting says.";
+  }
+  if (!entry.installed) {
+    return "The setting is on and there is no start-up entry — it was removed outside this program. Tick the box again to put it back.";
+  }
+  if (!entry.matchesThisInstall) {
+    return `A start-up entry exists but it starts another copy of the program: ${entry.command ?? "somewhere else"}. Tick the box again to point it at this one.`;
+  }
+  return "A start-up entry for this installation is in place.";
 }

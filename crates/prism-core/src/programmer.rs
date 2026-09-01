@@ -854,7 +854,9 @@ impl Programmer {
             | Command::RemoveOutput { .. }
             | Command::SetOutputEnabled { .. }
             | Command::SetSurfacePort { .. }
-            | Command::ConfigureMachine { .. } => {
+            | Command::ConfigureMachine { .. }
+            // S29's, which acts on the process and never arrives here.
+            | Command::Shutdown => {
                 return Err(ProgrammerError::NotAProgrammerCommand);
             }
         };

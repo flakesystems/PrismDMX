@@ -668,6 +668,8 @@ The cable is an **FTDI FT232R with no microcontroller**. There is no widget firm
 | Failure mode in the field | USB unplugged or machine suspended ⇒ the driver thread detects the error, purges and reconnects; the UI light turns red, the engine keeps running |
 | Linux/RPi note | `ftdi_sio` claims the device; the libftdi path resolves this by detaching the kernel driver plus a udev rule. Do not use D2XX on Linux |
 
+**Statically linked, and since S29 so is everything else on Windows.** `ftd2xx.dll` ships with FTDI's driver package, and a dynamically linked daemon on a machine without it would fail to start *at all* rather than falling back to the virtual COM port — the import is resolved when the process loads, long before any of our code can decide anything. FTDI's static library is built against the **static** C runtime, which from S8 to S29 was reconciled by excluding the dynamic one's competitor (`/NODEFAULTLIB:LIBCMT`). The shell ended that: `webview2-com-sys` links a second static library built the same way, and one link cannot both have the static runtime and not have it. The whole Windows build is `-Ctarget-feature=+crt-static` now, which makes all three agree and takes the Visual C++ redistributable — a **per-machine** install, on a desk whose installer needs no administrator rights (§10.3) — off the list of things a school has to have. `.cargo/config.toml` carries the reasoning and both workflows repeat the flag, because `RUSTFLAGS` from the environment *replaces* the configuration's rather than adding to it.
+
 35 Hz is normal for this class of hardware — QLC+ and FreeStyler achieve no more with the same cable — and is unproblematic for conventional dimmers and LED pars. Guaranteed 44 Hz requires ArtNet, sACN or a future Enttec Pro widget. The UI states this plainly when the output is created rather than hiding it.
 
 **D2XX or the VCP on this machine (S8):** both were driven against a real fixture and both produced a steady, correct picture. **D2XX remains the preferred path**, and not because of the rate — the VCP measured *faster* (38.4 Hz against 35.5 Hz), and the whole of that difference is the 2 ms safety margin D2XX is given before the next break. It is preferred because it configures the port completely: the latency timer and the USB transfer sizes are reachable through D2XX and **not reachable at all** through a serial API, where they are whatever the registry says — 16 ms on the bring-up machine. A path that cannot set the settings this table calls fatal is a fallback, not a default.
@@ -771,7 +773,14 @@ prismdmx/
 │  │                     # cross-check never sees it.
 │  ├─ prism-ipc/         # framing + transport, server and client halves
 │  ├─ prismd/            # daemon binary (engine, session, surface, outputs, Web Remote)
-│  └─ prism-app/         # Tauri shell (thin client; spawns or attaches to prismd)
+│  └─ prism-app/         # Tauri shell (thin client; spawns or attaches to
+│                        # prismd). Built in S29: `attach`, `autostart`,
+│                        # `dialogs` and `spawn` are the decisions and have
+│                        # tests that need no window; `shell` is the assembly.
+│                        # `tauri.conf.json` + `icons/` + `capabilities/` are
+│                        # the bundle, and it carries `prismd.exe` and
+│                        # `profiles/` as resources so an installed desk finds
+│                        # both beside its own executable.
 ├─ ui/
 │  ├─ src/components/    # Canvas, Executor Bar, Encoder Bar, Console, View Selector
 │  ├─ src/windows/       # Fixture Sheet, Sequence Sheet, 3D Viewer, Patch, Settings …
@@ -790,7 +799,12 @@ prismdmx/
 │                        # — it walks a panel button by button and floods a
 │                        # surface until it stops answering — and no test may.
 │                        # `prism-midi` is where the shipping backend lives.
-├─ docs/                 # MCU_MAPPING.md, IPC_PROTOCOL.md, DMX_MERGE.md
+├─ docs/                 # MCU_MAPPING.md, IPC_PROTOCOL.md, DMX_MERGE.md,
+│                        # PRERELEASE_PUNCHLIST.md, RELEASE_NOTES.md
+├─ .github/workflows/    # ci.yml on every commit — including, since S29, the
+│                        # shell and its installer — and release.yml, which
+│                        # runs the gates again on a `v*` tag and attaches the
+│                        # installer to the release it makes
 └─ tests/                # integration and stress/latency suites
 ```
 
@@ -805,7 +819,9 @@ Windows is the only release target. To stop Raspberry Pi and macOS support from 
 - **Platform code is confined.** `#[cfg(target_os = …)]` may appear only in `prism-protocols` (FTDI backend selection), `prism-app` (shell and autostart), **`prism-ipc`, in `transport/local.rs` alone** (named pipe on Windows, Unix domain socket elsewhere — added in S16; the reasoning is in `PROGRESS.md`'s decision log) and **`prism-midi`, in `system.rs` alone** (WinMM, CoreMIDI or ALSA behind `midir` — added in **S36**). In each case the exception selects a platform primitive and nothing above the selection knows which one was chosen: in `prism-ipc` the framing, the handshake, the backpressure policy, the server and the client are one code path on every target, and in `prism-midi` so are the port naming, the reconnection and the `SurfacePort` above them. `prism-domain`, `prism-engine`, `prism-core` and `prism-surface` are platform-neutral and therefore testable anywhere.
 - **The fourth exception was a decision, not a detail** *(S36)*. Until then the only code in the repository that had ever opened a MIDI port lived **outside** the workspace (`tools/xtouch-probe/`, S20), and the daemon's `SurfacePort` seam had two implementations, neither of which touched a device. A backend needs a home before it can have an implementation, and there were two candidate homes: another tool outside the workspace, or a crate inside it whose whole purpose is to hold the split. The second was chosen, because the precedent is `thread-priority` (S17) — a dependency taken on for exactly that reason — and because S37's settings window has to *enumerate* ports over the protocol, which a tool cannot do. `prism-surface` gained **no dependency at all** and `prismd` gained one path dependency.
 - **What keeps `midir` off the cross-check is the manifest, not a habit.** `prism-midi` declares it for Windows and macOS, whose MIDI service is part of the operating system, and behind an `alsa` feature on Linux, whose is a `pkg-config` probe for `libasound2-dev`. So on `aarch64-unknown-linux-gnu` — the target the ARM64 job checks — `prism-midi` has **no dependencies whatever**, and a Raspberry Pi build (§10.2) is `--features prism-midi/alsa` with that package installed. A build with no backend enumerates an empty list and refuses to open, which is the same answer a machine with nothing plugged in gives, and it is what the Linux CI jobs exercise.
-- **CI keeps the door open.** Windows: full build and all tests on every commit. Linux ARM64: cross-compile check plus the platform-neutral tests, no hardware tests. macOS: not in CI until it becomes a priority.
+- **CI keeps the door open.** Windows: full build and all tests on every commit, plus — since **S29** — the shell and its installer as a job of their own. Linux ARM64: cross-compile check plus the platform-neutral tests, no hardware tests. macOS: not in CI until it becomes a priority.
+- **The ARM64 cross-check does not compile `prism-app`, and that exclusion is this rule rather than an exception to it** *(S29)*. `cargo check --workspace --exclude prism-app --target aarch64-unknown-linux-gnu` is the command. The job exists to catch platform code leaking into a crate that is supposed to be neutral; the shell is the crate it is supposed to leak *into*, it is the only one of the four exceptions whose platform code is the whole purpose of it, and building it needs a webview toolkit this job has no business installing. Everything below it is still checked on that target, which is the claim the job actually makes. What the shell *is* built by is the Windows job, on every commit, all the way to the installer — because an installer that only ever builds on one person's machine is a file rather than a release.
+- **Only Windows writes an autostart entry, and that is a decision** *(S29)*. §10.3's table names a systemd user unit and a `LaunchAgent` beside the `HKCU\…\Run` value; `prism_app::autostart` implements the third and reports the other two as *not supported by this build*. D10 makes Windows the only release target, and this section's own argument applies to the shell as much as to anything else: no job compiles `prism-app` on Linux or macOS, so a Linux autostart written today would be code nothing ever builds, which is the rot this section exists to prevent. Everything above the `Entry` seam — the three-way comparison, the report a settings panel reads, the command line an entry carries — is one code path on every target and is tested on every target, so the day a Pi grows a screen the work is one implementation of one trait.
 - **No Windows-only crates** in the core crates.
 - **A tool that needs a device lives outside the workspace.** S20 had to open a MIDI port to verify the X-Touch, which `prism-surface` is not allowed to do. Rather than bend the rule, `tools/xtouch-probe/` is its own crate with its own `[workspace]`: it depends on `prism-surface` by path — so the bytes it puts on the wire are the shipping codec's and not a transcription — while `cargo test --workspace`, `cargo clippy --workspace --all-targets` and the ARM64 cross-check never compile `midir` at all. The verification it produced comes back into the workspace as **recorded captures** (`crates/prism-surface/tests/captures/`), which the ordinary suite replays with nothing plugged in. That shape is the pattern for any future device: platform code and hardware in a tool, evidence in a fixture.
 
@@ -830,6 +846,36 @@ A true Windows service requires admin rights, which schools often cannot grant. 
 **As built (S17), and it is two files rather than one.** The mutual exclusion is an advisory lock (`std::fs::File::try_lock`) on an empty `prismd.guard`, held for the daemon's lifetime; the discovery document is `prismd.lock` beside it, holding the process id, the endpoints and the §2.1 token. Two files because an exclusive lock on Windows stops *other processes reading the locked bytes*, and the whole point of the discovery file is that clients read it.
 
 The liveness check is therefore the lock rather than a probe of the process id, and that is stronger in two ways as well as portable. The operating system releases the lock when the process ends — **including when it is killed**, which is the case a stale file is about — so the question a second daemon asks is *is anybody holding this*, not *is process 4711 alive*. A process id is reusable, so a probe would report a stale lock as live for ever once the number came round again; and a probe is platform code, which §10.1 does not allow `prismd`. The id is still written down, because a person looking at the file needs it. A named mutex is not used: it would answer the same question with a second mechanism to keep in step.
+
+**As built (S29), and the two edges it had to decide.** `prism_app::attach` is
+the caller S17's mechanism was built for. It asks `prismd::lock::look` — a
+**shared** lock on the guard, taken and let go, which can never displace the
+exclusive one a daemon holds and never creates a file — and then decides:
+
+| What it found | What it does |
+|---|---|
+| Nobody holding the guard | Starts `prismd` beside itself, detached, and waits for it to publish an endpoint |
+| A daemon with a WebSocket listener | **Attaches**: the window is opened against that address, with the §2.1 token if the document carries one |
+| A daemon with no listener the window can reach | **Neither.** It says which process holds the desk, where that process said it could be reached, and which data directory the two are arguing about |
+
+The third row is the edge worth writing down. A shell that spawned anyway would
+not in fact produce two daemons — `DaemonLock::acquire` refuses the second — but
+it would produce something worse to diagnose: a program that appears to start,
+briefly, and then reports a lock error from a process the operator never asked
+for. *I could not reach the first one* is not evidence that there is not one; it
+is usually evidence that somebody switched the listener off.
+
+The other edge is **a daemon belonging to a different installation**, and it
+resolves into a question that already has an owner. The *data directory* is the
+identity here, not the executable: two installations sharing one user's
+`%APPDATA%\PrismDMX` are one desk by definition, and one pointed at a directory
+of its own never sees this one's lock. So *a different installation* can only
+mean a different **build**, and `docs/IPC_PROTOCOL.md` §4.2's `PROTOCOL_VERSION`
+is what refuses an incompatible one — with a message about versions rather than
+about files. The shell therefore does **not** compare its own version against the
+running daemon's, and it never replaces a running daemon with the one it shipped
+with: an update that stopped a desk mid-show to start its own copy would be the
+fault the shutdown paragraph below exists to prevent.
 
 **Every one of the three tiers is a setting since S37, and so is the rest of the
 command line.** `prism_core::MachineConfig` holds the autostart flag beside the
@@ -866,9 +912,67 @@ want 7373, and refusing to start over it would let one stray process make a desk
 unstartable half an hour before a show. What the operator gets instead is a panel
 that says *configured here, listening nowhere*.
 
+**Autostart, as built (S29).** `prism_app::autostart` is the shell acting on the
+switch S37 wrote down. Three things about it are decisions rather than details:
+
+- **When.** The entry is reconciled **at every start** — which catches one
+  deleted by hand in Task Manager, an installation that moved, and a switch
+  changed while the shell was shut — and **again when the daemon confirms a
+  change**, so a box that is ticked takes effect at once. It is deliberately not
+  written at exit: an exit-time write would fight the box when two clients
+  disagree, and a shell that is killed does not run one at all, which is the case
+  where a stale entry matters most. It is written on the **delta** rather than on
+  the click, because the switch is the daemon's state and any client can change
+  it — a shell acting on its own click would be acting on a value it does not own,
+  and would write an entry for a command that was refused.
+- **What an entry naming somewhere else means.** It is **reinstalled**, not left
+  alone. That is what an update looks like from here, and a switch that is on
+  beside an entry pointing at last month's directory is the switch this whole
+  arrangement exists not to be.
+- **What the panel shows.** Both: the *setting*, which is `MachineConfig`'s and
+  which every client reads back, and the *entry*, which is a fact about this
+  Windows account. Where they disagree the row says which way round and what to
+  do about it, because **a switch that displays a lie is worse than no switch**.
+  In a browser there is no shell to ask and the row says *that* rather than
+  guessing.
+
+**The installer is per-user, and this table is why** *(S29)*. An installer that
+demanded administrator rights in order to offer a switch that needs none would
+have chosen the wrong tier of it. So the NSIS bundle installs into
+`%LOCALAPPDATA%` with `installMode: currentUser`, an existing installation is
+replaced in place, and a **running daemon is left running** — it is the previous
+build until somebody restarts it, and stopping a desk to install an update is not
+something an installer may decide. Uninstalling removes the program and nothing
+else: the show files, `machine.json`, the operator's own fixture profiles and the
+control map are in `%APPDATA%\PrismDMX` and survive it, because there is no
+version of *reinstall this* that also means *throw away my show*. `prismd.lock`
+and `prismd.guard` are in that directory too and are not touched; a lock left by a
+daemon an update stopped is stale in exactly the sense this section already
+handles.
+
 **Shutdown.** The daemon exits only on explicit instruction — tray menu, CLI, service stop — sending sACN termination packets and applying a configurable blackout-or-hold. Accidentally closing a window must never end a show.
 
 **As built (S17):** clients are told first (`Reject { ShuttingDown }`, so they show *the daemon stopped* rather than *the connection broke*), then — with `--blackout-on-exit` — a blackout is **published as a frame** and the outputs are given time to send it, then the driver threads are stopped, which is where `DmxOutput::shutdown` ends the sACN streams carrying that last look. The order is what makes blackout-or-hold a decision at this level rather than in a driver: `--hold-on-exit` is the default and leaves the stage as it was.
+
+**And the tray menu can now say it (S29).** The sentence above has named a tray
+menu since S17 and there was nothing that could send one: a daemon spawned by a
+shell has no console, so Ctrl-C was unreachable. `Command::Shutdown` is the
+instruction — **the fourth kind of command**, acting on neither the show, the
+session nor the machine but on the process, so it has no applier and produces no
+delta; the daemon's own handler reads it before anything is routed and ends the
+run loop, which then takes exactly the path above. The shell sends it over the
+**local transport**, which is the one `docs/IPC_PROTOCOL.md` §2 gives the desktop
+shell and which is reachable only from this machine and this user. The shell
+could have killed the process instead, and that is precisely the difference: a
+kill skips every step in the preceding paragraph, so a venue's sACN receivers
+would hold the last look until their own timeouts ran out.
+
+**Closing the window is not any of this.** The shell's close button hides the
+window and tells the daemon nothing, because nothing about the daemon has
+changed; quitting the shell from the tray leaves it running too, which is the
+default tier of the table above. Stopping the desk is a third item and says so.
+That is **D9**, and `crates/prismd/tests/daemon.rs` asserts the half a test can
+reach.
 
 ---
 
@@ -902,6 +1006,7 @@ The diagrams in `Architecture.txt` and `XTouch.txt` remain the reference for eve
 | **The value-tree budget (S38)** | `crates/prism-domain/src/wire.rs::a_generated_wire_value_fits_in_a_test_thread` | S37 made it a test for `Command` and `Delta`; S38 found both of its blind spots the hard way. It watches all **four** wire enums now, because `Answer` went over the cliff while it was green; and the budget is the **measured** 30 992 rather than a round 32 KiB, because 32 144 sits in the gap S37 never tried and overflows `prism-core`'s suite. The remedy it points at changed too: with every fat field already boxed the tree grows at 560 bytes per variant *whatever it carries*, so a wide **unit** enum is the expensive thing — `GlobalButton` alone was 36 064 bytes — and `crate::arb::arbitrary_from_list` is what removes it |
 | **A listener that cannot bind (S37)** | A real socket is bound to an address and a daemon is configured for it — `crates/prismd/tests/settings.rs` | *The address is taken* is the case the rule exists for, so it is produced rather than contrived. The daemon **starts**, `websocketOpen` is `null` while `websocket` still names the address, and the rig is driven throughout |
 | **The settings window (S37)** | `ui/src/settings/settingswindow.test.tsx` in jsdom against a fake socket, and `ui/e2e/settings.spec.ts` in Chromium against a real `prismd` | The unit half asserts on what happens **before** the delta, gesture by gesture: a command out, and the panel unchanged. The browser half is the one that removes the doubt — S33's five-output rig built from nothing but the window with every frame counter climbing, one output re-addressed while the other four keep sending, a show saved under a new name and reopened, a **second tab** following the first without being told, and twelve rows scrolling inside the window with the document *and* the canvas both reading zero. That last is `CLAUDE.md`'s rule checked in a browser rather than reviewed in a stylesheet, and the *inside* half is what a check of zeros everywhere would miss |
+| **The desktop shell (S29)** | `crates/prism-app`'s own suite with no Tauri in it, `ui/src/shell/bridge.test.ts` in jsdom, and a row in §14 for what is left | **No test may need a window**, which is `CLAUDE.md`'s hardware rule stated for a shell — so everything the shell *decides* is a function called with neither: `attach::approach` over all four shapes of discovery document (nobody, a listener, no listener, nothing published at all), `autostart::reconcile` over the four states of the comparison **and** the update case an installation that moved produces, `dialogs::chooser` over all seven places a path is asked for, and `spawn::arguments` over what a daemon this shell starts is told. The one piece of platform code has tests too, and they are the reason `RunKey` carries its key as a field: pointed at a scratch key under the user's own hive it exercises the same three registry calls **without leaving a start-up entry on the machine that ran them** — a test may not need a device, and it may not leave one changed either. The bridge is tested in both of the places the interface runs, with and without the object Tauri puts on `window`, because *there is no shell* is an answer rather than a failure. What genuinely needs a window is §14's 🪟 row, as six numbered steps |
 | Stress / latency | `criterion`: 64 universes under 100 % CPU load; **p99.9 tick jitter < 2 ms**, no dropped frames over 10 minutes | CI gate |
 | UI | `vitest` + Testing Library; Playwright end-to-end against a daemon in mock-output mode | ≥ 85 % global — **met 2026-08-14: 98.91 % lines on `ui/src` (S24), 235 tests.** S24 added the second channel and with it two claims that are *counted* rather than argued: a `<Profiler>` round the whole interface records **zero React commits** over 300 frames of 64 universes, and the frame budget is measured in Chromium against a real `prismd` publishing 64 real universes — 0.30 ms median, 1.10 ms p99 for decode and paint together, against a budget of 8 ms. The renderer is testable at all because the 2D context is a seam like every hardware interface (`LevelSurface`): `jsdom` has no rasteriser, and a recording surface is what lets all 32 768 pixels be asserted against the frame they were drawn from. The telemetry decoder is held to `prism_ipc::TelemetryFrame::decode`'s own answers on frames a running daemon sent — there is no encoder in the interface, deliberately. S23's measurement: **98.60 % lines on `ui/src`, 158 tests.** Both suites exist from that session: the unit suite has no socket at all (the transport is an argument, so a five-second reconnect backoff is *asserted* rather than waited for), and `ui/e2e` starts a real `prismd --mock-output --websocket`, **kills** it and restarts it, which is the reconnect criterion where an operator would meet it. The mirror is not tested against its own expectations: `ui/src/mirror/recording.test.ts` replays a delta stream recorded off a running daemon and compares the result with the snapshot that daemon served a *second* client |
 
@@ -926,6 +1031,15 @@ Every hardware interface sits behind a trait (`DmxOutput`, `prismd::surface::Sur
 
 All of them are isolated as plain table data so verification is a data update, not a refactor.
 
+**Since S29 the list has one row that needs no hardware and cannot be a test
+either**, and it is marked 🪟 rather than 🔌: what a *window* does. The rule it
+answers to is the same one — `CLAUDE.md` says a test may not need a device, and a
+shell adds *a test may not need a window* — so everything the shell **decides**
+is a function `crates/prism-app`'s suite calls with no Tauri anywhere: spawn or
+attach, the autostart comparison, the dialogue table, the daemon's arguments.
+What is left is the platform's own behaviour, and it is a recipe below rather
+than a claim nobody checked.
+
 | Item | Where | What to do |
 |---|---|---|
 | ArtNet against a real node | §7.2 and [`crates/prism-protocols/src/artnet.rs`](crates/prism-protocols/src/artnet.rs) | The packet is asserted field by field against the specification and on a received datagram, which is everything a socket can answer. What only a node can answer is whether *it* agrees: the port-address mapping (0-based or 1-based on that manufacturer's front panel) and whether it needs ArtSync. Both are configuration, not code — `PortAddress` and `ArtNetConfig::sync`. **S46 made the first half answerable without reading a front panel**: a node that answers `ArtPoll` tells the desk its own port-address table, and the settings panel says which of those universes this desk sends nothing on and which it sends that the node does not list |
@@ -936,5 +1050,6 @@ All of them are isolated as plain table data so verification is a data update, n
 | 🔌 **ALSA on the Raspberry Pi** | §10.2 and `prism-midi`'s `alsa` feature | The backend is target-gated so the ARM64 cross-check needs no `libasound2-dev`, which means the Linux MIDI path is **compiled by nobody today**. What a Pi can answer, and only a Pi: that `cargo build --features prism-midi/alsa` succeeds with that package installed, that ALSA's port names go through `prism_midi::normalise` as §2 of `naming.rs` predicts — the ` 24:0` client address coming off — and that the client number really does change across a boot, which is the whole reason that rule exists. It is a data question about one function and a build question about one feature, so verifying it is a build and one test |
 | 🔌 **The control editor against a real X-Touch** | §4.4 of [`docs/MCU_MAPPING.md`](docs/MCU_MAPPING.md) and [`ui/src/settings/controls.tsx`](ui/src/settings/controls.tsx) | S38 made the binding table editable and everything a *daemon* can answer for is asserted with nothing plugged in: a key rebound over the protocol changes what the same three bytes do, learn names a control of every shape §2.1 has and does not fire it, and two editors produce one table. What only the desk can answer is whether **learn is comfortable to use on the real panel** — whether pressing a key while an editor is open names the key the operator meant, on a surface whose modifiers are held rather than latched (§2.1) and whose V-Pots accelerate (§2.7). Verifying it is an afternoon with the panel open, not a code change. The second half needs the sound console as well: §4.3's *permanently ours* set is drawn in the editor as data (`McuProfile::permanent`), and confirming it is the same one-line edit §7's ◻ row has always described |
 | 🔌 **The settings window against real hardware** | §10.3 and [`ui/src/settings/`](ui/src/settings/) | S37 made every one of `prismd`'s operational flags a setting a browser can write, and everything a *daemon* can answer for is asserted with nothing plugged in: the rig is built from the window against five recording doubles, the MIDI enumeration answers and opens nothing, and a listener that cannot bind is produced by binding the address first. What only a venue can answer is whether the rig an installer types into this window is the rig their nodes receive — which is the two rows below and the two above it, met from the other end. Verifying it is an afternoon in a hall with the panel open, not a code change |
+| 🪟 **The shell's window, tray and dialogues (S29)** | §10.3 and [`crates/prism-app/src/shell.rs`](crates/prism-app/src/shell.rs) | Everything the shell **decides** is asserted with no window: `attach::approach` over all four shapes of discovery document, `autostart::reconcile` over the four states of the comparison and the update case, `dialogs::chooser` over every place a path is asked for, and `spawn::arguments` over what a daemon this shell starts is told. What only a desktop can answer is that the platform does what it is asked. The recipe, in order, on a machine with the installer run: **(1)** start it — a window appears and the desk connects; **(2)** close the window with its own button — the tray icon stays, `prismd.exe` is still in Task Manager, and a DMX Sheet on a second client still shows the rig moving; **(3)** start it again from the Start menu — the window comes back and there is still exactly **one** `prismd.exe`; **(4)** *Settings → Show files → Save as → Browse…* — the operating system's dialogue opens, filtered to `.prism`, in the folder the current show is in, and what is picked lands in the box; **(5)** *Settings → This machine*, tick autostart — the row underneath says an entry is in place, and `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` has a `PrismDMX` value; delete that value by hand and reopen the panel — the row says it was removed outside the program; **(6)** tray → *Stop the desk* — `prismd.exe` goes, and with `--blackout-on-exit` the rig goes dark rather than freezing. Each step is a claim a test would have had to fake, and none is a code change to verify |
 | Two Open DMX adapters told apart by serial | §7.0 and `DeviceDescriptor::with_serial` in [`crates/prism-protocols/src/device.rs`](crates/prism-protocols/src/device.rs) | S33 made the rig data, and `OutputKind::OpenDmx { serial }` is what pins one output to one physical cable. The serial reaches the bus — `opendmx.rs`'s `a_serial_from_the_configuration_is_what_the_bus_is_asked_for` asserts the descriptor the driver asks D2XX for — and the matching rule is S8's, asserted on enumerated devices. What only **two cables** can answer is whether the two open the adapters an installer expects rather than both taking the first: the machine that verified S8 has one. Both halves are configuration, not code, so verifying it is a data update and one test |
 | ~~SH-RS09B USB VID/PID and achievable frame rate~~ | §7.1 and `DeviceProfile::SH_RS09B` in [`crates/prism-protocols/src/device.rs`](crates/prism-protocols/src/device.rs) | ✅ **Done 2026-08-11 (S8).** `0403:6001`, serial `B0037HIY`, `FT232R USB UART`; 35.5 Hz sustained over 60 s through D2XX. The constant now carries `verified: true` and the tests assert the measurements. Verifying it was an edit to three fields and one test, which is what holding it as data was for |

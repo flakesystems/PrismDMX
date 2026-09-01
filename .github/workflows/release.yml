@@ -1,0 +1,185 @@
+# The release build — S29.
+#
+# What a release is, decided here rather than left to a habit:
+#
+# **It hangs on a tag**, `v<major>.<minor>.<patch>`, and the tag is the trigger
+# rather than a GitHub release object. A workflow that ran on `release:
+# published` would need a release to exist before the artefact that goes in it
+# had been built, which is the wrong way round: this one builds first and makes
+# the release with the installer already attached.
+#
+# **The version comes from the workspace manifest** and from nowhere else.
+# `crates/prism-app/tests/version.rs` is what holds that: `tauri.conf.json`
+# carries no version at all, so the bundler falls back to the crate's, which is
+# `[workspace.package] version`. The job below checks that the tag agrees with
+# it and refuses otherwise, because a tag and a manifest that disagree produce
+# an installer whose file name is a lie.
+#
+# **It runs the gates again.** Trusting the commit's own CI run would be enough
+# almost every time and wrong the once: a tag can be put on a commit whose run
+# never finished, on a commit from a branch that was never merged, or on one
+# whose run went red after somebody stopped looking. A release built from red
+# code is the most expensive mistake this session could make, and re-running the
+# gates costs twenty minutes.
+#
+# **It is given no secrets it does not need.** The only one is
+# `GITHUB_TOKEN`, which the runner supplies, and it is granted `contents: write`
+# and nothing else. There is no signing certificate here yet — the release notes
+# say so, and say what SmartScreen will do about it, which is where a beta tester
+# should read it rather than in a support request.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # So the whole thing can be exercised without cutting a release: it builds and
+  # uploads the installer as a workflow artefact, and creates nothing.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Windows - installer
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      # As in ci.yml, and for the same reason: RUSTFLAGS from the environment
+      # replaces .cargo/config.toml's rather than adding to them, so the static
+      # C runtime has to be asked for again here. .cargo/config.toml has the
+      # reasoning, and S29 is where it changed - the shell links a second
+      # static library and one link cannot both have the static runtime and
+      # not have it.
+      RUSTFLAGS: "-D warnings -Ctarget-feature=+crt-static"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: Swatinem/rust-cache@v2
+
+      # **The tag and the manifest have to be the same number.** A tag that
+      # disagrees produces an installer named after one version and carrying
+      # another, and nothing downstream would ever notice.
+      - name: The tag is the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $manifest = Select-String -Path Cargo.toml -Pattern '^version = "(.+)"' |
+            Select-Object -First 1
+          $version = $manifest.Matches[0].Groups[1].Value
+          if ($tag -ne $version) {
+            Write-Error "the tag says $tag and Cargo.toml says $version"
+            exit 1
+          }
+          Write-Output "building $version"
+
+      - name: Install the fixture library
+        shell: pwsh
+        run: tools/fetch-fixtures/fetch-fixtures.ps1
+
+      - name: Install the interface's dependencies
+        working-directory: ui
+        run: npm ci
+
+      # ---- The gates, again ----
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
+
+      # ui/src/bindings is generated rather than committed, and `cargo test`
+      # above has just written it — so the typecheck below has something to read.
+      - name: Typecheck the interface
+        working-directory: ui
+        run: npx tsc -b --force
+
+      - name: Lint the interface
+        working-directory: ui
+        run: npm run lint
+
+      - name: Test the interface
+        working-directory: ui
+        run: npm run test
+
+      # ---- The build ----
+      # The daemon first and in release, because the bundle carries it as a
+      # resource: `prism_app::spawn::daemon_beside` looks for `prismd.exe` in the
+      # installation directory, and so does the fixture library's own search.
+      - name: Build the engine
+        run: cargo build --release -p prismd
+
+      # `shell: bash` on purpose. The default on a Windows runner is PowerShell,
+      # which will not execute the extensionless shell script npm puts in
+      # `node_modules/.bin`; bash is present on every Windows runner and is the
+      # same invocation the README gives a developer.
+      - name: Build the installer
+        working-directory: crates/prism-app
+        shell: bash
+        run: ../../ui/node_modules/.bin/tauri build
+
+      # The checksum goes in the release notes, because the build is not signed
+      # and a checksum is what somebody who would rather not click through
+      # SmartScreen can check instead.
+      - name: Checksum
+        id: installer
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe |
+            Select-Object -First 1
+          if (-not $setup) { Write-Error "no installer was produced"; exit 1 }
+          $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower()
+          Write-Output "path=$($setup.FullName)" >> $env:GITHUB_OUTPUT
+          Write-Output "name=$($setup.Name)" >> $env:GITHUB_OUTPUT
+          Write-Output "sha256=$hash" >> $env:GITHUB_OUTPUT
+          Write-Output "$($setup.Name)  $hash"
+
+      # Always, tag or not: a `workflow_dispatch` run exists to produce exactly
+      # this and to create nothing.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prismdmx-installer
+          path: target/release/bundle/nsis/*-setup.exe
+          retention-days: 14
+
+      # ---- The release ----
+      # The notes are the file in the repository plus the checksum of the file
+      # that was just built, in one document. One `body_path` rather than a
+      # `body` beside it, because the action takes the path in preference to the
+      # text and the checksum would have gone silently.
+      - name: The release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $notes = Get-Content docs/RELEASE_NOTES.md -Raw
+          $notes += "`n`n---`n`n**SHA-256** of ``${{ steps.installer.outputs.name }}``:`n"
+          $notes += "``${{ steps.installer.outputs.sha256 }}```n"
+          Set-Content -Path release-body.md -Value $notes -Encoding utf8
+
+      # Marked **pre-release**: what makes 0.9.0 a closed beta is this flag
+      # rather than a suffix on the version, because a Windows installer version
+      # has to be three numbers and nothing else.
+      - name: The release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.installer.outputs.path }}
+          name: PrismDMX ${{ github.ref_name }}
+          prerelease: true
+          generate_release_notes: false
+          body_path: release-body.md

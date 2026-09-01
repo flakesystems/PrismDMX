@@ -816,10 +816,19 @@ The exit criterion that could not be written before is
 is pressed and channel 5 reaches 255 **on the frames**, with no client attached at
 all.
 
-## S29 · `prism-app` — Tauri shell
-**Size:** M · **Depends on:** S17, S23
+## S29 · `prism-app` — Tauri shell & Closed Beta Pre-Release
+**Size:** L · **Depends on:** S17, S23, S43
 
-**Deliverables:** Tauri shell, daemon spawn-or-attach, autostart settings per `ARCHITECTURE_SPEC.md` §10.3, tray, explicit shutdown. The autostart and machine settings are **driven from the settings window** (S37) rather than from a menu of their own: a setting that exists in two places is a setting that disagrees with itself, and the Web Remote (S31) has no menu bar at all.
+**Goal:** The planned Pre-Release and the official launch of the Closed Beta Phase. This session bundles the backend and the new Tauri shell frontend into a single executable program, wraps it in an installer, automates the release process, and delivers the first Closed Beta release.
+
+**Deliverables:**
+- **Tauri shell:** bundles the `prismd` daemon and the UI into one executable program.
+- Daemon spawn-or-attach, autostart settings per `ARCHITECTURE_SPEC.md` §10.3, tray, and explicit shutdown.
+- The autostart and machine settings are **driven from the settings window** (S37) rather than from a menu of their own: a setting that exists in two places is a setting that disagrees with itself, and the Web Remote (S31) has no menu bar at all.
+- **Native OS file dialogues** for every path an operator types (e.g. Open, Save as, New, Export, Import). A Tauri command returns the chosen path as a string to the settings window.
+- **Installer:** an installer must be created for the bundled application.
+- **GitHub Build Workflow:** a CI pipeline must be created that builds the application on a release and attaches the installer as an artifact.
+- **Closed Beta Release:** a first release for the Closed Beta must be published at the end of this session.
 
 **And the operating system's own file dialogue, for every path an operator types** — asked for by the owner on 2026-08-28, out of S43's rebuild: *Dateien öffnen und speichern unter jeglicher Art (Showfiles/JSON/Control Map) sollte im Dateimanager des ausführenden Betriebssystems geschehen, um einfacher Pfade angeben zu können.* The owner named the condition themselves — *sollte das erst mit der Desktop Umgebung gehen, muss das Feature in diese Session verschoben werden* — and it does, for a reason worth writing down rather than deferring quietly:
 
@@ -828,11 +837,61 @@ all.
 The **control map** is the exception and it is already done (S43): it is exported and imported as a *file the browser holds*, not a path the daemon resolves, because a binding table belongs to the machine an operator is sitting at rather than to the one running the show. That one wants no shell.
 
 **Exit criteria**
-- Closing the window leaves the daemon running and DMX flowing — asserted, this is D9
-- **Open, Save as, New, Export and Import each open the OS dialogue** and put the chosen path in the box the daemon is sent; typing a path still works, and the Web Remote is unchanged
-- Second shell instance attaches instead of spawning a second daemon
-- Opt-in autostart installs and uninstalls cleanly **without administrator rights**
-- Installer produces a working build on a clean Windows machine
+- Closing the window leaves the daemon running and DMX flowing — asserted, this is D9.
+- **Open, Save as, New, Export and Import each open the OS dialogue** and put the chosen path in the box the daemon is sent; typing a path still works, and the Web Remote is unchanged.
+- Second shell instance attaches instead of spawning a second daemon.
+- Opt-in autostart installs and uninstalls cleanly **without administrator rights**.
+- Installer produces a working build on a clean Windows machine.
+- A GitHub Build Workflow successfully runs on a release, builds the app, and provides the installer as an attached artifact.
+- The first Closed Beta release is successfully created.
+
+**Done 2026-09-01.** Every criterion above; the version is **0.9.0** and the tag
+is **`v0.9.0`**, published as a GitHub **pre-release** — what makes it a beta is
+that flag rather than a suffix on the number, because a Windows installer version
+has to be three numerals and nothing else. See `PROGRESS.md` §2.46 for the
+measurements. Six things are worth carrying forward.
+
+**The tray menu §10.3 has named since S17 needed a command, and it is the fourth
+kind.** `Command::Shutdown` acts on neither the show, the session nor the machine
+but on the **process**: no applier, no delta, nothing for an Oops to take back,
+and the daemon's own handler reads it before anything is routed. The alternative
+was killing the process, and that is the argument — a kill skips every step of
+§10.3's shutdown, so a venue's sACN receivers would hold the last look until
+their own timeouts ran out. It is the first command since S33 to need a home that
+was not one of the three appliers, and the honest answer was that it needs none.
+
+**Spawn or attach had two edges and only one of them was in the plan.** A
+document naming a daemon the window cannot reach is **neither**: not a spawn,
+because *I could not reach the first one* is not evidence that there is not one;
+not an attach, because there is nothing to attach to. It says which process holds
+the desk and where that process said it could be found. The second edge — *a
+daemon belonging to a different installation* — dissolved on inspection: the
+**data directory** is the identity, so a different installation can only be a
+different **build**, and `PROTOCOL_VERSION` already owns that question.
+
+**The switch is written on the delta, not on the click.** Autostart is a
+*setting*: any client can change it, and a shell that acted on its own click
+would be acting on a value it does not own and would write an entry for a command
+that was refused. So the entry follows `machine.autostart` — and the panel's
+first pass **reads** rather than writes, because an entry somebody deleted in
+Task Manager would otherwise be silently repaired by opening a panel and nobody
+would ever learn it had gone.
+
+**The file dialogue cost the protocol nothing, which is the measurement that says
+the shape was right.** Seven places ask for a path and all five show-file ones
+send the same command with the same field they always did. The box stays, and the
+*Browse…* button is drawn only where something is behind it.
+
+**One version, kept one by writing it in fewer places rather than in more.**
+`tauri.conf.json` carries **no** `version` at all — the bundler falls back to the
+crate's, which is the workspace's — and `ui/package.json` stays `0.0.0` because
+nothing publishes it. A number that tracked another number would be the second
+number the arrangement exists to prevent.
+
+**The release workflow runs the gates again, and that is not caution.** A tag can
+land on a commit whose run never finished, on one from a branch nobody merged, or
+on one whose run went red after somebody stopped looking. Twenty minutes against
+a release built from red code is not a close decision.
 
 ---
 
@@ -1191,6 +1250,6 @@ is, is the order the work was planned to make sense in.
 | 14 | **S46** protocols/`prismd`/`ui` — Art-Net node discovery | Born out of S43 on 2026-08-27 from punch-list B6: health means *the socket took it*, and UDP always takes it. Needs a receive path that does not exist yet, which is the session. Independent of S45, so it may equally run beside it. **Done 2026-08-29** — see `PROGRESS.md` §2.43. The receive path is the first in the workspace and it got a seam of its own, which `udp.rs` had specified in S9; a node is *answering*, *never answered* or *stopped* with the age of its last reply, and the daemon folds that into the health every client is told. Nothing broadcasts: the poll goes where the rig already sends, and the cost of that is named rather than hidden |
 | 15 | **S48** domain/core/engine — tracking, and a cue list that lands in the same place twice | **Done 2026-08-30** — the byte-identical frame sequence is asserted both ways round and as a property over generated lists; `Query::CueTracking` is what a cue sheet reads and the only fold in the project. Asked for by the owner on 2026-08-27 out of S43's hand-testing, and it is the deepest thing that list turned up: today the output at a cue depends on how you got there, so a cue cannot be rehearsed. After S45 because it needs *one sequence, one playback* underneath it — a tracking state per playback of the same list is two answers to the question this session exists to give one answer to |
 | 16 | **S49** domain/core/`ui` — the command line moves into the daemon | **Done 2026-08-31** — see `PROGRESS.md` §2.45. Born out of S43 on 2026-08-28: the owner asked for a bound key that *sends* its line, and a daemon with no parser cannot. S43 shipped the stop-gap and named it one; the field it added is gone. There is one parser and it is `prism_core::console` — the same grammar, held to the same recording of what a real daemon accepted — and a bound key now fires its line with **no client attached at all**. It added **no command**: `run` had meant *and run it* since S43, so what was missing was a daemon that could read a line. After S45 and S48 because those two add words to the grammar, and moving a grammar twice is moving it twice |
-| 17 | **S29** `prism-app` — Tauri shell | **Next.** Independent throughout; it is what makes the rest an application rather than a browser tab. It also carries the **OS file dialogue** the owner asked for on 2026-08-28, which is here because a browser cannot name a path on the daemon's machine |
+| 17 | **S29** `prism-app` — Tauri shell, and the closed beta | Independent throughout; it is what makes the rest an application rather than a browser tab. It also carried the **OS file dialogue** the owner asked for on 2026-08-28, which was here because a browser cannot name a path on the daemon's machine. **Done 2026-09-01**, released as **`v0.9.0`** — see `PROGRESS.md` §2.46. The shell spawns or attaches through S17's guard, hides on close and stops the desk only when asked; `Command::Shutdown` is the fourth kind of command and exists because a daemon with no console had no way to be told; the autostart switch S37 wrote down is acted on at last, and the panel says what the machine **has** rather than only what was asked for. Punch-list **B31** is closed. CI grew a job that builds the installer on every commit, and a release workflow that runs the gates again before it makes one |
 | 18 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them |
 | 19 | **S41** docs · **S42** prismdmx.de | Last, because a manual written before the settings window would document a program that does not exist |

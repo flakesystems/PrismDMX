@@ -8,11 +8,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { MachineChange, MachineSettings, SurfaceStatus } from "../bindings";
+import type { AutostartReport } from "../shell/bridge";
 import { machine as machineFixture } from "../testing/fake-daemon";
 import {
   EXIT_ACTIONS,
   LOG_LEVELS,
   PANELS,
+  autostartEntryText,
   counterRows,
   exitText,
   fileName,
@@ -206,5 +208,58 @@ describe("a list of universes", () => {
 
   it("round-trips through the way it is written out", () => {
     expect(readUniverses(writeUniverses([9, 10, 11, 12]))).toEqual([9, 10, 11, 12]);
+  });
+});
+
+describe("what the autostart row says about this machine's start-up entry", () => {
+  /** A report the shell would answer with. */
+  const report = (over: Partial<AutostartReport> = {}): AutostartReport => ({
+    supported: true,
+    installed: false,
+    command: null,
+    matchesThisInstall: false,
+    ...over,
+  });
+
+  it("says a browser cannot see one, which is not the same as there not being one", () => {
+    // The Web Remote, `npm run dev`, and every one of the 46 end-to-end tests.
+    expect(autostartEntryText(true, null)).toContain("browser");
+  });
+
+  it("says a platform that cannot write one stores the setting and acts on nothing", () => {
+    expect(autostartEntryText(true, report({ supported: false }))).toContain("cannot write");
+  });
+
+  it("agrees with itself when the two agree", () => {
+    expect(autostartEntryText(true, report({ installed: true, matchesThisInstall: true }))).toBe(
+      "A start-up entry for this installation is in place.",
+    );
+    expect(autostartEntryText(false, report())).toBe(
+      "There is no start-up entry, which is what the setting says.",
+    );
+  });
+
+  /**
+   * **The two readings the row exists for.** A tick beside a setting whose
+   * entry was deleted in Task Manager is a switch displaying a lie, and so is
+   * an empty box beside an entry that is still there.
+   */
+  it("says which way round the two disagree, and what to do about it", () => {
+    expect(autostartEntryText(true, report({ installed: false }))).toContain(
+      "there is no start-up entry",
+    );
+    expect(autostartEntryText(false, report({ installed: true }))).toContain(
+      "still there",
+    );
+  });
+
+  /** An update installed somewhere else leaves an entry naming the old copy. */
+  it("names another installation's entry rather than quietly disagreeing with it", () => {
+    const text = autostartEntryText(
+      true,
+      report({ installed: true, command: '"C:\Old\PrismDMX.exe" --hidden' }),
+    );
+    expect(text).toContain("another copy");
+    expect(text).toContain("C:\Old\PrismDMX.exe");
   });
 });

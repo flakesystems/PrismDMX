@@ -26,6 +26,23 @@
  * because an sACN source that changed its CID mid-show would fight the source it
  * used to be for the two and a half seconds a receiver's timeout runs.
  *
+ * # The autostart row says what the machine has, not only what was asked for
+ *
+ * S37 wrote the switch down and nobody acted on it; **S29's shell is what acts**
+ * — it is the one process that can write a `HKCU\…\Run` value without
+ * administrator rights (`ARCHITECTURE_SPEC.md` §10.3). Two states follow from
+ * that, and they can disagree: the *setting*, which is `MachineConfig`'s and
+ * which every client reads back, and the *start-up entry*, which is a fact about
+ * this Windows account that a person can delete in Task Manager without this
+ * program hearing about it.
+ *
+ * A tick beside a setting whose entry is not there would be a switch displaying
+ * a lie, so the row draws both: the box sends `ConfigureMachine` as it always
+ * did, and beside it {@link autostartState} says what the machine actually has.
+ * In a browser there is no shell to ask, and the row says *that* rather than
+ * guessing — which is `isHeld`'s rule about a box that does nothing, one panel
+ * along.
+ *
  * # The data directory is shown and not edited
  *
  * The settings themselves live in it, so a daemon told to move it would have to
@@ -34,14 +51,17 @@
  * operator looking for `machine.json` knows where to look.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ExitAction, LogLevel, MachineChange, MachineSettings } from "../bindings";
+import type { AutostartReport } from "../shell/bridge";
+import { autostartApply, autostartState, choosePath, inShell } from "../shell/bridge";
 import { useDesk, useSend } from "../store/hooks";
 import type { DeskState } from "../store/desk";
 import {
   EXIT_ACTIONS,
   LOG_LEVELS,
+  autostartEntryText,
   exitText,
   heldNote,
   isHeld,
@@ -280,21 +300,7 @@ function Behaviour({
         </select>
         <Held note={heldNote(machine, "ExitAction")} restart={false} />
       </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={machine.autostart}
-          data-testid="machine-autostart"
-          onChange={(event) => {
-            onChange({ t: "Autostart", autostart: event.target.checked });
-          }}
-        />
-        Start this desk when the machine starts
-      </label>
-      <p className="settings-hint" data-testid="autostart-note">
-        Written down here and acted on by the desktop shell, which is the one process that can add
-        a start-up entry without administrator rights. A daemon started by hand is unaffected.
-      </p>
+      <Autostart machine={machine} onChange={onChange} />
       <form
         data-testid="universes-form"
         onSubmit={(event) => {
@@ -347,6 +353,23 @@ function Behaviour({
             }}
           />
         </label>
+        {inShell() && !isHeld(machine, "FixtureLibrary") ? (
+          <button
+            type="button"
+            data-testid="machine-library-browse"
+            onClick={() => {
+              void choosePath("FixtureLibrary", library ?? machine.fixtureLibrary ?? "").then(
+                (chosen) => {
+                  if (chosen !== null) {
+                    setLibrary(chosen);
+                  }
+                },
+              );
+            }}
+          >
+            Browse&hellip;
+          </button>
+        ) : null}
         <button
           type="submit"
           data-testid="machine-library-apply"
@@ -357,6 +380,79 @@ function Behaviour({
         <Held note={heldNote(machine, "FixtureLibrary")} restart />
       </form>
     </section>
+  );
+}
+
+/**
+ * The switch, and what this machine actually has.
+ *
+ * The box writes the **setting** (`ConfigureMachine`), which is what every
+ * client reads back and what the daemon stores; the shell writes the **entry**,
+ * which is what Windows reads at log-in. Both, in that order, because the second
+ * is not always possible and the first must be recorded whether or not it was:
+ * a desk configured from a browser stores the flag now and the shell obeys it at
+ * its next start, which is exactly what `autostart::reconcile` is for.
+ */
+function Autostart({
+  machine,
+  onChange,
+}: {
+  readonly machine: MachineSettings;
+  readonly onChange: (change: MachineChange) => void;
+}) {
+  const [entry, setEntry] = useState<AutostartReport | null>(null);
+  const wanted = machine.autostart;
+  const settled = useRef<boolean | null>(null);
+
+  // **The entry is written when the daemon confirms the setting, not when the
+  // box is clicked** — which is D3 applied to a side effect. The switch is the
+  // *daemon's* state: a second window, or a Web Remote, can turn it on, and a
+  // shell that acted on its own click would be acting on a value it does not
+  // own and might not get. Following `machine.autostart` means every one of
+  // those routes reaches the registry, and it means a refused command writes
+  // nothing.
+  //
+  // The first pass **reads** rather than writes, which is what lets this row
+  // show a disagreement at all: an entry somebody deleted in Task Manager would
+  // otherwise be silently repaired by opening the panel, and nobody would ever
+  // learn it had gone. Putting it back is a click, and the row says so.
+  useEffect(() => {
+    let current = true;
+    const first = settled.current === null;
+    const changed = settled.current !== wanted;
+    settled.current = wanted;
+    const asking = first || !changed ? autostartState() : autostartApply(wanted);
+    void asking.then((report) => {
+      if (current) {
+        setEntry(report);
+      }
+    });
+    return () => {
+      current = false;
+    };
+  }, [wanted]);
+
+  return (
+    <>
+      <label>
+        <input
+          type="checkbox"
+          checked={machine.autostart}
+          data-testid="machine-autostart"
+          onChange={(event) => {
+            onChange({ t: "Autostart", autostart: event.target.checked });
+          }}
+        />
+        Start this desk when the machine starts
+      </label>
+      <p className="settings-hint" data-testid="autostart-note">
+        Written down here and acted on by the desktop shell, which is the one process that can add
+        a start-up entry without administrator rights. A daemon started by hand is unaffected.
+      </p>
+      <p className="settings-reading" data-testid="autostart-entry">
+        {autostartEntryText(wanted, entry)}
+      </p>
+    </>
   );
 }
 

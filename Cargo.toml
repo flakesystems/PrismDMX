@@ -3,7 +3,16 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+# **One version for the whole program** — S29. Every crate takes it
+# (`version.workspace = true`), `tauri.conf.json` deliberately carries none so
+# the bundler falls back to this one, and `crates/prism-app/tests/version.rs`
+# is what holds the three together. The release tag is `v` and this.
+#
+# 0.9.0 is the **first closed beta**: a desk that runs a show end to end and is
+# not 1.0 until somebody else's venue has said so. What makes it a beta is the
+# release's own pre-release flag rather than a suffix here, because a Windows
+# installer version has to be three numbers and nothing else.
+version = "0.9.0"
 edition = "2024"
 # Raised from 1.85 in S17. `std::fs::File::try_lock` was stabilised in 1.89 and
 # it is what `prismd` uses for the single-instance guarantee: an advisory lock
