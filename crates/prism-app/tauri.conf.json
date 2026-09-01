@@ -30,11 +30,6 @@
       "icons/128x128@2x.png",
       "icons/icon.ico"
     ],
-    "resources": {
-      "../../target/release/prismd.exe": "prismd.exe",
-      "../../profiles/surface/xtouch.json": "profiles/surface/xtouch.json",
-      "../../profiles/fixtures/": "profiles/fixtures/"
-    },
     "windows": {
       "nsis": {
         "installMode": "currentUser",

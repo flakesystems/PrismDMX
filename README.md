@@ -270,12 +270,15 @@ cargo build --release -p prismd
 ```
 
 ```bash
-cd crates/prism-app && ../../ui/node_modules/.bin/tauri build
+cd crates/prism-app && ../../ui/node_modules/.bin/tauri build --config tauri.bundle.conf.json
 ```
 
 The engine goes first because the bundle carries it as a resource, and the Tauri
-CLI has to be run from the directory holding `tauri.conf.json`. The installer
-lands in `target/release/bundle/nsis/`.
+CLI has to be run from the directory holding `tauri.conf.json`. The second
+configuration is what names the payload — the daemon, the fixture library and
+the surface profile — and it is separate so that an ordinary
+`cargo build --workspace` does not demand a release build of the daemon. The
+installer lands in `target/release/bundle/nsis/`.
 
 ### The gates
 

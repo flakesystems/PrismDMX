@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "../../target/release/prismd.exe": "prismd.exe",
+      "../../profiles/surface/xtouch.json": "profiles/surface/xtouch.json",
+      "../../profiles/fixtures/": "profiles/fixtures/"
+    }
+  }
+}

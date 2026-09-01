@@ -31,11 +31,17 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// The Tauri configuration, as JSON.
+/// One of the two Tauri configurations, as JSON.
+fn config(name: &str) -> serde_json::Value {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(name);
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("{name} is beside the crate"));
+    serde_json::from_str(&text).unwrap_or_else(|_| panic!("{name} is JSON"))
+}
+
+/// The base configuration — the one an ordinary `cargo build` reads.
 fn tauri_config() -> serde_json::Value {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
-    let text = std::fs::read_to_string(&path).expect("tauri.conf.json is beside the crate");
-    serde_json::from_str(&text).expect("tauri.conf.json is JSON")
+    config("tauri.conf.json")
 }
 
 /// The bundler must find no version of its own, or there are two.
@@ -96,13 +102,9 @@ fn the_interface_carries_no_version_of_its_own() {
     );
 }
 
-/// What the installer will be called, and what it installs beside the shell.
-///
-/// Asserted because the release workflow attaches a file by name and the shell
-/// looks for the daemon beside itself: three claims in three files that a
-/// release only finds out about at the end.
+/// What the installer will be called, and how it installs.
 #[test]
-fn the_bundle_carries_the_daemon_and_the_profiles_beside_the_shell() {
+fn the_installer_needs_no_administrator_rights() {
     let config = tauri_config();
     assert_eq!(config["productName"], "PrismDMX");
     assert_eq!(config["bundle"]["targets"][0], "nsis");
@@ -112,16 +114,40 @@ fn the_bundle_carries_the_daemon_and_the_profiles_beside_the_shell() {
         config["bundle"]["windows"]["nsis"]["installMode"], "currentUser",
         "a per-machine install needs administrator rights, which §10.3 says this desk must not"
     );
+}
 
-    let resources = &config["bundle"]["resources"];
-    let engine = resources
-        .as_object()
-        .expect("the resources are a map")
-        .values()
-        .any(|target| target == "prismd.exe");
+/// **The payload is in a second file, and this is why.**
+///
+/// `tauri-build`'s build script checks that every `bundle.resources` path
+/// exists — on **every** build of this crate, not only when one is being
+/// bundled. With the release daemon named in the base configuration, an
+/// ordinary `cargo build --workspace` on a clean checkout failed with *resource
+/// path `target\release\prismd.exe` doesn't exist*, which is a cryptic way of
+/// telling somebody who was running the tests that they had not made a release
+/// build of the daemon. CI found it on the first push.
+///
+/// So the payload lives in `tauri.bundle.conf.json`, which the CLI is given
+/// when it bundles and nothing reads otherwise. The cost is a configuration
+/// that can be forgotten — and what pays it back is the step in both workflows
+/// that asks the **built installer** what is inside it, because a bundler given
+/// no resources exits zero perfectly happily.
+#[test]
+fn the_bundle_carries_the_daemon_and_the_profiles_beside_the_shell() {
     assert!(
-        engine,
-        "the daemon has to land beside the shell: `prism_app::spawn::daemon_beside` looks there, \
-         and so does `prismd::paths::installed_library_dir`"
+        tauri_config()["bundle"].get("resources").is_none(),
+        "the base configuration must name no resources, or `cargo build --workspace` needs a \
+         release build of the daemon before it will compile"
     );
+
+    let bundle = config("tauri.bundle.conf.json");
+    let resources = bundle["bundle"]["resources"]
+        .as_object()
+        .expect("the payload is a map");
+    for expected in ["prismd.exe", "profiles/fixtures/"] {
+        assert!(
+            resources.values().any(|target| target == expected),
+            "the installer has to carry {expected}: `prism_app::spawn::daemon_beside` looks \
+             beside the executable, and so does `prismd::paths::installed_library_dir`"
+        );
+    }
 }

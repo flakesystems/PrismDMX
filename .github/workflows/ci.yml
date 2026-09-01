@@ -203,6 +203,12 @@ jobs:
         shell: pwsh
         run: tools/fetch-fixtures/fetch-fixtures.ps1
 
+      # ui/src/bindings is generated from Rust rather than committed, and
+      # `tauri build` runs `npm run build` for the interface — which will not
+      # typecheck without it. The UI job has the same step for the same reason.
+      - name: Generate TypeScript bindings
+        run: cargo test -p prism-domain
+
       - name: Install the interface's dependencies
         working-directory: ui
         run: npm ci
@@ -223,24 +229,33 @@ jobs:
       - name: Build the installer
         working-directory: crates/prism-app
         shell: bash
-        run: ../../ui/node_modules/.bin/tauri build
+        run: ../../ui/node_modules/.bin/tauri build --config tauri.bundle.conf.json
 
-      # Not "did it exit zero" but "is the file there and does it carry what an
-      # installed desk needs". A bundler that quietly dropped a resource would
-      # produce an installer that installs a program which cannot find its own
-      # engine.
-      - name: What the bundle contains
+      # Not "did it exit zero" but "does the installer carry what an installed
+      # desk needs". A bundler given a configuration without the payload in it
+      # exits zero perfectly happily and produces an installer that installs a
+      # program which cannot find its own engine — which is exactly the failure
+      # splitting the configuration in two made possible, so it is exactly the
+      # one that gets checked.
+      - name: What the installer contains
         shell: pwsh
         run: |
           $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe |
             Select-Object -First 1
           if (-not $setup) { Write-Error "no installer was produced"; exit 1 }
           Write-Output "$($setup.Name)  $([math]::Round($setup.Length / 1MB, 1)) MB"
+          $files = & "$env:ProgramFiles\7-Zip\7z.exe" l $setup.FullName
           foreach ($needed in @(
-            "target/release/PrismDMX.exe",
-            "target/release/prismd.exe"
+            "PrismDMX.exe",
+            "prismd.exe",
+            "profiles\surface\xtouch.json",
+            "profiles\fixtures\manufacturers.json"
           )) {
-            if (-not (Test-Path $needed)) { Write-Error "$needed is missing"; exit 1 }
+            if (-not ($files -match [regex]::Escape($needed))) {
+              Write-Error "the installer does not carry $needed"
+              exit 1
+            }
+            Write-Output "carries $needed"
           }
 
       - uses: actions/upload-artifact@v4

@@ -47,7 +47,11 @@ jobs:
   build:
     name: Windows - installer
     runs-on: windows-latest
-    timeout-minutes: 60
+    # Every gate again, then a release build of the daemon, then the shell with
+    # LTO and one codegen unit, on a cache this job has never warmed. Ninety
+    # minutes is what that costs the first time and it is the right thing to
+    # spend it on: this is the job that decides what a person downloads.
+    timeout-minutes: 90
     env:
       # As in ci.yml, and for the same reason: RUSTFLAGS from the environment
       # replaces .cargo/config.toml's rather than adding to them, so the static
@@ -131,7 +135,30 @@ jobs:
       - name: Build the installer
         working-directory: crates/prism-app
         shell: bash
-        run: ../../ui/node_modules/.bin/tauri build
+        run: ../../ui/node_modules/.bin/tauri build --config tauri.bundle.conf.json
+
+      # What a person is about to download, asked of the file itself. A
+      # configuration without the payload in it bundles perfectly happily and
+      # produces an installer whose program cannot find its own engine.
+      - name: What the installer contains
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe |
+            Select-Object -First 1
+          if (-not $setup) { Write-Error "no installer was produced"; exit 1 }
+          $files = & "$env:ProgramFiles\7-Zip\7z.exe" l $setup.FullName
+          foreach ($needed in @(
+            "PrismDMX.exe",
+            "prismd.exe",
+            "profiles\surface\xtouch.json",
+            "profiles\fixtures\manufacturers.json"
+          )) {
+            if (-not ($files -match [regex]::Escape($needed))) {
+              Write-Error "the installer does not carry $needed"
+              exit 1
+            }
+            Write-Output "carries $needed"
+          }
 
       # The checksum goes in the release notes, because the build is not signed
       # and a checksum is what somebody who would rather not click through
