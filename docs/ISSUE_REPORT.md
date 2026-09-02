@@ -1,63 +1,51 @@
-# ISSUE_REPORT.md — Automatischer Durchlauf 2026-09-02
+# Issue Report — 2026-09-02
 
-Dieser Bericht dokumentiert den Abgleich zwischen den geöffneten, gelabelten
-GitHub-Issues und dem Tracking-Dokument `docs/ISSUES.md`.
-
----
-
-## Durchgeführte Schritte
-
-1. `CLAUDE.md` und `docs/ISSUES.md` gelesen.
-2. Alle offenen, gelabelten Issues im Repository `flakesystems/prismdmx`
-   abgerufen (2 Issues).
-3. Jeden Issue gegen `ISSUES.md` abgeglichen.
-4. Neue Einträge angelegt, Kommentare auf GitHub gepostet.
+Automatisch erstellter Bericht des Scheduled Issue-Tracking-Laufs.
 
 ---
 
-## Abgeglichene Issues
+## Überblick
 
-### GitHub #1 — Wrongly ordered clear steps
+| GitHub # | ISSUES.md | Titel (nach Umbenennung) | Status |
+|---|---|---|---|
+| #1 | B37 | (bug) Wrongly ordered clear steps | ☐ offen — bereits erfasst |
+| #2 | B38 | (bug) Missing OFL channel mappings and capability support in programmer | ☐ offen — bereits erfasst |
+| #3 | B39 | (bug) Tray icon refuses to close if the daemon is closed manually | ☐ offen — **neu aufgenommen** |
+| #5 | B40 | (bug) Flakey e2e test in looks.spec.ts | ☐ offen — **neu aufgenommen** |
 
-| Feld | Wert |
-|---|---|
-| Labels | bug |
-| Status auf GitHub | offen |
-| In ISSUES.md vorher | **nicht vorhanden** |
-| Aktion | **Neu angelegt als B37** |
-
-**B37** wurde in der Sektion *Programmer, Presets, Groups* angelegt.
-Schwere: ärgerlich. Die Reihenfolge der Clear-Stufen ist falsch: zuerst wird
-die Ausgabe gelöscht, dann erst die Fixture-Auswahl — das ist das Gegenteil
-des erwarteten Verhaltens und verhindert das parallele Programmieren mehrerer
-Fixtures.
+Keine geschlossenen Issues vorhanden. Keine Duplikate gefunden.
 
 ---
 
-### GitHub #2 — There are channels missing in the programmer
+## Durchgeführte Aktionen
 
-| Feld | Wert |
-|---|---|
-| Labels | bug, enhancement |
-| Status auf GitHub | offen |
-| In ISSUES.md vorher | **nicht vorhanden** |
-| Aktion | **Neu angelegt als B38** |
+### Bereits erfasste Issues (#1, #2)
 
-**B38** wurde in der Sektion *Programmer, Presets, Groups* angelegt.
-Schwere: ärgerlich. Nicht alle Kanäle von Open-Fixture-Library-Profilen sind
-im Programmer einem Attribut zugeordnet; außerdem fehlt die Unterstützung von
-OFL-Capabilities vollständig.
+- **#1 / B37:** Eintrag war korrekt als offen markiert. Kein neuer Kommentar nötig (Tracking-Kommentar aus dem Vorlauf vorhanden). Titel auf `(bug) Wrongly ordered clear steps` aktualisiert.
+- **#2 / B38:** Eintrag war korrekt als offen markiert. Der vom Eigentümer hinterlassene Kontext-Kommentar (OFL-Links) war bereits in den B38-Eintrag integriert. Kein weiterer Kommentar nötig. Titel auf `(bug) Missing OFL channel mappings and capability support in programmer` aktualisiert.
+
+### Neu aufgenommene Issues (#3, #5)
+
+#### B39 — Tray-Icon schließt nicht, wenn Daemon manuell beendet wird (GitHub #3)
+
+- In `docs/ISSUES.md` unter **Sonstiges** als B39 eingetragen, Schwere: ärgerlich.
+- Tracking-Kommentar auf GitHub gepostet.
+- Titel auf `(bug) Tray icon refuses to close if the daemon is closed manually` aktualisiert.
+
+**Beschreibung:** Wird der Daemon außerhalb des Tray-Menüs beendet (z. B. via Task-Manager), bleibt das Tray-Icon stehen. "Stop the desk" findet keinen Prozess. Ein neuer Daemon-Start erzeugt ein zweites Icon.
+
+#### B40 — Instabiler e2e-Test in looks.spec.ts (GitHub #5)
+
+- In `docs/ISSUES.md` unter **Sonstiges** als B40 eingetragen, Schwere: ärgerlich.
+- Tracking-Kommentar auf GitHub gepostet.
+- Titel auf `(bug) Flakey e2e test in looks.spec.ts` aktualisiert.
+
+**Beschreibung:** `ui/e2e/looks.spec.ts:374` — `a preset link is alive: editing the preset changes the light a cue puts out` schlägt bei Docs-only-CI-Runs fehl. Da ein Docs-only-Run keine UI-Artefakte neu baut, deutet das auf eine Race Condition oder Timing-Abhängigkeit im Test selbst hin.
 
 ---
 
-## Gesamtbild
+## Keine Aktion erforderlich
 
-| ISSUES.md-Eintrag | GitHub-Issue | Ergebnis |
-|---|---|---|
-| B37 (neu) | #1 | neu angelegt, offen |
-| B38 (neu) | #2 | neu angelegt, offen |
-
-Kein Issue war ein Duplikat eines bestehenden Eintrags. Kein Issue, das als
-geschlossen getrackt war, wurde auf GitHub geschlossen. Alle anderen
-ISSUES.md-Einträge (B1–B36) haben keine direkte GitHub-Issue-Nummer und
-wurden in diesem Durchlauf nicht berührt.
+- Keine geschlossenen Issues mit neuen Kommentaren gefunden.
+- Keine Duplikate identifiziert.
+- Issues #1 und #2 hatten keine neuen Kommentare (außer dem bereits vorhandenen Claude-Tracking-Kommentar).

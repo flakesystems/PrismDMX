@@ -517,6 +517,26 @@ Meldungen, Tastatur, Leerzustände, Verhalten beim Start, Verbindungsabbrüche.*
 
   Tests: `every_place_a_path_is_asked_for_has_a_dialogue`, `a_suggested_name_and_its_filter_agree`, `the_fixture_library_is_the_only_directory`, `every_file_dialogue_can_be_made_to_show_everything` und `the_five_show_kinds_are_the_protocols_five_file_commands` (`crates/prism-app/src/dialogs.rs`), die zwölf in `ui/src/shell/bridge.test.ts`, sowie *offers no file dialogue in a browser, and the box still works*, *puts what the operating system's dialogue returned into the box the daemon is sent* und *leaves the box alone when the operator cancels the dialogue* in `ui/src/settings/settingswindow.test.tsx`.
 
+### B39 — Tray-Icon schließt nicht, wenn Daemon manuell beendet wird
+
+- **Wo:** Desktop App, Tray Icon
+- **Schwere:** ärgerlich
+- **Was passiert:** Wird der Daemon manuell geschlossen (nicht über das Tray-Icon), bleibt das Icon in der Taskleiste bestehen. Ein Klick auf "Stop the desk" findet den Prozess nicht mehr. Wird danach ein neuer Daemon gestartet, erscheint ein zweites Tray-Icon.
+- **Was passieren soll:** Das Tray-Icon soll erkennen, wenn der Daemon nicht mehr läuft, und sich entweder selbst schließen oder korrekt auf "Stop the desk" reagieren.
+- **So sieht man es:** Daemon manuell schließen (z. B. Task-Manager), Tray-Icon beobachten und "Stop the desk" klicken
+- **Ergebnis:** ☐ offen
+
+
+### B40 — Instabiler e2e-Test in looks.spec.ts
+
+- **Wo:** e2e Tests, `ui/e2e/looks.spec.ts:374`
+- **Schwere:** ärgerlich
+- **Was passiert:** Der Test `a preset link is alive: editing the preset changes the light a cue puts out` schlägt intermittierend bei Docs-only-CI-Runs fehl, obwohl diese keine UI-Änderungen beinhalten. Ein Docs-only-Run kann keinen UI-Fehler verursachen.
+- **Was passieren soll:** Der Test soll deterministisch laufen und nicht bei Docs-only-Runs fehlschlagen. Ursache des Flaky-Verhaltens identifizieren und beheben.
+- **So sieht man es:** Mehrere CI-Runs mit ausschließlich Docs-Änderungen beobachten
+- **Ergebnis:** ☐ offen
+
+
 ### B34 — Ein Rig aus RGBW-PARs geht beim Start des Daemons an
 
 - **Wo:** Ausgabe, jede Show mit farbmischenden Fixtures ohne Dimmerkanal
