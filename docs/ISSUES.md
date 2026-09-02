@@ -1,16 +1,4 @@
-# PRERELEASE_PUNCHLIST.md — was an der Oberfläche nicht stimmt
-
-Geschrieben vom Eigentümer, abgearbeitet von **S43**
-(`IMPLEMENTATION_PLAN.md`). Diese Datei ist keine Notizsammlung, sondern die
-halbe Anforderung dieser Session: ein Exit-Kriterium sagt, dass am Ende **jeder**
-Eintrag hier einen von drei Ausgängen hat und keiner still verschwunden ist.
-
-Sie beschreibt, was an der laufenden Oberfläche falsch, unbequem oder unfertig
-ist. Sie beschreibt **nicht**, wie es gebaut werden soll — das ist die Arbeit der
-Session, und ein Eintrag, der schon die Lösung vorgibt, verliert die Information,
-worum es dem Operator eigentlich ging.
-
----
+# ISSUES.md — was an der Oberfläche nicht stimmt
 
 ## Wie ein Eintrag aussieht
 
