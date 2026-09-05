@@ -115,11 +115,30 @@ async function closeWindows(page: Page): Promise<void> {
   await expect(page.locator("[data-window-type]")).toHaveCount(0);
 }
 
-/** Types a line into the console command line and presses Enter. */
-async function command(page: Page, line: string): Promise<void> {
+/** Fills the line and presses Enter, without waiting for what follows. */
+async function typeLine(page: Page, line: string): Promise<void> {
   const input = page.getByTestId("command-input");
   await input.fill(line);
   await input.press("Enter");
+}
+
+/**
+ * Types a line into the console command line, presses Enter, and **waits for
+ * the daemon to have taken it**.
+ *
+ * Enter is not an act since S49; it is a question — *what does this line mean* —
+ * and the line is sent when the answer comes back. A test that typed the next
+ * thing straight afterwards was therefore racing its own previous line, which is
+ * D3 in the suite rather than in the interface (`PROGRESS.md` §7 has the same
+ * lesson twice already, about window closes and about a form's suggestion).
+ *
+ * The box emptying is the line having been taken: `ConsoleProvider.dispatch`
+ * clears it when it sends. A line that raises a question instead leaves it
+ * standing, and that line belongs to {@link store}.
+ */
+async function command(page: Page, line: string): Promise<void> {
+  await typeLine(page, line);
+  await expect(page.getByTestId("command-input")).toHaveValue("");
 }
 
 /**
@@ -130,10 +149,30 @@ async function command(page: Page, line: string): Promise<void> {
  * to work around, so a test that stores twice says which answer it means.
  */
 async function store(page: Page, line: string, mode: string): Promise<void> {
-  await command(page, line);
+  await typeLine(page, line);
   const prompt = page.getByTestId("command-prompt");
+  const input = page.getByTestId("command-input");
+  // **The question is a round trip away, so it is waited for and never
+  // counted.** `count()` does not wait — `PROGRESS.md` §7 says so about
+  // `evaluateAll` and it is the same sentence — and this took the count thirty
+  // milliseconds after Enter. On a loaded runner it read zero, the click was
+  // skipped, and *the store did not happen* became a green step whose failure
+  // turned up three assertions later as a rig that would not light.
+  //
+  // Two states the daemon reaches and no third: either the question stands, and
+  // the line is still in the box waiting to be answered, or the line ran and the
+  // box is empty. Waiting for whichever comes is what makes this deterministic,
+  // and a line that is refused times out here saying so rather than being
+  // silently skipped.
+  await expect
+    .poll(async () => (await prompt.count()) > 0 || (await input.inputValue()) === "", {
+      timeout: 15_000,
+    })
+    .toBe(true);
   if ((await prompt.count()) > 0) {
     await page.getByTestId(`prompt-${mode}`).click();
+    // Answering it sends the store, and that empties the box the same way.
+    await expect(input).toHaveValue("");
   }
 }
 
