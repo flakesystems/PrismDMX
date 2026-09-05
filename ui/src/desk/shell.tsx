@@ -99,6 +99,15 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
   // So every line this client sends is remembered until its echo comes back, and
   // while any is outstanding the session's line is somebody else's opinion about
   // a line we are still writing. Ours wins until we are level again.
+  //
+  // **A line this client *ran* is one of the lines it sent** — S50, and the
+  // second CI run this rule has cost. The daemon clears `Session::commandLine`
+  // as part of running a line (`ShowFile::run_command_line`), so a key that
+  // writes and runs a whole line — every key in §4.5's first shape — empties the
+  // daemon's field a round trip after it was pressed. An operator who started
+  // typing in that gap had their line wiped by that emptying: the box went
+  // blank, Enter ran nothing, and **nothing said so**. See {@link useMirror}'s
+  // `ran` for the half of the fix that queues it.
   const outstanding = mirror.outstanding;
   useEffect(() => {
     const queue = outstanding.current;
@@ -206,8 +215,9 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
       setPrompt(null);
       setTyped((current) => (current === line ? "" : current));
       // And the keystroke still owed goes with it, for the same reason and under
-      // the same condition — see `cancel`.
-      mirror.cancel(line);
+      // the same condition — see `ran`, which also writes down the clearing this
+      // run is about to cause so the effect above does not read it as news.
+      mirror.ran(line);
     },
     [mirror, send],
   );
@@ -339,7 +349,7 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 function useMirror(send: (command: Command) => void): {
   readonly soon: (text: string) => void;
   readonly now: (text: string) => void;
-  readonly cancel: (line: string) => void;
+  readonly ran: (line: string) => void;
   readonly outstanding: { current: string[] };
 } {
   const sent = useRef("");
@@ -381,7 +391,9 @@ function useMirror(send: (command: Command) => void): {
       flush(text);
     };
     /**
-     * Drops a keystroke about a line that has been **run** — S49.
+     * Writes down that this client has asked the daemon to **run** a line.
+     *
+     * # The keystroke still owed for it is dropped — S49
      *
      * The daemon clears the line itself as part of running it, so a flush still
      * owed for that line would put half of what was typed back into a box the
@@ -392,20 +404,34 @@ function useMirror(send: (command: Command) => void): {
      * round trip is in flight. Cancelling it then would leave the second screen
      * and the X-Touch's display showing a line nobody is writing any more.
      *
-     * It leaves `outstanding` alone in either case. The queue is what stops a
-     * late echo of a line *this* client sent being adopted as news — S43's
-     * defect — and running a line does not make the echoes of the keystrokes
-     * that built it stop arriving.
+     * # And the clearing it causes is queued as ours — S50
+     *
+     * That same clearing arrives as a `SessionPatch` carrying an **empty** line,
+     * and it is this client's own doing however the run was started. Left
+     * unqueued it was read as news, and adopting it emptied a box the operator
+     * was still typing into: a whole line eaten, with the daemon never told and
+     * nothing on the screen to say so. It is queued exactly when it will
+     * produce a delta at all — `sent` is what this client last put in the
+     * daemon's field, so an empty one means the field is already empty and an
+     * unchanged field produces no ops (`Session::commit`). Queueing an echo
+     * that never arrives would deafen this client to the next real one, which is
+     * the second screen this rule exists for.
      */
-    const cancel = (line: string): void => {
-      if (owed.current !== null && owed.current !== line) {
-        return;
+    const ran = (line: string): void => {
+      if (owed.current === null || owed.current === line) {
+        if (timer.current !== null) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        owed.current = null;
       }
-      if (timer.current !== null) {
-        clearTimeout(timer.current);
-        timer.current = null;
+      if (sent.current !== "") {
+        outstanding.current.push("");
       }
-      owed.current = null;
+      // The daemon's field is empty now, whatever this client last put in it, so
+      // the next keystroke mirrors the line the operator is left holding rather
+      // than being deduplicated away against a value that is no longer there.
+      sent.current = "";
     };
     const soon = (text: string): void => {
       if (sent.current === text) {
@@ -427,6 +453,6 @@ function useMirror(send: (command: Command) => void): {
         }
       }, SEND_INTERVAL_MS);
     };
-    return { soon, now, cancel, outstanding };
+    return { soon, now, ran, outstanding };
   }, [send]);
 }

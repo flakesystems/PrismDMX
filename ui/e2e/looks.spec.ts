@@ -423,6 +423,7 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
+  await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   // The fader is its own line since S40 — see the note in the first test.
   await command(page, "Assign Sequence 1 Executor 3");
   await page.getByTestId("store-cue").click();
@@ -518,6 +519,7 @@ test("a cue sheet of four hundred rows scrolls inside its own window", async ({ 
   await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
+  await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   await command(page, "1 thru 3 red at 100");
   for (let number = 1; number <= 30; number += 1) {
     await page.getByTestId("store-number").fill(String(number));
@@ -566,6 +568,7 @@ test("a cue sheet says what a cue asserts and what it inherits from the cues abo
   await openWindow(page, "Executors");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
+  await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   await command(page, "Assign Sequence 1 Executor 3");
 
   // Cue 1 sets red on three PARs. Cue 2 sets **green** and says nothing at all

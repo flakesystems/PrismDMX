@@ -534,7 +534,17 @@ Meldungen, Tastatur, Leerzustände, Verhalten beim Start, Verbindungsabbrüche.*
 - **Was passiert:** Der Test `a preset link is alive: editing the preset changes the light a cue puts out` schlägt intermittierend bei Docs-only-CI-Runs fehl, obwohl diese keine UI-Änderungen beinhalten. Ein Docs-only-Run kann keinen UI-Fehler verursachen.
 - **Was passieren soll:** Der Test soll deterministisch laufen und nicht bei Docs-only-Runs fehlschlagen. Ursache des Flaky-Verhaltens identifizieren und beheben.
 - **So sieht man es:** Mehrere CI-Runs mit ausschließlich Docs-Änderungen beobachten
-- **Ergebnis:** ☐ offen
+- **Ergebnis:** ✅ **behoben** — und der Test war nicht schuld. Die Zeile wurde nicht langsam ausgeführt, sondern **still gelöscht**; der Fehler sitzt in der Konsole und trifft jeden Operator, nicht nur den Runner.
+
+  **Was passiert ist.** Eine Taste in §4.5's erster Form schreibt eine ganze Zeile und führt sie aus, und Ausführen ist seit S49 asynchron: die Taste fragt erst den Daemon, was die Zeile bedeutet, und schickt sie, wenn die Antwort da ist. Der Daemon **leert** dabei `Session::commandLine` — `ShowFile::run_command_line` endet auf `written("")` — und dieses Leeren kommt als `SessionPatch` zurück. Wer in dieser Lücke zu tippen anfängt, bekam es in sein eigenes Feld übernommen: die Zeile war weg, das Enter danach führte eine leere Zeile aus, und **nichts sagte etwas** — keine Notiz, kein Refusal, keine Zeile im Log. Im Preset-Test ist es der Klick auf `preset-1` und gleich danach `at 100`: der Cue bekam die Farbe und **keine Intensität**, und ein RGBW-PAR ohne Intensität macht seit B34 kein Licht — genau die Null, an der der Test bei `litPixels(FULL)` hängen blieb.
+
+  **Warum die Wache nicht griff.** `ConsoleProvider` merkt sich seit S43 jede Zeile, die dieser Client sendet, bis ihr Echo zurückkommt; solange etwas aussteht, ist die Zeile der Session die Meinung eines anderen über eine Zeile, die wir noch schreiben. `dispatch` ging an dieser Warteschlange vorbei. Das Echo der getippten Zeile strich sie leer — und das *darauffolgende* Leeren war damit keine eigene Spur mehr, sondern Neuigkeit.
+
+  **Die Behebung.** `useMirror.ran` ersetzt `cancel` und schreibt das Leeren mit auf, das dieser Lauf gleich verursacht. Nur dann, wenn dieser Client überhaupt etwas im Feld des Daemons stehen hat: ein unverändertes Feld erzeugt gar keine Ops (`Session::commit`), und ein Echo, auf das gewartet wird und das nie kommt, macht den Client für das nächste *echte* taub — also für den zweiten Bildschirm, für den die Regel überhaupt da ist. Beide Hälften stehen als Test da.
+
+  **Und die Suite wartet jetzt.** Drei `new-sequence`-Klicks in `looks.spec.ts` tippten sofort weiter, während drei Nachbarn im selben File auf `sequence-count` warten. D3 gilt auch für die Tests: eine Geste ist ein Kommando hin und ein Delta zurück.
+
+  Tests: `keeps a line typed while a key's line is still in flight` und `still adopts a line typed on another screen after a key has run one` (`ui/src/desk/desk.test.tsx`). Der zweite instabile Test — `looks.spec.ts:510`, *a cue sheet of four hundred rows* — fiel aus demselben Grund und ist mit behoben.
 
 
 ### B34 — Ein Rig aus RGBW-PARs geht beim Start des Daemons an
