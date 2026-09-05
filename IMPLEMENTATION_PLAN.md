@@ -1098,6 +1098,8 @@ none that writes one.
 
 # Phase 9 — Extended features
 
+*None of these has run, and on 2026-09-05 they moved **behind** Phase 10 and Phase 11 in the running order — see Phase 12 and the table at the end for why. The sessions themselves are unchanged.*
+
 ## S30 · 3D viewer
 **Size:** L · **Depends on:** S27
 
@@ -1150,8 +1152,10 @@ none that writes one.
 
 # Phase 10 — Documentation and release
 
+*Planned last, and moved. The running order now puts these two **before** the extended features of Phase 9, because the reason for being last has expired: the manual was to wait until the settings window existed, and it does. What is left of the project is fixes and additions, and a program nobody outside this repository can read the manual to is not ready for an **open** beta however many features it grows.*
+
 ## S41 · docs — the manual, and a README in every crate
-**Size:** L · **Depends on:** S37, S40
+**Size:** L · **Depends on:** S37, S40, S51
 
 **Goal:** everything a person who is not the author needs, and the check that stops it going stale.
 
@@ -1178,6 +1182,43 @@ none that writes one.
 - The manuals are S41's source and not a copy of it
 - The documentation is readable without JavaScript, and every page says which version it documents
 - Deployment is reproducible, and the domain serves over TLS
+- **A stranger can get from the front page to a running desk** — download, install, patch one fixture, put it at full — without asking the author anything. That is what an open beta is, and it is the only exit criterion here that a test cannot check: somebody who has not built this has to do it
+
+---
+
+# Phase 11 — What the closed beta sent back
+
+*Written after `v0.9.0` went out on 2026-09-01. Its position in the running order is **first**, ahead of both phases above it: the numbers are identity and the running order is the schedule.*
+
+## S51 · `prism-core` + `prism-engine` + `prism-app` + `ui` — the punch list, and v0.9.1
+**Size:** L · **Depends on:** S29, S34, S44, S45
+
+**Goal:** close every entry `docs/ISSUES.md` still has open, and release the result as **v0.9.1**. Six entries, four of them faults and two of them things the closed beta found missing. Nothing here is a new subsystem; every one of them lands in a model that already exists, which is what makes them one session rather than six.
+
+**Deliverables**
+
+- **B36 — the crossfade an operator can actually walk a list with.** Today one fader movement does one fade and then the fader **snaps back** to nought for the next. Two modes replace it, chosen per executor: **Fade**, where pushing up fades the current cue out and pulling down fades the next one in; and **XFade**, where pushing up crossfades from the current cue to the next and pulling down crossfades from that one to the one after — so an operator walks a cue list by moving one fader up and down and never lifts their hand. **The fader is never moved by the desk**, in either mode; stopping half way holds the crossfade half way, which is the whole point of having one on a fader
+- **B37 — Clear in the order the hands expect.** The first press clears the **selection** and the second the values, not the other way round. The current order makes programming several fixtures in one look impossible without clearing what was already set
+- **B38 — the OFL profiles arrive whole.** Every channel of an Open Fixture Library profile maps to an attribute and a bank, and **capabilities** are read rather than ignored — a channel with named ranges is a channel an operator can pick a range from instead of guessing a number
+- **B39 — a tray icon that knows whether the desk is still there.** Kill the daemon from Task Manager and the icon stays, *Stop the desk* finds nothing, and the next start leaves a second icon beside the first. The shell watches the process it attached to, and says so
+- **B42 — full screen.** `F11` and `Alt` + `Enter`, both ways. `CLAUDE.md` asks for a device screen and a title bar is the last thing on it that is not one
+- **B43 — a home for a venue's own fixture profiles.** A directory `tools/fetch-fixtures` does not overwrite, read by the daemon, searchable beside the OFL profiles and **marked as the venue's own** in the picker. Today the documentation says where they may not go and names no alternative, so there is none
+- **v0.9.1**, tagged and released by `release.yml`, with notes that say which punch-list entries closed
+
+**Exit criteria**
+- Every entry in `docs/ISSUES.md` reads ✅ or ⛔ with a reason. **Not one is left ☐**, and none is closed by deleting it
+- The two playback modes are asserted on **frames**, not on state: a recorded fader walk through a cue list produces a byte-identical frame sequence twice, and a walk that stops half way outputs the half-way mix and holds it
+- No path in either mode ever writes a fader position back to the surface — asserted against the MCU output, because a desk that moves an operator's hand is the fault this entry is about
+- The clear stages are asserted as a **sequence**, so a later change that reorders them again goes red
+- Every profile in the 634-fixture corpus patches with no unmapped channel, asserted over the whole corpus rather than over an example
+- A custom profile survives a library re-download, and a test runs the download against a directory holding one
+- Full screen is driven in the end-to-end suite, both keys, both directions
+- The daemon dying under the shell is a **test**, not a hand-check: the icon reports it and a second start does not add a second icon
+- The tick makes no allocator call on any path this session adds, and the 46 end-to-end tests still pass
+
+# Phase 12 — Extended features, once the doors are open
+
+*Everything in Phase 9 that has not run: **S30** 3D viewer, **S31** Web Remote, **S32** PSN / OSC, **S47** timecode, **S50** macros. They are not renumbered — the numbers are identity — and they are not reordered among themselves. What moved is the schedule: the open beta comes first, and what an open beta asks for should choose between these five better than this document can.*
 
 ---
 
@@ -1216,7 +1257,8 @@ flowchart LR
     S39 & S34 & S45 --> S48
     S33 --> S46
     S34 & S39 & S36 --> S47
-    S37 & S40 --> S41 --> S42
+    S29 & S44 & S45 --> S51
+    S37 & S40 & S51 --> S41 --> S42
 ```
 
 **Critical path to a usable console:** S0 → S1 → S2 → S3 → S4 → S7 → S11 → S12 → S16 → S17 → S19 → S21 → S22 → S23 → S25 → S26. *Reached at S26.*
@@ -1252,5 +1294,6 @@ is, is the order the work was planned to make sense in.
 | 15 | **S48** domain/core/engine — tracking, and a cue list that lands in the same place twice | **Done 2026-08-30** — the byte-identical frame sequence is asserted both ways round and as a property over generated lists; `Query::CueTracking` is what a cue sheet reads and the only fold in the project. Asked for by the owner on 2026-08-27 out of S43's hand-testing, and it is the deepest thing that list turned up: today the output at a cue depends on how you got there, so a cue cannot be rehearsed. After S45 because it needs *one sequence, one playback* underneath it — a tracking state per playback of the same list is two answers to the question this session exists to give one answer to |
 | 16 | **S49** domain/core/`ui` — the command line moves into the daemon | **Done 2026-08-31** — see `PROGRESS.md` §2.45. Born out of S43 on 2026-08-28: the owner asked for a bound key that *sends* its line, and a daemon with no parser cannot. S43 shipped the stop-gap and named it one; the field it added is gone. There is one parser and it is `prism_core::console` — the same grammar, held to the same recording of what a real daemon accepted — and a bound key now fires its line with **no client attached at all**. It added **no command**: `run` had meant *and run it* since S43, so what was missing was a daemon that could read a line. After S45 and S48 because those two add words to the grammar, and moving a grammar twice is moving it twice |
 | 17 | **S29** `prism-app` — Tauri shell, and the closed beta | Independent throughout; it is what makes the rest an application rather than a browser tab. It also carried the **OS file dialogue** the owner asked for on 2026-08-28, which was here because a browser cannot name a path on the daemon's machine. **Done 2026-09-01**, released as **`v0.9.0`** (a GitHub pre-release, built and attached by `release.yml` on the tag) — see `PROGRESS.md` §2.46. The shell spawns or attaches through S17's guard, hides on close and stops the desk only when asked; `Command::Shutdown` is the fourth kind of command and exists because a daemon with no console had no way to be told; the autostart switch S37 wrote down is acted on at last, and the panel says what the machine **has** rather than only what was asked for. Punch-list **B31** is closed. CI grew a job that builds the installer on every commit, and a release workflow that runs the gates again before it makes one |
-| 18 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them |
-| 19 | **S41** docs · **S42** prismdmx.de | Last, because a manual written before the settings window would document a program that does not exist |
+| 18 | **S51** core/engine/`prism-app`/`ui` — the punch list, and v0.9.1 | **Next.** The closed beta has been out since 2026-09-01 and `docs/ISSUES.md` has six entries open: four faults and two things it found missing. They belong together because none of them is a new subsystem — each lands in a model that already exists — and because the list is the only thing between `v0.9.0` and a build that can be handed to somebody who did not write it |
+| 19 | **S41** docs · **S42** prismdmx.de | **Moved forward on 2026-09-05, and this is the reason.** They were last because a manual written before the settings window would document a program that does not exist. That window has existed since S37, and what is left of the project is additions and fixes — so the sentence no longer holds and its opposite does: an **open** beta is a release strangers install, and a program a stranger cannot read a manual to is not one, whatever else it grows. The remaining features are better chosen with an open beta's reports in hand than without them |
+| 20 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |

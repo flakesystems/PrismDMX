@@ -952,7 +952,7 @@ describe("the command line", () => {
     });
 
     /**
-     * **A key's line does not eat the line typed after it** — S50.
+     * **A key's line does not eat the line typed after it** — B40.
      *
      * Two runs of CI died here and neither said a word about it. Running a line
      * is asynchronous (S49) and the daemon *clears* `Session::commandLine` as
@@ -1022,7 +1022,7 @@ describe("the command line", () => {
 
     /**
      * **A pick decided a round trip ago does not land on the line typed since**
-     * — S50, and the other half of the same CI failure.
+     * — B40, and the other half of the same CI failure.
      *
      * What a pick means is the daemon's since S49, so a click on a pool row is a
      * question and an answer with the operator's hands free in between. They

@@ -166,6 +166,16 @@ alles, was sie annehmen oder ablehnen sollte und nicht tut.*
 - **So sieht man es:** Tab Complete Vorschläge
 - **Ergebnis:** ✅ **behoben** — `completions()` gibt die Wörter groß geschrieben zurück, so wie sie überall sonst im Pult stehen. Die Zeile selbst liest weiter unabhängig von der Schreibweise. Test: `ui/src/desk/console.test.ts`.
 
+### B42 — Kein Vollbild (GitHub #8)
+
+- **Wo:** Desktop App, Fenster
+- **Schwere:** ärgerlich
+- **Was passiert:** Die Tauri-App lässt sich nicht in den Vollbildmodus schalten — weder mit F11 noch mit Alt + Enter
+- **Was passieren soll:** Beide Tastenkürzel schalten das Fenster in den Vollbildmodus und wieder zurück. Ein Pult im Saal läuft im Vollbild, und `CLAUDE.md`s Regel *wie ein Geräte-Bildschirm* ist genau die, die ohne Fensterrahmen aufgeht
+- **So sieht man es:** App starten, F11 oder Alt + Enter drücken — nichts passiert
+- **Ergebnis:** ☐ offen
+
+
 ## Executors und Wiedergabe
 
 *Der Strip, die Fader, Go / Pause / Off, die Sequenzen, was während des Laufens
@@ -375,6 +385,16 @@ angezeigt wird.*
 - **Was passieren soll:** Ein Modal, in einer schönen Liste mit abgegrenzten Spalten formatiert
 - **So sieht man es:** Eine Patch-Zeile öffnen und das Feld *Type* anfassen
 - **Ergebnis:** ✅ **behoben** — B19 hatte aus zwei Listen eine gemacht, aber die Form der einen behalten: ein Textfeld mit einem Dropdown darunter, vier Zeilen `Hersteller · Name · Modus · n ch` in einer Zeile zusammengelaufen, schwebend über der Patch-Tabelle, die es verdeckte. Eine Bibliothek mit zweitausend Profilen ist eine **Tabelle**, und eine Tabelle braucht Platz. Also ist das Feld jetzt eine Anzeige und eine Taste, und die Taste öffnet ein Panel (`chrome/modal.tsx`) mit vier Spalten in der Reihenfolge, in der ein Operator eingrenzt: **Hersteller, Fixture, Modus, Kanäle** — der Modus und die Kanalzahl deshalb als eigene Spalten, weil sich ein 8-Kanal- und ein 15-Kanal-Modus desselben Geräts in einer zusammengelaufenen Zeile gleich lesen und im Rig nicht austauschbar sind. Die Spaltenbreiten sind fest (`table-layout: fixed`), sonst rückt jede getippte Taste die Spalten. Eine Zeile, die die Show schon trägt, sagt es in der letzten Spalte — *picking re-reads it*, was seit B1 die Bedeutung ist. Tests: `patches straight out of the desk's library, from the row being patched` (liest die vier Zellen einzeln) und die vier weiteren in `ui/src/patch/patchwindow.test.tsx`.
+
+### B43 — Für eigene Fixture-Profile gibt es keinen Ort (GitHub #9)
+
+- **Wo:** Fixture-Bibliothek, Patch
+- **Schwere:** ärgerlich — und der Eintrag, der einen Saal aufhält, in dem ein Gerät steht, das die OFL nicht kennt
+- **Was passiert:** Die Dokumentation sagt, wohin eigene Profile **nicht** gehören — dorthin, wo `tools/fetch-fixtures` beim nächsten Lauf darüberschreibt —, benennt aber keinen Ort, wohin sie stattdessen gehören. Es gibt also keinen.
+- **Was passieren soll:** Ein Verzeichnis, das ein Bibliotheks-Download nicht anfasst, das der Daemon mitliest und dessen Profile in der Suche neben den OFL-Profilen auftauchen — erkennbar als eigene. Und ein Satz in der Dokumentation, der sagt, wo es liegt.
+- **So sieht man es:** Ein eigenes Profil anlegen und die Bibliothek erneut herunterladen
+- **Ergebnis:** ☐ offen
+
 
 ## Einstellungen und Pult
 
