@@ -549,8 +549,12 @@ fn editing_a_cue_loads_every_attribute_and_keeps_every_link() {
     // every link from one that gave every part the same one.
     dial(&mut file, &[2], AttributeType::Green, 4242);
     file.apply(&store("7", StoreMode::Merge)).expect("a store");
+    // **Two presses since S51** (B37): the first takes the selection and the
+    // second the values. This test wants an empty programmer to load the cue
+    // into, so it presses until there is one rather than counting on a number.
     file.apply(&Command::ClearProgrammer).expect("a clear");
-    assert!(file.programmer.state().values.is_empty());
+    file.apply(&Command::ClearProgrammer).expect("a clear");
+    assert!(file.programmer.state().is_empty());
 
     file.apply(&Command::EditCue {
         sequence_id: Some(SequenceId::new(1)),
@@ -771,9 +775,26 @@ fn the_update_state_clears_on_a_clear_a_delete_and_another_load() {
 
     // 1. The programmer is cleared: the values it was holding are gone, so
     //    there is nothing to put back.
+    //
+    //    **The update state goes with the values and not with the selection** —
+    //    S51, B37. The first press drops the selection and no value moves, so
+    //    an operator letting one fixture go to add the next is still editing
+    //    the same cue and the Update key stays lit. It is the press that takes
+    //    the *values* that ends the edit.
     let mut file = two_part_cue();
     load(&mut file, "1");
     file.apply(&Command::ClearProgrammer).expect("a clear");
+    assert_eq!(
+        file.session.session().editing_cue,
+        Some(CueEdit {
+            sequence_id: SequenceId::new(1),
+            cue_number: "1".to_owned(),
+            modified: false,
+        }),
+        "dropping the selection ended an edit in which no value moved"
+    );
+    file.apply(&Command::ClearProgrammer)
+        .expect("a second clear");
     assert_eq!(file.session.session().editing_cue, None);
 
     // 2. The cue is deleted.

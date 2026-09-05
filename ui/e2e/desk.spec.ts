@@ -265,8 +265,11 @@ test("**an encoder change reaches the programmer and the output within a tick**"
   await expect(page.getByTestId("bank-Dimmer")).toHaveAttribute("data-touched", "yes");
   await expect(page.getByTestId("value-Dimmer")).toHaveText("50%");
 
-  // Clearing it takes the light off the rig again — the three-stage Clear's
-  // first stage, and the picture following the programmer in both directions.
+  // Clearing it takes the light off the rig again, and the picture follows the
+  // programmer in both directions. **Two presses since S51** (B37): the first
+  // drops the selection and the second the values, and it is the values the rig
+  // is lit by.
+  await page.getByTestId("clear").click();
   await page.getByTestId("clear").click();
   await expect(page.getByTestId("touched")).toHaveText("0");
   await expect.poll(async () => litPixels(page, HALF), { timeout: 10_000 }).toBe(0);
@@ -338,36 +341,41 @@ test("**paging the encoders agrees**: the console's `Zoom ▲▼` and the bar mo
   // took apart: `Beam` was six knobs — gobo, prism, iris, zoom, shutter and
   // control — and is three now, with `Gobo` and `Control` banks of their own
   // (`AttributeType::feature_group`). Three knobs is one page and no paging to
-  // observe, so the second page this test needs is Colour's: five parameters,
-  // four drawn and one over.
+  // observe, so the second page this test needs is Colour's.
+  //
+  // **And Colour is four pages since S51** (B38): the nineteen attributes the
+  // Open Fixture Library needs put cyan, magenta, yellow, UV, lime, indigo, a
+  // colour wheel and a colour temperature on that bank. The *first* page is
+  // still red, green, blue and white, which is the promise `AttributeType::ALL`
+  // makes when it appends rather than interleaves — so what an operator meets
+  // is unchanged and what this test walks is longer.
   pressConsole(started.keys, ASSIGN_COLOR);
   await expect(page.getByTestId("bank-Color")).toHaveAttribute("data-active", "yes");
 
-  // Colour has five parameters, so four are drawn and there is a second page.
   await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(4);
   await expect(page.getByTestId("encoder-Red")).toBeVisible();
   await expect(page.getByTestId("encoder-White")).toBeVisible();
   await expect(page.getByTestId("encoder-Amber")).toHaveCount(0);
-  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/4");
   await expect(page.getByTestId("encoder-page-down")).toBeEnabled();
 
   // **`Zoom ▼` on the console pages the browser.**
   pressConsole(started.keys, ZOOM_DOWN);
-  await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
-  await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(1);
+  await expect(page.getByTestId("programmer-page")).toHaveText("2/4");
+  await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(4);
   await expect(page.getByTestId("encoder-Amber")).toBeVisible();
   await expect(page.getByTestId("encoder-Red")).toHaveCount(0);
 
   // Now the *interface* pages, and the console's next press carries on from
   // where the browser left it — which is the criterion: **one page number**.
   await page.getByTestId("encoder-page-up").click();
-  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/4");
   await expect(page.getByTestId("encoder-Red")).toBeVisible();
 
   pressConsole(started.keys, ZOOM_DOWN);
-  await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
+  await expect(page.getByTestId("programmer-page")).toHaveText("2/4");
   pressConsole(started.keys, ZOOM_UP);
-  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/4");
   await expect(page.getByTestId("encoder-page-up")).toBeDisabled();
 });
 
@@ -487,6 +495,43 @@ for (const viewport of [
     }
   });
 }
+
+/**
+ * **Full screen, both keys, both directions — punch-list entry B42.**
+ *
+ * No daemon: the desk element and its two keys exist before anything is
+ * connected, and starting one would make this a test of a daemon. What is being
+ * asserted is the thing that was missing — that the keys *reach a mechanism*.
+ *
+ * This is a browser, so the mechanism is the Fullscreen API and the reading is
+ * `document.fullscreenElement`, taken off the document rather than off the
+ * attribute so that the attribute is checked against something other than
+ * itself. In the shell the same keys move the **window** instead
+ * (`prism_app::shell::set_fullscreen`), which no browser test can observe and
+ * which is the hand-check recorded in `PROGRESS.md` §2.47.
+ */
+test("F11 and Alt+Enter put the desk full screen, and take it out again", async ({ page }) => {
+  await page.goto("/");
+  const desk = page.getByTestId("desk");
+  await expect(desk).toHaveAttribute("data-fullscreen", "no");
+
+  const inFullscreen = async (): Promise<boolean> =>
+    await page.evaluate(() => document.fullscreenElement !== null);
+
+  for (const key of ["F11", "Alt+Enter"]) {
+    await page.keyboard.press(key);
+    await expect(desk, `${key} did not go full screen`).toHaveAttribute("data-fullscreen", "yes");
+    expect(await inFullscreen(), `${key}: the attribute said yes and the document did not`).toBe(
+      true,
+    );
+
+    await page.keyboard.press(key);
+    await expect(desk, `${key} did not come back out`).toHaveAttribute("data-fullscreen", "no");
+    expect(await inFullscreen(), `${key}: the attribute said no and the document did not`).toBe(
+      false,
+    );
+  }
+});
 
 /**
  * How many pixels of the telemetry canvas are exactly this colour.

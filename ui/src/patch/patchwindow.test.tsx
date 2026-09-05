@@ -474,7 +474,9 @@ describe("the patch window", () => {
     // apart.
     const row = screen.getByTestId("library-row-robe/wash-7q5/4ch");
     const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
-    expect(cells.slice(0, 4)).toEqual(["Robe", "Wash 7Q5", "4ch", "4"]);
+    // Five since S51 (B43): the fifth says whose profile it is, and this one
+    // came out of the recording, so it is the desk's.
+    expect(cells.slice(0, 5)).toEqual(["Robe", "Wash 7Q5", "4ch", "4", "library"]);
     expect(screen.getByTestId("library-row-robe/wash-7q5/2ch")).not.toBeNull();
 
     fireEvent.click(screen.getByTestId("library-robe/wash-7q5/4ch"));
@@ -495,6 +497,48 @@ describe("the patch window", () => {
     // the question it was asking has been answered, and a chooser left standing
     // over the form is a chooser an operator has to put away by hand.
     expect(screen.queryByTestId("library-modal")).toBeNull();
+  });
+
+  /**
+   * **The picker says whose a profile is** — punch-list entry **B43**.
+   *
+   * A venue's own profile may deliberately carry a library key, because that is
+   * what *correcting* a profile means, so the key cannot answer the question
+   * and the row has to. Asserted on two rows at once, since what an operator
+   * does with this column is scan down it.
+   */
+  it("marks a profile as the venue's own, beside one that came with the desk", async () => {
+    const { answerQuery } = await desk();
+    fireEvent.click(screen.getByTestId("patch-row-1"));
+    fireEvent.click(screen.getByTestId("library-open"));
+    await answerQuery("SearchLibrary", {
+      t: "LibraryMatches",
+      matches: [
+        {
+          id: "robe/wash-7q5/4ch",
+          manufacturer: "Robe",
+          name: "Wash 7Q5",
+          mode: "4ch",
+          footprint: 4,
+          own: true,
+        },
+        {
+          id: "robe/wash-7q5/2ch",
+          manufacturer: "Robe",
+          name: "Wash 7Q5",
+          mode: "2ch",
+          footprint: 2,
+          own: false,
+        },
+      ],
+      total: 2,
+    });
+
+    const source = (id: string) => screen.getByTestId(`library-source-${id}`);
+    expect(source("robe/wash-7q5/4ch").getAttribute("data-own")).toBe("yes");
+    expect(source("robe/wash-7q5/4ch").textContent).toBe("yours");
+    expect(source("robe/wash-7q5/2ch").getAttribute("data-own")).toBe("no");
+    expect(source("robe/wash-7q5/2ch").textContent).toBe("library");
   });
 
   it("says so when the library has nothing matching, rather than showing everything", async () => {
@@ -544,6 +588,7 @@ describe("the patch window", () => {
           name: "Dimmer",
           mode: "1ch",
           footprint: 1,
+          own: false,
         },
       ],
       total: 4,
@@ -608,6 +653,7 @@ describe("the patch window", () => {
           name: "RGBW PAR",
           mode: "4ch",
           footprint: 4,
+          own: false,
         },
       ],
       total: 4,

@@ -41,8 +41,11 @@ So the row above says *cue lists*. An **executor is a handle** on one:
 it says which list, what its fader does, what its encoder does and what each of
 its four keys does, and nothing about what the list is doing. Two executors whose
 faders are both `Master` are therefore two handles on one number, and a `Master`
-and an `XFade` on that same list are two different handles that stay
-independent — which is what the entry asks for in as many words.
+and a **crossfade** on that same list are two different handles that stay
+independent — which is what the entry asks for in as many words. It is also why
+the two crossfade *modes* S51 added are a setting of the **fader** and not of the
+cue list: a mode on the list would put a `Fade` handle and an `XFade` handle back
+into an argument about one field.
 
 `prism_domain::PlaybackId` carries the whole of it and
 `prism_core::Show::playback_of` is where an executor becomes one.
@@ -180,13 +183,20 @@ be tracking in one cue and a one-off in another.
 
 Per `CLAUDE.md`, the Clear function is a three-stage state machine (`ProgrammerState.clearStage`):
 
-| Stage | Action |
+| Stage | What the press takes away |
 |---|---|
-| 0 → 1 | Clear programmer **values**, keep the fixture selection |
-| 1 → 2 | Clear the **selection** |
-| 2 → 0 | Clear everything, including the active feature group and page state |
+| `1` Selection | The fixture **selection**, keeping every value that has been set |
+| `2` Values | The programmer **values** |
+| `3` All | Everything else: the active feature group and the page state beside it |
+| `0` Nothing | Nothing. There is nothing to clear and the key is dark |
 
-The stage resets to 0 on any other programmer interaction, so an operator who clears once and then grabs a fader does not find a later Clear press in an unexpected stage.
+**The stage is derived from the contents, not counted on the button** *(S43, punch-list B2)*. It cannot go stale, a press at `Nothing` changes nothing and reports so, and an operator who clears once and then grabs a fader finds the key offering what is actually there. The stage number is the *press order*, which is what lets an interface colour the key and name it from one integer.
+
+> **The selection comes first, and it did not until S51** *(B37)*. The first press used to take the values and the second the selection. The owner's punch list gives the reason for turning it, and it is not a preference: *andernfalls ist es nicht möglich, mehrere verschiedene Fixtures gleichzeitig zu programmieren*. Building a look out of several fixtures is **select, set, let go, select the next, set** — and *letting go* is the only one of those five steps that needs a key. Under the old order the only key that did it emptied the look at the same time, so a look could never be wider than one selection. It is now: one press releases the fixtures and leaves everything that has been set standing, the next press takes the values, the third takes the rest.
+>
+> What it costs is that a programmer emptied by hand takes **two** presses rather than one, which is the trade the entry asks for. The order is asserted as a *sequence* rather than one stage at a time — `the_stages_are_the_sequence_a_hand_presses` (`prism_domain::programmer`), `the_clear_key_offers_the_first_thing_there_is_to_clear` and `a_look_is_built_out_of_several_fixtures_one_clear_at_a_time` (`crates/prism-core/tests/programmer.rs`), and *names the selection first and the values second* (`ui/src/App.test.tsx`) — so a later change that reorders them again goes red on the step that moved.
+>
+> **One thing moved with it that the entry does not mention.** The *update state* — `Session::editingCue`, the cue an `EditCue` loaded and the blinking Update key that goes with it — used to be cleared by any press of Clear, on S39's argument that *the values it was holding are gone*. That argument names the values, and the first press no longer takes them: it hangs on the **values** now, so an operator who lets one fixture go to add the next is still editing the same cue and the key stays lit. A press that moves no value must not take a state away, which is B40's rule one field along.
 
 ---
 
@@ -220,6 +230,7 @@ through the cue list standing on the slot:
 | `Master` | the list's master level | `Sequence::masterLevel`, show state |
 | `Speed` | the list's rate | `Sequence::speed`, show state |
 | `XFade` | the transition's clock (§4.2) | nowhere — a gesture in progress |
+| `Fade` | the same clock, the other mode (§4.2) | nowhere — a gesture in progress |
 | `Empty` | nothing | — |
 
 An executor with **no** cue list on it is refused rather than silently ignored:
@@ -228,7 +239,24 @@ that wrote a number nobody could reach was what the old model allowed.
 
 ### 4.2 The crossfade is a clock, not a master
 
-`ExecutorFaderFunction::XFade` (`ARCHITECTURE_SPEC.md` §6) belongs here only to say that it does **not**. A manual crossfade replaces the *clock* of the transition a cue list is already in — the same `from`, the same `to`, the same traversal — with how far the fader has travelled from where it stood when the cue was taken, towards whichever end it started from. Reaching that end completes the cue; the next Go takes the fader's current position as the new origin, which is what makes the following crossfade run the other way. It scales nothing and merges nothing.
+`ExecutorFaderFunction::XFade` and `Fade` (`ARCHITECTURE_SPEC.md` §6) belong here only to say that they do **not** master anything. A manual crossfade replaces the *clock* of a transition — the same `from`, the same `to`, the same traversal — with how far the fader has travelled. It scales nothing and merges nothing, so nothing in §2 or §4.1 changes because one is moving.
+
+**Two modes since S51** *(punch-list B36)*, and the difference is which transition a movement carries:
+
+| Mode | Pushed up | Pulled down |
+|---|---|---|
+| `XFade` | crossfade to the next cue | crossfade to the one after it |
+| `Fade` | fade the current cue **out**, staying on it | fade the next cue **in**, from wherever the light is |
+
+So `XFade` advances the list by one cue per half of the travel and the stage never goes dark; `Fade` advances it by one per full up-and-down, through black. Either way one fader walks a cue list.
+
+**The unit is a *stroke*** — one journey of the fader from where it was resting to an end of its travel, carrying one transition — and three things about it are decisions rather than mechanics:
+
+- **It is armed by the first movement, not by engaging the fader.** A playback with an untouched crossfade fader reads the cue it is actually on, and switching a fader to a crossfade mid-show moves no light.
+- **A finished stroke holds at its end**, and the *next* movement — which can only go back the other way — arms the next one. There is no Go in between and nothing to re-base, which is what the old single mode needed and what made the desk drive the fader back to nought.
+- **A stroke stopped half way is a state.** Every entry sits at `interpolate(from, to, progress)`, the clock is not consulted, and the next tick computes the same numbers — so the frames are byte-identical tick after tick, and a walk replayed twice produces the same sequence twice. It is asserted that way (`crates/prismd/tests/crossfade.rs`) rather than on a state field.
+
+A **Go** takes the transition back on to the clock and abandons any stroke, leaving the fader exactly where the operator's hand left it. Nothing anywhere writes a crossfade fader's position — `ARCHITECTURE_SPEC.md` §4.2 has why, and `ExecutorFaderFunction::desk_may_move_it` is where the rule lives.
 
 ---
 

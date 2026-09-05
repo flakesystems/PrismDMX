@@ -45,6 +45,19 @@ const SHOW: JsonValue = {
         { attribute: "Green", featureGroup: "Color", defaultValue: 65535 },
         { attribute: "Pan", featureGroup: "Position", defaultValue: 32768 },
         { attribute: "Tilt", featureGroup: "Position", defaultValue: 32768 },
+        // **B38.** A gobo wheel with named ranges, the way an OFL profile
+        // carries one. `to` is the top of each range and the next one starts a
+        // step above it, so no value belongs to nothing.
+        {
+          attribute: "Gobo",
+          featureGroup: "Gobo",
+          defaultValue: 0,
+          ranges: [
+            { name: "Open", from: 0, to: 9999 },
+            { name: "Gobo 1", from: 10000, to: 19999 },
+            { name: "Gobo 2", from: 20000, to: 65535 },
+          ],
+        },
       ],
     },
   },
@@ -83,9 +96,10 @@ function programmer(values: [AttributeType, number][] = []): ProgrammerState {
   };
 }
 
-/** The band, and every attribute it asked to take over. */
+/** The band, every attribute it asked to take over, and every range picked. */
 function band(bank: string, state: ProgrammerState) {
   const taken: AttributeType[][] = [];
+  const picked: { attribute: AttributeType; name: string; from: number; to: number }[] = [];
   render(
     <ProgrammerBand
       session={session(bank)}
@@ -96,10 +110,13 @@ function band(bank: string, state: ProgrammerState) {
       onPage={() => undefined}
       onTurn={() => undefined}
       onTake={(attributes) => taken.push([...attributes])}
+      onPickRange={(reading, range) =>
+        picked.push({ attribute: reading.attribute, ...range })
+      }
       onLine={() => undefined}
     />,
   );
-  return { taken };
+  return { taken, picked };
 }
 
 describe("taking one attribute over", () => {
@@ -180,5 +197,51 @@ describe("the mark on an encoder", () => {
     // is what tells an operator to pull it down rather than push it up.
     expect(screen.getByTestId("value-Green").textContent).toBe("100%");
     expect(screen.getByTestId("value-Red").textContent).toBe("50%");
+  });
+});
+
+/**
+ * **A channel with named ranges** — S51, punch-list B38.
+ *
+ * The half of the entry that is about capabilities rather than about channels.
+ * Until S51 an OFL channel's ranges were read by nothing at all, so a gobo wheel
+ * was a number an operator had to know by heart; now the encoder names the range
+ * it is standing in and offers the list.
+ */
+describe("a channel with named ranges", () => {
+  it("names the range the value is standing in", () => {
+    const { picked } = band("Gobo", programmer([["Gobo", 15000]]));
+    expect(screen.getByTestId("range-Gobo").textContent).toBe("Gobo 1");
+    expect(picked).toEqual([]);
+  });
+
+  it("names the range the resting value is in when the programmer holds nothing", () => {
+    // The same rule the number follows since B1: what an encoder reads is the
+    // programmer's value, or the profile's resting value when it holds none.
+    band("Gobo", programmer());
+    expect(screen.getByTestId("range-Gobo").textContent).toBe("Open");
+  });
+
+  it("offers the list, and picking one asks for the middle of it", () => {
+    const { picked } = band("Gobo", programmer([["Gobo", 0]]));
+    fireEvent.click(screen.getByTestId("range-Gobo"));
+    const list = screen.getByTestId("ranges-Gobo");
+    expect([...list.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
+      "Open",
+      "Gobo 1",
+      "Gobo 2",
+    ]);
+
+    fireEvent.click(screen.getByTestId("range-Gobo-Gobo 2"));
+    expect(picked).toEqual([{ attribute: "Gobo", name: "Gobo 2", from: 20000, to: 65535 }]);
+    // The list puts itself away: the question it was asking has been answered.
+    expect(screen.queryByTestId("ranges-Gobo")).toBeNull();
+  });
+
+  it("draws nothing at all for a channel that has no ranges", () => {
+    // Every continuous encoder on the desk is one of these, and a row of empty
+    // space under each would take height off the canvas for nothing.
+    band("Color", programmer());
+    expect(screen.queryByTestId("range-Red")).toBeNull();
   });
 });

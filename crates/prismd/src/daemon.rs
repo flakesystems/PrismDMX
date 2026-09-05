@@ -1051,12 +1051,21 @@ fn join_library_load(
 /// the desk starts with four profiles and says so — because a lighting desk
 /// that would not start over a missing directory is a worse answer than one
 /// with four profiles in it.
-fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::FixtureLibrary {
+///
+/// Public since S51 so that `tests/fixture_install.rs` can put the two
+/// directories side by side, run the real installer over one of them and read
+/// the library the daemon would have got — which is punch-list entry B43's
+/// exit criterion, and not something a test of `FixtureLibrary` alone can say.
+pub fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::FixtureLibrary {
     let mut library = prism_core::FixtureLibrary::default();
 
+    // **The venue's own, first** — punch-list entry B43. First because
+    // `FixtureLibrary` keeps the first profile it is given for a key, which is
+    // what makes a file here a *correction* of a vendored one rather than a
+    // second entry beside it.
     let own = paths::fixtures_dir(data_dir);
     if own.is_dir() {
-        library.read_fixture_dir(&own, "custom", "Custom");
+        library.read_own_tree(&own);
     }
 
     let installed = configured

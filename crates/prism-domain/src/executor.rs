@@ -138,8 +138,62 @@ pub enum ExecutorFaderFunction {
     Master,
     /// Playback speed.
     Speed,
-    /// Manual crossfade between cues.
+    /// Manual crossfade between cues: **push up to fade to the next cue, pull
+    /// down to fade to the one after that** — see [`CrossfadeMode::XFade`].
     XFade,
+    /// The other manual crossfade: **push up to fade the current cue out, pull
+    /// down to fade the next one in** — see [`CrossfadeMode::Fade`].
+    ///
+    /// **New in S51**, punch-list entry B36. The entry asks for two modes and
+    /// this is the second; the first kept its name so a `.prism` file and a
+    /// saved binding written before S51 read unchanged.
+    Fade,
+}
+
+/// Which of the two manual crossfades a fader is — **S51, punch-list B36**.
+///
+/// # Where the mode lives, and why it is not somewhere else
+///
+/// The entry asks for two crossfade modes and the first question is whose they
+/// are. Three answers were available and only one of them is this model's:
+///
+/// - **The sequence's.** A cue list would bring its own operating mode, which
+///   sounds tidy and contradicts **B18**: two executors on one list with
+///   different fader functions are two independent handles by decision, so a
+///   mode on the list would make a *Fade* handle and an *XFade* handle argue
+///   about one field.
+/// - **The machine's** (`MachineConfig`), so a desk keeps it across a show
+///   change. But what a fader *does* is [`ExecutorFaderFunction`] and that has
+///   been show state since S1 — half the answer in the show and half beside it
+///   would mean `Assign Executor 1 Fader XFade` wrote to two places.
+/// - **The fader's**, which is what this is. The mode *is* what the fader does,
+///   so it is one more row of the function it already carries: one command
+///   (`ExecutorChange::Fader`), one field in the file, one word on the command
+///   line, and the control editor grows a row without being told to because it
+///   is generated from [`ExecutorFaderFunction::ALL`].
+///
+/// This type exists so the *engine* can be told which of the two a movement is
+/// without being handed a vocabulary containing `Master`, `Speed` and `Empty`,
+/// which mean nothing to a player. [`ExecutorFaderFunction::crossfade_mode`] is
+/// the one place the two are related.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum CrossfadeMode {
+    /// **Out and in.** Pushing the fader up fades the current cue out; pulling
+    /// it down fades the next cue in. A full up-and-down of the fader advances
+    /// the list by one cue, through black.
+    Fade,
+    /// **Across.** Pushing the fader up crossfades from the current cue to the
+    /// next; pulling it down crossfades from that one to the one after. Each
+    /// half of the fader's travel advances the list by one cue, and the stage
+    /// never goes dark between them.
+    XFade,
+}
+
+impl CrossfadeMode {
+    /// Both modes, for a test that walks them rather than the two somebody
+    /// remembered.
+    pub const ALL: [Self; 2] = [Self::Fade, Self::XFade];
 }
 
 impl ExecutorFaderFunction {
@@ -152,7 +206,46 @@ impl ExecutorFaderFunction {
     /// a line has nowhere to put one. `ARCHITECTURE_SPEC.md` §4.5 names the
     /// executor faders as the exception a line cannot express, and this is that
     /// sentence read the other way round.
-    pub const ALL: [Self; 4] = [Self::Empty, Self::Master, Self::Speed, Self::XFade];
+    pub const ALL: [Self; 5] = [
+        Self::Empty,
+        Self::Master,
+        Self::Speed,
+        Self::Fade,
+        Self::XFade,
+    ];
+
+    /// Which manual crossfade this fader is, or `None` when it is not one.
+    ///
+    /// **The one place the two vocabularies are related** — see
+    /// [`CrossfadeMode`]. Everything that has to tell a crossfade from a master
+    /// asks this rather than matching on two variants of its own, so a third
+    /// mode would be one edit rather than a search.
+    #[must_use]
+    pub const fn crossfade_mode(self) -> Option<CrossfadeMode> {
+        match self {
+            Self::Fade => Some(CrossfadeMode::Fade),
+            Self::XFade => Some(CrossfadeMode::XFade),
+            Self::Empty | Self::Master | Self::Speed => None,
+        }
+    }
+
+    /// Whether the **desk** may move this fader.
+    ///
+    /// The other half of B36, and the half the entry is actually about: *In
+    /// keinem Fall soll der Fader nach einer Bewegung irgendwie zurück bewegt
+    /// werden.* A `Master` fader shows a number the show holds, so a motor may
+    /// be driven to it and a second handle on the same list follows the first
+    /// (B18). A **crossfade** fader shows nothing: where it stands is the
+    /// operator's hand, and a desk that wrote a position back would be undoing
+    /// a gesture that is still happening.
+    ///
+    /// So this is asked before any position is written, on the surface and on
+    /// the screen, and it is `false` for both crossfades — never for `Empty`
+    /// either, which has no number to show at all.
+    #[must_use]
+    pub const fn desk_may_move_it(self) -> bool {
+        matches!(self, Self::Master | Self::Speed)
+    }
 }
 
 /// What an executor's encoder does.
@@ -335,8 +428,8 @@ impl proptest::arbitrary::Arbitrary for ExecutorButtonFunction {
 #[cfg(test)]
 mod tests {
     use crate::{
-        EXECUTOR_BUTTONS, Executor, ExecutorButtonFunction, ExecutorButtonRef, ExecutorChange,
-        ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, SequenceId,
+        CrossfadeMode, EXECUTOR_BUTTONS, Executor, ExecutorButtonFunction, ExecutorButtonRef,
+        ExecutorChange, ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, SequenceId,
     };
     use ts_rs::{Config, TS};
 
@@ -449,7 +542,11 @@ mod tests {
                 .iter()
                 .any(|function| matches!(function, ExecutorButtonFunction::CommandLine { .. }))
         );
-        assert_eq!(ExecutorFaderFunction::ALL.len(), 4);
+        // **Five since S51** (B36): the second crossfade mode is one more row of
+        // what a fader does, so the control editor grows a row without being
+        // told to — which is the reason the mode lives here rather than in
+        // `MachineConfig`. See `CrossfadeMode`.
+        assert_eq!(ExecutorFaderFunction::ALL.len(), 5);
         assert_eq!(ExecutorEncoderFunction::ALL.len(), 3);
         assert_eq!(EXECUTOR_BUTTONS, 4);
     }
@@ -568,11 +665,74 @@ mod tests {
         assert!(button.contains("line: string,"), "{button}");
         assert_eq!(
             ExecutorFaderFunction::inline(&cfg),
-            "\"Empty\" | \"Master\" | \"Speed\" | \"XFade\""
+            "\"Empty\" | \"Master\" | \"Speed\" | \"XFade\" | \"Fade\""
         );
+        // **`XFade` keeps its place**, which is why a `.prism` file and a saved
+        // binding written before S51 read unchanged — the encoding is the name.
+        assert_eq!(CrossfadeMode::inline(&cfg), "\"Fade\" | \"XFade\"");
         assert_eq!(
             ExecutorEncoderFunction::inline(&cfg),
             "\"Empty\" | \"Master\" | \"Speed\""
         );
+    }
+}
+
+#[cfg(test)]
+mod crossfade_modes {
+    use super::{CrossfadeMode, ExecutorFaderFunction};
+
+    /// **Every fader function that is a crossfade names a mode, and no other
+    /// does** — S51, B36, and the one place the two vocabularies are related.
+    ///
+    /// Walked over `ALL` rather than written out, so a sixth fader function
+    /// added later has to decide which side of this line it is on instead of
+    /// silently defaulting to *not a crossfade*.
+    #[test]
+    fn exactly_the_two_crossfades_name_a_mode() {
+        let named: Vec<CrossfadeMode> = ExecutorFaderFunction::ALL
+            .into_iter()
+            .filter_map(ExecutorFaderFunction::crossfade_mode)
+            .collect();
+        assert_eq!(named.len(), CrossfadeMode::ALL.len());
+        for mode in CrossfadeMode::ALL {
+            assert!(named.contains(&mode), "{mode:?} is named by no fader");
+        }
+        assert_eq!(
+            ExecutorFaderFunction::Fade.crossfade_mode(),
+            Some(CrossfadeMode::Fade)
+        );
+        assert_eq!(
+            ExecutorFaderFunction::XFade.crossfade_mode(),
+            Some(CrossfadeMode::XFade)
+        );
+        for other in [
+            ExecutorFaderFunction::Empty,
+            ExecutorFaderFunction::Master,
+            ExecutorFaderFunction::Speed,
+        ] {
+            assert_eq!(other.crossfade_mode(), None, "{other:?}");
+        }
+    }
+
+    /// **The desk moves a fader that shows a number, and only that** — B36's
+    /// second half, stated once so every layer can ask it.
+    ///
+    /// A crossfade fader's position is the operator's hand. `prismd::surface`
+    /// and `ui/src/desk/session.ts` both read this, which is what stops the
+    /// screen and the desk disagreeing about it.
+    #[test]
+    fn the_desk_never_moves_a_crossfade_fader() {
+        for function in ExecutorFaderFunction::ALL {
+            assert_eq!(
+                function.desk_may_move_it(),
+                function.crossfade_mode().is_none() && function != ExecutorFaderFunction::Empty,
+                "{function:?}"
+            );
+        }
+        assert!(ExecutorFaderFunction::Master.desk_may_move_it());
+        assert!(ExecutorFaderFunction::Speed.desk_may_move_it());
+        assert!(!ExecutorFaderFunction::Fade.desk_may_move_it());
+        assert!(!ExecutorFaderFunction::XFade.desk_may_move_it());
+        assert!(!ExecutorFaderFunction::Empty.desk_may_move_it());
     }
 }

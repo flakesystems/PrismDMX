@@ -462,9 +462,13 @@ impl TickBody for MergeBody {
                     player.tap();
                 }
             }
-            TickCommand::SetExecutorXFade { executor, position } => {
+            TickCommand::SetExecutorCrossfade {
+                executor,
+                mode,
+                position,
+            } => {
                 if let Some(player) = self.cues.player_mut(executor) {
-                    player.set_crossfade(position);
+                    player.set_crossfade(mode, position);
                 }
             }
             TickCommand::Go {
@@ -1801,7 +1805,8 @@ mod tests {
         body.apply(TickCommand::TapExecutorSpeed {
             executor: SequenceId::new(99).into(),
         });
-        body.apply(TickCommand::SetExecutorXFade {
+        body.apply(TickCommand::SetExecutorCrossfade {
+            mode: prism_domain::CrossfadeMode::XFade,
             executor: SequenceId::new(99).into(),
             position: 4,
         });
@@ -1815,6 +1820,12 @@ mod tests {
 
     /// The crossfade reaches the frame through the queue, which is the path the
     /// daemon uses.
+    ///
+    /// **S51 took the Go out of it** (B36). It used to need one: a crossfade
+    /// replaced the *clock* of a transition somebody else had started, so
+    /// nothing happened until a Go had started one. The fader starts it now —
+    /// which is the entry — so what this asserts is a fader and a frame with no
+    /// other gesture between them.
     #[test]
     fn a_crossfade_command_drives_the_transition_from_the_fader() {
         let head = moving_head();
@@ -1839,7 +1850,8 @@ mod tests {
         let dimmer = slot(&body, 1, AttributeType::Dimmer);
         let mut frame = DmxFrame::new(&layout());
 
-        body.apply(TickCommand::SetExecutorXFade {
+        body.apply(TickCommand::SetExecutorCrossfade {
+            mode: prism_domain::CrossfadeMode::XFade,
             executor: SequenceId::new(1).into(),
             position: 0,
         });
@@ -1848,20 +1860,92 @@ mod tests {
             on: true,
         });
         body.render(&tick(1), &mut frame);
-        body.apply(TickCommand::Go {
-            executor: SequenceId::new(1).into(),
-            direction: GoDirection::Next,
-        });
         body.render(&tick(2), &mut frame);
-        assert_eq!(body.values()[dimmer], 0);
+        assert_eq!(body.values()[dimmer], 0, "engaging a fader moved a light");
 
-        body.apply(TickCommand::SetExecutorXFade {
+        body.apply(TickCommand::SetExecutorCrossfade {
+            mode: prism_domain::CrossfadeMode::XFade,
+            executor: SequenceId::new(1).into(),
+            position: 32_768,
+        });
+        body.render(&tick(3), &mut frame);
+        let half = body.values()[dimmer];
+        assert!(
+            (32_000..34_000).contains(&half),
+            "half a fader is half a fade, got {half}"
+        );
+
+        body.apply(TickCommand::SetExecutorCrossfade {
+            mode: prism_domain::CrossfadeMode::XFade,
             executor: SequenceId::new(1).into(),
             position: 65_535,
         });
-        body.render(&tick(3), &mut frame);
-        // A ten-minute fade, arrived at in one tick, because the fader is the
-        // clock.
+        body.render(&tick(4), &mut frame);
+        // A ten-minute fade, arrived at in two movements, because the fader is
+        // the clock.
         assert_eq!(body.values()[dimmer], 65_535);
+    }
+
+    /// **The other mode reaches the frame the same way** — S51, B36.
+    ///
+    /// The two modes are one command with a different tag, so the thing worth
+    /// asserting at this layer is that both tags survive the queue and land on
+    /// the right behaviour: up on a `Fade` takes the light *out*, where up on an
+    /// `XFade` takes it to the next cue.
+    #[test]
+    fn a_fade_command_takes_the_current_cue_out_rather_than_bringing_the_next_in() {
+        let head = moving_head();
+        let patched = patch(1);
+        let mut body = MergeBody::for_patch(
+            &layout(),
+            patched.iter().map(|fixture| (fixture, &head)),
+            [SequenceId::new(1)],
+        )
+        .unwrap();
+        body.load_sequence(
+            SequenceId::new(1),
+            &sequence(
+                vec![
+                    cue("1", 0.0, vec![cue_part(1, AttributeType::Dimmer, 65_535)]),
+                    cue("2", 600.0, vec![cue_part(1, AttributeType::Dimmer, 30_000)]),
+                ],
+                false,
+            ),
+        )
+        .unwrap();
+        let dimmer = slot(&body, 1, AttributeType::Dimmer);
+        let mut frame = DmxFrame::new(&layout());
+
+        body.apply(TickCommand::SetExecutorActive {
+            executor: SequenceId::new(1).into(),
+            on: true,
+        });
+        body.apply(TickCommand::SetExecutorCrossfade {
+            mode: prism_domain::CrossfadeMode::Fade,
+            executor: SequenceId::new(1).into(),
+            position: 0,
+        });
+        body.render(&tick(1), &mut frame);
+        assert_eq!(body.values()[dimmer], 65_535);
+
+        body.apply(TickCommand::SetExecutorCrossfade {
+            mode: prism_domain::CrossfadeMode::Fade,
+            executor: SequenceId::new(1).into(),
+            position: 65_535,
+        });
+        body.render(&tick(2), &mut frame);
+        assert_eq!(body.values()[dimmer], 0, "up on a Fade did not take it out");
+
+        body.apply(TickCommand::SetExecutorCrossfade {
+            mode: prism_domain::CrossfadeMode::Fade,
+            executor: SequenceId::new(1).into(),
+            position: 0,
+        });
+        body.render(&tick(3), &mut frame);
+        assert_eq!(
+            body.values()[dimmer],
+            30_000,
+            "down on a Fade did not bring the next cue in"
+        );
     }
 }

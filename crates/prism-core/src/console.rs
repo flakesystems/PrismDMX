@@ -1771,6 +1771,28 @@ const fn attribute_name(attribute: AttributeType) -> &'static str {
         AttributeType::Prism => "Prism",
         AttributeType::Shutter => "Shutter",
         AttributeType::Control => "Control",
+        // The nineteen S51 added for B38. Every one is a word the line takes,
+        // lower-cased by `attribute_word`, so `1 cyan at 50` parses the moment
+        // the model has a cyan.
+        AttributeType::Cyan => "Cyan",
+        AttributeType::Magenta => "Magenta",
+        AttributeType::Yellow => "Yellow",
+        AttributeType::Uv => "UV",
+        AttributeType::Lime => "Lime",
+        AttributeType::Indigo => "Indigo",
+        AttributeType::ColorWheel => "ColorWheel",
+        AttributeType::ColorTemperature => "ColorTemperature",
+        AttributeType::PositionSpeed => "PositionSpeed",
+        AttributeType::GoboRotation => "GoboRotation",
+        AttributeType::PrismRotation => "PrismRotation",
+        AttributeType::Effect => "Effect",
+        AttributeType::EffectSpeed => "EffectSpeed",
+        AttributeType::Frost => "Frost",
+        AttributeType::Blade => "Blade",
+        AttributeType::BeamPosition => "BeamPosition",
+        AttributeType::Fog => "Fog",
+        AttributeType::Speed => "Speed",
+        AttributeType::Sound => "Sound",
     }
 }
 
@@ -1799,6 +1821,7 @@ const fn fader_word(function: ExecutorFaderFunction) -> &'static str {
         ExecutorFaderFunction::Empty => "Empty",
         ExecutorFaderFunction::Master => "Master",
         ExecutorFaderFunction::Speed => "Speed",
+        ExecutorFaderFunction::Fade => "Fade",
         ExecutorFaderFunction::XFade => "XFade",
     }
 }
@@ -1869,6 +1892,9 @@ const fn fader_name(function: ExecutorFaderFunction) -> &'static str {
         ExecutorFaderFunction::Empty => "Nothing",
         ExecutorFaderFunction::Master => "Master",
         ExecutorFaderFunction::Speed => "Speed",
+        // Two sentences a person reads, and they say what the fader *does*
+        // rather than naming it twice — S51, B36.
+        ExecutorFaderFunction::Fade => "Fade out and in",
         ExecutorFaderFunction::XFade => "Crossfade",
     }
 }

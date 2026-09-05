@@ -53,7 +53,7 @@
 
 pub mod ofl;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use prism_domain::{
@@ -75,7 +75,16 @@ use prism_domain::{
 /// (`crate::library::ofl`) and nowhere else: `AttributeDef::default_value` is
 /// the one answer, and a rule in the engine that overrode it would be a second.
 fn colour(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
-    eight_bit(attribute, coarse_offset, u16::MAX)
+    // **`is_additive_emitter` and not the bank** — S51, B38. The four generics
+    // are all additive, so this changes nothing for them; it is written this way
+    // because it is the same rule the OFL converter applies, and a fifth generic
+    // with a cyan flag on it must not come out resting opaque.
+    let home = if attribute.is_additive_emitter() {
+        u16::MAX
+    } else {
+        0
+    };
+    eight_bit(attribute, coarse_offset, home)
 }
 
 fn eight_bit(attribute: AttributeType, coarse_offset: u16, default_value: u16) -> AttributeDef {
@@ -89,6 +98,9 @@ fn eight_bit(attribute: AttributeType, coarse_offset: u16, default_value: u16) -
         invert: false,
         physical_from: 0.0,
         physical_to: 100.0,
+        // A generic profile has no named ranges: it stands in for a light
+        // nobody has told the desk about, so there is nothing to name.
+        ranges: Vec::new(),
     }
 }
 
@@ -111,6 +123,7 @@ fn sixteen_bit(
         invert: false,
         physical_from,
         physical_to,
+        ranges: Vec::new(),
     }
 }
 
@@ -222,6 +235,16 @@ pub struct FixtureLibrary {
     entries: Vec<LibraryEntry>,
     /// What reading the directories cost and what it could not use.
     conversion: ofl::Conversion,
+    /// The fixture keys — `manufacturer/fixture`, without the mode — the venue
+    /// supplied itself, so a vendored file of the same name is skipped whole.
+    ///
+    /// **Per fixture and not per mode**, and that is the decision B43 had to
+    /// make. Keeping the first profile for each *mode* key would leave a venue
+    /// that corrected a Mac 700 with its own 9-channel mode standing beside the
+    /// vendored 16-channel one — two profiles for one lamp, one of them the
+    /// thing the correction was written to replace. A venue's file is the
+    /// venue's answer about that fixture, all of it.
+    own_fixtures: BTreeSet<String>,
     /// Redirects met while walking, resolved once the whole tree is read.
     ///
     /// Held rather than followed on the spot, because the fixture a redirect
@@ -242,7 +265,24 @@ struct PendingRedirect {
     name: String,
     /// The key it points at.
     to: String,
+    /// Whether the *redirecting* file is the venue's own — B43. An alias is as
+    /// much the venue's as the file that declares it, whatever it points at.
+    own: bool,
 }
+
+/// The manufacturer key a loose file in the venue's own directory is filed
+/// under, and the name it shows — **B43**.
+///
+/// A file dropped straight into `fixtures/` needs no directory of its own,
+/// which is the whole convenience of *drop it in and restart*. A venue that
+/// wants a real manufacturer key — because it is *correcting* a vendored
+/// profile rather than adding one — puts the file in a directory named after
+/// that manufacturer instead. See [`FixtureLibrary::read_own_tree`].
+const CUSTOM_KEY: &str = "custom";
+const CUSTOM_NAME: &str = "Custom";
+
+/// The file stem of the manufacturer names table, which is not a fixture.
+const MANUFACTURERS_STEM: &str = "manufacturers";
 
 /// How many matches a search answers with when the caller does not say.
 ///
@@ -290,6 +330,53 @@ impl FixtureLibrary {
     /// [`Self::conversion`] and skipped, because a desk must start with a
     /// corrupt profile in its folder.
     pub fn read_ofl_tree(&mut self, root: &Path) {
+        self.read_tree(root, false);
+        self.resolve_redirects();
+    }
+
+    /// Reads **the venue's own** profile directory — punch-list entry **B43**.
+    ///
+    /// # Where it is, and why it is not where the library is
+    ///
+    /// `prismd::paths::fixtures_dir` — `fixtures/` inside the daemon's data
+    /// directory, which since S29 is the desk's identity: the show, the machine
+    /// configuration, the rig and the lock all live there and an installer does
+    /// not touch it. The installed library is the opposite: `tools/fetch-fixtures`
+    /// **empties its destination** on every run, deliberately, because a
+    /// half-replaced copy of somebody else's data is worse than none. A venue's
+    /// own profile put there would survive exactly until the next download,
+    /// which is the state B43 reports.
+    ///
+    /// # Two shapes, because a venue has two reasons to put a file here
+    ///
+    /// - **A loose `.json` at the top**, filed under `custom/<file stem>` — a
+    ///   light nobody has a profile for, dropped in and restarted. The
+    ///   convenience S44 built this for.
+    /// - **A manufacturer directory**, exactly as the Open Fixture Library lays
+    ///   one out, filed under `<directory>/<file stem>` — which is what makes
+    ///   the override S44 documented actually work. A key already in this
+    ///   library is kept ([`Self::read_ofl_tree`]), and this is read *first*, so
+    ///   `martin/mac-700-profile.json` in here replaces the vendored Mac 700.
+    ///   Until S51 there was no way to write that key at all: everything went
+    ///   under `custom/`, so the documented correction was impossible.
+    ///
+    /// A `manufacturers.json` here names the directories, as it does in the
+    /// vendored tree; without one a directory is its own display name.
+    ///
+    /// Every profile from here is marked [`LibraryEntry::own`], because the key
+    /// cannot say where it came from once a venue is allowed to reuse one.
+    pub fn read_own_tree(&mut self, root: &Path) {
+        // The loose files first, so a top-level `foo.json` and a
+        // `custom/foo.json` resolve the way every other collision does: first
+        // one wins, and the flat drop-in is the one this directory is for.
+        self.read_manufacturer(root, CUSTOM_KEY, CUSTOM_NAME, true);
+        self.read_tree(root, true);
+        self.resolve_redirects();
+    }
+
+    /// One directory of manufacturer directories, in the Open Fixture Library's
+    /// own layout. Shared by the vendored tree and the venue's own.
+    fn read_tree(&mut self, root: &Path, own: bool) {
         let names = manufacturer_names(root);
         let Ok(directory) = std::fs::read_dir(root) else {
             return;
@@ -307,9 +394,8 @@ impl FixtureLibrary {
                 continue;
             };
             let display = names.get(key).cloned().unwrap_or_else(|| key.to_owned());
-            self.read_manufacturer(&path, key, &display);
+            self.read_manufacturer(&path, key, &display, own);
         }
-        self.resolve_redirects();
     }
 
     /// Files the walk found a redirect in, turned into aliases.
@@ -341,6 +427,7 @@ impl FixtureLibrary {
                         name: redirect.name.clone(),
                         mode: mode.clone(),
                         footprint: profile.footprint,
+                        own: redirect.own,
                     },
                     FixtureType {
                         id: alias,
@@ -356,15 +443,14 @@ impl FixtureLibrary {
 
     /// Reads one directory of fixture files, all under one manufacturer.
     ///
-    /// The operator's own folder is read through this with a manufacturer of
-    /// `"Custom"`: a file dropped there needs no directory of its own, which is
-    /// the whole convenience of *drop it in and restart*.
-    pub fn read_fixture_dir(&mut self, path: &Path, key: &str, display: &str) {
-        self.read_manufacturer(path, key, display);
+    /// `own` says whether these are the venue's own profiles — see
+    /// [`Self::read_own_tree`], which is what the daemon calls.
+    pub fn read_fixture_dir(&mut self, path: &Path, key: &str, display: &str, own: bool) {
+        self.read_manufacturer(path, key, display, own);
         self.resolve_redirects();
     }
 
-    fn read_manufacturer(&mut self, path: &Path, key: &str, display: &str) {
+    fn read_manufacturer(&mut self, path: &Path, key: &str, display: &str, own: bool) {
         let Ok(directory) = std::fs::read_dir(path) else {
             return;
         };
@@ -378,6 +464,20 @@ impl FixtureLibrary {
             let Some(stem) = file.file_stem().and_then(|stem| stem.to_str()) else {
                 continue;
             };
+            // The names table is not a fixture. It is read by
+            // `manufacturer_names` and counting it as a rejected file would put
+            // one in every conversion report for no fault at all.
+            if stem == MANUFACTURERS_STEM {
+                continue;
+            }
+            let fixture_key = format!("{key}/{stem}");
+            if own {
+                self.own_fixtures.insert(fixture_key.clone());
+            } else if self.own_fixtures.contains(&fixture_key) {
+                // The venue has its own answer about this fixture — B43. Skipped
+                // whole rather than mode by mode; see `own_fixtures`.
+                continue;
+            }
             let Ok(source) = std::fs::read_to_string(&file) else {
                 self.conversion.files_rejected += 1;
                 continue;
@@ -385,14 +485,15 @@ impl FixtureLibrary {
             if let Some(redirect) = ofl::read_redirect(&source) {
                 self.conversion.redirects += 1;
                 self.pending.push(PendingRedirect {
-                    from: format!("{key}/{stem}"),
+                    from: fixture_key,
                     manufacturer: display.to_owned(),
                     name: redirect.name,
                     to: redirect.to,
+                    own,
                 });
                 continue;
             }
-            let (built, counts) = ofl::read_fixture(key, display, stem, &source);
+            let (built, counts) = ofl::read_fixture(key, display, stem, &source, own);
             self.conversion.absorb(counts);
             for (entry, profile) in built {
                 self.insert(entry, profile);
@@ -413,6 +514,9 @@ impl FixtureLibrary {
                 name: profile.name.clone(),
                 mode: profile.mode.clone(),
                 footprint: profile.footprint,
+                // The four built-in generics and anything a test hands over:
+                // shipped with the desk, so not the venue's.
+                own: false,
             },
             profile,
         );
@@ -571,6 +675,31 @@ mod tests {
       "modes": [
         { "shortName": "4ch", "channels": ["Pan", "Tilt", "Dimmer", "Red"] },
         { "shortName": "2ch", "channels": ["Dimmer", "Red"] }
+      ]
+    }"#;
+
+    /// The same fixture as the venue would correct it: one wider mode, and none
+    /// of the vendored file's.
+    const WIDE_HEAD: &str = r#"{
+      "name": "Wash 7Q5 (as hung here)",
+      "availableChannels": {
+        "Pan": { "capability": { "type": "Pan", "angleStart": "0deg", "angleEnd": "540deg" } },
+        "Tilt": { "capability": { "type": "Tilt", "angleStart": "0deg", "angleEnd": "180deg" } },
+        "Dimmer": { "capability": { "type": "Intensity" } },
+        "Red": { "capability": { "type": "ColorIntensity", "color": "Red" } },
+        "Green": { "capability": { "type": "ColorIntensity", "color": "Green" } },
+        "Blue": { "capability": { "type": "ColorIntensity", "color": "Blue" } },
+        "White": { "capability": { "type": "ColorIntensity", "color": "White" } },
+        "Zoom": { "capability": { "type": "Zoom" } },
+        "Shutter": { "capability": { "type": "ShutterStrobe", "shutterEffect": "Strobe" } }
+      },
+      "modes": [
+        {
+          "shortName": "9ch",
+          "channels": [
+            "Pan", "Tilt", "Dimmer", "Red", "Green", "Blue", "White", "Zoom", "Shutter"
+          ]
+        }
       ]
     }"#;
 
@@ -818,12 +947,115 @@ mod tests {
     fn a_flat_directory_is_read_under_one_manufacturer() {
         let dir = on_disk(&[("mine.json", HEAD)]);
         let mut library = FixtureLibrary::default();
-        library.read_fixture_dir(dir.path(), "custom", "Custom");
+        library.read_fixture_dir(dir.path(), "custom", "Custom", true);
         assert_eq!(library.len(), 2);
         let profile = library
             .profile("custom/mine/4ch")
             .expect("keyed by the stem");
         assert_eq!(profile.manufacturer, "Custom");
+    }
+
+    /* -- the venue's own directory (B43) ------------------------------------ */
+
+    /// **The venue's own directory is both shapes at once** — B43.
+    ///
+    /// A loose file is filed under `custom/`, which is S44's *drop it in and
+    /// restart*; a file inside a manufacturer directory is filed under that
+    /// manufacturer's key, which is what a **correction** to a vendored profile
+    /// needs and what was impossible before S51.
+    #[test]
+    fn the_venues_own_directory_takes_a_loose_file_and_a_manufacturer_directory() {
+        let dir = on_disk(&[("mine.json", HEAD), ("martin/mac-700.json", HEAD)]);
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(dir.path());
+
+        assert!(
+            library.profile("custom/mine/4ch").is_some(),
+            "the loose file"
+        );
+        assert!(
+            library.profile("martin/mac-700/4ch").is_some(),
+            "the manufacturer directory"
+        );
+    }
+
+    /// **A venue's profile wins over the vendored one with the same key** —
+    /// which is the override S44 documented and could not perform.
+    ///
+    /// Read first, and `insert` keeps the first profile it is given, so this is
+    /// the whole of the rule. Before S51 a venue's file could only ever be
+    /// keyed `custom/…`, so it could not collide with a vendored key at all and
+    /// the documented correction quietly did nothing.
+    #[test]
+    fn a_venues_profile_replaces_the_vendored_one_it_names() {
+        let vendored = on_disk(&[("martin/mac-700.json", HEAD)]);
+        let mine = on_disk(&[("martin/mac-700.json", WIDE_HEAD)]);
+
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(mine.path());
+        library.read_ofl_tree(vendored.path());
+
+        let profile = library
+            .profile("martin/mac-700/9ch")
+            .expect("the venue's own mode is the one that is there");
+        assert_eq!(profile.footprint, 9);
+        assert!(
+            library.profile("martin/mac-700/4ch").is_none(),
+            "the vendored copy came back beside the correction"
+        );
+    }
+
+    /// **The picker can tell whose a profile is** — B43's *marked as the
+    /// venue's own*.
+    ///
+    /// It cannot be read off the key, and that is the reason the flag exists: a
+    /// correction deliberately carries a vendored key.
+    #[test]
+    fn an_entry_says_whether_it_is_the_venues_own() {
+        let mine = on_disk(&[("martin/mac-700.json", HEAD)]);
+        let vendored = on_disk(&[("robe/mmx.json", HEAD)]);
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(mine.path());
+        library.read_ofl_tree(vendored.path());
+        for profile in generic_profiles() {
+            library.insert_profile(profile);
+        }
+
+        let own = |id: &str| {
+            library
+                .entries()
+                .iter()
+                .find(|entry| entry.id == id)
+                .map(|entry| entry.own)
+        };
+        assert_eq!(own("martin/mac-700/4ch"), Some(true));
+        assert_eq!(own("robe/mmx/4ch"), Some(false));
+        assert_eq!(own("generic.dimmer"), Some(false), "shipped with the desk");
+    }
+
+    /// A `manufacturers.json` in the venue's directory is a names table, not a
+    /// fixture, and is not counted as a file that could not be read.
+    #[test]
+    fn the_names_table_is_not_a_rejected_fixture() {
+        let dir = on_disk(&[
+            (
+                "manufacturers.json",
+                r#"{ "martin": { "name": "Martin" } }"#,
+            ),
+            ("martin/mac-700.json", HEAD),
+        ]);
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(dir.path());
+        assert_eq!(library.conversion().files_rejected, 0);
+        assert_eq!(
+            library
+                .entries()
+                .iter()
+                .find(|entry| entry.id == "martin/mac-700/4ch")
+                .map(|entry| entry.manufacturer.as_str()),
+            Some("Martin"),
+            "the names table is read here as it is in the vendored tree"
+        );
     }
 
     /* -- searching ---------------------------------------------------------- */
@@ -839,6 +1071,7 @@ mod tests {
                     name: name.to_owned(),
                     mode: mode.to_owned(),
                     footprint,
+                    own: false,
                 },
                 prism_domain::FixtureType {
                     id: id.to_owned(),

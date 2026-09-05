@@ -60,6 +60,7 @@ fn dimmer() -> FixtureType {
             invert: false,
             physical_from: 0.0,
             physical_to: 100.0,
+            ranges: Vec::new(),
         }],
     }
 }

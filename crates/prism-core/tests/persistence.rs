@@ -61,6 +61,7 @@ fn head_type() -> FixtureType {
                 invert: true,
                 physical_from: -270.0,
                 physical_to: 270.0,
+                ranges: Vec::new(),
             },
             attribute(AttributeType::Tilt, 2, 32768),
             attribute(AttributeType::Dimmer, 3, 0),

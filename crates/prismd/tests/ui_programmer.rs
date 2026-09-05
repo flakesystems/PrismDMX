@@ -87,6 +87,7 @@ fn attribute(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
         invert: false,
         physical_from: 0.0,
         physical_to: 100.0,
+        ranges: Vec::new(),
     }
 }
 
@@ -277,10 +278,16 @@ struct RecordedStrip {
     /// with no sequence — the bar shows the number instead.
     name: Option<String>,
     /// Where the fader stands, `0..=65535` — **the number its own function
-    /// names**, S45. It was the executor's master until then; a playback is the
-    /// cue list's now, so `Master` reads the list's level, `Speed` reads its
-    /// rate, and a crossfade or an empty fader reads nought.
-    fader_level: u16,
+    /// names**, S45 — or `null` when the desk has none for it.
+    ///
+    /// It was the executor's master until S45; a playback is the cue list's now,
+    /// so `Master` reads the list's level and `Speed` reads its rate. A
+    /// crossfade or an empty fader reads **`null`** since S51 (B36): a number
+    /// here means *draw the fader at this position*, and a nought written back
+    /// after every movement is the desk taking an operator's hand off the
+    /// crossfade. `ExecutorFaderFunction::desk_may_move_it` is the rule, and
+    /// `ui/src/desk/session.ts` is the other side of this recording.
+    fader_level: Option<u16>,
     /// Whether the cue list on it is running.
     is_active: bool,
     /// Which cue that list is in, if any.
@@ -557,13 +564,15 @@ fn script() -> Vec<Scripted> {
                 mode: None,
             },
         ),
+        // **S51 turned the first two round** (B37): the selection goes first,
+        // so a look can be built out of more than one fixture.
         (
-            "Clear once: the values go and the selection stays",
+            "Clear once: the selection goes and the values stay",
             Some((11, "clear")),
             Command::ClearProgrammer,
         ),
         (
-            "Clear twice: the selection goes",
+            "Clear twice: the values go",
             Some((12, "clear")),
             Command::ClearProgrammer,
         ),
@@ -1178,15 +1187,15 @@ fn strips_of(show: &JsonValue, session: &JsonValue) -> Vec<RecordedStrip> {
                 executor_id: id.get(),
                 assigned: executor.is_some(),
                 name,
-                fader_level: sequence.map_or(0, |value| {
+                fader_level: sequence.and_then(|value| {
                     let member = match fader_function.as_str() {
                         "Master" => "masterLevel",
                         "Speed" => "speed",
                         // A crossfade in progress is a gesture rather than show
-                        // state, and an empty fader has no number at all.
-                        _ => return 0,
+                        // state, and an empty fader has no number at all — B36.
+                        _ => return None,
                     };
-                    u16::try_from(int_at(value, member)).unwrap_or(0)
+                    Some(u16::try_from(int_at(value, member)).unwrap_or(0))
                 }),
                 is_active: sequence.is_some_and(|value| bool_at(value, "isActive")),
                 current_cue_index: sequence.and_then(|value| {
@@ -1492,7 +1501,7 @@ fn the_recording_is_of_a_desk_being_used() {
     );
 
     // A master moves, an executor runs and stops, and a cue index appears.
-    let levels: std::collections::BTreeSet<u16> = steps
+    let levels: std::collections::BTreeSet<Option<u16>> = steps
         .iter()
         .flat_map(|step| step.strips.iter().map(|strip| strip.fader_level))
         .collect();

@@ -991,7 +991,7 @@ impl ShowFile {
     /// |---|---|
     /// | `EditCue` | it *is* the update state: that cue, unmodified |
     /// | `Update`, and a `StoreCue` in Override mode into the cue being edited | unmodified again — the cue and the programmer now agree |
-    /// | `ClearProgrammer` | **cleared**: the values it was holding are gone, whatever stage the button was in |
+    /// | `ClearProgrammer` | **cleared once the values are gone** — S51, B37: the press that only drops the selection leaves the edit standing, because no value moved |
     /// | `Delete` of the cue being edited | **cleared**: there is nothing to put back |
     /// | `Move` of the cue being edited — a renumber | it **follows** — see below |
     /// | any other programmer edit | modified, which is what blinks the key |
@@ -1023,7 +1023,26 @@ impl ShowFile {
                 cue_number: cue_number.trim().to_owned(),
                 modified: false,
             }),
-            Command::ClearProgrammer => None,
+            // **The update state goes with the values, not with the
+            // selection** — S51, B37.
+            //
+            // The first press of Clear takes the selection now and leaves
+            // everything that has been set standing. An operator who lets one
+            // fixture go so they can add the next to the same look is still
+            // editing the same cue, and dropping the update state there would
+            // put the Update key out for a gesture that changed no value —
+            // which is the silent loss B37 exists to remove, moved one field
+            // along.
+            //
+            // Read **after** the clear has been applied, which is where this
+            // runs: what is left in the programmer is the answer.
+            Command::ClearProgrammer => {
+                if self.programmer.state().values.is_empty() {
+                    None
+                } else {
+                    editing.clone()
+                }
+            }
             Command::Update => editing.clone().map(|edit| CueEdit {
                 modified: false,
                 ..edit

@@ -452,7 +452,11 @@ fn script() -> Vec<Scripted> {
                 mode: OverwriteMode::Merge,
             },
         ),
-        Scripted::Do("clear the programmer", Command::ClearProgrammer),
+        // **Two presses since S51** (B37): the first drops the selection and
+        // the second the values. This script wants an *empty* programmer here,
+        // which is now two gestures rather than one.
+        Scripted::Do("clear the selection", Command::ClearProgrammer),
+        Scripted::Do("and then the values", Command::ClearProgrammer),
         Scripted::Do("select the PARs again", select(&[1, 2, 3])),
         Scripted::Do("dial a blue", dial(AttributeType::Blue, 60000)),
         Scripted::Do(
@@ -475,6 +479,7 @@ fn script() -> Vec<Scripted> {
             },
         ),
         Scripted::Do("clear again", Command::ClearProgrammer),
+        Scripted::Do("and the values with it", Command::ClearProgrammer),
         Scripted::Do("select the PARs", select(&[1, 2, 3])),
         Scripted::Do(
             "and apply the preset, which is what puts a **link** in the programmer",
@@ -487,6 +492,7 @@ fn script() -> Vec<Scripted> {
             store_cue(1, "3", StoreMode::Merge),
         ),
         Scripted::Do("clear once more", Command::ClearProgrammer),
+        Scripted::Do("and the values again", Command::ClearProgrammer),
         Scripted::Do("select the PARs", select(&[1, 2, 3])),
         Scripted::Do("dial a different blue", dial(AttributeType::Blue, 20000)),
         Scripted::Ask(
@@ -513,6 +519,7 @@ fn script() -> Vec<Scripted> {
             "clear the programmer for the last time",
             Command::ClearProgrammer,
         ),
+        Scripted::Do("...which takes two presses now", Command::ClearProgrammer),
         Scripted::Ask(
             "and a preview with nothing to store: refused, but it still says what \
              is filed under that number",
@@ -539,8 +546,13 @@ fn script() -> Vec<Scripted> {
         ),
         Scripted::Do("and put that back", Command::Update),
         Scripted::Do(
-            "an Update after the programmer has been cleared: refused, because \
-             clearing the programmer clears the update state",
+            "clear the selection while a cue is loaded: **the update state \
+             stands**, because no value moved (S51, B37)",
+            Command::ClearProgrammer,
+        ),
+        Scripted::Do(
+            "an Update after the *values* have been cleared: refused, because \
+             that is what clears the update state",
             Command::ClearProgrammer,
         ),
         Scripted::Do("...and this is the refusal", Command::Update),
@@ -1212,14 +1224,23 @@ fn the_update_state_says_which_cue_is_loaded_and_whether_it_has_moved() {
         "the second update did not stop the key blinking"
     );
 
-    // Clearing the programmer clears it — the values it was holding are gone.
+    // **The update state goes with the values, not with the selection** — S51,
+    // B37, and read off a real daemon's own session document.
+    //
+    // Dropping the selection leaves the edit standing: no value moved, and an
+    // operator letting one fixture go so they can add the next is still editing
+    // the same cue.
     assert!(
-        step(
-            &recording,
-            "an Update after the programmer has been cleared"
-        )
-        .editing_cue
-        .is_none(),
+        step(&recording, "clear the selection while a cue is loaded")
+            .editing_cue
+            .is_some(),
+        "dropping the selection ended an edit in which no value moved"
+    );
+    // The press that takes the **values** is the one that ends it.
+    assert!(
+        step(&recording, "an Update after the *values* have been cleared")
+            .editing_cue
+            .is_none(),
         "a cleared programmer is not editing a cue"
     );
     // ...and the Update that follows is refused rather than storing something.

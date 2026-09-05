@@ -100,17 +100,23 @@ export interface ExecutorStrip {
   /** The cue list this strip's controls reach, or `null` when it has none. */
   readonly sequenceId: number | null;
   /**
-   * What the fader stands at, `0..=65535` — **the number its own function
-   * names**, S45.
+   * What the fader stands at, `0..=65535`, or **`null` when the desk has no
+   * number for it** — S45, and `null` since S51 (B36).
    *
    * `Master` reads the cue list's master level and `Speed` reads its rate;
    * both are the *list's* since S45, so two strips whose faders are both
    * `Master` on one list draw the same figure and move together, which is
-   * punch-list entry B18. `XFade` and `Empty` read nought: where a crossfade
-   * fader stands is a gesture in progress rather than show state, and a fader
-   * with nothing on it has no number at all.
+   * punch-list entry B18.
+   *
+   * A **crossfade** reads `null`, and the difference between that and the
+   * nought it used to read is the whole of B36 on this side of the wire: a
+   * number means *draw the fader here*, and drawing a crossfade fader at nought
+   * after every movement is the desk taking the operator's hand off it. Where a
+   * crossfade fader stands is client-local (`ARCHITECTURE_SPEC.md` §4.2) and
+   * `executorbar.tsx` is what holds it. A fader with nothing on it reads `null`
+   * for the same reason: there is no number.
    */
-  readonly faderLevel: number;
+  readonly faderLevel: number | null;
   /** Whether the cue list on it is running. */
   readonly isActive: boolean;
   /**
@@ -217,7 +223,10 @@ function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorSt
       sequenceId: null,
       name: null,
       color: null,
-      faderLevel: 0,
+      // An empty slot has no number either — B36. `null` rather than nought,
+      // for the same reason: nought is a *position*, and a strip with nothing
+      // on it is not claiming one.
+      faderLevel: null,
       isActive: false,
       currentCueIndex: null,
       faderFunction: null,
@@ -251,27 +260,30 @@ function stripOf(show: JsonValue | null, page: number, slot: number): ExecutorSt
 }
 
 /**
- * What a strip's fader stands at: the number its own function names.
+ * What a strip's fader stands at, or `null` when the desk has no number for it.
  *
  * `prismd::surface::fader_reading` is the same answer for the motor fader on
  * the X-Touch, and the two have to agree — a screen and a desk that disagreed
- * about where a fader is would be the fault B18 is about, one layer up.
+ * about where a fader is would be the fault B18 is about, one layer up. Both
+ * ask `ExecutorFaderFunction::desk_may_move_it`, which is where the rule lives.
  */
 function faderReading(
   show: JsonValue | null,
   sequence: string | null,
   faderFunction: ExecutorFaderFunction | null,
-): number {
+): number | null {
   if (sequence === null) {
-    return 0;
+    return null;
   }
   switch (faderFunction) {
     case "Master":
       return numberAt(show, `${sequence}/masterLevel`) ?? 0;
     case "Speed":
       return numberAt(show, `${sequence}/speed`) ?? 0;
+    // **B36.** A crossfade has no number the desk may write, and neither has an
+    // unassigned fader.
     default:
-      return 0;
+      return null;
   }
 }
 

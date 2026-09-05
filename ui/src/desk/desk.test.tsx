@@ -507,8 +507,9 @@ describe("paging the encoder bar", () => {
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(true);
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
 
+        // Position has three since S51 (B38) and still fits on a page of four.
         session(store, { encoderBank: "Position" });
-        expect(drawn()).toEqual(["Pan", "Tilt"]);
+        expect(drawn()).toEqual(["Pan", "Tilt", "PositionSpeed"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/1");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
     });
@@ -529,9 +530,15 @@ describe("paging the encoder bar", () => {
      * The second assertion is the one that matters and it is deliberately
      * general: if a later split leaves **no** bank longer than a page, every
      * paging test below becomes a test of nothing, and this says so.
+     *
+     * **S51 is the second such session** (B38): the colour bank went from five
+     * attributes to thirteen when the nineteen the Open Fixture Library needs
+     * were added. The count is written out again rather than loosened, for the
+     * reason this test exists — a bank whose length nobody asserts is a bank
+     * that can be re-split under the paging tests without anybody noticing.
      */
     it("is asserted to have a bank that does not fit on one page", () => {
-        expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBe(5);
+        expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBe(13);
         expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBeGreaterThan(ENCODERS_PER_PAGE);
         const longest = Object.values(FEATURE_GROUP_ATTRIBUTES).reduce(
             (most, bank) => Math.max(most, bank.length),
@@ -545,8 +552,11 @@ describe("paging the encoder bar", () => {
     it("draws four at a time and pages by command", () => {
         const { acted, store } = desk();
         session(store, { encoderBank: "Color" });
+        // **The first page is what it always was** — the promise S51 made when
+        // it widened the model: an operator who never patches a CMY head lands
+        // on the four knobs they had.
         expect(drawn()).toEqual(["Red", "Green", "Blue", "White"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
+        expect(screen.getByTestId("programmer-page").textContent).toBe("1/4");
         // Nowhere back from the first page, somewhere forward from it.
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(true);
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(false);
@@ -555,14 +565,19 @@ describe("paging the encoder bar", () => {
         expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 1 }]);
         // D3: the page is the session's, so nothing has moved.
         expect(drawn()).toEqual(["Red", "Green", "Blue", "White"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
+        expect(screen.getByTestId("programmer-page").textContent).toBe("1/4");
 
         session(store, { programmerPage: 1 });
-        // The rest of the bank, and a last page that is not full.
-        expect(drawn()).toEqual(["Amber"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("2/2");
-        expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
+        expect(drawn()).toEqual(["Amber", "Cyan", "Magenta", "Yellow"]);
+        expect(screen.getByTestId("programmer-page").textContent).toBe("2/4");
+        expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(false);
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(false);
+
+        session(store, { programmerPage: 3 });
+        // The rest of the bank, and a last page that is not full.
+        expect(drawn()).toEqual(["ColorTemperature"]);
+        expect(screen.getByTestId("programmer-page").textContent).toBe("4/4");
+        expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
     });
 
     it("pages back down, and cannot page below the first page", () => {
@@ -586,8 +601,8 @@ describe("paging the encoder bar", () => {
     it("shows the last page rather than an empty bar when the session runs past the bank", () => {
         const { store } = desk();
         session(store, { encoderBank: "Color", programmerPage: 9 });
-        expect(drawn()).toEqual(["Amber"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("2/2");
+        expect(drawn()).toEqual(["ColorTemperature"]);
+        expect(screen.getByTestId("programmer-page").textContent).toBe("4/4");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
 
         // And a bank that shrank under a page number does the same thing.
@@ -628,7 +643,8 @@ describe("the encoder bar", () => {
             answer(step);
         }
         expect(screen.getByTestId("bank-Position").dataset["active"]).toBe("yes");
-        expect(screen.getByTestId("encoders").children.length).toBe(2);
+        // Three since S51 (B38): Pan, Tilt and the position-speed knob.
+        expect(screen.getByTestId("encoders").children.length).toBe(3);
         expect(screen.getByTestId("encoder-Pan")).not.toBeNull();
         expect(screen.getByTestId("encoder-Tilt")).not.toBeNull();
     });

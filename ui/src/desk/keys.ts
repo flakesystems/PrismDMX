@@ -53,3 +53,24 @@ export const CONSOLE_KEYS: readonly ConsoleKey[] = [
   { word: "View", shape: "append", title: "…a view" },
   { word: "Executor", shape: "append", title: "…an executor" },
 ];
+
+/**
+ * What the next press of Clear would take away, by the stage it reports —
+ * **S51, punch-list B37**.
+ *
+ * Indexed by `ProgrammerState::clearStage`, whose numbering **is** the order of
+ * the presses, so this array read top to bottom is the sequence a hand makes:
+ * the selection, then the values, then the rest.
+ *
+ * Here rather than beside the key it titles, and that is S39's rule at the top
+ * of this file: `oxlint` is right about `only-export-components`, so a table a
+ * component reads lives in a file with no component in it. `App.test.tsx`
+ * asserts the sequence — a desk that promised one thing in the tooltip and did
+ * another would be worse than one that said nothing.
+ */
+export const CLEAR_TITLES: readonly string[] = [
+  "There is nothing to clear",
+  "Clear the fixture selection, keeping the values",
+  "Clear the programmer values as well",
+  "Clear everything, including the encoder bank and the page",
+];

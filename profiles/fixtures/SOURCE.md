@@ -31,6 +31,26 @@ The revision is **pinned**, not `master`. Two machines that install a week apart
 get the same profiles, so a show patched on one opens the same way on the other;
 raising it is a deliberate edit to both scripts and to this table.
 
+## Your own profiles do **not** go here
+
+This directory is emptied on every run of the installer, deliberately: a
+half-replaced copy of somebody else's data is worse than none. Anything of yours
+put here survives until the next install and no longer — which is punch-list
+entry **B43**, and this paragraph is the half of it that is documentation.
+
+A venue's own profiles go in **`fixtures/` inside the daemon's data directory**
+(`%APPDATA%\PrismDMX\fixtures` on Windows, `prismd::paths::fixtures_dir`
+everywhere). Nothing an installer does touches it. Two shapes work there:
+
+- a loose `.json` at the top, filed under `custom/<file stem>` — a light nobody
+  has a profile for;
+- a **manufacturer directory** laid out exactly as this one is, filed under
+  `<directory>/<file stem>` — which is how a profile in *here* is corrected: the
+  desk reads its own directory first and keeps the first profile it finds for a
+  fixture, so yours replaces the vendored one whole.
+
+Either way the patch window marks the row as the venue's own. See `README.md`.
+
 ## Why it is not committed
 
 It has an upstream and a release cadence. A copy in this repository would be a

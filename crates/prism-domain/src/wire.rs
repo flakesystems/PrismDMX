@@ -74,6 +74,7 @@ round_trip! {
     feature_group => crate::FeatureGroup,
     merge_mode => crate::MergeMode,
     attribute_def => crate::AttributeDef,
+    attribute_range => crate::AttributeRange,
     fixture_type => crate::FixtureType,
 
     vec3 => crate::Vec3,

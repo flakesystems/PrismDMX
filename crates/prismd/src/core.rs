@@ -545,9 +545,14 @@ impl Core {
                         executor: *executor,
                     });
                 }
-                Effect::ExecutorXFade { executor, position } => {
-                    self.send(TickCommand::SetExecutorXFade {
+                Effect::ExecutorCrossfade {
+                    executor,
+                    mode,
+                    position,
+                } => {
+                    self.send(TickCommand::SetExecutorCrossfade {
                         executor: *executor,
+                        mode: *mode,
                         position: *position,
                     });
                 }
@@ -1560,6 +1565,9 @@ mod tests {
             channel(&frames, 1) == Some(0)
         });
 
+        // **Two presses since S51** (B37): the first takes the selection and
+        // the second the values, and it is the values the wire is holding.
+        core.apply(&Command::ClearProgrammer).unwrap();
         core.apply(&Command::ClearProgrammer).unwrap();
         until("the playbacks to decide again", || {
             channel(&frames, 1) == Some(255)
@@ -2187,10 +2195,27 @@ mod tests {
         until("the cue", || channel(&frames, 5) == Some(255));
 
         // Executor 4 is a crossfade: moving it takes the transition's clock off
-        // the engine and puts it on the fader, so the light moves. Engaging one
-        // takes the fader where it stands as the origin and heads for the far
-        // end (`prism_engine::Crossfade`), so this one is engaged below the
-        // middle and driven upwards.
+        // the engine and puts it on the fader, so the light moves.
+        //
+        // **Engaging one moves nothing, and the movement is what starts it** —
+        // S51, B36. It used to head for the far end the moment it was engaged;
+        // now the fader is put where the operator's hand is and the first
+        // *movement* arms the stroke, which is what makes a fader switched to a
+        // crossfade mid-show change nothing at all.
+        core.apply(&Command::SetExecutorMaster {
+            executor_id: ExecutorId::new(4),
+            level: 0,
+        })
+        .unwrap();
+        for _ in 0..10 {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(
+            channel(&frames, 5),
+            Some(255),
+            "engaging a crossfade moved the light"
+        );
+
         core.apply(&Command::SetExecutorMaster {
             executor_id: ExecutorId::new(4),
             level: 20_000,
@@ -2212,15 +2237,16 @@ mod tests {
             "the crossfade wrote the master"
         );
 
-        // Driving the crossfade to its far end completes the cue, which puts the
-        // light back where the Go had it.
+        // Driving the crossfade to its far end completes the cue, which lands
+        // the light on cue 2's own level.
         core.apply(&Command::SetExecutorMaster {
             executor_id: ExecutorId::new(4),
             level: u16::MAX,
         })
         .unwrap();
+        let arrived = 20_000_u16 >> 8;
         until("the crossfade to finish the cue", || {
-            channel(&frames, 5) == Some(255)
+            channel(&frames, 5) == Some(u8::try_from(arrived).unwrap_or(0))
         });
 
         // The master still scales it, from its own handle and by its own factor
@@ -2232,7 +2258,7 @@ mod tests {
         })
         .unwrap();
         until("the master to scale what the crossfade left", || {
-            channel(&frames, 5) == Some(128)
+            channel(&frames, 5) == Some(u8::try_from(arrived / 2).unwrap_or(0))
         });
 
         driver.stop();

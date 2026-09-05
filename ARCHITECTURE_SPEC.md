@@ -199,6 +199,12 @@ Sessions are persisted with the show file: reopening a show restores the console
 
 Monitor assignment of a window, scroll position, hover and drag state, 3D viewer camera, UI zoom level. These are legitimately different per screen and would be actively annoying as shared state. The console cannot drive them — deliberately, and with no loss of function.
 
+> **Where a crossfade fader stands is client-local, and that is punch-list B36** *(S51)*. Every other fader on the desk shows a **number the show holds** — a master level, a rate — so two handles on one cue list draw the same figure and a motor can be driven to it (B18). A crossfade shows nothing of the kind: what it stands at is *the operator's hand*, and a hand is legitimately different per screen by the rule above.
+>
+> The consequence is the entry. `prismd::surface::fader_reading` used to answer **nought** for a crossfade on the argument that there is no number to show, and every repaint wrote that nought to the motor — so a fader an operator had pushed up was driven back down a fraction of a second later. It answers `None` now and nothing is written at all; `ExecutorFaderFunction::desk_may_move_it` is the one place the rule lives, and both the surface and `ui/src/desk/session.ts` ask it, so the desk and the screen cannot disagree. On the screen the position is the browser's own, kept across the gesture rather than dropped on pointer-up, which is the one exception to `valuedrag.ts`'s rule and the reason for it.
+>
+> What is **not** client-local is where the *playback* has got to. That is `prism_engine::CuePlayer`'s, it is a function of the fader position it was last told about, and it is what makes two screens driving one crossfade agree about the light even while their two faders sit in different places.
+
 ### 4.3 Latency budget, fader to light
 
 The direct path is fully preserved. The UI appears in **none** of these steps:
@@ -213,6 +219,14 @@ The direct path is fully preserved. The UI appears in **none** of these steps:
 | **Total fader → light** | **~15–50 ms**, dominated by the DMX protocol itself and, at the top of the chain, by the surface's 19.8 ms report interval — not by anything PrismDMX does |
 
 Routing through the UI (MIDI → daemon → UI → daemon) would add two IPC round trips and a React render cycle, and would make lighting depend on UI responsiveness. That is why **no** operating path goes through the UI — including the UI commands themselves.
+
+> **The crossfade fader is the same path with the clock taken out** *(S51, punch-list B36)*. A manual crossfade does not replace the transition — the same `from`, the same `to`, the same cue traversal — it replaces the *clock*: how far through it is, is how far the fader has travelled. So the table above is unchanged, and the row that would have been *wait for the next tick* is instead *wherever the hand is*.
+>
+> **Two modes, chosen per executor.** `XFade` crossfades to the next cue on the way up and to the one after on the way down, so each half of the travel is a cue and the stage never goes dark. `Fade` fades the current cue **out** on the way up and the next one **in** on the way down, so a full up-and-down is a cue, through black. Either way an operator walks a list with one fader and never lifts their hand — which is what the entry asks for, and what the old single mode could not do because it needed a Go between every movement.
+>
+> **The unit is a *stroke***: one journey of the fader from where it was resting to an end of its travel, carrying one transition. It is armed by the **first movement** and not before, so a playback with an untouched fader reads the cue it is actually on; it is finished when the fader reaches that end, and the *next* movement — which can only go back the other way — arms the next one. Pulled all the way back to where it set off from, it is abandoned and the cue pointer goes back with it: the values are already exactly where they were.
+>
+> **A stroke stopped half way is a state and not a paused fade.** The clock is not consulted, so the same numbers come out tick after tick — which is what makes a recorded fader walk produce a byte-identical frame sequence twice, and it is asserted that way (`crates/prismd/tests/crossfade.rs`) rather than on a state field.
 
 ### 4.4 Commands the console issues for the interface
 
@@ -392,11 +406,35 @@ type FixtureId = number;  type GroupId = number;
 type SequenceId = number; type ExecutorId = number;
 type PresetId = number;   type UniverseId = number;   // 1..=64
 
+// **Thirty-four since S51** (punch-list B38). It was the fifteen on the first
+// two lines, and fifteen is why a third of the installed Open Fixture Library's
+// channels reached no attribute at all and were dropped — CMY mixing, every
+// colour wheel, every built-in effect, frost, fog, the framing shutters. The
+// nineteen below are one per capability type the format defines, and they are
+// **appended rather than interleaved**: `FeatureGroup::attributes` is this list
+// filtered and the encoder bar pages it four at a time, so the first page of the
+// colour bank is still Red, Green, Blue, White.
 type AttributeType =
   | "Dimmer" | "Pan" | "Tilt" | "Red" | "Green" | "Blue" | "White" | "Amber"
-  | "Iris" | "Zoom" | "Focus" | "Gobo" | "Prism" | "Shutter" | "Control";
+  | "Iris" | "Zoom" | "Focus" | "Gobo" | "Prism" | "Shutter" | "Control"
+  | "Cyan" | "Magenta" | "Yellow" | "Uv" | "Lime" | "Indigo"
+  | "ColorWheel" | "ColorTemperature" | "PositionSpeed"
+  | "GoboRotation" | "PrismRotation" | "Effect" | "EffectSpeed"
+  | "Frost" | "Blade" | "BeamPosition" | "Fog" | "Speed" | "Sound";
 
-type FeatureGroup = "Dimmer" | "Position" | "Color" | "Beam" | "Focus";
+// **Seven since S43** — the owner's `design/skeleton/programmer.pdf`. Still
+// seven after S51's nineteen: a bank is *what an operator reaches for*, and a
+// built-in effect is reached for at the moment a gobo is.
+type FeatureGroup =
+  "Dimmer" | "Position" | "Gobo" | "Color" | "Beam" | "Focus" | "Control";
+
+// One **named range** of a channel — an Open Fixture Library *capability*, read
+// since S51 (B38). A label on a number and nothing more: a gobo is still one
+// value, a cue stores that value, and the engine has never heard of a range.
+interface AttributeRange {
+  name: string;                // "Gobo 3", "Strobe slow", "Open"
+  from: number; to: number;    // 0..65535, and consecutive ranges meet
+}
 
 interface AttributeDef {
   attribute: AttributeType;
@@ -408,6 +446,8 @@ interface AttributeDef {
   invert: boolean;
   physicalFrom: number;        // e.g. -270 for Pan
   physicalTo: number;
+  ranges: AttributeRange[];    // S51; empty for a continuous channel, and for
+                               // every profile a show embedded before S51
 }
 
 interface FixtureType {
@@ -476,7 +516,13 @@ type ExecutorButtonFunction =
   | "Empty" | "Go+" | "Go-" | "LearnSpeed" | "Off" | "On" | "Flash" | "Toggle"
   // The **custom row** (S45): a key that sends a line the operator wrote.
   | { CommandLine: { line: string } };
-type ExecutorFaderFunction   = "Empty" | "Master" | "Speed" | "XFade";
+// **Five since S51** (punch-list B36). The two crossfades are two *modes*, and
+// the mode is a row of what the fader does rather than a field beside it — see
+// §4.3's note and `prism_domain::CrossfadeMode` for the argument against the
+// sequence and against `MachineConfig`.
+//   XFade — up crossfades to the next cue, down to the one after it
+//   Fade  — up fades the current cue out, down fades the next one in
+type ExecutorFaderFunction   = "Empty" | "Master" | "Speed" | "XFade" | "Fade";
 type ExecutorEncoderFunction = "Empty" | "Master" | "Speed";
 
 // An executor is a **handle** on a cue list's playback (S45), not a player.
@@ -512,7 +558,14 @@ interface ProgrammerState {
   selection: FixtureId[];
   activeFeatureGroup: FeatureGroup;
   values: Map<FixtureId, Map<AttributeType, ProgrammerValue>>;
-  clearStage: 0 | 1 | 2;       // three-stage clear per CLAUDE.md
+  // The three-stage clear `CLAUDE.md` asks for, plus `0` for *there is nothing
+  // to clear* (S43, punch-list B2 — the stage is derived from the contents and
+  // cannot go stale). The number **is** the press order, and S51 turned the
+  // first two round (punch-list B37): `1` drops the selection and keeps every
+  // value, `2` takes the values, `3` takes the rest. `docs/DMX_MERGE.md` §3.1
+  // has the reason — a look built out of several fixtures needs a key that lets
+  // one go without taking the look with it.
+  clearStage: 0 | 1 | 2 | 3;
 }
 
 interface ProgrammerValue {
@@ -974,6 +1027,30 @@ default tier of the table above. Stopping the desk is a third item and says so.
 That is **D9**, and `crates/prismd/tests/daemon.rs` asserts the half a test can
 reach.
 
+**And the daemon going without being asked is a fourth thing** *(S51, punch-list
+B39)*. A desk killed from Task Manager left the icon standing, *Stop the desk*
+looking for a process that was not there, and the next start putting a second
+icon beside the first. The shell **watches the guard** — `prismd::lock::look`,
+the same reading `prism_app::attach` makes at start, repeated once a second —
+and there were two candidates for that reading, which are not the same question:
+
+| What is watched | What it answers | Why not |
+|---|---|---|
+| The **connection** | *Is the desk talking to me?* | A desk that has merely gone quiet looks identical to one that has been killed, and **D2** is the decision that a desk may lose a client and carry on. A shell that tore its icon down over a silent socket would announce the end of a show that is still on stage |
+| The **guard** | *Is the desk still there?* | The operating system releases an advisory lock when the holder ends, **however it ends** — so this cannot be wrong about it, and it needs no platform code (§10.1) |
+
+So the guard, and a shell whose desk has gone **stands down**: the tray says so
+before anything else happens, *Stop the desk* stops looking for a process that is
+not there, the window is brought up, and the shell closes once the sentence has
+been acknowledged. The sentence answers the operator's first question — *is the
+show still on?* — before it is asked. A guard held by a **different** process is
+the same verdict for the second half of the entry: that is the moment a dead
+icon would otherwise sit beside a live one.
+
+What the guard cannot say is whether a live daemon is *healthy*, and it does not
+try: the interface reports that on its own, as the connection status beside the
+title. Two readings, two questions, and neither pretending to be the other.
+
 ---
 
 ## 11. Deviation from `Architecture.txt`
@@ -1050,6 +1127,6 @@ than a claim nobody checked.
 | 🔌 **ALSA on the Raspberry Pi** | §10.2 and `prism-midi`'s `alsa` feature | The backend is target-gated so the ARM64 cross-check needs no `libasound2-dev`, which means the Linux MIDI path is **compiled by nobody today**. What a Pi can answer, and only a Pi: that `cargo build --features prism-midi/alsa` succeeds with that package installed, that ALSA's port names go through `prism_midi::normalise` as §2 of `naming.rs` predicts — the ` 24:0` client address coming off — and that the client number really does change across a boot, which is the whole reason that rule exists. It is a data question about one function and a build question about one feature, so verifying it is a build and one test |
 | 🔌 **The control editor against a real X-Touch** | §4.4 of [`docs/MCU_MAPPING.md`](docs/MCU_MAPPING.md) and [`ui/src/settings/controls.tsx`](ui/src/settings/controls.tsx) | S38 made the binding table editable and everything a *daemon* can answer for is asserted with nothing plugged in: a key rebound over the protocol changes what the same three bytes do, learn names a control of every shape §2.1 has and does not fire it, and two editors produce one table. What only the desk can answer is whether **learn is comfortable to use on the real panel** — whether pressing a key while an editor is open names the key the operator meant, on a surface whose modifiers are held rather than latched (§2.1) and whose V-Pots accelerate (§2.7). Verifying it is an afternoon with the panel open, not a code change. The second half needs the sound console as well: §4.3's *permanently ours* set is drawn in the editor as data (`McuProfile::permanent`), and confirming it is the same one-line edit §7's ◻ row has always described |
 | 🔌 **The settings window against real hardware** | §10.3 and [`ui/src/settings/`](ui/src/settings/) | S37 made every one of `prismd`'s operational flags a setting a browser can write, and everything a *daemon* can answer for is asserted with nothing plugged in: the rig is built from the window against five recording doubles, the MIDI enumeration answers and opens nothing, and a listener that cannot bind is produced by binding the address first. What only a venue can answer is whether the rig an installer types into this window is the rig their nodes receive — which is the two rows below and the two above it, met from the other end. Verifying it is an afternoon in a hall with the panel open, not a code change |
-| 🪟 **The shell's window, tray and dialogues (S29)** | §10.3 and [`crates/prism-app/src/shell.rs`](crates/prism-app/src/shell.rs) | Everything the shell **decides** is asserted with no window: `attach::approach` over all four shapes of discovery document, `autostart::reconcile` over the four states of the comparison and the update case, `dialogs::chooser` over every place a path is asked for, and `spawn::arguments` over what a daemon this shell starts is told. What only a desktop can answer is that the platform does what it is asked. The recipe, in order, on a machine with the installer run: **(1)** start it — a window appears and the desk connects; **(2)** close the window with its own button — the tray icon stays, `prismd.exe` is still in Task Manager, and a DMX Sheet on a second client still shows the rig moving; **(3)** start it again from the Start menu — the window comes back and there is still exactly **one** `prismd.exe`; **(4)** *Settings → Show files → Save as → Browse…* — the operating system's dialogue opens, filtered to `.prism`, in the folder the current show is in, and what is picked lands in the box; **(5)** *Settings → This machine*, tick autostart — the row underneath says an entry is in place, and `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` has a `PrismDMX` value; delete that value by hand and reopen the panel — the row says it was removed outside the program; **(6)** tray → *Stop the desk* — `prismd.exe` goes, and with `--blackout-on-exit` the rig goes dark rather than freezing. Each step is a claim a test would have had to fake, and none is a code change to verify |
+| 🪟 **The shell's window, tray and dialogues (S29)** | §10.3 and [`crates/prism-app/src/shell.rs`](crates/prism-app/src/shell.rs) | Everything the shell **decides** is asserted with no window: `attach::approach` over all four shapes of discovery document, `autostart::reconcile` over the four states of the comparison and the update case, `dialogs::chooser` over every place a path is asked for, and `spawn::arguments` over what a daemon this shell starts is told. What only a desktop can answer is that the platform does what it is asked. The recipe, in order, on a machine with the installer run: **(1)** start it — a window appears and the desk connects; **(2)** close the window with its own button — the tray icon stays, `prismd.exe` is still in Task Manager, and a DMX Sheet on a second client still shows the rig moving; **(3)** start it again from the Start menu — the window comes back and there is still exactly **one** `prismd.exe`; **(4)** *Settings → Show files → Save as → Browse…* — the operating system's dialogue opens, filtered to `.prism`, in the folder the current show is in, and what is picked lands in the box; **(5)** *Settings → This machine*, tick autostart — the row underneath says an entry is in place, and `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` has a `PrismDMX` value; delete that value by hand and reopen the panel — the row says it was removed outside the program; **(6)** tray → *Stop the desk* — `prismd.exe` goes, and with `--blackout-on-exit` the rig goes dark rather than freezing. **(7)** *(S51, punch-list B42)* press `F11`, then `Alt` + `Enter` — the **window** loses its title bar and gets it back, both keys, both ways. The browser half of full screen is driven end to end in `ui/e2e/desk.spec.ts`; that a *window* has no title bar is the part only a desktop can say. **(8)** *(S51, punch-list B39)* with the desk running, end `prismd.exe` from Task Manager — within a second the tray tooltip reads *the desk has stopped*, the window comes forward with the sentence, and the icon **leaves the notification area** once it is acknowledged; start the program again and there is exactly one icon in the tray. Every decision behind step 8 is asserted in `crates/prism-app/tests/watching.rs` against a real advisory lock released the way a kill releases one, so what is left here is the icon. Each step is a claim a test would have had to fake, and none is a code change to verify |
 | Two Open DMX adapters told apart by serial | §7.0 and `DeviceDescriptor::with_serial` in [`crates/prism-protocols/src/device.rs`](crates/prism-protocols/src/device.rs) | S33 made the rig data, and `OutputKind::OpenDmx { serial }` is what pins one output to one physical cable. The serial reaches the bus — `opendmx.rs`'s `a_serial_from_the_configuration_is_what_the_bus_is_asked_for` asserts the descriptor the driver asks D2XX for — and the matching rule is S8's, asserted on enumerated devices. What only **two cables** can answer is whether the two open the adapters an installer expects rather than both taking the first: the machine that verified S8 has one. Both halves are configuration, not code, so verifying it is a data update and one test |
 | ~~SH-RS09B USB VID/PID and achievable frame rate~~ | §7.1 and `DeviceProfile::SH_RS09B` in [`crates/prism-protocols/src/device.rs`](crates/prism-protocols/src/device.rs) | ✅ **Done 2026-08-11 (S8).** `0403:6001`, serial `B0037HIY`, `FT232R USB UART`; 35.5 Hz sustained over 60 s through D2XX. The constant now carries `verified: true` and the tests assert the measurements. Verifying it was an edit to three fields and one test, which is what holding it as data was for |

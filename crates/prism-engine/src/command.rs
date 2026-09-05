@@ -12,7 +12,7 @@
 //! both ends are compiled together, and the queue is an in-process channel, not
 //! a wire.
 
-use prism_domain::{GoDirection, GroupId, PlaybackId};
+use prism_domain::{CrossfadeMode, GoDirection, GroupId, PlaybackId};
 
 use crate::spsc::{PAYLOAD_BYTES, TickPayload};
 
@@ -79,13 +79,27 @@ pub enum TickCommand {
         /// Which playback.
         executor: PlaybackId,
     },
-    /// Move an executor's manual crossfade fader — `ExecutorFaderFunction::XFade`.
+    /// Move an executor's manual crossfade fader — **S51, punch-list B36**.
     ///
     /// The transition is the one the cue list already has; what this replaces is
-    /// its *clock*. See `crate::player`'s module documentation.
-    SetExecutorXFade {
+    /// its *clock*. See `crate::player`'s module documentation for the two modes
+    /// and for the state a stroke stopped half way holds.
+    ///
+    /// # The mode travels with every movement, and it is one field rather than
+    /// a second command
+    ///
+    /// Which of the two a fader is belongs to the **show**
+    /// (`ExecutorFaderFunction`), and the tick holds no show — `ARCHITECTURE_SPEC.md`
+    /// §3.1: it resolves nothing. So the core thread, which is the one that
+    /// resolved the fader to a playback in the first place, says which mode the
+    /// movement is; the player compares it with the one it is holding and starts
+    /// again if it changed. It costs one tag rather than one byte because the
+    /// payload is a tag, a target and a value, and a mode is neither.
+    SetExecutorCrossfade {
         /// Which playback.
         executor: PlaybackId,
+        /// Which of the two crossfades this fader is.
+        mode: CrossfadeMode,
         /// Where the fader is, `0..=65535`.
         position: u16,
     },
@@ -166,6 +180,10 @@ impl TickCommand {
     const TAG_EXECUTOR_TAP: u8 = 12;
     const TAG_EXECUTOR_XFADE: u8 = 13;
     const TAG_GOTO: u8 = 14;
+    /// The second crossfade mode — S51, B36. A tag of its own rather than a
+    /// byte in the payload, because the encoding is a tag, a `u32` target and a
+    /// `u16` value, and a mode is not a target or a value.
+    const TAG_EXECUTOR_FADE: u8 = 15;
 
     /// The target as the number the codec carries.
     const fn split(target: PlaybackId) -> u32 {
@@ -221,9 +239,18 @@ impl TickPayload for TickCommand {
             Self::TapExecutorSpeed { executor } => {
                 (Self::TAG_EXECUTOR_TAP, Self::split(executor), 0)
             }
-            Self::SetExecutorXFade { executor, position } => {
-                (Self::TAG_EXECUTOR_XFADE, Self::split(executor), position)
-            }
+            Self::SetExecutorCrossfade {
+                executor,
+                mode,
+                position,
+            } => (
+                match mode {
+                    CrossfadeMode::Fade => Self::TAG_EXECUTOR_FADE,
+                    CrossfadeMode::XFade => Self::TAG_EXECUTOR_XFADE,
+                },
+                Self::split(executor),
+                position,
+            ),
             Self::SetBlackout(on) => (Self::TAG_BLACKOUT, 0, u16::from(on)),
             Self::SetGroupMaster { group, level } => (Self::TAG_GROUP_MASTER, group.get(), level),
             Self::SetProgrammerValue { slot, value } => (Self::TAG_PROGRAMMER_VALUE, slot, value),
@@ -290,8 +317,14 @@ impl TickPayload for TickCommand {
                 executor,
                 cue_index: value,
             }),
-            Self::TAG_EXECUTOR_XFADE => Some(Self::SetExecutorXFade {
+            Self::TAG_EXECUTOR_XFADE => Some(Self::SetExecutorCrossfade {
                 executor,
+                mode: CrossfadeMode::XFade,
+                position: value,
+            }),
+            Self::TAG_EXECUTOR_FADE => Some(Self::SetExecutorCrossfade {
+                executor,
+                mode: CrossfadeMode::Fade,
                 position: value,
             }),
             Self::TAG_BLACKOUT => match value {
@@ -369,7 +402,8 @@ mod tests {
             TickCommand::TapExecutorSpeed {
                 executor: SequenceId::new(5).into(),
             },
-            TickCommand::SetExecutorXFade {
+            TickCommand::SetExecutorCrossfade {
+                mode: prism_domain::CrossfadeMode::XFade,
                 executor: SequenceId::new(6).into(),
                 position: u16::MAX,
             },

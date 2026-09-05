@@ -71,6 +71,11 @@ async function desk(page: Page, port: number): Promise<void> {
 /**
  * Empties the programmer: three presses of Clear, which is the three-stage
  * Clear `CLAUDE.md` asks for and `prism_core::Programmer` implements.
+ *
+ * The order of the three changed in S51 (B37) — the selection goes first now —
+ * and this helper is unaffected by that on purpose: it wants an *empty*
+ * programmer, so it presses until there is one rather than counting on which
+ * press does what.
  */
 async function clearProgrammer(page: Page): Promise<void> {
   for (let press = 0; press < 3; press += 1) {

@@ -305,6 +305,11 @@ fn the_clear_key_offers_the_first_thing_there_is_to_clear() {
     // press, which is where **S43** changed the answer. The key used to be a
     // counter that wrapped round to the start; it reads the contents now, so a
     // press with nothing to clear does nothing and says so (B2).
+    //
+    // **S51 turned the first two rows round** (B37). The whole sequence is
+    // asserted here, in the order a hand presses it, so a later change that
+    // reorders the stages again goes red on the step that moved rather than
+    // quietly passing four independent assertions.
     let mut file = file();
     file.apply(&select(&[1, 2], SelectionMode::Set)).unwrap();
     file.apply(&set(AttributeType::Red, 65535)).unwrap();
@@ -314,22 +319,23 @@ fn the_clear_key_offers_the_first_thing_there_is_to_clear() {
     .unwrap();
     file.session.set_programmer_page(3).unwrap();
     file.session.set_programmer_param_index(2).unwrap();
-    assert_eq!(file.programmer.state().clear_stage, ClearStage::Values);
-
-    // Values go, the selection stays — and the key now offers the selection.
-    file.apply(&Command::ClearProgrammer).unwrap();
     assert_eq!(file.programmer.state().clear_stage, ClearStage::Selection);
-    assert!(file.programmer.state().values.is_empty());
-    assert_eq!(file.programmer.state().selection.len(), 2);
+
+    // The selection goes, **the values stay** — which is the change, and the
+    // reason for it: the next fixture is selected and added to this look.
+    file.apply(&Command::ClearProgrammer).unwrap();
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Values);
+    assert!(file.programmer.state().selection.is_empty());
+    assert_eq!(file.programmer.state().values.len(), 2);
     assert_eq!(
         file.programmer.state().active_feature_group,
         FeatureGroup::Color
     );
 
-    // The selection goes. What is left is the bank, so the key offers the rest.
+    // The values go. What is left is the bank, so the key offers the rest.
     file.apply(&Command::ClearProgrammer).unwrap();
     assert_eq!(file.programmer.state().clear_stage, ClearStage::All);
-    assert!(file.programmer.state().selection.is_empty());
+    assert!(file.programmer.state().values.is_empty());
     assert_eq!(
         file.programmer.state().active_feature_group,
         FeatureGroup::Color,
@@ -358,94 +364,100 @@ fn the_clear_key_offers_the_first_thing_there_is_to_clear() {
     );
 }
 
-/// **S43 rewrote this test and the rule under it.** It used to assert that any
-/// other programmer interaction *reset* the Clear stage, because the stage was a
-/// counter that would otherwise stand where the contents no longer did. A
-/// derived stage cannot get out of step, so there is nothing to reset — and the
-/// claim worth making is the one the old rule was reaching for: after any
-/// interaction the key offers the first thing there is to clear, whatever
-/// happened before it.
+/// **Several fixtures, one look** — S51, B37, and the reason the order turned.
+///
+/// This is the owner's own reproduction read forwards: programme one fixture,
+/// press Clear to let it go, programme the next, and store. Under the old order
+/// the middle press took the first fixture's values with it and the stored look
+/// held one fixture. It holds both now, and this test is the one that says so.
 #[test]
-fn the_stage_follows_the_contents_after_any_other_interaction() {
-    // Two presses in, the selection is gone as well — so a command that writes
-    // a *value* writes nothing, because there is nothing selected to write it
-    // to, and the key goes on offering what is actually there. That asymmetry
-    // is the whole point of a derived stage: the old counter answered `Idle`
-    // for every one of these, which was wrong in five cases out of ten.
-    let interactions: Vec<(Command, ClearStage, ClearStage)> = vec![
-        (
-            select(&[1], SelectionMode::Set),
-            ClearStage::Selection,
-            ClearStage::Selection,
-        ),
-        (
-            select(&[2], SelectionMode::Toggle),
-            ClearStage::Selection,
-            ClearStage::Selection,
-        ),
-        (
-            set(AttributeType::Red, 100),
-            ClearStage::Values,
-            ClearStage::All,
-        ),
-        (
-            Command::ApplyPreset {
-                preset_id: PresetId::new(4),
-            },
-            ClearStage::Values,
-            ClearStage::All,
-        ),
-        (
-            Command::SelectGroup {
-                group_id: prism_domain::GroupId::new(1),
-                mode: SelectionMode::Set,
-            },
-            ClearStage::Selection,
-            ClearStage::Selection,
-        ),
-    ];
+fn a_look_is_built_out_of_several_fixtures_one_clear_at_a_time() {
+    let mut file = file();
 
-    for (command, after_one, after_two) in interactions {
-        for (presses, want) in [(1_u8, after_one), (2, after_two)] {
-            let mut file = file();
-            file.apply(&select(&[1], SelectionMode::Set)).unwrap();
-            file.apply(&set(AttributeType::Blue, 4096)).unwrap();
-            for _ in 0..presses {
-                file.apply(&Command::ClearProgrammer).unwrap();
-            }
+    file.apply(&select(&[1], SelectionMode::Set)).unwrap();
+    file.apply(&set(AttributeType::Red, 65535)).unwrap();
+    // Let fixture 1 go. One press, and it is the press that used to empty the
+    // programmer.
+    file.apply(&Command::ClearProgrammer).unwrap();
+    assert!(file.programmer.state().selection.is_empty());
 
-            file.apply(&command)
-                .unwrap_or_else(|error| panic!("{command:?}: {error}"));
-            assert_eq!(
-                file.programmer.state().clear_stage,
-                want,
-                "{command:?} after {presses} press(es)"
-            );
-            // And it is a reading rather than a remembered number, always.
-            assert_eq!(
-                file.programmer.state().clear_stage,
-                file.programmer.state().stage()
-            );
-        }
-    }
+    file.apply(&select(&[2], SelectionMode::Set)).unwrap();
+    file.apply(&set(AttributeType::Blue, 65535)).unwrap();
+
+    let state = file.programmer.state();
+    assert_eq!(
+        state
+            .value(FixtureId::new(1), AttributeType::Red)
+            .map(|value| value.value),
+        Some(65535),
+        "the first fixture's value did not survive the Clear that let it go"
+    );
+    assert_eq!(
+        state
+            .value(FixtureId::new(2), AttributeType::Blue)
+            .map(|value| value.value),
+        Some(65535)
+    );
+
+    // And the look that reaches the show is both of them.
+    file.apply(&Command::StoreCue {
+        sequence_id: Some(SequenceId::new(1)),
+        cue_number: "1".to_owned(),
+        mode: StoreMode::Merge,
+    })
+    .unwrap();
+    let cue = file
+        .show
+        .sequence(SequenceId::new(1))
+        .and_then(|sequence| sequence.cues.first().cloned())
+        .expect("the store made a cue");
+    let mut fixtures: Vec<u32> = cue.parts.iter().map(|part| part.fixture.get()).collect();
+    fixtures.sort_unstable();
+    fixtures.dedup();
+    assert_eq!(fixtures, vec![1, 2]);
 }
 
+/// **S51 turned this test round, and that is B37.**
+///
+/// It used to assert that a store can never meet a non-zero Clear stage: the
+/// only way past the first stage was a Clear, and that Clear had already taken
+/// the values — so a store afterwards had nothing to store and was refused.
+///
+/// The order is the other way round now, and this is the consequence that
+/// matters: after one Clear the **values are still there**, so the store the old
+/// order refused is the store B37 exists to make possible. The stage a store
+/// meets is `Values`, and the store succeeds.
 #[test]
-fn a_store_can_never_meet_a_non_zero_clear_stage() {
-    // The fifth interaction is the exception that proves the rule rather than
-    // an untested case: the only way past `Values` is a Clear, and that Clear
-    // has already emptied the values — so a store from `Selection` or `All` has
-    // nothing to store and is refused before the stage is reached at all.
+fn a_store_after_one_clear_still_has_the_look_the_clear_left_standing() {
     let mut file = file();
     file.apply(&select(&[1], SelectionMode::Set)).unwrap();
     file.apply(&set(AttributeType::Blue, 4096)).unwrap();
     file.apply(&Command::ClearProgrammer).unwrap();
+    assert_eq!(file.programmer.state().clear_stage, ClearStage::Values);
 
+    file.apply(&Command::StoreCue {
+        sequence_id: Some(SequenceId::new(1)),
+        cue_number: "3".to_owned(),
+        mode: StoreMode::Merge,
+    })
+    .expect("the values the Clear left standing are a look, and a look stores");
+
+    // A store moves neither the values nor the selection, so it moves no stage
+    // either — S43's claim, which the new order does not disturb.
+    assert_eq!(
+        file.programmer.state().clear_stage,
+        ClearStage::Values,
+        "a store must not move the stage"
+    );
+
+    // Two more presses and there is nothing left; a store then is refused, and
+    // refused *before* the stage is reached.
+    file.apply(&Command::ClearProgrammer).unwrap();
     let before = snapshot(&file);
     assert!(
         file.apply(&Command::StoreCue {
             sequence_id: Some(SequenceId::new(1)),
-            cue_number: "3".to_owned(),
+            cue_number: "4".to_owned(),
             mode: StoreMode::Merge,
         })
         .is_err()
@@ -453,7 +465,7 @@ fn a_store_can_never_meet_a_non_zero_clear_stage() {
     assert_eq!(snapshot(&file), before);
     assert_eq!(
         file.programmer.state().clear_stage,
-        ClearStage::Selection,
+        ClearStage::All,
         "a refused store must not move the stage either"
     );
 }

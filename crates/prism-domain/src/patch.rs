@@ -225,6 +225,7 @@ mod tests {
                 invert: false,
                 physical_from: 0.0,
                 physical_to: 100.0,
+                ranges: Vec::new(),
             }],
         };
         let mut with_intensity = colour_only.clone();
@@ -238,6 +239,7 @@ mod tests {
             invert: false,
             physical_from: 0.0,
             physical_to: 100.0,
+            ranges: Vec::new(),
         });
 
         let mut patched = fixture();

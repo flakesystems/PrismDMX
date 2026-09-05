@@ -211,6 +211,7 @@ fn the_conversion_reports_what_it_could_not_use() {
          \x20 modes that control nothing:             {}\n\
          \x20 attributes mapped:                      {}\n\
          \x20 channels with no attribute here:        {}\n\
+         \x20 channels the file says do nothing:      {}\n\
          \x20 channels dropped as duplicates:         {}\n\
          \x20 channel names never defined:            {}\n\
          \x20 files rejected:                         {}\n\
@@ -222,6 +223,7 @@ fn the_conversion_reports_what_it_could_not_use() {
         counts.modes_without_attributes,
         counts.attributes,
         counts.channels_unmapped,
+        counts.channels_without_function,
         counts.channels_duplicate,
         counts.channels_undefined,
         counts.files_rejected,
@@ -253,6 +255,118 @@ fn the_conversion_reports_what_it_could_not_use() {
         "{} channel names resolved to nothing",
         counts.channels_undefined
     );
+}
+
+/// **No channel of the installed library is left without an attribute** —
+/// punch-list entry **B38**, and the claim only the corpus can refute.
+///
+/// This is a number and not a proportion, and that is the change S51 made. It
+/// was 5 037 — a third of every channel in the library — and each one of them
+/// was a channel an operator could not reach: CMY colour mixing, every colour
+/// wheel, every built-in effect, frost, fog, the framing shutters. The table in
+/// `prism_core::library::ofl` now has a row for every capability type the
+/// format defines, so the honest assertion is **nought**.
+///
+/// A channel whose every capability is OFL's `NoFunction` is counted
+/// separately and is not a gap: the file is saying the channel does nothing.
+///
+/// # What this deliberately does not claim
+///
+/// It says nothing about `channels_duplicate`, and that is S51's stated
+/// boundary rather than an oversight. A fixture with **two channels of one
+/// kind** — a second colour wheel, a per-pixel red on a tube written out
+/// longhand — still keeps the lower one and drops the higher, because this
+/// model gives one fixture one of each parameter and `MergeError::
+/// DuplicateAttribute` is what enforces it. Lifting that means giving an
+/// attribute an *occurrence*, which is a change to the key every value in a
+/// show is filed under — the programmer, the cue, the preset, the wire and the
+/// console grammar — and it is a session of its own rather than a corner of
+/// this one. `IMPLEMENTATION_PLAN.md` S52 carries it with the count below.
+#[test]
+fn every_channel_in_the_installed_library_maps_to_an_attribute() {
+    let Some(library) = installed() else { return };
+    let counts = library.conversion();
+    assert_eq!(
+        counts.channels_unmapped, 0,
+        "{} channels of the installed library reach no attribute at all — a capability type \
+         upstream has that `prism_core::library::ofl` does not",
+        counts.channels_unmapped
+    );
+    // The counter still counts, which is what keeps the nought above meaning
+    // something: it is nought because the table is complete, not because
+    // nothing is measured. Every channel the library has is accounted for as
+    // one of these five.
+    let accounted = counts.attributes
+        + counts.channels_unmapped
+        + counts.channels_without_function
+        + counts.channels_duplicate
+        + counts.channels_undefined;
+    assert!(
+        accounted > 10_000,
+        "only {accounted} channels were looked at, which is not this library"
+    );
+    println!(
+        "\nB38: {} channels mapped, {} unmapped, {} doing nothing, {} a second of their kind\n",
+        counts.attributes,
+        counts.channels_unmapped,
+        counts.channels_without_function,
+        counts.channels_duplicate,
+    );
+}
+
+/// **Named ranges reach the profiles** — B38's second half, over the corpus.
+///
+/// A number rather than an example, because *capabilities are read* is a claim
+/// about the library and not about the one fixture somebody tried it on. And
+/// two properties that a hand-written test would not have caught over two
+/// thousand profiles: a range is never inverted, and consecutive ranges of one
+/// channel meet with nothing between them — a gap is an encoder position that
+/// names nothing while the file says it names something.
+#[test]
+fn the_installed_library_carries_the_names_of_its_ranges() {
+    let Some(library) = installed() else { return };
+    let mut with_ranges = 0_usize;
+    let mut ranges = 0_usize;
+    for entry in library.entries() {
+        let profile = library.profile(&entry.id).expect("the library listed it");
+        for def in &profile.attributes {
+            if def.ranges.is_empty() {
+                continue;
+            }
+            with_ranges += 1;
+            ranges += def.ranges.len();
+            let mut previous: Option<u16> = None;
+            for range in &def.ranges {
+                assert!(
+                    range.from <= range.to,
+                    "{}: {:?} has a range that runs backwards",
+                    entry.id,
+                    def.attribute
+                );
+                assert!(
+                    !range.name.is_empty(),
+                    "{}: {:?} has a range with no name",
+                    entry.id,
+                    def.attribute
+                );
+                if let Some(previous) = previous {
+                    assert_eq!(
+                        range.from,
+                        previous.saturating_add(1),
+                        "{}: {:?} leaves a gap between two ranges",
+                        entry.id,
+                        def.attribute
+                    );
+                }
+                previous = Some(range.to);
+            }
+        }
+    }
+    assert!(
+        with_ranges > 1_000,
+        "only {with_ranges} channels came out with named ranges"
+    );
+    println!("\nB38: {ranges} named ranges over {with_ranges} channels\n");
 }
 
 /// **A search over the whole corpus answers, and answers small.**
@@ -305,10 +419,17 @@ fn no_profile_in_the_installed_library_rests_a_colour_shut() {
         return;
     };
     let mut checked = 0_usize;
+    let mut subtractive = 0_usize;
+    let mut open_filters = 0_usize;
     for entry in library.entries() {
         let profile = library.profile(&entry.id).expect("the library listed it");
         for def in &profile.attributes {
-            if def.feature_group == prism_domain::FeatureGroup::Color {
+            // **The emitter and not the bank** — S51, B38. The colour bank has
+            // cyan, magenta and yellow on it now, and those are *filters*: open
+            // is nought and full is opaque. Resting them where an emitter rests
+            // would black out every CMY rig, which is why the rule moved off
+            // the bank and on to the attribute.
+            if def.attribute.is_additive_emitter() {
                 assert_eq!(
                     def.default_value,
                     u16::MAX,
@@ -318,8 +439,42 @@ fn no_profile_in_the_installed_library_rests_a_colour_shut() {
                     def.default_value
                 );
                 checked += 1;
+            } else if matches!(
+                def.attribute,
+                prism_domain::AttributeType::Cyan
+                    | prism_domain::AttributeType::Magenta
+                    | prism_domain::AttributeType::Yellow
+            ) {
+                subtractive += 1;
+                if def.default_value == 0 {
+                    open_filters += 1;
+                }
             }
         }
     }
     assert!(checked > 100, "only {checked} colour channels were checked");
+
+    // **And a filter rests out of the beam** — S51, B38, and the other half of
+    // the same rule.
+    //
+    // *Where a desk parks a colour* is a convention of the desk for an emitter,
+    // which is what B1 settled. A **filter** has no such convention: which end
+    // of a CMY flag is open is a fact about how that head is wired, and the
+    // only evidence a desk has about it is the file. So the rule is *nought
+    // unless the manufacturer says otherwise*, and the exceptions are exactly
+    // the profiles that say otherwise — three of the hundred-odd in this
+    // library, all of them heads whose flags are wired the other way up.
+    //
+    // A proportion rather than a count, because the count moves upstream; what
+    // must not happen is a *general* rule that parks filters in the beam, and
+    // that would show here as a collapse rather than as a handful.
+    assert!(
+        subtractive > 50,
+        "only {subtractive} subtractive flags were checked — the corpus has CMY heads in it"
+    );
+    assert!(
+        open_filters * 10 >= subtractive * 9,
+        "only {open_filters} of {subtractive} subtractive flags rest out of the beam"
+    );
+    println!("\nB38: {open_filters} of {subtractive} subtractive flags rest open at nought\n");
 }

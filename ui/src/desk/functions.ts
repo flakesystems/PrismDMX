@@ -139,6 +139,10 @@ const FADER_NAMES: Readonly<Record<ExecutorFaderFunction, string>> = {
   Empty: "Nothing",
   Master: "Master",
   Speed: "Speed",
+  // **The two crossfades** — S51, B36. Named by what they do rather than by
+  // their own words, because *Fade* and *XFade* differ by one letter and an
+  // operator choosing between them in a menu has to be told which is which.
+  Fade: "Fade out and in",
   XFade: "Crossfade",
 };
 

@@ -8,11 +8,19 @@ members = ["crates/*"]
 # the bundler falls back to this one, and `crates/prism-app/tests/version.rs`
 # is what holds the three together. The release tag is `v` and this.
 #
-# 0.9.0 is the **first closed beta**: a desk that runs a show end to end and is
+# 0.9.0 was the **first closed beta**: a desk that runs a show end to end and is
 # not 1.0 until somebody else's venue has said so. What makes it a beta is the
 # release's own pre-release flag rather than a suffix here, because a Windows
 # installer version has to be three numbers and nothing else.
-version = "0.9.0"
+#
+# 0.9.1 is the **second**, and the patch digit rather than the minor one is a
+# claim rather than a habit: S51 carried six punch-list entries out of the first
+# beta and **none of them changed what a `.prism` file is**. A show written by
+# 0.9.0 opens here unchanged — `AttributeDef::ranges` is `#[serde(default)]` and
+# `ExecutorFaderFunction::XFade` kept its name, which is the whole of what that
+# costs. The wire is `docs/IPC_PROTOCOL.md` §4.2's own version and moves on its
+# own account.
+version = "0.9.1"
 edition = "2024"
 # Raised from 1.85 in S17. `std::fs::File::try_lock` was stabilised in 1.89 and
 # it is what `prismd` uses for the single-instance guarantee: an advisory lock

@@ -226,7 +226,9 @@ test("the fixture sheet shows the programmer and the cable, and they can differ"
   // agree with itself.
   await expect.poll(async () => litColumns(page), { timeout: 15_000 }).toBeGreaterThan(0);
 
-  // Clearing the programmer takes it off both.
+  // Clearing the programmer takes it off both — two presses since S51 (B37),
+  // the selection then the values.
+  await page.getByTestId("clear").click();
   await page.getByTestId("clear").click();
   await expect(page.getByTestId("prog-1-Red")).toHaveText("—");
   await expect.poll(async () => litColumns(page), { timeout: 15_000 }).toBe(0);
