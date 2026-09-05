@@ -119,6 +119,8 @@
 | S38 | The interactive control editor | ✅ | 2026-08-23 | The binding table of `docs/MCU_MAPPING.md` §4 edited at the desk. A fifth settings panel draws all **73 controls**, what each does, and which stay PrismDMX's in the combined Xctl+MC mode; **Learn** names the control an operator presses and does not fire it. The table lives in `prism_core::MachineConfig` beside the rig and the port — a **profile file is an import**, so a desk starts with the keys it was left with. Two new `MachineChange` variants and **no new command**. See §2.40 |
 
 ### Phase 9 — Extended features
+*Moved behind Phases 10 and 11 in the running order on 2026-09-05: the open beta comes first, and what it reports should choose between these five.*
+
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S30 | 3D viewer | ☐ | | |
@@ -128,10 +130,15 @@
 ### Phase 10 — Documentation and release
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
-| S41 | The manual, and a README in every crate | ☐ | | Added 2026-08-14. Checked by tests: every crate has one, and the manual's lists match the code |
-| S42 | prismdmx.de | ☐ | | Added 2026-08-14. Built from this repository, so the documentation cannot drift from a release |
+| S41 | The manual, and a README in every crate | ☐ | | Added 2026-08-14. Checked by tests: every crate has one, and the manual's lists match the code. **Moved ahead of Phase 9 on 2026-09-05** — the reason for being last expired when S37 shipped, and an open beta is a release strangers install |
+| S42 | prismdmx.de | ☐ | | Added 2026-08-14. Built from this repository, so the documentation cannot drift from a release. Runs with S41, for the **open beta** |
 
-**Done:** 31 / 44 · **In progress:** 0 · **Blocked:** 0
+### Phase 11 — What the closed beta sent back
+| Session | Title | Status | Date | Note |
+|---|---|---|---|---|
+| S51 | The punch list, and v0.9.1 | ☐ | | Added 2026-09-05, and **next in the running order**. The six entries `docs/ISSUES.md` still has open: B36 crossfade, B37 clear order, B38 the OFL profiles whole, B39 the tray icon after the daemon dies, B42 full screen, B43 a home for a venue's own profiles |
+
+**Done:** 31 / 45 · **In progress:** 0 · **Blocked:** 0
 
 **Eleven sessions were added on 2026-08-14** — S33–S43 — for the output patch,
 the real MIDI port, the settings window, the control editor, the desk-layout
@@ -4821,9 +4828,12 @@ the machine *has* beside what was asked for, because a switch that displays a li
 is worse than no switch. **`v0.9.0` is published**, as a pre-release, with an
 installer CI built rather than this machine.
 
-**Next: choose from Phase 9** — see §8 for the prompt that starts it, and the
-running order below. The closed beta is the input that was not available before,
-so what comes back from it is part of the choice.
+**Next: S51 — the punch list, and v0.9.1** (see §8 for the prompt). The choice
+was *pick one of Phase 9's five extended features*, and the closed beta answered
+it differently: `docs/ISSUES.md` has six entries open, four of them faults, and a
+sixth feature on a build whose crossfade cannot walk a cue list is a worse trade
+than any of the five. **S41 and S42 follow it** rather than waiting for Phase 9 —
+`IMPLEMENTATION_PLAN.md`'s running order carries the reason.
 
 Carried out of S29:
 - **Before adding a command, ask what kind of thing it acts on.** The three
@@ -6593,57 +6603,61 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**The next session is S31 — the Web Remote.** The running order in
-`IMPLEMENTATION_PLAN.md` puts number 18 as *the extended features, in whichever
-order the venue asks for them*, and this is the choice, with three reasons.
+**The next session is S51 — the punch list, and `v0.9.1`.** The running order in
+`IMPLEMENTATION_PLAN.md` used to put number 18 as *the extended features, in
+whichever order the venue asks for them*. The closed beta answered that question
+differently, and this is the change, with three reasons.
 
-**It is the one a hall asks for first.** Every other candidate is programmed
-*at* the desk: a 3D viewer (S30) is for the evening before, timecode (S47) is for
-a show that runs to one, PSN and OSC (S32) need tracking hardware a school does
-not have, macros (S50) make a fast operator faster. The Web Remote is for the one
-job that **cannot be done from the desk at all** — standing under a lantern with
-a tablet while you focus it. A venue with one operator and a ladder asks for that
-before it asks for anything on this list.
+**The venue asked, and it did not ask for a feature.** `v0.9.0` went out on
+2026-09-01 and what came back is six entries in `docs/ISSUES.md` — four faults
+and two things it found missing. One of them is a **crossfade an operator cannot
+walk a cue list with**: the fader snaps back to nought after every movement, so
+the one gesture a fader exists for does not work. A sixth extended feature on top
+of that is a worse trade than any of the five on offer.
 
-**It is the cheapest of the five, and S29 is why.** The interface already runs in
-a browser; the daemon has had a WebSocket listener **on by default** since S37,
-and a §2.1 token for reaching it off loopback; and S29 taught the shell to read
-that token out of the discovery document and pass it on, so the path a phone
-takes is a path something already walks.
+**They are one session because none of them is a new subsystem.** The crossfade
+lands in the playback S34 and S45 built, the clear order in the programmer S13
+built, the OFL mappings in the library S44 built, the tray and the full screen in
+the shell S29 built, and a home for a venue's own profiles beside the library
+that already has one. Six entries, five models that already exist, and no
+protocol change that is obvious from here.
 
-**And S29 left it an obligation with a name.** `Command::Shutdown` exists now, and
-`docs/IPC_PROTOCOL.md` §5 says in as many words that the Web Remote must not grow
-a button for it — *a phone in the auditorium is exactly the place from which a
-show must not be stoppable*. That sentence is currently a comment. S31 is the
-session that has to make it true, along with the same line §2.1 already draws
-around the machine panel.
+**And it is what the two sessions after it are waiting for.** S41 and S42 — the
+manuals and prismdmx.de — have moved ahead of Phase 9 for the **open** beta, and
+a manual is written against a program that is finished being wrong. Writing it
+over a build whose crossfade is about to change is writing it twice.
 
-**Read what the closed beta says first.** `v0.9.0` went out on 2026-09-01 and the
-issues it produces are the best information anybody has about what to build next.
-If they point somewhere else — and a *serious* fault will — they win over this
-choice, and the reason for the change belongs in the decision log.
+**Read what the beta says first, again.** The issues on GitHub are the best
+information anybody has, and `docs/ISSUES.md` is where they are tracked with
+numbers. If something serious has arrived since this was written, it wins over
+this list, and the reason for the change belongs in the decision log.
 
 ---
 ```
-PrismDMX — Session S31: `ui` + `prismd` — das Web Remote
+PrismDMX — Session S51: die Punchlist, und v0.9.1
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2, S18); das Pult
 bedient ihn ohne Oberfläche (D11, S22); die Oberfläche ist ein vollständiges
-Pult; und seit **S29** ist das Ganze **ein Programm**: ein Installationsprogramm,
-eine Tray-Ikone, *spawn or attach*, und die erste Closed-Beta-Veröffentlichung
-(`v0.9.0`) liegt auf GitHub.
+Pult; und seit **S29** ist das Ganze ein Programm mit einem
+Installationsprogramm, einer Tray-Ikone und einer ersten Veröffentlichung
+(`v0.9.0`, Closed Beta, auf GitHub).
 
-**Was fehlt, ist die eine Aufgabe, die man am Pult nicht erledigen kann.** Wer
-eine Lampe einrichtet, steht unter ihr — auf einer Leiter, mit einem Schlüssel in
-der Hand — und nicht am Pult. Heute braucht er dafür eine zweite Person. Das Web
-Remote ist die Antwort darauf, und fast alles dafür ist schon gebaut: die
-Oberfläche **ist** ein Browser-Programm, der WebSocket-Listener ist seit S37
-standardmäßig an, und `docs/IPC_PROTOCOL.md` §2.1 hat den Token, den ein Zugriff
-von außerhalb der Maschine verlangt. Was fehlt, sind drei Dinge — eine
-**Bedienoberfläche für einen Finger**, eine **Grenze**, die sagt, was ein Telefon
-nicht darf, und ein **Weg hinein**, den jemand auf einer Leiter gehen kann.
+**Was jetzt ansteht, ist nichts Neues, sondern das, was die Closed Beta
+zurückgemeldet hat.** `docs/ISSUES.md` ist die vom Eigentümer geführte
+Fehlerliste, sie hat **sechs offene Einträge**, und diese Session schließt sie
+alle und veröffentlicht das Ergebnis als **v0.9.1**. Vier Fehler und zwei Dinge,
+die gefehlt haben:
+
+| Eintrag | Worum es geht |
+|---|---|
+| **B36** | Der Crossfade springt nach jeder Faderbewegung auf null zurück. Zwei Modi sollen es ersetzen — *Fade* und *XFade* —, und der Fader wird in keinem davon vom Pult bewegt |
+| **B37** | Clear löscht in der falschen Reihenfolge: erst die Werte, dann die Auswahl. Umgekehrt herum ist es das, was mehrere Fixtures in einem Look überhaupt erst programmierbar macht |
+| **B38** | Nicht alle Kanäle eines OFL-Profils landen auf einem Attribut und einer Bank, und OFL-**Capabilities** werden gar nicht ausgewertet |
+| **B39** | Wird der Daemon von Hand beendet, bleibt die Tray-Ikone stehen, *Stop the desk* findet nichts, und der nächste Start legt eine zweite daneben |
+| **B42** | Kein Vollbild — weder F11 noch Alt + Enter |
+| **B43** | Für eigene Fixture-Profile gibt es keinen Ort. Die Dokumentation sagt, wohin sie **nicht** gehören, und nennt keine Alternative |
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 
@@ -6654,148 +6668,161 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                     „kein Test darf ein Gerät brauchen", und die
                                     UI-Regel (wie ein Geräte-Bildschirm; nichts
                                     scrollt außerhalb der Canvas)
-2.  IMPLEMENTATION_PLAN.md        — **die Definition von S31**. Die Deliverables
+2.  docs/ISSUES.md                — **die Anforderung dieser Session**, Eintrag
+                                    für Eintrag. Lies auch den Kopf: wie ein
+                                    Eintrag aussieht, dass Nummern Identität
+                                    sind und nie neu vergeben werden, und die
+                                    drei erlaubten Ausgänge. **Weglassen ist
+                                    keiner davon** — ein Eintrag darf abgelehnt
+                                    werden (⛔ mit Grund), er darf nur nicht
+                                    kommentarlos verschwinden
+3.  IMPLEMENTATION_PLAN.md        — **die Definition von S51**. Die Deliverables
                                     und die Exit-Kriterien dort sind die
                                     Anforderung, wortwörtlich. Danach die
-                                    Laufreihenfolge am Ende (S31 gehört zu
-                                    Nummer 18) und der Abhängigkeitsgraph
-3.  docs/IPC_PROTOCOL.md          — §2.1 (Netzexposition und der Token — **die
-                                    Grenze, um die es geht**), §2.2 (die
-                                    Fundstelle), §4.1 (der Handshake und
-                                    `ClientKind`), §5 (die Kommandos — und der
-                                    Absatz zu `Shutdown`, der ausdrücklich sagt,
-                                    dass das Web Remote dafür **keinen Knopf**
-                                    bekommen darf), §8 (Backpressure: ein
-                                    langsamer Client darf den Daemon nicht
-                                    aufhalten)
-4.  ARCHITECTURE_SPEC.md          — §4.1 und §4.2 (was Sitzungszustand ist und
-                                    was client-lokal — ein Telefon und ein Pult
-                                    sehen dieselbe Show und **nicht** dasselbe
-                                    Fenster), §10.3 (der Listener, der Token,
-                                    und warum Loopback die Vorgabe ist), **D3**
-                                    und **D11** in §1
-5.  ui/src/ipc/endpoint.ts        — die drei Quellen, aus denen ein Client
-                                    erfährt, wo der Daemon ist, und seit S29 der
-                                    Token daneben
-6.  ui/src/settings/machine.tsx   — das Panel, das ein Telefon **nicht** sehen
-                                    darf, und `settings.ts::isHeld` als das
-                                    Muster dafür, wie man eine Zeile zeichnet,
-                                    hinter der nichts steht
-7.  crates/prismd/src/server.rs   — `Desk::command`, `Desk::query` und der
-                                    Handshake: hier entscheidet sich, was ein
-                                    Client darf. Beachte, dass `ClientKind` heute
-                                    **selbst behauptet** wird
-8.  PROGRESS.md                   — §2.46 (S29 — was gerade gebaut wurde, und
-                                    die Verpflichtung, die es hinterlassen hat),
-                                    §7 mit allen „Carried out of"-Listen, §3 (die
+                                    Laufreihenfolge am Ende: S51 ist Nummer 18,
+                                    und die beiden Doku-Sessions dahinter sind
+                                    auf 2026-09-05 nach vorn gezogen worden —
+                                    die Begründung steht in der Tabelle
+4.  ARCHITECTURE_SPEC.md          — §4.3 (Playback und Zeit — **B36 wohnt hier**),
+                                    §4.1 und §4.2 (was Show-, was Sitzungs- und
+                                    was client-lokaler Zustand ist: davon hängt
+                                    ab, wo ein Crossfade-Modus gespeichert wird),
+                                    §10.1 (Plattformcode — vier Ausnahmen, sonst
+                                    keine), §10.3 (die Shell und der Daemon),
+                                    **D2**, **D3** und **D11** in §1
+5.  crates/prism-engine/          — die Wiedergabe: wie ein Fader heute in einen
+                                    Fade übersetzt wird, und der Tick, der davon
+                                    nichts allokieren darf
+6.  crates/prism-core/src/programmer.rs
+                                  — die Clear-Stufen (B37) und `clear_stage`,
+                                    das der Knopf liest
+7.  crates/prism-core/src/library/
+                                  — das Einlesen der Open Fixture Library, das
+                                    Kanal-Mapping und die Stelle, an der
+                                    Capabilities heute verloren gehen (B38, B43)
+8.  crates/prism-app/src/shell.rs — *spawn or attach*, die Tray-Ikone und
+                                    `Command::Shutdown` (B39), und das Fenster,
+                                    dem das Vollbild fehlt (B42)
+9.  PROGRESS.md                   — §2.46 (S29 — was zuletzt gebaut wurde), §7
+                                    mit allen „Carried out of"-Listen, §3 (die
                                     Zahlen, die weiter stimmen müssen), §5 (die
                                     offenen Verifikationen), §6 (der
-                                    Entscheidungslog)
-9.  docs/PRERELEASE_PUNCHLIST.md  — was noch offen ist (B7, B36), und **was aus
-                                    der Closed Beta zurückgekommen ist**: lies
-                                    die GitHub-Issues zu `v0.9.0`, bevor du
-                                    anfängst
+                                    Entscheidungslog — **lies den Eintrag vom
+                                    2026-09-05 zu B40**, er handelt von genau der
+                                    Sorte Fehler, die diese Session produzieren
+                                    könnte)
+10. Die GitHub-Issues             — `gh issue list --state open`. B37, B38, B39,
+                                    B42 und B43 tragen ihre Nummern im Titel. Ist
+                                    seither Neues gekommen, gehört es in
+                                    `docs/ISSUES.md`, bevor du anfängst
 
-Aufgabe: Session S31 umsetzen.
+Aufgabe: Session S51 umsetzen.
 
-**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S31 sind
-die Anforderung, vollständig und ohne Ausnahme.**
+**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` unter S51 sind
+die Anforderung, vollständig und ohne Ausnahme. Kein Eintrag in
+`docs/ISSUES.md` darf am Ende noch ☐ sein.**
 
 ## Die Entscheidungen, die diese Session treffen und begründen muss
 
-**Erstens: was ein Telefon nicht darf, und wer das durchsetzt.** Heute darf jeder
-verbundene Client alles. Das war richtig, solange jeder Client auf derselben
-Maschine lief; es ist es nicht mehr, sobald einer im Zuschauerraum steht.
-Mindestens zwei Dinge gehören hinter die Grenze: das **Panel *Diese Maschine***
-(§2.1 zieht die Linie schon, und `PROGRESS.md` §2 sagt seit S37 *das
-Maschinen-Panel reist nicht mit, und der Daemon ist es, der es verweigert*) und
-**`Command::Shutdown`** (S29, `docs/IPC_PROTOCOL.md` §5). Zu entscheiden ist, wo
-die Grenze liegt: **`ClientKind`** ist heute eine Selbstauskunft und damit keine
-Grenze; der **Transport** ist eine (die lokale Pipe erreicht nur diese Maschine
-und diesen Benutzer); ein **Token mit Rechten** wäre eine dritte. Was auch immer
-gewählt wird — es muss der **Daemon** sein, der ablehnt, und nicht eine
-Oberfläche, die den Knopf weglässt: ein Knopf, der nur nicht gezeichnet ist, ist
-keine Grenze, sondern eine Bitte.
+**Erstens: wo ein Crossfade-Modus wohnt, und wer den Fader besitzt.** *Fade* und
+*XFade* sind eine Eigenschaft von — was? Vom **Executor** (dann trägt sie
+`MachineConfig`, und ein Pult behält sie beim Showwechsel), von der **Sequenz**
+(dann trägt sie die Show, und eine Cueliste bringt ihre Bedienart mit) oder vom
+**Fader**? §4.1 und §4.2 stellen die Frage, und die Antwort ist zu begründen. Die
+zweite Hälfte ist härter und wichtiger: **das Pult bewegt den Fader nie.** Heute
+tut es das, und genau das ist der Fehler. Ein Fader, der auf halbem Weg stehen
+bleibt, hält den Crossfade auf halbem Weg — es gibt also einen Zustand
+*zwischen zwei Cues*, den die Wiedergabe halten können muss, und der ist zu
+benennen, bevor er implementiert wird. Prüfe ihn an **Frames**, nicht an
+Zustandsfeldern: eine aufgezeichnete Faderfahrt durch eine Cueliste ergibt
+zweimal dieselbe Bytefolge, und eine, die in der Mitte anhält, gibt die Mischung
+aus und behält sie.
 
-**Zweitens: was ein Finger bedient.** Die Oberfläche ist für Maus und Tastatur
-gebaut, und `ARCHITECTURE_SPEC.md` §4.5 macht die Kommandozeile *zur*
-Schnittstelle — auf einem Telefon gibt es keine Tastatur, die man dabei haben
-möchte. Zu entscheiden ist, ob das Web Remote **dieselben Fenster kleiner** ist
-oder **wenige eigene Ansichten**: Auswahl, Encoder, Executors, und was ein
-Einrichter wirklich braucht. Beides ist vertretbar; was nicht vertretbar ist, ist
-eine **zweite Wahrheit** — jede Ansicht liest `state`, keine hält etwas Eigenes
-(D3), und keine baut eine zweite Grammatik neben `prism_core::console` (S49).
+**Zweitens: eine umgedrehte Reihenfolge ist eine Verhaltensänderung, und die
+Tests, die sie festhalten, werden gedreht und nicht gelöscht.** B37 kehrt die
+Clear-Stufen um. Es gibt Tests, die die alte Reihenfolge behaupten — in
+`prism-core` und in `ui/` —, und `CLAUDE.md` verbietet, einen Test zu löschen,
+weil er rot ist. Sie werden umgeschrieben, mit einem Satz dazu, warum die neue
+Reihenfolge die richtige ist: *erst die Auswahl, dann die Werte*, weil man sonst
+mehrere Fixtures nicht nacheinander in einen Look programmieren kann. Und die
+Stufen sind als **Folge** zu prüfen, nicht einzeln, sonst dreht die nächste
+Session sie versehentlich zurück.
 
-**Drittens: wie jemand hineinkommt, der auf einer Leiter steht.** Der Listener
-ist Loopback, und ein Telefon ist nicht Loopback. Also: die Adresse ändern, ein
-Token machen, es eintippen — drei Schritte, von denen zwei am Pult passieren und
-einer auf dem Telefon. Zu entscheiden ist, wie das **einmal** geht und danach
-nicht mehr: ein QR-Code im Einstellungsfenster, der Adresse **und** Token trägt,
-ist der offensichtliche Weg — und dann ist zu begründen, was ein QR-Code kostet
-(eine Abhängigkeit, und ein Bild, das ein Token trägt und niemandem gezeigt
-werden darf, der nicht im Raum ist).
+**Drittens: wie weit eine Capability geht.** Ein OFL-Kanal kann benannte
+Bereiche tragen — *Gobo 3*, *Strobe langsam*, *Farbrad rot*. Sie einzulesen ist
+eine Sache; was der Programmer damit anfängt, ist eine zweite und größere. Zu
+entscheiden ist, **wo diese Session die Grenze zieht**, und die Grenze ist zu
+schreiben statt sie beim Umfang zu belassen: ein Encoder, der die Bereiche als
+Liste anbietet, ist etwas anderes als ein Encoder, der nur den Namen des
+Bereichs anzeigt, in dem er gerade steht. Beides ist vertretbar; unvertretbar
+ist, die Kanäle stumm auf einer Bank landen zu lassen, weil kein Mapping
+gefunden wurde. **Prüfe über den ganzen Korpus** (634 Profile), nicht an einem
+Beispiel: die Behauptung ist *kein Kanal bleibt unzugeordnet*, und die kann nur
+der Korpus widerlegen.
 
-**Viertens: was ein langsames Netz kostet.** `docs/IPC_PROTOCOL.md` §8 hat die
-Antwort für einen langsamen Client, aber sie ist nie an einem WLAN gemessen
-worden, das ein Veranstaltungsort tatsächlich hat. Telemetrie ist verwerfbar und wird
-zusammengefasst; Deltas sind es nicht. Ein Telefon hinter einer Wand ist der erste
-Client, bei dem das eine Rolle spielt.
+**Viertens: wo die eigenen Profile eines Veranstaltungsorts liegen, und was sie
+sind.** B43 verlangt ein Verzeichnis, das ein Bibliotheks-Download nicht
+anfasst. Zu entscheiden ist, wo (das Datenverzeichnis ist der offensichtliche
+Ort — es ist schon die Identität des Pults, siehe S29), wie es sich mit der OFL
+mischt, was bei einem Namensgleichstand gewinnt, und **woran ein Operator im
+Auswahlfenster sieht, dass ein Profil seines ist**. Beachte S11s Regel: eine
+Show **bettet ein**, sie referenziert nicht — ein einmal gepatchtes eigenes
+Profil reist also mit der Show und hängt nicht mehr an diesem Verzeichnis. Das
+ist die richtige Eigenschaft, und sie ist zu prüfen.
+
+**Fünftens: woran die Shell merkt, dass der Daemon weg ist.** Es gibt mindestens
+zwei Wege — den **Prozess** beobachten, an den sie sich gehängt hat, oder die
+**Verbindung**, die abreißt — und sie sind nicht gleichwertig: ein Daemon, der
+lebt, aber nicht antwortet, ist etwas anderes als einer, der beendet wurde, und
+D2 sagt, dass das Pult einen Client verlieren darf, ohne stehen zu bleiben. Was
+auch immer gewählt wird, zwei Dinge sind zu prüfen: die Ikone sagt es, und ein
+zweiter Start legt **keine zweite Ikone** daneben. Beides als Test, nicht als
+Handprobe — B39 ist genau deshalb aufgefallen, weil es niemand geprüft hatte.
+
+**Sechstens: das Vollbild gehört dem Fenster, nicht der Seite.** Tauri hat eine
+Fenster-API dafür, der Browser hat eine andere, und die Oberfläche läuft in
+beiden. Entscheide, welche es macht, und stelle sicher, dass der reine
+Browser-Build keine Taste bekommt, die nichts tut — eine Taste, die auf einem
+von zwei Wegen wirkungslos ist, ist schlimmer als keine.
 
 ## Randbedingungen
 
 - **Der Tick bleibt unberührt.** Die **neun** allokationsfreien Pfade
   (`crates/prism-engine/tests/tick_allocations.rs`) müssen unverändert null
-  messen.
+  messen. B36 fasst die Wiedergabe an und ist damit der Eintrag, der das
+  gefährden kann.
 - **§10.1 ist die Regel für Plattformcode**: `#[cfg(target_os = …)]` nur in den
   vier bestehenden Ausnahmen. Der ARM64-Cross-Check in CI setzt das durch und
-  compiliert `prism-app` bewusst nicht.
+  compiliert `prism-app` bewusst nicht — B39 und B42 wohnen dort und dürfen
+  nichts in einen plattformneutralen Crate schieben.
 - **Ein neues Kommando braucht eine Heimat und einen Eintrag in den fest
-  verdrahteten Zählungen** (heute **65**) — aber zwei Fragen davor. Erstens:
-  braucht es überhaupt eines? S38 wollte zwei neue Dinge sagen und hat **kein**
-  Kommando hinzugefügt, S45 eines, S46 keines, S48 eines, S49 keines, S29 eines
-  und hat es begründet. Zweitens, und das ist neu seit S29: **welche Art von
-  Zustand ändert es?** Die drei Applier sind die Show, die Sitzung und die
-  Maschine; `Shutdown` ist keiner davon, weil es auf den **Prozess** wirkt — kein
-  Applier, kein Delta, nichts für ein Oops. `common::daemon_commands` ist die
-  Liste dieser vierten Art, und sie existiert, damit
-  `the_three_groups_together_are_the_whole_protocol` weiterhin für ein Kommando
-  ohne Heimat rot wird.
-- **Das Wertbaum-Budget ist gemessen und knapp**:
-  `crates/prism-domain/src/wire.rs::a_generated_wire_value_fits_in_a_test_thread`
-  fällt bei **30 992** Byte. Wer es reißt: ein *Feld* boxen
-  (`crate::arb::boxed()`), und für ein **weites Unit-Enum** stattdessen
-  `crate::arb::arbitrary_from_list!`. Niemals `RUST_MIN_STACK`.
-- **`ui/src/bindings/` wird aus Rust erzeugt** (`cargo test -p prism-domain`),
-  nicht von Hand geschrieben.
-- **Ein neues Feld auf einem persistierten Typ braucht `#[serde(default)]`**,
-  und der Default muss die Bedeutung tragen, die die alte Datei schon hatte.
-- **Ein Test-Target, das einen Daemon startet, setzt `websocket: Listen::Off`**
-  und, sobald ein echter Art-Net-Output auf Loopback konfiguriert wird,
-  `artnet_discovery: false`.
-- **Die Gates laufen einzeln.** `cargo test --workspace` und `npm run test`
-  gleichzeitig lassen UI-Tests durch Zeitüberschreitung fallen, die einzeln
-  grün sind. Dasselbe gilt für einen laufenden `tauri build`: er belegt die
-  Maschine, und eine Zeitmessung daneben misst ihn.
-- **Vor Zeitmessungen die Systemlast prüfen**:
-  `Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'"`
-  — der `Get-Counter`-Weg ist lokalisiert und schlägt auf einer deutschen
-  Installation fehl. **Und stelle jede Behauptung über den Tick gegen ein
-  Kontrollfenster**, nie gegen Null — siehe §5.
-- **Eine Coverage-Messung ohne `cargo llvm-cov clean --workspace` davor ist
-  keine Messung**, und zwischen zwei Crates ebenso.
+  gezählten Listen.** Es gibt vier Arten (Show, Sitzung, Maschine, Prozess), und
+  `common::daemon_commands` zählt sie: heute **65**. Eine Zahl, die nicht mehr
+  stimmt, ist ein roter Test und kein Versehen.
 - **Die sechs Recordings sind ein Satz.** Ändert sich das Protokoll, werden alle
   sechs neu erzeugt (`cargo test -p prismd --test ui_* -- --ignored`) und die
   Diffs **strukturell** gelesen, nicht als Base64.
 - **Die `data-testid`s sind ein Vertrag** zwischen Oberfläche und den
   Playwright-Tests (heute 46). Ein umbenanntes Element zieht seinen Test **mit**;
   ein Test wird nie gelöscht, weil er rot ist.
-- **CI hat `channel = "stable"`** und seit S29 fünf Jobs plus einen, der das
-  Installationsprogramm baut. Ein Release entsteht über `release.yml` an einem
-  `v*`-Tag, und der Tag muss mit `[workspace.package] version` übereinstimmen.
+- **Eine Coverage-Messung ohne `cargo llvm-cov clean --workspace` davor ist
+  keine Messung**, und zwischen zwei Crates ebenso.
+- **CI hat `channel = "stable"`** und sechs Jobs, einer davon baut das
+  Installationsprogramm. Ein Release entsteht über `release.yml` an einem
+  `v*`-Tag, und der Tag muss mit `[workspace.package] version` übereinstimmen —
+  für diese Session also **`0.9.1`** in `Cargo.toml`, bevor der Tag gesetzt wird.
+  `tauri.conf.json` trägt bewusst **keine** Version; das ist geprüft
+  (`crates/prism-app/tests/version.rs`) und bleibt so.
 - **Der ganze Windows-Build ist seit S29 `+crt-static`** (`.cargo/config.toml`).
   Wer eine statische C-Bibliothek dazunimmt, erbt das; wer `RUSTFLAGS` in einem
   Workflow setzt, muss es wiederholen, weil die Umgebung die Konfiguration
   **ersetzt**.
+- **Die Konsole hat am 2026-09-05 zwei Fehler verloren, die niemand gemeldet
+  hätte** — sie fraßen die getippte Zeile lautlos (B40, Entscheidungslog). Die
+  Regel, die daraus kam, gilt für alles, was diese Session anfasst: *nichts, was
+  dieser Client vor dem letzten Tastendruck entschieden hat, überschreibt, was
+  danach kam.* Und: ein Zustand, den niemand meldet, weil nichts ihn sagt, ist
+  der teuerste, den es gibt.
 
 ## Zum Schluss
 
@@ -6805,26 +6832,34 @@ Client, bei dem das eine Rolle spielt.
   die Playwright-Tests (heute 46)
 - Die Zahlen aus den vorigen Sessions müssen weiter stimmen: null Allokationen
   im Tick (**neun** Pfade), null React-Commits, das Telemetrie-Frame-Budget
-- **Das Web Remote auf einem echten Telefon in einem echten WLAN prüfen** — und
-  festhalten, welches Gerät, welcher Browser und welches Netz. Ein Remote, das
-  nur im Chromium auf derselben Maschine funktioniert, hat das Kriterium nicht
-  erfüllt
-- **Die Grenze von außen prüfen**, nicht von innen: ein Client, der sich als
-  `Desktop` ausgibt und über den Netz-Listener kommt, muss abgelehnt werden —
-  sonst ist die Grenze eine Bitte
+- **Die zwei Einträge, die man nicht am Schreibtisch prüfen kann, von Hand
+  prüfen und festhalten wie:** B36 an einem echten Fader (X-Touch oder Maus) —
+  die Fahrt, der Halt auf halbem Weg, und dass nichts zurückspringt — und B39
+  mit einem Daemon, der im Task-Manager beendet wird
 - **Die Markdown-Dateien werden im selben Durchgang nachgezogen wie der Code**,
   nicht in einem Folge-Commit. Der Eigentümer hat das am 2026-08-28 ausdrücklich
   verlangt. Betroffen sind je nach Änderung: `ARCHITECTURE_SPEC.md` (§4.1, §4.2,
-  §10.3, §9 — und prüfe auf **tote Querverweise**: der Code zitiert Abschnitte
-  nach Nummer), `docs/IPC_PROTOCOL.md` (§2.1, §5), `README.md` (die Liste dessen,
-  was noch fehlt), `docs/RELEASE_NOTES.md`
-- PROGRESS.md aktualisieren: S31-Status, ein §2.47-Verifikationsprotokoll mit
+  §4.3, §10.3 — und prüfe auf **tote Querverweise**: der Code zitiert Abschnitte
+  nach Nummer), `docs/IPC_PROTOCOL.md` (§5), `README.md` (die Liste dessen, was
+  noch fehlt — **und der Ort für eigene Fixture-Profile aus B43**),
+  `docs/RELEASE_NOTES.md`
+- **`docs/ISSUES.md`**: jeder der sechs Einträge bekommt sein Ergebnis — ✅ mit
+  dem Satz, was geändert wurde, und dem Test, der es festhält, oder ⛔ mit dem
+  Grund. Danach hat die Liste **keinen offenen Eintrag mehr**
+- **Die GitHub-Issues, die damit erledigt sind, schließen** — mit einem Verweis
+  auf den Commit, und erst, wenn CI grün ist
+- PROGRESS.md aktualisieren: S51-Status, ein §2.47-Verifikationsprotokoll mit
   **jeder gemessenen Zahl**, die Coverage- und Performance-Tabellen in §3, und in
-  §7 eine neue Liste „Carried out of S31"
-- PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt überschreiben —
-  wähle die nächste der erweiterten Funktionen (S30 3D-Viewer, S32 PSN/OSC, S47
-  Timecode, S50 Makros) und begründe die Wahl im Prompt, unter Berücksichtigung
-  dessen, was aus der Closed Beta zurückgekommen ist
+  §7 eine neue Liste „Carried out of S51"
+- **`v0.9.1` veröffentlichen**: Version in `Cargo.toml`, Tag, `release.yml`, und
+  Release-Notes, die sagen, welche Punchlist-Einträge geschlossen wurden und was
+  ein Tester aus der Closed Beta jetzt anders vorfindet
+- PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt überschreiben — und
+  die nächste Session ist **nicht** wählbar: es sind **S41 und S42**, die
+  Handbücher und prismdmx.de, für den **Open-Beta-Pre-Release**. Die
+  Laufreihenfolge in `IMPLEMENTATION_PLAN.md` trägt die Begründung; der Prompt
+  soll sie wiederholen und dazu sagen, was v0.9.1 an der Dokumentation geändert
+  hat
 - Mit einer Conventional-Commit-Nachricht committen, pushen, CI beobachten und
   das Ergebnis in PROGRESS.md festhalten
 ```

@@ -100,7 +100,7 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
   // while any is outstanding the session's line is somebody else's opinion about
   // a line we are still writing. Ours wins until we are level again.
   //
-  // **A line this client *ran* is one of the lines it sent** — S50, and the
+  // **A line this client *ran* is one of the lines it sent** — B40, and the
   // second CI run this rule has cost. The daemon clears `Session::commandLine`
   // as part of running a line (`ShowFile::run_command_line`), so a key that
   // writes and runs a whole line — every key in §4.5's first shape — empties the
@@ -280,7 +280,7 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 
   const run = useCallback(
     (text: string) => {
-      // **Written into the box, unless the box has moved on under it** — S50.
+      // **Written into the box, unless the box has moved on under it** — B40.
       // A key writes its line where the operator can read it (§4.5) and that is
       // right for a key: the press *is* the latest thing they did. It is wrong
       // for {@link ConsoleShell.pick}, which decides what a pick means a round
@@ -338,7 +338,7 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
       const candidate = appended(typed, words);
       void readFor(candidate).then((answer) => {
         const chosen = pickOnto(answer);
-        // **The box can move on while a pick is being decided** — S50, and the
+        // **The box can move on while a pick is being decided** — B40, and the
         // second half of the same CI failure. What a pick means is a round trip
         // since S49, and an operator does not stop typing across one: they
         // clicked a preset and typed `at 100` fifty milliseconds later, and the
@@ -457,7 +457,7 @@ function useMirror(send: (command: Command) => void): {
      * round trip is in flight. Cancelling it then would leave the second screen
      * and the X-Touch's display showing a line nobody is writing any more.
      *
-     * # And the clearing it causes is queued as ours — S50
+     * # And the clearing it causes is queued as ours — B40
      *
      * That same clearing arrives as a `SessionPatch` carrying an **empty** line,
      * and it is this client's own doing however the run was started. Left
