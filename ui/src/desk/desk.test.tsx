@@ -950,4 +950,106 @@ describe("the command line", () => {
         }
         expect(screen.getByTestId("command-line").textContent).toBe("1 thru 4 at ");
     });
+
+    /**
+     * **A key's line does not eat the line typed after it** — S50.
+     *
+     * Two runs of CI died here and neither said a word about it. Running a line
+     * is asynchronous (S49) and the daemon *clears* `Session::commandLine` as
+     * part of running one, so a key in §4.5's first shape empties the daemon's
+     * field a round trip after the finger came off it. An operator who started
+     * typing in that gap had that emptying adopted into their box: the line went
+     * blank, the Enter after it ran nothing, and nothing on the screen said so.
+     *
+     * The deltas below are the daemon's own order for this gesture — the
+     * keystroke this client mirrored comes back first, then the clearing the
+     * key's line caused — because the mirror is sent before the run.
+     */
+    it("keeps a line typed while a key's line is still in flight", async () => {
+        const { commands, network, store } = desk();
+        /** The daemon's line moved, and nothing else. */
+        const daemonLine = (text: string) => {
+            act(() => {
+                store.applyDelta({
+                    t: "SessionPatch",
+                    ops: [{ op: "replace", path: "/session/commandLine", value: text }],
+                });
+            });
+        };
+
+        // A key writes a whole line and runs it. Nothing has gone out yet: the
+        // reading it is waiting on is a round trip.
+        fireEvent.click(screen.getByTestId("page-up"));
+        // And the operator does not stop typing while that is in flight.
+        const input = screen.getByTestId("command-input");
+        fireEvent.change(input, { target: { value: "1 thru 3 red at 100" } });
+        // Both readings answered, so the key's line is sent now.
+        await settleReadings(network.last);
+
+        // The daemon echoes the keystroke this client mirrored…
+        daemonLine("1 thru 3 red at 100");
+        // …and then clears its field, because it has just run the key's line.
+        daemonLine("");
+        expect((input as HTMLInputElement).value).toBe("1 thru 3 red at 100");
+
+        // Which is the whole point: the line is still there to be run.
+        fireEvent.submit(input);
+        await settleReadings(network.last);
+        expect(ranLines(commands())).toEqual(["Page 1", "1 thru 3 red at 100"]);
+    });
+
+    /**
+     * And the second screen this rule exists for still gets through.
+     *
+     * The clearing above is written down only when this client has put something
+     * in the daemon's field, because an unchanged field produces no ops at all
+     * (`Session::commit`) — a client waiting for an echo that was never going to
+     * arrive would be deaf to the next real one, which is the defect the guard
+     * is there to prevent rather than a version of it.
+     */
+    it("still adopts a line typed on another screen after a key has run one", async () => {
+        const { network, store } = desk();
+        fireEvent.click(screen.getByTestId("page-up"));
+        await settleReadings(network.last);
+        act(() => {
+            store.applyDelta({
+                t: "SessionPatch",
+                ops: [{ op: "replace", path: "/session/commandLine", value: "Sequence 4" }],
+            });
+        });
+        expect((screen.getByTestId("command-input") as HTMLInputElement).value).toBe("Sequence 4");
+    });
+
+    /**
+     * **A pick decided a round trip ago does not land on the line typed since**
+     * — S50, and the other half of the same CI failure.
+     *
+     * What a pick means is the daemon's since S49, so a click on a pool row is a
+     * question and an answer with the operator's hands free in between. They
+     * clicked a preset and typed `at 100` fifty milliseconds later; the pick's
+     * own line went into the box on top of theirs, the Enter after it ran the
+     * pick a second time, and `at 100` was never run at all. The cue went into
+     * the show with colour and no intensity — which since B34 is a cue that
+     * makes no light, and is what `looks.spec.ts:374` was measuring.
+     *
+     * Both halves are asserted, because a fix that simply dropped the late pick
+     * would pass a test that only looked at the box: the click is a thing the
+     * operator asked for and it still has to happen.
+     */
+    it("does not let a pick decided late overwrite the line typed since", async () => {
+        const { commands, network } = desk();
+        // A strip is a pick: with nothing typed it selects the executor, and
+        // deciding that is a round trip.
+        fireEvent.click(screen.getByTestId("select-3"));
+        // The operator does not wait for it.
+        const input = screen.getByTestId("command-input");
+        fireEvent.change(input, { target: { value: "at 100" } });
+        await settleReadings(network.last);
+
+        expect((input as HTMLInputElement).value).toBe("at 100");
+        fireEvent.submit(input);
+        await settleReadings(network.last);
+        // The click happened, and so did the line typed over it.
+        expect(ranLines(commands())).toEqual(["Executor 3", "at 100"]);
+    });
 });

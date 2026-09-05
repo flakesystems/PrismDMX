@@ -534,7 +534,19 @@ Meldungen, Tastatur, Leerzustände, Verhalten beim Start, Verbindungsabbrüche.*
 - **Was passiert:** Der Test `a preset link is alive: editing the preset changes the light a cue puts out` schlägt intermittierend bei Docs-only-CI-Runs fehl, obwohl diese keine UI-Änderungen beinhalten. Ein Docs-only-Run kann keinen UI-Fehler verursachen.
 - **Was passieren soll:** Der Test soll deterministisch laufen und nicht bei Docs-only-Runs fehlschlagen. Ursache des Flaky-Verhaltens identifizieren und beheben.
 - **So sieht man es:** Mehrere CI-Runs mit ausschließlich Docs-Änderungen beobachten
-- **Ergebnis:** ☐ offen
+- **Ergebnis:** ✅ **behoben** — und der Test war nicht schuld. Es waren **zwei** Fehler in der Konsole, beide derselbe Satz: *etwas, das dieser Client vor dem letzten Tastendruck des Operators entschieden hat, überschreibt die Zeile im Feld.* Beide treffen jeden Operator, nicht nur den Runner, und beide sagen dabei **nichts** — keine Notiz, kein Refusal, keine Zeile im Log.
+
+  **Der gemeinsame Grund.** Seit S49 ist Ausführen asynchron: eine Geste fragt erst den Daemon, was ihre Zeile bedeutet, und handelt, wenn die Antwort da ist. In dieser Lücke tippt der Operator weiter — und beide Fehler sind das, was dann in sein Feld einschlägt.
+
+  **Erstens: das Leeren des Daemons.** Der Daemon **leert** `Session::commandLine` als Teil des Ausführens (`ShowFile::run_command_line` endet auf `written("")`), und das kommt als `SessionPatch` zurück. `ConsoleProvider` merkt sich seit S43 jede Zeile, die dieser Client sendet, bis ihr Echo zurückkommt; `dispatch` ging aber an dieser Warteschlange vorbei. Das Echo der getippten Zeile strich sie leer, und das *darauffolgende* Leeren war damit keine eigene Spur mehr, sondern Neuigkeit — übernommen, Zeile weg, das Enter danach führte eine leere Zeile aus. Das ist `looks.spec.ts:510`: `new-sequence`, sofort danach `1 thru 3 red at 100`, und ein Store-Knopf, der 57 Sekunden lang tot blieb.
+
+  **Zweitens: die späte Entscheidung eines Picks.** Ein Klick auf eine Pool-Zeile ist eine Frage an den Daemon, und `run` schrieb seine Zeile danach **bedingungslos** ins Feld. Im Preset-Test: Klick auf `preset-1`, fünfzig Millisekunden später `at 100` getippt — und im Trace steht zum Zeitpunkt des Enter `Preset 1` im Feld und `at 100` nur noch in der Engine-Zeile. `at 100` wurde nie ausgeführt. Der Cue ging mit Farbe und **ohne Intensität** in die Show, und ein RGBW-PAR ohne Intensität macht seit B34 kein Licht — genau die Null, an der `litPixels(FULL)` hängen blieb.
+
+  **Die Behebung, zweimal.** `useMirror.ran` ersetzt `cancel` und schreibt das Leeren mit auf, das dieser Lauf gleich verursacht — nur dann, wenn dieser Client überhaupt etwas im Feld des Daemons stehen hat, weil ein unverändertes Feld gar keine Ops erzeugt (`Session::commit`) und ein Echo, das nie kommt, den Client für das nächste *echte* taub macht, also für den zweiten Bildschirm, für den die Regel da ist. Und `pick` vergleicht das Feld beim Eintreffen der Antwort mit dem, gegen das es entschieden hat: was der Zeiger wollte, passiert weiterhin — der Operator hat es angeklickt —, aber es schreibt nicht mehr dorthin, wo jetzt seine Zeile steht. Ein Pick, der nur *geschrieben* hätte, entfällt: Schreiben ist ein Angebot, eine Zeile fertigzumachen, und er macht gerade eine andere fertig.
+
+  **Und die Suite wartet jetzt.** Drei `new-sequence`-Klicks und der Preset-Klick in `looks.spec.ts` tippten sofort weiter, während Nachbarn im selben File auf `sequence-count` warten. D3 gilt auch für die Tests: eine Geste ist ein Kommando hin und ein Delta zurück.
+
+  Tests, alle in `ui/src/desk/desk.test.tsx`: `keeps a line typed while a key's line is still in flight`, `still adopts a line typed on another screen after a key has run one` und `does not let a pick decided late overwrite the line typed since`. Jeder wurde gegengeprüft — ohne seine Hälfte der Behebung geht er rot.
 
 
 ### B34 — Ein Rig aus RGBW-PARs geht beim Start des Daemons an

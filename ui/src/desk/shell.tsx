@@ -99,6 +99,15 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
   // So every line this client sends is remembered until its echo comes back, and
   // while any is outstanding the session's line is somebody else's opinion about
   // a line we are still writing. Ours wins until we are level again.
+  //
+  // **A line this client *ran* is one of the lines it sent** — S50, and the
+  // second CI run this rule has cost. The daemon clears `Session::commandLine`
+  // as part of running a line (`ShowFile::run_command_line`), so a key that
+  // writes and runs a whole line — every key in §4.5's first shape — empties the
+  // daemon's field a round trip after it was pressed. An operator who started
+  // typing in that gap had their line wiped by that emptying: the box went
+  // blank, Enter ran nothing, and **nothing said so**. See {@link useMirror}'s
+  // `ran` for the half of the fix that queues it.
   const outstanding = mirror.outstanding;
   useEffect(() => {
     const queue = outstanding.current;
@@ -127,6 +136,27 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
    * line, which is why the text is compared rather than assumed.
    */
   const held = useRef<CommandLineReading>(unread(""));
+
+  /**
+   * What is in the box **now**, for the one callback that decides late.
+   *
+   * `typed` in a closure is the box as it stood in the render the gesture
+   * started in, which is the wrong thing for {@link ConsoleShell.pick} to
+   * compare against: the whole question is whether it has changed since. Kept
+   * in a ref rather than read through an effect because the comparison happens
+   * in a promise callback, which can run before an effect has flushed.
+   */
+  const live = useRef(typed);
+  live.current = typed;
+
+  /**
+   * Whether the decision now being carried out was taken before the operator's
+   * latest keystroke — see {@link ConsoleShell.pick} and `run`.
+   *
+   * Raised for the length of one synchronous continuation and never seen
+   * raised outside it.
+   */
+  const decidedLate = useRef(false);
 
   const readFor = useCallback(
     async (line: string): Promise<CommandLineReading> => {
@@ -206,8 +236,9 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
       setPrompt(null);
       setTyped((current) => (current === line ? "" : current));
       // And the keystroke still owed goes with it, for the same reason and under
-      // the same condition — see `cancel`.
-      mirror.cancel(line);
+      // the same condition — see `ran`, which also writes down the clearing this
+      // run is about to cause so the effect above does not read it as news.
+      mirror.ran(line);
     },
     [mirror, send],
   );
@@ -249,7 +280,16 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 
   const run = useCallback(
     (text: string) => {
-      setTyped(text);
+      // **Written into the box, unless the box has moved on under it** — S50.
+      // A key writes its line where the operator can read it (§4.5) and that is
+      // right for a key: the press *is* the latest thing they did. It is wrong
+      // for {@link ConsoleShell.pick}, which decides what a pick means a round
+      // trip later and would otherwise put its line over one they have started
+      // since. `pick` raises the flag for exactly the length of that decision;
+      // nothing else ever sees it raised.
+      if (!decidedLate.current) {
+        setTyped(text);
+      }
       void execute(text);
     },
     [execute],
@@ -292,18 +332,41 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 
   const pick = useCallback(
     (words: string, own: () => void) => {
+      // The line this pick was decided against, so that the continuation below
+      // can tell whether it is still the line in the box.
+      const base = typed;
       const candidate = appended(typed, words);
       void readFor(candidate).then((answer) => {
         const chosen = pickOnto(answer);
-        if (chosen.kind === "own") {
-          own();
+        // **The box can move on while a pick is being decided** — S50, and the
+        // second half of the same CI failure. What a pick means is a round trip
+        // since S49, and an operator does not stop typing across one: they
+        // clicked a preset and typed `at 100` fifty milliseconds later, and the
+        // pick's own line landed on top of theirs. `at 100` was never run, the
+        // cue went into the show with colour and no intensity, and since B34
+        // that is a cue which makes no light.
+        //
+        // What the pointer asked for still happens — they asked for it — but it
+        // no longer writes where their line now is. A pick that would only have
+        // **written** is dropped instead: writing is an offer to finish a line,
+        // and they are already finishing a different one.
+        const late = live.current !== base;
+        if (chosen.kind === "write") {
+          if (!late) {
+            write(chosen.line);
+          }
           return;
         }
-        if (chosen.kind === "run") {
-          run(chosen.line);
-          return;
+        decidedLate.current = late;
+        try {
+          if (chosen.kind === "own") {
+            own();
+          } else {
+            run(chosen.line);
+          }
+        } finally {
+          decidedLate.current = false;
         }
-        write(chosen.line);
       });
     },
     [readFor, run, typed, write],
@@ -339,7 +402,7 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 function useMirror(send: (command: Command) => void): {
   readonly soon: (text: string) => void;
   readonly now: (text: string) => void;
-  readonly cancel: (line: string) => void;
+  readonly ran: (line: string) => void;
   readonly outstanding: { current: string[] };
 } {
   const sent = useRef("");
@@ -381,7 +444,9 @@ function useMirror(send: (command: Command) => void): {
       flush(text);
     };
     /**
-     * Drops a keystroke about a line that has been **run** — S49.
+     * Writes down that this client has asked the daemon to **run** a line.
+     *
+     * # The keystroke still owed for it is dropped — S49
      *
      * The daemon clears the line itself as part of running it, so a flush still
      * owed for that line would put half of what was typed back into a box the
@@ -392,20 +457,34 @@ function useMirror(send: (command: Command) => void): {
      * round trip is in flight. Cancelling it then would leave the second screen
      * and the X-Touch's display showing a line nobody is writing any more.
      *
-     * It leaves `outstanding` alone in either case. The queue is what stops a
-     * late echo of a line *this* client sent being adopted as news — S43's
-     * defect — and running a line does not make the echoes of the keystrokes
-     * that built it stop arriving.
+     * # And the clearing it causes is queued as ours — S50
+     *
+     * That same clearing arrives as a `SessionPatch` carrying an **empty** line,
+     * and it is this client's own doing however the run was started. Left
+     * unqueued it was read as news, and adopting it emptied a box the operator
+     * was still typing into: a whole line eaten, with the daemon never told and
+     * nothing on the screen to say so. It is queued exactly when it will
+     * produce a delta at all — `sent` is what this client last put in the
+     * daemon's field, so an empty one means the field is already empty and an
+     * unchanged field produces no ops (`Session::commit`). Queueing an echo
+     * that never arrives would deafen this client to the next real one, which is
+     * the second screen this rule exists for.
      */
-    const cancel = (line: string): void => {
-      if (owed.current !== null && owed.current !== line) {
-        return;
+    const ran = (line: string): void => {
+      if (owed.current === null || owed.current === line) {
+        if (timer.current !== null) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        owed.current = null;
       }
-      if (timer.current !== null) {
-        clearTimeout(timer.current);
-        timer.current = null;
+      if (sent.current !== "") {
+        outstanding.current.push("");
       }
-      owed.current = null;
+      // The daemon's field is empty now, whatever this client last put in it, so
+      // the next keystroke mirrors the line the operator is left holding rather
+      // than being deduplicated away against a value that is no longer there.
+      sent.current = "";
     };
     const soon = (text: string): void => {
       if (sent.current === text) {
@@ -427,6 +506,6 @@ function useMirror(send: (command: Command) => void): {
         }
       }, SEND_INTERVAL_MS);
     };
-    return { soon, now, cancel, outstanding };
+    return { soon, now, ran, outstanding };
   }, [send]);
 }
