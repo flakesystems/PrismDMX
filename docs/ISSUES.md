@@ -7,7 +7,7 @@ Zeilen. Nicht alle fünf müssen ausgefüllt sein — **Was passiert** und **Was
 passieren soll** sind die beiden, ohne die ein Eintrag nicht bearbeitbar ist.
 
 ```markdown
-### B7 — Der Executor-Strip zeigt nach dem Laden einer Show die alten Namen
+### Bxx — Der Executor-Strip zeigt nach dem Laden einer Show die alten Namen
 
 - **Wo:** Konsolen-Shell, Executor-Strip
 - **Schwere:** ärgerlich
@@ -19,6 +19,11 @@ passieren soll** sind die beiden, ohne die ein Eintrag nicht bearbeitbar ist.
   von A steht noch da. Jedes Mal.
 - **Ergebnis:** ☐ offen
 ```
+
+Die Vorlagen oben und unten tragen absichtlich **`Bxx`** und keine echte Nummer:
+sie standen einmal auf `B7` und `B1`, und wer die Datei nach offenen Einträgen
+durchzählt — von Hand oder mit einem Skript — hat sie beide mitgezählt. Eine
+Vorlage, die sich wie ein Eintrag liest, ist ein Eintrag.
 
 **Die Nummern werden nie neu vergeben.** Sie sind Identität, nicht Reihenfolge —
 dieselbe Regel wie bei den Session-Nummern in `IMPLEMENTATION_PLAN.md`. Ein
@@ -70,7 +75,7 @@ schließen, anordnen, Ansichten, Seiten, was zu groß oder zu klein ist.*
 
 <!-- Erster Eintrag hier. Vorlage:
 
-### B1 — <ein Satz, was falsch ist>
+### Bxx — <ein Satz, was falsch ist>
 
 - **Wo:**
 - **Schwere:**
