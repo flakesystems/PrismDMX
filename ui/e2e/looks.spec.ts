@@ -405,6 +405,11 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await clearProgrammer(page);
   await command(page, "1 thru 3");
   await page.getByTestId("preset-1").click();
+  // **And the pick is waited for**, because what a pick means is a round trip
+  // since S49 and the line below is a different gesture. The colour bank going
+  // *touched* is the programmer holding the preset's values, which is the thing
+  // the click was for.
+  await expect(page.getByTestId("bank-Color")).toHaveAttribute("data-touched", "yes");
   // **And the intensity, which is the desk's since S43.** These PARs have no
   // dimmer channel of their own, so the desk supplies one that scales their
   // colour — and it rests at nought, which is what stops a rig of them coming
@@ -423,6 +428,7 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
+  await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   // The fader is its own line since S40 — see the note in the first test.
   await command(page, "Assign Sequence 1 Executor 3");
   await page.getByTestId("store-cue").click();
@@ -518,6 +524,7 @@ test("a cue sheet of four hundred rows scrolls inside its own window", async ({ 
   await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
+  await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   await command(page, "1 thru 3 red at 100");
   for (let number = 1; number <= 30; number += 1) {
     await page.getByTestId("store-number").fill(String(number));
@@ -566,6 +573,7 @@ test("a cue sheet says what a cue asserts and what it inherits from the cues abo
   await openWindow(page, "Executors");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
+  await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   await command(page, "Assign Sequence 1 Executor 3");
 
   // Cue 1 sets red on three PARs. Cue 2 sets **green** and says nothing at all
