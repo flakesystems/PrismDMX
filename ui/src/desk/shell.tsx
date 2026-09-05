@@ -137,6 +137,27 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
    */
   const held = useRef<CommandLineReading>(unread(""));
 
+  /**
+   * What is in the box **now**, for the one callback that decides late.
+   *
+   * `typed` in a closure is the box as it stood in the render the gesture
+   * started in, which is the wrong thing for {@link ConsoleShell.pick} to
+   * compare against: the whole question is whether it has changed since. Kept
+   * in a ref rather than read through an effect because the comparison happens
+   * in a promise callback, which can run before an effect has flushed.
+   */
+  const live = useRef(typed);
+  live.current = typed;
+
+  /**
+   * Whether the decision now being carried out was taken before the operator's
+   * latest keystroke — see {@link ConsoleShell.pick} and `run`.
+   *
+   * Raised for the length of one synchronous continuation and never seen
+   * raised outside it.
+   */
+  const decidedLate = useRef(false);
+
   const readFor = useCallback(
     async (line: string): Promise<CommandLineReading> => {
       if (held.current.text === line) {
@@ -259,7 +280,16 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 
   const run = useCallback(
     (text: string) => {
-      setTyped(text);
+      // **Written into the box, unless the box has moved on under it** — S50.
+      // A key writes its line where the operator can read it (§4.5) and that is
+      // right for a key: the press *is* the latest thing they did. It is wrong
+      // for {@link ConsoleShell.pick}, which decides what a pick means a round
+      // trip later and would otherwise put its line over one they have started
+      // since. `pick` raises the flag for exactly the length of that decision;
+      // nothing else ever sees it raised.
+      if (!decidedLate.current) {
+        setTyped(text);
+      }
       void execute(text);
     },
     [execute],
@@ -302,18 +332,41 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
 
   const pick = useCallback(
     (words: string, own: () => void) => {
+      // The line this pick was decided against, so that the continuation below
+      // can tell whether it is still the line in the box.
+      const base = typed;
       const candidate = appended(typed, words);
       void readFor(candidate).then((answer) => {
         const chosen = pickOnto(answer);
-        if (chosen.kind === "own") {
-          own();
+        // **The box can move on while a pick is being decided** — S50, and the
+        // second half of the same CI failure. What a pick means is a round trip
+        // since S49, and an operator does not stop typing across one: they
+        // clicked a preset and typed `at 100` fifty milliseconds later, and the
+        // pick's own line landed on top of theirs. `at 100` was never run, the
+        // cue went into the show with colour and no intensity, and since B34
+        // that is a cue which makes no light.
+        //
+        // What the pointer asked for still happens — they asked for it — but it
+        // no longer writes where their line now is. A pick that would only have
+        // **written** is dropped instead: writing is an offer to finish a line,
+        // and they are already finishing a different one.
+        const late = live.current !== base;
+        if (chosen.kind === "write") {
+          if (!late) {
+            write(chosen.line);
+          }
           return;
         }
-        if (chosen.kind === "run") {
-          run(chosen.line);
-          return;
+        decidedLate.current = late;
+        try {
+          if (chosen.kind === "own") {
+            own();
+          } else {
+            run(chosen.line);
+          }
+        } finally {
+          decidedLate.current = false;
         }
-        write(chosen.line);
       });
     },
     [readFor, run, typed, write],

@@ -405,6 +405,11 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
   await clearProgrammer(page);
   await command(page, "1 thru 3");
   await page.getByTestId("preset-1").click();
+  // **And the pick is waited for**, because what a pick means is a round trip
+  // since S49 and the line below is a different gesture. The colour bank going
+  // *touched* is the programmer holding the preset's values, which is the thing
+  // the click was for.
+  await expect(page.getByTestId("bank-Color")).toHaveAttribute("data-touched", "yes");
   // **And the intensity, which is the desk's since S43.** These PARs have no
   // dimmer channel of their own, so the desk supplies one that scales their
   // colour — and it rests at nought, which is what stops a rig of them coming
