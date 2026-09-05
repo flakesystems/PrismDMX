@@ -1163,10 +1163,19 @@ impl Programmer {
     ///
     /// | Stage | What a press takes away |
     /// |---|---|
-    /// | `Values` | the programmer values, keeping the selection |
-    /// | `Selection` | the selection |
+    /// | `Selection` | the selection, keeping every value that has been set |
+    /// | `Values` | the programmer values |
     /// | `All` | the rest — the feature group, and the session's page beside it |
     /// | `Nothing` | nothing: there is nothing to clear |
+    ///
+    /// # The first two are the other way round since S51 — B37
+    ///
+    /// The first press used to take the values and the second the selection.
+    /// The owner's punch list gives the reason for turning it: a look built out
+    /// of several fixtures is *select, set, let go, select the next, set* — and
+    /// **letting go** is the only step in that list a key has to do. Under the
+    /// old order the key that did it took the look with it, so the look could
+    /// never be more than one selection wide. See [`prism_domain::ClearStage`].
     ///
     /// # It reads the contents, and it is not a cycle — S43, B2
     ///
@@ -1191,11 +1200,11 @@ impl Programmer {
     pub fn clear(&mut self) -> bool {
         let mut next = self.state.clone();
         match self.state.stage() {
-            ClearStage::Values => next.values.clear(),
             // The provenance goes with it — see `ProgrammerState::
             // clear_selection`. A `selected_groups` left standing over an empty
             // selection would make the next press of that group a *deselect*.
             ClearStage::Selection => next.clear_selection(),
+            ClearStage::Values => next.values.clear(),
             ClearStage::All => next = ProgrammerState::default(),
             ClearStage::Nothing => return false,
         }
@@ -1591,8 +1600,7 @@ mod tests {
         programmer
             .select_group(GroupId::new(1), SelectionMode::Toggle, &show)
             .unwrap();
-        // Stage 1 is the values; there are none, so this press takes the
-        // selection.
+        // Stage 1 is the selection since S51 (B37), and there is one.
         assert_eq!(programmer.state().stage(), ClearStage::Selection);
         programmer.clear();
         assert!(programmer.state().selection.is_empty());
@@ -1807,25 +1815,29 @@ mod tests {
     /// can be put back wrongly: restoring the look restores the stage, because
     /// the stage is a reading of the look. That is a stronger claim than the old
     /// one and it is what this now asserts.
+    ///
+    /// **S51 turned the first two stages round** (B37), so the press in the
+    /// middle takes the selection and the values are what is left standing.
     #[test]
     fn restoring_puts_back_the_look_and_the_stage_follows_it() {
         let show = show();
         let mut programmer = programmer(&show);
-        // Something to clear: the fixture programmer() touched.
-        assert_eq!(programmer.state().clear_stage, ClearStage::Values);
+        // Something to clear: the fixture programmer() touched, which is
+        // selected as well as set — so the selection is what the key offers.
+        assert_eq!(programmer.state().clear_stage, ClearStage::Selection);
         programmer.clear();
         let stored = programmer.state().clone();
-        // The values are gone and the selection is not, so the key now offers
-        // the selection — read off the contents rather than counted.
-        assert_eq!(stored.clear_stage, ClearStage::Selection);
+        // The selection is gone and the values are not, so the key now offers
+        // the values — read off the contents rather than counted.
+        assert_eq!(stored.clear_stage, ClearStage::Values);
         assert_eq!(stored.clear_stage, stored.stage());
 
         programmer
             .select_fixtures(&[FixtureId::new(3)], SelectionMode::Add, &show)
             .unwrap();
-        // Still nothing but a selection, so still the same offer. The old
-        // counter reset to zero here and told the operator there was nothing
-        // to clear when there was.
+        // Selecting again puts the key back to the selection, which is exactly
+        // the gesture B37 is about: the next fixture joins the look that is
+        // still standing.
         assert_eq!(programmer.state().clear_stage, ClearStage::Selection);
 
         assert!(programmer.restore(stored.clone()));
@@ -2027,7 +2039,7 @@ mod tests {
         let show = show();
         let mut programmer = programmer(&show);
         let before = programmer.state().clone();
-        assert_eq!(before.clear_stage, ClearStage::Values);
+        assert_eq!(before.clear_stage, ClearStage::Selection);
 
         for command in [
             Command::StoreCue {
@@ -2069,9 +2081,9 @@ mod tests {
         assert!(programmer.stored().deltas.is_empty());
         let mut cleared = programmer.clone();
         cleared.clear();
-        assert_eq!(cleared.state().clear_stage, ClearStage::Selection);
+        assert_eq!(cleared.state().clear_stage, ClearStage::Values);
         assert!(cleared.stored().deltas.is_empty());
-        assert_eq!(cleared.state().clear_stage, ClearStage::Selection);
+        assert_eq!(cleared.state().clear_stage, ClearStage::Values);
     }
 
     /// Every refusal says what was wrong, in words an operator can read.

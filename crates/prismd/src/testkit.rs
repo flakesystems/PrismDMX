@@ -32,6 +32,7 @@ pub fn attribute(attribute: AttributeType, coarse_offset: u16, home: u16) -> Att
         invert: false,
         physical_from: 0.0,
         physical_to: 100.0,
+        ranges: Vec::new(),
     }
 }
 

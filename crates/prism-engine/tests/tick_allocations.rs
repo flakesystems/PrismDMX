@@ -113,7 +113,7 @@ impl TickBody for RampBody {
             | TickCommand::SetExecutorFlash { .. }
             | TickCommand::SetExecutorSpeed { .. }
             | TickCommand::TapExecutorSpeed { .. }
-            | TickCommand::SetExecutorXFade { .. }
+            | TickCommand::SetExecutorCrossfade { .. }
             | TickCommand::Go { .. }
             | TickCommand::GotoCue { .. }
             | TickCommand::SetGroupMaster { .. }
@@ -293,6 +293,7 @@ fn fixture_type(attributes: usize, sixteen_bit: bool) -> FixtureType {
             invert: false,
             physical_from: 0.0,
             physical_to: 100.0,
+            ranges: Vec::new(),
         })
         .collect::<Vec<_>>();
     FixtureType {
@@ -944,8 +945,18 @@ fn a_tick_publishing_its_playbacks_makes_no_allocator_call_either() {
                 2 => TickCommand::TapExecutorSpeed {
                     executor: executor.into(),
                 },
-                _ => TickCommand::SetExecutorXFade {
+                // **Both crossfade modes go through the tick** — S51, B36, and
+                // the reason this alternates: `Fade` arms a fade-out and
+                // `XFade` a cue transition, and the allocation-free claim is
+                // about both paths rather than about the one that was written
+                // first.
+                _ => TickCommand::SetExecutorCrossfade {
                     executor: executor.into(),
+                    mode: if index.is_multiple_of(2) {
+                        prism_domain::CrossfadeMode::XFade
+                    } else {
+                        prism_domain::CrossfadeMode::Fade
+                    },
                     position: index.wrapping_mul(577),
                 },
             });

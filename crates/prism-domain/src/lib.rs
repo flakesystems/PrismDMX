@@ -49,15 +49,17 @@ mod surface;
 #[cfg(test)]
 mod wire;
 
-pub use attribute::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
+pub use attribute::{
+    AttributeDef, AttributeRange, AttributeType, FeatureGroup, FixtureType, MergeMode,
+};
 pub use command::{
     Command, CommandLineMode, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection,
     SelectionMode, SequenceStoreMode,
 };
 pub use delta::{Delta, NoticeLevel};
 pub use executor::{
-    EXECUTOR_BUTTONS, EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction, ExecutorButtonRef,
-    ExecutorChange, ExecutorEncoderFunction, ExecutorFaderFunction, SPEED_UNITY,
+    CrossfadeMode, EXECUTOR_BUTTONS, EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction,
+    ExecutorButtonRef, ExecutorChange, ExecutorEncoderFunction, ExecutorFaderFunction, SPEED_UNITY,
 };
 pub use export::{BINDINGS_DIR, export_bindings};
 pub use ids::{

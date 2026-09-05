@@ -1073,6 +1073,12 @@ function readLibraryEntry(value: unknown, path: string): LibraryEntry {
     name: asString(field(record, "name"), `${path}.name`),
     mode: asString(field(record, "mode"), `${path}.mode`),
     footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
+    // **B43.** Absent means *not the venue's own*, which is what every entry
+    // was before S51 and what a recording made before it carries. Read
+    // defensively rather than through `asBoolean`, for the reason the whole
+    // file exists: an entry is a mirror of a document, and a missing field must
+    // draw an unmarked row rather than fault the whole answer.
+    own: field(record, "own") === true,
   };
 }
 

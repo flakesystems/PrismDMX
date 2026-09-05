@@ -87,6 +87,32 @@ async function command(page: Page, line: string): Promise<void> {
   await input(page).press("Enter");
 }
 
+/**
+ * Empties the programmer, however many presses that takes.
+ *
+ * **Presses until the key says there is nothing left** rather than a fixed
+ * number of times, and the reason is S51 (B37): the order of the stages
+ * changed, so a test that counted presses was asserting the count rather than
+ * the state it wanted. The key's `data-stage` is the daemon's own answer —
+ * `ProgrammerState::clearStage`, nought when there is nothing to clear — so
+ * this waits for the thing it actually needs.
+ */
+async function clearProgrammer(page: Page): Promise<void> {
+  const key = page.getByTestId("clear");
+  for (let press = 0; press < 4; press += 1) {
+    const before = await key.getAttribute("data-stage");
+    if (before === "0") {
+      break;
+    }
+    await command(page, "Clear");
+    // Waited for, not assumed: a press is a round trip, and two Enters sent
+    // before the first came back are one press as far as the daemon is
+    // concerned. This is the same lesson B40 wrote down about `count()`.
+    await expect(key).not.toHaveAttribute("data-stage", before ?? "");
+  }
+  await expect(key).toHaveAttribute("data-stage", "0");
+}
+
 /** The colour `LevelPainter` draws a channel at 255 in — see `looks.spec.ts`. */
 const FULL = { red: 255, green: 235, blue: 150 };
 
@@ -196,7 +222,8 @@ test.describe("the console shell", () => {
 
     // A group selects its fixtures, and the daemon expands it. The rig is PARs,
     // so the level goes on a colour rather than on a dimmer they have not got.
-    await command(page, "Clear");
+    //
+    await clearProgrammer(page);
     await command(page, "Group 1");
     await command(page, "red at 100");
 
@@ -285,7 +312,10 @@ test.describe("the console shell", () => {
 
     // A second store onto the same number, with a different look in the
     // programmer. The question stands and **nothing has been sent**.
-    await command(page, "Clear");
+    //
+    // A *different* look means the first one has to be gone, which since S51
+    // (B37) is more than one press — see `clearProgrammer`.
+    await clearProgrammer(page);
     await command(page, "1");
     await command(page, "red at 50");
     await command(page, "Store Cue 1");
@@ -336,9 +366,7 @@ test.describe("the console shell", () => {
     await command(page, "Sequence 1");
     await command(page, "Store Cue 1");
     // The programmer is what is lighting the rig so far, so it goes.
-    await command(page, "Clear");
-    await command(page, "Clear");
-    await command(page, "Clear");
+    await clearProgrammer(page);
     await expect
       .poll(async () => litPixels(page, FULL), { timeout: 5000 })
       .toBe(0);

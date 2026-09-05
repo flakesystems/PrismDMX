@@ -162,6 +162,100 @@ pub fn unreachable_message(pid: u32, endpoints: &str, data_dir: &std::path::Path
     )
 }
 
+/// What became of the desk this shell attached to — **S29's other half, added
+/// in S51 for punch-list entry B39**.
+///
+/// # Why the guard and not the connection
+///
+/// There were two ways to notice, and they are not the same question.
+///
+/// Watching the **connection** answers *is the desk talking to me*. A desk that
+/// has gone quiet — a saturated link, a tick that is late, a client that lost
+/// its own socket — would look identical to one that has been killed, and
+/// **D2** is precisely the decision that a desk may lose a client and carry on:
+/// a shell that tore its icon down because a socket went quiet would be
+/// announcing the end of a show that is still on stage.
+///
+/// Watching the **guard** answers *is the desk still there*, which is the
+/// question B39 asks. The operating system releases an advisory lock when the
+/// process ends, however it ends — including from a task manager, which is the
+/// case in the entry — so [`prismd::lock::look`] cannot be wrong about it and
+/// needs no platform code (§10.1). It is the same reading the shell already
+/// makes at start, asked again on a timer, which is also why it cannot disagree
+/// with *spawn or attach*: there is one answer to *is a desk running here* and
+/// this is it.
+///
+/// What the guard cannot tell us is whether a live daemon is *healthy*. That is
+/// the interface's own business and it already reports it: the page's connection
+/// status goes to *Disconnected* on its own. Two readings, two questions, and
+/// neither pretending to be the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Standing {
+    /// The desk this shell attached to is still holding the guard.
+    Holding,
+    /// It has let the guard go, and nothing has taken its place.
+    Gone,
+    /// It has let the guard go and **another** desk holds the directory now —
+    /// somebody started the program again. This is the moment a second tray
+    /// icon would appear beside a dead one, which is the second half of B39.
+    Replaced {
+        /// The process now holding the guard, for the sentence a person reads.
+        pid: u32,
+    },
+}
+
+/// Reads a fresh [`Presence`] against the desk this shell attached to.
+///
+/// Pure, for [`approach`]'s reason: everything about *has my desk gone* is
+/// decidable from two numbers, so it is decided where a test can call it with
+/// neither a daemon nor a window.
+///
+/// # Nought is not evidence
+///
+/// A held guard whose document reads `pid: 0` is a daemon in the first moments
+/// of starting, or one whose document could not be read — see [`Presence`]. It
+/// is answered [`Standing::Holding`], because *somebody is holding the guard*
+/// and this shell has nothing better than that: claiming the desk had gone on
+/// that reading would put a dialogue over a running show every time a daemon
+/// was restarted a fraction faster than it writes its file.
+#[must_use]
+pub fn standing(attached_to: u32, presence: &Presence) -> Standing {
+    match presence {
+        Presence::Nobody => Standing::Gone,
+        Presence::Running(document) => {
+            if document.pid == 0 || document.pid == attached_to {
+                Standing::Holding
+            } else {
+                Standing::Replaced { pid: document.pid }
+            }
+        }
+    }
+}
+
+/// What a person is told when the desk under this shell has stopped.
+///
+/// It answers the question they will actually have — *is the show still on?* —
+/// before anything else, because the answer is no and a window that stayed open
+/// saying nothing would let them believe otherwise for as long as they did not
+/// look at the stage.
+#[must_use]
+pub fn stopped_message(pid: u32, replacement: Option<u32>) -> String {
+    let opening = format!(
+        "The PrismDMX desk this window was attached to (process {pid}) has stopped. It was not \
+         stopped from here.\n\nThe show is no longer being output."
+    );
+    match replacement {
+        Some(new_pid) => format!(
+            "{opening}\n\nAnother desk is running in this directory now (process {new_pid}). \
+             This window belongs to the old one and is closing, so that the desk in your \
+             notification area is the one that is running."
+        ),
+        None => format!(
+            "{opening}\n\nThis window is closing. Start PrismDMX again to bring the desk back."
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Approach, approach, unreachable_message, websocket_url};
@@ -294,6 +388,62 @@ mod tests {
         assert_eq!(
             websocket_url(&document).as_deref(),
             Some("ws://127.0.0.1:9000/ipc")
+        );
+    }
+}
+
+#[cfg(test)]
+mod watching {
+    use super::{Standing, standing, stopped_message};
+    use prismd::lock::{LockDocument, Presence};
+
+    fn holding(pid: u32) -> Presence {
+        Presence::Running(Box::new(LockDocument {
+            pid,
+            ..LockDocument::default()
+        }))
+    }
+
+    /// **B39, and the whole of it as a decision.** The desk this shell attached
+    /// to either still holds the guard, has gone, or has been replaced — and a
+    /// replacement is the case that would otherwise put a second icon beside a
+    /// dead one.
+    #[test]
+    fn a_shell_knows_whether_its_own_desk_is_still_there() {
+        assert_eq!(standing(4711, &holding(4711)), Standing::Holding);
+        assert_eq!(standing(4711, &Presence::Nobody), Standing::Gone);
+        assert_eq!(
+            standing(4711, &holding(5150)),
+            Standing::Replaced { pid: 5150 }
+        );
+    }
+
+    /// A daemon that holds the guard and has not written its document yet reads
+    /// `pid: 0`, and that is **not** evidence that this shell's desk has gone.
+    ///
+    /// The alternative — treating it as a replacement — puts a dialogue over a
+    /// running show whenever a daemon is restarted faster than it writes a file,
+    /// and B39 is an entry about a desk that is genuinely not there.
+    #[test]
+    fn a_guard_held_by_a_daemon_that_has_not_said_who_it_is_is_not_a_verdict() {
+        assert_eq!(standing(4711, &holding(0)), Standing::Holding);
+    }
+
+    /// The sentence answers the operator's first question before they ask it,
+    /// in both of the two cases.
+    #[test]
+    fn the_shell_says_the_show_has_stopped_and_says_it_first() {
+        let alone = stopped_message(4711, None);
+        assert!(alone.contains("4711"), "{alone}");
+        assert!(alone.contains("no longer being output"), "{alone}");
+        assert!(alone.contains("Start PrismDMX again"), "{alone}");
+
+        let replaced = stopped_message(4711, Some(5150));
+        assert!(replaced.contains("4711"), "{replaced}");
+        assert!(replaced.contains("5150"), "{replaced}");
+        assert!(
+            replaced.contains("notification area"),
+            "the reason this window closes is the second icon: {replaced}"
         );
     }
 }

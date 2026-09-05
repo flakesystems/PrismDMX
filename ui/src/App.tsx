@@ -50,19 +50,21 @@
 import { useCallback, useEffect, useState } from "react";
 
 import "./App.css";
-import type { AttributeType, FeatureGroup, WindowType } from "./bindings";
+import type { AttributeRange, AttributeType, FeatureGroup, WindowType } from "./bindings";
 import { Canvas } from "./canvas/canvas";
 import type { Rect } from "./canvas/geometry";
 import { WindowPicker } from "./canvas/picker";
 import { ViewBar } from "./canvas/viewbar";
 import { CommandLine } from "./desk/commandline";
 import type { ParameterReading } from "./desk/programmer";
+import { CLEAR_TITLES } from "./desk/keys";
 import { clearStage } from "./desk/programmer";
 import { ProgrammerBand } from "./desk/programmerband";
 import { commandLine, windowPickerOpen } from "./desk/session";
 import { objectLine, useConsole } from "./desk/consoleshell";
 import { ConsoleProvider } from "./desk/shell";
 import type { ConnectionStatus } from "./ipc/connection";
+import { documentIsFullscreen, isFullscreenKey, setFullscreen } from "./shell/fullscreen";
 import { statusText } from "./status";
 import { useDesk, useDeskStore, useSend } from "./store/hooks";
 import type { DeskState, Notice } from "./store/desk";
@@ -71,18 +73,60 @@ const selectStatus = (state: DeskState): ConnectionStatus => state.status;
 const selectDocuments = (state: DeskState) => state.documents;
 const selectNotices = (state: DeskState): readonly Notice[] => state.notices;
 
+/**
+ * Full screen, on the two keys B42 names — `F11` and `Alt` + `Enter`.
+ *
+ * The listener is on `window` and it **captures**, which is not incidental: the
+ * command line is a form and a browser submits one on Enter, so a handler that
+ * ran after the input would toggle the screen *and* run the operator's line.
+ * Capturing and calling `preventDefault` is what makes `Alt` + `Enter` one
+ * gesture rather than two.
+ *
+ * What it reflects is the state the host actually reached, never the state that
+ * was asked for — `shell/fullscreen.ts` has the argument. The
+ * `fullscreenchange` event is the other half of the same rule: every browser
+ * leaves full screen on Escape without telling the page that asked for it, so
+ * the reading is refreshed from the event rather than kept.
+ */
+function useFullscreen(): boolean {
+    const [full, setFull] = useState(false);
+
+    useEffect(() => {
+        const key = (event: KeyboardEvent): void => {
+            if (!isFullscreenKey(event)) {
+                return;
+            }
+            event.preventDefault();
+            void setFullscreen(!full).then(setFull);
+        };
+        // The browser's own way out, and the one nothing asks for.
+        const changed = (): void => {
+            setFull(documentIsFullscreen());
+        };
+        globalThis.addEventListener("keydown", key, { capture: true });
+        document.addEventListener("fullscreenchange", changed);
+        return () => {
+            globalThis.removeEventListener("keydown", key, { capture: true });
+            document.removeEventListener("fullscreenchange", changed);
+        };
+    }, [full]);
+
+    return full;
+}
+
 /** The whole interface. */
 export default function App() {
     const status = useDesk(selectStatus);
     const documents = useDesk(selectDocuments);
     const connected = status.kind === "connected";
+    const full = useFullscreen();
     return (
         // **Every key on the screen writes into one line** —
         // `ARCHITECTURE_SPEC.md` §4.5 — so the shell that holds it is above the
         // header as well as the canvas: the View Selector Bar's keys are lines
         // like any other, and so is the Clear key beside them.
         <ConsoleProvider session={documents?.session ?? null}>
-            <main className="desk">
+            <main className="desk" data-testid="desk" data-fullscreen={full ? "yes" : "no"}>
                 <header className="desk-header">
                     <h1>
                         <StatusLight status={status} />
@@ -166,6 +210,14 @@ function StatusLight({ status }: { readonly status: ConnectionStatus }) {
  * inert when there is nothing to clear**. That is the punch list's complaint
  * answered: the old key cycled through its stages whether or not anything was
  * cleared, so it could stand at a stage the programmer had moved on from.
+ *
+ * # The first press is the selection — S51, B37
+ *
+ * It was the values until then, and {@link CLEAR_TITLES} is the only place in
+ * this interface that says which is which: the stage arrives as a number and
+ * the number is the press order (`prism_domain::ClearStage`). Reversing the two
+ * middle rows below would tell an operator the opposite of what the key does,
+ * which is why they are asserted rather than read.
  */
 function ClearKey() {
     const { run } = useConsole();
@@ -187,14 +239,6 @@ function ClearKey() {
         </button>
     );
 }
-
-/** What the next press of Clear would take away, by the stage it reports. */
-const CLEAR_TITLES: readonly string[] = [
-    "There is nothing to clear",
-    "Clear the programmer values, keeping the selection",
-    "Clear the selection as well",
-    "Clear everything, including the encoder bank and the page",
-];
 
 /**
  * What is shown while there is no daemon.
@@ -385,6 +429,33 @@ function Desk() {
         },
         [send],
     );
+    /**
+     * **Pick a named range** — S51, punch-list B38.
+     *
+     * The one gesture in the programmer band that is **absolute**, and it has to
+     * be: a range is a place on the channel rather than a distance along it, and
+     * a relative move from wherever each fixture happens to be would land the
+     * selection on different slots. What is sent is the range's **middle**
+     * (`prism_domain::AttributeRange::middle`), which is the furthest any single
+     * value can be from both edges — a head whose thresholds are a step out from
+     * its manual still lands on the slot that was asked for.
+     *
+     * The list itself comes out of the show's own embedded profile, so nothing
+     * was added to the protocol: this is `SetAttribute` with the number the
+     * operator would otherwise have had to know.
+     */
+    const onPickRange = useCallback(
+        (reading: ParameterReading, range: AttributeRange) => {
+            const middle = range.from + Math.floor((range.to - range.from) / 2);
+            send({
+                t: "SetAttribute",
+                attribute: reading.attribute,
+                value: middle,
+                relative: false,
+            });
+        },
+        [send],
+    );
 
     useWindowPickerKey(onPicker);
 
@@ -414,6 +485,7 @@ function Desk() {
                 onPage={onProgrammerPage}
                 onTurn={onTurn}
                 onTake={onTake}
+                onPickRange={onPickRange}
                 onLine={run}
             />
             {windowPickerOpen(documents.session) ? (

@@ -31,11 +31,29 @@
  *
  * Clicking one takes it over at the value it is already showing. That is the
  * owner's own wording, and it is a turn of nought — see `App.tsx`'s `onTake`.
+ *
+ * # And a channel with named ranges says which one it is in — S51, B38
+ *
+ * An Open Fixture Library channel can say *0–9 open, 10–19 gobo 1, 20–29 gobo
+ * 2*. Until S51 none of that was read anywhere, so a gobo wheel was a number an
+ * operator had to know by heart. It is read now (`prism_domain::AttributeRange`),
+ * and this encoder does the two things that follow from having it:
+ *
+ * - it **names** the range the value is standing in, under the number; and
+ * - it **offers the list**, so a range can be picked instead of hunted for.
+ *
+ * The picker writes the **middle** of the range it was given
+ * (`AttributeRange::middle`), which is the furthest any single value can be from
+ * both edges — a fixture whose thresholds are a step out from its manual still
+ * lands on the slot that was asked for. Nothing else changes: a gobo is still
+ * one number, a cue still stores that number, and the engine has never heard of
+ * a range. See `prism_domain::AttributeRange` for the line this session drew.
  */
 
 import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
+import type { AttributeRange } from "../bindings";
 import type { ParameterReading } from "./programmer";
 import { sourceText, valueText } from "./programmer";
 import { EncoderDrag } from "./valuedrag";
@@ -47,15 +65,21 @@ export function Encoder({
   selectable,
   onSelect,
   onTurn,
+  onPickRange,
 }: {
   readonly reading: ParameterReading;
   readonly selected: boolean;
   readonly selectable: boolean;
   readonly onSelect: () => void;
   readonly onTurn: (reading: ParameterReading, delta: number) => void;
+  /** **B38.** Sets this attribute to the middle of a named range. */
+  readonly onPickRange: (reading: ParameterReading, range: AttributeRange) => void;
 }) {
   const begin = useEncoder(reading, onTurn);
+  const [listing, setListing] = useState(false);
+  const ranges = reading.available === 0 ? [] : reading.ranges;
   return (
+    <div className="encoder-slot">
     <button
       type="button"
       className={`encoder${selected ? " encoder-selected" : ""}${
@@ -88,7 +112,49 @@ export function Encoder({
           {reading.available === 0 ? "—" : `${String(reading.held)}/${String(reading.available)}`}
         </span>
       </span>
-    </button>
+      </button>
+      {/*
+        **B38.** The name of the range the encoder is standing in, and the way
+        into the list. Drawn only where there is one, because a row of empty
+        space under every continuous encoder would take height off the canvas
+        for nothing — `CLAUDE.md`'s device-screen rule, and the band's height is
+        fixed.
+      */}
+      {ranges.length === 0 ? null : (
+        <button
+          type="button"
+          className="encoder-range"
+          data-testid={`range-${reading.attribute}`}
+          data-open={listing ? "yes" : "no"}
+          title={`Pick a named range of ${reading.attribute}`}
+          aria-expanded={listing}
+          onClick={() => {
+            setListing((open) => !open);
+          }}
+        >
+          {reading.range ?? "—"}
+        </button>
+      )}
+      {listing && ranges.length > 0 ? (
+        <ul className="encoder-ranges" data-testid={`ranges-${reading.attribute}`}>
+          {ranges.map((range) => (
+            <li key={`${range.name}-${String(range.from)}`}>
+              <button
+                type="button"
+                className={range.name === reading.range ? "linkish range-here" : "linkish"}
+                data-testid={`range-${reading.attribute}-${range.name}`}
+                onClick={() => {
+                  setListing(false);
+                  onPickRange(reading, range);
+                }}
+              >
+                {range.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 

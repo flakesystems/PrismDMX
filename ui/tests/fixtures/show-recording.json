@@ -1,7 +1,7 @@
 {
   "note": "Recorded off a running prismd by crates/prismd/tests/ui_show.rs. The sequences, the presets, the executors and every answer are the daemon's own, taken from a fresh client's snapshot. Regenerate with: cargo test -p prismd --test ui_show -- --ignored",
   "protocolVersion": 1,
-  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4KuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysGdlbmVyaWMucmdidy5wYXKGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQCrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlV2hpdGWsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksGdlbmVyaWMucmdidy5wYXKsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM0Y2ikbmFtZahSR0JXIFBBUqhmaXh0dXJlc4ShMYqnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksGdlbmVyaWMucmdidy5wYXKodW5pdmVyc2UBoTKKp2FkZHJlc3MFomlkAqlpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAyqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaEziqdhZGRyZXNzCaJpZAOpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGhNIqnYWRkcmVzcxSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDSocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo6sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKx3aW5kb3dQaWNrZXLCpXZpZXdzgaExg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5CqcHJvZ3JhbW1lcoapc2VsZWN0aW9ukK5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50bKlsYXN0RXJyb3LArmxhc3RFcnJvckFnb01zwKZoZWFsdGiEr3Byb3RvY29sVmVyc2lvbgGmdGlja0h6y0BF8H4y1nkrq21pc3NlZFRpY2tzAK51bnNhdmVkQ2hhbmdlc8KuZml4dHVyZUxpYnJhcnnNCHGnbWFjaGluZY2mZGVza0lk2SQ2NzNlYWNhYS1hNDAyLTQ1NjgtYmVmYS03ZmZiYzc4ZjFiNzGnZGF0YURpctksQzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXA5QjlzdjGlbG9jYWzDqXdlYnNvY2tldK4xMjcuMC4wLjE6NzM3M613ZWJzb2NrZXRPcGVuwKV0b2tlbsCobG9nTGV2ZWykSW5mb6l1bml2ZXJzZXNAqmV4aXRBY3Rpb26kSG9sZKlhdXRvc3RhcnTCrmZpeHR1cmVMaWJyYXJ5wK5zdXJmYWNlUHJvZmlsZcCpb3ZlcnJpZGVzladPdXRwdXRzpUxvY2FsqVdlYnNvY2tldKlVbml2ZXJzZXOoTG9nTGV2ZWyoc2hvd0ZpbGWFpHBhdGjZN0M6XFVzZXJzXE1pbGFuXEFwcERhdGFcTG9jYWxcVGVtcFwudG1wOUI5c3YxXHNob3cucHJpc22mcmVjZW50kK51bnNhdmVkQ2hhbmdlc8KocmVjb3ZlcnnCr2F1dG9zYXZlU2Vjb25kcx4=",
+  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4KuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysGdlbmVyaWMucmdidy5wYXKGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQCrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlV2hpdGWsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksGdlbmVyaWMucmdidy5wYXKsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM0Y2ikbmFtZahSR0JXIFBBUqhmaXh0dXJlc4ShMYqnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksGdlbmVyaWMucmdidy5wYXKodW5pdmVyc2UBoTKKp2FkZHJlc3MFomlkAqlpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAyqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaEziqdhZGRyZXNzCaJpZAOpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgM6hwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGhNIqnYWRkcmVzcxSiaWQEqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDSocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo6sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKx3aW5kb3dQaWNrZXLCpXZpZXdzgaExg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5CqcHJvZ3JhbW1lcoapc2VsZWN0aW9ukK5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50H6lsYXN0RXJyb3LArmxhc3RFcnJvckFnb01zwKZoZWFsdGiEr3Byb3RvY29sVmVyc2lvbgGmdGlja0h6y0BGMdhnTDmpq21pc3NlZFRpY2tzAK51bnNhdmVkQ2hhbmdlc8KuZml4dHVyZUxpYnJhcnnNCHGnbWFjaGluZY2mZGVza0lk2SRlZmQ1NWFiYi1lNjExLTQ3ZjYtOGZkNS0xZDk5NDRjNmYxNGSnZGF0YURpcq8vdG1wLy50bXB2Sk1iaGulbG9jYWzDqXdlYnNvY2tldK4xMjcuMC4wLjE6NzM3M613ZWJzb2NrZXRPcGVuwKV0b2tlbsCobG9nTGV2ZWykSW5mb6l1bml2ZXJzZXNAqmV4aXRBY3Rpb26kSG9sZKlhdXRvc3RhcnTCrmZpeHR1cmVMaWJyYXJ5wK5zdXJmYWNlUHJvZmlsZcCpb3ZlcnJpZGVzladPdXRwdXRzpUxvY2FsqVdlYnNvY2tldKlVbml2ZXJzZXOoTG9nTGV2ZWyoc2hvd0ZpbGWFpHBhdGi6L3RtcC8udG1wdkpNYmhrL3Nob3cucHJpc22mcmVjZW50kK51bnNhdmVkQ2hhbmdlc8KocmVjb3ZlcnnCr2F1dG9zYXZlU2Vjb25kcx4=",
   "steps": [
     {
       "what": "make a cue list to store into: a fresh show has none at all",
@@ -88,7 +88,7 @@
       "client": "g6F0p0NvbW1hbmSjc2VxBKdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAg=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKZEaW1tZXKmdmFsdWVzkKpjbGVhclN0YWdlAQ=="
       ],
       "answer": null,
       "refused": false,
@@ -1370,11 +1370,123 @@
       "editingCue": null
     },
     {
-      "what": "clear the programmer",
+      "what": "clear the selection",
       "client": "g6F0p0NvbW1hbmSjc2VxFadjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26SAQKuc2VsZWN0ZWRHcm91cHOQr21hbnVhbFNlbGVjdGlvbpIBArJhY3RpdmVGZWF0dXJlR3JvdXClQ29sb3KmdmFsdWVzkKpjbGVhclN0YWdlAg=="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOVg6dmaXh0dXJlAalhdHRyaWJ1dGWjUmVkpXZhbHVlg6V2YWx1Zc3//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUBqWF0dHJpYnV0ZaVHcmVlbqV2YWx1ZYOldmFsdWXNnECmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWjUmVkpXZhbHVlg6V2YWx1Zc3//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVHcmVlbqV2YWx1ZYOldmFsdWXNnECmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWjUmVkpXZhbHVlg6V2YWx1Zc3//6Zzb3VyY2WmTWFudWFsqXByZXNldFJlZsCqY2xlYXJTdGFnZQI="
+      ],
+      "answer": null,
+      "refused": false,
+      "sequences": [
+        {
+          "id": 1,
+          "name": "Act 1",
+          "looping": false,
+          "cues": [
+            {
+              "number": "1",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "1.5",
+              "name": "Green wash",
+              "fadeIn": 5.5,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Time",
+              "triggerTime": 4.0,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "presets": [],
+      "executors": [
+        {
+          "id": 0,
+          "sequenceId": 1,
+          "isActive": false,
+          "currentCueIndex": null
+        }
+      ],
+      "selectedSequence": 1,
+      "editingCue": null
+    },
+    {
+      "what": "and then the values",
+      "client": "g6F0p0NvbW1hbmSjc2VxFqdjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "isQuery": false,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UD"
       ],
       "answer": null,
       "refused": false,
@@ -1483,10 +1595,10 @@
     },
     {
       "what": "select the PARs again",
-      "client": "g6F0p0NvbW1hbmSjc2VxFqdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
+      "client": "g6F0p0NvbW1hbmSjc2VxF6djb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UC"
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UB"
       ],
       "answer": null,
       "refused": false,
@@ -1595,7 +1707,7 @@
     },
     {
       "what": "dial a blue",
-      "client": "g6F0p0NvbW1hbmSjc2VxF6djb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWkQmx1ZaV2YWx1Zc3qYKhyZWxhdGl2ZcI=",
+      "client": "g6F0p0NvbW1hbmSjc2VxGKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWkQmx1ZaV2YWx1Zc3qYKhyZWxhdGl2ZcI=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOTg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXN6mCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXN6mCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXN6mCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UB"
@@ -1707,7 +1819,7 @@
     },
     {
       "what": "and a dimmer value on a PAR's white",
-      "client": "g6F0p0NvbW1hbmSjc2VxGKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWlV2hpdGWldmFsdWVkqHJlbGF0aXZlwg==",
+      "client": "g6F0p0NvbW1hbmSjc2VxGadjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWlV2hpdGWldmFsdWVkqHJlbGF0aXZlwg==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOWg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXN6mCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAalhdHRyaWJ1dGWlV2hpdGWldmFsdWWDpXZhbHVlZKZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaRCbHVlpXZhbHVlg6V2YWx1Zc3qYKZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWVkpnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQOpYXR0cmlidXRlpEJsdWWldmFsdWWDpXZhbHVlzepgpnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQOpYXR0cmlidXRlpVdoaXRlpXZhbHVlg6V2YWx1ZWSmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UB"
@@ -1819,10 +1931,10 @@
     },
     {
       "what": "what would storing preset 1 in the Colour pool do? a create, and it counts the colour values only",
-      "client": "g6F0pVF1ZXJ5o3NlcRmlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKZQcmVzZXSocHJlc2V0SWQBpHBvb2ylQ29sb3KkbW9kZaVNZXJnZQ==",
+      "client": "g6F0pVF1ZXJ5o3NlcRqlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKZQcmVzZXSocHJlc2V0SWQBpHBvb2ylQ29sb3KkbW9kZaVNZXJnZQ==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEZpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8KkbmFtZaCkbW9kZaVNZXJnZaVhZGRlZAaocmVwbGFjZWQApGtlcHQAp3JlbW92ZWQA",
+      "answer": "g6F0pkFuc3dlcqNzZXEapmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8KkbmFtZaCkbW9kZaVNZXJnZaVhZGRlZAaocmVwbGFjZWQApGtlcHQAp3JlbW92ZWQA",
       "refused": false,
       "sequences": [
         {
@@ -1929,7 +2041,7 @@
     },
     {
       "what": "store it, with a name and a scribble-strip colour",
-      "client": "g6F0p0NvbW1hbmSjc2VxGqdjb21tYW5khqF0q1N0b3JlUHJlc2V0qHByZXNldElkAaRwb29spUNvbG9ypG5hbWWpRGVlcCBibHVlpWNvbG9yg6FyAKFnAKFizP+kbW9kZaVNZXJnZQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxG6djb21tYW5khqF0q1N0b3JlUHJlc2V0qHByZXNldElkAaRwb29spUNvbG9ypG5hbWWpRGVlcCBibHVlpWNvbG9yg6FyAKFnAKFizP+kbW9kZaVNZXJnZQ==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKovcHJlc2V0cy8xpXZhbHVlhaVjb2xvcoOhYsz/oWcAoXIAomlkAaRuYW1lqURlZXAgYmx1ZaRwb29spUNvbG9ypnZhbHVlc5aDqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUBpXZhbHVlzepgg6lhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQGldmFsdWVkg6lhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqV2YWx1Zc3qYIOpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUCpXZhbHVlZIOpYXR0cmlidXRlpEJsdWWnZml4dHVyZQOldmFsdWXN6mCDqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlA6V2YWx1ZWQ="
@@ -2053,10 +2165,134 @@
     },
     {
       "what": "clear again",
-      "client": "g6F0p0NvbW1hbmSjc2VxG6djb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "client": "g6F0p0NvbW1hbmSjc2VxHKdjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UC"
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOWg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXN6mCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAalhdHRyaWJ1dGWlV2hpdGWldmFsdWWDpXZhbHVlZKZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaRCbHVlpXZhbHVlg6V2YWx1Zc3qYKZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWVkpnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQOpYXR0cmlidXRlpEJsdWWldmFsdWWDpXZhbHVlzepgpnNvdXJjZaZNYW51YWypcHJlc2V0UmVmwIOnZml4dHVyZQOpYXR0cmlidXRlpVdoaXRlpXZhbHVlg6V2YWx1ZWSmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UC"
+      ],
+      "answer": null,
+      "refused": false,
+      "sequences": [
+        {
+          "id": 1,
+          "name": "Act 1",
+          "looping": false,
+          "cues": [
+            {
+              "number": "1",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "1.5",
+              "name": "Green wash",
+              "fadeIn": 5.5,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Time",
+              "triggerTime": 4.0,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "id": 1,
+          "pool": "Color",
+          "name": "Deep blue",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 255
+          },
+          "values": 6
+        }
+      ],
+      "executors": [
+        {
+          "id": 0,
+          "sequenceId": 1,
+          "isActive": false,
+          "currentCueIndex": null
+        }
+      ],
+      "selectedSequence": 1,
+      "editingCue": null
+    },
+    {
+      "what": "and the values with it",
+      "client": "g6F0p0NvbW1hbmSjc2VxHadjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "isQuery": false,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UD"
       ],
       "answer": null,
       "refused": false,
@@ -2177,9 +2413,11 @@
     },
     {
       "what": "select the PARs",
-      "client": "g6F0p0NvbW1hbmSjc2VxHKdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
+      "client": "g6F0p0NvbW1hbmSjc2VxHqdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
       "isQuery": false,
-      "deltas": [],
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UB"
+      ],
       "answer": null,
       "refused": false,
       "sequences": [
@@ -2299,7 +2537,7 @@
     },
     {
       "what": "and apply the preset, which is what puts a **link** in the programmer",
-      "client": "g6F0p0NvbW1hbmSjc2VxHadjb21tYW5kgqF0q0FwcGx5UHJlc2V0qHByZXNldElkAQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxH6djb21tYW5kgqF0q0FwcGx5UHJlc2V0qHByZXNldElkAQ==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOWg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXN6mCmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlAalhdHRyaWJ1dGWlV2hpdGWldmFsdWWDpXZhbHVlZKZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUCqWF0dHJpYnV0ZaRCbHVlpXZhbHVlg6V2YWx1Zc3qYKZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWVkpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAYOnZml4dHVyZQOpYXR0cmlidXRlpEJsdWWldmFsdWWDpXZhbHVlzepgpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAYOnZml4dHVyZQOpYXR0cmlidXRlpVdoaXRlpXZhbHVlg6V2YWx1ZWSmc291cmNlplByZXNldKlwcmVzZXRSZWYBqmNsZWFyU3RhZ2UB"
@@ -2423,7 +2661,7 @@
     },
     {
       "what": "store a cue out of it: its parts carry the preset reference",
-      "client": "g6F0p0NvbW1hbmSjc2VxHqdjb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqEzpG1vZGWlTWVyZ2U=",
+      "client": "g6F0p0NvbW1hbmSjc2VxIKdjb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqEzpG1vZGWlTWVyZ2U=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5OIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzlYWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LQBYAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lqkdyZWVuIHdhc2imbnVtYmVyozEuNaVwYXJ0c5WFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQOpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//6d0cmlnZ2VypFRpbWWrdHJpZ2dlclRpbWXLQBAAAAAAAACIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqEzpXBhcnRzloWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQGpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc3qYIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWVkhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqlwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzepghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1ZWSFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUDqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXN6mCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlA6lwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlZKd0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkAahpc0FjdGl2ZcKkbG9vcMKrbWFzdGVyTGV2ZWzN//+kbmFtZaVBY3QgMaVzcGVlZM0EAA=="
@@ -2594,10 +2832,181 @@
     },
     {
       "what": "clear once more",
-      "client": "g6F0p0NvbW1hbmSjc2VxH6djb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "client": "g6F0p0NvbW1hbmSjc2VxIadjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UC"
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOWg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXN6mCmc291cmNlplByZXNldKlwcmVzZXRSZWYBg6dmaXh0dXJlAalhdHRyaWJ1dGWlV2hpdGWldmFsdWWDpXZhbHVlZKZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUCqWF0dHJpYnV0ZaRCbHVlpXZhbHVlg6V2YWx1Zc3qYKZzb3VyY2WmUHJlc2V0qXByZXNldFJlZgGDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWVkpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAYOnZml4dHVyZQOpYXR0cmlidXRlpEJsdWWldmFsdWWDpXZhbHVlzepgpnNvdXJjZaZQcmVzZXSpcHJlc2V0UmVmAYOnZml4dHVyZQOpYXR0cmlidXRlpVdoaXRlpXZhbHVlg6V2YWx1ZWSmc291cmNlplByZXNldKlwcmVzZXRSZWYBqmNsZWFyU3RhZ2UC"
+      ],
+      "answer": null,
+      "refused": false,
+      "sequences": [
+        {
+          "id": 1,
+          "name": "Act 1",
+          "looping": false,
+          "cues": [
+            {
+              "number": "1",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "1.5",
+              "name": "Green wash",
+              "fadeIn": 5.5,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Time",
+              "triggerTime": 4.0,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "3",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Blue",
+                  "value": 60000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "White",
+                  "value": 100,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Blue",
+                  "value": 60000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "White",
+                  "value": 100,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Blue",
+                  "value": 60000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "White",
+                  "value": 100,
+                  "presetRef": 1
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "id": 1,
+          "pool": "Color",
+          "name": "Deep blue",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 255
+          },
+          "values": 6
+        }
+      ],
+      "executors": [
+        {
+          "id": 0,
+          "sequenceId": 1,
+          "isActive": false,
+          "currentCueIndex": null
+        }
+      ],
+      "selectedSequence": 1,
+      "editingCue": null
+    },
+    {
+      "what": "and the values again",
+      "client": "g6F0p0NvbW1hbmSjc2VxIqdjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "isQuery": false,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UD"
       ],
       "answer": null,
       "refused": false,
@@ -2765,9 +3174,11 @@
     },
     {
       "what": "select the PARs",
-      "client": "g6F0p0NvbW1hbmSjc2VxIKdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
+      "client": "g6F0p0NvbW1hbmSjc2VxI6djb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5MBAgOkbW9kZaNTZXQ=",
       "isQuery": false,
-      "deltas": [],
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UB"
+      ],
       "answer": null,
       "refused": false,
       "sequences": [
@@ -2934,7 +3345,7 @@
     },
     {
       "what": "dial a different blue",
-      "client": "g6F0p0NvbW1hbmSjc2VxIadjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWkQmx1ZaV2YWx1Zc1OIKhyZWxhdGl2ZcI=",
+      "client": "g6F0p0NvbW1hbmSjc2VxJKdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWkQmx1ZaV2YWx1Zc1OIKhyZWxhdGl2ZcI=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOTg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UB"
@@ -3105,10 +3516,10 @@
     },
     {
       "what": "what would storing over preset 1 do? an edit of a preset: the three blues are replaced and the three whites are kept",
-      "client": "g6F0pVF1ZXJ5o3NlcSKlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKZQcmVzZXSocHJlc2V0SWQBpHBvb2ylQ29sb3KkbW9kZaVNZXJnZQ==",
+      "client": "g6F0pVF1ZXJ5o3NlcSWlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKZQcmVzZXSocHJlc2V0SWQBpHBvb2ylQ29sb3KkbW9kZaVNZXJnZQ==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEipmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8OkbmFtZalEZWVwIGJsdWWkbW9kZaVNZXJnZaVhZGRlZACocmVwbGFjZWQDpGtlcHQDp3JlbW92ZWQA",
+      "answer": "g6F0pkFuc3dlcqNzZXElpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8OkbmFtZalEZWVwIGJsdWWkbW9kZaVNZXJnZaVhZGRlZACocmVwbGFjZWQDpGtlcHQDp3JlbW92ZWQA",
       "refused": false,
       "sequences": [
         {
@@ -3274,7 +3685,7 @@
     },
     {
       "what": "edit the preset — **and cue 3 follows it**, which is the whole claim",
-      "client": "g6F0p0NvbW1hbmSjc2VxI6djb21tYW5khqF0q1N0b3JlUHJlc2V0qHByZXNldElkAaRwb29spUNvbG9ypG5hbWWrRGFya2VyIGJsdWWlY29sb3KDoXIAoWcAoWJ4pG1vZGWlTWVyZ2U=",
+      "client": "g6F0p0NvbW1hbmSjc2VxJqdjb21tYW5khqF0q1N0b3JlUHJlc2V0qHByZXNldElkAaRwb29spUNvbG9ypG5hbWWrRGFya2VyIGJsdWWlY29sb3KDoXIAoWcAoWJ4pG1vZGWlTWVyZ2U=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHOSg6JvcKdyZXBsYWNlpHBhdGiqL3ByZXNldHMvMaV2YWx1ZYWlY29sb3KDoWJ4oWcAoXIAomlkAaRuYW1lq0RhcmtlciBibHVlpHBvb2ylQ29sb3KmdmFsdWVzloOpYXR0cmlidXRlpEJsdWWnZml4dHVyZQGldmFsdWXNTiCDqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAaV2YWx1ZWSDqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUCpXZhbHVlzU4gg6lhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKldmFsdWVkg6lhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlA6V2YWx1Zc1OIIOpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUDpXZhbHVlZIOib3CncmVwbGFjZaRwYXRorC9zZXF1ZW5jZXMvMaV2YWx1ZYmlY29sb3LApGN1ZXOTiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhMaVwYXJ0c5WFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQOpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//6d0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwIilZGVsYXnLAAAAAAAAAACmZmFkZUluy0AWAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZapHcmVlbiB3YXNopm51bWJlcqMxLjWlcGFydHOVhalhdHRyaWJ1dGWjUmVkp2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXN//+FqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzZxAhalhdHRyaWJ1dGWjUmVkp2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXN//+FqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzZxAhalhdHRyaWJ1dGWjUmVkp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXN//+ndHJpZ2dlcqRUaW1lq3RyaWdnZXJUaW1ly0AQAAAAAAAAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhM6VwYXJ0c5aFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAalwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlZIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQKpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUCqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWVkhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlA6lwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQOpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1ZWSndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCq21hc3RlckxldmVszf//pG5hbWWlQWN0IDGlc3BlZWTNBAA="
@@ -3445,10 +3856,10 @@
     },
     {
       "what": "a preview of a store into a sequence that is not there: refused, in the daemon's own words",
-      "client": "g6F0pVF1ZXJ5o3NlcSSlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZM0BlKljdWVOdW1iZXKhMaRtb2RlpU1lcmdl",
+      "client": "g6F0pVF1ZXJ5o3NlcSelcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZM0BlKljdWVOdW1iZXKhMaRtb2RlpU1lcmdl",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEkpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTCp3JlZnVzYWy4dGhlcmUgaXMgbm8gc2VxdWVuY2UgNDA0pmV4aXN0c8KkbmFtZaCkbW9kZaVNZXJnZaVhZGRlZACocmVwbGFjZWQApGtlcHQAp3JlbW92ZWQA",
+      "answer": "g6F0pkFuc3dlcqNzZXEnpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTCp3JlZnVzYWy4dGhlcmUgaXMgbm8gc2VxdWVuY2UgNDA0pmV4aXN0c8KkbmFtZaCkbW9kZaVNZXJnZaVhZGRlZACocmVwbGFjZWQApGtlcHQAp3JlbW92ZWQA",
       "refused": false,
       "sequences": [
         {
@@ -3614,10 +4025,181 @@
     },
     {
       "what": "clear the programmer for the last time",
-      "client": "g6F0p0NvbW1hbmSjc2VxJadjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "client": "g6F0p0NvbW1hbmSjc2VxKKdjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26TAQIDsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UC"
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOTg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UC"
+      ],
+      "answer": null,
+      "refused": false,
+      "sequences": [
+        {
+          "id": 1,
+          "name": "Act 1",
+          "looping": false,
+          "cues": [
+            {
+              "number": "1",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "1.5",
+              "name": "Green wash",
+              "fadeIn": 5.5,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Time",
+              "triggerTime": 4.0,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "3",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Blue",
+                  "value": 20000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "White",
+                  "value": 100,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Blue",
+                  "value": 20000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "White",
+                  "value": 100,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Blue",
+                  "value": 20000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "White",
+                  "value": 100,
+                  "presetRef": 1
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "id": 1,
+          "pool": "Color",
+          "name": "Darker blue",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 120
+          },
+          "values": 6
+        }
+      ],
+      "executors": [
+        {
+          "id": 0,
+          "sequenceId": 1,
+          "isActive": false,
+          "currentCueIndex": null
+        }
+      ],
+      "selectedSequence": 1,
+      "editingCue": null
+    },
+    {
+      "what": "...which takes two presses now",
+      "client": "g6F0p0NvbW1hbmSjc2VxKadjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "isQuery": false,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UD"
       ],
       "answer": null,
       "refused": false,
@@ -3785,10 +4367,10 @@
     },
     {
       "what": "and a preview with nothing to store: refused, but it still says what is filed under that number",
-      "client": "g6F0pVF1ZXJ5o3NlcSalcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyoTGkbW9kZaVNZXJnZQ==",
+      "client": "g6F0pVF1ZXJ5o3NlcSqlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyoTGkbW9kZaVNZXJnZQ==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEmpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTCp3JlZnVzYWzZNXRoZSBwcm9ncmFtbWVyIGlzIGVtcHR5LCBzbyB0aGVyZSBpcyBub3RoaW5nIHRvIHN0b3JlpmV4aXN0c8OkbmFtZaCkbW9kZaVNZXJnZaVhZGRlZACocmVwbGFjZWQApGtlcHQAp3JlbW92ZWQA",
+      "answer": "g6F0pkFuc3dlcqNzZXEqpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTCp3JlZnVzYWzZNXRoZSBwcm9ncmFtbWVyIGlzIGVtcHR5LCBzbyB0aGVyZSBpcyBub3RoaW5nIHRvIHN0b3JlpmV4aXN0c8OkbmFtZaCkbW9kZaVNZXJnZaVhZGRlZACocmVwbGFjZWQApGtlcHQAp3JlbW92ZWQA",
       "refused": false,
       "sequences": [
         {
@@ -3954,7 +4536,7 @@
     },
     {
       "what": "load cue 3 back into the programmer — **its preset links come with it**, which is the claim `EditCue` exists to keep",
-      "client": "g6F0p0NvbW1hbmSjc2VxJ6djb21tYW5kg6F0p0VkaXRDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyoTM=",
+      "client": "g6F0p0NvbW1hbmSjc2VxK6djb21tYW5kg6F0p0VkaXRDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyoTM=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOWg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUBqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWVkpnNvdXJjZahSZWNhbGxlZKlwcmVzZXRSZWYBg6dmaXh0dXJlAqlhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWVkpnNvdXJjZahSZWNhbGxlZKlwcmVzZXRSZWYBg6dmaXh0dXJlA6lhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWVkpnNvdXJjZahSZWNhbGxlZKlwcmVzZXRSZWYBqmNsZWFyU3RhZ2UB",
@@ -4130,7 +4712,7 @@
     },
     {
       "what": "put it straight back with nothing changed: **byte-identical**, links and all, and the Update key stops blinking",
-      "client": "g6F0p0NvbW1hbmSjc2VxKKdjb21tYW5kgaF0plVwZGF0ZQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxLKdjb21tYW5kgaF0plVwZGF0ZQ==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5OIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzlYWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LQBYAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lqkdyZWVuIHdhc2imbnVtYmVyozEuNaVwYXJ0c5WFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQOpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//6d0cmlnZ2VypFRpbWWrdHJpZ2dlclRpbWXLQBAAAAAAAACIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqEzpXBhcnRzloWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQGpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWVkhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqlwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1ZWSFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUDqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlA6lwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlZKd0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkAahpc0FjdGl2ZcKkbG9vcMKrbWFzdGVyTGV2ZWzN//+kbmFtZaVBY3QgMaVzcGVlZM0EAA=="
@@ -4305,7 +4887,7 @@
     },
     {
       "what": "now change something while the cue is loaded, which is what makes the key blink",
-      "client": "g6F0p0NvbW1hbmSjc2VxKadjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWlV2hpdGWldmFsdWXNdTCocmVsYXRpdmXC",
+      "client": "g6F0p0NvbW1hbmSjc2VxLadjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWlV2hpdGWldmFsdWXNdTCocmVsYXRpdmXC",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOWg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUBqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWXNdTCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWXNdTCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWXNdTCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UB",
@@ -4481,7 +5063,7 @@
     },
     {
       "what": "and put that back",
-      "client": "g6F0p0NvbW1hbmSjc2VxKqdjb21tYW5kgaF0plVwZGF0ZQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxLqdjb21tYW5kgaF0plVwZGF0ZQ==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5OIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzlYWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LQBYAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1lqkdyZWVuIHdhc2imbnVtYmVyozEuNaVwYXJ0c5WFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNnECFqWF0dHJpYnV0ZaNSZWSnZml4dHVyZQOpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc3//6d0cmlnZ2VypFRpbWWrdHJpZ2dlclRpbWXLQBAAAAAAAACIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqEzpXBhcnRzloWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQGpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUCqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlA6lwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQOpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MKd0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkAahpc0FjdGl2ZcKkbG9vcMKrbWFzdGVyTGV2ZWzN//+kbmFtZaVBY3QgMaVzcGVlZM0EAA==",
@@ -4656,11 +5238,186 @@
       }
     },
     {
-      "what": "an Update after the programmer has been cleared: refused, because clearing the programmer clears the update state",
-      "client": "g6F0p0NvbW1hbmSjc2VxK6djb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "what": "clear the selection while a cue is loaded: **the update state stands**, because no value moved (S51, B37)",
+      "client": "g6F0p0NvbW1hbmSjc2VxL6djb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26TAQIDrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UC",
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOWg6dmaXh0dXJlAalhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUBqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWXNdTCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlAqlhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUCqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWXNdTCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAg6dmaXh0dXJlA6lhdHRyaWJ1dGWkQmx1ZaV2YWx1ZYOldmFsdWXNTiCmc291cmNlqFJlY2FsbGVkqXByZXNldFJlZgGDp2ZpeHR1cmUDqWF0dHJpYnV0ZaVXaGl0ZaV2YWx1ZYOldmFsdWXNdTCmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UC"
+      ],
+      "answer": null,
+      "refused": false,
+      "sequences": [
+        {
+          "id": 1,
+          "name": "Act 1",
+          "looping": false,
+          "cues": [
+            {
+              "number": "1",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "1.5",
+              "name": "Green wash",
+              "fadeIn": 5.5,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Time",
+              "triggerTime": 4.0,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Green",
+                  "value": 40000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Red",
+                  "value": 65535,
+                  "presetRef": null
+                }
+              ]
+            },
+            {
+              "number": "3",
+              "name": "",
+              "fadeIn": 0.0,
+              "fadeOut": 0.0,
+              "delay": 0.0,
+              "trigger": "Go",
+              "triggerTime": null,
+              "parts": [
+                {
+                  "fixture": 1,
+                  "attribute": "Blue",
+                  "value": 20000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 1,
+                  "attribute": "White",
+                  "value": 30000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "Blue",
+                  "value": 20000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 2,
+                  "attribute": "White",
+                  "value": 30000,
+                  "presetRef": null
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "Blue",
+                  "value": 20000,
+                  "presetRef": 1
+                },
+                {
+                  "fixture": 3,
+                  "attribute": "White",
+                  "value": 30000,
+                  "presetRef": null
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "presets": [
+        {
+          "id": 1,
+          "pool": "Color",
+          "name": "Darker blue",
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 120
+          },
+          "values": 6
+        }
+      ],
+      "executors": [
+        {
+          "id": 0,
+          "sequenceId": 1,
+          "isActive": false,
+          "currentCueIndex": null
+        }
+      ],
+      "selectedSequence": 1,
+      "editingCue": {
+        "sequenceId": 1,
+        "cueNumber": "3",
+        "modified": false
+      }
+    },
+    {
+      "what": "an Update after the *values* have been cleared: refused, because that is what clears the update state",
+      "client": "g6F0p0NvbW1hbmSjc2VxMKdjb21tYW5kgaF0r0NsZWFyUHJvZ3JhbW1lcg==",
+      "isQuery": false,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26QrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26QsmFjdGl2ZUZlYXR1cmVHcm91cKVDb2xvcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UD",
         "gqF0pURlbHRhpWRlbHRhgqF0rFNlc3Npb25QYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGizL3Nlc3Npb24vZWRpdGluZ0N1ZaV2YWx1ZcA="
       ],
       "answer": null,
@@ -4829,7 +5586,7 @@
     },
     {
       "what": "...and this is the refusal",
-      "client": "g6F0p0NvbW1hbmSjc2VxLKdjb21tYW5kgaF0plVwZGF0ZQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxMadjb21tYW5kgaF0plVwZGF0ZQ==",
       "isQuery": false,
       "deltas": [],
       "answer": null,
@@ -4998,10 +5755,10 @@
     },
     {
       "what": "select a PAR",
-      "client": "g6F0p0NvbW1hbmSjc2VxLadjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5EBpG1vZGWjU2V0",
+      "client": "g6F0p0NvbW1hbmSjc2VxMqdjb21tYW5kg6F0rlNlbGVjdEZpeHR1cmVzo2lkc5EBpG1vZGWjU2V0",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RAa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQGyYWN0aXZlRmVhdHVyZUdyb3VwpUNvbG9ypnZhbHVlc5CqY2xlYXJTdGFnZQI="
+        "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RAa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQGyYWN0aXZlRmVhdHVyZUdyb3VwpUNvbG9ypnZhbHVlc5CqY2xlYXJTdGFnZQE="
       ],
       "answer": null,
       "refused": false,
@@ -5169,7 +5926,7 @@
     },
     {
       "what": "dial a green on it",
-      "client": "g6F0p0NvbW1hbmSjc2VxLqdjb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWlR3JlZW6ldmFsdWXNMDmocmVsYXRpdmXC",
+      "client": "g6F0p0NvbW1hbmSjc2VxM6djb21tYW5khKF0rFNldEF0dHJpYnV0ZalhdHRyaWJ1dGWlR3JlZW6ldmFsdWXNMDmocmVsYXRpdmXC",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0sVByb2dyYW1tZXJDaGFuZ2VkpXN0YXRlhqlzZWxlY3Rpb26RAa5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukQGyYWN0aXZlRmVhdHVyZUdyb3VwpUNvbG9ypnZhbHVlc5GDp2ZpeHR1cmUBqWF0dHJpYnV0ZaVHcmVlbqV2YWx1ZYOldmFsdWXNMDmmc291cmNlpk1hbnVhbKlwcmVzZXRSZWbAqmNsZWFyU3RhZ2UB"
@@ -5340,10 +6097,10 @@
     },
     {
       "what": "what would an Override of cue 1 do now? **this is the one an operator has to be warned about**: one value replaced and four thrown away",
-      "client": "g6F0pVF1ZXJ5o3NlcS+lcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyoTGkbW9kZahPdmVycmlkZQ==",
+      "client": "g6F0pVF1ZXJ5o3NlcTSlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyoTGkbW9kZahPdmVycmlkZQ==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEvpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8OkbmFtZaCkbW9kZahPdmVycmlkZaVhZGRlZACocmVwbGFjZWQBpGtlcHQAp3JlbW92ZWQE",
+      "answer": "g6F0pkFuc3dlcqNzZXE0pmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8OkbmFtZaCkbW9kZahPdmVycmlkZaVhZGRlZACocmVwbGFjZWQBpGtlcHQAp3JlbW92ZWQE",
       "refused": false,
       "sequences": [
         {
@@ -5509,7 +6266,7 @@
     },
     {
       "what": "store it as an Override: the cue ends up holding exactly this one value, and the four that were there are gone",
-      "client": "g6F0p0NvbW1hbmSjc2VxMKdjb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqExpG1vZGWoT3ZlcnJpZGU=",
+      "client": "g6F0p0NvbW1hbmSjc2VxNadjb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqExpG1vZGWoT3ZlcnJpZGU=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5OIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbstAFgAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWqR3JlZW4gd2FzaKZudW1iZXKjMS41pXBhcnRzlYWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//p3RyaWdnZXKkVGltZat0cmlnZ2VyVGltZctAEAAAAAAAAIilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaCmbnVtYmVyoTOlcGFydHOWhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAalwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQKpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUDqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwp3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqttYXN0ZXJMZXZlbM3//6RuYW1lpUFjdCAxpXNwZWVkzQQA"
@@ -5656,10 +6413,10 @@
     },
     {
       "what": "and a Remove of the same value from cue 1.5, which holds four others: one goes and four stay",
-      "client": "g6F0pVF1ZXJ5o3NlcTGlcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyozEuNaRtb2RlplJlbW92ZQ==",
+      "client": "g6F0pVF1ZXJ5o3NlcTalcXVlcnmDoXSsU3RvcmVQcmV2aWV3pnRhcmdldIOhdKNDdWWqc2VxdWVuY2VJZAGpY3VlTnVtYmVyozEuNaRtb2RlplJlbW92ZQ==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXExpmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8OkbmFtZapHcmVlbiB3YXNopG1vZGWmUmVtb3ZlpWFkZGVkAKhyZXBsYWNlZACka2VwdASncmVtb3ZlZAE=",
+      "answer": "g6F0pkFuc3dlcqNzZXE2pmFuc3dlcoKhdKxTdG9yZVByZXZpZXencHJldmlld4moYWNjZXB0ZWTDp3JlZnVzYWzApmV4aXN0c8OkbmFtZapHcmVlbiB3YXNopG1vZGWmUmVtb3ZlpWFkZGVkAKhyZXBsYWNlZACka2VwdASncmVtb3ZlZAE=",
       "refused": false,
       "sequences": [
         {
@@ -5801,7 +6558,7 @@
     },
     {
       "what": "take it out with a **Remove**: the cue keeps everything else",
-      "client": "g6F0p0NvbW1hbmSjc2VxMqdjb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqMxLjWkbW9kZaZSZW1vdmU=",
+      "client": "g6F0p0NvbW1hbmSjc2VxN6djb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqMxLjWkbW9kZaZSZW1vdmU=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5OIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbstAFgAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWqR3JlZW4gd2FzaKZudW1iZXKjMS41pXBhcnRzlIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWjUmVkp2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXN//+FqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzZxAhalhdHRyaWJ1dGWjUmVkp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXN//+ndHJpZ2dlcqRUaW1lq3RyaWdnZXJUaW1ly0AQAAAAAAAAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhM6VwYXJ0c5aFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqlwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQOpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCq21hc3RlckxldmVszf//pG5hbWWlQWN0IDGlc3BlZWTNBAA="
@@ -5942,7 +6699,7 @@
     },
     {
       "what": "the same Remove again: refused, because the value is gone and a store that removes nothing is one an operator would press twice",
-      "client": "g6F0p0NvbW1hbmSjc2VxM6djb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqMxLjWkbW9kZaZSZW1vdmU=",
+      "client": "g6F0p0NvbW1hbmSjc2VxOKdjb21tYW5khKF0qFN0b3JlQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqMxLjWkbW9kZaZSZW1vdmU=",
       "isQuery": false,
       "deltas": [],
       "answer": null,
@@ -6081,7 +6838,7 @@
     },
     {
       "what": "append the programmer to the cue list: a new cue at the highest number, which is 4",
-      "client": "g6F0p0NvbW1hbmSjc2VxNKdjb21tYW5khKF0rVN0b3JlU2VxdWVuY2Wqc2VxdWVuY2VJZAGkbmFtZaCkbW9kZaZBcHBlbmQ=",
+      "client": "g6F0p0NvbW1hbmSjc2VxOadjb21tYW5khKF0rVN0b3JlU2VxdWVuY2Wqc2VxdWVuY2VJZAGkbmFtZaCkbW9kZaZBcHBlbmQ=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5SIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbstAFgAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWqR3JlZW4gd2FzaKZudW1iZXKjMS41pXBhcnRzlIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWjUmVkp2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXN//+FqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzZxAhalhdHRyaWJ1dGWjUmVkp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXN//+ndHJpZ2dlcqRUaW1lq3RyaWdnZXJUaW1ly0AQAAAAAAAAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhM6VwYXJ0c5aFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqlwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQOpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqE0pXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCq21hc3RlckxldmVszf//pG5hbWWlQWN0IDGlc3BlZWTNBAA="
@@ -6239,7 +6996,7 @@
     },
     {
       "what": "and merge it into every cue there is",
-      "client": "g6F0p0NvbW1hbmSjc2VxNadjb21tYW5khKF0rVN0b3JlU2VxdWVuY2Wqc2VxdWVuY2VJZAGkbmFtZaCkbW9kZaVNZXJnZQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxOqdjb21tYW5khKF0rVN0b3JlU2VxdWVuY2Wqc2VxdWVuY2VJZAGkbmFtZaCkbW9kZaVNZXJnZQ==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5SIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbstAFgAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWqR3JlZW4gd2FzaKZudW1iZXKjMS41pXBhcnRzlYWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc0wOYWpYXR0cmlidXRlo1JlZKdmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//halhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc2cQIWpYXR0cmlidXRlo1JlZKdmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzf//p3RyaWdnZXKkVGltZat0cmlnZ2VyVGltZctAEAAAAAAAAIilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaCmbnVtYmVyoTOlcGFydHOXhalhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc0wOYWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQGpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUCqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAqlwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlA6lwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQOpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MKd0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwIilZGVsYXnLAAAAAAAAAACmZmFkZUluywAAAAAAAAAAp2ZhZGVPdXTLAAAAAAAAAACkbmFtZaCmbnVtYmVyoTSlcGFydHORhalhdHRyaWJ1dGWlR3JlZW6nZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc0wOad0cmlnZ2Vyokdvq3RyaWdnZXJUaW1lwK9jdXJyZW50Q3VlSW5kZXjAomlkAahpc0FjdGl2ZcKkbG9vcMKrbWFzdGVyTGV2ZWzN//+kbmFtZaVBY3QgMaVzcGVlZM0EAA=="
@@ -6409,7 +7166,7 @@
     },
     {
       "what": "delete a cue: the numbers left do not close up",
-      "client": "g6F0p0NvbW1hbmSjc2VxNqdjb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSDoXSjQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqMxLjU=",
+      "client": "g6F0p0NvbW1hbmSjc2VxO6djb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSDoXSjQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqMxLjU=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5OIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqEzpXBhcnRzl4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqlwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQOpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqE0pXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCq21hc3RlckxldmVszf//pG5hbWWlQWN0IDGlc3BlZWTNBAA="
@@ -6538,7 +7295,7 @@
     },
     {
       "what": "delete a cue that is not there: refused, and nothing moves",
-      "client": "g6F0p0NvbW1hbmSjc2VxN6djb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSDoXSjQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqI5OQ==",
+      "client": "g6F0p0NvbW1hbmSjc2VxPKdjb21tYW5kgqF0pkRlbGV0ZaZ0YXJnZXSDoXSjQ3VlqnNlcXVlbmNlSWQBqWN1ZU51bWJlcqI5OQ==",
       "isQuery": false,
       "deltas": [],
       "answer": null,
@@ -6665,7 +7422,7 @@
     },
     {
       "what": "a sequence number that is taken: refused, and the cue list survives",
-      "client": "g6F0p0NvbW1hbmSjc2VxOKdjb21tYW5khKF0rVN0b3JlU2VxdWVuY2Wqc2VxdWVuY2VJZAGkbmFtZaxPdmVyIHRoZSB0b3CkbW9kZaZBcHBlbmQ=",
+      "client": "g6F0p0NvbW1hbmSjc2VxPadjb21tYW5khKF0rVN0b3JlU2VxdWVuY2Wqc2VxdWVuY2VJZAGkbmFtZaxPdmVyIHRoZSB0b3CkbW9kZaZBcHBlbmQ=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5SIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqEzpXBhcnRzl4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqlwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQOpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqE0pXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqE1pXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCq21hc3RlckxldmVszf//pG5hbWWlQWN0IDGlc3BlZWTNBAA="
@@ -6811,7 +7568,7 @@
     },
     {
       "what": "fire the list",
-      "client": "g6F0p0NvbW1hbmSjc2VxOadjb21tYW5kg6F0qkV4ZWN1dG9yR2+mdGFyZ2V0gqF0qEV4ZWN1dG9yqmV4ZWN1dG9ySWQAqWRpcmVjdGlvbqROZXh0",
+      "client": "g6F0p0NvbW1hbmSjc2VxPqdjb21tYW5kg6F0qkV4ZWN1dG9yR2+mdGFyZ2V0gqF0qEV4ZWN1dG9yqmV4ZWN1dG9ySWQAqWRpcmVjdGlvbqROZXh0",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhhKF0rVBsYXliYWNrU3RhdGWocGxheWJhY2sBqGlzQWN0aXZlw6hjdWVJbmRleAA="
@@ -6957,7 +7714,7 @@
     },
     {
       "what": "step it again",
-      "client": "g6F0p0NvbW1hbmSjc2VxOqdjb21tYW5kg6F0qkV4ZWN1dG9yR2+mdGFyZ2V0gqF0qEV4ZWN1dG9yqmV4ZWN1dG9ySWQAqWRpcmVjdGlvbqROZXh0",
+      "client": "g6F0p0NvbW1hbmSjc2VxP6djb21tYW5kg6F0qkV4ZWN1dG9yR2+mdGFyZ2V0gqF0qEV4ZWN1dG9yqmV4ZWN1dG9ySWQAqWRpcmVjdGlvbqROZXh0",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhhKF0rVBsYXliYWNrU3RhdGWocGxheWJhY2sBqGlzQWN0aXZlw6hjdWVJbmRleAE="
@@ -7103,7 +7860,7 @@
     },
     {
       "what": "and stop it",
-      "client": "g6F0p0NvbW1hbmSjc2VxO6djb21tYW5kgqF0q0V4ZWN1dG9yT2ZmpnRhcmdldIKhdKhFeGVjdXRvcqpleGVjdXRvcklkAA==",
+      "client": "g6F0p0NvbW1hbmSjc2VxQKdjb21tYW5kgqF0q0V4ZWN1dG9yT2ZmpnRhcmdldIKhdKhFeGVjdXRvcqpleGVjdXRvcklkAA==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhhKF0rVBsYXliYWNrU3RhdGWocGxheWJhY2sBqGlzQWN0aXZlwqhjdWVJbmRleMA="
@@ -7249,7 +8006,7 @@
     },
     {
       "what": "a Go on an executor with nothing on it: refused",
-      "client": "g6F0p0NvbW1hbmSjc2VxPKdjb21tYW5kg6F0qkV4ZWN1dG9yR2+mdGFyZ2V0gqF0qEV4ZWN1dG9yqmV4ZWN1dG9ySWQEqWRpcmVjdGlvbqROZXh0",
+      "client": "g6F0p0NvbW1hbmSjc2VxQadjb21tYW5kg6F0qkV4ZWN1dG9yR2+mdGFyZ2V0gqF0qEV4ZWN1dG9yqmV4ZWN1dG9ySWQEqWRpcmVjdGlvbqROZXh0",
       "isQuery": false,
       "deltas": [],
       "answer": null,
@@ -7393,7 +8150,7 @@
     },
     {
       "what": "and take the last edit back",
-      "client": "g6F0p0NvbW1hbmSjc2VxPadjb21tYW5kgaF0pE9vcHM=",
+      "client": "g6F0p0NvbW1hbmSjc2VxQqdjb21tYW5kgaF0pE9vcHM=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGisL3NlcXVlbmNlcy8xpXZhbHVliaVjb2xvcsCkY3Vlc5OIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqExpXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqEzpXBhcnRzl4WpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUBqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwhalhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAqlwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQKpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQOpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUDqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCIpWRlbGF5ywAAAAAAAAAApmZhZGVJbssAAAAAAAAAAKdmYWRlT3V0ywAAAAAAAAAApG5hbWWgpm51bWJlcqE0pXBhcnRzkYWpYXR0cmlidXRlpUdyZWVup2ZpeHR1cmUBqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNMDmndHJpZ2dlcqJHb6t0cmlnZ2VyVGltZcCvY3VycmVudEN1ZUluZGV4wKJpZAGoaXNBY3RpdmXCpGxvb3DCq21hc3RlckxldmVszf//pG5hbWWlQWN0IDGlc3BlZWTNBAA="
@@ -7521,5 +8278,5 @@
       "editingCue": null
     }
   ],
-  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOBoTCFr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvZW5jb2RlckZ1bmN0aW9upUVtcHR5rWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKpzZXF1ZW5jZUlkAaxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpkRpbW1lcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNIVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50AaJpZK5nZW5lcmljLmRpbW1lcqxtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrBnZW5lcmljLnJnYncucGFyhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlR3JlZW6sY29hcnNlT2Zmc2V0AaxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpVdoaXRlrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLBnZW5lcmljLnJnYncucGFyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjNGNopG5hbWWoUkdCVyBQQVKoZml4dHVyZXOEoTGKp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaEyiqdhZGRyZXNzBaJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGhM4qnYWRkcmVzcwmiaWQDqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDOocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksGdlbmVyaWMucmdidy5wYXKodW5pdmVyc2UBoTSKp2FkZHJlc3MUomlkBKlpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA0qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZK5nZW5lcmljLmRpbW1lcqh1bml2ZXJzZQGmZ3JvdXBzgKdwcmVzZXRzgaExhaVjb2xvcoOhYnihZwChcgCiaWQBpG5hbWWrRGFya2VyIGJsdWWkcG9vbKVDb2xvcqZ2YWx1ZXOWg6lhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAaV2YWx1Zc1OIIOpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUBpXZhbHVlZIOpYXR0cmlidXRlpEJsdWWnZml4dHVyZQKldmFsdWXNTiCDqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAqV2YWx1ZWSDqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUDpXZhbHVlzU4gg6lhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQOldmFsdWVkqXNlcXVlbmNlc4GhMYmlY29sb3LApGN1ZXOTiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhMaVwYXJ0c5GFqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzTA5p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhM6VwYXJ0c5eFqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzTA5halhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAalwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQKpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUDqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwp3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhNKVwYXJ0c5GFqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzTA5p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqttYXN0ZXJMZXZlbM3//6RuYW1lpUFjdCAxpXNwZWVkzQQAp3Nlc3Npb26Cp3Nlc3Npb26OrGFjdGl2ZVZpZXdJZAGrY29tbWFuZExpbmWgqmVkaXRpbmdDdWXAq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZQGsd2luZG93UGlja2VywqV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKGqXNlbGVjdGlvbpEBrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26RAbJhY3RpdmVGZWF0dXJlR3JvdXClQ29sb3KmdmFsdWVzkYOnZml4dHVyZQGpYXR0cmlidXRlpUdyZWVupXZhbHVlg6V2YWx1Zc0wOaZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCqY2xlYXJTdGFnZQGnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50zQI3qWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEX8U45ia5yrbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzw65maXh0dXJlTGlicmFyec0IcadtYWNoaW5ljaZkZXNrSWTZJDY3M2VhY2FhLWE0MDItNDU2OC1iZWZhLTdmZmJjNzhmMWI3MadkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcDlCOXN2MaVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOVp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbKhzaG93RmlsZYWkcGF0aNk3QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXA5QjlzdjFcc2hvdy5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2Vzw6hyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg=="
+  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOBoTCFr2J1dHRvbkZ1bmN0aW9uc5SjR28ro0dvLaNPZmalRW1wdHmvZW5jb2RlckZ1bmN0aW9upUVtcHR5rWZhZGVyRnVuY3Rpb26mTWFzdGVyomlkAKpzZXF1ZW5jZUlkAaxmaXh0dXJlVHlwZXOCrmdlbmVyaWMuZGltbWVyhqphdHRyaWJ1dGVzkYmpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpkRpbW1lcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNIVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50AaJpZK5nZW5lcmljLmRpbW1lcqxtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlozFjaKRuYW1lpkRpbW1lcrBnZW5lcmljLnJnYncucGFyhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlR3JlZW6sY29hcnNlT2Zmc2V0AaxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpVdoaXRlrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLBnZW5lcmljLnJnYncucGFyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjNGNopG5hbWWoUkdCVyBQQVKoZml4dHVyZXOEoTGKp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaEyiqdhZGRyZXNzBaJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGhM4qnYWRkcmVzcwmiaWQDqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDOocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksGdlbmVyaWMucmdidy5wYXKodW5pdmVyc2UBoTSKp2FkZHJlc3MUomlkBKlpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA0qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZK5nZW5lcmljLmRpbW1lcqh1bml2ZXJzZQGmZ3JvdXBzgKdwcmVzZXRzgaExhaVjb2xvcoOhYnihZwChcgCiaWQBpG5hbWWrRGFya2VyIGJsdWWkcG9vbKVDb2xvcqZ2YWx1ZXOWg6lhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAaV2YWx1Zc1OIIOpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUBpXZhbHVlZIOpYXR0cmlidXRlpEJsdWWnZml4dHVyZQKldmFsdWXNTiCDqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlAqV2YWx1ZWSDqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUDpXZhbHVlzU4gg6lhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQOldmFsdWVkqXNlcXVlbmNlc4GhMYmlY29sb3LApGN1ZXOTiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhMaVwYXJ0c5GFqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzTA5p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhM6VwYXJ0c5eFqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzTA5halhdHRyaWJ1dGWkQmx1ZadmaXh0dXJlAalwcmVzZXRSZWYBqHRyYWNraW5npVRyYWNrpXZhbHVlzU4ghalhdHRyaWJ1dGWlV2hpdGWnZml4dHVyZQGpcHJlc2V0UmVmwKh0cmFja2luZ6VUcmFja6V2YWx1Zc11MIWpYXR0cmlidXRlpEJsdWWnZml4dHVyZQKpcHJlc2V0UmVmAah0cmFja2luZ6VUcmFja6V2YWx1Zc1OIIWpYXR0cmlidXRlpVdoaXRlp2ZpeHR1cmUCqXByZXNldFJlZsCodHJhY2tpbmelVHJhY2uldmFsdWXNdTCFqWF0dHJpYnV0ZaRCbHVlp2ZpeHR1cmUDqXByZXNldFJlZgGodHJhY2tpbmelVHJhY2uldmFsdWXNTiCFqWF0dHJpYnV0ZaVXaGl0ZadmaXh0dXJlA6lwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzXUwp3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAiKVkZWxhecsAAAAAAAAAAKZmYWRlSW7LAAAAAAAAAACnZmFkZU91dMsAAAAAAAAAAKRuYW1loKZudW1iZXKhNKVwYXJ0c5GFqWF0dHJpYnV0ZaVHcmVlbqdmaXh0dXJlAalwcmVzZXRSZWbAqHRyYWNraW5npVRyYWNrpXZhbHVlzTA5p3RyaWdnZXKiR2+rdHJpZ2dlclRpbWXAr2N1cnJlbnRDdWVJbmRleMCiaWQBqGlzQWN0aXZlwqRsb29wwqttYXN0ZXJMZXZlbM3//6RuYW1lpUFjdCAxpXNwZWVkzQQAp3Nlc3Npb26Cp3Nlc3Npb26OrGFjdGl2ZVZpZXdJZAGrY29tbWFuZExpbmWgqmVkaXRpbmdDdWXAq2VuY29kZXJCYW5rpkRpbW1lcqxleGVjdXRvclBhZ2UArWZvY3VzZWRXaW5kb3fAomlkAaRuYW1lpE1haW6rb3BlbldpbmRvd3OQrnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZQGsd2luZG93UGlja2VywqV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKGqXNlbGVjdGlvbpEBrnNlbGVjdGVkR3JvdXBzkK9tYW51YWxTZWxlY3Rpb26RAbJhY3RpdmVGZWF0dXJlR3JvdXClQ29sb3KmdmFsdWVzkYOnZml4dHVyZQGpYXR0cmlidXRlpUdyZWVupXZhbHVlg6V2YWx1Zc0wOaZzb3VyY2WmTWFudWFsqXByZXNldFJlZsCqY2xlYXJTdGFnZQGnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50zQHuqWxhc3RFcnJvcsCubGFzdEVycm9yQWdvTXPApmhlYWx0aISvcHJvdG9jb2xWZXJzaW9uAaZ0aWNrSHrLQEYCnBOkocarbWlzc2VkVGlja3MArnVuc2F2ZWRDaGFuZ2Vzw65maXh0dXJlTGlicmFyec0IcadtYWNoaW5ljaZkZXNrSWTZJGVmZDU1YWJiLWU2MTEtNDdmNi04ZmQ1LTFkOTk0NGM2ZjE0ZKdkYXRhRGlyry90bXAvLnRtcHZKTWJoa6Vsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOVp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbKhzaG93RmlsZYWkcGF0aLovdG1wLy50bXB2Sk1iaGsvc2hvdy5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2Vzw6hyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg=="
 }

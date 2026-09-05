@@ -456,6 +456,7 @@ function LibraryPicker({
                             <th scope="col">Fixture</th>
                             <th scope="col">Mode</th>
                             <th scope="col">Ch</th>
+                            <th scope="col">Source</th>
                             <th scope="col">In this show</th>
                         </tr>
                     </thead>
@@ -481,6 +482,22 @@ function LibraryPicker({
                                 <td>{entry.name === "" ? entry.id : entry.name}</td>
                                 <td>{entry.mode === "" ? "—" : entry.mode}</td>
                                 <td>{entry.footprint}</td>
+                                {/*
+                                  **B43.** Whose profile this is. A venue's own
+                                  may deliberately carry a library key in order
+                                  to *correct* one, so the key cannot answer it
+                                  and the daemon says so on the entry instead.
+                                  It is a column rather than a mark on the name,
+                                  because *which of these two Mac 700s is mine*
+                                  is read by scanning down rather than across.
+                                */}
+                                <td
+                                    className="library-source"
+                                    data-testid={`library-source-${entry.id}`}
+                                    data-own={entry.own ? "yes" : "no"}
+                                >
+                                    {entry.own ? "yours" : "library"}
+                                </td>
                                 <td className="library-held">
                                     {embedded.has(entry.id) ? "yes — picking re-reads it" : ""}
                                 </td>

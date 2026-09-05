@@ -367,6 +367,9 @@ static SOFTWARE_DIMMER: prism_domain::AttributeDef = prism_domain::AttributeDef 
     invert: false,
     physical_from: 0.0,
     physical_to: 100.0,
+    // A supplied intensity is the desk's own and has no file behind it, so
+    // there are no named ranges to carry (S51, B38).
+    ranges: Vec::new(),
 };
 
 impl Show {

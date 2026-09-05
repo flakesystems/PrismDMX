@@ -731,8 +731,14 @@ describe("the store bar", () => {
     await settle();
     expect(ran().at(-1)).toBe("Update");
 
-    // And a cleared programmer ends the edit, so the key goes.
-    await applyStep("an Update after the programmer has been cleared");
+    // **Dropping the selection does not end the edit** — S51, B37: no value
+    // moved, so the key stays and can still be pressed.
+    await applyStep("clear the selection while a cue is loaded");
+    expect(screen.getByTestId("update-cue")).not.toBeNull();
+
+    // The press that takes the **values** is the one that ends it, so the key
+    // goes.
+    await applyStep("an Update after the *values* have been cleared");
     expect(screen.queryByTestId("update-cue")).toBeNull();
   });
 

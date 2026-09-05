@@ -29,6 +29,22 @@ pub enum ProgrammerValueSource {
 
 /// What the next press of Clear will do — `docs/DMX_MERGE.md` §3.1.
 ///
+/// # The order is selection first, and that is S51's change (B37)
+///
+/// It ran the other way until then: the first press took the **values** and the
+/// second the selection. The owner's punch list says why that is wrong, and it
+/// is not a matter of taste — *andernfalls ist es nicht möglich, mehrere
+/// verschiedene Fixtures gleichzeitig zu programmieren.* Building a look out of
+/// several fixtures is: select one, set it, let it go, select the next, set
+/// that. **Letting one go** is the gesture in the middle, and under the old
+/// order the only key that does it took the values with it — so the look could
+/// never grow past whatever was selected at the moment it was stored.
+///
+/// So the first press drops the selection and **keeps** what has been set, the
+/// second takes the values, and the third puts the rest back. The declaration
+/// order below is the press order and is also the wire number, which is what
+/// makes `1` mean *the first press* on both sides of the protocol.
+///
 /// # It is derived, not counted, and that is S43's change
 ///
 /// Until S43 this was a **counter on the button**: a press advanced it whatever
@@ -55,11 +71,13 @@ pub enum ClearStage {
     /// There is nothing to clear. A press does nothing and the key is dark.
     #[default]
     Nothing,
-    /// The next press clears the values and keeps the selection.
-    Values,
-    /// The values are gone; the next press drops the selection.
+    /// The next press drops the selection and keeps every value that has been
+    /// set — the gesture that lets one fixture go so the next can be added to
+    /// the same look (B37).
     Selection,
-    /// Values and selection are gone; the next press puts the rest back to
+    /// Nothing is selected; the next press clears the values.
+    Values,
+    /// Selection and values are gone; the next press puts the rest back to
     /// where a fresh programmer starts — the feature group, and the page the
     /// session keeps beside it.
     All,
@@ -71,8 +89,8 @@ impl ClearStage {
     pub const fn as_u8(self) -> u8 {
         match self {
             Self::Nothing => 0,
-            Self::Values => 1,
-            Self::Selection => 2,
+            Self::Selection => 1,
+            Self::Values => 2,
             Self::All => 3,
         }
     }
@@ -90,8 +108,8 @@ impl TryFrom<u8> for ClearStage {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::Nothing),
-            1 => Ok(Self::Values),
-            2 => Ok(Self::Selection),
+            1 => Ok(Self::Selection),
+            2 => Ok(Self::Values),
             3 => Ok(Self::All),
             other => Err(InvalidClearStage(other)),
         }
@@ -309,15 +327,17 @@ impl ProgrammerState {
     /// holds nothing and sits on the default bank has nothing to clear, and the
     /// key says so rather than cycling.
     ///
-    /// The order is `docs/DMX_MERGE.md` §3.1's and is not arbitrary — values
-    /// before selection, because an operator who has set the wrong level far
-    /// more often wants the level back than the selection gone.
+    /// The order is `docs/DMX_MERGE.md` §3.1's and is not arbitrary — **the
+    /// selection before the values**, because that is the order that lets a
+    /// look be built out of more than one fixture. See [`ClearStage`] for the
+    /// argument; it was the other way round until S51 and punch-list entry B37
+    /// is what turned it.
     #[must_use]
     pub fn stage(&self) -> ClearStage {
-        if !self.values.is_empty() {
-            ClearStage::Values
-        } else if !self.selection.is_empty() {
+        if !self.selection.is_empty() {
             ClearStage::Selection
+        } else if !self.values.is_empty() {
+            ClearStage::Values
         } else if self.active_feature_group == FeatureGroup::default() {
             ClearStage::Nothing
         } else {
@@ -511,8 +531,8 @@ mod tests {
         // key at rest reads as.
         for (stage, text) in [
             (ClearStage::Nothing, "0"),
-            (ClearStage::Values, "1"),
-            (ClearStage::Selection, "2"),
+            (ClearStage::Selection, "1"),
+            (ClearStage::Values, "2"),
             (ClearStage::All, "3"),
         ] {
             assert_eq!(serde_json::to_string(&stage).unwrap(), text);
@@ -528,20 +548,41 @@ mod tests {
         );
     }
 
+    /// **The order is the number, and the number is the order** — S51, B37.
+    ///
+    /// Written as one assertion rather than four, because the thing that must
+    /// not drift is the *sequence*: a later change that puts the values back in
+    /// front of the selection turns this red, which a per-variant test would
+    /// not.
     #[test]
-    fn the_stage_is_the_first_thing_there_is_to_clear() {
-        // The whole of B2's rule, read off the contents. `restage` is what every
-        // commit in `prism_core::Programmer` calls, so the carried field can
-        // never disagree with this.
-        let mut state = ProgrammerState::default();
-        assert_eq!(state.stage(), ClearStage::Nothing);
+    fn the_wire_numbers_are_the_order_the_presses_come_in() {
+        assert_eq!(
+            [
+                ClearStage::Nothing,
+                ClearStage::Selection,
+                ClearStage::Values,
+                ClearStage::All,
+            ]
+            .map(ClearStage::as_u8),
+            [0, 1, 2, 3]
+        );
+    }
 
-        state.active_feature_group = FeatureGroup::Color;
-        assert_eq!(state.stage(), ClearStage::All);
-
+    /// The stage is the first thing there is to clear, and **the selection is
+    /// the first thing** — S51, B37.
+    ///
+    /// Asserted as the sequence a hand actually presses, from a full programmer
+    /// down to an empty one, rather than one state at a time: the order is the
+    /// change B37 asked for, and only a sequence can hold it. Reversing
+    /// `ProgrammerState::stage`'s first two arms turns this red on the second
+    /// step.
+    #[test]
+    fn the_stages_are_the_sequence_a_hand_presses() {
+        let mut state = ProgrammerState {
+            active_feature_group: FeatureGroup::Color,
+            ..ProgrammerState::default()
+        };
         state.selection.push(FixtureId::new(1));
-        assert_eq!(state.stage(), ClearStage::Selection);
-
         state.set_value(
             FixtureId::new(1),
             AttributeType::Dimmer,
@@ -551,10 +592,44 @@ mod tests {
                 preset_ref: None,
             },
         );
-        assert_eq!(state.stage(), ClearStage::Values);
 
+        // Selection first — the press that lets one fixture go so the next can
+        // be added to the same look.
+        assert_eq!(state.stage(), ClearStage::Selection);
+        state.clear_selection();
+
+        // The values are still there, which is the whole point of the order.
+        assert_eq!(state.values.len(), 1);
+        assert_eq!(state.stage(), ClearStage::Values);
+        state.values.clear();
+
+        // Then the rest: the bank, and the page the session keeps beside it.
+        assert_eq!(state.stage(), ClearStage::All);
+        state.active_feature_group = FeatureGroup::default();
+
+        assert_eq!(state.stage(), ClearStage::Nothing);
         state.restage();
-        assert_eq!(state.clear_stage, ClearStage::Values);
+        assert_eq!(state.clear_stage, ClearStage::Nothing);
+    }
+
+    /// A programmer with nothing selected still offers its values.
+    ///
+    /// The other half of the order: `stage` reads the *first thing there is*,
+    /// so a look left standing after the selection went is reached by the very
+    /// next press rather than by two.
+    #[test]
+    fn values_left_standing_are_the_next_press() {
+        let mut state = ProgrammerState::default();
+        state.set_value(
+            FixtureId::new(7),
+            AttributeType::Dimmer,
+            ProgrammerValue {
+                value: 65_535,
+                source: ProgrammerValueSource::Manual,
+                preset_ref: None,
+            },
+        );
+        assert_eq!(state.stage(), ClearStage::Values);
     }
 
     #[test]

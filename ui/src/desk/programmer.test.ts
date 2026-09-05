@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { JsonValue, ProgrammerState } from "../bindings";
+import type { AttributeType, JsonValue, ProgrammerState } from "../bindings";
 import {
   ENCODERS_PER_PAGE,
   bankParameters,
@@ -66,7 +66,7 @@ const SHOW: JsonValue = {
 /** A programmer holding the given values, in the flat wire shape. */
 function programmer(
   selection: number[],
-  values: [number, string, number][] = [],
+  values: [number, AttributeType, number][] = [],
 ): ProgrammerState {
   return {
     selection,
@@ -74,10 +74,13 @@ function programmer(
     manualSelection: [],
     activeFeatureGroup: "Dimmer",
     clearStage: 0,
+    // The attribute is passed through since S51 rather than folded to one of
+    // three: the model has thirty-four of them now (B38), and a helper that
+    // silently rewrote *Gobo* as *Dimmer* would make a test of the gobo wheel
+    // a test of the dimmer.
     values: values.map(([fixture, attribute, value]) => ({
       fixture,
-      // The recording's own vocabulary; a test file may know what it built.
-      attribute: attribute === "Pan" ? "Pan" : attribute === "Tilt" ? "Tilt" : "Dimmer",
+      attribute,
       value: { value, source: "Manual", presetRef: null },
     })),
   };
@@ -188,7 +191,14 @@ describe("what an encoder reads", () => {
     // Fixture 1 is a dimmer with no pan, so a Position bank over a mixed
     // selection has one fixture that can be panned and one that cannot.
     const readings = bankReadings(programmer([1, 5], [[5, "Pan", 16383]]), SHOW, "Position");
-    expect(readings.map((reading) => reading.attribute)).toEqual(["Pan", "Tilt"]);
+    // Three since S51 (B38): the position bank has a speed knob on it now, and
+    // nothing selected has one.
+    expect(readings.map((reading) => reading.attribute)).toEqual([
+      "Pan",
+      "Tilt",
+      "PositionSpeed",
+    ]);
+    expect(readings[2]?.available).toBe(0);
     expect(readings[0]?.available).toBe(1);
     expect(readings[0]?.held).toBe(1);
     expect(readings[1]?.available).toBe(1);
@@ -197,16 +207,22 @@ describe("what an encoder reads", () => {
 
   it("gives every bank its parameters in the generated order", () => {
     expect(bankParameters("Dimmer")).toEqual(["Dimmer"]);
-    expect(bankParameters("Position")).toEqual(["Pan", "Tilt"]);
     expect(bankParameters("Focus")).toEqual(["Focus"]);
-    // **Seven banks since S43**, so Beam is three parameters rather than the six
-    // it carried when Gobo and Control were folded into it. The list is
-    // generated from `prism_domain::FeatureGroup::attributes`, so what is
-    // asserted here is the *order* reaching the encoders — the membership is
+    // **Seven banks since S43 and thirty-four attributes since S51** (B38). The
+    // list is generated from `prism_domain::FeatureGroup::attributes`, so what
+    // is asserted here is the *order* reaching the encoders — the membership is
     // `feature_groups_are_the_seven_encoder_banks`'s, in Rust.
-    expect(bankParameters("Beam")).toEqual(["Iris", "Zoom", "Shutter"]);
-    expect(bankParameters("Gobo")).toEqual(["Gobo", "Prism"]);
-    expect(bankReadings(null, null, "Beam").map((reading) => reading.index)).toEqual([0, 1, 2]);
+    //
+    // The **first four** of every bank are what they were before S51, which is
+    // the promise `AttributeType::ALL` makes and the one an operator meets: the
+    // page they land on is unchanged.
+    expect(bankParameters("Position").slice(0, 2)).toEqual(["Pan", "Tilt"]);
+    expect(bankParameters("Beam").slice(0, 3)).toEqual(["Iris", "Zoom", "Shutter"]);
+    expect(bankParameters("Gobo").slice(0, 2)).toEqual(["Gobo", "Prism"]);
+    expect(bankParameters("Color").slice(0, 4)).toEqual(["Red", "Green", "Blue", "White"]);
+    expect(bankReadings(null, null, "Beam").map((reading) => reading.index)).toEqual([
+      0, 1, 2, 3, 4, 5,
+    ]);
   });
 });
 
@@ -409,5 +425,105 @@ function emptyReading() {
     source: null,
     home: null,
     overriding: false,
+    ranges: [],
+    range: null,
   } as const;
 }
+
+/**
+ * **The named ranges a channel carries** — S51, punch-list B38.
+ *
+ * Read out of the show's own embedded profile (S11), like the resting value
+ * beside them, so nothing was added to the protocol for it. What is asserted
+ * here is the two rules that are not obvious: only when the whole selection
+ * agrees, and never guessed at.
+ */
+describe("a channel's named ranges", () => {
+  const wheel = (ranges: unknown): JsonValue =>
+    ({
+      fixtures: { "1": { typeId: "spot" }, "2": { typeId: "other" } },
+      fixtureTypes: {
+        spot: {
+          attributes: [{ attribute: "Gobo", featureGroup: "Gobo", defaultValue: 0, ranges }],
+        },
+        other: {
+          attributes: [
+            {
+              attribute: "Gobo",
+              featureGroup: "Gobo",
+              defaultValue: 0,
+              ranges: [{ name: "Something else", from: 0, to: 65535 }],
+            },
+          ],
+        },
+      },
+    }) as JsonValue;
+
+  const named = [
+    { name: "Open", from: 0, to: 9999 },
+    { name: "Gobo 1", from: 10000, to: 65535 },
+  ];
+
+  it("names the range the value is standing in", () => {
+    const [gobo] = bankReadings(programmer([1], [[1, "Gobo", 30000]]), wheel(named), "Gobo");
+    expect(gobo?.ranges).toEqual(named);
+    expect(gobo?.range).toBe("Gobo 1");
+  });
+
+  it("names nothing when the selected fixtures do not agree on a list", () => {
+    // Two heads with different wheels in them: offering one of the two lists
+    // would name the wrong slot on half the selection, which is the same rule
+    // the resting value follows.
+    const [gobo] = bankReadings(programmer([1, 2], []), wheel(named), "Gobo");
+    expect(gobo?.ranges).toEqual([]);
+    expect(gobo?.range).toBeNull();
+  });
+
+  it("names nothing when the values differ", () => {
+    const [gobo] = bankReadings(
+      programmer([1], [[1, "Gobo", 30000]]),
+      wheel(named),
+      "Gobo",
+    );
+    expect(gobo?.range).toBe("Gobo 1");
+    // ...and a mixed reading has no single place to be standing in.
+    const mixed = bankReadings(
+      programmer([1], [[1, "Gobo", 30000]]),
+      wheel(named),
+      "Gobo",
+    )[0];
+    expect(mixed?.mixed).toBe(false);
+  });
+
+  it("has none at all for a profile written before ranges existed", () => {
+    // A show that embedded its profiles before S51 carries no `ranges` key, and
+    // the fixture behaves exactly as it did — which is the right answer for a
+    // show somebody is about to run.
+    const [gobo] = bankReadings(programmer([1], []), wheel(undefined), "Gobo");
+    expect(gobo?.ranges).toEqual([]);
+    expect(gobo?.range).toBeNull();
+  });
+
+  it("refuses to guess at a list it cannot make sense of", () => {
+    // S26's *do not read the show* rule: a mirror one delta behind a schema
+    // change draws an encoder with no names rather than a broken one.
+    for (const broken of [
+      "not a list",
+      [{ name: "Open" }],
+      [{ from: 0, to: 10 }],
+      [{ name: "Open", from: "nought", to: 10 }],
+    ]) {
+      const [gobo] = bankReadings(programmer([1], []), wheel(broken), "Gobo");
+      expect(gobo?.ranges, JSON.stringify(broken)).toEqual([]);
+    }
+  });
+
+  it("names nothing for a value in a gap the profile does not describe", () => {
+    const [gobo] = bankReadings(
+      programmer([1], [[1, "Gobo", 40000]]),
+      wheel([{ name: "Open", from: 0, to: 9999 }]),
+      "Gobo",
+    );
+    expect(gobo?.range).toBeNull();
+  });
+});

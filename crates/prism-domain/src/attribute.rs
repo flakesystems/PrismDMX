@@ -45,11 +45,75 @@ pub enum AttributeType {
     Shutter,
     /// Fixture control channel (reset, lamp on, ...).
     Control,
+    // -- S51, punch-list B38: the nineteen that made the corpus whole --------
+    //
+    // Everything below was added because the Open Fixture Library has a
+    // capability type for it and this model had nowhere to put it, so the
+    // channel was dropped and the operator could not reach it. See
+    // `crate::AttributeType::ALL` for the counting and
+    // `prism_core::library::ofl` for the table that maps them.
+    /// Subtractive cyan — a CMY colour-mixing flag.
+    Cyan,
+    /// Subtractive magenta.
+    Magenta,
+    /// Subtractive yellow.
+    Yellow,
+    /// Ultraviolet emitter.
+    Uv,
+    /// Lime emitter.
+    Lime,
+    /// Indigo emitter.
+    Indigo,
+    /// A colour wheel, or a channel of named colour presets.
+    ColorWheel,
+    /// Correlated colour temperature — warm to cold on one channel.
+    ColorTemperature,
+    /// How fast the head moves between positions.
+    PositionSpeed,
+    /// Rotation of the gobo in the gate.
+    GoboRotation,
+    /// Rotation of the prism.
+    PrismRotation,
+    /// A built-in effect or macro.
+    Effect,
+    /// How fast that effect runs.
+    EffectSpeed,
+    /// Frost, or a diffusion flag.
+    Frost,
+    /// A framing shutter or blade.
+    Blade,
+    /// Where the beam sits within the fixture.
+    BeamPosition,
+    /// A fog or haze machine's output.
+    Fog,
+    /// A speed or time channel that names no particular effect.
+    Speed,
+    /// Sound-to-light sensitivity.
+    Sound,
 }
 
 impl AttributeType {
     /// Every attribute type, in specification order.
-    pub const ALL: [Self; 15] = [
+    ///
+    /// # Thirty-four since S51, and the order is a promise — B38
+    ///
+    /// It was fifteen, and fifteen is what made punch-list entry **B38** true:
+    /// five thousand channels of the installed library mapped to nothing at all
+    /// and were dropped, taking CMY colour mixing, every colour wheel, every
+    /// effect, frost, fog and the framing shutters with them. The nineteen
+    /// added here are one per thing the Open Fixture Library actually has a
+    /// capability type for, and with them **no channel in the 634-fixture
+    /// corpus is left without an attribute** — asserted over the corpus in
+    /// `crates/prism-core/tests/fixture_library.rs`, because a claim about a
+    /// library can only be refuted by the library.
+    ///
+    /// **The first fifteen keep their places, and that is not sentiment.**
+    /// [`FeatureGroup::attributes`] is this array filtered, and the encoder bar
+    /// draws four at a time out of that — so appending rather than interleaving
+    /// is what keeps *Red, Green, Blue, White* the first page of the colour
+    /// bank on a desk that now knows about indigo. A venue that never patches a
+    /// CMY head never pages past the four knobs it had.
+    pub const ALL: [Self; 34] = [
         Self::Dimmer,
         Self::Pan,
         Self::Tilt,
@@ -65,7 +129,54 @@ impl AttributeType {
         Self::Prism,
         Self::Shutter,
         Self::Control,
+        Self::Cyan,
+        Self::Magenta,
+        Self::Yellow,
+        Self::Uv,
+        Self::Lime,
+        Self::Indigo,
+        Self::ColorWheel,
+        Self::ColorTemperature,
+        Self::PositionSpeed,
+        Self::GoboRotation,
+        Self::PrismRotation,
+        Self::Effect,
+        Self::EffectSpeed,
+        Self::Frost,
+        Self::Blade,
+        Self::BeamPosition,
+        Self::Fog,
+        Self::Speed,
+        Self::Sound,
     ];
+
+    /// Whether this attribute is an **additive emitter** — a lamp that makes
+    /// more light the higher it is driven.
+    ///
+    /// The question punch-list **B1** answers with *a colour rests open*, and
+    /// S51 is where it stopped being the same question as *is this on the
+    /// colour bank*. Cyan, magenta and yellow are **subtractive**: they are
+    /// filters, so open is nought and full is opaque — a CMY head parked at
+    /// full on all three is not white, it is black, and giving them B1's
+    /// resting value would have blacked out every CMY rig the moment this model
+    /// learned to see them. A colour **wheel** is neither: its value is a slot
+    /// number and there is no *open* to rest at.
+    ///
+    /// So the rule that reaches a profile is this one and not the bank.
+    #[must_use]
+    pub const fn is_additive_emitter(self) -> bool {
+        matches!(
+            self,
+            Self::Red
+                | Self::Green
+                | Self::Blue
+                | Self::White
+                | Self::Amber
+                | Self::Uv
+                | Self::Lime
+                | Self::Indigo
+        )
+    }
 
     /// The encoder bank this attribute appears on by default.
     ///
@@ -79,16 +190,48 @@ impl AttributeType {
     /// lamp-on, reset and fan that you touch once a show and never during one.
     /// Six knobs on one bank meant two pages of `Beam` and a `Control` channel
     /// filed behind the shutter.
+    /// **Still seven banks after S51's nineteen** — B38. The owner's drawing
+    /// (`design/skeleton/programmer.pdf`) names seven and the programmer band
+    /// is built out of them, so the new attributes were filed among the seven
+    /// rather than given an eighth: a bank is *what an operator reaches for*,
+    /// and a built-in effect is reached for at the same moment as the gobo it
+    /// replaces.
     #[must_use]
     pub const fn feature_group(self) -> FeatureGroup {
         match self {
             Self::Dimmer => FeatureGroup::Dimmer,
-            Self::Pan | Self::Tilt => FeatureGroup::Position,
-            Self::Gobo | Self::Prism => FeatureGroup::Gobo,
-            Self::Red | Self::Green | Self::Blue | Self::White | Self::Amber => FeatureGroup::Color,
-            Self::Iris | Self::Zoom | Self::Shutter => FeatureGroup::Beam,
+            Self::Pan | Self::Tilt | Self::PositionSpeed => FeatureGroup::Position,
+            // The pattern in the beam, and how fast it moves.
+            Self::Gobo
+            | Self::Prism
+            | Self::GoboRotation
+            | Self::PrismRotation
+            | Self::Effect
+            | Self::EffectSpeed => FeatureGroup::Gobo,
+            Self::Red
+            | Self::Green
+            | Self::Blue
+            | Self::White
+            | Self::Amber
+            | Self::Cyan
+            | Self::Magenta
+            | Self::Yellow
+            | Self::Uv
+            | Self::Lime
+            | Self::Indigo
+            | Self::ColorWheel
+            | Self::ColorTemperature => FeatureGroup::Color,
+            // The size and the shape of the beam.
+            Self::Iris
+            | Self::Zoom
+            | Self::Shutter
+            | Self::Frost
+            | Self::Blade
+            | Self::BeamPosition => FeatureGroup::Beam,
             Self::Focus => FeatureGroup::Focus,
-            Self::Control => FeatureGroup::Control,
+            // The row that is touched once a show: lamp, reset, fan — and the
+            // machine channels that belong to the same kind of moment.
+            Self::Control | Self::Fog | Self::Speed | Self::Sound => FeatureGroup::Control,
         }
     }
 
@@ -172,22 +315,49 @@ impl FeatureGroup {
     pub const fn attributes(self) -> &'static [AttributeType] {
         match self {
             Self::Dimmer => &[AttributeType::Dimmer],
-            Self::Position => &[AttributeType::Pan, AttributeType::Tilt],
+            Self::Position => &[
+                AttributeType::Pan,
+                AttributeType::Tilt,
+                AttributeType::PositionSpeed,
+            ],
             Self::Color => &[
                 AttributeType::Red,
                 AttributeType::Green,
                 AttributeType::Blue,
                 AttributeType::White,
                 AttributeType::Amber,
+                AttributeType::Cyan,
+                AttributeType::Magenta,
+                AttributeType::Yellow,
+                AttributeType::Uv,
+                AttributeType::Lime,
+                AttributeType::Indigo,
+                AttributeType::ColorWheel,
+                AttributeType::ColorTemperature,
             ],
-            Self::Gobo => &[AttributeType::Gobo, AttributeType::Prism],
+            Self::Gobo => &[
+                AttributeType::Gobo,
+                AttributeType::Prism,
+                AttributeType::GoboRotation,
+                AttributeType::PrismRotation,
+                AttributeType::Effect,
+                AttributeType::EffectSpeed,
+            ],
             Self::Beam => &[
                 AttributeType::Iris,
                 AttributeType::Zoom,
                 AttributeType::Shutter,
+                AttributeType::Frost,
+                AttributeType::Blade,
+                AttributeType::BeamPosition,
             ],
             Self::Focus => &[AttributeType::Focus],
-            Self::Control => &[AttributeType::Control],
+            Self::Control => &[
+                AttributeType::Control,
+                AttributeType::Fog,
+                AttributeType::Speed,
+                AttributeType::Sound,
+            ],
         }
     }
 
@@ -211,6 +381,64 @@ pub enum MergeMode {
     Htp,
     /// Latest takes precedence — the most recently activated source wins.
     Ltp,
+}
+
+/// One **named range** of a channel — an Open Fixture Library *capability*,
+/// read at last in S51 (punch-list **B38**).
+///
+/// # What a range is for, and where this session drew the line
+///
+/// An OFL channel is a list of capabilities: *0–7 closed, 8–134 dimmer,
+/// 135–239 strobe*, or *0–9 open, 10–19 gobo 1, 20–29 gobo 2*. Until S51 none
+/// of it was read, so a gobo wheel was a number between nought and full and an
+/// operator had to know that gobo 3 lives at 27 %.
+///
+/// **The line this session drew** is at the *reading*: a range has a name and
+/// two ends, the profile carries them, and the interface says which range an
+/// encoder is standing in and offers the list to pick from. What it is
+/// deliberately **not** is a change to what a value *is*: a gobo is still one
+/// number in `0..=65535`, a cue still stores that number, and nothing in the
+/// engine or the merge knows a range exists. The alternative — a value that is
+/// *a slot* rather than a number — would reach `CuePart`, the programmer, the
+/// wire and the tick, and it is a different session.
+///
+/// So a range is a **label on a number**, and picking one writes the middle of
+/// it. That is enough for the fault B38 reports and it costs the model nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct AttributeRange {
+    /// What the range is called, in the words the manufacturer used — *Gobo 3*,
+    /// *Strobe slow*, *Open*.
+    pub name: String,
+    /// The lowest value in the range, `0..=65535`.
+    pub from: u16,
+    /// The highest value in the range, `0..=65535`.
+    pub to: u16,
+}
+
+impl AttributeRange {
+    /// Whether `value` falls in this range.
+    #[must_use]
+    pub const fn holds(&self, value: u16) -> bool {
+        self.from <= value && value <= self.to
+    }
+
+    /// The value picking this range writes: **the middle of it**.
+    ///
+    /// The middle rather than the bottom, because a range's ends are where it
+    /// meets its neighbours and a fixture whose thresholds are a step out from
+    /// what its manual says would land on the wrong slot. The middle is the
+    /// furthest any single value can be from both edges.
+    #[must_use]
+    pub const fn middle(&self) -> u16 {
+        let (low, high) = if self.from <= self.to {
+            (self.from, self.to)
+        } else {
+            (self.to, self.from)
+        };
+        low.wrapping_add((high - low) / 2)
+    }
 }
 
 /// One attribute of a fixture type: where it sits in the footprint and how it
@@ -249,6 +477,19 @@ pub struct AttributeDef {
         proptest(strategy = "crate::arb::finite_f64()")
     )]
     pub physical_to: f64,
+    /// The channel's named ranges, lowest first — **S51, B38**.
+    ///
+    /// Empty for a channel that has none, which is every continuous parameter
+    /// and every profile written before this existed. `#[serde(default)]`, so a
+    /// `.prism` file that embedded its profiles before S51 (S11: a show embeds)
+    /// opens unchanged and simply offers no ranges — the fixture works exactly
+    /// as it did, which is the right answer for a show somebody is about to run.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub ranges: Vec<AttributeRange>,
 }
 
 impl AttributeDef {
@@ -256,6 +497,17 @@ impl AttributeDef {
     #[must_use]
     pub const fn is_sixteen_bit(&self) -> bool {
         self.fine_offset.is_some()
+    }
+
+    /// The named range `value` is standing in, if the channel has one — B38.
+    ///
+    /// The **first** that holds it. OFL ranges do not overlap, and a
+    /// hand-written profile whose ranges do gets the lower one rather than an
+    /// argument: an encoder that named two things at once would be worse than
+    /// one that named the wrong one.
+    #[must_use]
+    pub fn range_at(&self, value: u16) -> Option<&AttributeRange> {
+        self.ranges.iter().find(|range| range.holds(value))
     }
 }
 
@@ -325,6 +577,7 @@ mod tests {
             invert: false,
             physical_from: -135.0,
             physical_to: 135.0,
+            ranges: Vec::new(),
         }
     }
 
@@ -340,11 +593,122 @@ mod tests {
         );
     }
 
+    /// **Thirty-four since S51, and the first fifteen have not moved** — B38.
+    ///
+    /// The count is not the interesting half. The *order* is: the encoder bar
+    /// pages a bank four at a time out of `FeatureGroup::attributes`, which is
+    /// this array filtered, so a nineteen appended keeps `Red, Green, Blue,
+    /// White` the first page of the colour bank and an interleaved nineteen
+    /// would not. A venue that never patches a CMY head must not have to page
+    /// past indigo to find blue.
     #[test]
-    fn all_fifteen_attribute_types_exist() {
-        assert_eq!(AttributeType::ALL.len(), 15);
-        assert_eq!(AttributeType::ALL[0], AttributeType::Dimmer);
-        assert_eq!(AttributeType::ALL[14], AttributeType::Control);
+    fn the_thirty_four_attribute_types_exist_and_the_first_fifteen_are_where_they_were() {
+        assert_eq!(AttributeType::ALL.len(), 34);
+        assert_eq!(
+            &AttributeType::ALL[..15],
+            &[
+                AttributeType::Dimmer,
+                AttributeType::Pan,
+                AttributeType::Tilt,
+                AttributeType::Red,
+                AttributeType::Green,
+                AttributeType::Blue,
+                AttributeType::White,
+                AttributeType::Amber,
+                AttributeType::Iris,
+                AttributeType::Zoom,
+                AttributeType::Focus,
+                AttributeType::Gobo,
+                AttributeType::Prism,
+                AttributeType::Shutter,
+                AttributeType::Control,
+            ]
+        );
+        // Every one of them exactly once, which is what stops a copy-and-paste
+        // in a thirty-four-line array from going unnoticed.
+        let mut sorted = AttributeType::ALL;
+        sorted.sort_unstable();
+        let mut unique = sorted.to_vec();
+        unique.dedup();
+        assert_eq!(unique.len(), 34);
+    }
+
+    /// **The first page of every bank is what it was** — the promise above,
+    /// said in the terms the operator meets it in.
+    #[test]
+    fn the_first_four_of_every_bank_are_the_ones_that_were_there_before() {
+        assert_eq!(
+            &FeatureGroup::Color.attributes()[..4],
+            &[
+                AttributeType::Red,
+                AttributeType::Green,
+                AttributeType::Blue,
+                AttributeType::White,
+            ]
+        );
+        assert_eq!(
+            &FeatureGroup::Beam.attributes()[..3],
+            &[
+                AttributeType::Iris,
+                AttributeType::Zoom,
+                AttributeType::Shutter,
+            ]
+        );
+        assert_eq!(
+            &FeatureGroup::Position.attributes()[..2],
+            &[AttributeType::Pan, AttributeType::Tilt]
+        );
+        assert_eq!(
+            &FeatureGroup::Gobo.attributes()[..2],
+            &[AttributeType::Gobo, AttributeType::Prism]
+        );
+        assert_eq!(
+            FeatureGroup::Control.attributes()[0],
+            AttributeType::Control
+        );
+    }
+
+    /// **A filter is not an emitter** — S51, B38, and the rule that stops a CMY
+    /// rig going black at home.
+    #[test]
+    fn only_an_additive_emitter_rests_open() {
+        for emitter in [
+            AttributeType::Red,
+            AttributeType::Green,
+            AttributeType::Blue,
+            AttributeType::White,
+            AttributeType::Amber,
+            AttributeType::Uv,
+            AttributeType::Lime,
+            AttributeType::Indigo,
+        ] {
+            assert!(emitter.is_additive_emitter(), "{emitter:?}");
+        }
+        // The three filters and the two colour channels that are neither.
+        for other in [
+            AttributeType::Cyan,
+            AttributeType::Magenta,
+            AttributeType::Yellow,
+            AttributeType::ColorWheel,
+            AttributeType::ColorTemperature,
+        ] {
+            assert!(
+                !other.is_additive_emitter(),
+                "{other:?} is on the colour bank and is not an emitter"
+            );
+            assert_eq!(other.feature_group(), FeatureGroup::Color);
+        }
+        // And nothing off the colour bank is one, which is what makes the rule
+        // safe to apply without asking about the bank at all.
+        for attribute in AttributeType::ALL {
+            if attribute.is_additive_emitter() {
+                assert_eq!(
+                    attribute.feature_group(),
+                    FeatureGroup::Color,
+                    "{attribute:?}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -395,14 +759,17 @@ mod tests {
             serde_json::to_string(&FeatureGroup::Position).unwrap(),
             "\"Position\""
         );
-        // **`Beam` fits on one page of encoders now**, which is what the split
-        // was for: it had six knobs against `ENCODERS_PER_PAGE`'s four, so
-        // reaching a shutter meant paging. `Color` still has five and still
-        // pages — five is what an RGBWA fixture *has*, and no arrangement of
-        // banks makes it four.
-        assert_eq!(FeatureGroup::Beam.attributes().len(), 3);
-        assert_eq!(FeatureGroup::Gobo.attributes().len(), 2);
-        assert_eq!(FeatureGroup::Control.attributes().len(), 1);
+        // **The banks grew in S51 and there are still seven of them** (B38).
+        // The owner's `design/skeleton/programmer.pdf` names seven and the
+        // programmer band is drawn out of `ALL`, so the nineteen new attributes
+        // were filed among the seven rather than given an eighth. What that
+        // costs is paging on the colour bank, and the page an operator meets
+        // first is unchanged — `the_first_four_of_every_bank_are_the_ones_that_
+        // were_there_before` is the half that matters.
+        assert_eq!(FeatureGroup::Beam.attributes().len(), 6);
+        assert_eq!(FeatureGroup::Gobo.attributes().len(), 6);
+        assert_eq!(FeatureGroup::Color.attributes().len(), 13);
+        assert_eq!(FeatureGroup::Control.attributes().len(), 4);
         // And the split moved knobs about rather than inventing or losing any.
         let banked: usize = FeatureGroup::ALL
             .iter()
@@ -446,7 +813,12 @@ mod tests {
             FeatureGroup::Position.parameter(1),
             Some(AttributeType::Tilt)
         );
-        assert_eq!(FeatureGroup::Position.parameter(2), None);
+        assert_eq!(
+            FeatureGroup::Position.parameter(2),
+            Some(AttributeType::PositionSpeed),
+            "S51 gave the position bank a third knob (B38)"
+        );
+        assert_eq!(FeatureGroup::Position.parameter(3), None);
         assert_eq!(FeatureGroup::Dimmer.parameter(u32::MAX), None);
     }
 
@@ -502,7 +874,11 @@ mod tests {
             AttributeType::inline(&cfg),
             "\"Dimmer\" | \"Pan\" | \"Tilt\" | \"Red\" | \"Green\" | \"Blue\" | \"White\" \
              | \"Amber\" | \"Iris\" | \"Zoom\" | \"Focus\" | \"Gobo\" | \"Prism\" \
-             | \"Shutter\" | \"Control\""
+             | \"Shutter\" | \"Control\" | \"Cyan\" | \"Magenta\" | \"Yellow\" | \"Uv\" \
+             | \"Lime\" | \"Indigo\" | \"ColorWheel\" | \"ColorTemperature\" \
+             | \"PositionSpeed\" | \"GoboRotation\" | \"PrismRotation\" | \"Effect\" \
+             | \"EffectSpeed\" | \"Frost\" | \"Blade\" | \"BeamPosition\" | \"Fog\" \
+             | \"Speed\" | \"Sound\""
         );
         assert_eq!(
             FeatureGroup::inline(&cfg),

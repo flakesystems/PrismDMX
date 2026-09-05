@@ -450,7 +450,7 @@ mod tests {
         // Position is the row that would catch a table sorted alphabetically or
         // built from the enum's declaration order rather than from `ALL`.
         assert!(
-            variants.contains("  \"Position\": [\"Pan\", \"Tilt\"],"),
+            variants.contains("  \"Position\": [\"Pan\", \"Tilt\", \"PositionSpeed\"],"),
             "{variants}"
         );
     }

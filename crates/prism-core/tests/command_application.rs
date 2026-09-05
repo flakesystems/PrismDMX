@@ -687,8 +687,9 @@ fn what_a_fader_does_is_the_executors_own_setting() {
         .unwrap();
     assert_eq!(
         applied.effects,
-        vec![Effect::ExecutorXFade {
+        vec![Effect::ExecutorCrossfade {
             executor,
+            mode: prism_domain::CrossfadeMode::XFade,
             position: 30_000
         }]
     );

@@ -19,6 +19,7 @@ import { act } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "./App";
+import { CLEAR_TITLES } from "./desk/keys";
 import type { Command } from "./bindings";
 import { statusText } from "./status";
 import { Connection } from "./ipc/connection";
@@ -536,5 +537,33 @@ describe("notices", () => {
         ]);
         // The frame is still up, because there is still something in it.
         expect(screen.getByTestId("notices").textContent).toContain("no fixture 12 is patched");
+    });
+});
+
+/**
+ * **What the Clear key promises, in the order it does it** — S51, B37.
+ *
+ * The stage arrives as a number and the number is the press order, so this
+ * array is the interface's whole statement about what Clear does. Asserted as a
+ * *sequence*, because the order is the change B37 asked for: a later edit that
+ * swaps the two middle rows — or a daemon that swaps them back — turns this red
+ * rather than leaving the tooltip lying about the key underneath it.
+ */
+describe("the Clear key's stages", () => {
+    it("names the selection first and the values second", () => {
+        expect(CLEAR_TITLES).toEqual([
+            "There is nothing to clear",
+            "Clear the fixture selection, keeping the values",
+            "Clear the programmer values as well",
+            "Clear everything, including the encoder bank and the page",
+        ]);
+    });
+
+    it("has one title for every stage the protocol can carry", () => {
+        // `ProgrammerState["clearStage"]` is `0 | 1 | 2 | 3`, generated from
+        // `prism_domain::ClearStage`; a fifth stage would leave the key with no
+        // title at all and `CLEAR_TITLES[stage] ?? CLEAR_TITLES[0]` would say
+        // the wrong thing quietly.
+        expect(CLEAR_TITLES).toHaveLength(4);
     });
 });

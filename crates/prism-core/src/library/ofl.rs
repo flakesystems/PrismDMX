@@ -53,7 +53,9 @@
 //! defined — each is skipped and counted, and none of them is an error that
 //! reaches a caller. A desk must start with a corrupt profile in its folder.
 
-use prism_domain::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
+use prism_domain::{
+    AttributeDef, AttributeRange, AttributeType, FeatureGroup, FixtureType, MergeMode,
+};
 use serde_json::Value;
 
 use super::LibraryEntry;
@@ -81,7 +83,20 @@ pub struct Conversion {
     /// Attributes mapped, over all modes.
     pub attributes: usize,
     /// Channels whose capabilities map to no [`AttributeType`].
+    ///
+    /// **Nought over the whole installed library since S51** (punch-list B38),
+    /// and `crates/prism-core/tests/fixture_library.rs` asserts it rather than
+    /// printing it: every capability type the Open Fixture Library has now maps
+    /// to an attribute and a bank, so a channel that reaches this counter is a
+    /// capability type that did not exist when the table was written.
     pub channels_unmapped: usize,
+    /// Channels whose every capability is OFL's `NoFunction` — **S51**.
+    ///
+    /// Not a loss and not a mapping gap: the file is saying the channel does
+    /// nothing, in as many words. It occupies its place in the footprint like
+    /// any other. Counted separately so that [`Self::channels_unmapped`] can be
+    /// held to nought and still mean something.
+    pub channels_without_function: usize,
     /// Channels dropped because a lower channel already claimed that attribute.
     pub channels_duplicate: usize,
     /// Channel names a mode used that the fixture never defines.
@@ -101,6 +116,7 @@ impl Conversion {
         self.modes_without_attributes += other.modes_without_attributes;
         self.attributes += other.attributes;
         self.channels_unmapped += other.channels_unmapped;
+        self.channels_without_function += other.channels_without_function;
         self.channels_duplicate += other.channels_duplicate;
         self.channels_undefined += other.channels_undefined;
         self.files_rejected += other.files_rejected;
@@ -154,6 +170,7 @@ pub fn read_fixture(
     manufacturer_name: &str,
     fixture_key: &str,
     source: &str,
+    own: bool,
 ) -> (Vec<(LibraryEntry, FixtureType)>, Conversion) {
     let mut counts = Conversion::default();
     let Ok(Value::Object(fixture)) = serde_json::from_str::<Value>(source) else {
@@ -200,6 +217,7 @@ pub fn read_fixture(
         counts.channels_unmapped += losses.unmapped;
         counts.channels_duplicate += losses.duplicate;
         counts.channels_undefined += losses.undefined;
+        counts.channels_without_function += losses.without_function;
         if attributes.is_empty() {
             counts.modes_without_attributes += 1;
         }
@@ -213,6 +231,7 @@ pub fn read_fixture(
                 name: name.clone(),
                 mode: mode_name.clone(),
                 footprint,
+                own,
             },
             FixtureType {
                 id,
@@ -233,6 +252,7 @@ struct Losses {
     unmapped: usize,
     duplicate: usize,
     undefined: usize,
+    without_function: usize,
 }
 
 /// A fixture's channel definitions, with its fine aliases resolved.
@@ -370,6 +390,14 @@ impl<'a> Channels<'a> {
                 losses.undefined += 1;
                 continue;
             };
+            // A channel whose every capability is `NoFunction` **does nothing**,
+            // by the file's own statement. It holds its place in the footprint
+            // and there is nothing for an operator to reach — S51, and the
+            // reason `channels_unmapped` can be held to nought.
+            if does_nothing(definition) {
+                losses.without_function += 1;
+                continue;
+            }
             let Some(attribute) = attribute_of(definition) else {
                 losses.unmapped += 1;
                 continue;
@@ -407,6 +435,9 @@ fn definition_to_attribute(
         invert: false,
         physical_from,
         physical_to,
+        // **S51, B38.** What the channel's ranges are called, so a gobo wheel
+        // stops being a number an operator has to know by heart.
+        ranges: ranges_of(definition),
     }
 }
 
@@ -440,9 +471,23 @@ fn definition_to_attribute(
 /// Everything else takes the file's value and, absent one, zero — which is what
 /// OFL means by an absent `defaultValue`.
 fn default_value(attribute: AttributeType, definition: &Value) -> u16 {
-    if attribute.feature_group() == FeatureGroup::Color {
+    // **The bank was the wrong question, and S51 is where it showed** (B38).
+    // Until then *a colour rests open* was read as `FeatureGroup::Color`, which
+    // was right while the only colours this model had were additive emitters.
+    // It now has cyan, magenta and yellow — **filters**, where open is nought
+    // and full is opaque — and a colour *wheel*, whose value is a slot number
+    // with no *open* to rest at. Resting those at full would have blacked out
+    // every CMY rig on the first frame after this build.
+    if attribute.is_additive_emitter() {
         return u16::MAX;
     }
+    // A **filter** falls through to the file, and that is the same argument
+    // read the other way. B1's rule is a convention of the *desk*: an emitter
+    // has an obvious open end and every console the owner has used parks it
+    // there. A cyan flag has no such convention — which end is open is how that
+    // head is wired — so the file is the only evidence there is, and absent one
+    // nought is the answer, which is where all but three of the installed
+    // library's hundred-odd flags sit.
     match stated_default(definition.get("defaultValue")) {
         Some(value) => value,
         None if matches!(attribute, AttributeType::Pan | AttributeType::Tilt) => 32768,
@@ -512,20 +557,41 @@ fn physical_range(attribute: AttributeType, definition: &Value) -> (f64, f64) {
     }
 }
 
+/// Every capability of a channel definition, in the two shapes OFL writes them.
+///
+/// A single `capability` object is a channel that does one thing over its whole
+/// travel; a `capabilities` array is a channel split into named ranges.
+fn capabilities_of(definition: &Value) -> Vec<&Value> {
+    match (
+        definition.get("capability"),
+        definition.get("capabilities").and_then(Value::as_array),
+    ) {
+        (Some(single), _) => vec![single],
+        (None, Some(list)) => list.iter().collect(),
+        (None, None) => Vec::new(),
+    }
+}
+
+/// Whether every capability of this channel is OFL's `NoFunction`.
+///
+/// The file saying, in as many words, that the channel controls nothing. It
+/// still occupies its place in the footprint — that is what it is written down
+/// for — and it is not a gap in this desk's table.
+fn does_nothing(definition: &Value) -> bool {
+    let capabilities = capabilities_of(definition);
+    !capabilities.is_empty()
+        && capabilities
+            .iter()
+            .all(|capability| capability.get("type").and_then(Value::as_str) == Some("NoFunction"))
+}
+
 /// The attribute a channel's capabilities map to, if any.
 ///
 /// **Intensity anywhere wins**, and otherwise the first capability that maps —
 /// see the module documentation for why a `Dimmer / Strobe` channel is a dimmer
 /// rather than a shutter.
 fn attribute_of(definition: &Value) -> Option<AttributeType> {
-    let one = definition.get("capability");
-    let many = definition.get("capabilities").and_then(Value::as_array);
-    let capabilities: Vec<&Value> = match (one, many) {
-        (Some(single), _) => vec![single],
-        (None, Some(list)) => list.iter().collect(),
-        (None, None) => Vec::new(),
-    };
-    let mapped: Vec<AttributeType> = capabilities
+    let mapped: Vec<AttributeType> = capabilities_of(definition)
         .into_iter()
         .filter_map(attribute_of_capability)
         .collect();
@@ -537,34 +603,77 @@ fn attribute_of(definition: &Value) -> Option<AttributeType> {
 }
 
 /// One capability as an attribute of this model, if there is one.
+///
+/// # Every capability type OFL has, and where S51 put it — B38
+///
+/// The table was eleven rows and everything else fell through it: 5 037 of the
+/// installed library's 15 150 channels reached no attribute at all and were
+/// dropped, which is punch-list entry **B38**. It is now one row per capability
+/// type the format defines, and the corpus test asserts that nothing falls
+/// through.
+///
+/// Two rows are the ones worth arguing about, and both are decisions rather
+/// than deductions:
+///
+/// - **`ColorPreset` is a colour wheel.** A channel of named colour presets and
+///   a physical wheel of glass are the same gesture to an operator — *pick a
+///   colour by slot* — and this model has one attribute for it.
+/// - **`Maintenance`, `Generic` and anything else a machine does is `Control`.**
+///   That bank is documented as *the row you touch once a show and never during
+///   one*, which is exactly what a reset, a lamp strike and a fan are.
+///
+/// `NoFunction` deliberately maps to nothing and is answered before this is
+/// reached ([`does_nothing`]): a capability that says *this range does nothing*
+/// is not evidence about what the channel is for, and a channel that is only
+/// that is not a parameter at all.
 fn attribute_of_capability(capability: &Value) -> Option<AttributeType> {
     let kind = capability.get("type")?.as_str()?;
     match kind {
         "Pan" | "PanContinuous" => Some(AttributeType::Pan),
         "Tilt" | "TiltContinuous" => Some(AttributeType::Tilt),
+        "PanTiltSpeed" => Some(AttributeType::PositionSpeed),
         "Intensity" => Some(AttributeType::Dimmer),
         "ShutterStrobe" | "StrobeSpeed" | "StrobeDuration" => Some(AttributeType::Shutter),
         "Iris" | "IrisEffect" => Some(AttributeType::Iris),
-        "Zoom" => Some(AttributeType::Zoom),
+        // A beam angle *is* a zoom: both say how wide the beam is, and a desk
+        // with two knobs for it would be a desk with a knob that does nothing on
+        // every fixture that names the other one.
+        "Zoom" | "BeamAngle" => Some(AttributeType::Zoom),
         "Focus" => Some(AttributeType::Focus),
-        "Prism" | "PrismRotation" => Some(AttributeType::Prism),
-        // Every wheel is a gobo wheel as far as this model is concerned. A
-        // colour wheel is the case that costs something, and it costs less than
-        // dropping the channel: an operator can still reach the wheel.
-        "WheelSlot" | "WheelRotation" | "WheelShake" | "WheelSlotRotation" => {
-            Some(AttributeType::Gobo)
-        }
+        "Frost" | "FrostEffect" => Some(AttributeType::Frost),
+        "Prism" => Some(AttributeType::Prism),
+        "PrismRotation" => Some(AttributeType::PrismRotation),
+        // A wheel is a gobo wheel; its **rotation** is its own parameter, which
+        // is what makes a head with a rotating gobo two knobs rather than one
+        // knob and a dropped channel.
+        "WheelSlot" | "WheelShake" => Some(AttributeType::Gobo),
+        "WheelRotation" | "WheelSlotRotation" => Some(AttributeType::GoboRotation),
+        "ColorPreset" => Some(AttributeType::ColorWheel),
+        "ColorTemperature" => Some(AttributeType::ColorTemperature),
         "ColorIntensity" => colour_attribute(capability.get("color")?.as_str()?),
+        "Effect" | "EffectParameter" => Some(AttributeType::Effect),
+        "EffectSpeed" | "EffectDuration" => Some(AttributeType::EffectSpeed),
+        "BladeInsertion" | "BladeRotation" | "BladeSystemRotation" => Some(AttributeType::Blade),
+        "BeamPosition" => Some(AttributeType::BeamPosition),
+        "Fog" | "FogOutput" | "FogType" => Some(AttributeType::Fog),
+        "Rotation" | "Speed" | "Time" => Some(AttributeType::Speed),
+        "SoundSensitivity" => Some(AttributeType::Sound),
+        "Maintenance" | "Generic" => Some(AttributeType::Control),
+        // `NoFunction` is answered by `does_nothing` before this is reached, and
+        // anything else is a capability type added upstream since this table was
+        // written. It is counted, and the corpus test is what says so.
         _ => None,
     }
 }
 
-/// The attribute an additive colour maps to, if this model has one.
+/// The attribute an emitter colour maps to.
 ///
-/// `None` for UV, Cyan, Yellow, Magenta, Lime and Indigo — see the module
-/// documentation. Warm and cold white both become White, which is wrong in a way
-/// an operator can see and work with; the alternative is a fixture whose white
-/// does not respond at all.
+/// **Every colour OFL names has one since S51** (B38). Warm and cold white both
+/// become White, which is wrong in a way an operator can see and work with; the
+/// alternative is a fixture whose white does not respond at all. `Cyan`,
+/// `Magenta` and `Yellow` are **subtractive** and this model now says so —
+/// see `AttributeType::is_additive_emitter`, which is what stops a CMY head
+/// resting at full on all three and therefore black.
 fn colour_attribute(colour: &str) -> Option<AttributeType> {
     match colour {
         "Red" => Some(AttributeType::Red),
@@ -572,8 +681,122 @@ fn colour_attribute(colour: &str) -> Option<AttributeType> {
         "Blue" => Some(AttributeType::Blue),
         "White" | "Warm White" | "Cold White" => Some(AttributeType::White),
         "Amber" => Some(AttributeType::Amber),
+        "UV" => Some(AttributeType::Uv),
+        "Lime" => Some(AttributeType::Lime),
+        "Indigo" => Some(AttributeType::Indigo),
+        "Cyan" => Some(AttributeType::Cyan),
+        "Magenta" => Some(AttributeType::Magenta),
+        "Yellow" => Some(AttributeType::Yellow),
+        // A colour the format grows later. Counted rather than guessed at.
         _ => None,
     }
+}
+
+/// The channel's named ranges, in this model's 16-bit values — **S51, B38**.
+///
+/// Only for a channel written as a `capabilities` **array**, which is OFL's own
+/// way of saying *this channel is split into ranges*. A channel with a single
+/// `capability` covers its whole travel with one thing, and naming that one
+/// thing would put a label under every continuous encoder on the desk saying
+/// what the encoder is already called.
+///
+/// A range with no `dmxRange` is skipped rather than guessed at: OFL allows one
+/// only on a single-capability channel, where this does not run.
+fn ranges_of(definition: &Value) -> Vec<AttributeRange> {
+    let Some(Value::Array(list)) = definition.get("capabilities") else {
+        return Vec::new();
+    };
+    let full = channel_maximum(definition);
+    let mut ranges = Vec::new();
+    for capability in list {
+        let Some(Value::Array(bounds)) = capability.get("dmxRange") else {
+            continue;
+        };
+        let (Some(low), Some(high)) = (
+            bounds.first().and_then(Value::as_u64),
+            bounds.get(1).and_then(Value::as_u64),
+        ) else {
+            continue;
+        };
+        let (low, high) = if low <= high {
+            (low, high)
+        } else {
+            (high, low)
+        };
+        ranges.push(AttributeRange {
+            name: capability_name(capability),
+            from: scale_to_full(low, full),
+            // The **top** of the step the range ends on, so two neighbouring
+            // ranges meet with nothing between them: at eight bits, `[0, 7]`
+            // and `[8, 134]` would otherwise leave 1 800..2 055 belonging to
+            // neither, and an encoder standing there would name nothing.
+            //
+            // A range that ends at the channel's own maximum ends at ours, and
+            // it is written out rather than computed: the step above the last
+            // one does not exist, so scaling it and taking one back off lands a
+            // step short and leaves the top of every channel unnamed.
+            to: if high >= full {
+                u16::MAX
+            } else {
+                scale_to_full(high.saturating_add(1), full).saturating_sub(1)
+            },
+        });
+    }
+    ranges
+}
+
+/// The largest DMX value one channel of this definition can hold.
+///
+/// OFL writes `dmxValueResolution` when a channel's capabilities are given in
+/// something other than eight bits. Absent means eight, which is the format's
+/// own default and what all but a handful of the installed library use.
+fn channel_maximum(definition: &Value) -> u64 {
+    match definition
+        .get("dmxValueResolution")
+        .and_then(Value::as_str)
+        .unwrap_or("8bit")
+    {
+        "16bit" => 65_535,
+        "24bit" => 16_777_215,
+        _ => 255,
+    }
+}
+
+/// A DMX value in a channel's own resolution, as one of this model's `0..=65535`.
+fn scale_to_full(value: u64, maximum: u64) -> u16 {
+    if maximum == 0 {
+        return 0;
+    }
+    let scaled = value
+        .saturating_mul(u64::from(u16::MAX))
+        .div_euclid(maximum)
+        .min(u64::from(u16::MAX));
+    u16::try_from(scaled).unwrap_or(u16::MAX)
+}
+
+/// What to call one capability, in the words a manufacturer used.
+///
+/// OFL has no single *name* field: the human words live in `comment`, and the
+/// rest is type-specific. So the comment is preferred, then the two fields that
+/// carry a name of their own, and the capability's **type** is the last resort —
+/// which is still better than a blank row, because *ShutterStrobe* between
+/// *Open* and *Closed* tells an operator what the middle of the channel does.
+fn capability_name(capability: &Value) -> String {
+    for key in ["comment", "effectName", "shutterEffect", "colorTemperature"] {
+        if let Some(text) = capability.get(key).and_then(Value::as_str)
+            && !text.trim().is_empty()
+        {
+            return text.trim().to_owned();
+        }
+    }
+    if let Some(slot) = capability.get("slotNumber").and_then(Value::as_u64) {
+        return format!("Slot {slot}");
+    }
+    capability
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("—")
+        .to_owned()
 }
 
 /// A string member of a JSON object.
@@ -660,7 +883,13 @@ mod tests {
     /// on channel 0.
     #[test]
     fn a_mode_becomes_a_fixture_type_with_the_manufacturers_channel_order() {
-        let (built, counts) = read_fixture("stage-right", "Stage Right", "stage-wash", STAGE_WASH);
+        let (built, counts) = read_fixture(
+            "stage-right",
+            "Stage Right",
+            "stage-wash",
+            STAGE_WASH,
+            false,
+        );
         assert_eq!(built.len(), 2, "two modes, two profiles");
         assert_eq!(counts.fixtures, 1);
         assert_eq!(counts.modes, 2);
@@ -693,10 +922,19 @@ mod tests {
         assert_eq!(at(AttributeType::Green).coarse_offset, 4);
         assert_eq!(at(AttributeType::Blue).coarse_offset, 5);
         assert_eq!(at(AttributeType::White).coarse_offset, 6);
-        // `Pan/Tilt Speed` and `Reset` map to nothing and are dropped — and the
-        // channels before them are unaffected, which is the point.
-        assert_eq!(nine.attributes.len(), 7);
-        assert_eq!(counts.channels_unmapped, 4, "two per mode");
+        // **`Pan/Tilt Speed` arrives now** — S51, B38. It was one of the five
+        // thousand channels that mapped to nothing and were dropped; OFL calls
+        // it `PanTiltSpeed` and this model has an attribute for it.
+        assert_eq!(at(AttributeType::PositionSpeed).coarse_offset, 7);
+        // `Reset` is a channel whose only capability is `NoFunction` — the file
+        // saying it does nothing. It holds its place in the footprint and is
+        // **not** a mapping gap, which is why it has a counter of its own.
+        assert_eq!(nine.attributes.len(), 8);
+        assert_eq!(
+            counts.channels_unmapped, 0,
+            "every capability type this file uses maps to an attribute"
+        );
+        assert_eq!(counts.channels_without_function, 2, "one Reset per mode");
 
         // The 9-channel mode is 8-bit throughout; nothing has a fine channel.
         assert!(nine.attributes.iter().all(|def| def.fine_offset.is_none()));
@@ -704,7 +942,13 @@ mod tests {
 
     #[test]
     fn a_fine_channel_alias_becomes_the_fine_offset_of_the_channel_it_belongs_to() {
-        let (built, _) = read_fixture("stage-right", "Stage Right", "stage-wash", STAGE_WASH);
+        let (built, _) = read_fixture(
+            "stage-right",
+            "Stage Right",
+            "stage-wash",
+            STAGE_WASH,
+            false,
+        );
         let (entry, fourteen) = &built[1];
         assert_eq!(entry.mode, "14ch");
         assert_eq!(fourteen.footprint, 14);
@@ -731,7 +975,7 @@ mod tests {
     /// keeps everything after it at the right offset.
     #[test]
     fn an_unused_channel_still_takes_up_its_place() {
-        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH);
+        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH, false);
         let fourteen = &built[1].1;
         assert_eq!(fourteen.footprint, 14);
         assert!(
@@ -747,7 +991,7 @@ mod tests {
     /// which is how `ARCHITECTURE_SPEC.md` §6 writes a pan range.
     #[test]
     fn pan_and_tilt_carry_the_travel_the_file_states() {
-        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH);
+        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH, false);
         let nine = &built[0].1;
         let range = |attribute: AttributeType| {
             let def = nine
@@ -765,7 +1009,7 @@ mod tests {
 
     #[test]
     fn a_default_value_is_scaled_to_the_sixteen_bit_this_model_holds() {
-        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH);
+        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH, false);
         let nine = &built[0].1;
         let home = |attribute: AttributeType| {
             nine.attributes
@@ -814,7 +1058,7 @@ mod tests {
     fn the_feature_group_and_the_merge_mode_are_this_model_s_own() {
         // OFL has neither. The bank an attribute is on is what the encoder bar
         // walks (S26) and the merge mode is `DMX_MERGE.md` §2's.
-        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH);
+        let (built, _) = read_fixture("m", "M", "f", STAGE_WASH, false);
         for def in &built[0].1.attributes {
             assert_eq!(def.feature_group, def.attribute.feature_group());
             assert_eq!(def.merge_mode, def.attribute.default_merge_mode());
@@ -844,7 +1088,7 @@ mod tests {
             { "shortName": "13ch", "channels": ["Master", { "insert": "matrixChannels" }] }
           ]
         }"#;
-        let (built, counts) = read_fixture("m", "M", "bar", source);
+        let (built, counts) = read_fixture("m", "M", "bar", source, false);
         assert_eq!(built.len(), 1);
         assert_eq!(built[0].0.mode, "1ch");
         assert_eq!(counts.modes_with_inserts, 1);
@@ -868,7 +1112,7 @@ mod tests {
             { "shortName": "2ch", "channels": ["Red Master", "Red Master fine"] }
           ]
         }"#;
-        let (built, counts) = read_fixture("m", "M", "bar", source);
+        let (built, counts) = read_fixture("m", "M", "bar", source, false);
         assert_eq!(counts.channels_undefined, 0);
         let attributes = &built[0].1.attributes;
         assert_eq!(attributes.len(), 1);
@@ -889,7 +1133,7 @@ mod tests {
           },
           "modes": [{ "shortName": "2ch", "channels": ["Master", "Dimmer"] }]
         }"#;
-        let (built, counts) = read_fixture("m", "M", "f", source);
+        let (built, counts) = read_fixture("m", "M", "f", source, false);
         let profile = &built[0].1;
         assert_eq!(profile.footprint, 2, "both channels are still occupied");
         assert_eq!(profile.attributes.len(), 1);
@@ -897,10 +1141,19 @@ mod tests {
         assert_eq!(counts.channels_duplicate, 1);
     }
 
-    /// The colours this model has no attribute for, dropped rather than guessed
-    /// at — and counted, because it is a real limitation.
+    /// **S51 turned this test round, and that is B38.**
+    ///
+    /// It used to say that cyan, magenta and yellow were colours this model
+    /// had no attribute for, and that they were dropped and counted. They are
+    /// three attributes now, so a CMY head patches whole — and the second
+    /// assertion is the one that matters more than the first: **a subtractive
+    /// flag rests at nought**. B1's rule is *a colour rests open*, and open for
+    /// a filter is out of the beam. Giving these three B1's resting value would
+    /// have made every CMY rig black at home, which is B34 in reverse and the
+    /// sort of fault a corpus does not catch because it is about a number
+    /// rather than a shape.
     #[test]
-    fn a_colour_this_model_cannot_express_is_dropped() {
+    fn a_subtractive_colour_arrives_and_rests_out_of_the_beam() {
         let source = r#"{
           "name": "CMY",
           "availableChannels": {
@@ -911,14 +1164,259 @@ mod tests {
           },
           "modes": [{ "shortName": "4ch", "channels": ["Cyan", "Magenta", "Yellow", "Dim"] }]
         }"#;
-        let (built, counts) = read_fixture("m", "M", "f", source);
+        let (built, counts) = read_fixture("m", "M", "f", source, false);
         let profile = &built[0].1;
         assert_eq!(profile.footprint, 4);
-        assert_eq!(profile.attributes.len(), 1);
-        assert_eq!(profile.attributes[0].attribute, AttributeType::Dimmer);
-        assert_eq!(profile.attributes[0].coarse_offset, 3);
-        assert_eq!(counts.channels_unmapped, 3);
+        assert_eq!(profile.attributes.len(), 4, "nothing is dropped now");
+        assert_eq!(counts.channels_unmapped, 0);
         assert_eq!(counts.modes_without_attributes, 0);
+
+        let at = |attribute: AttributeType| {
+            profile
+                .attributes
+                .iter()
+                .find(|def| def.attribute == attribute)
+                .unwrap_or_else(|| panic!("{attribute:?} is missing"))
+        };
+        for subtractive in [
+            AttributeType::Cyan,
+            AttributeType::Magenta,
+            AttributeType::Yellow,
+        ] {
+            let def = at(subtractive);
+            assert_eq!(
+                def.feature_group,
+                FeatureGroup::Color,
+                "{subtractive:?} belongs on the colour bank"
+            );
+            assert_eq!(
+                def.default_value, 0,
+                "{subtractive:?} is a filter: open is nought, and full is black"
+            );
+        }
+        assert_eq!(at(AttributeType::Dimmer).coarse_offset, 3);
+    }
+
+    /// A colour the format grows after this table was written is still counted.
+    ///
+    /// The guard that keeps `channels_unmapped == 0` meaningful: it is nought
+    /// because the table is complete, not because the counter stopped counting.
+    #[test]
+    fn a_colour_this_model_has_never_heard_of_is_still_counted() {
+        let source = r#"{
+          "name": "Future",
+          "availableChannels": {
+            "Octarine": { "capability": { "type": "ColorIntensity", "color": "Octarine" } },
+            "Dim": { "capability": { "type": "Intensity" } }
+          },
+          "modes": [{ "shortName": "2ch", "channels": ["Octarine", "Dim"] }]
+        }"#;
+        let (built, counts) = read_fixture("m", "M", "f", source, false);
+        assert_eq!(built[0].1.attributes.len(), 1);
+        assert_eq!(counts.channels_unmapped, 1);
+    }
+
+    /// **A channel's named ranges are read** — S51, B38, and the half of the
+    /// entry that is about capabilities rather than about channels.
+    ///
+    /// The `Dimmer / Strobe` channel of the fixture the S44 request came with:
+    /// three ranges, in eight-bit DMX, which this model holds as `0..=65535`.
+    /// The ends are the ones that matter — two neighbouring ranges have to meet
+    /// with nothing between them, or an encoder standing in the gap names
+    /// nothing at all.
+    #[test]
+    fn a_channel_split_into_ranges_carries_their_names_and_their_ends() {
+        let (built, _) = read_fixture(
+            "stage-right",
+            "Stage Right",
+            "stage-wash",
+            STAGE_WASH,
+            false,
+        );
+        let dimmer = built[0]
+            .1
+            .attributes
+            .iter()
+            .find(|def| def.attribute == AttributeType::Dimmer)
+            .expect("the Dimmer / Strobe channel is the dimmer");
+
+        let names: Vec<&str> = dimmer
+            .ranges
+            .iter()
+            .map(|range| range.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["Closed", "Intensity", "Strobe"]);
+
+        // 8-bit `[0, 7]`, `[8, 134]`, `[135, 239]` scaled to this model's range.
+        assert_eq!(dimmer.ranges[0].from, 0);
+        assert_eq!(
+            dimmer.ranges[0].to + 1,
+            dimmer.ranges[1].from,
+            "the first two ranges must meet"
+        );
+        assert_eq!(
+            dimmer.ranges[1].to + 1,
+            dimmer.ranges[2].from,
+            "the second two ranges must meet"
+        );
+
+        // And the reading an encoder makes: which range is it standing in.
+        assert_eq!(
+            dimmer.range_at(0).map(|range| range.name.as_str()),
+            Some("Closed")
+        );
+        assert_eq!(
+            dimmer
+                .range_at(dimmer.ranges[1].middle())
+                .map(|r| r.name.as_str()),
+            Some("Intensity")
+        );
+        // Above the last range the file describes there is nothing named, and
+        // the encoder says so rather than naming the nearest.
+        assert_eq!(dimmer.range_at(u16::MAX), None);
+    }
+
+    /// A channel that does **one** thing over its whole travel has no ranges.
+    ///
+    /// Naming that one thing would put a label under every continuous encoder
+    /// on the desk saying what the encoder is already called.
+    #[test]
+    fn a_channel_with_one_capability_has_no_named_ranges() {
+        let (built, _) = read_fixture(
+            "stage-right",
+            "Stage Right",
+            "stage-wash",
+            STAGE_WASH,
+            false,
+        );
+        let pan = built[0]
+            .1
+            .attributes
+            .iter()
+            .find(|def| def.attribute == AttributeType::Pan)
+            .expect("pan is there");
+        assert!(pan.ranges.is_empty());
+    }
+
+    /// Ranges given in sixteen bits are read in sixteen bits.
+    ///
+    /// OFL says so with `dmxValueResolution`, and a channel read at the wrong
+    /// resolution would put every range name in the bottom 0.4 % of the travel.
+    #[test]
+    fn a_sixteen_bit_channel_states_its_resolution_and_is_read_in_it() {
+        let source = r#"{
+          "name": "Wheel",
+          "availableChannels": {
+            "Gobo": {
+              "dmxValueResolution": "16bit",
+              "capabilities": [
+                { "dmxRange": [0, 32767], "type": "WheelSlot", "comment": "Open" },
+                { "dmxRange": [32768, 65535], "type": "WheelSlot", "comment": "Gobo 1" }
+              ]
+            }
+          },
+          "modes": [{ "shortName": "1ch", "channels": ["Gobo"] }]
+        }"#;
+        let (built, _) = read_fixture("m", "M", "f", source, false);
+        let gobo = &built[0].1.attributes[0];
+        assert_eq!(gobo.attribute, AttributeType::Gobo);
+        assert_eq!(gobo.ranges.len(), 2);
+        assert_eq!(gobo.ranges[0].from, 0);
+        assert_eq!(gobo.ranges[1].to, u16::MAX);
+        assert_eq!(
+            gobo.range_at(60_000).map(|range| range.name.as_str()),
+            Some("Gobo 1")
+        );
+    }
+
+    /// Every capability type the format defines maps to an attribute.
+    ///
+    /// The unit-test half of B38's corpus claim: the corpus can only show that
+    /// the *library* has nothing this table misses, and this shows that the
+    /// table itself is the one that was written. A type added upstream later
+    /// falls through and is counted, which is what
+    /// `a_colour_this_model_has_never_heard_of_is_still_counted` holds.
+    #[test]
+    fn every_capability_type_the_format_defines_has_an_attribute() {
+        // `docs/capability-types.md` upstream, minus `NoFunction`, which is
+        // answered before the table is reached.
+        let types = [
+            "ShutterStrobe",
+            "StrobeSpeed",
+            "StrobeDuration",
+            "Intensity",
+            "ColorTemperature",
+            "Pan",
+            "PanContinuous",
+            "Tilt",
+            "TiltContinuous",
+            "PanTiltSpeed",
+            "WheelSlot",
+            "WheelShake",
+            "WheelSlotRotation",
+            "WheelRotation",
+            "Effect",
+            "EffectSpeed",
+            "EffectDuration",
+            "EffectParameter",
+            "SoundSensitivity",
+            "BeamAngle",
+            "BeamPosition",
+            "Focus",
+            "Zoom",
+            "Iris",
+            "IrisEffect",
+            "Frost",
+            "FrostEffect",
+            "Prism",
+            "PrismRotation",
+            "BladeInsertion",
+            "BladeRotation",
+            "BladeSystemRotation",
+            "Fog",
+            "FogOutput",
+            "FogType",
+            "Rotation",
+            "Speed",
+            "Time",
+            "Maintenance",
+            "Generic",
+            "ColorPreset",
+        ];
+        for kind in types {
+            let capability = json!({ "type": kind });
+            assert!(
+                super::attribute_of_capability(&capability).is_some(),
+                "{kind} maps to no attribute, so a channel of them would be dropped"
+            );
+        }
+        // And the colour a `ColorIntensity` names, for every colour OFL has.
+        for colour in [
+            "Red",
+            "Green",
+            "Blue",
+            "White",
+            "Warm White",
+            "Cold White",
+            "Amber",
+            "UV",
+            "Lime",
+            "Indigo",
+            "Cyan",
+            "Magenta",
+            "Yellow",
+        ] {
+            let capability = json!({ "type": "ColorIntensity", "color": colour });
+            assert!(
+                super::attribute_of_capability(&capability).is_some(),
+                "{colour} maps to no attribute"
+            );
+        }
+        assert_eq!(
+            super::attribute_of_capability(&json!({ "type": "NoFunction" })),
+            None,
+            "NoFunction is not an attribute, and `does_nothing` is what reads it"
+        );
     }
 
     /// **A file that is not a fixture never stops anything.**
@@ -937,7 +1435,7 @@ mod tests {
             r#"{ "modes": [{ "channels": [] }] }"#,
             r#"{ "modes": [{ "shortName": "x" }] }"#,
         ] {
-            let (built, counts) = read_fixture("m", "M", "f", source);
+            let (built, counts) = read_fixture("m", "M", "f", source, false);
             assert!(built.is_empty(), "{source} produced a profile");
             assert_eq!(counts.attributes, 0, "{source}");
         }
@@ -949,7 +1447,7 @@ mod tests {
             r#"{ "modes": [{ "channels": ["nothing defines this"] }] }"#,
             r#"{ "availableChannels": 7, "modes": [{ "channels": [null] }] }"#,
         ] {
-            let (built, counts) = read_fixture("m", "M", "f", source);
+            let (built, counts) = read_fixture("m", "M", "f", source, false);
             assert_eq!(built.len(), 1, "{source}");
             assert!(built[0].1.attributes.is_empty(), "{source}");
             assert_eq!(built[0].1.footprint, 1, "{source}");
@@ -958,9 +1456,15 @@ mod tests {
         // The last two are *readable* files with nothing usable in them, so
         // they are not counted as rejected — the distinction matters when a
         // number is reported to a person.
-        let (_, rejected) = read_fixture("m", "M", "f", "not json");
+        let (_, rejected) = read_fixture("m", "M", "f", "not json", false);
         assert_eq!(rejected.files_rejected, 1);
-        let (_, thin) = read_fixture("m", "M", "f", r#"{ "modes": [{ "channels": [null] }] }"#);
+        let (_, thin) = read_fixture(
+            "m",
+            "M",
+            "f",
+            r#"{ "modes": [{ "channels": [null] }] }"#,
+            false,
+        );
         assert_eq!(thin.files_rejected, 0);
         assert_eq!(thin.modes, 1);
         assert_eq!(thin.modes_without_attributes, 1);
@@ -975,7 +1479,7 @@ mod tests {
             r#"{{ "availableChannels": {{ "X": {{ "capability": {{ "type": "Intensity" }} }} }},
                   "modes": [{{ "shortName": "600ch", "channels": [{channels}] }}] }}"#
         );
-        let (built, counts) = read_fixture("m", "M", "f", &source);
+        let (built, counts) = read_fixture("m", "M", "f", &source, false);
         assert!(built.is_empty());
         assert_eq!(counts.modes, 0);
     }
@@ -988,7 +1492,7 @@ mod tests {
           "availableChannels": { "D": { "capability": { "type": "Intensity" } } },
           "modes": [{ "channels": ["D"] }, { "name": "Extended", "channels": ["D", null] }]
         }"#;
-        let (built, _) = read_fixture("m", "M", "f", source);
+        let (built, _) = read_fixture("m", "M", "f", source, false);
         assert_eq!(built[0].0.id, "m/f/1ch");
         assert_eq!(
             built[1].0.id, "m/f/Extended",
@@ -999,8 +1503,8 @@ mod tests {
     #[test]
     fn counts_add_up_across_files() {
         let mut total = Conversion::default();
-        let (_, one) = read_fixture("m", "M", "f", STAGE_WASH);
-        let (_, two) = read_fixture("m", "M", "g", STAGE_WASH);
+        let (_, one) = read_fixture("m", "M", "f", STAGE_WASH, false);
+        let (_, two) = read_fixture("m", "M", "g", STAGE_WASH, false);
         total.absorb(one);
         total.absorb(two);
         assert_eq!(total.fixtures, 2);

@@ -26,6 +26,7 @@ pub(crate) fn attribute(attribute: AttributeType, coarse_offset: u16) -> Attribu
         invert: false,
         physical_from: 0.0,
         physical_to: 100.0,
+        ranges: Vec::new(),
     }
 }
 
@@ -154,6 +155,7 @@ pub(crate) fn migration_fixture() -> crate::ShowFile {
                     invert: true,
                     physical_from: -270.0,
                     physical_to: 270.0,
+                    ranges: Vec::new(),
                 },
                 attribute(AttributeType::Tilt, 2),
                 attribute(AttributeType::Dimmer, 3),

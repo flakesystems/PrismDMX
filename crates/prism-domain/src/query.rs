@@ -132,6 +132,20 @@ pub struct LibraryEntry {
     pub mode: String,
     /// How many channels one of them occupies.
     pub footprint: u16,
+    /// Whether this profile is **the venue's own** rather than one that came
+    /// with the desk — punch-list entry **B43**.
+    ///
+    /// It is on the entry rather than worked out from the key, and that is the
+    /// point: a venue's profile may deliberately carry an Open Fixture Library
+    /// key in order to *correct* one, so the key cannot say where it came from.
+    /// The picker marks it, because a profile an operator wrote is one they may
+    /// need to go and edit, and *which of these two Mac 700s is mine* is a
+    /// question a key cannot answer.
+    ///
+    /// `#[serde(default)]` so a recording made before S51 reads as a library of
+    /// profiles that all came with the desk, which is what it was.
+    #[serde(default)]
+    pub own: bool,
 }
 
 /// What a store would be filed under — the cue or the preset it would land in.

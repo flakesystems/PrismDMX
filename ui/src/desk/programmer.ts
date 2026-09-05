@@ -25,6 +25,7 @@
  */
 
 import type {
+  AttributeRange,
   AttributeType,
   FeatureGroup,
   JsonValue,
@@ -33,7 +34,7 @@ import type {
 } from "../bindings";
 import { FEATURE_GROUP_ATTRIBUTES, FEATURE_GROUP_VARIANTS } from "../bindings/variants";
 import { isArray, isObject } from "../mirror/patch";
-import { pointerToken, stringAt, valueAt } from "../mirror/select";
+import { numberAt, pointerToken, stringAt, valueAt } from "../mirror/select";
 import { percentOfLevel } from "./level";
 
 /** What one encoder of the bar shows. */
@@ -85,6 +86,32 @@ export interface ParameterReading {
    * sheet, so the value can always be a number.
    */
   readonly overriding: boolean;
+  /**
+   * The channel's **named ranges**, when every selected fixture that has this
+   * attribute agrees on the same list; empty when they differ or there are none
+   * — punch-list **B38**, S51.
+   *
+   * An Open Fixture Library channel can say *0–9 open, 10–19 gobo 1, 20–29 gobo
+   * 2*, and until S51 none of it was read: a gobo wheel was a number an
+   * operator had to know by heart. The list comes out of the show's own
+   * embedded profile (S11), like {@link ParameterReading.home} does, so nothing
+   * was added to the protocol for it.
+   *
+   * **Only when they agree**, for {@link ParameterReading.home}'s reason: two
+   * different heads selected together have different wheels in them, and
+   * offering one of the two lists would name the wrong slot on half the
+   * selection.
+   */
+  readonly ranges: readonly AttributeRange[];
+  /**
+   * The name of the range the value is standing in, or `null`.
+   *
+   * `null` covers every way of not having one: no ranges, a mixed value, a
+   * value in a gap the profile does not describe. An encoder that named the
+   * nearest range instead would be telling an operator they are on a gobo when
+   * they are between two.
+   */
+  readonly range: string | null;
 }
 
 /**
@@ -173,6 +200,8 @@ function readingOf(
   let mixedSource = false;
   let home: number | null = null;
   let mixedHome = false;
+  let ranges: readonly AttributeRange[] | null = null;
+  let mixedRanges = false;
   for (const fixture of selection) {
     if (groupOf(show, fixture, attribute) !== null) {
       available += 1;
@@ -181,6 +210,15 @@ function readingOf(
         home = rest;
       } else if (rest !== home) {
         mixedHome = true;
+      }
+      // **B38.** The same *only when they agree* rule the resting value
+      // follows: two heads with different wheels in them have different lists,
+      // and one of the two would name the wrong slot on half the selection.
+      const own = rangesOf(show, fixture, attribute);
+      if (ranges === null && !mixedRanges) {
+        ranges = own;
+      } else if (!sameRanges(ranges ?? [], own)) {
+        mixedRanges = true;
       }
     }
     const entry = entryFor(programmer, fixture, attribute);
@@ -200,6 +238,8 @@ function readingOf(
       mixed = true;
     }
   }
+  const shown = mixed ? null : (level ?? (mixedHome ? null : home));
+  const agreed = mixedRanges ? [] : (ranges ?? []);
   return {
     attribute,
     index,
@@ -210,7 +250,78 @@ function readingOf(
     source: mixedSource ? null : source,
     home: mixedHome ? null : home,
     overriding: held > 0,
+    ranges: agreed,
+    range:
+      shown === null
+        ? null
+        : (agreed.find((range) => range.from <= shown && shown <= range.to)?.name ?? null),
   };
+}
+
+/** Whether two range lists are the same list. */
+function sameRanges(
+  left: readonly AttributeRange[],
+  right: readonly AttributeRange[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((range, at) => {
+      const other = right[at];
+      return (
+        other !== undefined &&
+        range.name === other.name &&
+        range.from === other.from &&
+        range.to === other.to
+      );
+    })
+  );
+}
+
+/**
+ * One fixture's named ranges for an attribute, out of the show's own profile.
+ *
+ * Read from the embedded profile rather than from a query, exactly as
+ * {@link homeOf} is: a show carries its own copies (S11), so the ranges an
+ * operator is offered are the ones the *show* has — a library re-download does
+ * not change what a patched fixture's wheel is called, which is the whole point
+ * of embedding.
+ *
+ * A profile embedded before S51 has no `ranges` at all and answers with none,
+ * which is the fixture behaving exactly as it did.
+ */
+export function rangesOf(
+  show: JsonValue | null,
+  fixture: number,
+  attribute: AttributeType,
+): readonly AttributeRange[] {
+  const attributes = typeAttributes(show, fixture);
+  if (attributes === null) {
+    return [];
+  }
+  for (const entry of attributes) {
+    if (!isObject(entry) || valueAt(entry, "/attribute") !== attribute) {
+      continue;
+    }
+    const ranges = valueAt(entry, "/ranges");
+    if (!isArray(ranges)) {
+      return [];
+    }
+    const read: AttributeRange[] = [];
+    for (const range of ranges) {
+      const name = stringAt(range, "/name");
+      const from = numberAt(range, "/from");
+      const to = numberAt(range, "/to");
+      if (name === null || from === null || to === null) {
+        // A mirror one delta behind a schema change, which is S26's *do not
+        // read the show* rule: a list this cannot make sense of is no list,
+        // which draws an encoder with no names rather than a broken one.
+        return [];
+      }
+      read.push({ name, from, to });
+    }
+    return read;
+  }
+  return [];
 }
 
 /**

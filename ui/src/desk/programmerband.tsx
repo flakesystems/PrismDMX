@@ -66,7 +66,13 @@
 
 import { useEffect } from "react";
 
-import type { AttributeType, FeatureGroup, JsonValue, ProgrammerState } from "../bindings";
+import type {
+  AttributeRange,
+  AttributeType,
+  FeatureGroup,
+  JsonValue,
+  ProgrammerState,
+} from "../bindings";
 import { FEATURE_GROUP_VARIANTS } from "../bindings/variants";
 import type { SequenceRow } from "../show/looks";
 import { executorInForce, sequenceInForce, sequenceRow } from "../show/looks";
@@ -99,6 +105,12 @@ export interface ProgrammerBandProps {
    * overridden: see `App.tsx`'s `onTake` for why that matters.
    */
   readonly onTake: (attributes: readonly AttributeType[]) => void;
+  /**
+   * **B38.** Sets an attribute to the middle of one of its named ranges.
+   *
+   * The one absolute gesture in this band — see `App.tsx`'s `onPickRange`.
+   */
+  readonly onPickRange: (reading: ParameterReading, range: AttributeRange) => void;
   /** Writes and submits a line — the cue list's rows are list picks (§4.5). */
   readonly onLine: (line: string) => void;
 }
@@ -113,6 +125,7 @@ export function ProgrammerBand({
   onPage,
   onTurn,
   onTake,
+  onPickRange,
   onLine,
 }: ProgrammerBandProps) {
   const bank = encoderBank(session);
@@ -225,6 +238,7 @@ export function ProgrammerBand({
                 }
               }}
               onTurn={onTurn}
+              onPickRange={onPickRange}
             />
           ))
         )}

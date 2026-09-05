@@ -224,11 +224,16 @@ function Strip({
                 {/*
                   A crossfade fader shows no figure: where it stands is a
                   gesture in progress rather than show state, so there is
-                  nothing for the desk to have told this strip (S45).
+                  nothing for the desk to have told this strip (S45) — and
+                  since S51 (B36) there are two of them, which the two letters
+                  tell apart. The *bar* still draws where the hand left it; it
+                  is the **number** that would be a claim about the show.
                 */}
                 {strip.assigned && strip.faderFunction !== null && strip.faderFunction !== "Empty"
-                    ? strip.faderFunction === "XFade"
-                        ? "XF"
+                    ? strip.faderLevel === null
+                        ? strip.faderFunction === "Fade"
+                            ? "FD"
+                            : "XF"
                         : `${String(percent)}%`
                     : "·"}
             </span>
@@ -319,6 +324,22 @@ function FunctionButton({
  * The same arrangement `canvas/window.tsx` uses for a drag, and the same rule —
  * the local value is **dropped** on pointer-up, so a fader pulled against a
  * daemon that refuses it springs back. See `./valuedrag.ts`.
+ *
+ * # Except for a crossfade, and that exception is punch-list B36
+ *
+ * `strip.faderLevel` is `null` for a crossfade fader: the daemon has no number
+ * for it, because **where a crossfade fader stands is the operator's hand**
+ * rather than anything the show holds. So dropping the local value on
+ * pointer-up would put such a fader back at nought after every movement, which
+ * is exactly the fault the entry reports — *danach fährt er zurück auf 0 für
+ * den nächsten Fade*.
+ *
+ * So a fader with no number of its own **keeps** where it was put. That is
+ * client-local state by `ARCHITECTURE_SPEC.md` §4.2's own rule — it is
+ * legitimately different per screen, because it is a hand — and it is the only
+ * position in this bar that is. Two screens showing the same crossfade
+ * executor therefore show their own fader in their own place and both drive the
+ * same playback, which is the same answer §4.2 gives a scroll position.
  */
 function useFader(
     strip: ExecutorStrip,
@@ -326,6 +347,8 @@ function useFader(
 ): { readonly level: number; readonly begin: (event: ReactPointerEvent) => void } {
     const [drag, setDrag] = useState<ValueDrag | null>(null);
     const [shown, setShown] = useState<number | null>(null);
+    /** Whether this fader's position is the hand's rather than the show's. */
+    const ours = strip.faderLevel === null;
 
     useEffect(() => {
         if (drag === null) {
@@ -337,9 +360,13 @@ function useFader(
         const finish = (): void => {
             drag.end(Date.now());
             // Dropped, not reconciled: what the fader shows from this moment is what
-            // the session says the master is.
+            // the session says the master is — **unless there is nothing for it
+            // to say**, which is a crossfade (B36). Then the hand's position is
+            // the only one there is, and it stays.
             setDrag(null);
-            setShown(null);
+            if (!ours) {
+                setShown(null);
+            }
         };
         globalThis.addEventListener("pointermove", move);
         globalThis.addEventListener("pointerup", finish);
@@ -349,7 +376,7 @@ function useFader(
             globalThis.removeEventListener("pointerup", finish);
             globalThis.removeEventListener("pointercancel", finish);
         };
-    }, [drag]);
+    }, [drag, ours]);
 
     const begin = (event: ReactPointerEvent): void => {
         // A slot with no cue list on it has no number to move, and
@@ -368,7 +395,9 @@ function useFader(
         event.preventDefault();
         const box = event.currentTarget.getBoundingClientRect();
         const started = new ValueDrag({
-            origin: strip.faderLevel,
+            // A crossfade starts from where this screen last left it, because
+            // there is nowhere else to start from.
+            origin: shown ?? strip.faderLevel ?? 0,
             from: event.clientY,
             travel: box.height,
             inverted: true,
@@ -380,5 +409,5 @@ function useFader(
         setShown(started.level);
     };
 
-    return { level: shown ?? strip.faderLevel, begin };
+    return { level: shown ?? strip.faderLevel ?? 0, begin };
 }

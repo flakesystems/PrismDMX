@@ -55,8 +55,12 @@ Named here rather than discovered by you:
 - **No 3D visualiser** (planned).
 - **No Web Remote** — a phone or tablet cannot drive the desk yet (planned).
 - **No timecode, OSC or PSN** (planned).
-- **Crossfade is not finished.** A crossfade fader completes the fade and
-  returns to zero rather than staying where you left it. It is a known fault.
+- **A fixture with two of one parameter loses the second.** A head with two
+  colour wheels, or an LED tube whose profile writes out a red per pixel, keeps
+  the lower channel and drops the higher: this desk gives one fixture one of
+  each parameter. Every *kind* of channel the Open Fixture Library has arrives
+  since `v0.9.1`; what is left is the repeats, and it is the next thing on the
+  list for the fixture library.
 - **Executor labels do not follow a show change** in every case: after loading a
   second show, a strip may keep the previous show's labels until you switch
   windows.
@@ -167,9 +171,49 @@ A first show, in the order it is usually done:
 6. **Save.** *Settings → Show files*, or `Ctrl-S`. The desk also autosaves a
    recovery copy while there is anything unsaved.
 
+**`F11` or `Alt` + `Enter` puts the desk full screen**, and takes it out again. A
+desk in a hall runs without a title bar.
+
+**Clear lets go before it forgets.** The first press drops the fixture
+*selection* and keeps everything you have set, so the next fixture joins the same
+look; the second press takes the values; the third puts the encoder bank and the
+page back. The key says which of the three the next press would do.
+
+**A crossfade fader is walked, not reset.** An executor's fader can be one of two
+crossfades. *XFade* crossfades to the next cue on the way up and to the one after
+on the way down, so you walk a cue list with one fader without lifting your hand.
+*Fade* takes the current cue out on the way up and brings the next one in on the
+way down. Stop half way and the desk holds the mixture there. Nothing ever moves
+the fader back for you.
+
 **Everything is the command line.** Every key, every tile and every button writes
 a line rather than acting on its own, so what a gesture means is what the line
 means — and any line can be bound to a key on the X-Touch.
+
+### Your own fixture profiles
+
+A light the Open Fixture Library does not know is a profile you can write
+yourself. It goes in **`fixtures/` inside the desk's own directory** —
+`%APPDATA%\PrismDMX\fixtures` on Windows — in the Open Fixture Library's own
+JSON format, and the desk reads it at start-up.
+
+That directory and not `profiles/fixtures/`: the second one is a **download**,
+and `tools/fetch-fixtures` empties it on every run, so anything of yours put
+there survives until the next install and no longer. The desk's own directory is
+never touched by an installer.
+
+Two shapes, and both work:
+
+| Where you put it | What it is for |
+|---|---|
+| `fixtures/my-light.json` | A light nobody has a profile for. It is filed under *Custom* and appears in the picker beside everything else |
+| `fixtures/<manufacturer>/<fixture>.json` | A **correction** to a profile that came with the desk. Use the same manufacturer directory and file name the library uses and yours replaces it |
+
+Either way the picker marks the row **yours** in its *Source* column, so a
+profile you wrote is one you can find again. And once you have patched a fixture
+with it, the profile is **copied into the show**: a `.prism` file is
+self-contained, so it opens the same way on a desk that has never seen your
+directory.
 
 **The manual is not written yet.** It is a session of its own; until then, this
 list and the hints inside each window are what there is, and the beta is a good

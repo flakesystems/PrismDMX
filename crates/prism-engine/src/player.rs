@@ -94,13 +94,55 @@
 //! `docs/MCU_MAPPING.md` §4.1's unresolved rows. A crossfade does not replace
 //! the transition — the same `from`, `to` and cue traversal are used — it
 //! replaces the *clock*: progress is how far the fader has travelled from where
-//! it stood when the cue was taken, towards whichever end it started from.
-//! Reaching that end completes the cue and the fader is then inert until the
-//! next Go, which takes its current position as the new origin. That is what
-//! makes the next crossfade run in the other direction, which is how a console
-//! with one crossfade fader is operated.
+//! it stood when the stroke began, towards the end it is heading for.
+//!
+//! # Two modes, and the state between two cues — S51, punch-list B36
+//!
+//! What S34 built was one mode and it had a hole in it, which is the entry: one
+//! movement did one fade and then *the desk drove the fader back to nought* for
+//! the next one. Two things replace it.
+//!
+//! **A stroke is the unit, and there are two kinds of it.** A [`Stroke`] is one
+//! journey of the fader from where it rested to an end of its travel, and it
+//! carries one transition. What that transition *is* depends on the mode and on
+//! the direction, and that is the whole of the two modes:
+//!
+//! | Mode | Pushed up | Pulled down |
+//! |---|---|---|
+//! | [`CrossfadeMode::XFade`] | crossfade to the next cue | crossfade to the one after |
+//! | [`CrossfadeMode::Fade`] | fade the current cue **out** | fade the next cue **in** |
+//!
+//! So in `XFade` each half of the travel advances the list by one cue and the
+//! stage never goes dark; in `Fade` a full up-and-down advances it by one, via
+//! black. Either way an operator walks a cue list by moving one fader up and
+//! down and never lifts their hand.
+//!
+//! **Nothing ever moves the fader.** A completed stroke is *done* and holds its
+//! transition at the end; the fader is then simply somewhere, and the next
+//! movement — which can only be back the other way, because it is at an end —
+//! arms the next stroke from there. There is no re-basing, no Go required, and
+//! nothing to drive a motor to. `prismd::surface` is the other half of that
+//! rule: a crossfade fader is never written (`ExecutorFaderFunction::
+//! desk_may_move_it`).
+//!
+//! **A stroke stopped half way is the state between two cues**, and it is a
+//! state this player can hold indefinitely: every entry sits at
+//! `interpolate(from, to, progress)`, the clock is not consulted, and the next
+//! tick computes the same numbers. That is what makes the frames a recorded
+//! fader walk produces byte-identical twice over, which is how B36 is asserted.
+//!
+//! **Arming is lazy, and that is what keeps the cue readout honest.** A stroke
+//! is armed by the first movement away from where the fader rested, not before,
+//! so a playback sitting on cue 3 with an untouched fader reads *cue 3*. The
+//! moment the operator starts to move, the desk is on its way to cue 4 and says
+//! so — which is exactly what pressing Go does.
+//!
+//! **And a reversal all the way back abandons the stroke.** Pulling a fader
+//! back to where it started means *not that*: the entries are already exactly
+//! where they were, so the cue pointer goes back with them and the next
+//! movement starts a fresh stroke in whichever direction it goes.
 
-use prism_domain::{CueTrigger, GoDirection, PlaybackId, SPEED_UNITY};
+use prism_domain::{CrossfadeMode, CueTrigger, GoDirection, PlaybackId, SPEED_UNITY};
 
 use crate::cue::{CuePlan, SequencePlan, interpolate};
 use crate::playback::{PlaybackLayer, PlaybackSource};
@@ -108,12 +150,6 @@ use crate::playback::{PlaybackLayer, PlaybackSource};
 /// Full travel of a crossfade fader, and the denominator its progress is
 /// expressed over. The same `65535` every level in this project is measured in.
 const FULL: u16 = u16::MAX;
-
-/// The middle of a crossfade fader's travel, which is what decides which end it
-/// is heading for. Written out rather than divided, because the tick path denies
-/// `clippy::integer_division` — and because half of an odd number is a decision
-/// rather than an arithmetic result.
-const HALF: u16 = 32_767;
 
 /// How long two taps may be apart and still be one measurement.
 ///
@@ -123,63 +159,171 @@ const HALF: u16 = 32_767;
 /// is the only clock this module has.
 pub const TAP_WINDOW: u64 = 4 * crate::tick::TICK_HZ;
 
-/// A manual crossfade in progress: where the fader stood when the cue was taken,
-/// and where it stands now.
+/// One journey of a manual crossfade fader, and the transition it drives —
+/// **S51, B36**.
+///
+/// Armed by the first movement away from where the fader was resting, and
+/// finished when the fader reaches the end it set off for. See the module
+/// documentation for the two modes and for why arming is lazy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Crossfade {
-    /// The fader position the current transition started from.
+struct Stroke {
+    /// Where the fader stood when this stroke was armed.
     origin: u16,
-    /// Where the fader is now.
-    position: u16,
-    /// Whether the travel has been completed — after which the fader does
-    /// nothing until the next Go re-bases it.
+    /// The end it is heading for — `0` or [`FULL`], and never anything else: a
+    /// stroke is a journey to an *end*, which is what makes the next one go the
+    /// other way without anything having to remember a direction.
+    target: u16,
+    /// The cue the playback was standing on when this was armed, so a full
+    /// reversal can put the pointer back where it found it.
+    ///
+    /// `None` when the playback was stopped, in which case a reversal leaves it
+    /// stopped.
+    from_cue: Option<usize>,
+    /// Whether the fader has reached [`Self::target`].
+    ///
+    /// A finished stroke holds its transition at the end rather than handing
+    /// the clock back: the entries stay where the fader put them until the
+    /// fader moves again, which is what *nothing springs back* means one layer
+    /// down.
     done: bool,
 }
 
-impl Crossfade {
-    /// A crossfade engaged with the fader where it is, so engaging one never
-    /// moves any light by itself.
-    const fn new(position: u16) -> Self {
-        Self {
-            origin: position,
-            position,
-            done: false,
-        }
-    }
-
-    /// The end this travel is heading for: whichever is further from the origin,
-    /// so the span is never shorter than half the fader and a division by a
-    /// vanishing number cannot happen.
-    const fn target(self) -> u16 {
-        if self.origin > HALF { 0 } else { FULL }
-    }
-
-    /// How far through the transition the fader has been pushed, `0..=FULL`.
-    fn progress(self) -> u16 {
+impl Stroke {
+    /// How far through its transition the fader has been pushed, `0..=FULL`.
+    ///
+    /// Travel **towards the target only**: a fader pushed back the way it came
+    /// un-does the crossfade, which is what an operator who changed their mind
+    /// means by it.
+    fn progress(self, position: u16) -> u16 {
         if self.done {
             return FULL;
         }
-        let target = self.target();
-        let span = self.origin.abs_diff(target);
+        let span = self.origin.abs_diff(self.target);
         if span == 0 {
             return FULL;
         }
-        // Travel *towards* the target only: a fader pushed back the way it came
-        // un-does the crossfade, which is what an operator who changed their
-        // mind means by it.
-        let travelled = if target > self.origin {
-            self.position.saturating_sub(self.origin)
+        let travelled = if self.target > self.origin {
+            position.saturating_sub(self.origin)
         } else {
-            self.origin.saturating_sub(self.position)
+            self.origin.saturating_sub(position)
         };
         let scaled = (u32::from(travelled) * u32::from(FULL)).div_euclid(u32::from(span));
         u16::try_from(scaled).unwrap_or(FULL)
     }
+}
 
-    /// Whether the fader has reached the end it was heading for.
-    fn arrived(self) -> bool {
-        self.progress() == FULL
+impl Manual {
+    /// How far through its transition this fader has been pushed, or `None`
+    /// when no stroke is armed.
+    fn progress(self) -> Option<u16> {
+        self.stroke.map(|stroke| stroke.progress(self.position))
     }
+
+    /// Moves the fader, and says what the player has to do about it.
+    ///
+    /// The whole of the state machine, and it is four cases:
+    ///
+    /// 1. **No stroke, and the fader moved.** Arm one, from where it was, in
+    ///    the direction it went — [`Arm::NextCue`] or [`Arm::FadeOut`]
+    ///    depending on the mode and the direction.
+    /// 2. **A stroke that has just arrived.** Mark it done; the transition
+    ///    holds at its end and nothing else happens until the fader leaves.
+    /// 3. **A done stroke the fader has left.** Retire it and arm the next one
+    ///    from the end it was sitting at, which is why an operator never lifts
+    ///    their hand.
+    /// 4. **A stroke reversed all the way back to its origin.** Abandon it —
+    ///    the entries are already exactly where they were.
+    fn moved(&mut self, position: u16, current: Option<usize>) -> Arm {
+        let previous = self.position;
+        self.position = position;
+        let Some(stroke) = self.stroke else {
+            return self.arm(previous, position, current);
+        };
+        if stroke.done {
+            if position == stroke.target {
+                return Arm::Nothing;
+            }
+            // Off the end it landed on, so the next journey begins here.
+            self.stroke = None;
+            return self.arm(stroke.target, position, current);
+        }
+        if stroke.progress(position) == FULL {
+            self.stroke = Some(Stroke {
+                done: true,
+                ..stroke
+            });
+            return Arm::Nothing;
+        }
+        // Back to where it set off from, or past it: the operator changed their
+        // mind, and the transition is already exactly where it started.
+        let reversed = if stroke.target > stroke.origin {
+            position <= stroke.origin
+        } else {
+            position >= stroke.origin
+        };
+        if reversed {
+            self.stroke = None;
+            return Arm::Abandon(stroke.from_cue);
+        }
+        Arm::Nothing
+    }
+
+    /// Arms a stroke from `origin` towards the end `position` is heading for.
+    fn arm(&mut self, origin: u16, position: u16, current: Option<usize>) -> Arm {
+        if position == origin {
+            return Arm::Nothing;
+        }
+        let target = if position > origin { FULL } else { 0 };
+        self.stroke = Some(Stroke {
+            origin,
+            target,
+            from_cue: current,
+            // **A movement that goes all the way in one step arrives in one
+            // step.** A pointer drag reports every few milliseconds and a
+            // motorised fader slammed to an end reports once, so the stroke has
+            // to be able to be born finished — otherwise the next movement off
+            // that end would be read as travel *back along this one* and the
+            // transition would run backwards.
+            done: position == target,
+        });
+        // **The two modes, in one expression.** `XFade` heads for the next cue
+        // whichever way the fader goes; `Fade` fades the current cue out on the
+        // way up and the next one in on the way down, which is the owner's own
+        // wording in B36.
+        match (self.mode, target) {
+            (CrossfadeMode::XFade, _) | (CrossfadeMode::Fade, 0) => Arm::NextCue,
+            (CrossfadeMode::Fade, _) => Arm::FadeOut,
+        }
+    }
+}
+
+/// A manual crossfade fader: which of the two modes it is, where it stands, and
+/// the stroke in progress if it is mid-journey.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Manual {
+    /// Which of the two modes — [`CrossfadeMode`].
+    mode: CrossfadeMode,
+    /// Where the fader is now. When no stroke is armed this is also where it is
+    /// *resting*, which is what the next stroke takes as its origin.
+    position: u16,
+    /// The journey in progress, if the fader has moved off its rest.
+    stroke: Option<Stroke>,
+}
+
+/// What a fader movement asks the player to do next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Arm {
+    /// Nothing: the fader moved inside a stroke that is already armed, or did
+    /// not move at all.
+    Nothing,
+    /// Begin the next cue — an `XFade` stroke in either direction, and the
+    /// downward half of a `Fade`.
+    NextCue,
+    /// Fade the current cue out without leaving it — the upward half of a
+    /// `Fade`.
+    FadeOut,
+    /// Put the pointer back where the abandoned stroke found it.
+    Abandon(Option<usize>),
 }
 
 /// One attribute a playback is holding, and the fade it is part way through.
@@ -259,8 +403,8 @@ pub struct CuePlayer {
     tap: bool,
     /// When the previous tap landed, for the interval the next one measures.
     last_tap: Option<u64>,
-    /// The manual crossfade, while the executor's fader is driving one.
-    crossfade: Option<Crossfade>,
+    /// The manual crossfade fader, while the executor has one on it.
+    manual: Option<Manual>,
     /// Whether a held `Flash` is what started this playback, so releasing it
     /// stops what it started and leaves alone what it did not.
     flashed: bool,
@@ -287,7 +431,7 @@ impl CuePlayer {
             restart: false,
             tap: false,
             last_tap: None,
-            crossfade: None,
+            manual: None,
             flashed: false,
             active: false,
             flush: false,
@@ -348,7 +492,7 @@ impl CuePlayer {
         self.delay = 0;
         self.restart = false;
         self.flashed = false;
-        // `speed`, `crossfade` and `last_tap` deliberately survive: they are the
+        // `speed`, `manual` and `last_tap` deliberately survive: they are the
         // *executor's* settings, not the sequence's, and a cue list swapped
         // under a fader that is holding a rate must not silently return to 1x.
         self.flush = false;
@@ -383,7 +527,7 @@ impl CuePlayer {
             current,
             delay,
             restart,
-            crossfade,
+            manual,
             ..
         } = self;
         let Some(plan) = sequence.as_ref() else {
@@ -395,11 +539,12 @@ impl CuePlayer {
         *delay = begin(plan, entries, next);
         *current = Some(next);
         *restart = true;
-        // A crossfade takes the fader's *present* position as the start of the
-        // new travel, which is what makes the second Go run the fader back the
-        // way it came.
-        if let Some(fade) = crossfade.as_mut() {
-            *fade = Crossfade::new(fade.position);
+        // **A Go takes the transition back** — S51, B36. Any stroke in progress
+        // is abandoned and the new cue runs on the clock; the fader is left
+        // exactly where the operator's hand left it, and its next movement arms
+        // a fresh stroke from there. Nothing is re-based and nothing is driven.
+        if let Some(manual) = manual.as_mut() {
+            manual.stroke = None;
         }
         true
     }
@@ -423,7 +568,7 @@ impl CuePlayer {
             current,
             delay,
             restart,
-            crossfade,
+            manual,
             ..
         } = self;
         let Some(plan) = sequence.as_ref() else {
@@ -435,8 +580,8 @@ impl CuePlayer {
         *delay = begin(plan, entries, index);
         *current = Some(index);
         *restart = true;
-        if let Some(fade) = crossfade.as_mut() {
-            *fade = Crossfade::new(fade.position);
+        if let Some(manual) = manual.as_mut() {
+            manual.stroke = None;
         }
         true
     }
@@ -505,41 +650,120 @@ impl CuePlayer {
         self.tap = true;
     }
 
-    /// Where a manual crossfade is, if the executor's fader is driving one.
+    /// Where the manual crossfade fader stands, if this executor has one.
+    ///
+    /// A **reading**, and nothing acts on it: since S51 nothing writes a
+    /// crossfade fader's position anywhere (`ExecutorFaderFunction::
+    /// desk_may_move_it`), so this exists for a test and for a readback and not
+    /// for a motor.
     #[must_use]
     pub const fn crossfade(&self) -> Option<u16> {
-        match self.crossfade {
-            Some(fade) => Some(fade.position),
+        match self.manual {
+            Some(manual) => Some(manual.position),
             None => None,
         }
     }
 
-    /// How far through the current transition a manual crossfade has been
-    /// pushed, `0..=65535`, or nothing when no crossfade is engaged.
+    /// How far through its transition the manual crossfade has been pushed,
+    /// `0..=65535`, or nothing when no stroke is in progress.
+    ///
+    /// `None` also for a fader that is engaged and has not moved: there is no
+    /// transition to be part way through until a stroke is armed, which is what
+    /// keeps the cue readout honest while a hand rests on a fader.
     #[must_use]
     pub fn crossfade_progress(&self) -> Option<u16> {
-        self.crossfade.map(Crossfade::progress)
+        self.manual.and_then(Manual::progress)
     }
 
-    /// Moves the manual crossfade fader.
+    /// Moves the manual crossfade fader — **S51, B36**.
     ///
-    /// Engaging one takes the fader where it stands as the origin, so switching
-    /// a fader to `XFade` never moves any light by itself.
-    pub fn set_crossfade(&mut self, position: u16) {
-        match self.crossfade.as_mut() {
-            Some(fade) => {
-                fade.position = position;
-                if fade.arrived() {
-                    fade.done = true;
+    /// Engaging one takes the fader where it stands and arms **nothing**, so
+    /// switching a fader to a crossfade never moves any light by itself and the
+    /// playback goes on reading the cue it is actually on. The first movement is
+    /// what arms a stroke; see [`Manual::moved`] for the four cases and the
+    /// module documentation for the two modes.
+    ///
+    /// Changing the mode under a stroke abandons it and leaves every attribute
+    /// where it stands: a fader whose job changed mid-gesture is not in the
+    /// middle of anything any more.
+    pub fn set_crossfade(&mut self, mode: CrossfadeMode, position: u16) {
+        let Some(manual) = self.manual.as_mut() else {
+            self.manual = Some(Manual {
+                mode,
+                position,
+                stroke: None,
+            });
+            return;
+        };
+        if manual.mode != mode {
+            *manual = Manual {
+                mode,
+                position,
+                stroke: None,
+            };
+            // **Held where it stands, not handed back to the clock.** The
+            // transition this stroke was driving is half done, and the player's
+            // own clock has been running the whole time — giving it back would
+            // finish the fade at whatever `elapsed` happens to say, which is a
+            // jump. A fader whose job changed mid-gesture is not in the middle
+            // of anything any more, so the honest answer is *stay*.
+            hold(&mut self.entries);
+            return;
+        }
+        let armed = manual.moved(position, self.current);
+        let Some(plan) = self.sequence.as_ref() else {
+            return;
+        };
+        match armed {
+            Arm::Nothing => {}
+            Arm::NextCue => {
+                if let Some(next) = plan.step(self.current, GoDirection::Next) {
+                    self.delay = begin(plan, &mut self.entries, next);
+                    self.current = Some(next);
+                } else {
+                    // Nothing to go to, so there is no stroke to be in.
+                    self.manual = self.manual.map(|manual| Manual {
+                        stroke: None,
+                        ..manual
+                    });
                 }
             }
-            None => self.crossfade = Some(Crossfade::new(position)),
+            Arm::FadeOut => {
+                // **The upward half of a `Fade`.** The cue pointer stays where
+                // it is — the list has not moved, the light is going out — and
+                // the entries are given the release's targets without the
+                // release's dropping: an intensity heads home, everything else
+                // holds, and nothing leaves the merge, because the downward half
+                // has to fade the next cue in from here.
+                let outgoing = self.current;
+                match outgoing {
+                    Some(index) => {
+                        fade_out(plan, &mut self.entries, index);
+                        self.delay = 0;
+                    }
+                    None => {
+                        self.manual = self.manual.map(|manual| Manual {
+                            stroke: None,
+                            ..manual
+                        });
+                    }
+                }
+            }
+            Arm::Abandon(from_cue) => {
+                // The entries are already exactly where they were, so putting
+                // the pointer back is the whole of it: `begin` from here writes
+                // the values that are already out.
+                self.current = from_cue;
+                if let Some(index) = from_cue {
+                    self.delay = begin(plan, &mut self.entries, index);
+                }
+            }
         }
     }
 
     /// Takes the manual crossfade off, so the transition runs on time again.
     pub const fn clear_crossfade(&mut self) {
-        self.crossfade = None;
+        self.manual = None;
     }
 
     /// Whether a held flash is what started this playback.
@@ -596,7 +820,7 @@ impl CuePlayer {
             speed,
             delay,
             restart,
-            crossfade,
+            manual,
             active,
             ..
         } = self;
@@ -631,8 +855,12 @@ impl CuePlayer {
         // A manual crossfade replaces the clock and nothing else: the same
         // `from` and `to`, driven by how far the fader has travelled. It governs
         // the *cue transition* only, so a release still fades out on time.
-        let manual = match crossfade {
-            Some(fade) if current.is_some() => Some(fade.progress()),
+        // A manual crossfade replaces the clock and nothing else — and only
+        // while a **stroke** is armed, since S51: a fader that is engaged and
+        // has not been moved leaves the transition on the clock, which is what
+        // makes switching a fader to a crossfade change nothing at all.
+        let manual = match manual {
+            Some(fader) if current.is_some() => fader.progress(),
             _ => None,
         };
         for entry in entries.iter_mut().filter(|entry| entry.live) {
@@ -666,12 +894,21 @@ impl CuePlayer {
             }
         }
 
+        // **A held stroke suspends the automatic chain** — S51, B36. A stroke
+        // stopped half way is the state *between two cues*, and `elapsed` has
+        // gone on running the whole time it was held; a `Follow` fired off that
+        // clock would take the list somewhere while the operator was still
+        // half-way into the cue before it. A cue reached **by** the fader has
+        // its follow evaluated the moment the stroke is retired, which is when
+        // the next one is armed.
+        //
         // Follow and Time, once per tick at most. `follow_step` and not `step`:
         // a **Go** always comes round to the first cue and an automatic chain
         // only does when the list loops, which is what `Sequence::loop` has
         // always meant. `None` is the end of the chain, so the guard the two
         // used to share is the type now.
-        if let Some(index) = *current
+        if manual.is_none()
+            && let Some(index) = *current
             && let Some(next) = plan.follow_step(index)
             && triggers(plan, index, next, elapsed)
         {
@@ -679,9 +916,6 @@ impl CuePlayer {
             *current = Some(next);
             *clock = 0;
             *remainder = 0;
-            if let Some(fade) = crossfade.as_mut() {
-                *fade = Crossfade::new(fade.position);
-            }
         }
 
         // A release that has run its course drops everything at once, so the
@@ -823,6 +1057,49 @@ fn begin(plan: &SequencePlan, entries: &mut [Entry], index: usize) -> u64 {
     cue.delay()
 }
 
+/// Freezes every held attribute where it stands — S51, B36.
+///
+/// What a manual transition abandoned part way through becomes. The clock has
+/// been running underneath the fader the whole time, so simply dropping the
+/// stroke would let `elapsed` finish the fade in one tick; making `from`, `to`
+/// and `value` the same number is *stay here* said in the only terms an entry
+/// has.
+fn hold(entries: &mut [Entry]) {
+    for entry in entries.iter_mut().filter(|entry| entry.live) {
+        entry.from = entry.value;
+        entry.to = entry.value;
+        entry.duration = 0;
+        entry.releasing = false;
+    }
+}
+
+/// Fades the current cue **out** without letting go of it — S51, B36's `Fade`.
+///
+/// [`release`]'s targets with none of its consequences: an intensity heads home
+/// and everything else holds, but the cue pointer stays where it is and nothing
+/// is dropped, because the downward half of the stroke has to fade the next cue
+/// in **from here**. A playback that let its slots go at the top of the fader
+/// would hand the rig to whatever is underneath it for the length of an
+/// operator's pause, which is the opposite of what a two-stroke fade is for.
+///
+/// The duration is nought and the fader is the clock: [`Stroke::progress`] is
+/// what interpolates it, so an operator who stops half way is half out.
+fn fade_out(plan: &SequencePlan, entries: &mut [Entry], outgoing: usize) {
+    let fade = plan.cue(outgoing).map_or(0, CuePlan::fade_out);
+    for (position, entry) in entries.iter_mut().enumerate() {
+        if !entry.live {
+            continue;
+        }
+        entry.from = entry.value;
+        entry.to = match plan.slot(position) {
+            Some(slot) if slot.htp => slot.home,
+            _ => entry.value,
+        };
+        entry.duration = fade;
+        entry.releasing = false;
+    }
+}
+
 /// Turns everything the playback holds into a release over the outgoing cue's
 /// fade-out time: intensities to home, everything else held where it is.
 fn release(plan: &SequencePlan, entries: &mut [Entry], outgoing: usize) {
@@ -960,7 +1237,8 @@ mod tests {
     use crate::player::{SPEED_UNITY, TAP_WINDOW};
     use crate::testkit::{cue, cue_part, moving_head, sequence};
     use prism_domain::{
-        AttributeType, Cue, CueTrigger, FixtureId, GoDirection, PlaybackId, Sequence, SequenceId,
+        AttributeType, CrossfadeMode, Cue, CueTrigger, FixtureId, GoDirection, PlaybackId,
+        Sequence, SequenceId,
     };
 
     /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
@@ -2034,101 +2312,285 @@ mod tests {
         assert_eq!(rig.player(1).speed(), SPEED_UNITY);
     }
 
+    /// **A three-cue list to walk with one fader.**
+    fn walkable() -> Sequence {
+        sequence(
+            vec![
+                dimmer_cue("1", 0, 0.0),
+                // Ten seconds, so *time* could not have got anywhere.
+                dimmer_cue("2", 65_535, 10.0),
+                dimmer_cue("3", 20_000, 10.0),
+            ],
+            false,
+        )
+    }
+
     /// The crossfade drives the transition from the fader instead of from time,
     /// and engaging one moves nothing by itself.
+    ///
+    /// **S51 turned the second half of this round** (B36). It used to need a Go
+    /// before the fader did anything, because a crossfade only replaced the
+    /// clock of a transition somebody else had started. The fader starts it now:
+    /// the first movement off the rest *is* the Go.
     #[test]
     fn a_manual_crossfade_is_driven_by_the_fader_and_not_by_the_clock() {
         let mut rig = Rig::new(1);
-        rig.load(
-            1,
-            &sequence(
-                vec![
-                    dimmer_cue("1", 0, 0.0),
-                    // A ten-second fade, so *time* could not have got there.
-                    dimmer_cue("2", 65_535, 10.0),
-                ],
-                false,
-            ),
-        );
-        // The fader is at the bottom and the crossfade is engaged there.
-        rig.player(1).set_crossfade(0);
+        rig.load(1, &walkable());
         rig.go(1, GoDirection::Next);
         rig.run(0, 5);
         assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
 
-        rig.go(1, GoDirection::Next);
+        // Engaging the fader where it stands moves nothing and starts nothing:
+        // the playback is on cue 1 and says so.
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 0);
         rig.tick(6);
-        assert_eq!(
-            rig.value(1, AttributeType::Dimmer),
-            0,
-            "a Go moved it alone"
-        );
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
+        assert_eq!(rig.current(1), Some(0), "engaging a fader took a cue");
+        assert_eq!(rig.player(1).crossfade_progress(), None);
 
-        rig.player(1).set_crossfade(32_768);
+        // Half a fader is half a fade — and the cue pointer has moved, because
+        // the operator has started the move.
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 32_768);
         rig.tick(7);
         let half = rig.value(1, AttributeType::Dimmer);
         assert!(
             (32_000..34_000).contains(&half),
             "half a fader is half a fade, got {half}"
         );
+        assert_eq!(rig.current(1), Some(1));
 
-        // Pushed back down: the operator changed their mind and the crossfade
-        // goes back with them.
-        rig.player(1).set_crossfade(0);
-        rig.tick(8);
+        // **And it holds there.** Fifty ticks with nothing touched, and the
+        // frame does not move: a stroke stopped half way is a state, not a fade
+        // that has been paused.
+        rig.run(8, 58);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), half);
+
+        // Pushed back down to where it set off from: the operator changed their
+        // mind, the values are back and so is the cue pointer.
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 0);
+        rig.tick(59);
         assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
+        assert_eq!(rig.current(1), Some(0), "a reversal left the pointer moved");
 
-        rig.player(1).set_crossfade(65_535);
-        rig.tick(9);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 65_535);
+        rig.tick(60);
         assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+        assert_eq!(rig.current(1), Some(1));
     }
 
-    /// Arriving completes the cue, and the next Go runs the fader back the way
-    /// it came — which is how a desk with one crossfade fader is operated.
+    /// **`XFade`: one fader walks the list, and nothing ever moves the fader** —
+    /// S51, punch-list B36.
+    ///
+    /// The entry in one test. Up crossfades to the next cue, down crossfades to
+    /// the one after, and between the two the fader is simply left where the
+    /// operator put it — **there is no Go in this test at all** after the first,
+    /// which is the whole complaint: *danach fährt er zurück auf 0 für den
+    /// nächsten Fade. Das ist unpraktisch.*
     #[test]
-    fn a_completed_crossfade_is_inert_until_the_next_go_re_bases_it() {
+    fn a_crossfade_fader_walks_the_list_up_and_down_without_being_moved() {
+        let mut rig = Rig::new(1);
+        rig.load(1, &walkable());
+        rig.go(1, GoDirection::Next);
+        rig.tick(0);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
+
+        // Up: cue 1 → cue 2.
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 0);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 65_535);
+        rig.tick(1);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+        assert_eq!(rig.current(1), Some(1));
+        // The fader is at the top and **stays** at the top.
+        assert_eq!(rig.player(1).crossfade(), Some(65_535));
+
+        // Down: cue 2 → cue 3, with no Go and no re-basing.
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 32_768);
+        rig.tick(2);
+        let part = rig.value(1, AttributeType::Dimmer);
+        assert!(
+            (40_000..50_000).contains(&part),
+            "half the way down is half the crossfade, got {part}"
+        );
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 0);
+        rig.tick(3);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 20_000);
+        assert_eq!(rig.current(1), Some(2));
+        assert_eq!(rig.player(1).crossfade(), Some(0));
+    }
+
+    /// **`Fade`: up takes the current cue out, down brings the next one in** —
+    /// S51, B36, in the owner's own words.
+    ///
+    /// The difference from `XFade` is the top of the travel: the stage is dark
+    /// there rather than on the next cue, and the next cue arrives on the way
+    /// back down.
+    #[test]
+    fn a_fade_fader_takes_the_cue_out_going_up_and_the_next_one_in_coming_down() {
         let mut rig = Rig::new(1);
         rig.load(
             1,
             &sequence(
-                vec![
-                    dimmer_cue("1", 0, 0.0),
-                    dimmer_cue("2", 65_535, 10.0),
-                    dimmer_cue("3", 20_000, 10.0),
-                ],
+                vec![dimmer_cue("1", 65_535, 0.0), dimmer_cue("2", 30_000, 10.0)],
                 false,
             ),
         );
-        rig.player(1).set_crossfade(0);
         rig.go(1, GoDirection::Next);
         rig.tick(0);
-        rig.go(1, GoDirection::Next);
-        rig.player(1).set_crossfade(65_535);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
+
+        rig.player(1).set_crossfade(CrossfadeMode::Fade, 0);
+        // Half way up: half out, and **still on cue 1** — the list has not
+        // moved, the light is going away.
+        rig.player(1).set_crossfade(CrossfadeMode::Fade, 32_768);
         rig.tick(1);
-        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
-
-        // Moving the fader after it has arrived does nothing: the travel is
-        // finished and the cue is complete.
-        rig.player(1).set_crossfade(60_000);
-        rig.tick(2);
-        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
-
-        // The next Go takes the fader where it stands as the new origin, so the
-        // travel is now downwards — which is how a desk with one crossfade
-        // fader is operated: up for one cue, down for the next.
-        rig.go(1, GoDirection::Next);
-        rig.tick(3);
-        assert_eq!(rig.value(1, AttributeType::Dimmer), 65_535);
-        rig.player(1).set_crossfade(30_000);
-        rig.tick(4);
-        let part = rig.value(1, AttributeType::Dimmer);
+        let half = rig.value(1, AttributeType::Dimmer);
         assert!(
-            (40_000..60_000).contains(&part),
-            "half a travel is half a fade, got {part}"
+            (32_000..34_000).contains(&half),
+            "half a fader is half out, got {half}"
         );
-        rig.player(1).set_crossfade(0);
-        rig.tick(5);
-        assert_eq!(rig.value(1, AttributeType::Dimmer), 20_000);
+        assert_eq!(rig.current(1), Some(0), "the fade-out took a cue");
+
+        // All the way up: dark, and still on cue 1.
+        rig.player(1).set_crossfade(CrossfadeMode::Fade, 65_535);
+        rig.tick(2);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 0);
+        assert_eq!(rig.current(1), Some(0));
+
+        // And back down brings the **next** cue in, from the dark.
+        rig.player(1).set_crossfade(CrossfadeMode::Fade, 32_768);
+        rig.tick(3);
+        let coming = rig.value(1, AttributeType::Dimmer);
+        assert!(
+            (14_000..16_000).contains(&coming),
+            "half way down is half of cue 2, got {coming}"
+        );
+        assert_eq!(rig.current(1), Some(1));
+
+        rig.player(1).set_crossfade(CrossfadeMode::Fade, 0);
+        rig.tick(4);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), 30_000);
+        assert_eq!(rig.player(1).crossfade(), Some(0));
+    }
+
+    /// **A walk down a list produces the same frames twice** — B36's exit
+    /// criterion, at the level the player can state it.
+    ///
+    /// The fader is driven through the same positions twice over, from the same
+    /// starting state, and the value at every tick is compared. `crates/prismd`
+    /// makes the same claim on the DMX frames themselves; this is the one that
+    /// says *the playback is a function of where the fader is*, which is what
+    /// makes the frames identical rather than merely similar.
+    #[test]
+    fn the_same_fader_walk_produces_the_same_values_twice() {
+        let walk = |mode: CrossfadeMode| -> Vec<u16> {
+            let mut rig = Rig::new(1);
+            rig.load(1, &walkable());
+            rig.go(1, GoDirection::Next);
+            rig.tick(0);
+            rig.player(1).set_crossfade(mode, 0);
+            let mut seen = Vec::new();
+            for (step, position) in [
+                0_u16, 8_000, 20_000, 40_000, 65_535, 50_000, 30_000, 10_000, 0, 25_000, 65_535,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                rig.player(1).set_crossfade(mode, position);
+                rig.tick(step as u64 + 1);
+                seen.push(rig.value(1, AttributeType::Dimmer));
+            }
+            seen
+        };
+        for mode in CrossfadeMode::ALL {
+            let first = walk(mode);
+            let second = walk(mode);
+            assert_eq!(first, second, "{mode:?} is not a function of the fader");
+            // And the walk actually moved something, or the claim is vacuous.
+            assert!(
+                first.iter().any(|value| *value != first[0]),
+                "{mode:?} produced a flat walk"
+            );
+        }
+    }
+
+    /// A stroke stopped half way **holds**, and the frames say so tick after
+    /// tick — the state *between two cues* B36 asks the playback to be able to
+    /// hold.
+    #[test]
+    fn a_stroke_stopped_half_way_holds_the_mixture_indefinitely() {
+        for mode in CrossfadeMode::ALL {
+            let mut rig = Rig::new(1);
+            rig.load(1, &walkable());
+            rig.go(1, GoDirection::Next);
+            rig.tick(0);
+            rig.player(1).set_crossfade(mode, 0);
+            rig.player(1).set_crossfade(mode, 30_000);
+            rig.tick(1);
+            let held = rig.value(1, AttributeType::Dimmer);
+            for tick in 2..200 {
+                rig.tick(tick);
+                assert_eq!(
+                    rig.value(1, AttributeType::Dimmer),
+                    held,
+                    "{mode:?} moved at tick {tick} with nobody touching the fader"
+                );
+            }
+        }
+    }
+
+    /// Switching the mode under a stroke abandons it and moves nothing.
+    ///
+    /// A fader whose job changed mid-gesture is not in the middle of anything
+    /// any more, and the honest answer is to stop rather than to reinterpret the
+    /// half-finished journey as the other kind.
+    #[test]
+    fn changing_the_mode_under_a_stroke_leaves_the_light_where_it_is() {
+        let mut rig = Rig::new(1);
+        rig.load(1, &walkable());
+        rig.go(1, GoDirection::Next);
+        rig.tick(0);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 0);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 30_000);
+        rig.tick(1);
+        let held = rig.value(1, AttributeType::Dimmer);
+
+        rig.player(1).set_crossfade(CrossfadeMode::Fade, 30_000);
+        rig.tick(2);
+        assert_eq!(rig.value(1, AttributeType::Dimmer), held);
+        assert_eq!(rig.player(1).crossfade_progress(), None);
+    }
+
+    /// A Go abandons the stroke and leaves the fader where the hand left it.
+    ///
+    /// **S51 turned this round** (B36). The old rule was *arriving completes the
+    /// cue and the fader is inert until the next Go re-bases it*, which is what
+    /// made an operator's fader a thing the desk had opinions about. Now a Go
+    /// takes the transition back on to the clock, the fader is not touched, and
+    /// its next movement arms a fresh stroke from wherever it happens to be.
+    #[test]
+    fn a_go_takes_the_transition_back_and_leaves_the_fader_alone() {
+        let mut rig = Rig::new(1);
+        rig.load(1, &walkable());
+        rig.go(1, GoDirection::Next);
+        rig.tick(0);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 0);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 30_000);
+        rig.tick(1);
+
+        rig.go(1, GoDirection::Next);
+        rig.tick(2);
+        // The fader has not been moved by anything.
+        assert_eq!(rig.player(1).crossfade(), Some(30_000));
+        assert_eq!(rig.player(1).crossfade_progress(), None);
+        // And the cue that the Go took is running on the clock, so time moves
+        // it — which a stroke would not have.
+        let before = rig.value(1, AttributeType::Dimmer);
+        rig.run(3, 60);
+        assert_ne!(
+            rig.value(1, AttributeType::Dimmer),
+            before,
+            "the Go's cue did not get its clock back"
+        );
     }
 
     /// Taking the crossfade off gives the transition its clock back.
@@ -2142,15 +2604,15 @@ mod tests {
                 false,
             ),
         );
-        rig.player(1).set_crossfade(0);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 0);
         rig.go(1, GoDirection::Next);
         rig.tick(0);
         rig.go(1, GoDirection::Next);
         rig.run(1, 60);
         assert_eq!(
             rig.value(1, AttributeType::Dimmer),
-            0,
-            "time drove a manual crossfade"
+            65_535,
+            "a Go's cue runs on the clock, whatever a fader is engaged"
         );
         assert_eq!(rig.player(1).crossfade(), Some(0));
 
@@ -2202,7 +2664,7 @@ mod tests {
         let mut rig = Rig::new(1);
         rig.load(1, &sequence(vec![dimmer_cue("1", 65_535, 1.0)], false));
         rig.player(1).set_speed(SPEED_UNITY * 3);
-        rig.player(1).set_crossfade(12_345);
+        rig.player(1).set_crossfade(CrossfadeMode::XFade, 12_345);
         rig.load(1, &sequence(vec![dimmer_cue("1", 30_000, 1.0)], false));
         assert_eq!(rig.player(1).speed(), SPEED_UNITY * 3);
         assert_eq!(rig.player(1).crossfade(), Some(12_345));

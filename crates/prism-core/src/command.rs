@@ -151,14 +151,22 @@ pub enum Effect {
         /// The playback.
         executor: PlaybackId,
     },
-    /// Move an executor's manual crossfade — `ExecutorFaderFunction::XFade`.
+    /// Move an executor's manual crossfade — **S51, punch-list B36**.
     ///
     /// Carries no show state at all: where a crossfade fader stands is a
     /// gesture in progress, like a flash, and a show file that remembered one
-    /// would reload holding half a cue.
-    ExecutorXFade {
+    /// would reload holding half a cue. **And nothing writes it back**, which
+    /// is what the entry is about: a fader the desk moves is a fader taken out
+    /// of the operator's hand mid-gesture.
+    ///
+    /// The **mode** rides with the position because the tick resolves nothing
+    /// (`ARCHITECTURE_SPEC.md` §3.1) and which of the two crossfades a fader is
+    /// belongs to the show.
+    ExecutorCrossfade {
         /// The playback.
         executor: PlaybackId,
+        /// Which of the two crossfades — `ExecutorFaderFunction::crossfade_mode`.
+        mode: prism_domain::CrossfadeMode,
         /// Where the fader is, `0..=65535`.
         position: u16,
     },
@@ -863,10 +871,19 @@ impl Show {
                     }],
                 })
             }
-            ExecutorFaderFunction::XFade => Ok(Applied::effect(Effect::ExecutorXFade {
-                executor: playback,
-                position: level,
-            })),
+            // **Both crossfades, one arm** — S51, B36. Which of the two it is
+            // is the fader's own setting and travels with the movement, because
+            // the tick holds no show and cannot look it up.
+            ExecutorFaderFunction::Fade | ExecutorFaderFunction::XFade => {
+                let mode = function
+                    .crossfade_mode()
+                    .unwrap_or(prism_domain::CrossfadeMode::XFade);
+                Ok(Applied::effect(Effect::ExecutorCrossfade {
+                    executor: playback,
+                    mode,
+                    position: level,
+                }))
+            }
             // Answered above, before the cue list was asked for.
             ExecutorFaderFunction::Empty => Ok(Applied::default()),
         }
@@ -1261,8 +1278,9 @@ mod tests {
             .unwrap();
         assert_eq!(
             applied.effects,
-            vec![Effect::ExecutorXFade {
+            vec![Effect::ExecutorCrossfade {
                 executor: PlaybackId::of_sequence(SequenceId::new(1)),
+                mode: prism_domain::CrossfadeMode::XFade,
                 position: 65_535,
             }]
         );

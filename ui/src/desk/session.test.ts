@@ -45,7 +45,7 @@ interface RecordedStrip {
   readonly executorId: number;
   readonly assigned: boolean;
   readonly name: string | null;
-  readonly faderLevel: number;
+  readonly faderLevel: number | null;
   readonly isActive: boolean;
   readonly currentCueIndex: number | null;
   readonly faderFunction: string;
@@ -296,7 +296,7 @@ describe("a document that is not one", () => {
     // One whose level is a word is assigned, at zero, with nothing on it —
     // every field is read on its own, so one bad member does not lose a strip.
     expect(strips[1]?.assigned).toBe(true);
-    expect(strips[1]?.faderLevel).toBe(0);
+    expect(strips[1]?.faderLevel).toBeNull();
     expect(strips[1]?.faderFunction).toBeNull();
     expect(strips[1]?.buttonFunctions).toEqual([]);
   });
@@ -396,11 +396,37 @@ describe("a document that is not one", () => {
     expect(strips[0]?.faderLevel).toBe(20000);
     expect(strips[1]?.faderLevel).toBe(20000);
     expect(strips[2]?.faderLevel).toBe(2048);
-    expect(strips[3]?.faderLevel).toBe(0);
-    expect(strips[4]?.faderLevel).toBe(0);
+    // **`null` and not nought, since S51** (B36). A crossfade fader has no
+    // number the desk may write: where it stands is the operator's hand, and a
+    // nought here is what put it back at the bottom after every movement.
+    expect(strips[3]?.faderLevel).toBeNull();
+    expect(strips[5]?.faderLevel).toBeNull();
+    expect(strips[4]?.faderLevel).toBeNull();
     // A slot with no cue list on it has no number to read at all.
-    expect(strips[5]?.faderLevel).toBe(0);
     expect(strips[5]?.sequenceId).toBeNull();
+  });
+
+  /**
+   * **Both crossfade modes read as *the hand's*** — S51, B36.
+   *
+   * The two are one rule (`ExecutorFaderFunction::desk_may_move_it`) and the
+   * screen asks it the same way the desk does, so a mode added later has to
+   * decide which side of the line it is on rather than defaulting to *the desk
+   * may move it*.
+   */
+  it("gives neither crossfade a number the desk could write back", () => {
+    const show = {
+      sequences: { "1": { name: "Act 1", masterLevel: 20000, speed: 2048 } },
+      executors: {
+        "0": { sequenceId: 1, faderFunction: "XFade" },
+        "1": { sequenceId: 1, faderFunction: "Fade" },
+        "2": { sequenceId: 1, faderFunction: "Master" },
+      },
+    };
+    const strips = pageStrips({ session: { executorPage: 0 } }, show);
+    expect(strips[0]?.faderLevel).toBeNull();
+    expect(strips[1]?.faderLevel).toBeNull();
+    expect(strips[2]?.faderLevel).toBe(20000);
   });
 
   it("falls back to the first bank when the session names one it does not know", () => {

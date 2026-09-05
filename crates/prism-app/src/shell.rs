@@ -19,26 +19,61 @@
 //! `Command::Shutdown` over the local transport, which is the one
 //! `docs/IPC_PROTOCOL.md` §2 gives the desktop shell, and then quits. That is
 //! the tray menu §10.3 has named since S17 and had no way to perform.
+//!
+//! # And what happens when the desk goes without being asked — B39, S51
+//!
+//! A desk killed from a task manager left the icon standing, *Stop the desk*
+//! looking for a process that was not there, and the next start putting a
+//! second icon beside the first. So the shell **watches the guard**
+//! ([`crate::attach::standing`], which has the argument for the guard rather
+//! than the connection) once a second, and a shell whose desk has gone stands
+//! down: the tray says so, the operator is told in a sentence that answers
+//! *is the show still on*, and the shell closes. Nothing of a dead desk is left
+//! in the notification area for the next start to sit beside.
+//!
+//! The watching is here and the deciding is not: what the poll produces is a
+//! [`crate::attach::Standing`], which is decided from two numbers in a module a
+//! test can call without a window.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::attach::Approach;
+use crate::attach::{Approach, Standing, standing, stopped_message};
 use crate::autostart::{self, Report};
 use crate::dialogs::{Mode, PathKind, chooser};
 
 /// The window's label, matching `capabilities/default.json`.
 const DESK: &str = "desk";
 
+/// The tray icon's identifier, so the watcher can find it again to change what
+/// it says.
+const TRAY: &str = "desk";
+
 /// The tray menu's item identifiers.
 const SHOW: &str = "show";
 const QUIT: &str = "quit";
 const STOP: &str = "stop";
+
+/// How often the shell looks at the guard to see whether its desk is still
+/// there — **B39**.
+///
+/// A second, and the number is chosen from what it costs and what it buys. It
+/// costs one `File::open` and one `try_lock_shared` on a file the daemon is
+/// already holding, which is nothing measurable; it buys an icon that is wrong
+/// for at most a second. Anything faster would be a poll for a change that
+/// happens once in a session, and anything slower is long enough for an
+/// operator to click *Stop the desk* on a desk that is not there.
+const WATCH_EVERY: Duration = Duration::from_secs(1);
+
+/// The tooltip while the desk is running, and after it has gone.
+const RUNNING_TOOLTIP: &str = "PrismDMX — the desk is running";
+const STOPPED_TOOLTIP: &str = "PrismDMX — the desk has stopped";
 
 /// What the shell worked out before the window existed, kept for the commands
 /// that need it.
@@ -50,6 +85,10 @@ struct Desk {
     /// an odd configuration rather than an impossible one — and the tray's
     /// *Stop the desk* is the one thing that then cannot be done.
     local: Mutex<Option<String>>,
+    /// Whether the watcher has found the desk gone — **B39**. Set once and never
+    /// unset: a shell whose desk has stopped is closing, and a second verdict
+    /// while the first dialogue is up would be a second dialogue.
+    stood_down: Mutex<bool>,
 }
 
 impl Desk {
@@ -85,6 +124,7 @@ pub fn run(
     let desk = Desk {
         executable,
         local: Mutex::new(local),
+        stood_down: Mutex::new(false),
     };
 
     tauri::Builder::default()
@@ -94,6 +134,7 @@ pub fn run(
             choose_path,
             autostart_state,
             autostart_apply,
+            set_fullscreen,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -102,12 +143,19 @@ pub fn run(
                     let Ok(Approach::Attach { url, token, .. }) = &found else {
                         unreachable!("`refusal` answers `None` only for an attach")
                     };
+                    let Ok(Approach::Attach { pid, .. }) = &found else {
+                        unreachable!("`refusal` answers `None` only for an attach")
+                    };
                     open_window(&handle, url, token.as_deref(), hidden)?;
                     build_tray(&handle)?;
                     // **The switch, acted on at last** (S37 wrote it down, S29
                     // obeys it). At start, because an entry can be deleted by
                     // hand and a switch can be changed while the shell is shut.
                     reconcile_at_start(&handle, &data_dir);
+                    // **B39.** From here on the shell knows which process its
+                    // desk is, so it can notice when that process is no longer
+                    // the one holding the guard.
+                    watch_the_desk(&handle, data_dir.clone(), *pid);
                 }
                 Some(message) => {
                     let closing = handle.clone();
@@ -230,8 +278,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&show, &separator, &quit, &stop])?;
 
-    let mut tray = TrayIconBuilder::with_id("desk")
-        .tooltip("PrismDMX — the desk is running")
+    let mut tray = TrayIconBuilder::with_id(TRAY)
+        .tooltip(RUNNING_TOOLTIP)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, event| {
@@ -244,6 +292,79 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
+}
+
+/// Watches the guard, and stands the shell down when its desk has gone — **B39**.
+///
+/// One thread and a sleep, rather than a file-system watch: the thing being
+/// watched is a *lock*, not a file's contents, and a lock is released without
+/// anything being written. `prismd::lock::look` is the same reading `main` makes
+/// at start, which is what makes this incapable of disagreeing with *spawn or
+/// attach*.
+///
+/// An error reading the directory is **not** a verdict. A shell that tore its
+/// icon down because a disk hiccuped would be announcing the end of a show that
+/// is still running, which is the fault this is fixing, upside down.
+fn watch_the_desk(app: &AppHandle, data_dir: PathBuf, attached_to: u32) {
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(WATCH_EVERY);
+            let Ok(presence) = prismd::lock::look(&data_dir) else {
+                continue;
+            };
+            match standing(attached_to, &presence) {
+                Standing::Holding => {}
+                Standing::Gone => {
+                    stand_down(&handle, attached_to, None);
+                    return;
+                }
+                Standing::Replaced { pid } => {
+                    stand_down(&handle, attached_to, Some(pid));
+                    return;
+                }
+            }
+        }
+    });
+}
+
+/// Says the desk has stopped, in the tray and in a sentence, and closes.
+///
+/// **The tray first and the dialogue second**, and that order is the whole
+/// design: the icon is what an operator looks at, so it stops claiming the desk
+/// is running before anything else happens — including before the dialogue,
+/// which may sit unread behind a full-screen window. *Stop the desk* is taken
+/// out of the menu at the same moment, because a menu item that looks for a
+/// process that is not there is exactly what B39 reports.
+///
+/// Then the shell **closes**, once the sentence has been acknowledged. That is
+/// the second half of the entry: a dead desk's icon left in the notification
+/// area is what puts a second one beside it at the next start.
+fn stand_down(app: &AppHandle, attached_to: u32, replacement: Option<u32>) {
+    {
+        let desk: State<'_, Desk> = app.state();
+        let mut stood_down = desk
+            .stood_down
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *stood_down {
+            return;
+        }
+        *stood_down = true;
+    }
+    if let Some(tray) = app.tray_by_id(TRAY) {
+        let _ = tray.set_tooltip(Some(STOPPED_TOOLTIP));
+    }
+    // A hidden window would leave the dialogue with nothing to sit on, and an
+    // operator with nothing to see at all.
+    show_window(app);
+
+    let closing = app.clone();
+    app.dialog()
+        .message(stopped_message(attached_to, replacement))
+        .title("PrismDMX")
+        .kind(tauri_plugin_dialog::MessageDialogKind::Warning)
+        .show(move |_| closing.exit(0));
 }
 
 /// What each tray item does.
@@ -277,13 +398,30 @@ fn show_window(app: &AppHandle) {
 /// shell that killed the process would skip every one of those.
 fn stop_the_desk(app: &AppHandle) {
     let handle = app.clone();
-    let address = {
+    let (address, stood_down) = {
         let desk: State<'_, Desk> = app.state();
-        desk.local
+        let address = desk
+            .local
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+            .clone();
+        let stood_down = *desk
+            .stood_down
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (address, stood_down)
     };
+    // **B39.** The watcher has already found the desk gone, so this is not a
+    // connection to attempt: it is a question with an answer, and the answer is
+    // that there is nothing to stop.
+    if stood_down {
+        app.dialog()
+            .message("The desk has already stopped. There is nothing to ask.")
+            .title("PrismDMX")
+            .kind(tauri_plugin_dialog::MessageDialogKind::Warning)
+            .show(|_| ());
+        return;
+    }
     let Some(address) = address else {
         app.dialog()
             .message(
@@ -325,7 +463,7 @@ async fn ask_to_stop(address: &str) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     // Waited for, because `send` only queues it: a shell that exited here could
     // take the connection down before the frame left the buffer.
-    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), client.next_event()).await;
+    let _ = tokio::time::timeout(Duration::from_secs(2), client.next_event()).await;
     client.disconnect().await;
     Ok(())
 }
@@ -403,6 +541,39 @@ async fn choose_path(
     }))
 }
 
+/// **B42.** Puts the desk window into full screen, or takes it out, and answers
+/// with the state it actually reached.
+///
+/// # The window owns full screen, not the page
+///
+/// There are two mechanisms and they are not equivalent. A page can ask for the
+/// browser's Fullscreen API, which makes the *document* fill the screen inside
+/// whatever frame the host gives it; a window can be made full screen by the
+/// window manager, which is what takes the title bar away. `CLAUDE.md` asks for
+/// a device screen, and a title bar is the last thing on this one that is not
+/// one — so in the shell it is the **window**, through Tauri's own API, and the
+/// page does not touch its own Fullscreen API at all.
+///
+/// The browser build keeps the same two keys and uses the Fullscreen API there,
+/// because that is the only thing a browser has and it is not nothing: the Web
+/// Remote (S31) and the end-to-end suite both run in one. What matters is that
+/// neither build gets a key that does nothing, which is what
+/// `ui/src/shell/fullscreen.ts` chooses between.
+///
+/// Answering with the state **reached** rather than the state asked for is the
+/// same rule the autostart switch follows: a control that says what it wanted
+/// rather than what happened is a control that displays a lie.
+#[tauri::command]
+fn set_fullscreen(app: AppHandle, on: bool) -> Result<bool, String> {
+    let Some(window) = app.get_webview_window(DESK) else {
+        return Err("this shell has no desk window".to_owned());
+    };
+    window
+        .set_fullscreen(on)
+        .map_err(|error| error.to_string())?;
+    window.is_fullscreen().map_err(|error| error.to_string())
+}
+
 /// What this machine's start-up entry actually is — the reading that stops the
 /// switch displaying a lie.
 #[tauri::command]
@@ -428,7 +599,7 @@ fn autostart_apply(desk: State<'_, Desk>, wanted: bool) -> Result<Report, String
 
 #[cfg(test)]
 mod tests {
-    use super::{refusal, urlencode};
+    use super::{RUNNING_TOOLTIP, STOPPED_TOOLTIP, refusal, urlencode};
     use crate::attach::Approach;
     use std::path::Path;
 
@@ -474,6 +645,19 @@ mod tests {
                 .expect("even the unreachable arm says something")
                 .contains("second one")
         );
+    }
+
+    /// **The icon reports it** — B39, and the smallest half of it.
+    ///
+    /// A tray icon has one line of text and it is the only thing an operator
+    /// sees without clicking. The two readings have to differ and the second
+    /// has to say what happened, or the icon goes on claiming a desk is running
+    /// after it has stopped — which is the entry in one sentence.
+    #[test]
+    fn the_tray_says_which_of_the_two_states_the_desk_is_in() {
+        assert_ne!(RUNNING_TOOLTIP, STOPPED_TOOLTIP);
+        assert!(RUNNING_TOOLTIP.contains("running"), "{RUNNING_TOOLTIP}");
+        assert!(STOPPED_TOOLTIP.contains("stopped"), "{STOPPED_TOOLTIP}");
     }
 
     /// The two values that go through it: a WebSocket URL and a token the

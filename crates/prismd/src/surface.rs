@@ -532,8 +532,13 @@ impl SurfaceLink {
             let sequence = executor
                 .and_then(|executor| executor.sequence_id)
                 .and_then(|sequence| core.file.show.sequence(sequence));
-            let level = fader_reading(executor, sequence);
-            self.controller.set_fader(Fader::Strip(index), level);
+            // **Nothing is written for a fader the desk may not move** — S51,
+            // B36. Not nought, not the last value: nothing at all, so a
+            // crossfade an operator has pushed up stays where their hand left
+            // it.
+            if let Some(level) = fader_reading(executor, sequence) {
+                self.controller.set_fader(Fader::Strip(index), level);
+            }
             self.controller.set_led(
                 ButtonId::Strip {
                     strip: index,
@@ -587,16 +592,20 @@ impl SurfaceLink {
             self.controller
                 .set_text(index, DisplayLine::Lower, &self.text);
         }
+        // The main fader follows the selected executor, and the same rule
+        // applies to it: a selected crossfade leaves the main fader alone.
         let selected = session
             .selected_executor
             .and_then(|id| core.file.show.executor(id))
-            .map_or(0, |executor| {
+            .map_or(Some(0), |executor| {
                 let sequence = executor
                     .sequence_id
                     .and_then(|sequence| core.file.show.sequence(sequence));
                 fader_reading(Some(executor), sequence)
             });
-        self.controller.set_fader(Fader::Main, selected);
+        if let Some(level) = selected {
+            self.controller.set_fader(Fader::Main, level);
+        }
         // §4.1: "Save | LED lit while unsaved changes exist".
         self.controller.set_led(
             ButtonId::Global(GlobalButton::Save),
@@ -660,31 +669,47 @@ fn notice_for(health: SurfaceHealth) -> Option<Delta> {
     })
 }
 
-/// What a strip's motor fader stands at: the number its own function names.
+/// What a strip's motor fader stands at, or **nothing when the desk may not
+/// move it**.
 ///
 /// **S45.** A fader was always the master before, because that was the only
 /// number an executor had. Now what it moves is `Executor::fader_function` and
 /// what it shows has to be the same thing, or an operator moves a speed fader
 /// and watches a master.
 ///
-/// A crossfade reads **nought**: where a crossfade fader stands is a gesture in
-/// progress rather than show state (`prism_core::Effect::ExecutorXFade`), so
-/// there is nothing to put a motor at, and the resting end is the honest place
-/// for it. An empty fader and a slot with no cue list read nought for the same
-/// reason — there is no number.
+/// # `None` is the whole of B36's second half — S51
+///
+/// This used to answer **nought** for a crossfade, on the argument that there
+/// is no number to show and the resting end is the honest place for a motor.
+/// The argument was wrong in exactly one word: *motor*. Every paint wrote that
+/// nought to the fader, so a crossfade fader driven up by an operator was
+/// driven back down by the desk a fraction of a second later — which is the
+/// punch-list entry, in one function.
+///
+/// A crossfade fader shows nothing because **where it stands is the operator's
+/// hand**, and a hand is not a reading to be corrected. So the answer is
+/// `None`, [`Strips::paint`] writes nothing at all, and the shadow the
+/// controller keeps for that fader is left as it is until the fader is given a
+/// job that has a number in it.
+///
+/// `ExecutorFaderFunction::desk_may_move_it` is where the rule lives, so the
+/// screen (`ui/src/desk/session.ts`) and the desk cannot disagree about it.
 fn fader_reading(
     executor: Option<&prism_domain::Executor>,
     sequence: Option<&prism_domain::Sequence>,
-) -> u16 {
+) -> Option<u16> {
     let (Some(executor), Some(sequence)) = (executor, sequence) else {
-        return 0;
+        return Some(0);
     };
+    if !executor.fader_function.desk_may_move_it() {
+        return None;
+    }
     match executor.fader_function {
-        prism_domain::ExecutorFaderFunction::Master => sequence.master_level,
-        prism_domain::ExecutorFaderFunction::Speed => sequence.speed,
-        prism_domain::ExecutorFaderFunction::XFade | prism_domain::ExecutorFaderFunction::Empty => {
-            0
-        }
+        prism_domain::ExecutorFaderFunction::Master => Some(sequence.master_level),
+        prism_domain::ExecutorFaderFunction::Speed => Some(sequence.speed),
+        // Answered above by `desk_may_move_it`; a slot with no job on its fader
+        // has no number either.
+        _ => None,
     }
 }
 
@@ -721,6 +746,9 @@ fn legend(executor: Option<&prism_domain::Executor>) -> String {
         Fader_::Master => 'M',
         Fader_::Speed => 'S',
         Fader_::XFade => 'X',
+        // `F` for the fade-out-and-in mode — S51, B36. One character is what a
+        // scribble strip has (`docs/MCU_MAPPING.md` §4.1).
+        Fader_::Fade => 'F',
         Fader_::Empty => '-',
     });
     legend
@@ -1284,8 +1312,13 @@ mod tests {
             parameter_of(FeatureGroup::Dimmer, 0),
             Some(AttributeType::Dimmer)
         );
+        // The position bank got a third knob in S51 (B38).
+        assert_eq!(
+            parameter_of(FeatureGroup::Position, 2),
+            Some(AttributeType::PositionSpeed)
+        );
         // Past the end is nothing rather than the last one.
-        assert_eq!(parameter_of(FeatureGroup::Position, 2), None);
+        assert_eq!(parameter_of(FeatureGroup::Position, 3), None);
         assert_eq!(parameter_of(FeatureGroup::Dimmer, 9), None);
     }
 
