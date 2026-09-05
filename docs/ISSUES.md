@@ -431,6 +431,21 @@ angezeigt wird.*
 *Alles, was in keinen der Abschnitte darüber passt — Farben, Schrift,
 Meldungen, Tastatur, Leerzustände, Verhalten beim Start, Verbindungsabbrüche.*
 
+### B41 — Das Programm trug das Icon der Projektvorlage
+
+- **Wo:** Browser-Tab, Fenster, Taskleiste, Tray, Installer
+- **Schwere:** Schönheitsfehler — aber der erste, den jeder sieht
+- **Was passiert:** Der blitzförmige Bolzen in `ui/public/favicon.svg` und in `crates/prism-app/icons/` ist der von `npm create vite`, nur umgefärbt. Ein Pult, das sich in der Taskleiste als Build-Werkzeug ausgibt.
+- **Was passieren soll:** Überall das PrismDMX-Logo — und *überall* heißt fünf Stellen, nicht eine.
+- **So sieht man es:** Tab-Icon im Browser, Fenster-Icon und Taskleiste der Desktop-App, Tray, Icon der `.exe` im Explorer
+- **Ergebnis:** ✅ **behoben**, in zwei Schritten. PR #6 brachte das Logo als `ui/public/favicon.ico` — und traf damit **keine** der fünf Stellen: `ui/index.html` zeigte weiter auf die gelöschte `favicon.svg`, und weil `vite preview` unbekannte Pfade auf `index.html` zurückfallen lässt, kam kein 404, sondern HTML mit `Content-Type: text/html`. Der Browser verwirft das als Icon, und der Tab stand damit ganz **ohne** Icon da — ein Fehler, den ein 404 lauter gemeldet hätte als dieser Erfolg.
+
+  Der Rest hing an einer zweiten Quelle: die Desktop-Shell nimmt ihre Icons aus `crates/prism-app/icons/`, die `tauri.conf.json` namentlich aufzählt. Die fünf Dateien sind jetzt aus `ui/public/favicon.ico` erzeugt — 32, 128, 128@2x, 512 und ein `.ico` mit sieben Größen von 16 bis 256 —, damit Tab, Fenster, Taskleiste, Tray und Installer **ein** Bild zeigen statt fünf, die getrennt gepflegt werden müssten. Der Tray fällt von selbst mit, weil `shell.rs` `app.default_window_icon()` nimmt.
+
+  Nachgeprüft und nicht behauptet: `/favicon.ico` kommt aus dem gebauten `dist` mit 200 und `image/x-icon`, der Browser holt es beim Laden der Seite, und die frisch gelinkte `PrismDMX.exe` trägt das neue Logo als Windows-Ressource — aus der `.exe` ausgelesen, nicht aus der Quelldatei.
+
+  Bleibt offen: `ui/public/icons.svg` ist ein Sprite mit Social-Media-Symbolen aus derselben Vorlage und wird von nichts referenziert.
+
 ### B22 — Es gibt noch viele ungestylte Buttons
 
 - **Wo:** überall
