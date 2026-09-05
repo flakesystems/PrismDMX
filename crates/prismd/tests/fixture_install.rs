@@ -47,12 +47,23 @@ const VENDORED_FIXTURE: &str = r#"{
   "modes": [{ "shortName": "2ch", "channels": ["Dimmer", "Green"] }]
 }"#;
 
-/// The repository this test is part of.
+/// The repository this test is part of, in a form **another program can
+/// open**.
+///
+/// `canonicalize` on Windows returns a *verbatim* path — `\\?\D:\a\…` — which
+/// the Rust file API is happy with and which **PowerShell will not open**. So
+/// the prefix is taken off again. Reading the script here worked either way and
+/// running it did not, which is why this only ever failed on the one job that
+/// spawns `pwsh`.
 fn repository() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
-        .expect("the repository is on disk")
+        .expect("the repository is on disk");
+    match path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+        Some(plain) => PathBuf::from(plain),
+        None => path,
+    }
 }
 
 /// Builds an archive shaped exactly as the one the installer downloads: a
@@ -102,6 +113,19 @@ fn archive(work: &Path, revision: &str, fixtures: &[(&str, &str)]) -> Option<Pat
 /// branch it took, and that is worth asserting: a script that ignored the
 /// override would download the real library and pass this test by accident.
 fn install(destination: &Path, archive: &Path, revision: &str) -> Option<(bool, String)> {
+    // What the archive actually holds, in case the script cannot find a member
+    // in it. Printed rather than asserted: it is a diagnosis and not a claim.
+    if let Ok(listing) = Command::new("tar")
+        .arg("--list")
+        .arg("--file")
+        .arg(archive)
+        .output()
+    {
+        println!(
+            "the archive holds:\n{}",
+            String::from_utf8_lossy(&listing.stdout)
+        );
+    }
     let root = repository();
     let script = if cfg!(windows) {
         root.join("tools/fetch-fixtures/fetch-fixtures.ps1")
@@ -128,7 +152,14 @@ fn install(destination: &Path, archive: &Path, revision: &str) -> Option<(bool, 
     match command.output() {
         Ok(output) => Some((
             output.status.success(),
-            String::from_utf8_lossy(&output.stdout).into_owned(),
+            // **Both streams.** A script that fails says why on stderr, and an
+            // assertion that threw that away would leave a red build with
+            // nothing in it but *the installer did not finish*.
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ),
         )),
         Err(error) => {
             println!("skipping: the installer could not be run here ({error})");
@@ -252,7 +283,7 @@ fn a_venues_own_profiles_survive_a_library_re_download() {
     let Some((ran, said)) = install(&library, &archive, "abc123") else {
         return;
     };
-    assert!(ran, "the installer did not finish");
+    assert!(ran, "the installer did not finish, and said:\n{said}");
     assert!(
         said.contains("installing the Open Fixture Library from"),
         "the installer ignored the archive it was given and said: {said}"
