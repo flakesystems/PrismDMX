@@ -153,6 +153,39 @@ async fn settle(daemon: &mut Daemon) {
     }
 }
 
+/// Runs the daemon until the frame has **stopped moving**, and returns it.
+///
+/// A fixed number of slices would be a race on a loaded two-core runner: a
+/// command that had not yet reached the tick would leave the previous frame in
+/// the buffer, and a test whose whole claim is *the same walk twice* would then
+/// be comparing one stale read against one fresh one.
+///
+/// Two conditions, and both are needed. A **minimum** of slices, because the
+/// frame is stable before the command lands as well as after it; and then
+/// **stability**, because a fader movement is the only thing moving the light —
+/// every cue in this list fades over ten seconds and none of them is on the
+/// clock while a stroke is armed, so a settled frame is a settled playback.
+async fn settled_frame(daemon: &mut Daemon, frames: &prism_protocols::MockOutputHandle) -> Vec<u8> {
+    let mut last = frame(frames);
+    let mut still = 0;
+    for slice in 0..400 {
+        daemon
+            .run(Some(Duration::from_millis(5)), std::future::pending())
+            .await;
+        let now = frame(frames);
+        if now == last {
+            still += 1;
+        } else {
+            still = 0;
+            last = now;
+        }
+        if slice >= 20 && still >= 10 {
+            break;
+        }
+    }
+    last.expect("the output has had a frame")
+}
+
 /// Channel 1 of the last frame the mock output was given.
 fn channel_one(frames: &prism_protocols::MockOutputHandle) -> Option<u8> {
     frame(frames).and_then(|data| data.first().copied())
@@ -195,8 +228,7 @@ async fn walk(
             executor_id: ExecutorId::new(0),
             level: *position,
         });
-        settle(daemon).await;
-        seen.push(frame(frames).expect("the output has had a frame"));
+        seen.push(settled_frame(daemon, frames).await);
     }
     seen
 }

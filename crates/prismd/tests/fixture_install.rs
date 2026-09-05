@@ -97,8 +97,11 @@ fn archive(work: &Path, revision: &str, fixtures: &[(&str, &str)]) -> Option<Pat
 /// Runs the installer this platform has, against `destination`.
 ///
 /// `None` when there is no interpreter for it here, which is printed rather
-/// than passed over: a silent skip cannot be told from a pass.
-fn install(destination: &Path, archive: &Path, revision: &str) -> Option<bool> {
+/// than passed over: a silent skip cannot be told from a pass. `Some` carries
+/// whether it finished and what it said on the way — the first line names the
+/// branch it took, and that is worth asserting: a script that ignored the
+/// override would download the real library and pass this test by accident.
+fn install(destination: &Path, archive: &Path, revision: &str) -> Option<(bool, String)> {
     let root = repository();
     let script = if cfg!(windows) {
         root.join("tools/fetch-fixtures/fetch-fixtures.ps1")
@@ -123,11 +126,92 @@ fn install(destination: &Path, archive: &Path, revision: &str) -> Option<bool> {
         .env("PRISMDMX_OFL_ARCHIVE", archive)
         .env("PRISMDMX_OFL_REVISION", revision);
     match command.output() {
-        Ok(output) => Some(output.status.success()),
+        Ok(output) => Some((
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        )),
         Err(error) => {
             println!("skipping: the installer could not be run here ({error})");
             None
         }
+    }
+}
+
+/// **No local variable of the PowerShell script shadows one of its parameters.**
+///
+/// A guard against the fault the commit that added `-Archive` shipped and CI
+/// caught: **PowerShell variable names are case-insensitive**, so a local
+/// `$archive` *is* the `$Archive` parameter. Assigning the work directory's
+/// tarball path to it made `if ($Archive)` true on every run, and a machine that
+/// had been told nothing went down the *local archive* branch to copy a file
+/// that was not there — every Windows install, broken by a name.
+///
+/// Held as a check on the text because that is what the fault is: the two names
+/// are the same name, and no execution of the script with the override set can
+/// see it. The download branch itself is exercised by `.github/workflows/ci.yml`,
+/// which is where it was found.
+#[test]
+fn the_powershell_script_has_no_local_that_is_also_a_parameter() {
+    let script =
+        std::fs::read_to_string(repository().join("tools/fetch-fixtures/fetch-fixtures.ps1"))
+            .expect("the installer is in the repository");
+
+    // The `param(...)` block, which is the first one in the file. Its closing
+    // bracket is found by **counting**, not by the first `)`: a parameter's
+    // default is an expression and carries brackets of its own.
+    let opened = script
+        .split_once("param(")
+        .map(|(_, rest)| rest)
+        .expect("the script takes parameters");
+    let mut depth = 1_i32;
+    let mut end = opened.len();
+    for (at, character) in opened.char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = at;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let block = &opened[..end];
+    let parameters: Vec<String> = block
+        .split('$')
+        .skip(1)
+        .filter_map(|piece| {
+            let name: String = piece
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            (!name.is_empty()).then_some(name.to_lowercase())
+        })
+        .collect();
+    assert!(
+        parameters.contains(&"archive".to_owned()),
+        "the parameters were not found; this guard is reading the wrong thing: {parameters:?}"
+    );
+
+    for line in script.lines() {
+        let Some((left, _)) = line.split_once('=') else {
+            continue;
+        };
+        let trimmed = left.trim();
+        let Some(name) = trimmed.strip_prefix('$') else {
+            continue;
+        };
+        // An assignment, not a comparison or a parameter default.
+        if !name.chars().all(|c| c.is_alphanumeric() || c == '_') || left.starts_with("    [") {
+            continue;
+        }
+        assert!(
+            !parameters.contains(&name.to_lowercase()),
+            "`${name}` is a local and a parameter at once, and PowerShell cannot tell them \
+             apart: {line}"
+        );
     }
 }
 
@@ -165,10 +249,14 @@ fn a_venues_own_profiles_survive_a_library_re_download() {
     ) else {
         return;
     };
-    let Some(ran) = install(&library, &archive, "abc123") else {
+    let Some((ran, said)) = install(&library, &archive, "abc123") else {
         return;
     };
     assert!(ran, "the installer did not finish");
+    assert!(
+        said.contains("installing the Open Fixture Library from"),
+        "the installer ignored the archive it was given and said: {said}"
+    );
 
     // The installer did what it does: its destination is now the archive's, and
     // the committed note is the one thing it left.
