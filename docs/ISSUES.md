@@ -301,6 +301,9 @@ angezeigt wird.*
 - **Was passiert:** Nicht alle Kanäle von Open-Fixture-Library-Profilen sind einem Attribut und einer Kategorie im Programmer zugeordnet. Außerdem fehlt die Unterstützung von OFL-Capabilities vollständig
 - **Was passieren soll:** Alle relevanten OFL-Kanäle sollen auf Attribute und Kategorien gemappt werden; OFL-Capabilities sollen ausgewertet und unterstützt werden
 - **So sieht man es:** Ein OFL-Fixture patchen und im Programmer aufrufen — einzelne Kanäle erscheinen dort nicht oder landen in der falschen Bank
+- **Referenzen (vom Eigentümer, GitHub #2):**
+  - OFL Fixture Format: https://github.com/OpenLightingProject/open-fixture-library/blob/master/docs/fixture-format.md
+  - OFL Capability Types: https://github.com/OpenLightingProject/open-fixture-library/blob/master/docs/capability-types.md
 - **Ergebnis:** ☐ offen
 
 
