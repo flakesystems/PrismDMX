@@ -12,17 +12,30 @@
 import { describe, expect, it } from "vitest";
 
 import type { AttributeType, JsonValue, ProgrammerState } from "../bindings";
+import type { ParameterKey } from "./programmer";
 import {
   ENCODERS_PER_PAGE,
   bankParameters,
   bankReadings,
+  bankRepeats,
   encoderPage,
   groupOf,
   homeOf,
+  parameterLabel,
   sourceText,
   touchedBanks,
   valueText,
 } from "./programmer";
+
+/**
+ * One attribute of one fixture — S52.
+ *
+ * The first of a kind unless a number is given, which is what `occurrence: 0`
+ * means everywhere else: the one there has always been.
+ */
+function key(attribute: AttributeType, occurrence = 0): ParameterKey {
+  return { attribute, occurrence };
+}
 
 /** A show with two dimmers and one head, in the shape `prism-core` serialises. */
 const SHOW: JsonValue = {
@@ -60,13 +73,59 @@ const SHOW: JsonValue = {
         { attribute: "Green", featureGroup: "Color", defaultValue: 65535 },
       ],
     },
+    // **S52's two shapes.** A head with two colour wheels is the ordinary
+    // repeat: both knobs belong side by side. A tube with a red per pixel is
+    // the other one: six pages of things called *Red* is not a bank, so past
+    // `INLINE_OCCURRENCES` the band draws one part at a time.
+    twowheel: {
+      attributes: [
+        { attribute: "ColorWheel", featureGroup: "Color", defaultValue: 0 },
+        {
+          attribute: "ColorWheel",
+          occurrence: 1,
+          featureGroup: "Color",
+          defaultValue: 0,
+          ranges: [
+            { name: "Open", from: 0, to: 32767 },
+            { name: "Deep blue", from: 32768, to: 65535 },
+          ],
+        },
+      ],
+    },
+    tube: {
+      attributes: [
+        { attribute: "Red", featureGroup: "Color", defaultValue: 65535 },
+        { attribute: "Red", occurrence: 1, featureGroup: "Color", defaultValue: 65535 },
+        { attribute: "Red", occurrence: 2, featureGroup: "Color", defaultValue: 65535 },
+        { attribute: "Red", occurrence: 3, featureGroup: "Color", defaultValue: 65535 },
+      ],
+    },
+    // A lamp with a dedicated warm and cold white — the owner's own, and what
+    // S52's two new attributes are for.
+    cwww: {
+      attributes: [
+        { attribute: "WarmWhite", featureGroup: "Color", defaultValue: 65535 },
+        { attribute: "ColdWhite", featureGroup: "Color", defaultValue: 65535 },
+      ],
+    },
+  },
+};
+
+/** The fixtures with repeats, patched beside the four above. */
+const REPEATS: JsonValue = {
+  ...(SHOW as Record<string, JsonValue>),
+  fixtures: {
+    ...((SHOW as { fixtures: Record<string, JsonValue> }).fixtures),
+    "8": { typeId: "twowheel", softwareDimmer: false },
+    "9": { typeId: "tube", softwareDimmer: false },
+    "10": { typeId: "cwww", softwareDimmer: false },
   },
 };
 
 /** A programmer holding the given values, in the flat wire shape. */
 function programmer(
   selection: number[],
-  values: [number, AttributeType, number][] = [],
+  values: [number, AttributeType, number, number?][] = [],
 ): ProgrammerState {
   return {
     selection,
@@ -78,9 +137,10 @@ function programmer(
     // three: the model has thirty-four of them now (B38), and a helper that
     // silently rewrote *Gobo* as *Dimmer* would make a test of the gobo wheel
     // a test of the dimmer.
-    values: values.map(([fixture, attribute, value]) => ({
+    values: values.map(([fixture, attribute, value, occurrence]) => ({
       fixture,
       attribute,
+      occurrence: occurrence ?? 0,
       value: { value, source: "Manual", presetRef: null },
     })),
   };
@@ -99,7 +159,7 @@ describe("what an encoder reads", () => {
    * half that keeps the old argument true.
    */
   it("reads the resting value when the programmer holds nothing, and says it is not overriding", () => {
-    const [dimmer] = bankReadings(programmer([1, 2]), SHOW, "Dimmer");
+    const [dimmer] = bankReadings(programmer([1, 2]), SHOW, "Dimmer", 0);
     expect(dimmer?.level).toBeNull();
     expect(dimmer?.mixed).toBe(false);
     expect(dimmer?.held).toBe(0);
@@ -116,7 +176,7 @@ describe("what an encoder reads", () => {
    * value at the bottom of the range.
    */
   it("reads a colour at full, because that is where a colour rests", () => {
-    const red = bankReadings(programmer([5]), SHOW, "Color").find(
+    const red = bankReadings(programmer([5]), SHOW, "Color", 0).find(
       (reading) => reading.attribute === "Red",
     );
     expect(red?.home).toBe(65535);
@@ -124,19 +184,22 @@ describe("what an encoder reads", () => {
     expect(valueText(red ?? emptyReading())).toBe("100%");
   });
 
-  it("says nothing at all when nothing selected has the attribute", () => {
-    // The one case a dash is still the honest answer: there is no resting value
-    // to read, because there is no fixture to read it from.
-    const [pan] = bankReadings(programmer([1, 2]), SHOW, "Position");
-    expect(pan?.available).toBe(0);
-    expect(pan?.home).toBeNull();
-    expect(valueText(pan ?? emptyReading())).toBe("—");
+  it("draws no encoder at all for a parameter nothing selected has", () => {
+    // **S52, and the owner's own ask.** This used to be an encoder reading a
+    // dash. Two dimmers have no position at all, so the bank is empty and the
+    // band says so in a sentence instead of offering three knobs that do
+    // nothing.
+    expect(bankReadings(programmer([1, 2]), SHOW, "Position", 0)).toEqual([]);
+    expect(bankParameters(programmer([1, 2]), SHOW, "Position", 0)).toEqual([]);
+    // A dash is still what `valueText` says for a reading with nothing under
+    // it; what changed is that the band no longer makes one.
+    expect(valueText(emptyReading())).toBe("—");
   });
 
   it("reads the resting value over a selection only some of which has the attribute", () => {
     // The dimmer has no red at all, so there is one fixture to read a resting
     // value from and no disagreement to report.
-    const red = bankReadings(programmer([1, 5]), SHOW, "Color").find(
+    const red = bankReadings(programmer([1, 5]), SHOW, "Color", 0).find(
       (reading) => reading.attribute === "Red",
     );
     expect(red?.available).toBe(1);
@@ -149,7 +212,7 @@ describe("what an encoder reads", () => {
     // *Overriding* means this value goes out whatever the playbacks say, and it
     // is what a click on an encoder turns on without moving anything.
     const state = programmer([1, 2], [[1, "Dimmer", 32767]]);
-    const [dimmer] = bankReadings(state, SHOW, "Dimmer");
+    const [dimmer] = bankReadings(state, SHOW, "Dimmer", 0);
     expect(dimmer?.overriding).toBe(true);
     expect(dimmer?.held).toBe(1);
     expect(dimmer?.available).toBe(2);
@@ -166,7 +229,7 @@ describe("what an encoder reads", () => {
         [2, "Dimmer", 32767],
       ],
     );
-    const [dimmer] = bankReadings(state, SHOW, "Dimmer");
+    const [dimmer] = bankReadings(state, SHOW, "Dimmer", 0);
     expect(dimmer?.level).toBe(32767);
     expect(dimmer?.held).toBe(2);
     expect(valueText(dimmer ?? emptyReading())).toBe("50%");
@@ -180,7 +243,7 @@ describe("what an encoder reads", () => {
         [2, "Dimmer", 65535],
       ],
     );
-    const [dimmer] = bankReadings(state, SHOW, "Dimmer");
+    const [dimmer] = bankReadings(state, SHOW, "Dimmer", 0);
     expect(dimmer?.mixed).toBe(true);
     expect(dimmer?.level).toBeNull();
     expect(dimmer?.held).toBe(2);
@@ -190,38 +253,102 @@ describe("what an encoder reads", () => {
   it("counts what the selection has, not what it holds", () => {
     // Fixture 1 is a dimmer with no pan, so a Position bank over a mixed
     // selection has one fixture that can be panned and one that cannot.
-    const readings = bankReadings(programmer([1, 5], [[5, "Pan", 16383]]), SHOW, "Position");
-    // Three since S51 (B38): the position bank has a speed knob on it now, and
-    // nothing selected has one.
-    expect(readings.map((reading) => reading.attribute)).toEqual([
-      "Pan",
-      "Tilt",
-      "PositionSpeed",
-    ]);
-    expect(readings[2]?.available).toBe(0);
+    const readings = bankReadings(programmer([1, 5], [[5, "Pan", 16383]]), SHOW, "Position", 0);
+    // **Two, not three** — S52. The position bank has a speed knob on it since
+    // S51 (B38) and nothing selected has one, so it is not drawn: a bank shows
+    // what the fixtures have.
+    expect(readings.map((reading) => reading.attribute)).toEqual(["Pan", "Tilt"]);
     expect(readings[0]?.available).toBe(1);
     expect(readings[0]?.held).toBe(1);
     expect(readings[1]?.available).toBe(1);
     expect(readings[1]?.held).toBe(0);
   });
 
-  it("gives every bank its parameters in the generated order", () => {
-    expect(bankParameters("Dimmer")).toEqual(["Dimmer"]);
-    expect(bankParameters("Focus")).toEqual(["Focus"]);
-    // **Seven banks since S43 and thirty-four attributes since S51** (B38). The
-    // list is generated from `prism_domain::FeatureGroup::attributes`, so what
-    // is asserted here is the *order* reaching the encoders — the membership is
-    // `feature_groups_are_the_seven_encoder_banks`'s, in Rust.
-    //
-    // The **first four** of every bank are what they were before S51, which is
-    // the promise `AttributeType::ALL` makes and the one an operator meets: the
-    // page they land on is unchanged.
-    expect(bankParameters("Position").slice(0, 2)).toEqual(["Pan", "Tilt"]);
-    expect(bankParameters("Beam").slice(0, 3)).toEqual(["Iris", "Zoom", "Shutter"]);
-    expect(bankParameters("Gobo").slice(0, 2)).toEqual(["Gobo", "Prism"]);
-    expect(bankParameters("Color").slice(0, 4)).toEqual(["Red", "Green", "Blue", "White"]);
-    expect(bankReadings(null, null, "Beam").map((reading) => reading.index)).toEqual([
-      0, 1, 2, 3, 4, 5,
+  it("gives a bank the parameters the selection has, in the generated order", () => {
+    // **S52.** The order within a bank is still `FEATURE_GROUP_ATTRIBUTES`,
+    // generated from `prism_domain::FeatureGroup::attributes`; what is filtered
+    // is which of them the selection actually has.
+    const of = (selection: number[], bank: Parameters<typeof bankParameters>[2]) =>
+      bankParameters(programmer(selection), SHOW, bank, 0).map(parameterLabel);
+    expect(of([1], "Dimmer")).toEqual(["Dimmer"]);
+    expect(of([5], "Position")).toEqual(["Pan", "Tilt"]);
+    // **The head files its dimmer on the colour bank and the knob does not
+    // move** — a distinction that predates S52. Which bank a knob is on is
+    // `FEATURE_GROUP_ATTRIBUTES`; what a profile's own `featureGroup` decides
+    // is whether the masters may scale the channel and which bank key lights up
+    // to say the programmer is holding something.
+    expect(of([5], "Color")).toEqual(["Red"]);
+    expect(of([5], "Dimmer")).toEqual(["Dimmer"]);
+    expect(of([6], "Color")).toEqual(["Red", "Green"]);
+    // Nothing selected: no bank has anything, which is an empty band and not a
+    // row of dashes.
+    expect(of([], "Color")).toEqual([]);
+    expect(bankReadings(null, null, "Beam", 0)).toEqual([]);
+    // And the indices are the ones the jog wheel counts with, from nought.
+    expect(bankReadings(programmer([6]), SHOW, "Color", 0).map((r) => r.index)).toEqual([0, 1]);
+  });
+
+  /**
+   * **A fixture with two of a parameter gets two knobs** — S52, and the
+   * owner's own report.
+   *
+   * Numbered from the second: the first of a kind is unqualified, because a
+   * desk where every knob had a `1` after it would have made a rare case
+   * everybody's problem.
+   */
+  it("numbers a repeated parameter instead of dropping it", () => {
+    const readings = bankReadings(programmer([8]), REPEATS, "Color", 0);
+    expect(readings.map((reading) => reading.label)).toEqual(["ColorWheel", "ColorWheel 2"]);
+    expect(readings.map((reading) => reading.occurrence)).toEqual([0, 1]);
+    expect(bankRepeats(programmer([8]), REPEATS, "Color")).toBe(2);
+    // The two are separate values: the programmer holds one and not the other.
+    const held = bankReadings(
+      programmer([8], [[8, "ColorWheel", 65535, 1]]),
+      REPEATS,
+      "Color",
+      0,
+    );
+    expect(held[0]?.overriding).toBe(false);
+    expect(held[1]?.overriding).toBe(true);
+    expect(held[1]?.level).toBe(65535);
+    // And the ranges are the second wheel's own, so its steps are its own.
+    expect(held[1]?.range).toBe("Deep blue");
+    expect(held[0]?.ranges).toEqual([]);
+  });
+
+  /**
+   * **Past a few repeats the bank draws one part at a time** — S52.
+   *
+   * A tube with a red per pixel would otherwise give the colour bank a page of
+   * things called *Red* per pixel and bury the four knobs anybody reaches for.
+   * `INLINE_OCCURRENCES` is the line, and it is `prism-domain`'s rather than
+   * this side's, because the jog wheel has to agree about it.
+   */
+  it("draws one part at a time once the repeats go deeper than a few", () => {
+    const state = programmer([9]);
+    expect(bankRepeats(state, REPEATS, "Color")).toBe(4);
+    for (const part of [0, 1, 2, 3]) {
+      const readings = bankReadings(state, REPEATS, "Color", part);
+      expect(readings.map((reading) => reading.occurrence)).toEqual([part]);
+      expect(readings.map((reading) => reading.index)).toEqual([0]);
+    }
+    // A part past the end draws the last one rather than nothing: a band that
+    // went blank because a number was too big would be one an operator cannot
+    // get back. The correcting command is the band's.
+    expect(bankReadings(state, REPEATS, "Color", 99)[0]?.occurrence).toBe(3);
+    expect(bankReadings(state, REPEATS, "Color", -1)[0]?.occurrence).toBe(0);
+  });
+
+  /**
+   * **A warm white and a cold white are two knobs** — S52, the owner's lamp.
+   *
+   * They were one attribute before, so the second channel of a lamp with both
+   * was dropped and half of it did not answer.
+   */
+  it("gives a warm white and a cold white a knob each", () => {
+    expect(bankParameters(programmer([10]), REPEATS, "Color", 0).map(parameterLabel)).toEqual([
+      "WarmWhite",
+      "ColdWhite",
     ]);
   });
 });
@@ -230,8 +357,8 @@ describe("which bank an attribute is on", () => {
   it("is the profile's answer and not the attribute's name", () => {
     // The head files its dimmer under Colour, so a value on it marks *that*
     // bank — which is what `prism_core::Programmer::feature_groups` does.
-    expect(groupOf(SHOW, 5, "Dimmer")).toBe("Color");
-    expect(groupOf(SHOW, 1, "Dimmer")).toBe("Dimmer");
+    expect(groupOf(SHOW, 5, key("Dimmer"))).toBe("Color");
+    expect(groupOf(SHOW, 1, key("Dimmer"))).toBe("Dimmer");
     expect(touchedBanks(programmer([5], [[5, "Dimmer", 100]]), SHOW)).toEqual(["Color"]);
   });
 
@@ -245,22 +372,25 @@ describe("which bank an attribute is on", () => {
    * the operator's hands where a dimmer belongs.
    */
   it("supplies an intensity for a fixture whose profile has none", () => {
-    expect(groupOf(SHOW, 6, "Dimmer")).toBe("Dimmer");
-    expect(homeOf(SHOW, 6, "Dimmer")).toBe(0);
+    expect(groupOf(SHOW, 6, key("Dimmer"))).toBe("Dimmer");
+    expect(homeOf(SHOW, 6, key("Dimmer"))).toBe(0);
     // The colour beside it is untouched, and open.
-    expect(homeOf(SHOW, 6, "Red")).toBe(65535);
+    expect(homeOf(SHOW, 6, key("Red"))).toBe(65535);
+    // **And there is exactly one of it** — S52. A desk supplies one intensity,
+    // never two, so asking for a second is asking for a channel nobody has.
+    expect(groupOf(SHOW, 6, key("Dimmer", 1))).toBeNull();
   });
 
   it("supplies nothing where the operator switched it off, or where there is one already", () => {
     // Switched off in the patch: the fixture has no intensity at all, which is
     // what an operator asks for when the PAR is on a dimmer pack.
-    expect(groupOf(SHOW, 7, "Dimmer")).toBeNull();
-    expect(homeOf(SHOW, 7, "Dimmer")).toBeNull();
+    expect(groupOf(SHOW, 7, key("Dimmer"))).toBeNull();
+    expect(homeOf(SHOW, 7, key("Dimmer"))).toBeNull();
     // And a profile that *has* a dimmer keeps its own, wherever it files it —
     // the head above files one on the colour bank, and supplying a second would
     // name the same attribute twice.
-    expect(groupOf(SHOW, 5, "Dimmer")).toBe("Color");
-    expect(homeOf(SHOW, 5, "Dimmer")).toBe(65535);
+    expect(groupOf(SHOW, 5, key("Dimmer"))).toBe("Color");
+    expect(homeOf(SHOW, 5, key("Dimmer"))).toBe(65535);
   });
 
   it("marks the banks in bank order, however the values were set", () => {
@@ -277,10 +407,12 @@ describe("which bank an attribute is on", () => {
   it("answers nothing for what the show cannot resolve", () => {
     // Each of these is an ordinary state: an unpatched fixture, a profile that
     // has gone, a mode without that attribute, and a hand-edited file.
-    expect(groupOf(SHOW, 99, "Dimmer")).toBeNull();
-    expect(groupOf({ fixtures: { "1": { typeId: "gone" } } }, 1, "Dimmer")).toBeNull();
-    expect(groupOf(SHOW, 1, "Pan")).toBeNull();
-    expect(groupOf({ fixtures: { "1": { typeId: "x" } }, fixtureTypes: { x: 7 } }, 1, "Dimmer")).toBeNull();
+    expect(groupOf(SHOW, 99, key("Dimmer"))).toBeNull();
+    expect(groupOf({ fixtures: { "1": { typeId: "gone" } } }, 1, key("Dimmer"))).toBeNull();
+    expect(groupOf(SHOW, 1, key("Pan"))).toBeNull();
+    expect(
+      groupOf({ fixtures: { "1": { typeId: "x" } }, fixtureTypes: { x: 7 } }, 1, key("Dimmer")),
+    ).toBeNull();
     expect(
       groupOf(
         {
@@ -288,7 +420,7 @@ describe("which bank an attribute is on", () => {
           fixtureTypes: { x: { attributes: [4, { attribute: "Dimmer" }] } },
         },
         1,
-        "Dimmer",
+        key("Dimmer"),
       ),
     ).toBeNull();
     expect(
@@ -298,10 +430,10 @@ describe("which bank an attribute is on", () => {
           fixtureTypes: { x: { attributes: [{ attribute: "Dimmer", featureGroup: "Ultra" }] } },
         },
         1,
-        "Dimmer",
+        key("Dimmer"),
       ),
     ).toBeNull();
-    expect(groupOf(null, 1, "Dimmer")).toBeNull();
+    expect(groupOf(null, 1, key("Dimmer"))).toBeNull();
     // A value the show cannot resolve marks no bank at all — S6 drops it on the
     // way into the engine, and a knob that did nothing would be worse.
     expect(touchedBanks(programmer([99], [[99, "Dimmer", 1]]), SHOW)).toEqual([]);
@@ -356,7 +488,7 @@ describe("paging a bank", () => {
  */
 describe("where a value came from", () => {
   it("says nothing for an encoder holding nothing", () => {
-    const [dimmer] = bankReadings(programmer([1, 2]), SHOW, "Dimmer");
+    const [dimmer] = bankReadings(programmer([1, 2]), SHOW, "Dimmer", 0);
     expect(dimmer?.source).toBeNull();
     expect(sourceText(dimmer ?? emptyReading())).toBe("");
   });
@@ -366,6 +498,7 @@ describe("where a value came from", () => {
       programmer([1, 2], [[1, "Dimmer", 32767], [2, "Dimmer", 32767]]),
       SHOW,
       "Dimmer",
+      0,
     );
     // `programmer()` builds manual values, which is what an encoder turn makes.
     expect(dimmer?.source).toBe("Manual");
@@ -388,7 +521,7 @@ describe("where a value came from", () => {
         },
       ],
     };
-    const [dimmer] = bankReadings(mixed, SHOW, "Dimmer");
+    const [dimmer] = bankReadings(mixed, SHOW, "Dimmer", 0);
     expect(dimmer?.held).toBe(2);
     expect(dimmer?.source).toBeNull();
     expect(sourceText(dimmer ?? emptyReading())).toBe("~");
@@ -417,6 +550,11 @@ describe("where a value came from", () => {
 function emptyReading() {
   return {
     attribute: "Dimmer",
+    occurrence: 0,
+    label: "Dimmer",
+    // **S53.** A reading of nothing has no manufacturer's word either, so the
+    // encoder falls back to the desk's own — which is what `null` means here.
+    name: null,
     index: 0,
     level: null,
     mixed: false,
@@ -465,7 +603,7 @@ describe("a channel's named ranges", () => {
   ];
 
   it("names the range the value is standing in", () => {
-    const [gobo] = bankReadings(programmer([1], [[1, "Gobo", 30000]]), wheel(named), "Gobo");
+    const [gobo] = bankReadings(programmer([1], [[1, "Gobo", 30000]]), wheel(named), "Gobo", 0);
     expect(gobo?.ranges).toEqual(named);
     expect(gobo?.range).toBe("Gobo 1");
   });
@@ -474,7 +612,7 @@ describe("a channel's named ranges", () => {
     // Two heads with different wheels in them: offering one of the two lists
     // would name the wrong slot on half the selection, which is the same rule
     // the resting value follows.
-    const [gobo] = bankReadings(programmer([1, 2], []), wheel(named), "Gobo");
+    const [gobo] = bankReadings(programmer([1, 2], []), wheel(named), "Gobo", 0);
     expect(gobo?.ranges).toEqual([]);
     expect(gobo?.range).toBeNull();
   });
@@ -484,6 +622,7 @@ describe("a channel's named ranges", () => {
       programmer([1], [[1, "Gobo", 30000]]),
       wheel(named),
       "Gobo",
+      0,
     );
     expect(gobo?.range).toBe("Gobo 1");
     // ...and a mixed reading has no single place to be standing in.
@@ -491,6 +630,7 @@ describe("a channel's named ranges", () => {
       programmer([1], [[1, "Gobo", 30000]]),
       wheel(named),
       "Gobo",
+      0,
     )[0];
     expect(mixed?.mixed).toBe(false);
   });
@@ -499,7 +639,7 @@ describe("a channel's named ranges", () => {
     // A show that embedded its profiles before S51 carries no `ranges` key, and
     // the fixture behaves exactly as it did — which is the right answer for a
     // show somebody is about to run.
-    const [gobo] = bankReadings(programmer([1], []), wheel(undefined), "Gobo");
+    const [gobo] = bankReadings(programmer([1], []), wheel(undefined), "Gobo", 0);
     expect(gobo?.ranges).toEqual([]);
     expect(gobo?.range).toBeNull();
   });
@@ -513,7 +653,7 @@ describe("a channel's named ranges", () => {
       [{ from: 0, to: 10 }],
       [{ name: "Open", from: "nought", to: 10 }],
     ]) {
-      const [gobo] = bankReadings(programmer([1], []), wheel(broken), "Gobo");
+      const [gobo] = bankReadings(programmer([1], []), wheel(broken), "Gobo", 0);
       expect(gobo?.ranges, JSON.stringify(broken)).toEqual([]);
     }
   });
@@ -523,7 +663,86 @@ describe("a channel's named ranges", () => {
       programmer([1], [[1, "Gobo", 40000]]),
       wheel([{ name: "Open", from: 0, to: 9999 }]),
       "Gobo",
+      0,
     );
     expect(gobo?.range).toBeNull();
+  });
+});
+
+/**
+ * **What the manufacturer calls the channel** — S53, `AttributeDef::label`.
+ *
+ * Read out of the show's own embedded profile like the resting value and the
+ * ranges beside it, and it follows the **same two rules**: only when the whole
+ * selection agrees, and never guessed at. It is a **label and not a key** — both
+ * of the fixtures below are `Gobo`, so a preset made on one plays back on the
+ * other, which is the whole reason the key stayed a closed enum.
+ */
+describe("the name the manufacturer gave a channel", () => {
+  const named = (mine: unknown, theirs: unknown): JsonValue =>
+    ({
+      fixtures: { "1": { typeId: "mine" }, "2": { typeId: "theirs" } },
+      fixtureTypes: {
+        mine: {
+          attributes: [
+            { attribute: "Gobo", featureGroup: "Gobo", defaultValue: 0, label: mine },
+          ],
+        },
+        theirs: {
+          attributes: [
+            { attribute: "Gobo", featureGroup: "Gobo", defaultValue: 0, label: theirs },
+          ],
+        },
+      },
+    }) as JsonValue;
+
+  it("reads it off the profile the show embedded", () => {
+    const [gobo] = bankReadings(
+      programmer([1], []),
+      named("Rotating Gobo", "Gobo Wheel"),
+      "Gobo",
+      0,
+    );
+    expect(gobo?.name).toBe("Rotating Gobo");
+    // The desk's own word is still there underneath it, and it is the word the
+    // key is spelled with.
+    expect(gobo?.label).toBe("Gobo");
+    expect(gobo?.attribute).toBe("Gobo");
+  });
+
+  it("falls back to the desk's own word when the selection disagrees", () => {
+    // Naming one of the two would be wrong about the other half of the
+    // selection, which is the rule `home` and `ranges` already follow.
+    const [gobo] = bankReadings(
+      programmer([1, 2], []),
+      named("Rotating Gobo", "Gobo Wheel"),
+      "Gobo",
+      0,
+    );
+    expect(gobo?.name).toBeNull();
+  });
+
+  it("keeps it when the selection agrees, however they were patched", () => {
+    const [gobo] = bankReadings(
+      programmer([1, 2], []),
+      named("Rotating Gobo", "Rotating Gobo"),
+      "Gobo",
+      0,
+    );
+    expect(gobo?.name).toBe("Rotating Gobo");
+  });
+
+  it("has none for a profile embedded before S53, or for a generic one", () => {
+    const [gobo] = bankReadings(programmer([1], []), named(undefined, undefined), "Gobo", 0);
+    expect(gobo?.name).toBeNull();
+  });
+
+  it("refuses to read anything that is not a name", () => {
+    // S26's *do not read the show* rule: a mirror one delta behind a schema
+    // change shows the desk's word rather than a number or an object.
+    for (const broken of [7, null, { name: "Gobo" }, ["Gobo"]]) {
+      const [gobo] = bankReadings(programmer([1], []), named(broken, broken), "Gobo", 0);
+      expect(gobo?.name, JSON.stringify(broken)).toBeNull();
+    }
   });
 });

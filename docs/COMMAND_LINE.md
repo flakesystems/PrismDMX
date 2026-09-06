@@ -87,8 +87,29 @@ desk says so rather than guessing.
 | `at 50` | the selection to 50 % |
 | `1 thru 4 at 50` | selects and sets, which is two commands |
 | `5 pan at 25` · `5 at pan 25` | an attribute other than the dimmer, on either side of `at` |
+| `5 gobo 2 at 50` | **which one of that kind** — a head with two gobo wheels, S52 |
 | `at full` · `at out` · `at zero` | the words for the two ends |
 | `Full` | the selection to full, with nothing else on the line |
+
+An attribute word is the attribute's own name, lower-cased: `dimmer`, `pan`,
+`red`, `colorwheel`, `warmwhite`, `bladerotation`. There are forty-one of them
+and `prism_domain::AttributeType` is the list.
+
+**`raw` is the odd one and the useful one** — S54. It is not a kind of
+parameter; it is *a channel this desk has no word for*, and every DMX slot of a
+patched fixture that reaches no other attribute reaches this one. `1 raw 3 at 50`
+drives the third such channel of fixture 1 to half. Which channel that is has a
+name on the encoder — the manufacturer's own, or `Ch 7` for a slot nobody named
+— because a number alone would be a channel an operator has to count out.
+
+**A number straight after an attribute word says which channel of that kind you
+mean** — S52, and the line counts from one where the model counts from nought,
+so `gobo 1` and `gobo` are the same wheel. The rule is narrow on purpose,
+because the shortest thing an occurrence could be is also a fixture number: it
+is read only when the attribute word is **not the first word** of the line and
+the number stands **immediately before `at`**. So `pan 5 at 25` still selects
+fixture 5, and `5 at pan 25` — where the attribute stands after `at` and the
+next word is the level — is unchanged.
 
 ### 2.3 Storing
 

@@ -37,6 +37,8 @@ fn dimmer_16() -> FixtureType {
 fn attribute(coarse_offset: u16, fine_offset: Option<u16>) -> AttributeDef {
     AttributeDef {
         attribute: AttributeType::Dimmer,
+        label: None,
+        occurrence: 0,
         feature_group: AttributeType::Dimmer.feature_group(),
         coarse_offset,
         fine_offset,
@@ -88,6 +90,7 @@ fn cue(number: &str, value: u16, fade: f64) -> Cue {
         parts: vec![CuePart {
             fixture: FixtureId::new(1),
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value,
             preset_ref: None,
             tracking: prism_domain::CueTracking::Track,

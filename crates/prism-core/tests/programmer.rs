@@ -12,8 +12,8 @@ mod common;
 use common::{par_type, populated_show, preset, show_commands};
 use prism_core::{Programmer, ProgrammerError, ShowFile};
 use prism_domain::{
-    AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, PresetId, PresetPool,
-    ProgrammerValueSource, SelectionMode, SequenceId, StoreMode,
+    AttributeKey, AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, PresetId,
+    PresetPool, ProgrammerValueSource, SelectionMode, SequenceId, StoreMode,
 };
 use proptest::prelude::*;
 
@@ -36,6 +36,7 @@ fn select(ids: &[u32], mode: SelectionMode) -> Command {
 fn set(attribute: AttributeType, value: i32) -> Command {
     Command::SetAttribute {
         attribute,
+        occurrence: 0,
         value,
         relative: false,
     }
@@ -186,7 +187,7 @@ fn an_untouched_attribute_is_absent_rather_than_zero() {
     for id in [1, 2] {
         assert_eq!(
             state
-                .value(FixtureId::new(id), AttributeType::Red)
+                .value(FixtureId::new(id), AttributeKey::first(AttributeType::Red))
                 .map(|value| value.value),
             Some(65535)
         );
@@ -194,12 +195,16 @@ fn an_untouched_attribute_is_absent_rather_than_zero() {
     // Untouched, on a fixture that *is* selected and *does* have the attribute.
     assert!(
         state
-            .value(FixtureId::new(1), AttributeType::Green)
+            .value(FixtureId::new(1), AttributeKey::first(AttributeType::Green))
             .is_none(),
         "green was written as zero"
     );
     // Untouched, on a fixture that is not selected.
-    assert!(state.value(FixtureId::new(3), AttributeType::Red).is_none());
+    assert!(
+        state
+            .value(FixtureId::new(3), AttributeKey::first(AttributeType::Red))
+            .is_none()
+    );
     // And nothing else exists anywhere: two fixtures, one attribute each.
     assert_eq!(state.values.len(), 2);
     assert!(
@@ -225,8 +230,16 @@ fn an_attribute_the_fixture_does_not_have_is_not_written() {
     file.apply(&set(AttributeType::Pan, 30000)).unwrap();
 
     let state = file.programmer.state();
-    assert!(state.value(FixtureId::new(1), AttributeType::Pan).is_none());
-    assert!(state.value(FixtureId::new(4), AttributeType::Pan).is_none());
+    assert!(
+        state
+            .value(FixtureId::new(1), AttributeKey::first(AttributeType::Pan))
+            .is_none()
+    );
+    assert!(
+        state
+            .value(FixtureId::new(4), AttributeKey::first(AttributeType::Pan))
+            .is_none()
+    );
     assert!(state.values.is_empty(), "neither fixture has a pan");
 
     // And the intensity the desk supplies **is** written, to the PAR that had
@@ -236,14 +249,20 @@ fn an_attribute_the_fixture_does_not_have_is_not_written() {
     let state = file.programmer.state();
     assert_eq!(
         state
-            .value(FixtureId::new(1), AttributeType::Dimmer)
+            .value(
+                FixtureId::new(1),
+                AttributeKey::first(AttributeType::Dimmer)
+            )
             .map(|value| value.value),
         Some(30000),
         "the PAR's intensity is the desk's"
     );
     assert_eq!(
         state
-            .value(FixtureId::new(4), AttributeType::Dimmer)
+            .value(
+                FixtureId::new(4),
+                AttributeKey::first(AttributeType::Dimmer)
+            )
             .map(|value| value.value),
         Some(30000)
     );
@@ -387,14 +406,14 @@ fn a_look_is_built_out_of_several_fixtures_one_clear_at_a_time() {
     let state = file.programmer.state();
     assert_eq!(
         state
-            .value(FixtureId::new(1), AttributeType::Red)
+            .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
             .map(|value| value.value),
         Some(65535),
         "the first fixture's value did not survive the Clear that let it go"
     );
     assert_eq!(
         state
-            .value(FixtureId::new(2), AttributeType::Blue)
+            .value(FixtureId::new(2), AttributeKey::first(AttributeType::Blue))
             .map(|value| value.value),
         Some(65535)
     );
@@ -505,7 +524,7 @@ fn applying_a_preset_records_the_preset_reference() {
     let value = file
         .programmer
         .state()
-        .value(FixtureId::new(1), AttributeType::Red)
+        .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
         .expect("the preset was not applied");
     assert_eq!(value.value, 65535);
     assert_eq!(value.source, ProgrammerValueSource::Preset);
@@ -561,7 +580,7 @@ fn a_manual_change_on_top_of_a_preset_breaks_the_link() {
     let value = file
         .programmer
         .state()
-        .value(FixtureId::new(1), AttributeType::Red)
+        .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
         .unwrap();
     assert_eq!(value.source, ProgrammerValueSource::Manual);
     assert_eq!(value.preset_ref, None);
@@ -734,6 +753,7 @@ fn every_rejection_leaves_the_programmer_byte_identical() {
         },
         Command::SetAttribute {
             attribute: AttributeType::Red,
+            occurrence: 0,
             value: 65536,
             relative: false,
         },
@@ -789,6 +809,7 @@ fn any_programmer_command() -> impl Strategy<Value = Command> {
         (any::<AttributeType>(), -70000i32..70000, any::<bool>()).prop_map(
             |(attribute, value, relative)| Command::SetAttribute {
                 attribute,
+                occurrence: 0,
                 value,
                 relative,
             }
@@ -881,6 +902,7 @@ fn a_relative_move_starts_from_home_and_saturates() {
     // Nothing touched yet: the move starts at the attribute's home value.
     file.apply(&Command::SetAttribute {
         attribute: AttributeType::Red,
+        occurrence: 0,
         value: -400,
         relative: true,
     })
@@ -888,7 +910,7 @@ fn a_relative_move_starts_from_home_and_saturates() {
     assert_eq!(
         file.programmer
             .state()
-            .value(FixtureId::new(1), AttributeType::Red)
+            .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
             .map(|value| value.value),
         Some(600)
     );
@@ -896,6 +918,7 @@ fn a_relative_move_starts_from_home_and_saturates() {
     // And from there on, from the value the programmer is holding.
     file.apply(&Command::SetAttribute {
         attribute: AttributeType::Red,
+        occurrence: 0,
         value: 400,
         relative: true,
     })
@@ -903,7 +926,7 @@ fn a_relative_move_starts_from_home_and_saturates() {
     assert_eq!(
         file.programmer
             .state()
-            .value(FixtureId::new(1), AttributeType::Red)
+            .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
             .map(|value| value.value),
         Some(1000)
     );
@@ -912,6 +935,7 @@ fn a_relative_move_starts_from_home_and_saturates() {
     for (delta, expected) in [(-70000, 0), (70000, 65535)] {
         file.apply(&Command::SetAttribute {
             attribute: AttributeType::Red,
+            occurrence: 0,
             value: delta,
             relative: true,
         })
@@ -919,7 +943,7 @@ fn a_relative_move_starts_from_home_and_saturates() {
         assert_eq!(
             file.programmer
                 .state()
-                .value(FixtureId::new(1), AttributeType::Red)
+                .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
                 .map(|value| value.value),
             Some(expected)
         );

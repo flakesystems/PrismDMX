@@ -33,7 +33,8 @@ use core::fmt;
 use std::collections::BTreeSet;
 
 use prism_domain::{
-    AttributeDef, AttributeType, FeatureGroup, Fixture, FixtureId, FixtureType, UniverseId,
+    AttributeDef, AttributeKey, AttributeType, FeatureGroup, Fixture, FixtureId, FixtureType,
+    UniverseId,
 };
 
 use crate::frame::{DmxFrame, FrameLayout, UNIVERSE_CHANNELS};
@@ -351,13 +352,13 @@ impl ChannelPlan {
             // Resolved here, at patch time, so the tick carries one slot index
             // per target and asks no questions about the patch.
             let dimmer = if fixture.has_software_dimmer(fixture_type) {
-                plan.index_of(fixture.id, AttributeType::Dimmer)
+                plan.index_of(fixture.id, AttributeKey::first(AttributeType::Dimmer))
             } else {
                 None
             };
 
             for def in &fixture_type.attributes {
-                let Some(slot) = plan.index_of(fixture.id, def.attribute) else {
+                let Some(slot) = plan.index_of(fixture.id, def.key()) else {
                     return Err(PatchError::AttributeNotInPlan {
                         fixture: fixture.id,
                         attribute: def.attribute,
@@ -498,6 +499,7 @@ mod tests {
         attribute_at, fixture, fixture_type, moving_head, moving_head_16, sized_fixture_type,
     };
     use crate::{DmxFrame, FrameLayout, MergeError, MergePlan};
+    use prism_domain::AttributeKey;
     use prism_domain::{AttributeType, Fixture, FixtureId, FixtureType, UniverseId};
     use proptest::prelude::*;
 
@@ -537,7 +539,7 @@ mod tests {
     fn the_supplied_intensity_scales_the_colour_and_nothing_else() {
         let (plan, channels, par, patched) = colour_par_plans(true);
         let dimmer = plan
-            .index_of(patched.id, AttributeType::Dimmer)
+            .index_of(patched.id, AttributeKey::first(AttributeType::Dimmer))
             .expect("the desk supplied one");
         let mut values = vec![0u16; plan.slot_count()];
         for attribute in [
@@ -545,9 +547,13 @@ mod tests {
             AttributeType::Green,
             AttributeType::Blue,
         ] {
-            values[plan.index_of(patched.id, attribute).unwrap()] = u16::MAX;
+            values[plan
+                .index_of(patched.id, AttributeKey::first(attribute))
+                .unwrap()] = u16::MAX;
         }
-        values[plan.index_of(patched.id, AttributeType::Pan).unwrap()] = u16::MAX;
+        values[plan
+            .index_of(patched.id, AttributeKey::first(AttributeType::Pan))
+            .unwrap()] = u16::MAX;
 
         let mut frame = DmxFrame::new(&layout(&[1]));
         channels.encode(&values, &mut frame);
@@ -583,11 +589,14 @@ mod tests {
     fn a_fixture_with_the_switch_off_is_written_straight_through() {
         let (plan, channels, _par, patched) = colour_par_plans(false);
         assert!(
-            plan.index_of(patched.id, AttributeType::Dimmer).is_none(),
+            plan.index_of(patched.id, AttributeKey::first(AttributeType::Dimmer))
+                .is_none(),
             "no slot, so nothing to scale by"
         );
         let mut values = vec![0u16; plan.slot_count()];
-        values[plan.index_of(patched.id, AttributeType::Red).unwrap()] = u16::MAX;
+        values[plan
+            .index_of(patched.id, AttributeKey::first(AttributeType::Red))
+            .unwrap()] = u16::MAX;
         let mut frame = DmxFrame::new(&layout(&[1]));
         channels.encode(&values, &mut frame);
         assert_eq!(frame.channels()[0], 255);

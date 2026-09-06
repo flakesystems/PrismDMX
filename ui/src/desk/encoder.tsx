@@ -32,28 +32,33 @@
  * Clicking one takes it over at the value it is already showing. That is the
  * owner's own wording, and it is a turn of nought — see `App.tsx`'s `onTake`.
  *
- * # And a channel with named ranges says which one it is in — S51, B38
+ * # Every encoder here is one the selection has — S52
+ *
+ * The band used to draw a fixed table of knobs and write `—` under the ones
+ * nothing selected had. It draws only what the fixtures have now
+ * (`./programmer.ts`'s `bankParameters`), so there is no absent state left to
+ * render and `encoder-absent` is gone with it. An encoder's name is its key's:
+ * `Gobo` for the first of a kind and `Gobo 2` for the second, on a head that
+ * has two.
+ *
+ * # And a channel with named ranges is picked from, not guessed at — S51, S52
  *
  * An Open Fixture Library channel can say *0–9 open, 10–19 gobo 1, 20–29 gobo
- * 2*. Until S51 none of that was read anywhere, so a gobo wheel was a number an
- * operator had to know by heart. It is read now (`prism_domain::AttributeRange`),
- * and this encoder does the two things that follow from having it:
+ * 2*. S51 read those (`prism_domain::AttributeRange`) and hung a small button
+ * under the encoder to open the list. The owner's word on that button is that
+ * it should not be one: **right-click the encoder** and the steps come up in a
+ * window (`./rangepicker.tsx`), which is the same gesture the pools already use
+ * for *manage this* and gives the band its row of height back.
  *
- * - it **names** the range the value is standing in, under the number; and
- * - it **offers the list**, so a range can be picked instead of hunted for.
- *
- * The picker writes the **middle** of the range it was given
- * (`AttributeRange::middle`), which is the furthest any single value can be from
- * both edges — a fixture whose thresholds are a step out from its manual still
- * lands on the slot that was asked for. Nothing else changes: a gobo is still
- * one number, a cue still stores that number, and the engine has never heard of
- * a range. See `prism_domain::AttributeRange` for the line this session drew.
+ * The name of the range the value is standing in stays — it is a **reading**,
+ * not a control, so it sits inside the encoder under the percentage. An encoder
+ * whose channel has no ranges has no window and no line, and right-clicking it
+ * does nothing.
  */
 
-import { useEffect, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useState } from "react";
 
-import type { AttributeRange } from "../bindings";
 import type { ParameterReading } from "./programmer";
 import { sourceText, valueText } from "./programmer";
 import { EncoderDrag } from "./valuedrag";
@@ -65,96 +70,97 @@ export function Encoder({
   selectable,
   onSelect,
   onTurn,
-  onPickRange,
+  onSteps,
 }: {
   readonly reading: ParameterReading;
   readonly selected: boolean;
   readonly selectable: boolean;
   readonly onSelect: () => void;
   readonly onTurn: (reading: ParameterReading, delta: number) => void;
-  /** **B38.** Sets this attribute to the middle of a named range. */
-  readonly onPickRange: (reading: ParameterReading, range: AttributeRange) => void;
+  /**
+   * **S52.** Opens the steps window for this encoder.
+   *
+   * Called only where the channel has named ranges: an encoder with none has
+   * nothing to show, and a window that opened empty would be a window an
+   * operator learns to stop opening.
+   */
+  readonly onSteps: (reading: ParameterReading) => void;
 }) {
   const begin = useEncoder(reading, onTurn);
-  const [listing, setListing] = useState(false);
-  const ranges = reading.available === 0 ? [] : reading.ranges;
+  const hasSteps = reading.ranges.length > 0;
+  // **The manufacturer's word where there is one** — S53. *Rotating Gobo*
+  // rather than *Gobo 2*: the desk's own name is what an operator falls back
+  // on, not what they are holding. The **key** is unchanged either way — see
+  // `prism_domain::AttributeDef::label`.
+  const shown = reading.name ?? reading.label;
+  // **The test id is the key and not the attribute** — S52. A head with two
+  // colour wheels draws two encoders, and a name that could not tell them apart
+  // would be two elements answering to one id. The first of a kind keeps the
+  // bare name, so every id written before a fixture could have two of a
+  // parameter still names the same encoder.
+  const id =
+    reading.occurrence === 0
+      ? reading.attribute
+      : `${reading.attribute}-${String(reading.occurrence + 1)}`;
   return (
-    <div className="encoder-slot">
     <button
       type="button"
       className={`encoder${selected ? " encoder-selected" : ""}${
-        reading.available === 0 ? " encoder-absent" : ""
-      }${reading.overriding ? " encoder-overriding" : ""}`}
-      data-testid={`encoder-${reading.attribute}`}
+        reading.overriding ? " encoder-overriding" : ""
+      }`}
+      data-testid={`encoder-${id}`}
       data-selected={selected ? "yes" : "no"}
       data-overriding={reading.overriding ? "yes" : "no"}
+      data-steps={hasSteps ? "yes" : "no"}
       data-index={reading.index}
       title={
-        reading.available === 0
-          ? `Nothing selected has ${reading.attribute}`
-          : reading.overriding
-            ? `${reading.attribute} — overriding: this value goes out whatever the playbacks say. Drag to change, Shift for fine`
-            : `${reading.attribute} — resting value; click to take it over. Drag to change, Shift for fine`
+        reading.overriding
+          ? `${shown} — overriding: this value goes out whatever the playbacks say. Drag to change, Shift for fine${
+              hasSteps ? ". Right-click for its steps" : ""
+            }`
+          : `${shown} — resting value; click to take it over. Drag to change, Shift for fine${
+              hasSteps ? ". Right-click for its steps" : ""
+            }`
       }
       aria-disabled={selectable ? undefined : true}
       onPointerDown={begin}
       onClick={onSelect}
+      onContextMenu={(event) => {
+        // A channel with no steps keeps the browser's own menu out of the way
+        // all the same: this is a device screen, and a context menu over the
+        // programmer band is never what was wanted.
+        event.preventDefault();
+        if (hasSteps) {
+          onSteps(reading);
+        }
+      }}
     >
-      <span className="encoder-name">{reading.attribute}</span>
-      <span className="encoder-value" data-testid={`value-${reading.attribute}`}>
+      <span className="encoder-name" title={shown}>
+        {shown}
+      </span>
+      <span className="encoder-value" data-testid={`value-${id}`}>
         {valueText(reading)}
       </span>
+      {/*
+        **S51/S52.** The range the value is standing in, as a reading rather
+        than a button — drawn only where the channel has ranges, because a line
+        of empty space under every continuous encoder would take height off the
+        canvas for nothing (`CLAUDE.md`'s device-screen rule).
+      */}
+      {hasSteps ? (
+        <span className="encoder-step" data-testid={`range-${id}`}>
+          {reading.range ?? "—"}
+        </span>
+      ) : null}
       <span className="encoder-foot">
-        <span className="encoder-source" data-testid={`source-${reading.attribute}`}>
+        <span className="encoder-source" data-testid={`source-${id}`}>
           {sourceText(reading)}
         </span>
-        <span className="encoder-count" data-testid={`count-${reading.attribute}`}>
-          {reading.available === 0 ? "—" : `${String(reading.held)}/${String(reading.available)}`}
+        <span className="encoder-count" data-testid={`count-${id}`}>
+          {`${String(reading.held)}/${String(reading.available)}`}
         </span>
       </span>
-      </button>
-      {/*
-        **B38.** The name of the range the encoder is standing in, and the way
-        into the list. Drawn only where there is one, because a row of empty
-        space under every continuous encoder would take height off the canvas
-        for nothing — `CLAUDE.md`'s device-screen rule, and the band's height is
-        fixed.
-      */}
-      {ranges.length === 0 ? null : (
-        <button
-          type="button"
-          className="encoder-range"
-          data-testid={`range-${reading.attribute}`}
-          data-open={listing ? "yes" : "no"}
-          title={`Pick a named range of ${reading.attribute}`}
-          aria-expanded={listing}
-          onClick={() => {
-            setListing((open) => !open);
-          }}
-        >
-          {reading.range ?? "—"}
-        </button>
-      )}
-      {listing && ranges.length > 0 ? (
-        <ul className="encoder-ranges" data-testid={`ranges-${reading.attribute}`}>
-          {ranges.map((range) => (
-            <li key={`${range.name}-${String(range.from)}`}>
-              <button
-                type="button"
-                className={range.name === reading.range ? "linkish range-here" : "linkish"}
-                data-testid={`range-${reading.attribute}-${range.name}`}
-                onClick={() => {
-                  setListing(false);
-                  onPickRange(reading, range);
-                }}
-              >
-                {range.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    </button>
   );
 }
 

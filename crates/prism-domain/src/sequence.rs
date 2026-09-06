@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AttributeType, FixtureId, PresetId, RgbColor, SequenceId};
+use crate::{AttributeKey, AttributeType, FixtureId, PresetId, RgbColor, SequenceId};
 
 /// What starts a cue.
 #[derive(
@@ -83,6 +83,13 @@ pub struct CuePart {
     pub fixture: FixtureId,
     /// The attribute being set.
     pub attribute: AttributeType,
+    /// Which channel of that kind — **S52**, counted from nought.
+    ///
+    /// A fixture may have two of a parameter (a head with two colour wheels),
+    /// and this is which one. Absent means the first, so a `.prism` file
+    /// written before S52 reads back with every value where it always was.
+    #[serde(default, skip_serializing_if = "AttributeKey::occurrence_is_first")]
+    pub occurrence: u8,
     /// The value, `0..=65535`.
     pub value: u16,
     /// Link to the preset this value came from, which keeps the cue
@@ -197,6 +204,14 @@ pub struct Cue {
     pub parts: Vec<CuePart>,
 }
 
+impl CuePart {
+    /// The key this part is filed under — attribute and occurrence, **S52**.
+    #[must_use]
+    pub const fn key(&self) -> AttributeKey {
+        AttributeKey::new(self.attribute, self.occurrence)
+    }
+}
+
 impl Cue {
     /// Which attributes this cue asserts, whether they track or are taken back.
     ///
@@ -206,7 +221,7 @@ impl Cue {
     pub fn asserts(&self) -> BTreeSet<CueKey> {
         self.parts
             .iter()
-            .map(|part| (part.fixture, part.attribute))
+            .map(|part| (part.fixture, part.key()))
             .collect()
     }
 
@@ -231,7 +246,7 @@ impl Cue {
 /// A pair rather than a struct because it is a **key**: [`CueTrack`] holds its
 /// state in a map ordered by it, and the order is the one every attribute table
 /// in the desk uses — fixture number, then `AttributeType`'s own order.
-pub type CueKey = (FixtureId, AttributeType);
+pub type CueKey = (FixtureId, AttributeKey);
 
 /// One attribute whose held value moved when a cue was entered.
 ///
@@ -246,8 +261,18 @@ pub struct CueChange {
     pub fixture: FixtureId,
     /// The attribute.
     pub attribute: AttributeType,
+    /// Which channel of that kind — **S52**, counted from nought.
+    pub occurrence: u8,
     /// What it is held at from this cue on, or `None` for no longer held.
     pub value: Option<u16>,
+}
+
+impl CueChange {
+    /// The key this change is about — attribute and occurrence, **S52**.
+    #[must_use]
+    pub const fn key(&self) -> AttributeKey {
+        AttributeKey::new(self.attribute, self.occurrence)
+    }
 }
 
 /// The tracking rule, written once — **S48**.
@@ -338,7 +363,7 @@ impl CueTrack {
         here.clear();
         touched.extend(overlay.keys().copied());
         for part in &cue.parts {
-            let key = (part.fixture, part.attribute);
+            let key = (part.fixture, part.key());
             touched.insert(key);
             here.insert(key, (part.value, part.tracking));
         }
@@ -362,7 +387,8 @@ impl CueTrack {
             };
             changes.push(CueChange {
                 fixture: key.0,
-                attribute: key.1,
+                attribute: key.1.attribute,
+                occurrence: key.1.occurrence,
                 value: now,
             });
         }
@@ -685,8 +711,8 @@ const fn unity_speed() -> u16 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AttributeType, Cue, CuePart, CueProperty, CueTrack, CueTracking, CueTrackingMode,
-        CueTrigger, FixtureId, RgbColor, Sequence, SequenceId,
+        AttributeKey, AttributeType, Cue, CuePart, CueProperty, CueTrack, CueTracking,
+        CueTrackingMode, CueTrigger, FixtureId, RgbColor, Sequence, SequenceId,
     };
 
     /// **The number is trimmed on both sides**, because an operator typed one
@@ -718,6 +744,7 @@ mod tests {
             parts: vec![CuePart {
                 fixture: FixtureId::new(1),
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 65535,
                 preset_ref: None,
                 tracking: CueTracking::Track,
@@ -896,6 +923,7 @@ mod tests {
         CuePart {
             fixture: FixtureId::new(fixture),
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value,
             preset_ref: None,
             tracking,
@@ -913,7 +941,10 @@ mod tests {
     fn held(track: &CueTrack, fixture: u32) -> Option<u16> {
         track
             .visible()
-            .get(&(FixtureId::new(fixture), AttributeType::Dimmer))
+            .get(&(
+                FixtureId::new(fixture),
+                AttributeKey::first(AttributeType::Dimmer),
+            ))
             .copied()
     }
 
@@ -968,7 +999,10 @@ mod tests {
         assert_eq!(
             track
                 .tracked()
-                .get(&(FixtureId::new(1), AttributeType::Dimmer))
+                .get(&(
+                    FixtureId::new(1),
+                    AttributeKey::first(AttributeType::Dimmer)
+                ))
                 .copied(),
             Some(32_768)
         );
@@ -1045,9 +1079,12 @@ mod tests {
         // And what the cue asserts is what it names, whatever the value is.
         assert_eq!(
             look("2", vec![valued(1, 100, CueTracking::Track)]).asserts(),
-            [(FixtureId::new(1), AttributeType::Dimmer)]
-                .into_iter()
-                .collect()
+            [(
+                FixtureId::new(1),
+                AttributeKey::first(AttributeType::Dimmer)
+            )]
+            .into_iter()
+            .collect()
         );
     }
 
@@ -1080,8 +1117,20 @@ mod tests {
         assert_eq!(
             states[2].inherited(&sequence.cues[2]),
             vec![
-                ((FixtureId::new(1), AttributeType::Dimmer), 100),
-                ((FixtureId::new(2), AttributeType::Dimmer), 200),
+                (
+                    (
+                        FixtureId::new(1),
+                        AttributeKey::first(AttributeType::Dimmer)
+                    ),
+                    100
+                ),
+                (
+                    (
+                        FixtureId::new(2),
+                        AttributeKey::first(AttributeType::Dimmer)
+                    ),
+                    200
+                ),
             ]
         );
     }

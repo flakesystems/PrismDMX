@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AttributeType, FeatureGroup, FixtureId, GroupId, PresetId};
+use crate::{AttributeKey, AttributeType, FeatureGroup, FixtureId, GroupId, PresetId};
 
 /// Where a programmer value came from.
 #[derive(
@@ -168,12 +168,27 @@ pub struct ProgrammerEntry {
     pub fixture: FixtureId,
     /// The attribute that was touched.
     pub attribute: AttributeType,
+    /// Which channel of that kind — **S52**, counted from nought.
+    ///
+    /// A fixture may have two of a parameter (a head with two colour wheels),
+    /// and this is which one. Absent means the first, so a `.prism` file
+    /// written before S52 reads back with every value where it always was.
+    #[serde(default, skip_serializing_if = "AttributeKey::occurrence_is_first")]
+    pub occurrence: u8,
     /// The value.
     pub value: ProgrammerValue,
 }
 
+impl ProgrammerEntry {
+    /// The key this entry is filed under — attribute and occurrence, **S52**.
+    #[must_use]
+    pub const fn key(&self) -> AttributeKey {
+        AttributeKey::new(self.attribute, self.occurrence)
+    }
+}
+
 /// Touched values, indexed by fixture and then attribute.
-pub type ProgrammerValues = BTreeMap<FixtureId, BTreeMap<AttributeType, ProgrammerValue>>;
+pub type ProgrammerValues = BTreeMap<FixtureId, BTreeMap<AttributeKey, ProgrammerValue>>;
 
 /// The programmer: selection plus the sparse set of touched values.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
@@ -264,7 +279,7 @@ pub struct ProgrammerState {
 
 /// Serialises [`ProgrammerValues`] as a flat list of [`ProgrammerEntry`].
 mod entry_list {
-    use super::{ProgrammerEntry, ProgrammerValues};
+    use super::{AttributeKey, ProgrammerEntry, ProgrammerValues};
     use serde::ser::SerializeSeq as _;
     use serde::{Deserialize as _, Deserializer, Serializer};
 
@@ -275,10 +290,11 @@ mod entry_list {
         let count = values.values().map(|attributes| attributes.len()).sum();
         let mut seq = serializer.serialize_seq(Some(count))?;
         for (&fixture, attributes) in values {
-            for (&attribute, &value) in attributes {
+            for (&key, &value) in attributes {
                 seq.serialize_element(&ProgrammerEntry {
                     fixture,
-                    attribute,
+                    attribute: key.attribute,
+                    occurrence: key.occurrence,
                     value,
                 })?;
             }
@@ -292,10 +308,10 @@ mod entry_list {
         let entries = Vec::<ProgrammerEntry>::deserialize(deserializer)?;
         let mut values = ProgrammerValues::new();
         for entry in entries {
-            values
-                .entry(entry.fixture)
-                .or_default()
-                .insert(entry.attribute, entry.value);
+            values.entry(entry.fixture).or_default().insert(
+                AttributeKey::new(entry.attribute, entry.occurrence),
+                entry.value,
+            );
         }
         Ok(values)
     }
@@ -355,21 +371,13 @@ impl ProgrammerState {
 
     /// The value for one fixture and attribute, if it has been touched.
     #[must_use]
-    pub fn value(&self, fixture: FixtureId, attribute: AttributeType) -> Option<&ProgrammerValue> {
-        self.values.get(&fixture)?.get(&attribute)
+    pub fn value(&self, fixture: FixtureId, key: AttributeKey) -> Option<&ProgrammerValue> {
+        self.values.get(&fixture)?.get(&key)
     }
 
     /// Records a touched value, replacing any previous one.
-    pub fn set_value(
-        &mut self,
-        fixture: FixtureId,
-        attribute: AttributeType,
-        value: ProgrammerValue,
-    ) {
-        self.values
-            .entry(fixture)
-            .or_default()
-            .insert(attribute, value);
+    pub fn set_value(&mut self, fixture: FixtureId, key: AttributeKey, value: ProgrammerValue) {
+        self.values.entry(fixture).or_default().insert(key, value);
     }
 
     /// Forgets one touched value, returning it.
@@ -379,10 +387,10 @@ impl ProgrammerState {
     pub fn clear_value(
         &mut self,
         fixture: FixtureId,
-        attribute: AttributeType,
+        key: AttributeKey,
     ) -> Option<ProgrammerValue> {
         let attributes = self.values.get_mut(&fixture)?;
-        let removed = attributes.remove(&attribute);
+        let removed = attributes.remove(&key);
         if attributes.is_empty() {
             self.values.remove(&fixture);
         }
@@ -393,8 +401,8 @@ impl ProgrammerState {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AttributeType, ClearStage, Delta, FeatureGroup, FixtureId, GroupId, InvalidClearStage,
-        PresetId, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
+        AttributeKey, AttributeType, ClearStage, Delta, FeatureGroup, FixtureId, GroupId,
+        InvalidClearStage, PresetId, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
     };
     use std::collections::BTreeMap;
 
@@ -407,7 +415,7 @@ mod tests {
             values: BTreeMap::from([(
                 FixtureId::new(1),
                 BTreeMap::from([(
-                    AttributeType::Blue,
+                    AttributeKey::first(AttributeType::Blue),
                     ProgrammerValue {
                         value: 65535,
                         source: ProgrammerValueSource::Preset,
@@ -446,7 +454,7 @@ mod tests {
         let back: ProgrammerState = serde_json::from_str(&json).unwrap();
         assert_eq!(back, state());
         assert_eq!(
-            back.value(FixtureId::new(1), AttributeType::Blue)
+            back.value(FixtureId::new(1), AttributeKey::first(AttributeType::Blue))
                 .map(|value| value.value),
             Some(65535)
         );
@@ -466,13 +474,17 @@ mod tests {
         let state = state();
         assert!(
             state
-                .value(FixtureId::new(1), AttributeType::Blue)
+                .value(FixtureId::new(1), AttributeKey::first(AttributeType::Blue))
                 .is_some()
         );
-        assert!(state.value(FixtureId::new(1), AttributeType::Red).is_none());
         assert!(
             state
-                .value(FixtureId::new(2), AttributeType::Blue)
+                .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
+                .is_none()
+        );
+        assert!(
+            state
+                .value(FixtureId::new(2), AttributeKey::first(AttributeType::Blue))
                 .is_none()
         );
     }
@@ -484,14 +496,14 @@ mod tests {
         let mut state = state();
         assert_eq!(
             state
-                .clear_value(FixtureId::new(1), AttributeType::Blue)
+                .clear_value(FixtureId::new(1), AttributeKey::first(AttributeType::Blue))
                 .map(|value| value.value),
             Some(65535)
         );
         assert!(state.values.is_empty());
         assert!(
             state
-                .clear_value(FixtureId::new(1), AttributeType::Blue)
+                .clear_value(FixtureId::new(1), AttributeKey::first(AttributeType::Blue))
                 .is_none()
         );
     }
@@ -504,10 +516,14 @@ mod tests {
             source: ProgrammerValueSource::Manual,
             preset_ref: None,
         };
-        state.set_value(FixtureId::new(1), AttributeType::Dimmer, manual);
         state.set_value(
             FixtureId::new(1),
-            AttributeType::Dimmer,
+            AttributeKey::first(AttributeType::Dimmer),
+            manual,
+        );
+        state.set_value(
+            FixtureId::new(1),
+            AttributeKey::first(AttributeType::Dimmer),
             ProgrammerValue {
                 value: 200,
                 ..manual
@@ -515,7 +531,10 @@ mod tests {
         );
         assert_eq!(
             state
-                .value(FixtureId::new(1), AttributeType::Dimmer)
+                .value(
+                    FixtureId::new(1),
+                    AttributeKey::first(AttributeType::Dimmer)
+                )
                 .map(|value| value.value),
             Some(200)
         );
@@ -585,7 +604,7 @@ mod tests {
         state.selection.push(FixtureId::new(1));
         state.set_value(
             FixtureId::new(1),
-            AttributeType::Dimmer,
+            AttributeKey::first(AttributeType::Dimmer),
             ProgrammerValue {
                 value: 100,
                 source: ProgrammerValueSource::Manual,
@@ -622,7 +641,7 @@ mod tests {
         let mut state = ProgrammerState::default();
         state.set_value(
             FixtureId::new(7),
-            AttributeType::Dimmer,
+            AttributeKey::first(AttributeType::Dimmer),
             ProgrammerValue {
                 value: 65_535,
                 source: ProgrammerValueSource::Manual,

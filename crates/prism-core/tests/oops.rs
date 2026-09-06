@@ -75,6 +75,7 @@ fn program(file: &mut ShowFile) {
     .unwrap();
     file.apply(&Command::SetAttribute {
         attribute: AttributeType::Red,
+        occurrence: 0,
         value: 65535,
         relative: false,
     })
@@ -230,6 +231,7 @@ fn undoable_command() -> impl Strategy<Value = Command> {
         (any::<AttributeType>(), -70_000i32..70_000, any::<bool>()).prop_map(
             |(attribute, value, relative)| Command::SetAttribute {
                 attribute,
+                occurrence: 0,
                 value,
                 relative,
             }
@@ -854,6 +856,7 @@ fn nothing_is_journaled_for_a_command_that_changed_nothing() {
     // for the value to go.
     file.apply(&Command::SetAttribute {
         attribute: AttributeType::Red,
+        occurrence: 0,
         value: 65535,
         relative: false,
     })
@@ -931,6 +934,7 @@ fn an_undo_can_take_something_away_as_well_as_put_it_back() {
     .unwrap();
     file.apply(&Command::SetAttribute {
         attribute: AttributeType::Red,
+        occurrence: 0,
         value: 65535,
         relative: false,
     })

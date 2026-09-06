@@ -327,7 +327,16 @@ test("**paging the encoders agrees**: the console's `Zoom ▲▼` and the bar mo
   await openWindow(page, "Status");
   await openWindow(page, "Executors");
 
-  // Dimmer has one parameter, so there is one page and nowhere to go.
+  // **Select the two-cell bar** — S52, and the whole reason there is a second
+  // page to walk. A bank's knobs are what the *selection* has now, so with
+  // nothing selected every bank is empty; fixture 6 has a red, a green, a blue
+  // and a white **per cell**, which is eight knobs on the colour bank.
+  await page.getByTestId("command-input").fill("6");
+  await page.getByTestId("command-input").press("Enter");
+  await expect(page.getByTestId("selection")).toHaveText("6");
+
+  // Dimmer is the desk's supplied intensity — one parameter, one page, nowhere
+  // to go.
   await expect(page.getByTestId("bank-Dimmer")).toHaveAttribute("data-active", "yes");
   await expect(page.getByTestId("programmer-page")).toHaveText("1/1");
   await expect(page.getByTestId("encoder-page-down")).toBeDisabled();
@@ -343,39 +352,41 @@ test("**paging the encoders agrees**: the console's `Zoom ▲▼` and the bar mo
   // (`AttributeType::feature_group`). Three knobs is one page and no paging to
   // observe, so the second page this test needs is Colour's.
   //
-  // **And Colour is four pages since S51** (B38): the nineteen attributes the
-  // Open Fixture Library needs put cyan, magenta, yellow, UV, lime, indigo, a
-  // colour wheel and a colour temperature on that bank. The *first* page is
-  // still red, green, blue and white, which is the promise `AttributeType::ALL`
-  // makes when it appends rather than interleaves — so what an operator meets
-  // is unchanged and what this test walks is longer.
+  // **And since S52 a bank's knobs are what the selection has**, so the two
+  // pages this test walks are the bar's two **cells**: red, green, blue, white,
+  // then *Red 2, Green 2, Blue 2, White 2*. The first page is what it always
+  // was, which is the promise the ordering makes — every first occurrence in
+  // the generated order, then every second — so what an operator meets is
+  // unchanged and what this test walks is the thing S52 built.
   pressConsole(started.keys, ASSIGN_COLOR);
   await expect(page.getByTestId("bank-Color")).toHaveAttribute("data-active", "yes");
 
   await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(4);
   await expect(page.getByTestId("encoder-Red")).toBeVisible();
   await expect(page.getByTestId("encoder-White")).toBeVisible();
+  // Nothing selected has an amber, so there is no knob for one at all — S52's
+  // other half, and the owner's own ask.
   await expect(page.getByTestId("encoder-Amber")).toHaveCount(0);
-  await expect(page.getByTestId("programmer-page")).toHaveText("1/4");
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
   await expect(page.getByTestId("encoder-page-down")).toBeEnabled();
 
   // **`Zoom ▼` on the console pages the browser.**
   pressConsole(started.keys, ZOOM_DOWN);
-  await expect(page.getByTestId("programmer-page")).toHaveText("2/4");
+  await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
   await expect(page.getByTestId("encoders").locator("[data-index]")).toHaveCount(4);
-  await expect(page.getByTestId("encoder-Amber")).toBeVisible();
+  await expect(page.getByTestId("encoder-Red-2")).toBeVisible();
   await expect(page.getByTestId("encoder-Red")).toHaveCount(0);
 
   // Now the *interface* pages, and the console's next press carries on from
   // where the browser left it — which is the criterion: **one page number**.
   await page.getByTestId("encoder-page-up").click();
-  await expect(page.getByTestId("programmer-page")).toHaveText("1/4");
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
   await expect(page.getByTestId("encoder-Red")).toBeVisible();
 
   pressConsole(started.keys, ZOOM_DOWN);
-  await expect(page.getByTestId("programmer-page")).toHaveText("2/4");
+  await expect(page.getByTestId("programmer-page")).toHaveText("2/2");
   pressConsole(started.keys, ZOOM_UP);
-  await expect(page.getByTestId("programmer-page")).toHaveText("1/4");
+  await expect(page.getByTestId("programmer-page")).toHaveText("1/2");
   await expect(page.getByTestId("encoder-page-up")).toBeDisabled();
 });
 

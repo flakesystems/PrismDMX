@@ -137,8 +137,11 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S51 | The punch list, and v0.9.1 | ✅ | 2026-09-05 | All exit criteria verified — see §2.47. **The first session driven by somebody else's list**, and all six entries closed with none deleted or narrowed. The crossfade is two modes and the desk never moves the fader again — asserted on **frames**, byte for byte, and against the MIDI leaving the daemon. Clear lets go of the selection before it forgets the values, asserted as a *sequence* so the next reordering goes red. The Open Fixture Library arrives whole: `AttributeType` is **34** instead of 15, `channels_unmapped` is **nought** over the whole 634-fixture corpus where it was **5 037 of 15 150**, and 44 053 named ranges reach the encoders. A venue's own profiles have a directory no installer touches, and the real install script runs over one in a test. Full screen is `F11` and `Alt` + `Enter`, driven in the browser. A desk killed from Task Manager is noticed within a second by a **test** rather than by an operator. Three consequences nobody asked for came with them and each is in §2.47: B1's colour rule was wrong for filters, the update state hung on the wrong half of a Clear, and *nothing moves the fader* needed one predicate rather than two. The line B38 stops at is written down and carried as **S52**. Published as **`v0.9.1`**, a GitHub pre-release |
+| S52 | A fixture may have two of a parameter | ✅ | 2026-09-06 | All exit criteria verified — see §2.48. **The second session driven by the owner's own list**, and it is one subject with four holes in it: what a fixture profile becomes when it is patched. `AttributeType` alone stopped being the key every value in a show is filed under — it is `AttributeKey`, plus a nought-based **occurrence** — so `channels_duplicate` is **nought** over the installed corpus where it was **2 679**, and a head with two colour wheels keeps both. `Warm White` and `Cold White` are their own attributes, which is the owner's own lamp: folded into `White`, the second of the two was dropped and half the fixture did not answer. The encoder banks show **only the parameters the selection has**, numbered where a fixture has repeats and stepped by parts where it has more than fit; the **steps of a wheel come off a right-click** and carry the manufacturer's own names out of the profile's `wheels` block, where **3 440 of 4 497** read *Slot 3* before. And the 90 profiles with a matrix insert can be patched at all: the library yields **2 871 profiles** where it yielded 2 157. **No migration** — an absent occurrence *is* the first, so a `v0.9.1` show opens with every value where it was. Three things nobody asked for came with them and each is in §2.48: the show model's own duplicate check was asking the old question, `SessionState::commit` is a hand-written diff a new field does not reach, and the interface's `bankParameters` stopped being a table one test was asserting through |
+| S53 | Every capability the format distinguishes | ✅ | 2026-09-06 | All exit criteria verified — see §2.49. The owner asked whether the parameter names could simply be taken **dynamically out of the fixture file**, and then asked for the Open Fixture Library's own two documents to be read before an answer was given. Reading them gave a better answer than the question suggested: the format is a **closed set of 43 capability types** with **discriminators** beside them, and the previous table read the type and threw the discriminators away — lossily, in a way **no counter could show**, because `channels_unmapped` stayed at nought while channels arrived under the wrong knob. So the key stays a closed enum, which is what lets one command line reach a rig from three manufacturers, and what comes out of the file dynamically is the **label**. `AttributeType` is **40**: a colour wheel's rotation, a hazer, one framing blade turning and the whole frame turning. **What a wheel is comes from its slots** — and from *most* of them, because ten wheels of the corpus mix kinds and on six the first slot is not what the wheel is: **115 wheel channels leave the gobo bank**, 110 of them colour. A framing blade is numbered by the **`blade` the file states**, so *Blade 3* is blade three and not the third blade channel. And **37 526 channels carry the name their manufacturer gave them** onto the encoder — *Rotating Gobo*, not *Gobo 2* — out of the show's own embedded profile, so a library update cannot rename a patched rig. Two things worth having in the record: `ColorWheelRotation` is reached by **nothing** in the corpus and the test asserts that as **nought** rather than wishing otherwise, because a colour wheel's scroll is a range on the select channel and that is one knob; and a figure I had given the owner twice was **wrong**, caught by the test, because it was measured with a rule the reader does not use |
+| S54 | No slot of a patched fixture is out of reach | ✅ | 2026-09-06 | All exit criteria verified — see §2.50. The owner read S53 and said the thing S53 had not: *"Es kann nach dem aktuellen Prinzip passieren, dass manche Channels mancher Fixtures nicht ansteuerbar sind."* Measured rather than argued about, it was **707 DMX slots in 337 of the 2 871 profiles** — including **34 of the 35** channels of a `glp/knv-cube` and **9 of the 10** of a `jb-systems/twin-effect-laser`, both of them effectively unusable while every counter in the reader read nought. The counters could not see it because they only ever asked *did this channel reach an attribute*, never *does this slot have a knob*. The answer is a **floor and not four fixes**: `AttributeType::Raw`, the 41st and the only row that is not a kind of parameter, so that every slot of a patched fixture has exactly one `AttributeDef` — and the corpus asserts **that**, over 40 953 slots, rather than asserting the four causes away one at a time. A fifth cause is the reason it is a floor: a capability type a later version of the format adds. In the same pass **B49 is closed**, and the question turned out to be wrong: a switching alias never moves the footprint, so *resolve or refuse* was a false choice — where the file's own positions agree about what the slot is, it is that (**97 channels**), and where they disagree it is a raw knob under the alias's own name, because a knob labelled *Colour Wheel* that is a gobo half the time is worse than one labelled *Channel 2*. `B1`'s own test caught the one real defect on the way: a switched red rested shut |
 
-**Done:** 31 / 45 · **In progress:** 0 · **Blocked:** 0
+**Done:** 34 / 47 · **In progress:** 0 · **Blocked:** 0
 
 **Eleven sessions were added on 2026-08-14** — S33–S43 — for the output patch,
 the real MIDI port, the settings window, the control editor, the desk-layout
@@ -3875,6 +3878,237 @@ are named in `ARCHITECTURE_SPEC.md` §14's 🪟 row rather than claimed here:
 Neither is a code path without a test. Both are the last inch, on a machine with
 a screen.
 
+### 2.48 S52 verification record
+
+Measured on 2026-09-06. The second session driven by the owner's own list rather
+than by the plan: **a fixture may have two of a parameter** (the plan's S52),
+and four things asked for in the same breath — the parameters that were still
+missing, an encoder bank that shows only what the fixtures have, the predefined
+steps by right-click, and the matrix profiles that could not be patched at all.
+
+| Check | Result |
+|---|---|
+| **`channels_duplicate` is nought over the installed corpus** | ✅ `every_channel_in_the_installed_library_maps_to_an_attribute` asserts it as a number beside `channels_unmapped`, which is how S51 asserted the other half. It was **2 679** — a head's upper colour wheel, every pixel of a tube but one. The counter stays, because a profile can still defeat it: more than 256 channels of one kind in one mode is a key one byte wide cannot hold, and the honest answer is to count that rather than truncate it onto an occurrence somebody else owns |
+| **The corpus, before and after** | ✅ **2 871 profiles** where there were 2 157, from the same 627 fixtures; **37 070 attributes** mapped; 0 unmapped; 99 `NoFunction`; **0 modes skipped for an insert**, where 90 profiles and 724 inserts were skipped whole. **4 162 repeated parameters**, the deepest **72 occurrences** — a tube with a red, a green and a blue per pixel over twenty-four pixels |
+| **A profile with two colour wheels patches, and both reach DMX** | ✅ `a_second_channel_of_a_kind_is_numbered_rather_than_dropped` (`prism_core::library::ofl`) is the reader's half, and the merge's half is the type: `MergePlan` sorts and searches on `(fixture, attribute, occurrence)`, `ChannelPlan` resolves a target per `AttributeDef`, and `every_profile_in_the_installed_library_is_one_a_show_accepts` runs all 2 871 profiles through the same door `Command::EmbedFixtureType` goes through — which is what caught `ShowError::DuplicateAttribute` still asking the old question |
+| **A `v0.9.1` file opens with every value on the first occurrence** | ✅ and it is the serde default that makes it true rather than a migration: `occurrence` is `#[serde(default, skip_serializing_if = …)]` on every carrier, so an older document has no such key and reads as nought — **and a show with no repeats serialises byte for byte as it did**, which is the second half and the one a migration would have broken. `crates/prism-core/tests/persistence.rs` is green with **no assertion changed** — its struct literals gained an explicit `occurrence: 0` and nothing else — and `store.rs`'s `the_frozen_fixture_is_the_show_it_was_written_from` still compares the migrated version-1 file byte for byte. The claim is also asserted on its own, in `prism_domain`: `an_absent_occurrence_is_the_first_and_the_first_writes_nothing` |
+| **Warm white and cold white** | ✅ the owner's own report (`docs/ISSUES.md` B45), and the plainest statement of what an occurrence is for. The format names thirteen emitter colours; this model had eleven, because `Warm White` and `Cold White` were both read as `White` — a wrong label on a lamp with one of them, and a **dropped channel** on a lamp with both, which is exactly the owner's. `a_fixture_with_a_warm_and_a_cold_white_keeps_both` reads **16 profiles** of the corpus with both, and asserts that the two land on different channels |
+| **Only the attributes a fixture has** | ✅ `prism_core::Programmer::bank_parameters` replaces the fixed table `FeatureGroup::attributes` was, and **`prismd::surface::parameter_of` asks the same function**. S22's warning — turn the wheel, watch a parameter other than the highlighted one move — is answered the way it was when the list was a table: by there being one of them. `the_wheel_walks_the_list_the_encoder_bar_is_given` asserts index for index over every bank |
+| **…and the two shapes a bank can be in** | ✅ up to `prism_domain::INLINE_OCCURRENCES` repeats stand side by side, numbered — two colour wheels, a warm and a cold white — and past that the band draws one **part** at a time with a stepper, because an eight-pixel tube would otherwise give the colour bank six pages of things called *Red*. The constant is `prism-domain`'s and is exported to TypeScript, because the jog wheel has to agree about it |
+| **The steps, by right-click** | ✅ and the fault under it was not the gesture. S51 read a range's name **out of the capability** (`comment`, `effectName`), and a wheel capability rarely has one — it has `wheel` and `slotNumber`, and the name is in the fixture's own `wheels` block, which the reader had never opened. **3 440 of the corpus's 4 497 wheel capabilities** read *Slot 3*. It is now **115 957 of 115 966 ranges named**, nine still a bare slot number, and those nine are files whose wheel has fewer slots than the channel has capabilities. Nothing is invented: name, then the `resource` key's last part, then the slot's own `type` |
+| **…and the window** | ✅ `desk/rangepicker.tsx` over `chrome/modal.tsx` — the panel the window chooser and the fixture library already use, so there is no third copy. The button under the encoder is gone and the band has its row of height back; the *name* of the step stays, inside the encoder, as a reading. A right-click on an encoder with no steps opens nothing |
+| **Matrix inserts** | ✅ `prism_core::library::matrix`, and the reason it is this session is that an expanded matrix **is** a fixture with eight reds. OFL's own pixel-key rule (`lib/model/Matrix.js`), the four `repeatFor` keywords, the explicit array the corpus uses 480 times, and both `channelOrder`s. `eachPixelGroup` is *ordered by appearance in the JSON file*, which a `serde_json::Value` cannot answer — its maps are sorted — so the order is read off the stream with a `MapAccess` visitor rather than guessed at from the sorted names |
+| **…and what is still skipped** | ✅ named rather than quietly folded in: a **switching channel** is a footprint that depends on another channel's *value* while the show runs, which is a different question from one that depends on the fixture's own geometry. `docs/ISSUES.md` carries it as **B49** and `README.md` names it under *what it cannot do yet* |
+| **`1 gobo 2 at 50`** | ✅ and the rule is narrow on purpose, because the shortest thing an occurrence could be is also a fixture number. Three conditions: the attribute word is not the first word, the next word is a whole number, and that number stands immediately before `at`. `a_number_after_an_attribute_names_which_one_of_that_kind` asserts the new form **and** that `5 at pan 25` and `pan 5 at 25` still mean what they meant |
+| **The tick is untouched** | ✅ and there is a **tenth path** now, because the claim needed one: `a_tick_with_a_fixture_of_thirty_two_repeated_channels_allocates_nothing` builds a tube-shaped profile — thirty-two reds, one per pixel, plus the intensity the desk supplies it — and ticks 2 112 slots a thousand times for **0 allocator calls**. It could not have been written before S52: that profile was a one-channel fixture with thirty-one dropped channels. The other nine read 0 unchanged. What could have gone wrong here is arithmetic rather than a call — `MergePlan::index_of` searches a three-part key now — and this is where that is measured rather than assumed |
+| **The gates** | ✅ `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check` clean; `cargo test --workspace` **2 260 tests, 0 failed** across **82** test binaries, with the one caveat below; in `ui/`: `npx tsc -b`, `npm run lint`, `npm run test` (**828 tests in 56 files**) and `npm run e2e` (**47 tests, 4.8 minutes**, against a real `prismd` in mock-output mode) all clean. Run one at a time, as `README.md` asks |
+| **…and the paging walk is now the thing S52 built** | ✅ `ui/e2e/desk.spec.ts`'s *paging agrees* used to walk the colour bank's four pages of attributes. A bank's knobs are a question about the selection now, so a long table no longer proves the bar pages at all — it walks the **two cells of the bar** instead: *Red, Green, Blue, White*, then *Red 2, Green 2, Blue 2, White 2*, paged from the X-Touch and from the browser against one page number. The rig had to gain that fixture, and it is one that could not have existed before this session |
+| **…and the one red run that was the machine** | `prismd::outputs::an_art_net_output_whose_node_never_answers_is_not_reported_ok` failed once during this session and **passes on its own**. It is a timing test about a node that never answers, on a machine that had been carrying a `cargo test --workspace` and a `vitest` run at once for an afternoon — §5's standing note, and the same finding S45 and S48 recorded. Nothing in S52 opens `prism-protocols` or the discovery path |
+| **The recordings** | ✅ `desk-rig.prism` and `desk-recording.json` regenerated (`cargo test -p prismd --test ui_programmer -- --ignored`), because the rig **gained a fixture**: a two-cell bar with a red, a green, a blue and a white **per cell**. It is there so that the paging tests page something real — a bank's knobs are a question about the selection now, so a long table no longer proves the bar pages — and it is a fixture that could not have existed before S52: its second cell was four dropped channels. The other five recordings are untouched. **The guard on the committed file did its job**: `the_committed_rig_is_dark_and_has_more_than_one_encoder_bank_on_it` went red on *the rig is five fixtures* the moment the file was regenerated, which is exactly what it is for — a fixture that quietly stopped existing under the interface's paging tests would otherwise be a suite testing nothing. It asserts the repeats now as well |
+
+#### What this changed that nobody asked for
+
+**`ShowError::DuplicateAttribute` was asking the wrong question, and the corpus
+found it.** The reader numbered the repeats correctly on the first run and
+`channels_duplicate` read nought — and then
+`every_profile_in_the_installed_library_is_one_a_show_accepts` failed on
+`5star-systems/spica-250m/16bit: defines Gobo twice`. The show model's own
+validator still compared `def.attribute`, so a profile the *reader* now produced
+was one the *show* refused. Both errors kept their names and both now ask about
+the **key**: a fixture may have two colour wheels; what it may not have is two
+first colour wheels.
+
+**The interface's `bankParameters` stopped being a table, and one test had to
+stop asserting through it.** `ui/src/desk/session.test.ts` held the UI's bank
+membership to the daemon's recording by calling `bankParameters`; that function
+now answers a question about the *selection*, so the recording is compared
+against `FEATURE_GROUP_ATTRIBUTES` — the table both sides still filter — and the
+filtering is asserted separately. The claim S26 made is unchanged; what moved is
+which of the two halves each test holds.
+
+### 2.49 S53 verification record
+
+Measured on 2026-09-06, and it began with a question rather than a fault. The
+owner asked *"Es muss am Ende jedes mögliche Fixture abgebildet werden. Ist es
+dafür nicht am einfachsten, die Namen einfach dynamisch aus der Fixture
+Definition Datei zu entnehmen?"* — then asked for the two Open Fixture Library
+documents to be read properly before an answer was proposed.
+
+Reading them produced a better answer than the one the question suggested. The
+format is not a list of names to lift; it is a **closed set of 43 capability
+types** with **discriminators** beside them — properties that split one type into
+distinct physical parameters. `ColorIntensity` carries a `color`; `WheelSlot`
+carries a `wheel`, whose slots have types; `BladeInsertion` and `BladeRotation`
+carry a `blade`; `Fog` carries a `fogType`. The previous table read the **type**
+and discarded all of it, which is lossy in a way **no counter could show**:
+`channels_unmapped` sat at nought the whole time, because every channel arrived
+*somewhere*. So the key stays a closed enum — that is what lets one command line
+reach a rig from three manufacturers — and what comes out of the file
+**dynamically is the label**.
+
+| Check | Result |
+|---|---|
+| **What a wheel is comes from its slots** | ✅ not from its name, which is free text: `a_wheel_goes_to_the_bank_its_slots_say_it_belongs_on` uses a wheel called `Wheel A` on purpose. Over the corpus: **109 colour wheels, 131 gobo, one each of prism, iris and frost**, and **115 wheel channels leave the gobo bank** — 110 of them colour. `the_capability_discriminators_reach_the_attributes_they_name` holds both halves, because a change that moved *every* wheel to the colour bank would satisfy the first half alone |
+| **…and it is what most of the wheel is** | ✅ the rule was *the first slot that says anything* for one draft, and the corpus refuted it: **ten wheels mix kinds, and on six the first slot is not what the wheel is**. `beamz/panther-7r` and `elation/proteus-hybrid` both call a wheel *Gobo Wheel* and put an iris at the top of it; *first one wins* sent all six to the iris knob. Counting the body slots — `Open` and `Closed` say nothing and are not counted — moved **nine profiles** back. A tie goes to the slot listed first, which is the only order there is to appeal to. `a_wheel_that_mixes_kinds_is_the_kind_most_of_its_slots_are` and `a_wheel_split_evenly_between_two_kinds_takes_the_one_listed_first` |
+| **`ColorWheelRotation` is reached by nothing, and that is asserted as nought** | ✅ the honest half of this session. Almost every colour wheel of the corpus puts its scroll as a **range at the top of the select channel** — *slot 1 … slot 8, then rotate CW* — and such a channel is **one knob**, which the reader gets by taking the channel's first mapped capability. The one profile with a dedicated scroll channel (`futurelight/dmh-75-i-led-moving-head`) declares it and puts it in no mode. The row exists because the **format** makes the distinction and a fixture will land on it; the corpus test asserts `== 0` with the two readings that would make it change, and the rule lives in the unit test where a rule belongs |
+| **Which blade, out of the file** | ✅ `blade` is the occurrence — `Top`/`Right`/`Bottom`/`Left` in the order the format itself lists them, or a number from one. Before S53 a profile spot's eight framing channels were **one** attribute numbered by the order this reader met them, so *Blade 3* meant *the third blade channel*. Inserting is not rotating and one blade is not the frame: **28 blade rotations, 15 frame rotations** over the corpus. A stated number another channel has already taken falls back to counting rather than landing on top of it — a profile contradicting itself must not cost a channel |
+| **A hazer is not a fog machine** | ✅ `fogType`, and **13 haze channels** in the corpus. `FogOutput` with no type stated stays fog, because the file has not said otherwise |
+| **The encoder reads the manufacturer's word** | ✅ `AttributeDef::label`: **37 526 channels carry their own name and none do not** (`every_channel_of_the_installed_library_carries_its_own_name`). It is a **label and never a key** — two heads whose reds are called different things still share `AttributeType::Red`. Two selected fixtures that disagree fall back to the desk's own word, under `home`'s rule: naming one of them would be wrong about the other |
+| **…and it travels in the show, not in the library** | ✅ read out of the **embedded** profile like `homeOf` and `rangesOf` are, so a library re-download cannot rename a patched fixture's channels under a running production. The cost is stated rather than hidden: a fixture patched before this release keeps the desk's words until it is re-patched |
+| **Nothing was invented** | ✅ the owner's standing instruction from S52, and it applies to the whole of this session: every attribute added corresponds to a distinction the format **states**, and where the file says nothing the reader keeps the behaviour it had. `Unknown` is a wheel whose slots say nothing this desk knows, and it behaves as a gobo wheel — which is what **every** wheel did before S53 |
+| **`AttributeType` is forty and still appends** | ✅ `ALL: [Self; 40]`. The order is a promise: `FeatureGroup::attributes` is this list filtered and the encoder bar pages it four at a time, so the first page of the colour bank is still Red, Green, Blue, White. Four new words on the command line, out of the same table |
+
+#### The gates
+
+Run in `README.md`'s order, each one on its own:
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | ✅ **2 268 passed**, 0 failed, across 82 binaries |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all --check` | ✅ clean |
+| `npm --prefix ui run test` | ✅ **837 passed**, 56 files — nine of them S53's own: five holding the label's two rules in `programmer.test.ts` (only when the selection agrees, never guessed at) and four holding what the encoder actually draws |
+| `npm --prefix ui run lint` · `tsc --noEmit` | ✅ clean |
+| `npm --prefix ui run e2e` | ✅ **47 passed** |
+| The allocation gate | ✅ **0 allocator calls on all ten paths** — S53 touches the reader, not the tick |
+
+**Both short jitter gates went red once and the cause is recorded rather than
+hidden:** they were run concurrently with a `vitest` run and read p50 6.4 ms and
+3.5 ms against a 2 ms bound. Re-run on a quiet machine they pass. That is the
+same finding §5's tick-deadline row has recorded three times, and the reason it
+is written down again is that a red gate whose cause is not stated is a red gate
+somebody will later assume was the code.
+
+Both recordings were regenerated (`ui/tests/fixtures/desk-recording.json` and
+`daemon-recording.json`), because the bank tables moved: **sixteen** on Colour,
+**eight** on Beam, **five** on Control.
+
+#### What this changed that nobody asked for
+
+**A number I had asserted twice was wrong, and the test is what said so.** I told
+the owner that the split moved *122 colour-wheel channels and 245 colour-wheel
+rotations*. Both came from a throwaway script whose wheel rule was not the
+reader's — it called a wheel `Color` if **any** slot was a colour — and the 245
+were **capabilities**, not channels. Re-measured with the reader's own rule the
+figures are **115 channels, of which 110 are colour wheels, and no colour-wheel
+rotations at all**. The corpus test went red on `assert!(at(ColorWheelRotation) >
+0)`, which is the assertion doing its job on its author. The lesson is narrower
+than *check your figures*: **a measurement taken with a different rule than the
+code uses is not a measurement of the code**, and the only honest place to count
+is the code's own path.
+
+**Every hand-written `AttributeDef` in the test suites needed the new field.**
+Thirty-odd literals across nine crates, and `label` is `Option<String>` with
+`#[serde(default, skip_serializing_if)]` for the same reason `occurrence` is — a
+profile embedded before S53 reads back with no label and the encoder shows the
+desk's word, with nothing rewritten and no migration.
+
+**`library::ofl`'s module header was three sessions stale, and nothing had gone
+red over it.** It still said *this domain model has fifteen `AttributeType`s*,
+still listed *the first channel claiming an attribute wins* as the rule, and
+still carried a bullet saying **CMY, UV, lime and indigo are dropped** — which
+S51 fixed and S52 built on. A doc comment is the one thing in this repository
+with no test behind it, so the only thing that catches it is reading the file
+you are editing from the top. It is current as of S53, and the general note for
+a later session is that **a module header describing a rule that has since
+changed is worse than no header**: it is a confident wrong answer.
+
+
+### 2.50 S54 verification record
+
+Measured on 2026-09-06, and it started with one sentence from the owner about
+the session that had just finished: *"Es kann nach dem aktuellen Prinzip
+passieren, dass manche Channels mancher Fixtures nicht ansteuerbar sind. Dafür
+müssen wir eine Lösung finden."*
+
+It was right, and the first job was to find out **how** right rather than to
+agree. The counters could not answer: `channels_unmapped`, `channels_duplicate`
+and `modes_with_inserts` all read nought. So the question was asked the way an
+operator would ask it — **for every profile, how many of its DMX slots have a
+knob on them?** — and the answer was **707 slots in 337 of the 2 871 profiles**,
+1.7 % of slots and **12 % of profiles**. `glp/knv-cube/35ch` reached one of its
+thirty-five channels; `jb-systems/twin-effect-laser/10ch` reached one of ten.
+Both patch, both look right in the picker, and neither can be operated.
+
+| Check | Result |
+|---|---|
+| **No slot of any profile is out of reach** | ✅ **707 → 0** over 40 953 slots, and it is an *assertion* rather than a count: `no_slot_of_any_profile_is_out_of_reach` walks every profile's footprint and fails naming the worst offenders. This is the sentence the session exists to make true, and it is the one that could not be said before — every counter that existed asked whether a **channel** reached an attribute, and none asked whether a **slot** had a knob |
+| **…and the raw knob stays the exception** | ✅ a floor that made every slot a `Raw` would satisfy the line above and be useless, so `the_raw_channel_is_the_exception_and_not_the_rule` holds the shape as well: **619 raw of 38 233 attributes**, 1.6 %, and every one of them carries a name. The two together are the claim; either alone can be satisfied by a bad answer |
+| **Four ways a slot went missing, and a fifth that is the point** | ✅ counted separately so a re-import that made one worse is visible: a switching alias whose positions disagree (**289**), a `null` mode entry (**210**), a channel the file says does nothing (**99**), a fine byte with no coarse channel (**14**). The fifth is a capability type a later version of the format adds — and it is the reason this is a floor and not four fixes, because that one cannot be enumerated in advance |
+| **`AttributeType::Raw`, the 41st** | ✅ and the only row in that enum that is not a *kind* of parameter: it says *there is a channel here*. `FeatureGroup::Control`, LTP, resting where the file says. It is **last on the last bank**, so a venue that never patches a fixture with one never meets it — the band draws only what the selection has (S52, B46) |
+| **…named in the operator's own words** | ✅ S53's `label` is what makes a raw knob usable rather than a curiosity: the manufacturer's word where the file has one (*Channel 2*, *Reserved 1*), and **`Ch 7`** where it does not — the channel's own place in the fixture counted from one, which is the number on a patch sheet. Asserted as *never absent* on a raw attribute, because a knob nobody can name is one nobody can use |
+| **B49 closed, and the question it asked was wrong** | ✅ *either resolve a switching channel or refuse it* is an alternative that does not exist. **The footprint never moves** — an alias is exactly one slot in every position — so refusing was never necessary; and the file names the whole set of channels the alias can be, so refusing was never all that was available. Where every position agrees about the parameter, the slot **is** that parameter: **97 channels** of the corpus, `Layer 1 Red` on the colour bank rather than as a raw knob. Where they disagree — **178 of the 246 aliases** — it stays raw under its own name |
+| **Nothing is invented** | ✅ the owner's standing rule from S52, and it decides two things here. A resolved switching alias gets **no named steps**, because which ranges the slot has belongs to whichever channel is live and the positions disagree about them even where they agree about the parameter. And a raw knob gets none either, for the same reason written smaller: there is nothing to read them from |
+| **A `.prism` file written before S54 opens unchanged** | ✅ nothing about the *format* moved. `Raw` is an appended enum row and a profile embedded before S54 has no raw attributes in it, so an older show reads back exactly as it was written — the fixture keeps the holes it was patched with until it is re-patched, which is the same rule S53's labels follow and the same reason: what a show embeds is what a show runs |
+
+#### The gates
+
+Run in `README.md`'s order, each one on its own:
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | ✅ **2 275 passed**, 0 failed, across 82 binaries |
+| `cargo clippy --workspace --all-targets -- -D warnings` | ✅ clean |
+| `cargo fmt --all --check` | ✅ clean |
+| `npm --prefix ui run test` | ✅ **840 passed**, 56 files — three of them S54's own, holding the desk half: a raw channel is a knob on Control under the profile's name, a gesture on it still names `Raw 2`, and a right-click opens nothing because there is nothing to read steps from |
+| `npm --prefix ui run lint` · `tsc --noEmit` | ✅ clean |
+| `npm --prefix ui run e2e` | ✅ **47 passed** |
+| The allocation gate | ✅ **0 allocator calls on all ten paths**, with more merge slots per fixture than before — a raw slot is an `AttributeDef` like any other and the tick learned no new branch |
+
+Both recordings were regenerated, and the reason is the one that makes them
+worth having: `the_recorded_answers_are_what_the_documents_say` went red on the
+Control bank reading five attributes where the daemon now says six. That test is
+the only thing holding the interface's idea of a bank to the daemon's, and it
+noticed a change nobody had told it about.
+
+**CI is green on the pushed branch**, which is the half of a gate run that a
+local machine cannot answer for: runs
+[34063301885](https://github.com/flakesystems/PrismDMX/actions/runs/34063301885)
+(push) and
+[34063331612](https://github.com/flakesystems/PrismDMX/actions/runs/34063331612)
+(pull request), both **success**, on
+[#15](https://github.com/flakesystems/PrismDMX/pull/15). The work of S52, S53 and
+S54 went up as **two** commits rather than three, and the reason is worth
+recording because it is a fact about this tree rather than a preference: S53 and
+S54 **overwrote lines S52 had written**, so S52's intermediate text exists
+nowhere any more — the diff against `v0.9.1` goes straight from S51's
+`attribute_of(definition)` to S53's three-argument form. Three commits could
+have been made to *read* like the three sessions, but two of them would not have
+built, and a history that cannot be bisected is worth less than one commit that
+is true. The three sessions are told apart in the places that are meant to tell
+them apart: §2.48, §2.49 and §2.50, the decision log, and `docs/ISSUES.md`
+B44–B52 — all of which ship *inside* that commit.
+
+#### What this changed that nobody asked for
+
+**`B1`'s own test found the one real defect, on a fixture nobody was looking
+at.** A switching alias that resolves to a red is a red — and the first version
+built it from the raw constructor, which rests a slot at nought. An additive
+emitter rests **open** (B1, S43, corrected in S51), so
+`no_profile_in_the_installed_library_rests_a_colour_shut` went red on
+`gruft/pixel-tube/Pixel`: *rests Red at 0*. The alias carries no `defaultValue`
+of its own — which channel is live decides that — so the answer is the one
+`default_value` already gives when a file states nothing, and the fix is to ask
+it. The lesson is one this project keeps re-learning in new shapes: **a new way
+of building an `AttributeDef` is a new way of getting every rule about
+`AttributeDef` wrong**, and the rules are only held by the tests that were
+written for the old way.
+
+**Four tests asserted the old behaviour in as many words, and none of them was
+wrong when it was written.** *the three nulls are nobody's channels*, *a
+readable mode with nothing usable in it*, *a colour from the future is counted*,
+*nine channels and eight attributes* — each was an accurate statement of what
+the reader did, and each had to become an accurate statement of what it does
+now. They were rewritten with the reason beside them rather than deleted, which
+is what keeps the next reader from thinking the old answer was an oversight
+rather than a decision that stopped being right.
+
+**`modes_without_attributes` is nought by construction now.** It used to count a
+mode that converted and controlled nothing; with a floor under every slot, a
+mode with entries always has a knob per entry and a mode without entries is
+refused earlier. The counter stays, held to nought the way `channels_unmapped`
+is — a counter that *can* fire and does not is worth more than a deleted one.
+
 ---
 
 ## 3. Coverage tracking
@@ -4376,7 +4610,7 @@ Every one is recorded as plain data so verification is a data update, not a refa
 | ~~Art-Net **discovery** against a real node~~ | — | ✅ **verified 2026-08-30 (S46)** — an **SGM** node at `2.16.10.66`, directly on Ethernet with no switch between. It answers a **unicast** `ArtPoll`, which is what this desk sends, so *poll where you already send* holds against real hardware and the broadcast this desk refuses to send was not needed. Discovered, named and shown; one reply per poll. **Two faults were found getting there and both are fixed** — a reply padded past 239 bytes discarded on Windows, and this machine's inbound firewall rule covering the wrong network profile — and the second is now something the desk says out loud rather than something an operator has to guess. The old text: ☐ unverified, and **deliberately not blocking**. Everything a socket can answer is asserted with nothing on the network: a mock node on loopback is polled, answers, is named and shown (`artpoll_wire.rs`, over a real `UdpSocket`); one that stops reads *stopped* with the age, inside one poll interval; one that never answers never reads well, over the protocol against a running daemon (`crates/prismd/tests/artnet_nodes.rs`); and a quarter of a million random bytes produce no panic and **zero** allocator calls. What only a real node can answer is two things, and both are about **other people's firmware**: whether it replies to a **unicast** `ArtPoll` rather than only to a broadcast one — §6 says it must, and this desk deliberately sends no broadcast — and whether it announces itself at power-up, which is what makes an unconfigured node appear at all. If a venue's nodes turn out to answer only broadcasts, the change is one address and one permission flag in `DiscoveryConfig`, not a code change. `ARCHITECTURE_SPEC.md` §14 |
 | 🪟 The shell's window, tray and dialogues | nothing — S29 is complete without it | ☐ unverified **by a person**, and deliberately not blocking. Everything the shell *decides* is asserted with no window at all: `attach::approach` over all four shapes of discovery document, `autostart::reconcile` over the four states of the comparison and the update case, `dialogs::chooser` over all seven places a path is asked for, `spawn::arguments` over what a daemon this shell starts is told, and the bridge in jsdom over both of the places the interface runs. What is left is that the *platform* does what it is asked — a tray item is clickable, a native dialogue returns what was picked, a `HKCU\…\Run` value survives a log-out. `ARCHITECTURE_SPEC.md` §14 has the recipe as six numbered steps, in the order a person would do them, and none of them is a code change to verify. **S51 added two steps to it and closed neither**, which is the honest half of two punch-list entries: **(7)** press `F11` and then `Alt` + `Enter` — the *window* loses and regains its title bar, which only a desktop can say (the browser half is driven end to end in `ui/e2e/desk.spec.ts`); **(8)** with the desk running, end `prismd.exe` from Task Manager — within a second the tray tooltip reads *the desk has stopped*, the window comes forward with the sentence, and the icon **leaves the notification area** when it is acknowledged; start the program again and there is exactly one icon. Every decision behind step 8 is asserted in `crates/prism-app/tests/watching.rs` against a real advisory lock released the way a kill releases it; what is left is the icon |
 | The installer on a Windows machine with **no toolchain on it** | nothing — the build is reproducible in CI | ☐ **half-verified.** What is verified: the installer is built by `.github/workflows/ci.yml`'s `shell` job on a stock `windows-latest` runner on every commit, and by `release.yml` again before a release — so it is not a file that exists only on one machine. What is **not**: nobody has yet run the produced `.exe` on a Windows machine that has never had a Rust toolchain, a Node installation or this repository on it. The claim that needs it is *the program finds its own engine and its own fixture library beside itself*, which is a claim about the **bundle's** layout rather than about the code, and the machine that could answer it is a beta tester's — which is what the closed beta is for. The first report that the desk starts on a machine that never built it closes this row |
-| The ten-minute tick-deadline gate, on **this** machine | nothing — the short gates CI runs are green | ☐ **not re-measured at S51, and the reason is stated rather than assumed.** S51 rewrote the crossfade inside `prism-engine::player`, so the question was asked properly: what it added to the *tick* is one `match` on a mode and one subtraction — `Stroke::progress` replaces a clock read, and a held stroke does **less** work per tick than a running fade, because the clock is not consulted at all. The allocation gate reads **0 on all nine paths** with both modes pushed through the queue, and the short jitter gates are green. A ten-minute reading taken on a container also running a Node build would say nothing about either. The row below is S48's and still stands. **Measured at S48, red, and the control says it is the machine and not the code. Not re-measured at S49**, which opened neither `prism-engine` nor any output driver: parsing a line happens on the command path, the allocation gate reads 0 on all nine paths unchanged, and there is nothing this session could have made slower.** S48 put a binary search per slot into every cue entry, so the ten-minute gate was re-run — and beside it, in the same hour and on the same machine, the **bare tick with no merge body at all** (`the_tick_alone_holds_its_deadline_for_ten_minutes`). **The full pipeline** — 64 universes, four drivers — missed **57** of 26 344 ticks over 600 s with p50 **100 µs**, p99 **1.1 ms** and p99.9 **133 ms**, on a machine reading 29 % busy; an earlier run of the same test at 47 % busy missed **77** of 26 324 with p99.9 **68.8 ms**. **The bare tick**, with no merge body at all, missed **47** of 26 354 in the same hour with p50 100 µs, p99 **1.1 ms** and p99.9 **74.9 ms**.  **A tick with nothing in it cannot be slower than a tick doing the merge, the encoder and eight cue lists, so the difference is not the engine**: this machine was carrying `GeoGuessr`, `Discord`, `firefox` and a live audio stack (`voicemeeter8`, `audiodg`) throughout, and the p99 of **1.1 ms** is inside the gate in every run — what fails it is a handful of multi-millisecond stalls, which is a scheduler preempting a thread and not arithmetic taking too long. It is the same finding S45 recorded at 35 % busy, measured this time with the control beside it rather than against nothing. What *is* the engine is measured and green: the allocation gate reads **0 on all nine paths**, and the short jitter gates CI runs are green on every job. **Re-run it on a quiet machine**: `cargo test -p prism-engine --release --test realtime -- --ignored the_tick_holds_its_deadline_for_ten_minutes --nocapture`, and run the bare-tick control beside it whenever the answer is not zero — the pair is the measurement, never the first number alone. §3.1 has the harness, §3's note has why the numbers move |
+| The ten-minute tick-deadline gate, on **this** machine | nothing — the short gates CI runs are green | ☐ **not re-measured at S54, and here the question was worth asking properly.** S54 gives a slot a knob where it had none, so a fixture carries **more merge slots than before** — 707 more over the whole corpus, and 34 more on the one profile that gained most. That is arithmetic on the tick, which is what a deadline gate answers for. What it is *not* is a new **kind** of work: a raw slot is an `AttributeDef` like any other, `MergePlan` sorts and searches it with the same three-part key, and nothing on the tick learned a new branch. The allocation gate reads **0 on all ten paths**, including the one carrying thirty-two repeated channels, and the two short jitter gates are green. **Not re-measured at S53, and this time the reason is that nothing on the tick moved.** S53 changed the **library reader** and added four rows to an enum; `MergePlan`, `ChannelPlan` and the merge body are untouched, and an `Option<String>` on `AttributeDef` is read when a profile is embedded, never on a tick. The allocation gate reads **0 on all ten paths**. The two short jitter gates went red **once** in this session and the cause is recorded rather than hidden: they were run concurrently with a `vitest` run, read p50 6.4 ms and 3.5 ms, and pass on a quiet machine — which is the same finding the row below has recorded three times. **Not re-measured at S52 either, and the reason is a measurement rather than an argument.** S52 widened the key every merge slot is filed under, so `MergePlan::index_of` searches a three-part key and a fixture can carry thirty-two channels of a kind. That is arithmetic on the tick, which is exactly what a deadline gate would answer for — so the allocation gate got a **tenth path** instead, and it reads **0 allocator calls over 2 112 repeated slots** in a thousand ticks (`a_tick_with_a_fixture_of_thirty_two_repeated_channels_allocates_nothing`). The short jitter gates are green. A ten-minute reading taken on a machine that has been carrying a workspace test run and a `vitest` run all afternoon would say nothing about either, and one test in `prismd::outputs` went red on exactly that and passes alone. **Not re-measured at S51, and the reason is stated rather than assumed.** S51 rewrote the crossfade inside `prism-engine::player`, so the question was asked properly: what it added to the *tick* is one `match` on a mode and one subtraction — `Stroke::progress` replaces a clock read, and a held stroke does **less** work per tick than a running fade, because the clock is not consulted at all. The allocation gate reads **0 on all nine paths** with both modes pushed through the queue, and the short jitter gates are green. A ten-minute reading taken on a container also running a Node build would say nothing about either. The row below is S48's and still stands. **Measured at S48, red, and the control says it is the machine and not the code. Not re-measured at S49**, which opened neither `prism-engine` nor any output driver: parsing a line happens on the command path, the allocation gate reads 0 on all nine paths unchanged, and there is nothing this session could have made slower.** S48 put a binary search per slot into every cue entry, so the ten-minute gate was re-run — and beside it, in the same hour and on the same machine, the **bare tick with no merge body at all** (`the_tick_alone_holds_its_deadline_for_ten_minutes`). **The full pipeline** — 64 universes, four drivers — missed **57** of 26 344 ticks over 600 s with p50 **100 µs**, p99 **1.1 ms** and p99.9 **133 ms**, on a machine reading 29 % busy; an earlier run of the same test at 47 % busy missed **77** of 26 324 with p99.9 **68.8 ms**. **The bare tick**, with no merge body at all, missed **47** of 26 354 in the same hour with p50 100 µs, p99 **1.1 ms** and p99.9 **74.9 ms**.  **A tick with nothing in it cannot be slower than a tick doing the merge, the encoder and eight cue lists, so the difference is not the engine**: this machine was carrying `GeoGuessr`, `Discord`, `firefox` and a live audio stack (`voicemeeter8`, `audiodg`) throughout, and the p99 of **1.1 ms** is inside the gate in every run — what fails it is a handful of multi-millisecond stalls, which is a scheduler preempting a thread and not arithmetic taking too long. It is the same finding S45 recorded at 35 % busy, measured this time with the control beside it rather than against nothing. What *is* the engine is measured and green: the allocation gate reads **0 on all nine paths**, and the short jitter gates CI runs are green on every job. **Re-run it on a quiet machine**: `cargo test -p prism-engine --release --test realtime -- --ignored the_tick_holds_its_deadline_for_ten_minutes --nocapture`, and run the bare-tick control beside it whenever the answer is not zero — the pair is the measurement, never the first number alone. §3.1 has the harness, §3's note has why the numbers move |
 | ~~SH-RS09B USB VID/PID and real frame rate~~ | — | ✅ **verified 2026-08-11 (S8)** — `0403:6001`, serial `B0037HIY`, `FT232R USB UART`, 35.5 Hz over 60 s. `DeviceProfile::SH_RS09B` carries `verified: true` and the tests assert the measurements. **Holding it as data paid for itself:** the whole verification was three fields and one test, with no code changed anywhere else — see `ARCHITECTURE_SPEC.md` §14 |
 
 ---
@@ -4387,6 +4621,20 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-09-06 | S54 | **A counter can only find what it was built to look for, and every counter this reader had was looking at channels.** `channels_unmapped`, `channels_duplicate`, `channels_undefined` and `modes_with_inserts` all read nought, and **707 DMX slots of the installed library had no knob on them** — 34 of the 35 channels of a `glp/knv-cube`. Each of those counters answers *what did the reader fail to understand*, and every one of them can be nought while an operator cannot reach a channel, because a slot the reader did not understand was simply not written down. The absence had no name, so nothing could count it | The assertion asks the **operator's** question instead: *for every profile, does every DMX slot of its footprint have exactly one `AttributeDef`?* (`no_slot_of_any_profile_is_out_of_reach`, over 40 953 slots.) The general shape is worth more than the fix: **an invariant stated over what a thing produces is stronger than any number of counters over what it discards**, because the discards are a list somebody has to remember to extend and the production is not. The counters stayed, as diagnostics — they still say what the reader did not understand, which is a real and different question |
+| 2026-09-06 | S54 | **A floor is not four fixes, and the difference is the fifth cause.** Four things put a slot out of reach: a switching alias, a `null` mode entry, a `NoFunction` channel, an orphaned fine byte. Fixing exactly those four would have made the corpus green today and left the next capability type the format grows to fall through the same hole in silence — which is precisely how the four got there, one session at a time | `AttributeType::Raw` is a **default**, not a case: every slot that reaches no other attribute reaches it, so a capability type nobody has taught this reader yet arrives as a named knob rather than as nothing. It is the 41st row and the only one in the enum that is not a kind of parameter — it says *there is a channel here* — which is why it is last, on the last bank, where a venue that never patches such a fixture never meets it. `a_colour_this_model_has_never_heard_of_is_still_counted` now asserts both halves at once: still counted, **and** still reachable |
+| 2026-09-06 | S54 | **B49 asked *resolve or refuse* and the answer was neither, because the footprint never moves.** A switching channel had been left out of S52 on the grounds that *a footprint that changes while the show runs* is a different problem from one that depends on the fixture's geometry. Reading the format properly says the premise is false: an alias occupies **exactly one slot in every position**, and the file names the complete set of channels it can be, statically. Nothing about the layout depends on a running value | Two answers instead of one, chosen by what the file says. Where every position agrees about the parameter, the slot **is** that parameter — 97 channels of the corpus, `Layer 1 Red` on the colour bank. Where they disagree (178 of 246 aliases) it is a raw knob under the alias's own name, because a knob labelled after one position is wrong in the others and *Channel 2* is at least true. What is genuinely left is narrower than B49 and could only be named once the rest was done: the desk does not **follow** the switch while the show runs, which is a question about the show model rather than about reading the file — `docs/ISSUES.md` **B52** |
+| 2026-09-06 | S54 | **A second way of building an `AttributeDef` is a second way of getting every rule about `AttributeDef` wrong.** The resolved switching alias was built from the raw-channel constructor, which rests a slot at nought — and a resolved alias that is a *red* must rest **open**, because B1's rule is about the attribute and not about how the definition was made. `no_profile_in_the_installed_library_rests_a_colour_shut` failed on `gruft/pixel-tube/Pixel`, a fixture nobody was looking at | The switched branch asks `default_value` like every other branch does, and the alias's missing `defaultValue` is exactly the *file states nothing* case that function already handles — emitter open, pan and tilt centred, everything else shut. The lesson is where to look next time: **when a new constructor appears beside an old one, the rules the old one enforced are now a list nobody is holding it to**, and the only thing that caught this was a corpus test written two sessions earlier for a different reason |
+| 2026-09-06 | S53 | **A closed key and a dynamic label are two different questions, and the owner's asked the first while needing the second.** *"Ist es nicht am einfachsten, die Namen einfach dynamisch aus der Fixture Definition Datei zu entnehmen?"* — and reading the Open Fixture Library's own two documents properly said no, twice over. The format is a **closed set of 43 capability types**, so there is no open-ended name to lift; and if there were, a key taken from the file would mean `1 gobo at 50` reached the head whose manufacturer wrote *Gobo* and not the one who wrote *Gobo Wheel*. What the file does carry, and what the previous table threw away, are the **discriminators** beside a type | Two answers to two questions. The **key** stays a closed enum — `AttributeType`, now forty — and grows only where the format states a distinction: `ColorWheelRotation`, `Haze`, `BladeRotation`, `BladeSystem`. The **label** comes out of the file: `AttributeDef::label` carries the manufacturer's own channel name onto the encoder, **37 526 of them** in the corpus. The rule is worth stating plainly because it will come up again: **what an operator reads should come from the file; what a preset is filed under must not** |
+| 2026-09-06 | S53 | **A lossy conversion can leave every counter at nought.** `channels_unmapped` was nought and `channels_duplicate` was nought, and **115 wheel channels** were still on the wrong encoder bank — 110 of them colour wheels an operator pressing *Colour* would not find. Nothing was lost; it arrived somewhere. The counters could only ever ask *did this channel reach an attribute*, never *did it reach the right one* | The corpus test asks the second question: `the_capability_discriminators_reach_the_attributes_they_name` asserts that each attribute the discriminators produce is **reached**, and — the half that matters — that the **gobo bank still has its gobo wheels**, because a change that moved every wheel to the colour bank would satisfy the first half alone. The general lesson: **a counter of failures cannot measure a misclassification**, and the only assertion that can is one naming both sides of the split |
+| 2026-09-06 | S53 | **A wheel is what most of it is, not what the first slot says.** The first draft classified a wheel by the first slot that named a kind, and its own doc comment said *the thing it mostly is* — code and comment disagreeing in plain sight. The corpus settled it: **ten wheels mix kinds and on six the first slot is not what the wheel is**. `beamz/panther-7r` and `elation/proteus-hybrid` both call a wheel *Gobo Wheel* and put an iris at the top of it, so *first one wins* sent six plainly-gobo wheels to the iris knob | `kind_of` counts the body slots (`Open` and `Closed` say nothing and are not counted) and takes the majority, with a tie going to the slot listed first — the only order there is to appeal to. Nine profiles moved back to the gobo bank. Two unit tests hold the rule and the tie separately, because the tie is the part a later reading would quietly change |
+| 2026-09-06 | S53 | **A figure I gave the owner twice was measured with a rule the code does not use.** I reported *122 colour-wheel channels and 245 colour-wheel rotations* moving banks. Both came from a throwaway script whose wheel rule was *any slot is a colour* rather than the reader's, and the 245 were **capabilities**, not channels. The corpus test then went red on `assert!(at(ColorWheelRotation) > 0)` — the assertion catching its own author | Re-measured on the reader's own path: **115 channels, 110 of them colour wheels, and no colour-wheel rotations at all**. The zero is asserted **as zero**, with the two readings that would make it change written beside it, because a colour wheel's scroll is nearly always a range at the top of the select channel and that is **one knob**. The lesson is narrower than *check your figures*: **a measurement taken with a different rule than the code uses is not a measurement of the code**, and a doc comment quoting one is a claim nothing holds |
+| 2026-09-06 | S52 | **A session field is written down four times, and adding one to three of them is silent.** `Session::programmer_occurrence` reached the struct, the command, the applier and the interface — and `SessionState::commit`, which is a **hand-written field-by-field diff**, still had twelve fields in it. The session moved and no delta went out, so a second screen and the X-Touch would have sat on part 1 while the operator walked a tube's pixels. Nothing about it looks like a bug: the field is there, the command works, and the desk it was typed on is right | Found by `session_deltas_reproduce_the_session_they_came_from` (`crates/prism-core/tests/delta_round_trip.rs`) — a property over arbitrary commands that replays every emitted delta into a mirror and compares. It shrank to the one-command case, `SetProgrammerOccurrence { occurrence: 1 }`, which is as small as a report can be. The fix is one `if` and one pointer constant; the lesson is that **the diff is a list nobody is holding to the struct**, and the only thing that holds it is this property. The neighbouring omission it also caught: `Command::is_session_command` is a fourth list, and a command missing from it routes to the wrong applier in the daemon |
+| 2026-09-06 | S52 | **The reader and the validator asked the same question differently, and the corpus is what found it.** The library reader numbered a fixture's repeated channels correctly on the first run and `channels_duplicate` read nought — and then `every_profile_in_the_installed_library_is_one_a_show_accepts` failed on one profile in 2 871: *`5star-systems/spica-250m/16bit` defines Gobo twice*. `Show::embed_fixture_type`'s own validator still compared `def.attribute`, so a profile the reader now produced was one the show refused | Both duplicate errors — `ShowError::DuplicateAttribute` and `prism_engine::MergeError::DuplicateAttribute` — ask about the **key** now, and both kept their names, because what they refuse has not changed in kind: a fixture may have two colour wheels; what it may not have is two *first* colour wheels. The lesson is the test rather than the fix: **a converter's own counter cannot tell you its output is accepted**, and the only thing that can is running the whole corpus through the door the real caller uses |
+| 2026-09-06 | S52 | **An absent field is a better migration than a migration.** The occurrence had to reach `CuePart`, `PresetValue`, `ProgrammerEntry`, `AttributeDef`, `TrackedValue`, `SetAttribute` and the engine's slot — the key every value in a show is filed under — and S34 had already recorded what adding a field to a persisted type costs (the frozen fixture goes red) | A flat `occurrence: u8` beside the existing `attribute`, `#[serde(default, skip_serializing_if = …)]`, **nought-based** so that *absent* and *the one there has always been* are the same statement. A show with no repeats therefore serialises byte for byte as it did, and one written by `v0.9.1` opens with every value where it was — no `MIGRATIONS` row, no rewrite, and `persistence.rs` green unchanged. The nought-based choice is what buys that, and it costs exactly one place where the two numberings meet: `AttributeKey`'s `Display`, which writes `Gobo` for the first and `Gobo 2` for the second |
+| 2026-09-06 | S52 | **A list the wheel and the screen must agree about stopped being a table, and that is the same problem S22 warned about in a new shape.** `FeatureGroup::attributes` was one constant, exported to TypeScript, and S26 answered S22's warning by *there being one of it*. The owner asked for a band that shows only what the selection has, and a fixture may have two of a parameter — so how many knobs a bank has is a fact about the **selection**, which no constant can hold | One *function* instead of one table: `prism_core::Programmer::bank_parameters`, asked by `prismd::surface::parameter_of` for the jog wheel and mirrored by `ui/src/desk/programmer.ts` for the band, held together by the recording as `touchedBanks` and `feature_groups` already are. The shape of the answer is unchanged — there is one rule — and the thing that had to move with it is the *threshold*: `INLINE_OCCURRENCES` decides which parameters a bank has, so it is `prism-domain`'s constant and is exported, unlike `ENCODERS_PER_PAGE`, which is only how many fit on a screen |
+| 2026-09-06 | S52 | **A fault that reads as one thing can be two, and the number says which.** The owner asked for the predefined steps to be reachable by right-click. The gesture was the smaller half: S51 read a range's name **out of the capability** (`comment`, `effectName`, `shutterEffect`), and an Open Fixture Library wheel capability rarely has one — it carries `wheel` and `slotNumber`, and the name lives in the fixture's top-level `wheels` block, which the reader had never opened. **3 440 of the corpus's 4 497 wheel capabilities** read *Slot 3* | The picker moved to a right-click and a modal, and the *names* came out of `wheels`: the slot's own `name`, else the last part of the library `resource` key it is filed under, else the slot's `type` — which is how *Open* and *Closed* get their words, since the format gives those two nothing else. **Nothing is invented**, which was the owner's own instruction: where the file says none of those, S51's fallbacks still answer, and nine ranges in the whole corpus are still a bare slot number |
+| 2026-09-06 | S52 | **`serde_json`'s maps are sorted, and one line of the fixture format depends on the file's own order.** OFL's `eachPixelGroup` is defined as *ordered by appearance in the JSON file*. A `serde_json::Value` cannot answer that — its `Map` is a `BTreeMap` here — and enabling `preserve_order` would have changed the field order of every struct this workspace serialises to JSON, which is the `.prism` export format | The order is read **off the stream** instead: a twenty-line `Deserialize` with a `MapAccess` visitor that keeps the keys and ignores the values, applied to just enough of the file to reach `matrix.pixelGroups`. Local, no new dependency, and no change to anything else's serialisation. Worth carrying forward: **when order matters and only in one place, deserialise that place again rather than change the global map type** |
 | 2026-09-05 | S51 | **B1's colour rule was right for fifteen attributes and wrong for thirty-four, and the corpus is what said so.** *A colour rests open* (punch-list B1, S43) was implemented as *an attribute on `FeatureGroup::Color` rests at `u16::MAX`*, and that was the same statement while every colour this model had was an **additive emitter** — a lamp that makes more light the higher it is driven. B38 put cyan, magenta and yellow on that bank, and those are **filters**: open is nought and full is opaque. Parked where an emitter parks, a CMY head is not white at home, it is black — and every CMY rig in a venue would have come up dark on the first frame after this build. `no_profile_in_the_installed_library_rests_a_colour_shut` went red on a Clay Paky Alpha Spot QWO 800 | The rule asks the **attribute** and not the bank: `AttributeType::is_additive_emitter`, and it is asked in the two places a resting value is decided — `prism_core::library::ofl::default_value` and `library::colour` — so a fifth generic profile with a cyan flag on it cannot come out opaque either. A filter takes the file's stated default and otherwise nought, because unlike an emitter it has no *desk* convention: which end of a CMY flag is open is how that head is wired, and the file is the only evidence there is. A colour **wheel** is the third case and neither: its value is a slot number with no *open* to rest at. The lesson is the shape rather than the fix — **a rule stated in terms of a category is a rule that changes meaning when the category grows**, and nothing goes red until it does |
 | 2026-09-05 | S51 | **Reordering the clear stages moved a state nobody had asked about.** B37 turns the first two presses of Clear round, and `ShowFile::follow_cue_edit` had a rule from S39: *a `ClearProgrammer` clears the update state, whatever stage the button was in*, with the reason written beside it — *the values it was holding are gone, so there is nothing to put back*. The reason names the **values**, and after B37 the first press takes none. The rule went on being true and stopped being justified: an operator letting one fixture go in order to add the next to the same look would have found the Update key dark, for a gesture that changed no value at all | `editing_cue` survives a Clear that leaves values standing and is cleared by the one that takes them — read **after** the clear has been applied, so it is the programmer's actual contents that answer rather than a guess about the stage. It is B40's rule one field along: *nothing this client decided before the operator's last gesture overwrites what came after it*, generalised to **a gesture that moves no value must not take a state away**. Two tests were turned round rather than deleted, and the recorded script grew a step so the daemon's own session document says it |
 | 2026-09-05 | S51 | **A rule with two ends needs one predicate, or the two ends drift.** *Nothing ever moves a crossfade fader* (B36) is a statement about the **surface** — `prismd::surface::fader_reading` must not answer with a position — and about the **browser** — `ui/src/desk/executorbar.tsx` must not drop the position the hand left on pointer-up. Written twice, the two would have disagreed the first time somebody added a fader function: the surface's `match` would have got a new arm and the browser's would have fallen through to *the desk owns this* | `ExecutorFaderFunction::desk_may_move_it`, in `prism-domain`, asked by both. A third crossfade mode has to decide which side of the line it is on rather than defaulting to the wrong one, and `the_desk_never_moves_a_crossfade_fader` walks `ALL` rather than the two variants somebody remembered. The same shape appears twice more in this session — `crossfade_mode` is the one place the fader vocabulary and the engine vocabulary are related, and `is_additive_emitter` is the one place the colour rule lives — and it is the same lesson each time: **when a rule is asked in two layers, the rule is a function and not a `match`** |
@@ -4745,6 +4993,41 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 ## 7. Next actions
 
+**No slot of a patched fixture is out of reach.** *(S54, B51)* Every DMX slot of
+every profile has exactly one `AttributeDef`, asserted over 40 953 of them. Where
+the reader understands the channel it is what it always was; where it does not,
+the slot is `AttributeType::Raw` on the Control bank under the manufacturer's own
+name or `Ch 7`. This is a **floor**, so the next capability type the format grows
+arrives as a named knob rather than as silence — and the invariant to keep is the
+shape rather than the row: **state the guarantee over what the reader produces,
+not over what it discards.**
+
+**A switching alias is one slot in every position.** *(S54, B49)* The footprint
+never moves, so *resolve or refuse* was a false choice. Where the file's own
+positions agree about the parameter, the slot is that parameter; where they
+disagree it is raw under its own name, with no resting value and no named steps,
+because both belong to whichever channel is live. What is left is `B52`: the desk
+does not follow the switch while the show runs, and that is a question about the
+show model.
+
+**The key is closed; the label comes out of the file.** *(S53, B50)*
+`AttributeType` is a **closed enum of forty** and grows only where the Open
+Fixture Library states a distinction — that is what lets `1 gobo at 50` reach a
+rig from three manufacturers. What comes out of the file dynamically is
+`AttributeDef::label`, the manufacturer's own name for the channel, which the
+encoder shows in place of the desk's word and which **nothing is looked up by**.
+Two selected fixtures that disagree fall back to the desk's word, under `home`'s
+rule. It is read out of the show's **embedded** profile, so a library update
+cannot rename a patched rig mid-production.
+
+**A discriminator is read, not just a type.** *(S53, B50)* `WheelSlot` is a
+colour wheel or a gobo wheel depending on the wheel's **slots**, and on *most* of
+them; `blade` says which framing blade, so *Blade 3* is blade three; `fogType`
+tells a hazer from a fogger. A capability's type alone was never the whole
+answer, and reading only it left every counter at nought while channels arrived
+under the wrong knob. The next reader change should ask, before anything else,
+**what else does the file state beside this type**.
+
 **A crossfade fader belongs to the hand, not to the desk.** *(S51, B36)* Two
 modes — `XFade` walks the list a half-travel at a time, `Fade` takes a cue out
 going up and brings the next in coming down — and the *unit* is a **stroke**: one
@@ -4776,8 +5059,46 @@ attribute goes on the **end**.
 **A range is a label on a number.** *(S51, B38)* `AttributeDef::ranges` names the
 slots of a channel and the encoder offers them; picking one writes the middle. A
 value is still a number — the engine, the cue and the wire have never heard of a
-range. Making a value *be* a slot is **S52**, and so are the 2 679 repeated
-channels the corpus still drops.
+range, and **S52 did not change that**: making a value *be* a slot is still not
+a thing this model does. What S52 did change is the other half of that sentence,
+the 2 679 repeated channels, and the *names*: a wheel slot is called what its
+fixture's `wheels` block calls it.
+
+**An attribute is a type and an occurrence.** *(S52)* `AttributeKey` is the key
+every value in a show is filed under — `CuePart`, `PresetValue`,
+`ProgrammerEntry`, `AttributeDef`, `TrackedValue`, `SetAttribute` and
+`prism_engine::AttributeSlot`. It is **nought-based**, so an absent occurrence
+*is* the first one, and on the wire it is a flat field skipped when it is
+nought: a show with no repeats round-trips byte for byte and one written before
+S52 needs no migration. Exactly one place turns nought into one for a person —
+`AttributeKey`'s `Display`, which writes `Gobo` and `Gobo 2`. Anywhere else,
+adding or subtracting one is a bug waiting for a rig with three colour wheels.
+
+**A bank's knobs are a question about the selection, not a table.** *(S52)*
+`prism_core::Programmer::bank_parameters`, asked by `prismd::surface::parameter_of`
+for the jog wheel and by `ui/src/desk/programmer.ts` for the band — one rule,
+which is how S22's warning has been answered since S26. `FeatureGroup::attributes`
+is still the *order* both sides filter. Up to `prism_domain::INLINE_OCCURRENCES`
+repeats stand side by side, numbered; past that the band draws one **part** at a
+time and `Session::programmer_occurrence` says which. That constant decides
+which parameters a bank *has*, so unlike `ENCODERS_PER_PAGE` it is the domain's
+and is exported.
+
+**A matrix insert is geometry; a switching channel is state.** *(S52)*
+`prism_core::library::matrix` writes `{"insert": "matrixChannels"}` out to the
+channels it stands for, because what it depends on — the fixture's own pixel
+grid — is in the file and does not change while the show runs. A **switching
+channel** does change, so it is still counted and skipped, and is `docs/ISSUES.md`
+B49. The pixel keys, the sort orders and the default naming are OFL's own rules
+(`lib/model/Matrix.js`), transcribed rather than invented.
+
+**Nothing about a fixture is invented.** *(S52)* The owner's instruction for the
+steps picker, and it reaches further than the picker: a wheel slot is named from
+`wheels` — `name`, else the `resource` key's last part, else the slot's `type` —
+and where the file says none of those, the range keeps the fallback S51 gave it.
+Nine ranges in the whole corpus are still a bare slot number, and that is the
+right answer for nine files whose wheels have fewer slots than their channels
+have capabilities.
 
 **A venue's own fixture profiles live in the daemon's data directory.**
 *(S51, B43)* `prismd::paths::fixtures_dir`, read **before** the vendored library
@@ -6791,6 +7112,33 @@ document a program that does not exist. That window has existed since S37, and
 after S51 the six things the closed beta reported are fixed — which is the second
 half of the same argument: a manual written over a build whose crossfade is about
 to change is a manual written twice.
+
+**S52 ran in between, and the manual has to know four things it changed.** The
+encoder banks show only the parameters the selected fixtures have; a fixture with
+two of a parameter numbers them (*Gobo*, *Gobo 2*, and `1 gobo 2 at 50` on the
+line), and one with more repeats than fit gets a **Part** stepper instead;
+right-clicking an attribute opens its **steps** under the manufacturer's own
+names; and warm white and cold white are two knobs. `PROGRESS.md` §2.48 has the
+numbers and `docs/RELEASE_NOTES.md` has the operator's wording.
+
+**S53 followed it and adds two more.** An encoder is labelled with the **name the
+manufacturer gave that channel** — *Rotating Gobo*, not *Gobo 2* — and falls back
+to the desk's own word when two selected fixtures disagree; and a wheel is on the
+bank its **contents** say it belongs on, so a colour wheel is under **Colour**
+even where the profile calls it something else. A screenshot of the programmer
+band taken before S53 shows the wrong words on the knobs. `PROGRESS.md` §2.49 and
+`docs/ISSUES.md` B50.
+
+**S54 adds the one an operator will notice first.** **Every channel of a patched
+fixture has a knob**, without exception — and the manual should say so in those
+words, because it is the kind of promise a person checks. Where the profile does
+not say what a channel does, or where its meaning switches on another channel's
+value, the knob is on the **Control** bank named the way the profile names it, or
+`Ch 7`; `1 raw 3 at 50` reaches it from the line. Two things the manual must
+*not* say: that the desk knows what a switching channel currently is (it labels
+the unambiguous ones correctly and does not follow the switch — `docs/ISSUES.md`
+B52), and that a raw channel has named steps (it never does; there is nothing to
+read them from). `PROGRESS.md` §2.50 and `docs/ISSUES.md` B51.
 
 **The one exit criterion no test can check is the point of the session.** *A
 stranger gets from the front page to a running desk — download, install, patch

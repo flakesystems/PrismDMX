@@ -1240,6 +1240,55 @@ none that writes one.
 - A `.prism` file written by `v0.9.1` opens with every value on the first occurrence and no diff in the frames it produces — asserted on frames, because that is the claim
 - The tick still makes no allocator call, with a fixture whose footprint is thirty-two repeated channels
 
+**Done 2026-09-06**, and it grew **four** deliverables the owner asked for on the day — `docs/ISSUES.md` B45 to B48. The numbers first, all over the installed corpus: `channels_duplicate` is **nought** (it was 2 679); `modes_with_inserts` is **nought** (it was 90 profiles and 724 inserts); the library now yields **2 871 profiles** where it yielded 2 157; and of 115 966 named ranges only **nine** are still a bare slot number, where **3 440 of the 4 497 wheel positions** read *Slot 3*.
+
+- **The occurrence.** `AttributeKey` is `AttributeType` plus a nought-based index, and it is the key `CuePart`, `PresetValue`, `ProgrammerEntry`, `AttributeDef`, `TrackedValue`, `Command::SetAttribute` and `prism_engine::AttributeSlot` all file a value under. On the wire and in the file it is a flat `occurrence` omitted when it is nought, so **a show with no repeats round-trips byte for byte** and one written by `v0.9.1` opens with every value where it was. `MergeError::DuplicateAttribute` and `ShowError::DuplicateAttribute` both stayed — they refuse a repeated *key*, which is a broken profile and not an ordinary one.
+- **Warm white and cold white** (the owner's own report, `docs/ISSUES.md` B45). The format names thirteen emitter colours; this model had eleven, and folding `Warm White` and `Cold White` into `White` cost a lamp with **both** its second channel. 16 profiles of the corpus have both.
+- **Matrix inserts** (B48). `prism_core::library::matrix` writes `{"insert": "matrixChannels"}` out to the channels it stands for — OFL's own pixel-key rule, the four `repeatFor` keywords and the explicit array, both `channelOrder`s. It is *this* session that could do it: an eight-pixel tube is a fixture with eight reds. A **switching channel** is still skipped and is B49, because its footprint depends on another channel's value while the show runs.
+- **A bank shows what the fixtures have** (B46). `Programmer::bank_parameters` replaces the fixed table, and `prismd::surface::parameter_of` asks the same function — so S22's warning is answered by there being one of them, as it was when it was a table. Up to `INLINE_OCCURRENCES` repeats stand side by side, numbered; past that the band draws one **part** at a time and `Session::programmer_occurrence` says which.
+- **The steps, by right-click** (B47). The wheel slot names come out of the fixture's own `wheels` block, which this reader had never opened; the picker is `chrome/modal.tsx` and the button under the encoder is gone.
+- **`1 gobo 2 at 50`** in the console, with a rule narrow enough that every line that parsed before S52 still parses the same way.
+
+## S53 · `prism-core` + `prism-domain` + `ui` — every capability the format distinguishes
+**Size:** M · **Depends on:** S52
+
+**Goal:** read the **discriminators** the Open Fixture Library states beside a capability's type, and carry the manufacturer's own channel name onto the encoder. Born out of a question the owner asked after S52 — *"Es muss am Ende jedes mögliche Fixture abgebildet werden. Ist es dafür nicht am einfachsten, die Namen einfach dynamisch aus der Fixture Definition Datei zu entnehmen?"* — and out of the instruction that followed it: read `capability-types.md` and `fixture-format.md` properly before proposing anything.
+
+**Why the obvious answer is the wrong one.** Taking the parameter *names* out of the file would make the **key** dynamic, and the key is what lets one command line reach a rig from three manufacturers: `1 gobo at 50` has to mean the same thing on a head whose manufacturer wrote *Gobo* and on one who wrote *Gobo Wheel*. The format is in any case a **closed set of 43 capability types**, so there is no open-ended vocabulary to lift. What the file does carry, and what S51's table discarded, are the properties beside the type — `ColorIntensity.color`, `WheelSlot.wheel`, `BladeInsertion.blade`, `Fog.fogType` — which split one type into distinct physical parameters. Discarding them is lossy in a way **no counter shows**: `channels_unmapped` stayed at nought while channels arrived under the wrong knob.
+
+**Deliverables**
+
+- Four attributes for distinctions the format states and this model folded together: `ColorWheelRotation`, `Haze`, `BladeRotation`, `BladeSystem` — **forty**, appended
+- A wheel's bank from **its slots**, and from *most* of them: `beamz/panther-7r` calls a wheel *Gobo Wheel* and puts an iris at the top of it
+- A framing blade numbered by the **`blade` the file states**, so *Blade 3* is blade three and not the third blade channel
+- `AttributeDef::label` — the manufacturer's own channel name, out of the show's **embedded** profile, shown on the encoder and **never** looked up by
+
+**Exit criteria** — met, see `PROGRESS.md` §2.49
+
+- Each attribute the discriminators produce is reached over the corpus, **and** the gobo bank still has its gobo wheels
+- Every channel of the installed library carries its own name
+- No migration: an absent label is the desk's own word, as an absent occurrence is the first
+
+## S54 · `prism-core` + `prism-domain` — no slot of a patched fixture is out of reach
+**Size:** M · **Depends on:** S53
+
+**Goal:** make it **impossible** for a channel of a patched fixture to have no control, rather than fixing the reasons one at a time. Born out of one sentence from the owner after S53: *"Es kann nach dem aktuellen Prinzip passieren, dass manche Channels mancher Fixtures nicht ansteuerbar sind. Dafür müssen wir eine Lösung finden."*
+
+**Why no counter had found it.** The reader built an `AttributeDef` only for a channel it **understood**. A slot with no `AttributeDef` is invisible to the merge, the programmer, the command line and every cue — while still occupying the footprint, so the desk drove it to nought for the rest of the show. Every counter that existed asks *what did the reader fail to understand*, and all of them read nought; none asks *does every slot have a knob*. Measured that way: **707 slots in 337 of the 2 871 profiles**, including 34 of the 35 channels of a `glp/knv-cube`.
+
+**Deliverables**
+
+- `AttributeType::Raw`, the 41st and the only row that is not a *kind* of parameter — `FeatureGroup::Control`, LTP, named by `AttributeDef::label` (S53) with the manufacturer's word or `Ch 7`
+- Every slot of every mode gets exactly one `AttributeDef`, whatever the entry turns out to be
+- **B49**: a switching alias is one slot in every position, so where the file's positions agree about the parameter it *is* that parameter, and where they disagree it is raw under its own name
+- The counters stay as **diagnostics** — they answer a real and different question — and three more join them: `channels_unused`, `channels_orphan_fine`, `channels_switched`
+
+**Exit criteria** — met, see `PROGRESS.md` §2.50
+
+- `no_slot_of_any_profile_is_out_of_reach`: every DMX slot of all 2 871 profiles has a knob — 40 953 of them
+- `the_raw_channel_is_the_exception_and_not_the_rule`: the floor did not swallow the model — 619 raw of 38 233 attributes, every one named
+- No migration: `Raw` is an appended row, and a show embedded before S54 reads back exactly as it was written
+
 # Phase 12 — Extended features, once the doors are open
 
 *Everything in Phase 9 that has not run: **S30** 3D viewer, **S31** Web Remote, **S32** PSN / OSC, **S47** timecode, **S50** macros. They are not renumbered — the numbers are identity — and they are not reordered among themselves. What moved is the schedule: the open beta comes first, and what an open beta asks for should choose between these five better than this document can.*
@@ -1283,7 +1332,7 @@ flowchart LR
     S34 & S39 & S36 --> S47
     S29 & S44 & S45 --> S51
     S37 & S40 & S51 --> S41 --> S42
-    S51 --> S52
+    S51 --> S52 --> S53 --> S54
 ```
 
 **Critical path to a usable console:** S0 → S1 → S2 → S3 → S4 → S7 → S11 → S12 → S16 → S17 → S19 → S21 → S22 → S23 → S25 → S26. *Reached at S26.*
@@ -1321,5 +1370,7 @@ is, is the order the work was planned to make sense in.
 | 17 | **S29** `prism-app` — Tauri shell, and the closed beta | Independent throughout; it is what makes the rest an application rather than a browser tab. It also carried the **OS file dialogue** the owner asked for on 2026-08-28, which was here because a browser cannot name a path on the daemon's machine. **Done 2026-09-01**, released as **`v0.9.0`** (a GitHub pre-release, built and attached by `release.yml` on the tag) — see `PROGRESS.md` §2.46. The shell spawns or attaches through S17's guard, hides on close and stops the desk only when asked; `Command::Shutdown` is the fourth kind of command and exists because a daemon with no console had no way to be told; the autostart switch S37 wrote down is acted on at last, and the panel says what the machine **has** rather than only what was asked for. Punch-list **B31** is closed. CI grew a job that builds the installer on every commit, and a release workflow that runs the gates again before it makes one |
 | 18 | **S51** core/engine/`prism-app`/`ui` — the punch list, and v0.9.1 | **Done 2026-09-05**, released as **`v0.9.1`** — see `PROGRESS.md` §2.47. The closed beta had been out since 2026-09-01 and `docs/ISSUES.md` had six entries open: four faults and two things it found missing. They belonged together because none of them was a new subsystem — each landed in a model that already existed — and because the list was the only thing between `v0.9.0` and a build that can be handed to somebody who did not write it. All six closed; none by deleting it. It also drew a line and wrote it down: B38's capability half stops at *a range is a label on a number*, and the repeated channels the corpus still drops are **S52** rather than a footnote |
 | 19 | **S41** docs · **S42** prismdmx.de | **Moved forward on 2026-09-05, and this is the reason.** They were last because a manual written before the settings window would document a program that does not exist. That window has existed since S37, and what is left of the project is additions and fixes — so the sentence no longer holds and its opposite does: an **open** beta is a release strangers install, and a program a stranger cannot read a manual to is not one, whatever else it grows. The remaining features are better chosen with an open beta's reports in hand than without them |
-| 20 | **S52** domain/core/engine/`ui` — a fixture may have two of a parameter | Born out of S51 on 2026-09-05 with a number attached: 2 679 channels of the installed library are a second of their kind and are dropped. Not in S51 because it is a change to the **key every value in a show is filed under** — `CuePart`, the programmer, presets, the wire, the grammar and `ChannelPlan` — and that does not belong beside five bug fixes. Whether it runs before or after the open beta is a question for the open beta: nobody has yet reported a rig it stops |
-| 21 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |
+| 20 | **S52** domain/core/engine/`ui` — a fixture may have two of a parameter | **Done 2026-09-06**, and it ran **before** S41/S42 rather than after, because the owner reported the rig it stops: a lamp with dedicated warm and cold white channels, on which the second channel did not answer at all. That is the same fault as the second colour wheel — `Warm White` and `Cold White` were one attribute, so the second collided with the first — and it was not a question the open beta had to be asked. It carried four more things the owner asked for in the same breath: only the attributes a fixture *has* on the encoder banks, the steps of a wheel by right-click and under the manufacturer's own names, and the 90 matrix profiles that could not be patched at all. See `PROGRESS.md` §2.48 |
+| 21 | **S53** core/domain/`ui` — every capability the format distinguishes | **Done 2026-09-06**, straight out of S52 and out of a question the owner asked about it: could the parameter names not be taken **dynamically out of the fixture file**? Reading the Open Fixture Library's own `capability-types.md` and `fixture-format.md` properly gave a better answer than the question suggested — the format is a **closed set of 43 capability types** with **discriminators** beside them, and S51's table read the type and threw the discriminators away. That is lossy in a way no counter shows: `channels_unmapped` was nought while **115 wheel channels** sat on the wrong encoder bank. So the *key* stays closed (forty attributes) and the *label* comes out of the file. See `PROGRESS.md` §2.49 and `docs/ISSUES.md` B50 |
+| 22 | **S54** core/domain — no slot of a patched fixture is out of reach | **Done 2026-09-06**, out of one sentence the owner wrote after reading S53: under the current principle, some channels of some fixtures cannot be driven at all. Measured, it was **707 DMX slots in 337 of the 2 871 profiles** — and **no counter could see it**, because every counter the reader had asks what it failed to understand and none asked whether every slot has a knob. The answer is a floor rather than four fixes: `AttributeType::Raw`, the 41st, so that a capability type a later format grows arrives as a named knob instead of as silence. **B49 closed** in the same pass, with its own question corrected — a switching alias never moves the footprint. See `PROGRESS.md` §2.50 and `docs/ISSUES.md` B51 |
+| 23 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |

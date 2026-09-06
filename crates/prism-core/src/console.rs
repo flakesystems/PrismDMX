@@ -75,11 +75,11 @@
 //! — `Label View 1 "House lights"` — and need not be.
 
 use prism_domain::{
-    AttributeType, Command, CommandLineMode, CommandLineQuestion, CommandLineReadingKind,
-    ExecutorButtonFunction, ExecutorChange, ExecutorEncoderFunction, ExecutorFaderFunction,
-    ExecutorId, FixtureId, GoDirection, GroupId, ObjectRef, OverwriteMode, PlaybackTarget,
-    PresetId, PresetPool, RgbColor, SelectionMode, SequenceId, SequenceStoreMode, StoreMode,
-    ViewId,
+    AttributeKey, AttributeType, Command, CommandLineMode, CommandLineQuestion,
+    CommandLineReadingKind, ExecutorButtonFunction, ExecutorChange, ExecutorEncoderFunction,
+    ExecutorFaderFunction, ExecutorId, FixtureId, GoDirection, GroupId, ObjectRef, OverwriteMode,
+    PlaybackTarget, PresetId, PresetPool, RgbColor, SelectionMode, SequenceId, SequenceStoreMode,
+    StoreMode, ViewId,
 };
 
 /// The largest level the protocol carries — `u16::MAX`.
@@ -315,6 +315,7 @@ pub fn parse_command_line(line: &str) -> ConsoleReading {
             "full",
             vec![Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: level_from_percent(100.0),
                 relative: false,
             }],
@@ -1181,10 +1182,11 @@ fn selection_line(words: &[Token]) -> ConsoleReading {
     // taken out of the line before either half is read.
     let named = attribute_in(rest);
     let without: Vec<Token> = match named {
-        Some((ref word, _)) => rest
+        Some(ref named) => rest
             .iter()
-            .filter(|token| token.text != *word)
-            .cloned()
+            .enumerate()
+            .filter(|(index, _)| !named.covers(*index))
+            .map(|(_, token)| token.clone())
             .collect(),
         None => rest.to_vec(),
     };
@@ -1213,8 +1215,11 @@ fn selection_line(words: &[Token]) -> ConsoleReading {
         return just(commands);
     };
 
-    let attribute = named.map_or(AttributeType::Dimmer, |(_, attribute)| attribute);
-    match read_level(&without[at + 1..], attribute) {
+    let key = named.map_or_else(
+        || AttributeKey::first(AttributeType::Dimmer),
+        |named| named.key,
+    );
+    match read_level(&without[at + 1..], key) {
         Ok(level) => {
             commands.push(level);
             just(commands)
@@ -1279,7 +1284,7 @@ fn keyword_selection(words: &[Token], adding: bool) -> Option<ConsoleReading> {
 ///
 /// The attribute defaults to `Dimmer`, because `1 at 50` means intensity on
 /// every lighting desk there has ever been.
-fn read_level(words: &[Token], attribute: AttributeType) -> Result<Command, String> {
+fn read_level(words: &[Token], key: AttributeKey) -> Result<Command, String> {
     let Some(first) = words.first() else {
         return Err("at what? A level is a percentage: 0 to 100.".to_owned());
     };
@@ -1291,14 +1296,16 @@ fn read_level(words: &[Token], attribute: AttributeType) -> Result<Command, Stri
     }
     if first.text == "full" {
         return Ok(Command::SetAttribute {
-            attribute,
+            attribute: key.attribute,
+            occurrence: key.occurrence,
             value: level_from_percent(100.0),
             relative: false,
         });
     }
     if first.text == "out" || first.text == "zero" {
         return Ok(Command::SetAttribute {
-            attribute,
+            attribute: key.attribute,
+            occurrence: key.occurrence,
             value: 0,
             relative: false,
         });
@@ -1319,7 +1326,8 @@ fn read_level(words: &[Token], attribute: AttributeType) -> Result<Command, Stri
         return Err(format!("{} % is outside 0 to 100.", first.raw));
     }
     Ok(Command::SetAttribute {
-        attribute,
+        attribute: key.attribute,
+        occurrence: key.occurrence,
         value: level_from_percent(percent),
         relative: false,
     })
@@ -1358,14 +1366,72 @@ fn pool_in(words: &[Token]) -> Option<PresetPool> {
         .find(|pool| pool_word(*pool) == head.text)
 }
 
-/// The attribute one of these words names, if any of them does.
-fn attribute_in(words: &[Token]) -> Option<(String, AttributeType)> {
-    words.iter().find_map(|word| {
+/// An attribute a line named, and how much of the line said so.
+struct Named {
+    /// Where the attribute word is.
+    index: usize,
+    /// How many words it took: one, or two when an occurrence followed it.
+    span: usize,
+    /// The attribute and which channel of that kind — **S52**.
+    key: AttributeKey,
+}
+
+impl Named {
+    /// Whether the word at `index` is part of what named the attribute, and so
+    /// is taken out of the line before either half of it is read.
+    const fn covers(&self, index: usize) -> bool {
+        index >= self.index && index < self.index + self.span
+    }
+}
+
+/// The attribute one of these words names, if any of them does — and **which
+/// one of that kind**, since S52.
+///
+/// # `1 gobo 2 at 50`, and the three things that stop it eating a fixture
+///
+/// A head may have two colour wheels now, so the line needs a way to say which.
+/// The number goes straight after the attribute word, which is the shortest
+/// thing it could be — and the shortest thing it could be is also a fixture
+/// number, so the rule is narrow on purpose. An occurrence is read only when
+/// **all three** hold:
+///
+/// 1. the attribute word is **not the first word** of the line, so `pan 5 at 25`
+///    still selects fixture 5 rather than asking for a fifth pan;
+/// 2. the next word is a whole number from 1 to 256 — the width of the key; and
+/// 3. that number is the word **immediately before `at`**, so it is in the
+///    place a level is not and a fixture cannot be.
+///
+/// Everything the line could say before S52 therefore still says it, including
+/// `5 at pan 25`: an attribute word that stands *after* `at` is followed by the
+/// level, so nothing there is ever read as an occurrence.
+fn attribute_in(words: &[Token]) -> Option<Named> {
+    let at = words.iter().position(|word| word.text == "at");
+    let (index, attribute) = words.iter().enumerate().find_map(|(index, word)| {
         AttributeType::ALL
             .into_iter()
             .find(|attribute| attribute_word(*attribute) == word.text)
-            .map(|attribute| (word.text.clone(), attribute))
+            .map(|attribute| (index, attribute))
+    })?;
+    let occurrence = (index > 0 && at == Some(index + 2))
+        .then(|| words.get(index + 1).and_then(occurrence_of))
+        .flatten();
+    Some(Named {
+        index,
+        span: if occurrence.is_some() { 2 } else { 1 },
+        key: AttributeKey::new(attribute, occurrence.unwrap_or(0)),
     })
+}
+
+/// The occurrence a word names, counted from nought.
+///
+/// **The line counts from one and the key from nought**, and this is the one
+/// place in the console where the two meet — `prism_domain::AttributeKey` says
+/// the same about its `Display`. `gobo 1` is the wheel a profile lists first,
+/// so it is the same as writing no number at all; `gobo 0` names nothing and is
+/// left for the fixture reader to complain about.
+fn occurrence_of(word: &Token) -> Option<u8> {
+    let number = whole_number(&word.text)?;
+    u8::try_from(number.checked_sub(1)?).ok()
 }
 
 /// The fixture numbers a selection names.
@@ -1793,6 +1859,21 @@ const fn attribute_name(attribute: AttributeType) -> &'static str {
         AttributeType::Fog => "Fog",
         AttributeType::Speed => "Speed",
         AttributeType::Sound => "Sound",
+        // S52's two: the colours the Open Fixture Library names and this model
+        // used to fold into White. `1 warmwhite at 50` parses because the word
+        // is this name lower-cased, like every other.
+        AttributeType::WarmWhite => "WarmWhite",
+        AttributeType::ColdWhite => "ColdWhite",
+        // S53's four: the ones the capability table used to fold together.
+        AttributeType::ColorWheelRotation => "ColorWheelRotation",
+        AttributeType::Haze => "Haze",
+        AttributeType::BladeRotation => "BladeRotation",
+        AttributeType::BladeSystem => "BladeSystem",
+        // **S54.** `1 raw 3 at 50` reaches the third channel of fixture one
+        // that this desk has no word for — the word being *that there is no
+        // word* is the point, and the encoder carries the manufacturer's own
+        // name for it beside the number.
+        AttributeType::Raw => "Raw",
     }
 }
 

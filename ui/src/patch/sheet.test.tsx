@@ -124,18 +124,27 @@ describe("the fixture sheet", () => {
     for (const id of [1, 2, 5]) {
       expect(screen.getByTestId(`sheet-row-${String(id)}`)).not.toBeNull();
     }
-    // The Colour bank's parameters, out of the generated table — the same one
-    // the encoder bar and the jog wheel walk (S26).
-    for (const attribute of ["Red", "Green", "Blue", "White", "Amber"]) {
+    // **The columns are what the rig has** — S52. The RGBW PAR patched here has
+    // four colour channels, so the Colour bank is four columns and not the
+    // fifteen the generated table names. A column nothing on it could ever hold
+    // is a column of blanks, and this is the window where columns are
+    // expensive.
+    for (const attribute of ["Red", "Green", "Blue", "White"]) {
       expect(screen.getAllByText(attribute).length).toBeGreaterThan(0);
     }
+    expect(screen.queryByText("Amber")).toBeNull();
+    expect(screen.queryByText("Cyan")).toBeNull();
   });
 
   it("follows the bank, because the bank is the session's", () => {
     const { view } = sheet({ bank: "Position" });
     expect(screen.getByTestId("sheet-bank").textContent).toContain("Position");
-    expect(screen.getAllByText("Pan").length).toBeGreaterThan(0);
     expect(screen.queryByText("Red")).toBeNull();
+    // Nothing in this rig pans — two dimmers and a PAR — so the Position bank
+    // has no columns at all. The rows are still there, because the sheet is a
+    // list of the patch and not of one bank.
+    expect(screen.queryByText("Pan")).toBeNull();
+    expect(screen.getByTestId("sheet-row-5")).not.toBeNull();
     view.unmount();
   });
 
@@ -150,7 +159,9 @@ describe("the fixture sheet", () => {
     });
     expect(screen.getByTestId("prog-5-Red").textContent).toBe("50%");
     expect(screen.getByTestId("prog-5-Green").textContent).toBe("—");
-    // Fixture 1 is a one-channel dimmer: it has no colour attributes.
+    // Fixture 1 is a one-channel dimmer: it has no colour attributes. The
+    // **column** is still there since S52 — the PAR beside it has one — and the
+    // dimmer's cell in it is blank, which is the third fact.
     expect(screen.getByTestId("prog-1-Red").textContent).toBe("");
   });
 

@@ -300,6 +300,15 @@ fn client_local_state_is_absent_from_the_session_document() {
     // `prism_domain::Session::window_picker`: on this desk the X-Touch drives the
     // interface too, and the two are never allowed to be out of step.
     //
+    // **`programmerOccurrence` is S52's, and it is the second member that looks
+    // client-local and is not.** Which *part* of a repeated fixture the encoder
+    // bank is on — a tube with a red per pixel has more channels of a kind than
+    // a bank has knobs — reads like scroll position, which is §4.2's category.
+    // It is not, for `windowPicker`'s reason: the X-Touch walks the parts, and
+    // a surface key is resolved by a daemon with no screen. If the number lived
+    // in each client the desk and the screen would be looking at different
+    // pixels of the same tube.
+    //
     // **`commandLineRun` was S43's and is gone since S49.** It was a counter the
     // daemon bumped when a *bound* line asked to be sent, and it was on the wire
     // only because the command-line parser lived in the interface: the daemon
@@ -327,6 +336,7 @@ fn client_local_state_is_absent_from_the_session_document() {
             "id",
             "name",
             "openWindows",
+            "programmerOccurrence",
             "programmerPage",
             "programmerParamIndex",
             "selectedExecutor",

@@ -45,6 +45,7 @@ fn dial(file: &mut ShowFile, fixtures: &[u32], attribute: AttributeType, value: 
     .expect("those fixtures are patched");
     file.apply(&Command::SetAttribute {
         attribute,
+        occurrence: 0,
         value: i32::from(value),
         relative: false,
     })

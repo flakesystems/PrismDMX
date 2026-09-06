@@ -51,6 +51,7 @@
 //! matrix support — a mode whose channel list depends on state is skipped, with
 //! the count reported. See [`ofl`] for the whole of what conversion costs.
 
+mod matrix;
 pub mod ofl;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -90,6 +91,12 @@ fn colour(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
 fn eight_bit(attribute: AttributeType, coarse_offset: u16, default_value: u16) -> AttributeDef {
     AttributeDef {
         attribute,
+        // A generic profile stands in for a light nobody has told the desk
+        // about, so there is no manufacturer's word to carry — S53.
+        label: None,
+        // A generic profile has one of each parameter, so every one is the
+        // first of its kind — S52.
+        occurrence: 0,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset: None,
@@ -113,6 +120,8 @@ fn sixteen_bit(
 ) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group: FeatureGroup::Position,
         coarse_offset,
         fine_offset: Some(coarse_offset + 1),

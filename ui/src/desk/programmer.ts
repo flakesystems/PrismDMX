@@ -32,7 +32,11 @@ import type {
   ProgrammerState,
   ProgrammerValueSource,
 } from "../bindings";
-import { FEATURE_GROUP_ATTRIBUTES, FEATURE_GROUP_VARIANTS } from "../bindings/variants";
+import {
+  FEATURE_GROUP_ATTRIBUTES,
+  FEATURE_GROUP_VARIANTS,
+  INLINE_OCCURRENCES,
+} from "../bindings/variants";
 import { isArray, isObject } from "../mirror/patch";
 import { numberAt, pointerToken, stringAt, valueAt } from "../mirror/select";
 import { percentOfLevel } from "./level";
@@ -41,6 +45,35 @@ import { percentOfLevel } from "./level";
 export interface ParameterReading {
   /** Which attribute it turns. */
   readonly attribute: AttributeType;
+  /**
+   * Which channel of that kind — **S52**, counted from nought.
+   *
+   * A head may have two colour wheels and a tube a red per pixel. Nought is
+   * the one there has always been.
+   */
+  readonly occurrence: number;
+  /**
+   * What the encoder is called: `Gobo` for the first of a kind, `Gobo 2` for
+   * the second — `prism_domain::AttributeKey`'s `Display`, and the one place
+   * on this side where the nought-based key is read out one-based.
+   *
+   * **This is the desk's word.** {@link ParameterReading.name} is the
+   * manufacturer's, and the encoder prefers that one where there is one.
+   */
+  readonly label: string;
+  /**
+   * **What the manufacturer calls this channel** — S53, out of the show's own
+   * embedded profile (S11), like {@link ParameterReading.home} and
+   * {@link ParameterReading.ranges}.
+   *
+   * *Rotating Gobo*, *Color Wheel 2*, *Frost / Prism* — the words on the
+   * fixture's own data sheet, which is what an operator is holding. `null`
+   * where the profile has none (a generic one) or where two selected fixtures
+   * call it different things, for `home`'s reason: naming one of the two would
+   * be wrong about half the selection, and the desk's own word is right about
+   * all of it.
+   */
+  readonly name: string | null;
   /** Its index on the bank — the number the jog wheel counts with. */
   readonly index: number;
   /**
@@ -114,16 +147,144 @@ export interface ParameterReading {
   readonly range: string | null;
 }
 
+/** One attribute of one fixture, told apart from the next one like it — S52. */
+export interface ParameterKey {
+  /** What it controls. */
+  readonly attribute: AttributeType;
+  /** Which channel of that kind, counted from nought. */
+  readonly occurrence: number;
+}
+
 /**
- * The parameters of an encoder bank, in the order the jog wheel walks them.
+ * What an attribute is called: `Gobo`, or `Gobo 2` for the second of a kind.
  *
- * `FEATURE_GROUP_ATTRIBUTES` is generated from `prism_domain::FeatureGroup`,
- * and `prismd::surface::parameter_of` resolves the wheel through the same
- * table. That is the whole of S22's warning answered: there is one order, so
- * the wheel cannot turn something other than what is lit.
+ * `prism_domain::AttributeKey`'s `Display`, and the **only** place on this side
+ * where the nought-based key is read out one-based. Anywhere else adding one is
+ * a bug waiting for a rig with three colour wheels on it.
  */
-export function bankParameters(bank: FeatureGroup): readonly AttributeType[] {
-  return FEATURE_GROUP_ATTRIBUTES[bank];
+export function parameterLabel(key: ParameterKey): string {
+  return key.occurrence === 0 ? key.attribute : `${key.attribute} ${String(key.occurrence + 1)}`;
+}
+
+/**
+ * The parameters of an encoder bank **for the current selection** — S52.
+ *
+ * # It used to be a table, and two things ended that
+ *
+ * Until S52 this was `FEATURE_GROUP_ATTRIBUTES[bank]`: the same knobs for every
+ * selection, with a dash under every one nothing selected had. The owner asked
+ * for a band that shows **only what the fixtures have**, and a fixture may have
+ * **two of a parameter** — how many colour wheels a bank has is a fact about
+ * the selection, which no fixed table can hold.
+ *
+ * S22's warning comes with it and is answered the same way it always was:
+ * `prismd::surface::parameter_of` resolves the jog wheel through
+ * `prism_core::Programmer::bank_parameters`, which is this function's rule in
+ * Rust, and the recording holds the two together. If they disagreed an operator
+ * would turn the wheel and watch a parameter other than the highlighted one
+ * move.
+ *
+ * # Occurrence-major, and `part`
+ *
+ * Every first occurrence in `FEATURE_GROUP_ATTRIBUTES` order, then every
+ * second, then every third — so *Red, Green, Blue, White* stays the first page
+ * of the colour bank on a rig that has two of each, and *the second of
+ * everything* is one contiguous run.
+ *
+ * A bank whose deepest repeat is at most `INLINE_OCCURRENCES` draws them all
+ * and ignores `part`; past that it draws **one**, because an eight-pixel tube
+ * would otherwise give the colour bank six pages of things called *Red*.
+ */
+export function bankParameters(
+  programmer: ProgrammerState | null,
+  show: JsonValue | null,
+  bank: FeatureGroup,
+  part: number,
+): readonly ParameterKey[] {
+  return bankParametersOf(show, programmer?.selection ?? [], bank, part);
+}
+
+/**
+ * The same list, for a set of fixtures that is not the selection.
+ *
+ * The Fixture Sheet is the caller: it draws a **row per patched fixture** and a
+ * column per parameter, so its columns are what those fixtures have and not
+ * what happens to be selected. Same rule, same order, one implementation —
+ * `bankParameters` is this with the programmer's selection put in.
+ */
+export function bankParametersOf(
+  show: JsonValue | null,
+  fixtures: readonly number[],
+  bank: FeatureGroup,
+  part: number,
+): readonly ParameterKey[] {
+  const repeats = bankRepeatsOf(show, fixtures, bank);
+  if (repeats === 0) {
+    return [];
+  }
+  const occurrences =
+    repeats <= INLINE_OCCURRENCES
+      ? Array.from({ length: repeats }, (_, at) => at)
+      : [Math.min(Math.max(Math.trunc(part), 0), repeats - 1)];
+  const parameters: ParameterKey[] = [];
+  for (const occurrence of occurrences) {
+    for (const attribute of FEATURE_GROUP_ATTRIBUTES[bank]) {
+      const key = { attribute, occurrence };
+      if (fixtures.some((fixture) => groupOf(show, fixture, key) !== null)) {
+        parameters.push(key);
+      }
+    }
+  }
+  return parameters;
+}
+
+/**
+ * How deep this bank's repeats go for the current selection — S52.
+ *
+ * The **largest** number of channels of one kind any selected fixture has on
+ * this bank: 1 for an ordinary head, 2 for one with two colour wheels, 8 for a
+ * tube with a red per pixel. Nought when nothing selected has anything here,
+ * which is what draws an empty band rather than a row of dashes.
+ *
+ * The maximum and not the minimum, so a selection of two different heads offers
+ * every wheel one of them has — `prism_core::Programmer::bank_repeats` says the
+ * same and gives the reason.
+ */
+export function bankRepeats(
+  programmer: ProgrammerState | null,
+  show: JsonValue | null,
+  bank: FeatureGroup,
+): number {
+  return bankRepeatsOf(show, programmer?.selection ?? [], bank);
+}
+
+/**
+ * {@link bankRepeats} for a set of fixtures that is not the selection.
+ *
+ * **Which bank an attribute is on is `FEATURE_GROUP_ATTRIBUTES` and not the
+ * profile's own `featureGroup`**, and that distinction predates S52. A profile
+ * may file its dimmer under `Color` — an odd head, and a legal one — and what
+ * that decides is whether the masters may scale it and which bank key lights up
+ * to say the programmer is holding something ({@link touchedBanks}). It does
+ * not move the knob, or the knob would be somewhere different for every head in
+ * the selection.
+ */
+export function bankRepeatsOf(
+  show: JsonValue | null,
+  fixtures: readonly number[],
+  bank: FeatureGroup,
+): number {
+  const onBank: readonly string[] = FEATURE_GROUP_ATTRIBUTES[bank];
+  let deepest = 0;
+  for (const fixture of fixtures) {
+    for (const def of attributeDefs(show, fixture)) {
+      const attribute = stringAt(def, "/attribute");
+      if (attribute !== null && onBank.includes(attribute)) {
+        deepest = Math.max(deepest, (numberAt(def, "/occurrence") ?? 0) + 1);
+      }
+    }
+  }
+  return deepest;
 }
 
 /**
@@ -173,14 +334,21 @@ export function encoderPage(
   return { readings: readings.slice(from, from + ENCODERS_PER_PAGE), page: shown, pages };
 }
 
-/** What the encoders of a bank read, given the selection and the show. */
+/**
+  * What the encoders of a bank read, given the selection and the show.
+  *
+  * **One reading per parameter the selection actually has** since S52 — see
+  * {@link bankParameters}. There is no longer such a thing as an encoder
+  * nothing selected has: it is simply not drawn.
+  */
 export function bankReadings(
   programmer: ProgrammerState | null,
   show: JsonValue | null,
   bank: FeatureGroup,
+  part: number,
 ): readonly ParameterReading[] {
-  return bankParameters(bank).map((attribute, index) =>
-    readingOf(programmer, show, attribute, index),
+  return bankParameters(programmer, show, bank, part).map((key, index) =>
+    readingOf(programmer, show, key, index),
   );
 }
 
@@ -188,7 +356,7 @@ export function bankReadings(
 function readingOf(
   programmer: ProgrammerState | null,
   show: JsonValue | null,
-  attribute: AttributeType,
+  key: ParameterKey,
   index: number,
 ): ParameterReading {
   const selection = programmer?.selection ?? [];
@@ -202,10 +370,12 @@ function readingOf(
   let mixedHome = false;
   let ranges: readonly AttributeRange[] | null = null;
   let mixedRanges = false;
+  let name: string | null = null;
+  let mixedName = false;
   for (const fixture of selection) {
-    if (groupOf(show, fixture, attribute) !== null) {
+    if (groupOf(show, fixture, key) !== null) {
       available += 1;
-      const rest = homeOf(show, fixture, attribute);
+      const rest = homeOf(show, fixture, key);
       if (rest !== null && home === null && !mixedHome) {
         home = rest;
       } else if (rest !== home) {
@@ -214,14 +384,23 @@ function readingOf(
       // **B38.** The same *only when they agree* rule the resting value
       // follows: two heads with different wheels in them have different lists,
       // and one of the two would name the wrong slot on half the selection.
-      const own = rangesOf(show, fixture, attribute);
+      const own = rangesOf(show, fixture, key);
       if (ranges === null && !mixedRanges) {
         ranges = own;
       } else if (!sameRanges(ranges ?? [], own)) {
         mixedRanges = true;
       }
+      // **S53.** The manufacturer's word for the channel, under the same *only
+      // when they agree* rule: two heads whose gobo wheels are called different
+      // things fall back to the desk's own word.
+      const called = nameOf(show, fixture, key);
+      if (name === null && !mixedName) {
+        name = called;
+      } else if (called !== name) {
+        mixedName = true;
+      }
     }
-    const entry = entryFor(programmer, fixture, attribute);
+    const entry = entryFor(programmer, fixture, key);
     const value = entry?.value.value ?? null;
     if (entry === null || value === null) {
       continue;
@@ -241,7 +420,10 @@ function readingOf(
   const shown = mixed ? null : (level ?? (mixedHome ? null : home));
   const agreed = mixedRanges ? [] : (ranges ?? []);
   return {
-    attribute,
+    attribute: key.attribute,
+    occurrence: key.occurrence,
+    label: parameterLabel(key),
+    name: mixedName ? null : name,
     index,
     level: mixed ? null : level,
     mixed,
@@ -292,14 +474,10 @@ function sameRanges(
 export function rangesOf(
   show: JsonValue | null,
   fixture: number,
-  attribute: AttributeType,
+  key: ParameterKey,
 ): readonly AttributeRange[] {
-  const attributes = typeAttributes(show, fixture);
-  if (attributes === null) {
-    return [];
-  }
-  for (const entry of attributes) {
-    if (!isObject(entry) || valueAt(entry, "/attribute") !== attribute) {
+  for (const entry of attributeDefs(show, fixture)) {
+    if (!isKey(entry, key)) {
       continue;
     }
     const ranges = valueAt(entry, "/ranges");
@@ -325,6 +503,78 @@ export function rangesOf(
 }
 
 /**
+ * Whether one attribute definition is the key asked for — **S52**.
+ *
+ * An absent `occurrence` **is** the first, which is what makes a profile
+ * embedded in a `.prism` file before S52 answer exactly as it did.
+ */
+function isKey(entry: JsonValue, key: ParameterKey): boolean {
+  return (
+    isObject(entry) &&
+    stringAt(entry, "/attribute") === key.attribute &&
+    (numberAt(entry, "/occurrence") ?? 0) === key.occurrence
+  );
+}
+
+/**
+ * Every attribute one fixture has, the desk's supplied intensity included.
+ *
+ * `prism_core::Show::attribute_defs`, and here for the same reason it is there:
+ * *what a fixture has* is one question, and a reader that walked the profile's
+ * own list would answer it differently for a colour-only PAR (S43).
+ *
+ * The supplied intensity comes **first**, where a profile would have put a
+ * dimmer channel.
+ */
+function attributeDefs(show: JsonValue | null, fixture: number): readonly JsonValue[] {
+  const attributes = typeAttributes(show, fixture);
+  if (attributes === null) {
+    return [];
+  }
+  return suppliedIntensity(show, fixture, attributes)
+    ? [SUPPLIED_DIMMER, ...attributes]
+    : attributes;
+}
+
+/**
+ * The intensity the desk supplies to a fixture whose profile has none — S43.
+ *
+ * `prism_core::show::SOFTWARE_DIMMER`, as much of it as this side reads: the
+ * bank it is on, where it rests, and that it is the **first** and only dimmer.
+ * Nought is the answer that matters — it is what keeps a rig of colour-only
+ * fixtures dark at home now that a colour rests open (B1).
+ */
+const SUPPLIED_DIMMER: JsonValue = {
+  attribute: "Dimmer",
+  occurrence: 0,
+  featureGroup: "Dimmer",
+  defaultValue: 0,
+};
+
+/**
+ * What one fixture's profile calls this channel — **S53**.
+ *
+ * Read out of the embedded profile like {@link homeOf} is, so the word an
+ * operator reads is the one the *show* carries: a library re-download does not
+ * rename a patched fixture's channels, which is the point of embedding.
+ *
+ * `null` for a profile that carries no name — a generic one, and every profile
+ * a show embedded before S53.
+ */
+export function nameOf(
+  show: JsonValue | null,
+  fixture: number,
+  key: ParameterKey,
+): string | null {
+  for (const entry of attributeDefs(show, fixture)) {
+    if (isKey(entry, key)) {
+      return stringAt(entry, "/label");
+    }
+  }
+  return null;
+}
+
+/**
  * What one fixture's attribute rests at, out of the show's own profile.
  *
  * The **bottom of the merge stack** (`docs/DMX_MERGE.md`), which is what a lamp
@@ -336,19 +586,10 @@ export function rangesOf(
 export function homeOf(
   show: JsonValue | null,
   fixture: number,
-  attribute: AttributeType,
+  key: ParameterKey,
 ): number | null {
-  const attributes = typeAttributes(show, fixture);
-  if (attributes === null) {
-    return null;
-  }
-  if (attribute === "Dimmer" && suppliedIntensity(show, fixture, attributes)) {
-    // **Nought, and that is the point of it** — the colour underneath rests
-    // open (B1) and this is what keeps the lamp off until somebody asks.
-    return 0;
-  }
-  for (const entry of attributes) {
-    if (!isObject(entry) || stringAt(entry, "/attribute") !== attribute) {
+  for (const entry of attributeDefs(show, fixture)) {
+    if (!isKey(entry, key)) {
       continue;
     }
     const rest = valueAt(entry, "/defaultValue");
@@ -405,13 +646,17 @@ function suppliedIntensity(
 function entryFor(
   programmer: ProgrammerState | null,
   fixture: number,
-  attribute: AttributeType,
+  key: ParameterKey,
 ): ProgrammerState["values"][number] | null {
   if (programmer === null) {
     return null;
   }
   for (const entry of programmer.values) {
-    if (entry.fixture === fixture && entry.attribute === attribute) {
+    if (
+      entry.fixture === fixture &&
+      entry.attribute === key.attribute &&
+      (entry.occurrence ?? 0) === key.occurrence
+    ) {
       return entry;
     }
   }
@@ -422,9 +667,9 @@ function entryFor(
 export function valueFor(
   programmer: ProgrammerState | null,
   fixture: number,
-  attribute: AttributeType,
+  key: ParameterKey,
 ): number | null {
-  return entryFor(programmer, fixture, attribute)?.value.value ?? null;
+  return entryFor(programmer, fixture, key)?.value.value ?? null;
 }
 
 /**
@@ -468,7 +713,10 @@ export function touchedBanks(
   }
   const touched = new Set<FeatureGroup>();
   for (const entry of programmer.values) {
-    const group = groupOf(show, entry.fixture, entry.attribute);
+    const group = groupOf(show, entry.fixture, {
+      attribute: entry.attribute,
+      occurrence: entry.occurrence ?? 0,
+    });
     if (group !== null) {
       touched.add(group);
     }
@@ -488,17 +736,10 @@ export function touchedBanks(
 export function groupOf(
   show: JsonValue | null,
   fixture: number,
-  attribute: AttributeType,
+  key: ParameterKey,
 ): FeatureGroup | null {
-  const attributes = typeAttributes(show, fixture);
-  if (attributes === null) {
-    return null;
-  }
-  if (attribute === "Dimmer" && suppliedIntensity(show, fixture, attributes)) {
-    return "Dimmer";
-  }
-  for (const entry of attributes) {
-    if (!isObject(entry) || stringAt(entry, "/attribute") !== attribute) {
+  for (const entry of attributeDefs(show, fixture)) {
+    if (!isKey(entry, key)) {
       continue;
     }
     const group = stringAt(entry, "/featureGroup");

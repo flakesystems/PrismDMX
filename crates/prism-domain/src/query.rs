@@ -33,8 +33,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    ArtNetCounters, ArtNetNodeInfo, AttributeType, CommandLineMode, FixtureId, MidiPortInfo,
-    OutputStatusInfo, PresetId, PresetPool, SequenceId, SurfaceControl, SurfaceStatus, UniverseId,
+    ArtNetCounters, ArtNetNodeInfo, AttributeKey, AttributeType, CommandLineMode, FixtureId,
+    MidiPortInfo, OutputStatusInfo, PresetId, PresetPool, SequenceId, SurfaceControl,
+    SurfaceStatus, UniverseId,
 };
 
 /// Two fixtures sharing DMX channels.
@@ -298,6 +299,13 @@ pub struct TrackedValue {
     pub fixture: FixtureId,
     /// The attribute.
     pub attribute: AttributeType,
+    /// Which channel of that kind — **S52**, counted from nought.
+    ///
+    /// A fixture may have two of a parameter (a head with two colour wheels),
+    /// and this is which one. Absent means the first, so a `.prism` file
+    /// written before S52 reads back with every value where it always was.
+    #[serde(default, skip_serializing_if = "AttributeKey::occurrence_is_first")]
+    pub occurrence: u8,
     /// What the list holds it at while this cue is playing, `0..=65535`.
     pub value: u16,
 }

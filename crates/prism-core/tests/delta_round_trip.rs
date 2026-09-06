@@ -671,11 +671,13 @@ fn a_scripted_programmer_is_reproduced_command_by_command() {
     });
     pair.apply(&Command::SetAttribute {
         attribute: AttributeType::Red,
+        occurrence: 0,
         value: 65535,
         relative: false,
     });
     pair.apply(&Command::SetAttribute {
         attribute: AttributeType::Green,
+        occurrence: 0,
         value: -4096,
         relative: true,
     });
@@ -714,6 +716,7 @@ fn an_undo_and_a_redo_reach_all_three_mirrors() {
     });
     pair.apply(&Command::SetAttribute {
         attribute: AttributeType::Red,
+        occurrence: 0,
         value: 65535,
         relative: false,
     });

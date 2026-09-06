@@ -13,7 +13,7 @@
 use core::fmt;
 use std::collections::BTreeSet;
 
-use prism_domain::{AttributeType, FeatureGroup, FixtureId, FixtureType, MergeMode};
+use prism_domain::{AttributeKey, AttributeType, FeatureGroup, FixtureId, FixtureType, MergeMode};
 
 /// Upper bound on attributes in one plan.
 ///
@@ -36,6 +36,9 @@ pub enum MergeError {
         fixture: FixtureId,
         /// The attribute defined twice.
         attribute: AttributeType,
+        /// Which occurrence of it — **S52**. A fixture may have two colour
+        /// wheels; what it may not have is two *first* colour wheels.
+        occurrence: u8,
     },
     /// More attributes than [`MAX_SLOTS`]. Carries the count the build had
     /// reached when it stopped, which is one past the limit — building the rest
@@ -50,10 +53,15 @@ impl fmt::Display for MergeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::DuplicateFixture(id) => write!(f, "fixture {id} is patched twice"),
-            Self::DuplicateAttribute { fixture, attribute } => {
+            Self::DuplicateAttribute {
+                fixture,
+                attribute,
+                occurrence,
+            } => {
                 write!(
                     f,
-                    "fixture {fixture} defines the attribute {attribute:?} twice"
+                    "fixture {fixture} defines the attribute {} twice",
+                    AttributeKey::new(*attribute, *occurrence)
                 )
             }
             Self::TooManySlots(count) => {
@@ -76,6 +84,11 @@ pub struct AttributeSlot {
     pub fixture: FixtureId,
     /// Which attribute of it.
     pub attribute: AttributeType,
+    /// Which channel of that kind — **S52**, counted from nought.
+    ///
+    /// A fixture with two colour wheels has two `ColorWheel` slots, and this is
+    /// what tells the merge, the programmer and a cue which one they mean.
+    pub occurrence: u8,
     /// How playbacks combine for this attribute — from `AttributeDef.mergeMode`,
     /// which is the authority, not the attribute type's default.
     pub merge_mode: MergeMode,
@@ -99,6 +112,12 @@ impl AttributeSlot {
     /// merge mode. A profile is free to file an oddly-wired dimmer channel under
     /// [`FeatureGroup::Beam`], and then it is not intensity, whatever it is
     /// called.
+    /// The key this slot is filed under — **S52**.
+    #[must_use]
+    pub const fn key(&self) -> AttributeKey {
+        AttributeKey::new(self.attribute, self.occurrence)
+    }
+
     #[must_use]
     pub const fn is_intensity(&self) -> bool {
         matches!(self.feature_group, FeatureGroup::Dimmer)
@@ -153,15 +172,16 @@ impl MergePlan {
             if !patched.insert(fixture) {
                 return Err(MergeError::DuplicateFixture(fixture));
             }
-            let mut defined: BTreeSet<AttributeType> = BTreeSet::new();
+            let mut defined: BTreeSet<AttributeKey> = BTreeSet::new();
             if software_dimmer {
                 if slots.len() == MAX_SLOTS {
                     return Err(MergeError::TooManySlots(MAX_SLOTS + 1));
                 }
-                defined.insert(AttributeType::Dimmer);
+                defined.insert(AttributeKey::first(AttributeType::Dimmer));
                 slots.push(AttributeSlot {
                     fixture,
                     attribute: AttributeType::Dimmer,
+                    occurrence: 0,
                     merge_mode: AttributeType::Dimmer.default_merge_mode(),
                     feature_group: FeatureGroup::Dimmer,
                     // **Nought, and this is the whole point of the feature.** The
@@ -171,10 +191,11 @@ impl MergePlan {
                 });
             }
             for def in &fixture_type.attributes {
-                if !defined.insert(def.attribute) {
+                if !defined.insert(def.key()) {
                     return Err(MergeError::DuplicateAttribute {
                         fixture,
                         attribute: def.attribute,
+                        occurrence: def.occurrence,
                     });
                 }
                 if slots.len() == MAX_SLOTS {
@@ -183,13 +204,14 @@ impl MergePlan {
                 slots.push(AttributeSlot {
                     fixture,
                     attribute: def.attribute,
+                    occurrence: def.occurrence,
                     merge_mode: def.merge_mode,
                     feature_group: def.feature_group,
                     home: def.default_value,
                 });
             }
         }
-        slots.sort_unstable_by_key(|slot| (slot.fixture, slot.attribute));
+        slots.sort_unstable_by_key(|slot| (slot.fixture, slot.attribute, slot.occurrence));
         Ok(Self {
             slots: slots.into_boxed_slice(),
         })
@@ -225,9 +247,11 @@ impl MergePlan {
     /// A binary search over the sorted slots, so a caller resolving a command
     /// does not walk the patch.
     #[must_use]
-    pub fn index_of(&self, fixture: FixtureId, attribute: AttributeType) -> Option<usize> {
+    pub fn index_of(&self, fixture: FixtureId, key: AttributeKey) -> Option<usize> {
         self.slots
-            .binary_search_by_key(&(fixture, attribute), |slot| (slot.fixture, slot.attribute))
+            .binary_search_by_key(&(fixture, key.attribute, key.occurrence), |slot| {
+                (slot.fixture, slot.attribute, slot.occurrence)
+            })
             .ok()
     }
 }
@@ -236,7 +260,9 @@ impl MergePlan {
 mod tests {
     use crate::plan::{MAX_SLOTS, MergeError, MergePlan};
     use crate::testkit::{attribute_at, attribute_def, fixture_type, moving_head};
-    use prism_domain::{AttributeDef, AttributeType, FeatureGroup, FixtureId, MergeMode};
+    use prism_domain::{
+        AttributeDef, AttributeKey, AttributeType, FeatureGroup, FixtureId, MergeMode,
+    };
 
     fn plan_of(entries: &[(u32, &prism_domain::FixtureType)]) -> MergePlan {
         MergePlan::build(
@@ -248,7 +274,8 @@ mod tests {
     }
 
     fn slot_of(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
-        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+        plan.index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
+            .unwrap()
     }
 
     #[test]
@@ -308,10 +335,13 @@ mod tests {
         let head = moving_head();
         let plan = plan_of(&[(1, &head)]);
         let dimmer = plan
-            .index_of(FixtureId::new(1), AttributeType::Dimmer)
+            .index_of(
+                FixtureId::new(1),
+                AttributeKey::first(AttributeType::Dimmer),
+            )
             .unwrap();
         let pan = plan
-            .index_of(FixtureId::new(1), AttributeType::Pan)
+            .index_of(FixtureId::new(1), AttributeKey::first(AttributeType::Pan))
             .unwrap();
 
         let dimmer = plan.slot(dimmer).unwrap();
@@ -342,11 +372,11 @@ mod tests {
         let head = moving_head();
         let plan = plan_of(&[(1, &head)]);
         assert!(
-            plan.index_of(FixtureId::new(2), AttributeType::Pan)
+            plan.index_of(FixtureId::new(2), AttributeKey::first(AttributeType::Pan))
                 .is_none()
         );
         assert!(
-            plan.index_of(FixtureId::new(1), AttributeType::Tilt)
+            plan.index_of(FixtureId::new(1), AttributeKey::first(AttributeType::Tilt))
                 .is_none()
         );
         assert!(plan.slot(plan.slot_count()).is_none());
@@ -381,7 +411,10 @@ mod tests {
         assert_eq!(plan.slot_count(), 3, "two colours and the supplied dimmer");
 
         let index = plan
-            .index_of(FixtureId::new(1), AttributeType::Dimmer)
+            .index_of(
+                FixtureId::new(1),
+                AttributeKey::first(AttributeType::Dimmer),
+            )
             .expect("the desk supplied one");
         let slot = plan.slot(index).unwrap();
         assert_eq!(slot.home, 0, "dark at home");
@@ -392,7 +425,7 @@ mod tests {
         // And the colour it sits over is untouched: open, as B1 left it.
         let red = plan
             .slot(
-                plan.index_of(FixtureId::new(1), AttributeType::Red)
+                plan.index_of(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
                     .unwrap(),
             )
             .unwrap();
@@ -410,8 +443,11 @@ mod tests {
         let plan = MergePlan::build([(FixtureId::new(1), &par, false)]).unwrap();
         assert_eq!(plan.slot_count(), 1);
         assert!(
-            plan.index_of(FixtureId::new(1), AttributeType::Dimmer)
-                .is_none()
+            plan.index_of(
+                FixtureId::new(1),
+                AttributeKey::first(AttributeType::Dimmer)
+            )
+            .is_none()
         );
     }
 
@@ -443,6 +479,7 @@ mod tests {
             MergeError::DuplicateAttribute {
                 fixture: FixtureId::new(1),
                 attribute: AttributeType::Pan,
+                occurrence: 0,
             }
         );
     }
@@ -483,6 +520,7 @@ mod tests {
                 MergeError::DuplicateAttribute {
                     fixture: FixtureId::new(4),
                     attribute: AttributeType::Pan,
+                    occurrence: 0,
                 },
                 "fixture 4 defines the attribute Pan twice",
             ),

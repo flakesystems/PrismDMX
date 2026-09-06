@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AttributeType, FeatureGroup, FixtureId, PresetId, RgbColor};
+use crate::{AttributeKey, AttributeType, FeatureGroup, FixtureId, PresetId, RgbColor};
 
 /// One stored attribute value inside a preset.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -18,8 +18,23 @@ pub struct PresetValue {
     pub fixture: FixtureId,
     /// The attribute being set.
     pub attribute: AttributeType,
+    /// Which channel of that kind — **S52**, counted from nought.
+    ///
+    /// A fixture may have two of a parameter (a head with two colour wheels),
+    /// and this is which one. Absent means the first, so a `.prism` file
+    /// written before S52 reads back with every value where it always was.
+    #[serde(default, skip_serializing_if = "AttributeKey::occurrence_is_first")]
+    pub occurrence: u8,
     /// The value, `0..=65535`.
     pub value: u16,
+}
+
+impl PresetValue {
+    /// The key this value is filed under — attribute and occurrence, **S52**.
+    #[must_use]
+    pub const fn key(&self) -> AttributeKey {
+        AttributeKey::new(self.attribute, self.occurrence)
+    }
 }
 
 /// Which pool a preset is filed in — the seven feature groups, and *Multi*.
@@ -154,6 +169,7 @@ mod tests {
             values: vec![PresetValue {
                 fixture: FixtureId::new(1),
                 attribute: AttributeType::Blue,
+                occurrence: 0,
                 value: 65535,
             }],
         }
@@ -180,6 +196,7 @@ mod tests {
         let value = PresetValue {
             fixture: FixtureId::new(1),
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: u16::MAX,
         };
         assert_eq!(value.value, 65535);

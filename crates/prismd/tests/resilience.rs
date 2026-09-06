@@ -61,8 +61,8 @@ use std::time::{Duration, Instant};
 
 use prism_core::{SessionMirror, ShowMirror};
 use prism_domain::{
-    AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, JsonPatchOp, JsonValue,
-    PlaybackTarget, ProgrammerState, SelectionMode, UniverseId,
+    AttributeKey, AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, JsonPatchOp,
+    JsonValue, PlaybackTarget, ProgrammerState, SelectionMode, UniverseId,
 };
 use prism_ipc::{Client, ClientError, ClientEvent, ClientKind, Hello, RejectReason};
 use prism_protocols::FrameRecord;
@@ -400,6 +400,7 @@ async fn a_killed_client_comes_back_to_the_state_it_had_accumulated() {
         },
         Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 40000,
             relative: false,
         },
@@ -431,6 +432,7 @@ async fn a_killed_client_comes_back_to_the_state_it_had_accumulated() {
         },
         Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 20000,
             relative: false,
         },
@@ -487,7 +489,10 @@ async fn a_killed_client_comes_back_to_the_state_it_had_accumulated() {
     );
     assert_eq!(
         programmer
-            .value(FixtureId::new(4), AttributeType::Dimmer)
+            .value(
+                FixtureId::new(4),
+                AttributeKey::first(AttributeType::Dimmer)
+            )
             .map(|held| held.value),
         Some(20000)
     );

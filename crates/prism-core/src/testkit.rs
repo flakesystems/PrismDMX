@@ -18,6 +18,8 @@ use prism_domain::{
 pub(crate) fn attribute(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset: None,
@@ -88,6 +90,7 @@ pub(crate) fn cue(number: &str, fixture: u32, attribute: AttributeType, value: u
         parts: vec![CuePart {
             fixture: FixtureId::new(fixture),
             attribute,
+            occurrence: 0,
             value,
             preset_ref: None,
             tracking: prism_domain::CueTracking::Track,
@@ -120,6 +123,7 @@ pub(crate) fn preset(id: u32, fixture: u32, attribute: AttributeType, value: u16
         values: vec![PresetValue {
             fixture: FixtureId::new(fixture),
             attribute,
+            occurrence: 0,
             value,
         }],
     }
@@ -147,6 +151,8 @@ pub(crate) fn migration_fixture() -> crate::ShowFile {
             attributes: vec![
                 AttributeDef {
                     attribute: AttributeType::Pan,
+                    label: None,
+                    occurrence: 0,
                     feature_group: prism_domain::FeatureGroup::Position,
                     coarse_offset: 0,
                     fine_offset: Some(1),

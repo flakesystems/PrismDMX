@@ -274,7 +274,7 @@ impl SequencePlan {
         for cue in &order {
             for part in &cue.parts {
                 let Some((index, slot)) = plan
-                    .index_of(part.fixture, part.attribute)
+                    .index_of(part.fixture, part.key())
                     .and_then(|index| Some((index, plan.slot(index)?)))
                 else {
                     unresolved += 1;
@@ -304,7 +304,7 @@ impl SequencePlan {
             scratch.clear();
             for part in &cue.parts {
                 let Some(position) = plan
-                    .index_of(part.fixture, part.attribute)
+                    .index_of(part.fixture, part.key())
                     .and_then(|index| positions.get(&index))
                 else {
                     continue;
@@ -351,7 +351,7 @@ impl SequencePlan {
             walk.enter(cue, &mut changes);
             for change in &changes {
                 let Some(position) = plan
-                    .index_of(change.fixture, change.attribute)
+                    .index_of(change.fixture, change.key())
                     .and_then(|slot| positions.get(&slot))
                 else {
                     continue;
@@ -562,6 +562,7 @@ mod tests {
     use crate::plan::MergePlan;
     use crate::testkit::{cue, cue_part, moving_head, sequence};
     use crate::tick::TICK_HZ;
+    use prism_domain::AttributeKey;
     use prism_domain::{AttributeType, CueTrigger, FixtureId, GoDirection, SequenceId};
     use proptest::prelude::*;
 
@@ -572,7 +573,8 @@ mod tests {
     }
 
     fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
-        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+        plan.index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
+            .unwrap()
     }
 
     /// Where one attribute sits in a compiled sequence's own slot table, which

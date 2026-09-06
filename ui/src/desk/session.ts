@@ -71,6 +71,9 @@ export const PROGRAMMER_PAGE = "/session/programmerPage";
 /** Where the index of the parameter the jog wheel turns lives. */
 export const PROGRAMMER_PARAM_INDEX = "/session/programmerParamIndex";
 
+/** Where the part of a repeated fixture the bank is on lives — S52. */
+export const PROGRAMMER_OCCURRENCE = "/session/programmerOccurrence";
+
 /** Where the console line lives. */
 export const COMMAND_LINE = "/session/commandLine";
 
@@ -168,6 +171,18 @@ export function programmerPage(session: JsonValue | null): number {
 /** The index of the parameter the jog wheel turns. */
 export function programmerParamIndex(session: JsonValue | null): number {
   return numberAt(session, PROGRAMMER_PARAM_INDEX) ?? 0;
+}
+
+/**
+ * Which **part** of a repeated fixture the encoder bank is on — S52.
+ *
+ * A fixture may have two of a parameter, and a bank whose repeats go deeper
+ * than `INLINE_OCCURRENCES` draws one occurrence at a time rather than all of
+ * them. Nought for every rig with no repeats, which is most of them — and
+ * nought for a session written before S52, which is where it was.
+ */
+export function programmerOccurrence(session: JsonValue | null): number {
+  return numberAt(session, PROGRAMMER_OCCURRENCE) ?? 0;
 }
 
 /** The console line **as the daemon holds it** — never what has been typed. */

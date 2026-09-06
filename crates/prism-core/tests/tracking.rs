@@ -29,6 +29,7 @@ fn look(number: &str, values: &[(u32, u16)]) -> Cue {
             .map(|&(fixture, value)| CuePart {
                 fixture: FixtureId::new(fixture),
                 attribute: AttributeType::Red,
+                occurrence: 0,
                 value,
                 preset_ref: None,
                 tracking: CueTracking::Track,

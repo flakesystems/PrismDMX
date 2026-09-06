@@ -305,13 +305,18 @@ fn command_group_1() -> BoxedStrategy<crate::Command> {
     prop_oneof![
         (small_vec(4), any::<SelectionMode>())
             .prop_map(|(ids, mode)| C::SelectFixtures { ids, mode }),
-        (any::<AttributeType>(), any::<i32>(), any::<bool>()).prop_map(
-            |(attribute, value, relative)| C::SetAttribute {
+        (
+            any::<AttributeType>(),
+            any::<u8>(),
+            any::<i32>(),
+            any::<bool>()
+        )
+            .prop_map(|(attribute, occurrence, value, relative)| C::SetAttribute {
                 attribute,
+                occurrence,
                 value,
                 relative
-            }
-        ),
+            }),
         (any::<GroupId>(), any::<SelectionMode>())
             .prop_map(|(group_id, mode)| C::SelectGroup { group_id, mode }),
         any::<PresetId>().prop_map(|preset_id| C::ApplyPreset { preset_id }),
@@ -512,6 +517,7 @@ fn command_group_5() -> BoxedStrategy<crate::Command> {
         any::<SequenceId>().prop_map(|sequence_id| C::SelectSequence { sequence_id }),
         any::<FeatureGroup>().prop_map(|group| C::SetEncoderBank { group }),
         any::<u32>().prop_map(|page| C::SetProgrammerPage { page }),
+        any::<u32>().prop_map(|occurrence| C::SetProgrammerOccurrence { occurrence }),
         any::<ParamDirection>().prop_map(|direction| C::SelectProgrammerParam { direction }),
     ]
     .boxed()

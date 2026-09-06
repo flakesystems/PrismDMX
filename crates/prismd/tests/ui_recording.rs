@@ -170,6 +170,7 @@ fn some_command(rng: &mut Rng, patched: &mut u32) -> Command {
         1 => Command::SetAttribute {
             attribute: AttributeType::ALL
                 [usize::try_from(rng.below(3)).unwrap_or(0) % AttributeType::ALL.len()],
+            occurrence: 0,
             value: i32::try_from(rng.below(65536)).unwrap_or(0),
             relative: false,
         },
@@ -471,6 +472,7 @@ fn client_messages() -> Vec<ClientRecord> {
                 seq: 1,
                 command: Command::SetAttribute {
                     attribute: AttributeType::Dimmer,
+                    occurrence: 0,
                     value: -257,
                     relative: true,
                 },

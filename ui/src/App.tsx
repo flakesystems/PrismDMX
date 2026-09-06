@@ -50,13 +50,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 import "./App.css";
-import type { AttributeRange, AttributeType, FeatureGroup, WindowType } from "./bindings";
+import type { AttributeRange, FeatureGroup, WindowType } from "./bindings";
 import { Canvas } from "./canvas/canvas";
 import type { Rect } from "./canvas/geometry";
 import { WindowPicker } from "./canvas/picker";
 import { ViewBar } from "./canvas/viewbar";
 import { CommandLine } from "./desk/commandline";
-import type { ParameterReading } from "./desk/programmer";
+import type { ParameterKey, ParameterReading } from "./desk/programmer";
 import { CLEAR_TITLES } from "./desk/keys";
 import { clearStage } from "./desk/programmer";
 import { ProgrammerBand } from "./desk/programmerband";
@@ -394,12 +394,31 @@ function Desk() {
         },
         [send],
     );
+    /**
+     * **Which part of a repeated fixture the bank is on** — S52.
+     *
+     * Absolute, for `SetProgrammerPage`'s reason: the daemon does not know how
+     * deep a bank's repeats go for the current selection, so the band clamps and
+     * sends the number rather than a step nothing could saturate.
+     */
+    const onProgrammerPart = useCallback(
+        (occurrence: number) => {
+            send({ t: "SetProgrammerOccurrence", occurrence });
+        },
+        [send],
+    );
     const onTurn = useCallback(
         (reading: ParameterReading, delta: number) => {
             // Relative, so the daemon starts from what the programmer holds — or
             // from the attribute's home value when it holds nothing. Working that out
             // here would be this interface deciding what a value *is*.
-            send({ t: "SetAttribute", attribute: reading.attribute, value: delta, relative: true });
+            send({
+                t: "SetAttribute",
+                attribute: reading.attribute,
+                occurrence: reading.occurrence,
+                value: delta,
+                relative: true,
+            });
         },
         [send],
     );
@@ -422,9 +441,15 @@ function Desk() {
      * click that was meant to change nothing.
      */
     const onTake = useCallback(
-        (attributes: readonly AttributeType[]) => {
-            for (const attribute of attributes) {
-                send({ t: "SetAttribute", attribute, value: 0, relative: true });
+        (keys: readonly ParameterKey[]) => {
+            for (const key of keys) {
+                send({
+                    t: "SetAttribute",
+                    attribute: key.attribute,
+                    occurrence: key.occurrence,
+                    value: 0,
+                    relative: true,
+                });
             }
         },
         [send],
@@ -450,6 +475,7 @@ function Desk() {
             send({
                 t: "SetAttribute",
                 attribute: reading.attribute,
+                occurrence: reading.occurrence,
                 value: middle,
                 relative: false,
             });
@@ -484,6 +510,7 @@ function Desk() {
                 onParam={onParam}
                 onPage={onProgrammerPage}
                 onTurn={onTurn}
+                onPart={onProgrammerPart}
                 onTake={onTake}
                 onPickRange={onPickRange}
                 onLine={run}

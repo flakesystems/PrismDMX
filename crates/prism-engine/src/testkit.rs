@@ -26,6 +26,8 @@ pub(crate) fn attribute_at(
 ) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset,
@@ -91,6 +93,7 @@ pub(crate) fn cue_part(fixture: u32, attribute: AttributeType, value: u16) -> Cu
     CuePart {
         fixture: FixtureId::new(fixture),
         attribute,
+        occurrence: 0,
         value,
         preset_ref: None,
         tracking: prism_domain::CueTracking::Track,

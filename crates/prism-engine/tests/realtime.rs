@@ -441,6 +441,8 @@ fn stress_fixture_type() -> FixtureType {
         .enumerate()
         .map(|(index, attribute)| AttributeDef {
             attribute: *attribute,
+            label: None,
+            occurrence: 0,
             feature_group: attribute.feature_group(),
             coarse_offset: index as u16,
             fine_offset: None,
@@ -507,6 +509,7 @@ fn stress_sequence(fixture_type: &FixtureType, fixtures: u32, seed: u16) -> Sequ
                     fixture_type.attributes.iter().map(move |def| CuePart {
                         fixture: FixtureId::new(fixture),
                         attribute: def.attribute,
+                        occurrence: 0,
                         value: fixture
                             .wrapping_mul(u32::from(number) + 1)
                             .wrapping_add(u32::from(seed)) as u16,

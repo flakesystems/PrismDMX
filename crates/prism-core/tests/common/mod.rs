@@ -20,6 +20,8 @@ use prism_domain::{
 pub fn attribute(attribute: AttributeType, coarse_offset: u16, home: u16) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset: None,
@@ -91,6 +93,7 @@ pub fn cue(number: &str, fixture: u32, attribute: AttributeType, value: u16) -> 
         parts: vec![CuePart {
             fixture: FixtureId::new(fixture),
             attribute,
+            occurrence: 0,
             value,
             preset_ref: None,
             tracking: prism_domain::CueTracking::Track,
@@ -132,6 +135,7 @@ pub fn preset(id: u32, fixture: u32, attribute: AttributeType, value: u16) -> Pr
         values: vec![PresetValue {
             fixture: FixtureId::new(fixture),
             attribute,
+            occurrence: 0,
             value,
         }],
     }
@@ -170,6 +174,7 @@ pub fn show_commands() -> Vec<Command> {
         },
         Command::SetAttribute {
             attribute: AttributeType::Red,
+            occurrence: 0,
             value: 65535,
             relative: false,
         },

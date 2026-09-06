@@ -20,7 +20,17 @@ members = ["crates/*"]
 # `ExecutorFaderFunction::XFade` kept its name, which is the whole of what that
 # costs. The wire is `docs/IPC_PROTOCOL.md` §4.2's own version and moves on its
 # own account.
-version = "0.9.1"
+#
+# 0.9.2 is the **fixture library, whole**, and the patch digit is the same claim
+# made a second time: S52, S53 and S54 changed what a profile *becomes* when it
+# is patched and **nothing about what a `.prism` file is**. Every field they
+# added is `#[serde(default, skip_serializing_if = …)]` — the attribute key's
+# nought-based `occurrence` (S52), the channel's `label` (S53) — so a show
+# written by 0.9.1 opens with every value where it was, and one with no repeats
+# serialises back byte for byte. `AttributeType` grew from 34 rows to 41, all of
+# them **appended**, which is what keeps the first page of every encoder bank
+# what it was.
+version = "0.9.2"
 edition = "2024"
 # Raised from 1.85 in S17. `std::fs::File::try_lock` was stabilised in 1.89 and
 # it is what `prismd` uses for the single-instance guarantee: an advisory lock

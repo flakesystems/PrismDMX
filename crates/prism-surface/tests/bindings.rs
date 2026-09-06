@@ -44,7 +44,9 @@ fn context() -> SurfaceContext {
         previous_view: Some(ViewId::new(1)),
         next_view: Some(ViewId::new(7)),
         programmer_page: 3,
-        parameter: Some(prism_domain::AttributeType::Pan),
+        parameter: Some(prism_domain::AttributeKey::first(
+            prism_domain::AttributeType::Pan,
+        )),
     }
 }
 
@@ -346,6 +348,7 @@ fn the_jog_wheel_changes_the_selected_programmer_parameter() {
         table.command(SurfaceEvent::Jog { steps: -5 }, &context()),
         Some(Command::SetAttribute {
             attribute: prism_domain::AttributeType::Pan,
+            occurrence: 0,
             value: -5,
             relative: true,
         })

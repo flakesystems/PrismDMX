@@ -96,13 +96,19 @@ pub enum ShowError {
         /// The footprint it has to fit inside.
         footprint: u16,
     },
-    /// A fixture type defines one attribute twice, which would give one
+    /// A fixture type defines one attribute **key** twice, which would give one
     /// physical parameter two values.
+    ///
+    /// **The key and not the type, since S52.** A fixture may have two colour
+    /// wheels; what it may not have is two *first* colour wheels, because the
+    /// merge plan, the programmer and every cue file a value under the pair.
     DuplicateAttribute {
         /// The type that defines it.
         type_id: String,
         /// The attribute defined twice.
         attribute: prism_domain::AttributeType,
+        /// Which occurrence of it — S52.
+        occurrence: u8,
     },
     /// The fixture's footprint does not fit at its address: address 0, or a
     /// range running past channel 512.
@@ -249,8 +255,16 @@ impl fmt::Display for ShowError {
                 "fixture type {type_id:?} puts {attribute:?} at offset {offset}, \
                  outside its footprint of {footprint}"
             ),
-            Self::DuplicateAttribute { type_id, attribute } => {
-                write!(f, "fixture type {type_id:?} defines {attribute:?} twice")
+            Self::DuplicateAttribute {
+                type_id,
+                attribute,
+                occurrence,
+            } => {
+                write!(
+                    f,
+                    "fixture type {type_id:?} defines {} twice",
+                    prism_domain::AttributeKey::new(*attribute, *occurrence)
+                )
             }
             Self::AddressOutOfRange {
                 fixture,
@@ -359,6 +373,10 @@ pub struct Show {
 /// fixtures dark at home now that colour rests open (punch-list B1).
 static SOFTWARE_DIMMER: prism_domain::AttributeDef = prism_domain::AttributeDef {
     attribute: prism_domain::AttributeType::Dimmer,
+    // The desk's own channel, so there is no manufacturer's word for it — S53.
+    label: None,
+    // The first and the only one — a desk supplies one intensity, never two.
+    occurrence: 0,
     feature_group: prism_domain::FeatureGroup::Dimmer,
     coarse_offset: 0,
     fine_offset: None,
@@ -537,19 +555,50 @@ impl Show {
     pub fn attribute_def(
         &self,
         fixture: prism_domain::FixtureId,
-        attribute: prism_domain::AttributeType,
+        key: prism_domain::AttributeKey,
     ) -> Option<&prism_domain::AttributeDef> {
         let fixture = self.fixtures.get(&fixture)?;
         let fixture_type = self.fixture_types.get(&fixture.type_id)?;
-        if attribute == prism_domain::AttributeType::Dimmer
+        // **The supplied intensity is the first one and there is only one.** A
+        // fixture whose profile has no dimmer gets exactly one from the desk
+        // (S43), so asking for a *second* one is asking for a channel nobody
+        // has — S52, and answering `Some` there would put a value in the
+        // programmer that no merge slot can hold.
+        if key == prism_domain::AttributeKey::first(prism_domain::AttributeType::Dimmer)
             && fixture.has_software_dimmer(fixture_type)
         {
             return Some(&SOFTWARE_DIMMER);
         }
-        fixture_type
-            .attributes
-            .iter()
-            .find(|def| def.attribute == attribute)
+        fixture_type.attributes.iter().find(|def| def.key() == key)
+    }
+
+    /// Every attribute one patched fixture has, in the profile's own order —
+    /// **S52**.
+    ///
+    /// The desk's supplied intensity comes **first** where there is one, which
+    /// is where a profile would have put a dimmer channel and where
+    /// [`Self::attribute_def`] already answers for it. Written once here rather
+    /// than open-coded beside each caller, because *what a fixture has* is one
+    /// question and a caller that walked `FixtureType::attributes` on its own
+    /// would answer it differently for a colour-only PAR (S43).
+    ///
+    /// Empty for a fixture that is not patched, or whose profile the show
+    /// cannot resolve — both of which are ordinary states, not errors.
+    pub fn attribute_defs(
+        &self,
+        fixture: prism_domain::FixtureId,
+    ) -> impl Iterator<Item = &prism_domain::AttributeDef> {
+        let fixture = self.fixtures.get(&fixture);
+        let fixture_type = fixture.and_then(|fixture| self.fixture_types.get(&fixture.type_id));
+        let supplied = match (fixture, fixture_type) {
+            (Some(fixture), Some(fixture_type)) if fixture.has_software_dimmer(fixture_type) => {
+                Some(&SOFTWARE_DIMMER)
+            }
+            _ => None,
+        };
+        supplied
+            .into_iter()
+            .chain(fixture_type.into_iter().flat_map(|it| it.attributes.iter()))
     }
 
     /// The universes the patch occupies, ascending and without repeats.
@@ -1197,9 +1246,10 @@ impl Show {
                 let inherited: Vec<TrackedValue> = track
                     .inherited(cue)
                     .into_iter()
-                    .map(|((fixture, attribute), value)| TrackedValue {
+                    .map(|((fixture, key), value)| TrackedValue {
                         fixture,
-                        attribute,
+                        attribute: key.attribute,
+                        occurrence: key.occurrence,
                         value,
                     })
                     .collect();
@@ -1284,10 +1334,11 @@ impl Show {
         for part in &mut cue.parts {
             moved |= replace(&mut part.tracking, want);
         }
-        for ((fixture, attribute), value) in inherited {
+        for ((fixture, key), value) in inherited {
             cue.parts.push(CuePart {
                 fixture,
-                attribute,
+                attribute: key.attribute,
+                occurrence: key.occurrence,
                 value,
                 preset_ref: None,
                 tracking: CueTracking::Track,
@@ -1787,13 +1838,14 @@ fn check_fixture_type(fixture_type: &FixtureType) -> Result<(), ShowError> {
     }
     let mut seen = Vec::with_capacity(fixture_type.attributes.len());
     for attribute in &fixture_type.attributes {
-        if seen.contains(&attribute.attribute) {
+        if seen.contains(&attribute.key()) {
             return Err(ShowError::DuplicateAttribute {
                 type_id: fixture_type.id.clone(),
                 attribute: attribute.attribute,
+                occurrence: attribute.occurrence,
             });
         }
-        seen.push(attribute.attribute);
+        seen.push(attribute.key());
         for offset in [Some(attribute.coarse_offset), attribute.fine_offset]
             .into_iter()
             .flatten()
@@ -1863,8 +1915,8 @@ mod tests {
     use super::{Show, ShowError};
     use crate::testkit::{cue, dimmer_type, fixture, par_type, sequence};
     use prism_domain::{
-        AttributeType, ExecutorId, FixtureId, GroupId, JsonPatchOp, PresetId, SequenceId,
-        UniverseId, Vec3,
+        AttributeKey, AttributeType, ExecutorId, FixtureId, GroupId, JsonPatchOp, PresetId,
+        SequenceId, UniverseId, Vec3,
     };
 
     /// **A colour-only fixture has a dimmer the programmer can reach** — S43.
@@ -1884,7 +1936,10 @@ mod tests {
             .unwrap();
 
         let supplied = show
-            .attribute_def(FixtureId::new(1), AttributeType::Dimmer)
+            .attribute_def(
+                FixtureId::new(1),
+                AttributeKey::first(AttributeType::Dimmer),
+            )
             .expect("the desk supplies one for a PAR with no intensity");
         assert_eq!(supplied.default_value, 0, "dark at home");
         assert_eq!(supplied.feature_group, prism_domain::FeatureGroup::Dimmer);
@@ -1896,7 +1951,7 @@ mod tests {
                 .unwrap()
                 .attributes
                 .contains(
-                    show.attribute_def(FixtureId::new(1), AttributeType::Red)
+                    show.attribute_def(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
                         .unwrap()
                 ),
             "red is still the profile's own definition"
@@ -1905,7 +1960,10 @@ mod tests {
         // A fixture with a real dimmer keeps the profile's own definition, and
         // that is the one with a channel behind it.
         let real = show
-            .attribute_def(FixtureId::new(2), AttributeType::Dimmer)
+            .attribute_def(
+                FixtureId::new(2),
+                AttributeKey::first(AttributeType::Dimmer),
+            )
             .expect("the profile has one");
         assert!(
             show.fixture_type("generic.dimmer")
@@ -1927,8 +1985,11 @@ mod tests {
         patched.software_dimmer = false;
         show.patch_fixture(patched).unwrap();
         assert!(
-            show.attribute_def(FixtureId::new(1), AttributeType::Dimmer)
-                .is_none()
+            show.attribute_def(
+                FixtureId::new(1),
+                AttributeKey::first(AttributeType::Dimmer)
+            )
+            .is_none()
         );
     }
 
@@ -2024,6 +2085,7 @@ mod tests {
             ShowError::DuplicateAttribute {
                 type_id: "x".to_owned(),
                 attribute: AttributeType::Pan,
+                occurrence: 0,
             },
             ShowError::AddressOutOfRange {
                 fixture: FixtureId::new(1),
@@ -2385,6 +2447,7 @@ mod tests {
             Err(ShowError::DuplicateAttribute {
                 type_id: "generic.rgbw.par".to_owned(),
                 attribute: AttributeType::Red,
+                occurrence: 0,
             })
         );
 

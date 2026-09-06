@@ -650,6 +650,7 @@ impl Show {
             | Command::SelectExecutor { .. }
             | Command::SetEncoderBank { .. }
             | Command::SetProgrammerPage { .. }
+            | Command::SetProgrammerOccurrence { .. }
             | Command::SelectProgrammerParam { .. }
             | Command::SelectSequence { .. }
             | Command::CommandLineInput { .. } => Err(ShowError::NotAShowCommand),
@@ -1411,11 +1412,13 @@ mod tests {
             },
             Command::SetAttribute {
                 attribute: AttributeType::Red,
+                occurrence: 0,
                 value: 65535,
                 relative: false,
             },
             Command::SetAttribute {
                 attribute: AttributeType::Red,
+                occurrence: 0,
                 value: -128,
                 relative: true,
             },
@@ -1477,6 +1480,7 @@ mod tests {
             assert_eq!(
                 show.apply(&Command::SetAttribute {
                     attribute: AttributeType::Dimmer,
+                    occurrence: 0,
                     value,
                     relative: false,
                 }),
@@ -1486,6 +1490,7 @@ mod tests {
         // A relative value is a signed delta and may be either.
         show.apply(&Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: -70000,
             relative: true,
         })

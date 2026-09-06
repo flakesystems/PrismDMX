@@ -217,6 +217,8 @@ mod tests {
             footprint: 1,
             attributes: vec![crate::AttributeDef {
                 attribute: crate::AttributeType::Red,
+                label: None,
+                occurrence: 0,
                 feature_group: crate::FeatureGroup::Color,
                 coarse_offset: 0,
                 fine_offset: None,
@@ -231,6 +233,8 @@ mod tests {
         let mut with_intensity = colour_only.clone();
         with_intensity.attributes.push(crate::AttributeDef {
             attribute: crate::AttributeType::Dimmer,
+            label: None,
+            occurrence: 0,
             feature_group: crate::FeatureGroup::Dimmer,
             coarse_offset: 1,
             fine_offset: None,

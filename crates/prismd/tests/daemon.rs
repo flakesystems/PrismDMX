@@ -272,6 +272,7 @@ async fn a_client_connects_and_is_served_the_show_and_the_session() {
         let seq = client
             .send(Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 0,
                 relative: false,
             })

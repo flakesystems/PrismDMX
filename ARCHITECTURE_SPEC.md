@@ -168,6 +168,13 @@ interface Session {
   encoderBank: FeatureGroup;           // Dimmer / Position / Color / Beam / Focus
   programmerPage: number;              // Zoom ▲▼ — pages the encoder bar (S35)
   programmerParamIndex: number;        // Zoom ◀▶ — what the jog wheel turns
+  programmerOccurrence: number;        // S52 — which **part** of a repeated
+                                       // fixture the bank is on. A tube with a
+                                       // red per pixel has more channels of a
+                                       // kind than a bank has knobs, so past
+                                       // `INLINE_OCCURRENCES` repeats the bank
+                                       // draws one at a time and this says
+                                       // which. `#[serde(default)]`
   commandLine: string;                 // contents of the console line
   windowPicker: boolean;               // whether the window chooser is up (S43)
 }
@@ -406,21 +413,66 @@ type FixtureId = number;  type GroupId = number;
 type SequenceId = number; type ExecutorId = number;
 type PresetId = number;   type UniverseId = number;   // 1..=64
 
-// **Thirty-four since S51** (punch-list B38). It was the fifteen on the first
-// two lines, and fifteen is why a third of the installed Open Fixture Library's
-// channels reached no attribute at all and were dropped — CMY mixing, every
-// colour wheel, every built-in effect, frost, fog, the framing shutters. The
-// nineteen below are one per capability type the format defines, and they are
-// **appended rather than interleaved**: `FeatureGroup::attributes` is this list
-// filtered and the encoder bar pages it four at a time, so the first page of the
-// colour bank is still Red, Green, Blue, White.
+// **Forty-one since S54.** It was the fifteen on the first two lines, and fifteen
+// is why a third of the installed Open Fixture Library's channels reached no
+// attribute at all and were dropped — CMY mixing, every colour wheel, every
+// built-in effect, frost, fog, the framing shutters (S51, B38). S52 adds the
+// last two colours the format names, which this model used to fold into
+// `White` — and folding them cost a lamp with **both** its second channel.
+//
+// S53's four are a different lesson: they were not *missing* types but
+// **discriminators**, properties the format states beside a capability that
+// split one type into distinct physical parameters. A `WheelSlot` is a colour
+// wheel or a gobo wheel depending on what the wheel's slots are; a
+// `BladeRotation` is one blade turning and a `BladeSystemRotation` is the whole
+// frame; a `Fog` with `fogType: "Haze"` is a hazer. Reading the type and
+// nothing else is lossy in a way no counter shows — nothing is *unmapped*, it
+// just arrives under the wrong knob (S53, B50).
+//
+// **S54's `Raw` is the only row here that is not a kind of parameter.** It says
+// *there is a channel here* and nothing more, and it exists so that the
+// sentence **no slot of a patched fixture is out of reach** has no exceptions:
+// a switching alias whose positions disagree about what it is, a slot a mode
+// leaves unused, a channel the file says does nothing, a fine byte with no
+// coarse channel — and, the reason it is a floor rather than four fixes, a
+// capability type a later version of the format adds. Before S54 those slots
+// had no `AttributeDef` at all, which made them invisible to the merge, the
+// programmer and every cue while still occupying the footprint: 707 slots of
+// the installed library, driven to nought for ever (S54, B51).
+//
+// Every one is **appended rather than interleaved**: `FeatureGroup::attributes`
+// is this list filtered and the encoder bar pages it four at a time, so the
+// first page of the colour bank is still Red, Green, Blue, White.
 type AttributeType =
   | "Dimmer" | "Pan" | "Tilt" | "Red" | "Green" | "Blue" | "White" | "Amber"
   | "Iris" | "Zoom" | "Focus" | "Gobo" | "Prism" | "Shutter" | "Control"
   | "Cyan" | "Magenta" | "Yellow" | "Uv" | "Lime" | "Indigo"
   | "ColorWheel" | "ColorTemperature" | "PositionSpeed"
   | "GoboRotation" | "PrismRotation" | "Effect" | "EffectSpeed"
-  | "Frost" | "Blade" | "BeamPosition" | "Fog" | "Speed" | "Sound";
+  | "Frost" | "Blade" | "BeamPosition" | "Fog" | "Speed" | "Sound"
+  | "WarmWhite" | "ColdWhite"
+  | "ColorWheelRotation" | "Haze" | "BladeRotation" | "BladeSystem"
+  | "Raw";
+
+// **An attribute is a type and an occurrence** — S52, and this is the key every
+// value in a show is filed under. Until S52 the type alone was the key, and a
+// fixture therefore had one of each parameter: `MergeError::DuplicateAttribute`
+// enforced it and the library reader dropped the second channel of a kind —
+// 2 679 channels of the installed corpus, a head's upper colour wheel, every
+// pixel of a tube but one.
+//
+// It is **nought-based**, which is what makes an absent occurrence mean *the
+// one there has always been*: a `.prism` file written before S52 opens with
+// every value on the first occurrence and nothing has to be rewritten. People
+// count from one, so `AttributeKey`'s `Display` writes `Gobo` for the first and
+// `Gobo 2` for the second — and that method is the only place the two
+// numberings meet.
+//
+// On the wire and in the file it is a flat `occurrence` beside the `attribute`,
+// omitted when it is nought, so a show with no repeats round-trips byte for
+// byte. `CuePart`, `PresetValue`, `ProgrammerEntry`, `AttributeDef`,
+// `SetAttribute` and `prism_engine::AttributeSlot` all carry the pair.
+interface AttributeKey { attribute: AttributeType; occurrence: number; }
 
 // **Seven since S43** — the owner's `design/skeleton/programmer.pdf`. Still
 // seven after S51's nineteen: a bank is *what an operator reaches for*, and a
@@ -438,6 +490,24 @@ interface AttributeRange {
 
 interface AttributeDef {
   attribute: AttributeType;
+  occurrence: number;          // S52; which channel of that kind, from nought.
+                               // Omitted when nought — an older profile reads
+                               // back as the first of its kind
+  label: string | null;        // S53; **what the manufacturer calls this
+                               // channel** — "Rotating Gobo", "Color Wheel 2".
+                               // A label and never a key: two heads whose reds
+                               // are called different things still share
+                               // `AttributeType::Red`, which is what lets one
+                               // line reach a rig from three manufacturers.
+                               // The encoder shows it in place of the desk's
+                               // own word. Absent on a generic profile and on
+                               // every profile a show embedded before S53 —
+                               // but **never** absent on a "Raw" attribute,
+                               // where it is the only thing that names the
+                               // knob: the manufacturer's word, or "Ch 7", the
+                               // channel's own place in the fixture counted
+                               // from one, which is the number on a patch
+                               // sheet (S54)
   featureGroup: FeatureGroup;
   coarseOffset: number;        // 0-based offset within the fixture footprint
   fineOffset: number | null;   // 16-bit fine channel, null when 8-bit
@@ -447,7 +517,10 @@ interface AttributeDef {
   physicalFrom: number;        // e.g. -270 for Pan
   physicalTo: number;
   ranges: AttributeRange[];    // S51; empty for a continuous channel, and for
-                               // every profile a show embedded before S51
+                               // every profile a show embedded before S51.
+                               // S52 names a wheel slot out of the fixture's
+                               // own `wheels` block, so a gobo is called what
+                               // the manufacturer calls it and not "Slot 3"
 }
 
 interface FixtureType {
@@ -472,7 +545,11 @@ interface Preset {
   pool: FeatureGroup;          // Color / Position / Dimmer pools
   name: string;
   color: RgbColor | null;      // shown on the X-Touch scribble strip
-  values: Array<{ fixture: FixtureId; attribute: AttributeType; value: number }>;
+  values: Array<{
+    fixture: FixtureId; attribute: AttributeType;
+    occurrence: number;        // S52, omitted when nought
+    value: number;
+  }>;
 }
 
 // What a cue says about one attribute it names — S48. *Inherits* is the third
@@ -481,6 +558,7 @@ type CueTracking = "Track" | "CueOnly";
 
 interface CuePart {
   fixture: FixtureId; attribute: AttributeType;
+  occurrence: number;          // S52, omitted when nought
   value: number;               // 0..65535
   presetRef: PresetId | null;  // preset link keeps the cue live-updatable:
                                // storing the preset rewrites this part's value
@@ -557,7 +635,7 @@ type ExecutorButtonRef =
 interface ProgrammerState {
   selection: FixtureId[];
   activeFeatureGroup: FeatureGroup;
-  values: Map<FixtureId, Map<AttributeType, ProgrammerValue>>;
+  values: Map<FixtureId, Map<AttributeKey, ProgrammerValue>>;   // S52
   // The three-stage clear `CLAUDE.md` asks for, plus `0` for *there is nothing
   // to clear* (S43, punch-list B2 — the stage is derived from the contents and
   // cannot go stale). The number **is** the press order, and S51 turned the

@@ -90,6 +90,81 @@ pub enum AttributeType {
     Speed,
     /// Sound-to-light sensitivity.
     Sound,
+    // -- S52: the two the colour list still collapsed -----------------------
+    //
+    // The Open Fixture Library names thirteen emitter colours and this model
+    // had eleven of them: `Warm White` and `Cold White` both became
+    // [`Self::White`]. On a lamp with one of them that is a wrong label; on a
+    // lamp with **both** it is a dropped channel, because the second one is
+    // then a duplicate. Six profiles of the installed corpus have both.
+    /// Warm white emitter — its own channel, not a shade of [`Self::White`].
+    WarmWhite,
+    /// Cold white emitter.
+    ColdWhite,
+    // -- S53: the four the capability table was folding together -----------
+    //
+    // The Open Fixture Library gives several capability types a
+    // **discriminator** — a property that splits one type into distinct
+    // physical parameters. S52's table read the type and threw the
+    // discriminator away, so a colour wheel arrived as a gobo, every framing
+    // blade arrived as the same blade, and a hazer arrived as a fogger. See
+    // `prism_core::library::ofl::attribute_of_capability`.
+    /// Rotation or scroll of a **colour** wheel.
+    ///
+    /// Told from [`Self::GoboRotation`] by which wheel the capability names and
+    /// what that wheel's slots are.
+    ///
+    /// Four channels of the installed corpus, and the small number is the
+    /// interesting part: most `WheelRotation` capabilities are a **range at the
+    /// top of a wheel-select channel** — *slot 1 … slot 8, then rotate CW* —
+    /// and such a channel is one knob. Only where a fixture gives the rotation
+    /// a channel of its own is there a second one.
+    ColorWheelRotation,
+    /// A haze machine's output, as against [`Self::Fog`]'s.
+    ///
+    /// `Fog.fogType` says which, and a hazer and a fogger are not the same
+    /// machine to anybody standing in front of them.
+    Haze,
+    /// Rotation of **one** framing blade.
+    ///
+    /// [`Self::Blade`] is its insertion. Which blade is the attribute's
+    /// *occurrence*, out of the file's own `blade` property.
+    BladeRotation,
+    /// Rotation of the whole framing **system**, not of one blade.
+    ///
+    /// `BladeSystemRotation` carries no `blade`, so it has no occurrence to be
+    /// told apart by — folding it in with [`Self::BladeRotation`] would have
+    /// put it on top of blade one.
+    BladeSystem,
+    /// **A DMX slot of a fixture that this desk has no word for** — S54, and
+    /// the one row here that is not a *kind* of parameter.
+    ///
+    /// Every other row says what a channel **does**. This one says only *there
+    /// is a channel here*, and it exists so that the sentence **no slot of a
+    /// patched fixture is out of reach** can be true without exception. Before
+    /// S54 a channel the reader could not place was dropped: it kept its place
+    /// in the footprint and the desk drove it to nought for ever, with no knob
+    /// and **no counter that noticed** — 707 slots of the installed library,
+    /// 34 of the 35 channels of a `glp/knv-cube`.
+    ///
+    /// Three kinds of slot land here, and the [`AttributeDef::label`] tells them
+    /// apart in the operator's own words:
+    ///
+    /// - a channel whose meaning **switches** on another channel's value, where
+    ///   the file's own resolutions do not agree on what it is (S54, `B49`);
+    /// - a slot the mode leaves **unused**, or that the file states does
+    ///   **nothing** — *Reserved for future use* is a channel a firmware update
+    ///   may give a meaning to, and an operator who needs it then should not
+    ///   need a new build of this desk;
+    /// - anything a **later** version of the format describes that the table in
+    ///   `prism_core::library::ofl` has not been taught yet.
+    ///
+    /// It is **LTP** and it rests where the file says, or at nought. Its
+    /// occurrence counts the raw channels of one fixture in channel order, and
+    /// its label carries the manufacturer's own name for the channel — or
+    /// `Ch 7`, the channel's place in the fixture, which is the number an
+    /// operator is holding a patch sheet for.
+    Raw,
 }
 
 impl AttributeType {
@@ -113,7 +188,24 @@ impl AttributeType {
     /// is what keeps *Red, Green, Blue, White* the first page of the colour
     /// bank on a desk that now knows about indigo. A venue that never patches a
     /// CMY head never pages past the four knobs it had.
-    pub const ALL: [Self; 34] = [
+    ///
+    /// **Thirty-six since S52**, and the two are appended for the same reason
+    /// the nineteen were: `Warm White` and `Cold White` are colours the format
+    /// names and this model collapsed into [`Self::White`]. Appending keeps
+    /// *Red, Green, Blue, White* the first page of the colour bank.
+    ///
+    /// **Forty since S53**, and those four are a different kind of gap. Nothing
+    /// was *unmapped* before them — the four are things the table folded
+    /// together because it read a capability's **type** and discarded the
+    /// property the format uses to tell one physical parameter from another. A
+    /// colour wheel and a gobo wheel are both `WheelSlot`; a hazer and a fogger
+    /// are both `Fog`; four framing blades are all `BladeInsertion`. Counted
+    /// over the installed corpus: **121 wheel channels on the wrong bank** —
+    /// 115 colour wheels and two prism wheels an operator could not find under
+    /// *Colour* or *Prism*, and four colour-wheel rotations — 53 blade channels
+    /// with no relation to the blade they drive, and 13 haze channels called
+    /// fog.
+    pub const ALL: [Self; 41] = [
         Self::Dimmer,
         Self::Pan,
         Self::Tilt,
@@ -148,6 +240,13 @@ impl AttributeType {
         Self::Fog,
         Self::Speed,
         Self::Sound,
+        Self::WarmWhite,
+        Self::ColdWhite,
+        Self::ColorWheelRotation,
+        Self::Haze,
+        Self::BladeRotation,
+        Self::BladeSystem,
+        Self::Raw,
     ];
 
     /// Whether this attribute is an **additive emitter** — a lamp that makes
@@ -175,6 +274,8 @@ impl AttributeType {
                 | Self::Uv
                 | Self::Lime
                 | Self::Indigo
+                | Self::WarmWhite
+                | Self::ColdWhite
         )
     }
 
@@ -208,6 +309,9 @@ impl AttributeType {
             | Self::PrismRotation
             | Self::Effect
             | Self::EffectSpeed => FeatureGroup::Gobo,
+            // **S53.** A colour wheel's rotation is a colour gesture, so it is
+            // on the colour bank beside the wheel itself — which is where the
+            // wheel now is too.
             Self::Red
             | Self::Green
             | Self::Blue
@@ -220,18 +324,29 @@ impl AttributeType {
             | Self::Lime
             | Self::Indigo
             | Self::ColorWheel
-            | Self::ColorTemperature => FeatureGroup::Color,
+            | Self::ColorTemperature
+            | Self::WarmWhite
+            | Self::ColdWhite
+            | Self::ColorWheelRotation => FeatureGroup::Color,
             // The size and the shape of the beam.
             Self::Iris
             | Self::Zoom
             | Self::Shutter
             | Self::Frost
             | Self::Blade
+            | Self::BladeRotation
+            | Self::BladeSystem
             | Self::BeamPosition => FeatureGroup::Beam,
             Self::Focus => FeatureGroup::Focus,
             // The row that is touched once a show: lamp, reset, fan — and the
             // machine channels that belong to the same kind of moment.
-            Self::Control | Self::Fog | Self::Speed | Self::Sound => FeatureGroup::Control,
+            // **S54.** A slot this desk has no word for is reached where the
+            // other once-a-show rows are. It is not given a bank of its own,
+            // because the seven are one per Encoder Assign key of the surface
+            // (S43) and an eighth would have nowhere to live on the X-Touch.
+            Self::Control | Self::Fog | Self::Haze | Self::Speed | Self::Sound | Self::Raw => {
+                FeatureGroup::Control
+            }
         }
     }
 
@@ -244,6 +359,116 @@ impl AttributeType {
         match self {
             Self::Dimmer => MergeMode::Htp,
             _ => MergeMode::Ltp,
+        }
+    }
+}
+
+/// How deep a bank's repeats may go before they stop being knobs — **S52**.
+///
+/// A fixture may have two of a parameter, and *two* is not the same problem as
+/// *sixteen*. A head with two colour wheels wants both knobs side by side; an
+/// LED tube with a red per pixel would give the colour bank six pages of things
+/// called *Red* and bury the four knobs anybody actually reaches for.
+///
+/// So a bank whose deepest repeat is at most this many draws them all,
+/// numbered; past it the bank draws **one** occurrence at a time and the band
+/// grows a part stepper. Three, because that is a head with three wheels and
+/// still under a page of four.
+///
+/// **This is not the interface's decision**, unlike `ENCODERS_PER_PAGE`: it
+/// changes which parameters exist on a bank, so the jog wheel and the encoder
+/// bar have to agree about it. `prism_core::Programmer::bank_parameters` reads
+/// it, and it is exported to TypeScript with the rest of the bindings.
+pub const INLINE_OCCURRENCES: u8 = 3;
+
+/// One attribute of one fixture, told apart from the next one like it — **S52**.
+///
+/// # Why the key grew a second half
+///
+/// Until S52 an [`AttributeType`] *was* the key. A fixture had one dimmer, one
+/// pan, one gobo wheel, and the rule was enforced rather than assumed:
+/// `prism_engine::MergeError::DuplicateAttribute` refused a profile that named
+/// one twice, and `prism_core::library::ofl` therefore **dropped** the second
+/// channel of a kind rather than build a fixture that could not be patched.
+/// Measured over the installed library that was **2 679 channels** — a head
+/// with two colour wheels kept the lower one, an LED tube that writes out a red
+/// per pixel kept one pixel.
+///
+/// So an attribute now carries an **occurrence**: which channel of that kind
+/// this is, in the order the manufacturer wrote them down.
+///
+/// # It is nought-based, and exactly one place says otherwise
+///
+/// Zero is the first, which is what makes `#[serde(default)]` mean *the one
+/// there has always been* — a `.prism` file written before this existed opens
+/// with every value on the first occurrence and nothing has to be rewritten.
+/// People count from one, so [`Display`](std::fmt::Display) writes `Gobo` for
+/// the first and `Gobo 2` for the second, and that method is the **only** place
+/// the two numberings meet. Anywhere else adding or subtracting one is a bug
+/// waiting for a rig with three colour wheels on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub struct AttributeKey {
+    /// What this attribute controls.
+    pub attribute: AttributeType,
+    /// Which channel of that kind it is, counted from nought.
+    pub occurrence: u8,
+}
+
+impl AttributeKey {
+    /// The first — and until S52 the only — attribute of this kind.
+    #[must_use]
+    pub const fn first(attribute: AttributeType) -> Self {
+        Self {
+            attribute,
+            occurrence: 0,
+        }
+    }
+
+    /// One of a kind, counted from nought.
+    #[must_use]
+    pub const fn new(attribute: AttributeType, occurrence: u8) -> Self {
+        Self {
+            attribute,
+            occurrence,
+        }
+    }
+
+    /// Whether this is the first of its kind.
+    #[must_use]
+    pub const fn is_first(&self) -> bool {
+        self.occurrence == 0
+    }
+
+    /// Whether an occurrence field is the first — for `skip_serializing_if`.
+    ///
+    /// A free-standing predicate rather than a method because serde hands the
+    /// field and not the key: every struct that carries the two halves flat on
+    /// the wire (`CuePart`, `ProgrammerEntry`, `AttributeDef`, …) points its
+    /// `skip_serializing_if` here, so *what an absent occurrence means* is
+    /// written down once.
+    #[must_use]
+    pub const fn occurrence_is_first(occurrence: &u8) -> bool {
+        *occurrence == 0
+    }
+}
+
+impl From<AttributeType> for AttributeKey {
+    fn from(attribute: AttributeType) -> Self {
+        Self::first(attribute)
+    }
+}
+
+impl std::fmt::Display for AttributeKey {
+    /// `Gobo` for the first, `Gobo 2` for the second.
+    ///
+    /// The first is unqualified on purpose: a desk where every knob had a `1`
+    /// after it would be a desk that had made a rare case everybody's problem.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.occurrence == 0 {
+            write!(f, "{:?}", self.attribute)
+        } else {
+            write!(f, "{:?} {}", self.attribute, u16::from(self.occurrence) + 1)
         }
     }
 }
@@ -334,6 +559,9 @@ impl FeatureGroup {
                 AttributeType::Indigo,
                 AttributeType::ColorWheel,
                 AttributeType::ColorTemperature,
+                AttributeType::WarmWhite,
+                AttributeType::ColdWhite,
+                AttributeType::ColorWheelRotation,
             ],
             Self::Gobo => &[
                 AttributeType::Gobo,
@@ -350,6 +578,8 @@ impl FeatureGroup {
                 AttributeType::Frost,
                 AttributeType::Blade,
                 AttributeType::BeamPosition,
+                AttributeType::BladeRotation,
+                AttributeType::BladeSystem,
             ],
             Self::Focus => &[AttributeType::Focus],
             Self::Control => &[
@@ -357,6 +587,13 @@ impl FeatureGroup {
                 AttributeType::Fog,
                 AttributeType::Speed,
                 AttributeType::Sound,
+                AttributeType::Haze,
+                // **Last on the last bank** — S54. A slot this desk has no
+                // word for is the thing an operator reaches for least often, so
+                // it sits where the paging puts it last, and a venue that never
+                // patches a fixture with one never sees it: the band draws only
+                // what the selection has (S52, B46).
+                AttributeType::Raw,
             ],
         }
     }
@@ -449,6 +686,33 @@ impl AttributeRange {
 pub struct AttributeDef {
     /// What this attribute controls.
     pub attribute: AttributeType,
+    /// **What the manufacturer calls this channel** — S53.
+    ///
+    /// The profile's own channel name — *Rotating Gobo*, *Color Wheel 2*,
+    /// *Frost / Prism* — shown on the encoder in place of the attribute's own
+    /// name, which is this desk's word rather than the operator's.
+    ///
+    /// It is a **label and not a key**: nothing is looked up by it, two
+    /// fixtures whose reds are called different things still share the
+    /// attribute `Red`, and a preset still means the same on both. That
+    /// separation is the whole reason a desk can address a rig at all — see
+    /// `prism_core::library::ofl` for why the key stays this model's own
+    /// vocabulary.
+    ///
+    /// `None` for a generic profile, which stands in for a light nobody has
+    /// told the desk about and so has no manufacturer's word to carry, and for
+    /// every profile a show embedded before S53.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(value = "None"))]
+    pub label: Option<String>,
+    /// **Which channel of that kind this is** — S52, counted from nought.
+    ///
+    /// A head with two colour wheels has two `ColorWheel` definitions, the
+    /// lower-addressed one at nought. `#[serde(default)]` and skipped when it
+    /// is nought, so a profile embedded in a `.prism` file before this existed
+    /// reads back as the first of its kind and the file round-trips unchanged.
+    #[serde(default, skip_serializing_if = "AttributeKey::occurrence_is_first")]
+    pub occurrence: u8,
     /// Which encoder bank it appears on.
     pub feature_group: FeatureGroup,
     /// 0-based offset of the coarse channel within the fixture footprint.
@@ -493,6 +757,12 @@ pub struct AttributeDef {
 }
 
 impl AttributeDef {
+    /// The key this definition is filed under — S52.
+    #[must_use]
+    pub const fn key(&self) -> AttributeKey {
+        AttributeKey::new(self.attribute, self.occurrence)
+    }
+
     /// Whether this attribute occupies a coarse **and** a fine channel.
     #[must_use]
     pub const fn is_sixteen_bit(&self) -> bool {
@@ -563,12 +833,14 @@ impl FixtureType {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AttributeDef, AttributeType, FeatureGroup, FixtureType, MergeMode};
+    use crate::{AttributeDef, AttributeKey, AttributeType, FeatureGroup, FixtureType, MergeMode};
     use ts_rs::{Config, TS};
 
     fn tilt() -> AttributeDef {
         AttributeDef {
             attribute: AttributeType::Tilt,
+            label: None,
+            occurrence: 0,
             feature_group: FeatureGroup::Position,
             coarse_offset: 2,
             fine_offset: Some(3),
@@ -593,7 +865,8 @@ mod tests {
         );
     }
 
-    /// **Thirty-four since S51, and the first fifteen have not moved** — B38.
+    /// **Forty-one since S54, and the first fifteen have not moved** — B38,
+    /// B50, B51.
     ///
     /// The count is not the interesting half. The *order* is: the encoder bar
     /// pages a bank four at a time out of `FeatureGroup::attributes`, which is
@@ -602,8 +875,8 @@ mod tests {
     /// would not. A venue that never patches a CMY head must not have to page
     /// past indigo to find blue.
     #[test]
-    fn the_thirty_four_attribute_types_exist_and_the_first_fifteen_are_where_they_were() {
-        assert_eq!(AttributeType::ALL.len(), 34);
+    fn the_forty_one_attribute_types_exist_and_the_first_fifteen_are_where_they_were() {
+        assert_eq!(AttributeType::ALL.len(), 41);
         assert_eq!(
             &AttributeType::ALL[..15],
             &[
@@ -624,13 +897,125 @@ mod tests {
                 AttributeType::Control,
             ]
         );
+        // **S52's two and S53's four are the last six**, appended for the
+        // reason the nineteen before them were: the first page of the colour
+        // bank stays what it was.
+        //
+        // S53's are not types the format gained — they are distinctions it has
+        // always drawn beside a type (a wheel's slots, a `blade`, a `fogType`)
+        // and that this model used to throw away. See `library::ofl`.
+        //
+        // **S54's `Raw` is the last for a reason**: it is the only row that is
+        // not a kind of parameter at all. It says *there is a channel here* and
+        // nothing else, and it exists so that no slot of a patched fixture can
+        // be out of reach — including one described by a version of the format
+        // nobody has written yet.
+        assert_eq!(
+            &AttributeType::ALL[34..],
+            &[
+                AttributeType::WarmWhite,
+                AttributeType::ColdWhite,
+                AttributeType::ColorWheelRotation,
+                AttributeType::Haze,
+                AttributeType::BladeRotation,
+                AttributeType::BladeSystem,
+                AttributeType::Raw,
+            ]
+        );
         // Every one of them exactly once, which is what stops a copy-and-paste
-        // in a thirty-four-line array from going unnoticed.
+        // in a forty-one-line array from going unnoticed.
         let mut sorted = AttributeType::ALL;
         sorted.sort_unstable();
         let mut unique = sorted.to_vec();
         unique.dedup();
-        assert_eq!(unique.len(), 34);
+        assert_eq!(unique.len(), 41);
+    }
+
+    /// **An absent occurrence is the first one, and the first one writes
+    /// nothing** — S52, and this is the whole of the migration.
+    ///
+    /// The occurrence had to reach the key every value in a show is filed
+    /// under, and S34 recorded what adding a field to a persisted type costs:
+    /// the frozen version-1 fixture goes red. It costs nothing here because
+    /// *absent* and *the one there has always been* are made the same
+    /// statement — nought-based, `#[serde(default)]`, skipped when it is
+    /// nought. So a `.prism` file written by `v0.9.1` opens with every value
+    /// where it was, and a show with no repeats serialises byte for byte as it
+    /// did. No `MIGRATIONS` row, and nothing rewritten.
+    #[test]
+    fn an_absent_occurrence_is_the_first_and_the_first_writes_nothing() {
+        let first = AttributeDef {
+            attribute: AttributeType::Gobo,
+            label: None,
+            occurrence: 0,
+            feature_group: FeatureGroup::Gobo,
+            coarse_offset: 3,
+            fine_offset: None,
+            default_value: 0,
+            merge_mode: MergeMode::Ltp,
+            invert: false,
+            physical_from: 0.0,
+            physical_to: 100.0,
+            ranges: Vec::new(),
+        };
+        let written = serde_json::to_value(&first).unwrap();
+        assert!(
+            written.get("occurrence").is_none(),
+            "the first of a kind writes no occurrence: {written}"
+        );
+
+        // And a profile embedded before S52 has no such key at all.
+        let older = serde_json::json!({
+            "attribute": "Gobo",
+            "featureGroup": "Gobo",
+            "coarseOffset": 3,
+            "fineOffset": null,
+            "defaultValue": 0,
+            "mergeMode": "LTP",
+            "invert": false,
+            "physicalFrom": 0.0,
+            "physicalTo": 100.0
+        });
+        let read: AttributeDef = serde_json::from_value(older).unwrap();
+        assert_eq!(read, first);
+        assert_eq!(read.key(), AttributeKey::first(AttributeType::Gobo));
+
+        // A second of a kind does write one, or there would be nothing to tell
+        // the two apart on the wire.
+        let second = AttributeDef {
+            label: None,
+            occurrence: 1,
+            ..first
+        };
+        assert_eq!(
+            serde_json::to_value(&second).unwrap().get("occurrence"),
+            Some(&serde_json::json!(1))
+        );
+    }
+
+    /// **The first of a kind is unqualified, and the second counts from one.**
+    ///
+    /// The one place in the program where the nought-based key is read out
+    /// one-based. A desk where every knob carried a `1` would have made a rare
+    /// case everybody's problem.
+    #[test]
+    fn a_key_reads_out_one_based_and_only_here() {
+        assert_eq!(AttributeKey::first(AttributeType::Gobo).to_string(), "Gobo");
+        assert_eq!(
+            AttributeKey::new(AttributeType::Gobo, 1).to_string(),
+            "Gobo 2"
+        );
+        assert_eq!(
+            AttributeKey::new(AttributeType::ColorWheel, 2).to_string(),
+            "ColorWheel 3"
+        );
+        assert!(AttributeKey::first(AttributeType::Red).is_first());
+        assert!(!AttributeKey::new(AttributeType::Red, 1).is_first());
+        // The ordering is the one `MergePlan` sorts by: by kind, then by which
+        // one of that kind.
+        assert!(
+            AttributeKey::new(AttributeType::Red, 0) < AttributeKey::new(AttributeType::Red, 1)
+        );
     }
 
     /// **The first page of every bank is what it was** — the promise above,
@@ -766,10 +1151,24 @@ mod tests {
         // costs is paging on the colour bank, and the page an operator meets
         // first is unchanged — `the_first_four_of_every_bank_are_the_ones_that_
         // were_there_before` is the half that matters.
-        assert_eq!(FeatureGroup::Beam.attributes().len(), 6);
+        // **Eight on the beam bank since S53**: one framing blade turning and
+        // the whole frame turning are two gestures the format distinguishes and
+        // this model used to fold onto `Blade`, which numbered them by the
+        // order the reader met the channels.
+        assert_eq!(FeatureGroup::Beam.attributes().len(), 8);
         assert_eq!(FeatureGroup::Gobo.attributes().len(), 6);
-        assert_eq!(FeatureGroup::Color.attributes().len(), 13);
-        assert_eq!(FeatureGroup::Control.attributes().len(), 4);
+        // **Sixteen on the colour bank since S53.** S52 made it fifteen, not
+        // thirteen: `Warm White` and `Cold White` are colours the format names
+        // and this model used to fold into `White`, taking the second of the
+        // two with them. S53 adds the colour wheel's **rotation**, which is a
+        // colour gesture and used to be filed beside the gobos.
+        assert_eq!(FeatureGroup::Color.attributes().len(), 16);
+        // **Six on the control bank since S54.** S53 made it five — a hazer is
+        // not a fogger — and S54 adds the raw channel, which is filed among the
+        // once-a-show rows rather than given a bank of its own: the seven are
+        // one per Encoder Assign key of the X-Touch (S43), and an eighth would
+        // have nowhere on the surface to live.
+        assert_eq!(FeatureGroup::Control.attributes().len(), 6);
         // And the split moved knobs about rather than inventing or losing any.
         let banked: usize = FeatureGroup::ALL
             .iter()
@@ -878,7 +1277,9 @@ mod tests {
              | \"Lime\" | \"Indigo\" | \"ColorWheel\" | \"ColorTemperature\" \
              | \"PositionSpeed\" | \"GoboRotation\" | \"PrismRotation\" | \"Effect\" \
              | \"EffectSpeed\" | \"Frost\" | \"Blade\" | \"BeamPosition\" | \"Fog\" \
-             | \"Speed\" | \"Sound\""
+             | \"Speed\" | \"Sound\" | \"WarmWhite\" | \"ColdWhite\" \
+             | \"ColorWheelRotation\" | \"Haze\" | \"BladeRotation\" \
+             | \"BladeSystem\" | \"Raw\""
         );
         assert_eq!(
             FeatureGroup::inline(&cfg),

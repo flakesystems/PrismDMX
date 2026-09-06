@@ -172,6 +172,7 @@ fn every_rejection_leaves_the_show_byte_identical() {
         (
             Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 70000,
                 relative: false,
             },

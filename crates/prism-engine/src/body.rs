@@ -536,6 +536,7 @@ mod tests {
         Clock, DmxFrame, Engine, FrameLayout, ManualClock, TickBody, TickCommand, TickInfo,
         command_queue,
     };
+    use prism_domain::AttributeKey;
     use prism_domain::{
         AttributeType, Fixture, FixtureId, GoDirection, Group, GroupId, ProgrammerState,
         ProgrammerValue, ProgrammerValueSource, SequenceId, UniverseId,
@@ -568,7 +569,7 @@ mod tests {
 
     fn slot(body: &MergeBody, fixture: u32, attribute: AttributeType) -> usize {
         body.plan()
-            .index_of(FixtureId::new(fixture), attribute)
+            .index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
             .unwrap()
     }
 
@@ -875,10 +876,14 @@ mod tests {
         let mut state = ProgrammerState::default();
         state.set_value(
             FixtureId::new(1),
-            AttributeType::Pan,
+            AttributeKey::first(AttributeType::Pan),
             programmer_value(50_000),
         );
-        state.set_value(FixtureId::new(9), AttributeType::Pan, programmer_value(1));
+        state.set_value(
+            FixtureId::new(9),
+            AttributeKey::first(AttributeType::Pan),
+            programmer_value(1),
+        );
 
         assert_eq!(body.load_programmer(&state), 1);
         body.resolve();
