@@ -55,6 +55,8 @@ fn attribute(
 ) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset,

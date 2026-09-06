@@ -41,7 +41,7 @@
 use core::fmt;
 
 use prism_domain::{
-    AttributeType, ClearStage, Command, Cue, CuePart, CueTrigger, Delta, FeatureGroup, FixtureId,
+    AttributeKey, ClearStage, Command, Cue, CuePart, CueTrigger, Delta, FeatureGroup, FixtureId,
     GroupId, Preset, PresetId, PresetPool, PresetValue, ProgrammerState, ProgrammerValue,
     ProgrammerValueSource, RgbColor, SelectionMode, Sequence, SequenceId, SequenceStoreMode,
     StoreMode,
@@ -188,13 +188,118 @@ impl Programmer {
             .into_iter()
             .filter(|group| {
                 self.state.values.iter().any(|(&fixture, attributes)| {
-                    attributes.keys().any(|&attribute| {
-                        show.attribute_def(fixture, attribute)
+                    attributes.keys().any(|&key| {
+                        show.attribute_def(fixture, key)
                             .is_some_and(|def| def.feature_group == *group)
                     })
                 })
             })
             .collect()
+    }
+
+    /// The parameters one encoder bank has **for the current selection** —
+    /// S52, and the one rule two things ask.
+    ///
+    /// # Why this exists at all, and why it is here rather than twice
+    ///
+    /// Until S52 a bank's knobs were [`FeatureGroup::attributes`] and nothing
+    /// else: a fixed table, the same for every selection, with a dash under
+    /// every knob nothing selected had. Two things now make that untenable.
+    /// The owner asked for a band that shows **only what the fixtures have**,
+    /// and a fixture may have **two of a parameter**, which no fixed table can
+    /// enumerate — how many colour wheels a bank has is a fact about the
+    /// selection.
+    ///
+    /// So the list is computed, and S22's warning comes with it: the jog wheel
+    /// resolves *bank plus index* through `prismd::surface::parameter_of`, and
+    /// the interface numbers its encoders the same way. If the two disagreed an
+    /// operator would turn the wheel and watch a parameter other than the
+    /// highlighted one move — a fault nobody would attribute to a table. They
+    /// cannot disagree, because there is one of them and this is it.
+    ///
+    /// # The order, and why the second of everything comes after the first of
+    /// everything
+    ///
+    /// Occurrence-major: every first occurrence in [`FeatureGroup::attributes`]
+    /// order, then every second, then every third. That keeps *Red, Green,
+    /// Blue, White* the first page of the colour bank on a rig that has two of
+    /// each — the same promise appending to `AttributeType::ALL` keeps — and it
+    /// makes *the second of everything* one contiguous run, which is what the
+    /// part stepper walks.
+    ///
+    /// # `part`, and the two shapes a bank can be in
+    ///
+    /// A bank whose deepest repeat is at most
+    /// [`prism_domain::INLINE_OCCURRENCES`] draws them **all**, numbered, and
+    /// ignores `part`: two colour wheels, or a warm and a cold white, are knobs
+    /// an operator wants side by side. Past that the
+    /// bank draws **one** occurrence — `part`, clamped — because an eight-pixel
+    /// tube would otherwise give the colour bank six pages of things called
+    /// *Red*. See [`Self::bank_repeats`] for which shape a bank is in.
+    #[must_use]
+    pub fn bank_parameters(&self, show: &Show, bank: FeatureGroup, part: u8) -> Vec<AttributeKey> {
+        let repeats = self.bank_repeats(show, bank);
+        if repeats == 0 {
+            return Vec::new();
+        }
+        let occurrences: Vec<u8> = if repeats <= prism_domain::INLINE_OCCURRENCES {
+            (0..repeats).collect()
+        } else {
+            vec![part.min(repeats.saturating_sub(1))]
+        };
+        let mut parameters = Vec::new();
+        for occurrence in occurrences {
+            for &attribute in bank.attributes() {
+                let key = AttributeKey::new(attribute, occurrence);
+                if self.selection_has(show, key) {
+                    parameters.push(key);
+                }
+            }
+        }
+        parameters
+    }
+
+    /// How deep this bank's repeats go for the current selection — S52.
+    ///
+    /// The **largest** number of channels of one kind any selected fixture has
+    /// on this bank: 1 for an ordinary head, 2 for one with two colour wheels,
+    /// 8 for a tube with a red per pixel. Nought when nothing selected has
+    /// anything on this bank, which is what draws an empty band rather than a
+    /// row of dashes.
+    ///
+    /// The maximum and not the minimum, so a selection of two different heads
+    /// offers every wheel one of them has; a knob no *particular* fixture has
+    /// simply does not reach that fixture, which is what
+    /// [`Self::set_attribute`] has always done with an attribute a selected
+    /// fixture lacks.
+    /// **Which bank an attribute is on is [`FeatureGroup::attributes`] and not
+    /// the profile's `feature_group`**, and that distinction predates S52.
+    ///
+    /// A profile may file its dimmer under `Color` — an odd head, and a legal
+    /// one. That is a statement about *one fixture's channel*: it decides
+    /// whether the masters may scale it (`AttributeSlot::is_intensity`) and
+    /// which bank key lights up to say the programmer is holding something
+    /// (`Self::feature_groups`). It does **not** move the knob, or the knob
+    /// would be somewhere different for every head in the selection.
+    #[must_use]
+    pub fn bank_repeats(&self, show: &Show, bank: FeatureGroup) -> u8 {
+        let mut deepest = 0u8;
+        for &fixture in &self.state.selection {
+            for def in show.attribute_defs(fixture) {
+                if bank.attributes().contains(&def.attribute) {
+                    deepest = deepest.max(def.occurrence.saturating_add(1));
+                }
+            }
+        }
+        deepest
+    }
+
+    /// Whether anything selected has this exact key at all.
+    fn selection_has(&self, show: &Show, key: AttributeKey) -> bool {
+        self.state
+            .selection
+            .iter()
+            .any(|&fixture| show.attribute_def(fixture, key).is_some())
     }
 
     /// Touched values the show can no longer resolve, in a stable order.
@@ -204,16 +309,12 @@ impl Programmer {
     /// engine and asked this session to surface them: dropped silently, an
     /// operator cannot learn why a value does nothing.
     #[must_use]
-    pub fn unresolved(&self, show: &Show) -> Vec<(FixtureId, AttributeType)> {
+    pub fn unresolved(&self, show: &Show) -> Vec<(FixtureId, AttributeKey)> {
         self.state
             .values
             .iter()
-            .flat_map(|(&fixture, attributes)| {
-                attributes
-                    .keys()
-                    .map(move |&attribute| (fixture, attribute))
-            })
-            .filter(|&(fixture, attribute)| show.attribute_def(fixture, attribute).is_none())
+            .flat_map(|(&fixture, attributes)| attributes.keys().map(move |&key| (fixture, key)))
+            .filter(|&(fixture, key)| show.attribute_def(fixture, key).is_none())
             .collect()
     }
 
@@ -278,7 +379,7 @@ impl Programmer {
             let going = self.stored_keys(show, None);
             let mut cue = existing.clone();
             cue.parts
-                .retain(|part| !going.contains(&(part.fixture, part.attribute)));
+                .retain(|part| !going.contains(&(part.fixture, part.key())));
             if cue.parts.len() == existing.parts.len() {
                 return Err(ProgrammerError::NothingToRemove {
                     what: format!("cue {number} of sequence {sequence_id}"),
@@ -473,7 +574,7 @@ impl Programmer {
             ..ProgrammerState::default()
         };
         for part in &cue.parts {
-            if show.attribute_def(part.fixture, part.attribute).is_none() {
+            if show.attribute_def(part.fixture, part.key()).is_none() {
                 continue;
             }
             if !next.selection.contains(&part.fixture) {
@@ -481,7 +582,7 @@ impl Programmer {
             }
             next.set_value(
                 part.fixture,
-                part.attribute,
+                part.key(),
                 ProgrammerValue {
                     value: part.value,
                     // A link is what it came in with. A part with no link is
@@ -570,7 +671,7 @@ impl Programmer {
             preset.color = color;
             preset
                 .values
-                .retain(|value| !going.contains(&(value.fixture, value.attribute)));
+                .retain(|value| !going.contains(&(value.fixture, value.key())));
             if preset.values.len() == held.values.len() {
                 return Err(ProgrammerError::NothingToRemove {
                     what: format!("preset {id}"),
@@ -615,9 +716,10 @@ impl Programmer {
     /// order — or all of them, for [`PresetPool::Multi`].
     fn preset_values(&self, show: &Show, pool: PresetPool) -> Vec<PresetValue> {
         self.touched(show, pool.group())
-            .map(|(fixture, attribute, value)| PresetValue {
+            .map(|(fixture, key, value)| PresetValue {
                 fixture,
-                attribute,
+                attribute: key.attribute,
+                occurrence: key.occurrence,
                 value: value.value,
             })
             .collect()
@@ -637,9 +739,9 @@ impl Programmer {
         &self,
         show: &Show,
         pool: Option<FeatureGroup>,
-    ) -> Vec<(FixtureId, AttributeType)> {
+    ) -> Vec<(FixtureId, AttributeKey)> {
         self.touched(show, pool)
-            .map(|(fixture, attribute, _)| (fixture, attribute))
+            .map(|(fixture, key, _)| (fixture, key))
             .collect()
     }
 
@@ -655,17 +757,17 @@ impl Programmer {
         &'a self,
         show: &'a Show,
         pool: Option<FeatureGroup>,
-    ) -> impl Iterator<Item = (FixtureId, AttributeType, &'a ProgrammerValue)> + 'a {
+    ) -> impl Iterator<Item = (FixtureId, AttributeKey, &'a ProgrammerValue)> + 'a {
         self.state
             .values
             .iter()
             .flat_map(|(&fixture, attributes)| {
                 attributes
                     .iter()
-                    .map(move |(&attribute, value)| (fixture, attribute, value))
+                    .map(move |(&key, value)| (fixture, key, value))
             })
-            .filter(move |&(fixture, attribute, _)| {
-                show.attribute_def(fixture, attribute)
+            .filter(move |&(fixture, key, _)| {
+                show.attribute_def(fixture, key)
                     .is_some_and(|def| pool.is_none_or(|pool| def.feature_group == pool))
             })
     }
@@ -673,9 +775,10 @@ impl Programmer {
     /// The touched values as cue parts, in fixture then attribute order.
     fn cue_parts(&self, show: &Show) -> Vec<CuePart> {
         self.touched(show, None)
-            .map(|(fixture, attribute, value)| CuePart {
+            .map(|(fixture, key, value)| CuePart {
                 fixture,
-                attribute,
+                attribute: key.attribute,
+                occurrence: key.occurrence,
                 value: value.value,
                 // A link to a preset that is gone is not a link. The value it
                 // put there stays, exactly as `Show::remove_preset` leaves the
@@ -719,9 +822,15 @@ impl Programmer {
             Command::SelectFixtures { ids, mode } => self.select_fixtures(ids, *mode, show)?,
             Command::SetAttribute {
                 attribute,
+                occurrence,
                 value,
                 relative,
-            } => self.set_attribute(*attribute, *value, *relative, show)?,
+            } => self.set_attribute(
+                AttributeKey::new(*attribute, *occurrence),
+                *value,
+                *relative,
+                show,
+            )?,
             // S40's `Group 3`. The daemon expands it, which is what stops a
             // client sending a selection a second client's edit of that group
             // has already made wrong — and since S43 it is a **switch** rather
@@ -846,6 +955,7 @@ impl Programmer {
             | Command::SelectExecutor { .. }
             | Command::SetEncoderBank { .. }
             | Command::SetProgrammerPage { .. }
+            | Command::SetProgrammerOccurrence { .. }
             | Command::SelectProgrammerParam { .. }
             | Command::SelectSequence { .. }
             | Command::CommandLineInput { .. }
@@ -1067,7 +1177,7 @@ impl Programmer {
     /// encoder turns both ways (S1) and a wheel spun hard saturates.
     pub fn set_attribute(
         &mut self,
-        attribute: AttributeType,
+        key: AttributeKey,
         value: i32,
         relative: bool,
         show: &Show,
@@ -1080,19 +1190,19 @@ impl Programmer {
         let mut next = self.interaction();
         let mut group = None;
         for &fixture in &self.state.selection {
-            let Some(def) = show.attribute_def(fixture, attribute) else {
+            let Some(def) = show.attribute_def(fixture, key) else {
                 continue;
             };
             let resolved = absolute.unwrap_or_else(|| {
                 let base = self
                     .state
-                    .value(fixture, attribute)
+                    .value(fixture, key)
                     .map_or(def.default_value, |held| held.value);
                 nudge(base, value)
             });
             next.set_value(
                 fixture,
-                attribute,
+                key,
                 ProgrammerValue {
                     value: resolved,
                     source: ProgrammerValueSource::Manual,
@@ -1139,12 +1249,12 @@ impl Programmer {
             if !self.state.selection.contains(&stored.fixture) {
                 continue;
             }
-            let Some(def) = show.attribute_def(stored.fixture, stored.attribute) else {
+            let Some(def) = show.attribute_def(stored.fixture, stored.key()) else {
                 continue;
             };
             next.set_value(
                 stored.fixture,
-                stored.attribute,
+                stored.key(),
                 ProgrammerValue {
                     value: stored.value,
                     source: ProgrammerValueSource::Preset,
@@ -1339,9 +1449,9 @@ mod tests {
     use crate::testkit::{cue, dimmer_type, executor, fixture, par_type, preset, sequence};
     use crate::{Show, ShowFile};
     use prism_domain::{
-        AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, GroupId, Preset,
-        PresetId, PresetPool, PresetValue, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
-        SelectionMode, SequenceId, SequenceStoreMode, StoreMode,
+        AttributeKey, AttributeType, ClearStage, Command, Delta, FeatureGroup, FixtureId, GroupId,
+        Preset, PresetId, PresetPool, PresetValue, ProgrammerState, ProgrammerValue,
+        ProgrammerValueSource, SelectionMode, SequenceId, SequenceStoreMode, StoreMode,
     };
 
     /// Three PARs and a dimmer, one preset, one sequence.
@@ -1375,7 +1485,7 @@ mod tests {
             )
             .unwrap();
         programmer
-            .set_attribute(AttributeType::Red, 65535, false, show)
+            .set_attribute(AttributeKey::first(AttributeType::Red), 65535, false, show)
             .unwrap();
         programmer
     }
@@ -1396,7 +1506,7 @@ mod tests {
         );
         assert!(
             !programmer
-                .set_attribute(AttributeType::Red, 65535, false, &show)
+                .set_attribute(AttributeKey::first(AttributeType::Red), 65535, false, &show)
                 .unwrap()
         );
         // And nothing at all through the applier.
@@ -1405,6 +1515,7 @@ mod tests {
                 .apply(
                     &Command::SetAttribute {
                         attribute: AttributeType::Red,
+                        occurrence: 0,
                         value: 65535,
                         relative: false,
                     },
@@ -1634,10 +1745,15 @@ mod tests {
             )
             .unwrap();
         programmer
-            .set_attribute(AttributeType::Red, 65535, false, &show)
+            .set_attribute(AttributeKey::first(AttributeType::Red), 65535, false, &show)
             .unwrap();
         programmer
-            .set_attribute(AttributeType::Dimmer, 30000, false, &show)
+            .set_attribute(
+                AttributeKey::first(AttributeType::Dimmer),
+                30000,
+                false,
+                &show,
+            )
             .unwrap();
 
         let colour = programmer
@@ -1733,11 +1849,13 @@ mod tests {
                 PresetValue {
                     fixture: FixtureId::new(1),
                     attribute: AttributeType::Blue,
+                    occurrence: 0,
                     value: 65535,
                 },
                 PresetValue {
                     fixture: FixtureId::new(4),
                     attribute: AttributeType::Blue,
+                    occurrence: 0,
                     value: 65535,
                 },
             ],
@@ -1756,13 +1874,13 @@ mod tests {
         assert!(
             programmer
                 .state()
-                .value(FixtureId::new(1), AttributeType::Blue)
+                .value(FixtureId::new(1), AttributeKey::first(AttributeType::Blue))
                 .is_some()
         );
         assert!(
             programmer
                 .state()
-                .value(FixtureId::new(4), AttributeType::Blue)
+                .value(FixtureId::new(4), AttributeKey::first(AttributeType::Blue))
                 .is_none(),
             "the dimmer has no blue to set"
         );
@@ -1874,7 +1992,7 @@ mod tests {
         assert_eq!(
             programmer
                 .state()
-                .value(FixtureId::new(1), AttributeType::Red)
+                .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
                 .map(|value| value.source),
             Some(ProgrammerValueSource::Preset)
         );
@@ -1919,7 +2037,7 @@ mod tests {
 
         assert_eq!(
             programmer.unresolved(&show),
-            vec![(FixtureId::new(2), AttributeType::Red)]
+            vec![(FixtureId::new(2), AttributeKey::first(AttributeType::Red))]
         );
         let cue = programmer
             .cue(&show, SequenceId::new(1), "2", StoreMode::Merge)
@@ -1940,7 +2058,7 @@ mod tests {
         let mut state = ProgrammerState::default();
         state.set_value(
             FixtureId::new(1),
-            AttributeType::Red,
+            AttributeKey::first(AttributeType::Red),
             ProgrammerValue {
                 value: 1,
                 source: ProgrammerValueSource::Manual,
@@ -2127,6 +2245,7 @@ mod tests {
                     prism_domain::CuePart {
                         fixture: FixtureId::new(1),
                         attribute: AttributeType::Red,
+                        occurrence: 0,
                         value: 11,
                         preset_ref: None,
                         tracking: prism_domain::CueTracking::Track,
@@ -2134,6 +2253,7 @@ mod tests {
                     prism_domain::CuePart {
                         fixture: FixtureId::new(2),
                         attribute: AttributeType::Red,
+                        occurrence: 0,
                         value: 22,
                         preset_ref: None,
                         tracking: prism_domain::CueTracking::Track,
@@ -2164,7 +2284,7 @@ mod tests {
         assert!(
             programmer
                 .state()
-                .value(FixtureId::new(2), AttributeType::Red)
+                .value(FixtureId::new(2), AttributeKey::first(AttributeType::Red))
                 .is_none()
         );
 

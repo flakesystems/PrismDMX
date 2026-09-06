@@ -239,6 +239,21 @@ pub struct Session {
     pub programmer_page: u32,
     /// Which parameter the jog wheel turns (Zoom left/right).
     pub programmer_param_index: u32,
+    /// Which **part** of a repeated fixture the encoder bank is on — S52.
+    ///
+    /// A fixture may have two of a parameter, and a bank whose repeats go
+    /// deeper than [`crate::INLINE_OCCURRENCES`] draws one occurrence at a time
+    /// rather than all of them: this is which one. Nought for every rig with no
+    /// repeats at all, which is most of them.
+    ///
+    /// **Session state and not the client's**, for [`Self::window_picker`]'s
+    /// reason: the X-Touch drives the whole console and the interface is never
+    /// out of step with it, so which part is under the knobs is a fact the
+    /// daemon holds rather than one each screen decides. `#[serde(default)]`,
+    /// so a `.prism` file written before S52 opens on the first part — which is
+    /// where it was.
+    #[serde(default)]
+    pub programmer_occurrence: u32,
     /// Contents of the command line.
     ///
     /// **The text, and nothing about running it** — S49. S43 had a
@@ -286,6 +301,7 @@ impl Session {
             encoder_bank: FeatureGroup::Dimmer,
             programmer_page: 0,
             programmer_param_index: 0,
+            programmer_occurrence: 0,
             command_line: String::new(),
             window_picker: false,
         }
@@ -327,6 +343,7 @@ mod tests {
             encoder_bank: FeatureGroup::Dimmer,
             programmer_page: 0,
             programmer_param_index: 0,
+            programmer_occurrence: 0,
             command_line: String::new(),
             window_picker: false,
         }
@@ -361,6 +378,7 @@ mod tests {
                 "id",
                 "name",
                 "openWindows",
+                "programmerOccurrence",
                 "programmerPage",
                 "programmerParamIndex",
                 "selectedExecutor",

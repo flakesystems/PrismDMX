@@ -215,7 +215,8 @@ Commands express intent. The daemon validates, applies, journals for Oops where 
 type Command =
   // ---- Show and light ----
   | { t: "SelectFixtures"; ids: FixtureId[]; mode: "Set" | "Add" | "Toggle" }
-  | { t: "SetAttribute"; attribute: AttributeType; value: number; relative: boolean }
+  | { t: "SetAttribute"; attribute: AttributeType; occurrence?: number;
+      value: number; relative: boolean }
   | { t: "ApplyPreset"; presetId: PresetId }
   | { t: "ClearProgrammer" }
   | { t: "SelectGroup"; groupId: GroupId; mode: "Set" | "Add" | "Toggle" }
@@ -264,6 +265,7 @@ type Command =
   | { t: "SelectSequence"; sequenceId: SequenceId }
   | { t: "SetEncoderBank"; group: FeatureGroup }
   | { t: "SetProgrammerPage"; page: number }
+  | { t: "SetProgrammerOccurrence"; occurrence: number }
   | { t: "SelectProgrammerParam"; direction: "Prev" | "Next" }
   | { t: "CommandLineInput"; text: string; run: boolean; mode: CommandLineMode | null }
   // ---- This machine's own rig (S33) — neither the show's nor the session's ----
@@ -1034,7 +1036,9 @@ interface CueTrackingRow {               // S48 — one cue of one list
   blocks: boolean;                       // it asserts everything — derived
 }
 
-interface TrackedValue { fixture: FixtureId; attribute: AttributeType; value: number }
+interface TrackedValue {
+  fixture: FixtureId; attribute: AttributeType; occurrence?: number; value: number
+}
 
 interface SurfaceControl {               // S38 — one row of the binding table
   control: BoundControl;                 // which control

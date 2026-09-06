@@ -341,6 +341,7 @@ fn the_word_fixture_is_the_noise_it_is() {
 fn an_attribute_is_named_on_either_side_of_at() {
     let pan = Command::SetAttribute {
         attribute: AttributeType::Pan,
+        occurrence: 0,
         value: 16_383,
         relative: false,
     };
@@ -356,10 +357,54 @@ fn an_attribute_is_named_on_either_side_of_at() {
         commands("at 50"),
         vec![Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 32_767,
             relative: false,
         }]
     );
+}
+
+/// **A number after an attribute names which one of that kind** — S52.
+///
+/// A head may have two colour wheels now, so the line needs a way to say which.
+/// `1 gobo 2 at 50` is the second gobo wheel; the line counts from one and the
+/// key from nought, and `prism_core::console::occurrence_of` is the one place
+/// the two meet.
+///
+/// The rule is narrow on purpose, because the shortest thing an occurrence
+/// could be is also a fixture number — see `attribute_in` for the three
+/// conditions. What matters here is that everything the line could say before
+/// S52 still says it.
+#[test]
+fn a_number_after_an_attribute_names_which_one_of_that_kind() {
+    let five = Command::SelectFixtures {
+        ids: vec![FixtureId::new(5)],
+        mode: SelectionMode::Set,
+    };
+    let gobo = |occurrence: u8| Command::SetAttribute {
+        attribute: AttributeType::Gobo,
+        occurrence,
+        value: 32_767,
+        relative: false,
+    };
+    assert_eq!(commands("5 gobo 2 at 50"), vec![five.clone(), gobo(1)]);
+    // `gobo 1` is the wheel a profile lists first, which is the same as writing
+    // no number at all.
+    assert_eq!(commands("5 gobo 1 at 50"), vec![five.clone(), gobo(0)]);
+    assert_eq!(commands("5 gobo at 50"), vec![five.clone(), gobo(0)]);
+
+    // **And the forms that worked before still do.** `5 at pan 25` puts the
+    // attribute after `at`, where the next word is the level and never an
+    // occurrence; `pan 5 at 25` starts with the attribute, where the next word
+    // is a fixture and never an occurrence.
+    let pan = Command::SetAttribute {
+        attribute: AttributeType::Pan,
+        occurrence: 0,
+        value: 16_383,
+        relative: false,
+    };
+    assert_eq!(commands("5 at pan 25"), vec![five.clone(), pan.clone()]);
+    assert_eq!(commands("pan 5 at 25"), vec![five, pan]);
 }
 
 /// The three words an operator says instead of a number.
@@ -368,6 +413,7 @@ fn the_ends_of_the_range_have_words() {
     let level = |value: i32| {
         vec![Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value,
             relative: false,
         }]

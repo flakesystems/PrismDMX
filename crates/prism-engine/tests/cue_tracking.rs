@@ -52,6 +52,8 @@ fn dimmer() -> FixtureType {
         footprint: 1,
         attributes: vec![AttributeDef {
             attribute: AttributeType::Dimmer,
+            label: None,
+            occurrence: 0,
             feature_group: AttributeType::Dimmer.feature_group(),
             coarse_offset: 0,
             fine_offset: None,
@@ -84,6 +86,7 @@ fn part(fixture: u32, value: u16, tracking: CueTracking) -> CuePart {
     CuePart {
         fixture: FixtureId::new(fixture),
         attribute: AttributeType::Dimmer,
+        occurrence: 0,
         value,
         preset_ref: None,
         tracking,

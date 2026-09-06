@@ -492,24 +492,70 @@ describe("paging the encoder bar", () => {
         });
     }
 
-    /** The attributes the bar is drawing, in order. */
-    function drawn(): string[] {
-        return [...screen.getByTestId("encoders").children].map(
-            (encoder) => encoder.querySelector(".encoder-name")?.textContent ?? "",
-        );
+    /**
+     * Puts fixtures in the programmer's selection — **S52**.
+     *
+     * A bank's knobs are what the selection has now, so a paging test has to
+     * say what is selected before there is anything to page. The recorded rig
+     * has a moving head (5) and a **two-cell bar** (6): a red, a green, a blue
+     * and a white per cell, which is the eight-knob colour bank these tests
+     * walk and the thing S52 built.
+     */
+    function select(store: DeskStore, ids: number[]) {
+        act(() => {
+            store.applyDelta({
+                t: "ProgrammerChanged",
+                state: {
+                    selection: ids,
+                    selectedGroups: [],
+                    manualSelection: ids,
+                    activeFeatureGroup: "Dimmer",
+                    clearStage: 1,
+                    values: [],
+                },
+            });
+        });
     }
+
+    /**
+     * The attributes the bar is drawing, in order.
+     *
+     * Only the encoders: since **S52** the same box holds a sentence when the
+     * selection has nothing on this bank, and a sentence is not a knob.
+     */
+    function drawn(): string[] {
+        return [...screen.getByTestId("encoders").children].flatMap((child) => {
+            const name = child.querySelector(".encoder-name")?.textContent;
+            return name === undefined || name === null ? [] : [name];
+        });
+    }
+
+    it("shows nothing at all until something is selected", () => {
+        // **S52, and the owner's own ask.** A bank draws what the fixtures
+        // have, so with nothing selected there is nothing to draw — and the
+        // band says so in a sentence rather than offering knobs that do
+        // nothing.
+        const { store } = desk();
+        expect(drawn()).toEqual([]);
+        expect(screen.getByTestId("no-parameters")).not.toBeNull();
+        select(store, [5, 6]);
+        expect(drawn()).toEqual(["Dimmer"]);
+    });
 
     it("shows a bank that fits on one page and turns the page control off", () => {
         const { store } = desk();
-        // Dimmer has one parameter and Position two — both inside a page.
+        select(store, [5, 6]);
+        // One intensity — the head's own, and the bar's supplied one — so one
+        // knob and one page.
         expect(drawn()).toEqual(["Dimmer"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/1");
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(true);
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
 
-        // Position has three since S51 (B38) and still fits on a page of four.
+        // The Position bank has three attributes since S51 (B38) and this rig
+        // has two of them: only what the fixtures have is drawn.
         session(store, { encoderBank: "Position" });
-        expect(drawn()).toEqual(["Pan", "Tilt", "PositionSpeed"]);
+        expect(drawn()).toEqual(["Pan", "Tilt"]);
         expect(screen.getByTestId("programmer-page").textContent).toBe("1/1");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
     });
@@ -533,12 +579,20 @@ describe("paging the encoder bar", () => {
      *
      * **S51 is the second such session** (B38): the colour bank went from five
      * attributes to thirteen when the nineteen the Open Fixture Library needs
-     * were added. The count is written out again rather than loosened, for the
-     * reason this test exists — a bank whose length nobody asserts is a bank
-     * that can be re-split under the paging tests without anybody noticing.
+     * were added, **fifteen in S52** with a warm and a cold white, and
+     * **sixteen in S53** with the colour wheel's rotation, which the reader
+     * used to file beside the gobos. The count is written out again rather than
+     * loosened, for the reason this test exists — a bank whose length nobody
+     * asserts is a bank that can be re-split under the paging tests without
+     * anybody noticing.
+     *
+     * **What it no longer settles, since S52, is whether the *bar* pages.** A
+     * bank's knobs are what the selection has, so a long table is necessary and
+     * not sufficient: the tests below page a rig that actually has eight colour
+     * channels on one fixture.
      */
     it("is asserted to have a bank that does not fit on one page", () => {
-        expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBe(13);
+        expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBe(16);
         expect(FEATURE_GROUP_ATTRIBUTES.Color.length).toBeGreaterThan(ENCODERS_PER_PAGE);
         const longest = Object.values(FEATURE_GROUP_ATTRIBUTES).reduce(
             (most, bank) => Math.max(most, bank.length),
@@ -551,12 +605,14 @@ describe("paging the encoder bar", () => {
 
     it("draws four at a time and pages by command", () => {
         const { acted, store } = desk();
+        select(store, [6]);
         session(store, { encoderBank: "Color" });
-        // **The first page is what it always was** — the promise S51 made when
-        // it widened the model: an operator who never patches a CMY head lands
-        // on the four knobs they had.
+        // **The first page is what it always was** — the promise the ordering
+        // makes: every first occurrence in the generated order, then every
+        // second. So the second **cell** of the bar is the second page, and an
+        // operator who never patches a multi-cell fixture never sees one.
         expect(drawn()).toEqual(["Red", "Green", "Blue", "White"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("1/4");
+        expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
         // Nowhere back from the first page, somewhere forward from it.
         expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(true);
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(false);
@@ -565,23 +621,18 @@ describe("paging the encoder bar", () => {
         expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 1 }]);
         // D3: the page is the session's, so nothing has moved.
         expect(drawn()).toEqual(["Red", "Green", "Blue", "White"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("1/4");
+        expect(screen.getByTestId("programmer-page").textContent).toBe("1/2");
 
         session(store, { programmerPage: 1 });
-        expect(drawn()).toEqual(["Amber", "Cyan", "Magenta", "Yellow"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("2/4");
-        expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(false);
-        expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(false);
-
-        session(store, { programmerPage: 3 });
-        // The rest of the bank, and a last page that is not full.
-        expect(drawn()).toEqual(["ColorTemperature"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("4/4");
+        expect(drawn()).toEqual(["Red 2", "Green 2", "Blue 2", "White 2"]);
+        expect(screen.getByTestId("programmer-page").textContent).toBe("2/2");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
+        expect(screen.getByTestId("encoder-page-up").hasAttribute("disabled")).toBe(false);
     });
 
     it("pages back down, and cannot page below the first page", () => {
         const { acted, store } = desk();
+        select(store, [6]);
         session(store, { encoderBank: "Color", programmerPage: 1 });
         fireEvent.click(screen.getByTestId("encoder-page-up"));
         expect(acted()).toEqual([{ t: "SetProgrammerPage", page: 0 }]);
@@ -600,9 +651,10 @@ describe("paging the encoder bar", () => {
      */
     it("shows the last page rather than an empty bar when the session runs past the bank", () => {
         const { store } = desk();
+        select(store, [6]);
         session(store, { encoderBank: "Color", programmerPage: 9 });
-        expect(drawn()).toEqual(["ColorTemperature"]);
-        expect(screen.getByTestId("programmer-page").textContent).toBe("4/4");
+        expect(drawn()).toEqual(["Red 2", "Green 2", "Blue 2", "White 2"]);
+        expect(screen.getByTestId("programmer-page").textContent).toBe("2/2");
         expect(screen.getByTestId("encoder-page-down").hasAttribute("disabled")).toBe(true);
 
         // And a bank that shrank under a page number does the same thing.
@@ -618,11 +670,12 @@ describe("paging the encoder bar", () => {
      */
     it("lights the highlighted parameter only when its page is the one shown", () => {
         const { store } = desk();
+        select(store, [6]);
         session(store, { encoderBank: "Color", programmerParamIndex: 4 });
-        expect(screen.queryByTestId("encoder-Amber")).toBeNull();
+        expect(screen.queryByTestId("encoder-Red-2")).toBeNull();
 
         session(store, { programmerPage: 1 });
-        expect(screen.getByTestId("encoder-Amber").dataset["selected"]).toBe("yes");
+        expect(screen.getByTestId("encoder-Red-2").dataset["selected"]).toBe("yes");
         expect(screen.queryByTestId("encoder-White")).toBeNull();
     });
 });
@@ -632,8 +685,10 @@ describe("the encoder bar", () => {
         const { acted, answer } = desk();
         expect(screen.getByTestId("bank-Dimmer").dataset["active"]).toBe("yes");
         expect(screen.getByTestId("bank-Position").dataset["active"]).toBe("no");
-        // The Dimmer bank has one encoder; Position has two.
-        expect(screen.getByTestId("encoders").children.length).toBe(1);
+        // **Nothing is selected at the top of the script**, so no bank has any
+        // knobs — S52, and the owner's own ask. What the band shows instead is
+        // a sentence.
+        expect(screen.getByTestId("no-parameters")).not.toBeNull();
 
         fireEvent.click(screen.getByTestId("bank-Position"));
         expect(acted()).toEqual([{ t: "SetEncoderBank", group: "Position" }]);
@@ -643,23 +698,34 @@ describe("the encoder bar", () => {
             answer(step);
         }
         expect(screen.getByTestId("bank-Position").dataset["active"]).toBe("yes");
-        // Three since S51 (B38): Pan, Tilt and the position-speed knob.
-        expect(screen.getByTestId("encoders").children.length).toBe(3);
+        // The script has selected the three dimmers by now, and a dimmer has no
+        // position at all: the Position bank draws nothing.
+        expect(screen.getByTestId("no-parameters")).not.toBeNull();
+
+        // The moving head does pan, and selecting it fills the bank — **two
+        // knobs and not three**, because the position-speed knob S51 added is
+        // one this head has not got.
+        for (const step of [12, 13, 14]) {
+            answer(step);
+        }
+        expect(screen.getByTestId("encoders").children.length).toBe(2);
         expect(screen.getByTestId("encoder-Pan")).not.toBeNull();
         expect(screen.getByTestId("encoder-Tilt")).not.toBeNull();
     });
 
-    it("reads an untouched parameter as a dash and never as nought per cent", () => {
+    it("draws no knob at all for a parameter the selection has not got", () => {
+        // **S52 replaced the dash with an absence**, which is the owner's own
+        // ask: a bank draws what the fixtures have. The claim underneath is the
+        // one this test has always made — *absent is not zero* — and it is
+        // stronger now, because there is no encoder to misread.
         const { answer } = desk();
-        expect(screen.getByTestId("value-Dimmer").textContent).toBe("—");
-        // After `1 thru 3 at 50` the three of them hold the same value.
         for (let step = 0; step <= 11; step += 1) {
             answer(step);
         }
-        fireEvent.click(screen.getByTestId("bank-Dimmer"));
-        // Still Position until the daemon says otherwise, so the reading is Pan's
-        // — and the three dimmers that were just set to 50 % have no Pan at all.
-        expect(screen.getByTestId("value-Pan").textContent).toBe("—");
+        // The bank is Position and the selection is three dimmers, which have
+        // no pan and no tilt.
+        expect(screen.queryByTestId("value-Pan")).toBeNull();
+        expect(screen.getByTestId("no-parameters").textContent).toContain("Position");
     });
 
     it("shows the value the programmer holds for the selection", () => {
@@ -667,11 +733,12 @@ describe("the encoder bar", () => {
         for (let step = 0; step <= 11; step += 1) {
             answer(step);
         }
-        // The bank is Position and the selection is 1, 2, 3 — which are dimmers,
-        // so neither Pan nor Tilt is available on any of them.
-        expect(screen.getByTestId("encoder-Pan").dataset["selected"]).toBe("yes");
-        expect(screen.getByTestId("encoder-Pan").className).toContain("encoder-absent");
-        // The Dimmer bank is marked as touched, from the *show's* grouping.
+        // The bank is Position and the selection is 1, 2, 3 — which are
+        // dimmers, so there is nothing on this bank to draw at all (S52).
+        expect(screen.queryByTestId("encoder-Pan")).toBeNull();
+        // The Dimmer bank is marked as touched, from the *show's* grouping —
+        // which is a different question from which knobs a bank has, and is
+        // unchanged.
         expect(screen.getByTestId("bank-Dimmer").dataset["touched"]).toBe("yes");
         expect(screen.getByTestId("bank-Position").dataset["touched"]).toBe("no");
 
@@ -699,7 +766,7 @@ describe("the encoder bar", () => {
         fireEvent.pointerMove(window, { clientX: 4, pointerId: 1 });
         fireEvent.pointerUp(window, { pointerId: 1 });
         expect(acted()).toEqual([
-            { t: "SetAttribute", attribute: "Pan", value: 512, relative: true },
+            { t: "SetAttribute", attribute: "Pan", occurrence: 0, value: 512, relative: true },
         ]);
         // Nothing local moved: an encoder reads the programmer, and the programmer
         // moves when `ProgrammerChanged` comes back.
@@ -735,7 +802,7 @@ describe("the encoder bar", () => {
         fireEvent.click(screen.getByTestId("encoder-Tilt"));
         expect(acted()).toEqual([
             { t: "SelectProgrammerParam", direction: "Next" },
-            { t: "SetAttribute", attribute: "Tilt", value: 0, relative: true },
+            { t: "SetAttribute", attribute: "Tilt", occurrence: 0, value: 0, relative: true },
         ]);
         // **And nothing has moved**: which parameter is highlighted is the
         // session's, exactly as it was when an arrow sent the same command.
@@ -766,17 +833,26 @@ describe("the encoder bar", () => {
 
     it("composes a click on an encoder out of the steps the protocol has", () => {
         // There is no absolute form of `SelectProgrammerParam` — the console has
-        // none either, `Zoom ◀▶` steps — so a click is the steps between here and
-        // there. A bank has at most six parameters.
+        // none either, `Zoom ◀▶` steps — so a click is the steps between here
+        // and there. The script is walked as far as the moving head, because
+        // since **S52** a bank with nothing selected has no encoders to click.
         const { acted, answer } = desk();
-        for (let step = 0; step <= 8; step += 1) {
+        for (let step = 0; step <= 14; step += 1) {
             answer(step);
         }
+        /** Only the stepping, which is what this test is about. */
+        const steps = () =>
+            acted().filter((command) => command.t === "SelectProgrammerParam");
+
         fireEvent.click(screen.getByTestId("encoder-Tilt"));
-        expect(acted()).toEqual([{ t: "SelectProgrammerParam", direction: "Next" }]);
+        // A click also **takes the attribute over** where it is not already
+        // overridden (S43) — asserted by the test above; here it is filtered
+        // out, because what is being asserted is that there is no absolute
+        // form of the step and a click is composed of the steps there are.
+        expect(steps()).toEqual([{ t: "SelectProgrammerParam", direction: "Next" }]);
         answer(17);
         fireEvent.click(screen.getByTestId("encoder-Pan"));
-        expect(acted().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
+        expect(steps().at(-1)).toEqual({ t: "SelectProgrammerParam", direction: "Prev" });
     });
 
     /**

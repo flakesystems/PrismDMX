@@ -55,12 +55,11 @@ Named here rather than discovered by you:
 - **No 3D visualiser** (planned).
 - **No Web Remote** — a phone or tablet cannot drive the desk yet (planned).
 - **No timecode, OSC or PSN** (planned).
-- **A fixture with two of one parameter loses the second.** A head with two
-  colour wheels, or an LED tube whose profile writes out a red per pixel, keeps
-  the lower channel and drops the higher: this desk gives one fixture one of
-  each parameter. Every *kind* of channel the Open Fixture Library has arrives
-  since `v0.9.1`; what is left is the repeats, and it is the next thing on the
-  list for the fixture library.
+- **A profile whose channels switch on another channel's value is skipped.** The
+  Open Fixture Library calls those *switching channels*; a mode with one loses
+  the channels that depend on it, because a footprint that changes while the
+  show runs is not one this desk can address yet. Matrix profiles — a red per
+  pixel — do arrive.
 - **Executor labels do not follow a show change** in every case: after loading a
   second show, a strip may keep the previous show's labels until you switch
   windows.
@@ -163,6 +162,33 @@ A first show, in the order it is usually done:
 2. **Select and program.** Type `1 thru 6 at full` on the command line, or click
    the fixtures and turn the encoders. The programmer holds what you have
    changed until you store it or clear it.
+
+   The encoder banks show **only the parameters the selected fixtures actually
+   have**, so a four-colour PAR is four knobs and not a bank you page through.
+   A fixture with **two of a parameter** — a head with two colour wheels, a tube
+   with a red per pixel — numbers them: *Gobo*, *Gobo 2*, and `1 gobo 2 at 50`
+   on the command line. Where there are more repeats than fit side by side the
+   band grows a *Part* stepper instead.
+
+   **Right-click an encoder to pick a step.** A gobo wheel, a colour wheel or an
+   effect channel is a list of named positions in the fixture's own profile, and
+   the window that opens is that list — the manufacturer's names, not numbers to
+   count out.
+
+   **Every channel of a patched fixture has a knob**, without exception. Where
+   the profile describes what a channel does, the knob is that — a red, a gobo
+   wheel, an iris. Where it does not, or where the meaning of the channel
+   switches on another channel's value, there is still a knob for it on the
+   **Control** bank, named the way the fixture's own profile names it (or
+   `Ch 7`, the channel's place in the fixture). No slot of a fixture you have
+   patched is out of reach.
+
+   Each encoder is labelled with **the name the manufacturer gave that channel**
+   — *Rotating Gobo*, *Color Wheel 2* — rather than the desk's generic word for
+   it, and a wheel goes to the bank its **contents** say it belongs on: a wheel
+   of colours is under **Colour** even when the profile calls it something else.
+   Select two heads that name the same knob differently and the desk's own word
+   comes back, because naming one of them would be wrong about the other.
 3. **Store it.** `Store Cue 1` writes what the programmer holds into cue 1 of
    the selected sequence. `Store Group 3 "Front wash"` makes a group.
 4. **Put it on a fader.** `Assign Sequence 1 Executor 1`, and executor 1's keys

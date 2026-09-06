@@ -90,6 +90,8 @@ const ENCODER_BANK: &str = "encoderBank";
 const PROGRAMMER_PAGE: &str = "programmerPage";
 /// Wire name of `Session::programmer_param_index`.
 const PROGRAMMER_PARAM_INDEX: &str = "programmerParamIndex";
+/// Wire name of `Session::programmer_occurrence` — S52.
+const PROGRAMMER_OCCURRENCE: &str = "programmerOccurrence";
 /// Wire name of `Session::command_line`.
 const COMMAND_LINE: &str = "commandLine";
 /// Wire name of `Session::window_picker`.
@@ -381,6 +383,9 @@ impl SessionState {
             Command::SelectSequence { sequence_id } => self.select_sequence(Some(*sequence_id))?,
             Command::SetEncoderBank { group } => self.set_encoder_bank(*group)?,
             Command::SetProgrammerPage { page } => self.set_programmer_page(*page)?,
+            Command::SetProgrammerOccurrence { occurrence } => {
+                self.set_programmer_occurrence(*occurrence)?
+            }
             Command::SelectProgrammerParam { direction } => {
                 self.select_programmer_param(*direction)?
             }
@@ -1082,6 +1087,27 @@ impl SessionState {
         self.commit(next)
     }
 
+    /// Puts the encoder bank on another part of a repeated fixture — S52.
+    ///
+    /// Unbounded above, for [`Self::set_programmer_page`]'s reason: how deep a
+    /// bank's repeats go is a question about the *selection*, which this does
+    /// not have, so the client and the surface clamp and send a correcting
+    /// value. A part past the end draws the last one rather than nothing — a
+    /// band that went blank because a number was too big would be a band an
+    /// operator cannot get back.
+    ///
+    /// # Errors
+    ///
+    /// [`SessionError::NotRepresentable`] only.
+    pub fn set_programmer_occurrence(
+        &mut self,
+        occurrence: u32,
+    ) -> Result<Vec<JsonPatchOp>, SessionError> {
+        let mut next = self.session.clone();
+        next.programmer_occurrence = occurrence;
+        self.commit(next)
+    }
+
     /// Moves the parameter the jog wheel turns.
     ///
     /// Saturating at zero, and a jog wheel turned past the end is a no-op
@@ -1185,6 +1211,10 @@ impl SessionState {
         if next.programmer_param_index != current.programmer_param_index {
             let index = &next.programmer_param_index;
             ops.push(replace(PROGRAMMER_PARAM_INDEX, index)?);
+        }
+        if next.programmer_occurrence != current.programmer_occurrence {
+            let part = &next.programmer_occurrence;
+            ops.push(replace(PROGRAMMER_OCCURRENCE, part)?);
         }
         if next.command_line != current.command_line {
             ops.push(replace(COMMAND_LINE, &next.command_line)?);
@@ -1317,6 +1347,7 @@ mod tests {
             super::ENCODER_BANK,
             super::PROGRAMMER_PAGE,
             super::PROGRAMMER_PARAM_INDEX,
+            super::PROGRAMMER_OCCURRENCE,
             super::COMMAND_LINE,
         ] {
             assert!(members.contains_key(field), "{field} is not a member");

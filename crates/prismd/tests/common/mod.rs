@@ -38,6 +38,8 @@ pub fn one_daemon_at_a_time() -> MutexGuard<'static, ()> {
 fn attribute(attribute: AttributeType, coarse_offset: u16, home: u16) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset: None,
@@ -111,6 +113,7 @@ pub fn show_file() -> ShowFile {
             parts: vec![CuePart {
                 fixture: FixtureId::new(2),
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 65535,
                 preset_ref: None,
                 tracking: prism_domain::CueTracking::Track,

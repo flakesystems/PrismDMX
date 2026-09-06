@@ -53,6 +53,8 @@ fn head_type() -> FixtureType {
         attributes: vec![
             prism_domain::AttributeDef {
                 attribute: AttributeType::Pan,
+                label: None,
+                occurrence: 0,
                 feature_group: FeatureGroup::Position,
                 coarse_offset: 0,
                 fine_offset: Some(1),
@@ -141,11 +143,13 @@ fn saveable_file() -> ShowFile {
                 PresetValue {
                     fixture: FixtureId::new(3),
                     attribute: AttributeType::Red,
+                    occurrence: 0,
                     value: 65535,
                 },
                 PresetValue {
                     fixture: FixtureId::new(3),
                     attribute: AttributeType::Green,
+                    occurrence: 0,
                     value: 45000,
                 },
             ],
@@ -179,6 +183,7 @@ fn saveable_file() -> ShowFile {
                     parts: vec![CuePart {
                         fixture: FixtureId::new(3),
                         attribute: AttributeType::Red,
+                        occurrence: 0,
                         value: 65535,
                         preset_ref: Some(PresetId::new(12)),
                         tracking: prism_domain::CueTracking::Track,
@@ -196,6 +201,7 @@ fn saveable_file() -> ShowFile {
                         CuePart {
                             fixture: FixtureId::new(1),
                             attribute: AttributeType::Pan,
+                            occurrence: 0,
                             value: 12345,
                             preset_ref: None,
                             tracking: prism_domain::CueTracking::Track,
@@ -203,6 +209,7 @@ fn saveable_file() -> ShowFile {
                         CuePart {
                             fixture: FixtureId::new(2),
                             attribute: AttributeType::Dimmer,
+                            occurrence: 0,
                             value: 65535,
                             preset_ref: None,
                             tracking: prism_domain::CueTracking::Track,
@@ -330,6 +337,7 @@ fn second_file() -> ShowFile {
                     parts: vec![CuePart {
                         fixture: FixtureId::new(id),
                         attribute: AttributeType::Red,
+                        occurrence: 0,
                         value: 65535,
                         preset_ref: None,
                         tracking: prism_domain::CueTracking::Track,
@@ -458,6 +466,7 @@ fn a_reopened_show_is_clean_and_has_nothing_to_undo() {
     .unwrap();
     file.apply(&Command::SetAttribute {
         attribute: AttributeType::Dimmer,
+        occurrence: 0,
         value: 65535,
         relative: false,
     })

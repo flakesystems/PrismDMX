@@ -282,6 +282,7 @@ mod tests {
     use crate::merge::{FULL, apply_master};
     use crate::plan::MergePlan;
     use crate::testkit::{attribute_def, fixture_type, moving_head};
+    use prism_domain::AttributeKey;
     use prism_domain::{AttributeDef, AttributeType, FeatureGroup, FixtureId, Group, GroupId};
     use proptest::prelude::*;
 
@@ -292,7 +293,8 @@ mod tests {
     }
 
     fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
-        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+        plan.index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
+            .unwrap()
     }
 
     fn group(id: u32, fixtures: &[u32]) -> Group {

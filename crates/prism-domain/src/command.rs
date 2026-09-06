@@ -15,10 +15,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AttributeType, CueProperty, CueTrackingMode, ExecutorButtonRef, ExecutorChange, ExecutorId,
-    FeatureGroup, FixtureId, GroupId, JsonValue, MachineChange, OutputId, OutputInstance,
-    OutputKind, PlaybackTarget, PresetId, PresetPool, RgbColor, SequenceId, StoreMode, UniverseId,
-    ViewId, WindowInstanceId, WindowType,
+    AttributeKey, AttributeType, CueProperty, CueTrackingMode, ExecutorButtonRef, ExecutorChange,
+    ExecutorId, FeatureGroup, FixtureId, GroupId, JsonValue, MachineChange, OutputId,
+    OutputInstance, OutputKind, PlaybackTarget, PresetId, PresetPool, RgbColor, SequenceId,
+    StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -394,6 +394,13 @@ pub enum Command {
             proptest(strategy = "crate::arb::boxed()")
         )]
         attribute: AttributeType,
+        /// Which channel of that kind — **S52**, counted from nought.
+        ///
+        /// `1 gobo 2 at 50` on the console, and the second knob of a repeated
+        /// parameter on the band. Absent means the first, which is what every
+        /// client and every recorded line written before S52 meant.
+        #[serde(default, skip_serializing_if = "AttributeKey::occurrence_is_first")]
+        occurrence: u8,
         /// Absolute value `0..=65535`, or a signed delta when `relative` is set.
         ///
         /// Signed because encoders turn both ways: `ARCHITECTURE_SPEC.md` §6
@@ -1373,6 +1380,18 @@ pub enum Command {
         /// New page number.
         page: u32,
     },
+    /// Put the encoder bank on another **part** of a repeated fixture — S52.
+    ///
+    /// A tube with a red per pixel has more channels of a kind than a bank has
+    /// knobs, so the bank draws one occurrence at a time and this is what walks
+    /// them. Absolute rather than a step, for [`Self::SetProgrammerPage`]'s
+    /// reason: `prism-core` does not know how deep a bank's repeats go for the
+    /// current selection — the client and the surface both clamp — so a step
+    /// would have nothing to saturate against.
+    SetProgrammerOccurrence {
+        /// Which part, counted from nought.
+        occurrence: u32,
+    },
     /// Move the programmer parameter the jog wheel turns.
     SelectProgrammerParam {
         /// Which way to move.
@@ -1634,6 +1653,7 @@ impl Command {
             | Self::SelectSequence { .. }
             | Self::SetEncoderBank { .. }
             | Self::SetProgrammerPage { .. }
+            | Self::SetProgrammerOccurrence { .. }
             | Self::SelectProgrammerParam { .. }
             | Self::CommandLineInput { .. } => true,
             Self::Delete { target } | Self::Label { target, .. } => target.is_session_object(),
@@ -1779,6 +1799,7 @@ mod tests {
     fn set_attribute_carries_a_signed_value_so_encoders_can_turn_both_ways() {
         let command = Command::SetAttribute {
             attribute: AttributeType::Tilt,
+            occurrence: 0,
             value: -128,
             relative: true,
         };
@@ -1834,6 +1855,7 @@ mod tests {
             },
             Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 0,
                 relative: false,
             },

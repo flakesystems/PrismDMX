@@ -340,6 +340,147 @@ angezeigt wird.*
 - **So sieht man es:** Jog Wheel drehen
 - **Ergebnis:** ✅ **behoben** — und es war keine fehlende Beschleunigung, sondern die falsche **Einheit**. Beide Kurven in `prism_surface::accel` waren in abstrakten *Schritten* geschrieben, die niemand weiter unten multipliziert hat: ein Schritt war ein 65 535stel, also bewegte ein sorgfältiger V-Pot-Klick einen Parameter um 0,0015 % und eine volle Radumdrehung um die gemessene 1 %. Neu sind beide Tabellen in Attributeinheiten geschrieben, mit `COARSE` = 257 (ein DMX-Schritt eines 8-Bit-Kanals) als Maß. Die Radzeilen sind genau das Zwanzigfache der gemessenen — die beiden Zahlen des Eigentümers, 1 % gemessen und 20 % gewünscht, reichen dafür aus, ohne irgendwo Rasten pro Umdrehung zählen zu müssen. Die Spreizung (achtfach zwischen Klick und Spin) bleibt, weil sie nie das Problem war. Tests: `every_jog_row_is_twenty_times_the_row_the_owner_measured`, `the_wheel_still_answers_eightfold_between_a_click_and_a_spin` und `one_detent_is_a_move_that_can_be_seen_on_both_curves` (`crates/prism-surface/src/accel.rs`). **Die Kalibrierung selbst gehört in die Handprobe**: kein Test darf das Gerät anfassen, also hält der Test das Verhältnis und die Hand das Gefühl.
 
+### B44 — Ein Fixture mit zwei Kanälen derselben Art verliert den zweiten (Eigentümer, S52)
+
+- **Wo:** Fixture-Bibliothek (OFL), Programmer, Merge
+- **Schwere:** blocker — halbe Lampen antworten nicht
+- **Was passiert:** Ein Kopf mit zwei Farbrädern behält das untere und lässt das obere fallen; eine LED-Röhre, deren Profil ein Rot je Pixel ausschreibt, behält ein Pixel. Über die installierte Bibliothek gemessen: **2 679 Kanäle**.
+- **Was passieren soll:** Solche Parameter sollen **nummeriert** hinzugefügt werden — *Gobo*, *Gobo 2* —, statt fallengelassen zu werden.
+- **So sieht man es:** Ein Profil mit zwei Farbrädern patchen und im Programmer aufrufen; das zweite Rad ist nirgends.
+- **Ergebnis:** ✅ **behoben in S52 — der Schlüssel hat eine zweite Hälfte bekommen.**
+
+  `AttributeKey` ist `AttributeType` **plus eine Ordnungszahl**, und das ist der Schlüssel, unter dem jeder Wert einer Show abgelegt ist: `CuePart`, `PresetValue`, `ProgrammerEntry`, `AttributeDef`, `TrackedValue`, `Command::SetAttribute` und `prism_engine::AttributeSlot`. Der OFL-Reader vergibt sie **in der Reihenfolge des Herstellers**, also in Kanalreihenfolge — das untere Farbrad ist das erste. `channels_duplicate` liest über den installierten Korpus **null**, so behauptet wie `channels_unmapped` es seit S51 ist; vorher waren es 2 679.
+
+  **Ohne Migration, und das ist die Entscheidung, die es billig gemacht hat.** Die Ordnungszahl ist nullbasiert und auf der Leitung ein flaches Feld, das weggelassen wird, wenn es null ist: *abwesend* und *das eine, das es immer gab* sind damit dieselbe Aussage. Eine Show ohne Wiederholungen serialisiert byte-identisch wie vorher, und eine mit `v0.9.1` geschriebene `.prism`-Datei öffnet mit jedem Wert dort, wo er war. Genau **eine** Stelle rechnet für Menschen um eins hoch: `AttributeKey`s `Display`, das *Gobo* und *Gobo 2* schreibt.
+
+  **Was der Korpus gefunden hat und die Zähler nicht:** der Reader nummerierte gleich beim ersten Lauf richtig, aber `Show::embed_fixture_type` fragte weiter nach `def.attribute` — ein Profil, das der Reader jetzt erzeugte, wies die Show also zurück (`5star-systems/spica-250m/16bit`). Beide Duplikat-Fehler fragen jetzt nach dem **Schlüssel**: ein Fixture darf zwei Farbräder haben; was es nicht darf, sind zwei *erste*.
+
+  Tests: `a_second_channel_of_a_kind_is_numbered_rather_than_dropped` (`prism_core::library::ofl`), `every_channel_in_the_installed_library_maps_to_an_attribute` und `a_matrix_insert_becomes_the_channels_it_stands_for` (über den Korpus), `every_profile_in_the_installed_library_is_one_a_show_accepts` (alle 2 871 Profile durch dieselbe Tür wie `Command::EmbedFixtureType`), `numbers a repeated parameter instead of dropping it` und die drei in *a repeated parameter* (`ui/src/desk/`).
+
+### B45 — Warmweiß und Kaltweiß sind dasselbe Attribut (Eigentümer, S52)
+
+- **Wo:** Fixture-Bibliothek (OFL), Farbbank
+- **Schwere:** blocker auf einer Lampe, die beide hat
+- **Was passiert:** Die Open Fixture Library nennt dreizehn Emitterfarben; dieses Modell hatte elf davon, weil `Warm White` und `Cold White` beide als `White` gelesen wurden. Auf einer Lampe mit einem der beiden ist das eine falsche Beschriftung. Auf einer Lampe mit **beiden** kollidiert der zweite Kanal mit dem ersten und wird fallengelassen — sechs Profile der mitgelieferten Bibliothek, darunter `generic/cw-ww-fader`.
+- **Was passieren soll:** Beide bekommen ein eigenes Attribut und einen eigenen Encoder.
+- **So sieht man es:** Eine CW/WW-Lampe patchen; ein Knopf fährt beide Kanäle, oder einer davon reagiert gar nicht.
+- **Ergebnis:** ✅ **behoben in S52.** `AttributeType::WarmWhite` und `AttributeType::ColdWhite`, **angehängt** an `ALL` (36 statt 34) aus demselben Grund wie S51s neunzehn: `FeatureGroup::attributes` ist `ALL` gefiltert, und Anhängen hält *Rot, Grün, Blau, Weiß* als erste Seite der Farbbank. Beide sind additive Emitter, ruhen also **offen** — B1s Regel, gefragt über `is_additive_emitter` und nicht über die Bank. Beide sind ein Wort für die Kommandozeile (`1 warmwhite at 50`).
+
+  Über den Korpus gemessen: **16 Profile** tragen beide. `a_fixture_with_a_warm_and_a_cold_white_keeps_both` behauptet für jedes davon, dass die zwei auf **verschiedenen Kanälen** landen — was vorher nicht so war, weil der zweite ein Duplikat des ersten war und fallengelassen wurde. Dazu `a_warm_white_and_a_cold_white_are_two_attributes` (`prism_core::library::ofl`) und `gives a warm white and a cold white a knob each` (`ui/src/desk/programmer.test.ts`).
+
+### B46 — Der Programmer zeigt Attribute, die das Fixture nicht hat (Eigentümer, S52)
+
+- **Wo:** Programmer-Band, Fixture Sheet
+- **Schwere:** ärgerlich
+- **Was passiert:** Eine Bank zeichnet alle Attribute ihrer Tabelle und schreibt `—` unter die, die niemand in der Auswahl hat. Auf der Farbbank sind das seit S51 dreizehn Knöpfe, von denen ein RGBW-PAR vier benutzt — vier Seiten blättern für einen Wert.
+- **Was passieren soll:** Es sollen nur die Attribute angezeigt werden, die das Fixture auch hat.
+- **So sieht man es:** Einen PAR auswählen, auf die Farbbank gehen, blättern.
+- **Ergebnis:** ✅ **behoben in S52 — und die Parameterliste ist dabei von einer Tabelle zu einer Frage geworden.**
+
+  `FeatureGroup::attributes` war eine Konstante, für jede Auswahl dieselbe, und S26 hat S22s Warnung damit beantwortet, dass es **eine** davon gibt: das Jog Wheel und die Encoderleiste lesen dieselbe Tabelle, sonst dreht man das Rad und ein anderer Parameter als der markierte bewegt sich. Nur ist *wie viele Farbräder eine Bank hat* eine Tatsache über die **Auswahl**, die keine Konstante halten kann. Also ist es jetzt **eine Funktion**: `prism_core::Programmer::bank_parameters`, gefragt von `prismd::surface::parameter_of` fürs Rad und von `ui/src/desk/programmer.ts` fürs Band. Die Form der Antwort ist unverändert — es gibt eine Regel.
+
+  Ein Encoder, den niemand in der Auswahl hat, wird **gar nicht mehr gezeichnet**; `encoder-absent` und der `—`-Zähler sind weg, und eine leere Bank sagt es in einem Satz. Dasselbe im Fixture Sheet, das seine Spalten aus den **Zeilen** zieht statt aus der Auswahl — es zeichnet eine Zeile je gepatchtem Fixture, also sind seine Spalten das, was diese Fixtures haben.
+
+  Tests: `the_wheel_walks_the_list_the_encoder_bar_is_given` (`prismd::surface`, Index für Index über jede Bank), `draws no encoder at all for a parameter nothing selected has`, `gives a bank the parameters the selection has, in the generated order` und `draws no encoder at all for an attribute nothing selected has` (`ui/src/desk/`).
+
+### B47 — Vordefinierte Stufen heißen *Slot 3* und sind schlecht erreichbar (Eigentümer, S52)
+
+- **Wo:** Programmer-Band, Encoder
+- **Schwere:** ärgerlich
+- **Was passiert:** Zwei Dinge. Erstens heißen die Stufen nicht so, wie der Hersteller sie nennt: S51 las die Namen **in der Capability** (`comment`, `effectName`), und ein Radkanal hat dort selten einen — der Name steht im `wheels`-Block, den der Reader nie geöffnet hat. **3 440 der 4 497 Rad-Capabilities des Korpus** lesen sich deshalb als *Slot 1, Slot 2, Slot 3*. Zweitens hängt die Liste an einem kleinen Knopf unter dem Encoder und klappt in ein Band fester Höhe auf.
+- **Was passieren soll:** Rechtsklick auf ein Attribut, das vordefinierte Stufen hat (Gobos, Farbrad, Effekte), öffnet ein Fenster, in dem sie ausgewählt werden. **Es geht nur um die Stufen, die tatsächlich im OFL-Format definiert sind** — nichts wird erfunden. Der Knopf entfällt.
+- **So sieht man es:** Einen Kopf mit Gobo-Rad patchen und die Stufenliste öffnen.
+- **Ergebnis:** ✅ **behoben in S52, und die Geste war die kleinere Hälfte.**
+
+  **Die Namen.** S51 las den Namen eines Bereichs *in der Capability* (`comment`, `effectName`, `shutterEffect`), und eine Rad-Capability hat dort selten einen: sie trägt `wheel` und `slotNumber`, und der Name steht im `wheels`-Block der Datei, den dieser Reader nie geöffnet hatte. **3 440 der 4 497 Rad-Capabilities** des Korpus lasen sich deshalb als *Slot 3*. Jetzt sind es **115 957 von 115 966 Bereichen mit einem Namen**, neun noch eine nackte Slotnummer — und das sind Dateien, deren Rad weniger Slots hat als der Kanal Capabilities. **Nichts wird erfunden**, was die Vorgabe des Eigentümers war: `name`, sonst das letzte Glied des `resource`-Schlüssels, sonst der `type` des Slots (so bekommen *Open* und *Closed* ihr Wort, weil das Format ihnen sonst nichts gibt). Sagt die Datei nichts davon, bleiben S51s Rückfälle.
+
+  **Die Geste.** Rechtsklick auf den Encoder öffnet `desk/rangepicker.tsx` über `chrome/modal.tsx` — dieselbe Komponente wie der Fensterwähler und die Fixture-Bibliothek, also kein dritter Nachbau. Der Knopf unter dem Encoder ist weg und das Band hat seine Zeile Höhe zurück; der **Name** der Stufe bleibt, im Encoder selbst, als Anzeige. Ein Encoder ohne Stufen öffnet nichts.
+
+  Tests: `a_wheel_slot_is_named_out_of_the_wheels_block` und `a_capability_with_no_wheel_names_its_own_channel` (`prism_core::library::ofl`), `a_wheel_slot_is_named_out_of_the_wheels_the_file_declares` (über den Korpus), `opens the steps window on a right-click, and picking one asks for the middle`, `opens the second wheel's own steps, and not the first one's` und `draws nothing at all for a channel that has no ranges` (`ui/src/desk/programmerband.test.tsx`).
+
+### B48 — Profile mit Matrix-Inserts lassen sich gar nicht patchen (S52)
+
+- **Wo:** Fixture-Bibliothek (OFL)
+- **Schwere:** blocker für die betroffenen Fixtures
+- **Was passiert:** Ein OFL-Mode muss seine Kanäle nicht ausschreiben; er darf `{"insert": "matrixChannels"}` sagen und die Template-Kanäle je Pixel wiederholen lassen. Solche Modes wurden komplett übersprungen, weil ein Fußabdruck nicht von Zustand abhängen darf: **90 der 634 mitgelieferten Profile**, 724 Inserts.
+- **Was passieren soll:** Der Insert wird zu der Kanalliste aufgelöst, für die er steht. Er hängt von der **Geometrie** des Fixtures ab, die in der Datei steht — anders als ein *switching channel*, dessen Layout vom Wert eines anderen Kanals abhängt, während die Show läuft.
+- **So sieht man es:** Im Patch nach einer LED-Röhre suchen; die Matrix-Modes fehlen in der Liste.
+- **Ergebnis:** ✅ **behoben in S52, und es ging erst mit der Ordnungszahl aus B44.**
+
+  Ein aufgelöster Matrix-Insert *ist* ein Fixture mit acht Roten — vor S52 hätte er ein Rot und sieben gezählte Duplikate ergeben, was eine schlechtere Antwort ist als den Mode wegzulassen. `prism_core::library::matrix` schreibt ihn aus: OFLs eigene Pixelschlüssel-Regel (`lib/model/Matrix.js`, `_getPixelDefaultKey`), die vier `repeatFor`-Schlüsselwörter, das ausdrückliche Array (480-mal im Korpus) und beide `channelOrder`. Danach läuft alles Bestehende weiter — `Channels::definition` löst Template-Kanäle schon lange auf.
+
+  `modes_with_inserts` liest über den Korpus **null**; die Bibliothek liefert **2 871 Profile** statt 2 157 aus denselben 627 Fixtures. **4 162 wiederholte Parameter**, der tiefste mit **72 Ordnungszahlen**.
+
+  **Eine Kleinigkeit, die fast falsch geraten worden wäre:** `eachPixelGroup` ist im Format definiert als *ordered by appearance in the JSON file*, und `serde_json::Map` ist hier eine `BTreeMap` — die Dateireihenfolge ist also weg. `preserve_order` einzuschalten hätte die Feldreihenfolge jeder Struktur geändert, die dieses Projekt nach JSON schreibt. Stattdessen wird genau diese eine Stelle ein zweites Mal deserialisiert, mit einem zwanzigzeiligen `MapAccess`-Visitor, der die Schlüssel behält und die Werte wegwirft.
+
+  Tests: `a_matrix_insert_is_written_out_and_a_switching_channel_is_not` (`prism_core::library::ofl`), die sieben in `prism_core::library::matrix`, und `a_matrix_insert_becomes_the_channels_it_stands_for` über den Korpus — das behauptet auch, dass die Ordnungszahlen **lückenlos von null** laufen, weil eine übersprungene Zahl ein Knopf wäre, den das Band zeichnet und kein Kanal beantwortet.
+
+### B49 — Switching Channels werden übersprungen
+
+- **Wo:** Fixture-Bibliothek (OFL)
+- **Schwere:** ärgerlich
+- **Was passiert:** Ein *switching channel* ist ein Kanal, dessen Funktion vom Wert eines anderen abhängt — der Reader kennt den Alias nicht und zählt ihn als undefinierten Kanalnamen. 136 Dateien der mitgelieferten Bibliothek benutzen sie.
+- **Was passieren soll:** Entweder auflösen oder begründet ablehnen. Ein Fußabdruck, der sich während der Show ändert, ist etwas anderes als einer, der von der Geometrie des Fixtures abhängt (B48) — deshalb steht das hier und wurde in S52 ausdrücklich nicht mitgenommen.
+- **So sieht man es:** Ein Profil mit `switchChannels` patchen; einzelne Kanäle fehlen.
+- **Ergebnis:** ✅ **behoben in S54, und die Frage war falsch gestellt.**
+
+  *Entweder auflösen oder ablehnen* war eine Alternative, die es nicht gibt. Der **Fußabdruck ändert sich nie**: ein Alias ist in jeder Schaltstellung genau ein Slot. Was sich ändert, ist nur, *was* der Slot ist — und die Datei nennt die vollständige Menge der Möglichkeiten statisch. Ablehnen war also nie nötig, und vollständig auflösen ist nicht möglich; die richtige Antwort liegt dazwischen und hängt davon ab, was die Datei sagt.
+
+  **Sind sich alle Stellungen einig, ist der Slot das:** `Layer 1 Red` ist in jeder Stellung ein Rot, also ist er ein Rot, auf der Farbbank, unter seinem eigenen Namen. **97 Kanäle** des Korpus landen so.
+
+  **Sind sie es nicht — 178 der 246 Aliase —, ist der Slot ein Rohkanal** unter dem Namen, den die Datei ihm gibt (`Channel 2`). Ein Knopf, der *Farbrad* heißt und in der Hälfte der Stellungen ein Gobo ist, wäre schlechter als einer, der ehrlich *Channel 2* heißt. Ruhewert und Stufen bleiben leer, weil beide zu dem Kanal gehören, der gerade lebt — **nichts wird erfunden**, die Regel des Eigentümers aus S52.
+
+  **Was ausdrücklich offen bleibt und jetzt erst benennbar ist:** das Pult **folgt** dem Schalter nicht. Dreht ein Operator den Moduskanal, ändert sich, was der Slot tut, aber nicht, wie der Knopf heißt. Das ist eine Frage über *laufenden Zustand* und nicht über die Datei, und sie ist eine eigene — siehe **B52**.
+
+### B50 — Kanäle landen unter dem falschen Knopf, ohne dass ein Zähler es merkt (Eigentümer, S53)
+
+- **Wo:** Fixture-Bibliothek (OFL), Programmer-Band
+- **Schwere:** ärgerlich, und schlecht zu sehen
+- **Was passiert:** Die Tabelle in `attribute_of_capability` las den **Typ** einer Capability und sonst nichts. Das Format stellt aber neben den Typ noch Eigenschaften, die einen Typ in verschiedene physische Parameter aufteilen — *Diskriminatoren*: `WheelSlot` ist ein Farbrad oder ein Goborad, je nachdem, was auf dem Rad sitzt; `BladeRotation` dreht **ein** Messer und `BladeSystemRotation` den **ganzen** Rahmen; ein `Fog` mit `fogType: "Haze"` ist ein Hazer. Wer nur den Typ liest, verliert das — und zwar so, dass **kein Zähler anschlägt**: `channels_unmapped` blieb bei null, weil jeder Kanal *irgendwo* ankam. Nur eben unter dem falschen Knopf. Gemessen: **115 Radkanäle** des Korpus lagen auf der Gobo-Bank, 110 davon Farbräder; die vier Rahmenmesser eines Profilspots waren **ein** Attribut, nach Kanalreihenfolge nummeriert, also hieß *Blade 3* der dritte Messerkanal und nicht Messer drei.
+- **Was passieren soll:** Die Diskriminatoren werden gelesen, und der Name, den der Hersteller dem Kanal gibt, kommt mit — damit auf dem Encoder *Rotating Gobo* steht und nicht *Gobo 2*.
+- **So sieht man es:** Einen Kopf mit Farbrad patchen und **Colour** drücken; das Rad ist nicht dort, sondern unter **Gobo**.
+- **Ergebnis:** ✅ **behoben in S53.**
+
+  **Vier neue Attribute** (40 statt 36, angehängt wie immer): `ColorWheelRotation`, `Haze`, `BladeRotation`, `BladeSystem`. Keines ist ein Typ, den das Format neu bekommen hat — jedes ist eine Unterscheidung, die das Format **schon immer** trifft und die diese Tabelle wegwarf.
+
+  **Was ein Rad ist, sagen seine Slots**, nicht sein Name: `Wheel A` mit `Color`-Slots ist ein Farbrad, auch auf Deutsch und auch ohne das Wort *Color* im Namen. Und zwar **was die Mehrheit der Slots ist**: zehn Räder des Korpus mischen, und bei sechs davon ist der erste Slot, der überhaupt etwas sagt, nicht das, was das Rad ist — `beamz/panther-7r` und `elation/proteus-hybrid` nennen ihr Rad *Gobo Wheel* und setzen eine Iris oben drauf. Eine *der erste gewinnt*-Regel schickte alle sechs an den Iris-Knopf.
+
+  **Welches Messer, steht in der Datei:** `blade` ist die Ordnungszahl (`Top`/`Right`/`Bottom`/`Left` in der Reihenfolge, die das Format selbst auflistet, oder eine Zahl ab eins). Steht dort eine Nummer, die schon vergeben ist, wird gezählt statt überschrieben — ein Profil, das sich selbst widerspricht, darf keinen Kanal verlieren.
+
+  **Der Name des Kanals reist mit**, als `AttributeDef::label`: **37 526 Kanäle** des Korpus tragen ihn, keiner nicht. Er ist ein **Etikett und kein Schlüssel** — zwei Köpfe, deren Rot verschieden heißt, teilen weiter `AttributeType::Red`, und genau das lässt *eine* Zeile ein Rig aus drei Häusern erreichen. Sind zwei ausgewählte Fixtures uneins, zeigt der Encoder wieder das Wort des Pults — dieselbe Regel wie bei `home`.
+
+  **Eine Zahl, die absichtlich null bleibt:** `ColorWheelRotation` wird von **keinem** Kanal des Korpus erreicht, und das ist richtig. Fast jedes Farbrad legt sein Scrollen als **Bereich oben auf dem Auswahlkanal** ab — *Slot 1 … Slot 8, dann Rotation CW* — und so ein Kanal ist **ein** Knopf. Die Zeile existiert, weil das Format die Unterscheidung trifft und ein Fixture mit eigenem Scrollkanal sie erreichen wird; der Korpustest behauptet deshalb ausdrücklich **null** statt *mehr als null*, und die Regel selbst hängt am Unit-Test, wo eine Regel hingehört.
+
+  Tests: `a_wheel_goes_to_the_bank_its_slots_say_it_belongs_on`, `a_wheel_that_mixes_kinds_is_the_kind_most_of_its_slots_are`, `a_wheel_split_evenly_between_two_kinds_takes_the_one_listed_first`, `a_framing_blade_is_numbered_by_the_blade_and_not_by_the_channel`, `fog_and_haze_are_told_apart_by_the_type_the_file_states` und `a_channel_carries_the_name_its_manufacturer_gave_it` (`prism_core::library::ofl`); über den Korpus `the_capability_discriminators_reach_the_attributes_they_name` und `every_channel_of_the_installed_library_carries_its_own_name`.
+### B51 — Manche Kanäle mancher Fixtures sind gar nicht ansteuerbar (Eigentümer, S54)
+
+- **Wo:** Fixture-Bibliothek (OFL), Programmer-Band
+- **Schwere:** blocker für die betroffenen Fixtures, und **unsichtbar**
+- **Was passiert:** Der Reader gab nur den Kanälen einen `AttributeDef`, die er **verstand**. Ein Slot ohne `AttributeDef` ist für alles dahinter unsichtbar — kein Encoder, keine Kommandozeile, keine Cue —, behält aber seinen Platz im Fußabdruck: das Pult trieb ihn für immer auf null. Und **kein Zähler schlug an**, weil `channels_unmapped` nur fragt, ob ein Kanal *irgendein* Attribut erreicht, nicht ob jeder *Slot* einen Knopf hat. Gemessen: **707 Slots in 337 der 2 871 Profile**, darunter **34 von 35** Kanälen eines `glp/knv-cube` und **9 von 10** eines `jb-systems/twin-effect-laser`. Diese beiden Fixtures waren praktisch unbenutzbar, und die Bibliothek meldete sich als verlustfrei.
+- **Was passieren soll:** Kein Slot eines gepatchten Fixtures darf unerreichbar sein — und zwar als Eigenschaft, die man prüfen kann, nicht als Liste behobener Ursachen.
+- **So sieht man es:** `glp/knv-cube` im 35-Kanal-Modus patchen; ein einziger Knopf für fünfunddreißig Kanäle.
+- **Ergebnis:** ✅ **behoben in S54, und zwar als Boden statt als vier Reparaturen.**
+
+  **`AttributeType::Raw`**, der 41.: die einzige Zeile in dieser Aufzählung, die keine *Art* von Parameter ist. Sie sagt nur *hier ist ein Kanal*. Bank `Control`, LTP, Ruhewert aus der Datei, und das Etikett ist der Name des Herstellers — oder **`Ch 7`**, der Platz des Kanals im Fixture von eins gezählt, also die Zahl auf dem Patchzettel.
+
+  **Vier Sorten Loch fallen darauf**, und `the_conversion_reports_what_it_could_not_use` druckt jede einzeln: ein Switching-Alias, über den sich die Stellungen uneinig sind (**289**), ein `null`-Eintrag im Modus (**210**), ein Kanal, den die Datei als funktionslos beschreibt (**99**), und ein Fine-Byte ohne Grobkanal (**14**). Eine fünfte wäre ein Capability-Typ, den eine spätere Version des Formats hinzufügt — und genau deshalb ist es ein Boden und keine Liste.
+
+  **Die Zähler bleiben, als Diagnose.** `channels_unmapped` ist weiter null und sagt weiter etwas: es beantwortet *was hat der Reader nicht verstanden*, was eine andere Frage ist als *was kann ein Operator erreichen*. Die zweite beantwortet jetzt `no_slot_of_any_profile_is_out_of_reach` über **40 953 Slots**, und `the_raw_channel_is_the_exception_and_not_the_rule` hält daneben fest, dass die Ausnahme eine bleibt: **619 Rohkanäle von 38 233 Attributen**, 1,6 %.
+
+  **Ein Fund, den B1s eigener Test gemacht hat:** ein aufgelöster Switching-Kanal, der ein Rot ist, ruhte zuerst auf null statt offen, weil er den Ruhewert des Rohkanals bekam. `no_profile_in_the_installed_library_rests_a_colour_shut` fiel darüber auf `gruft/pixel-tube`. Der Alias hat keinen eigenen `defaultValue` — welcher Kanal lebt, entscheidet ihn —, also gilt die Konvention des Pults, und die steht seit S51 in `default_value`.
+
+  Tests: `a_switching_alias_is_the_parameter_its_positions_agree_on`, `a_switching_alias_whose_positions_disagree_is_raw_under_its_own_name`, `a_slot_the_mode_leaves_unused_is_still_a_knob`, `a_channel_the_file_says_does_nothing_is_still_a_knob` und `every_slot_of_a_mode_has_exactly_one_knob` (`prism_core::library::ofl`); über den Korpus `no_slot_of_any_profile_is_out_of_reach` und `the_raw_channel_is_the_exception_and_not_the_rule`.
+
+### B52 — Das Pult folgt einem Switching Channel nicht, während die Show läuft
+
+- **Wo:** Fixture-Bibliothek (OFL), Programmer-Band
+- **Schwere:** kosmetisch, seit S54
+- **Was passiert:** Ein Switching-Alias ist seit S54 immer erreichbar, und wo sich alle Stellungen einig sind, trägt er den richtigen Parameter (B49). Dreht der Operator aber den Moduskanal, ändert sich die Bedeutung des Slots, ohne dass der Knopf davon erfährt.
+- **Was passieren soll:** Offen. Ein `AttributeDef`, dessen Bedeutung vom Wert eines anderen Kanals abhängt, ist etwas, das dieses Modell nicht kennt — der Schlüssel, unter dem eine Cue einen Wert ablegt, dürfte sich nicht ändern, während die Cue läuft. Es ist deshalb **keine** kleine Ergänzung des Readers, sondern eine Frage an das Modell.
+- **So sieht man es:** Einen Laser mit Moduskanal patchen, den Modus drehen; der Nachbarknopf heißt weiter `Channel 2`.
+- **Ergebnis:** ☐ offen
+
+
 ## Patch und Fixture Sheet
 
 *Den Rig aufbauen, Fixtures anlegen, adressieren, die Bibliothek.*

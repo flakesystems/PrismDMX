@@ -62,7 +62,7 @@
 //! table for one either, nor for the programmer or the journal.
 
 use prism_domain::{
-    AttributeType, ClearStage, Command, CommandLineMode, CueEdit, Delta, FixtureId, JsonPatchOp,
+    AttributeKey, ClearStage, Command, CommandLineMode, CueEdit, Delta, FixtureId, JsonPatchOp,
     NoticeLevel, ObjectRef, PlaybackTarget, PresetId, PresetPool, Sequence, SequenceId, StoreMode,
     StorePreview, StoreTarget,
 };
@@ -323,11 +323,11 @@ impl ShowFile {
             .show
             .sequence(sequence_id)
             .and_then(|sequence| sequence.cues.iter().find(|cue| cue.number == wanted));
-        let stored: Vec<(FixtureId, AttributeType)> = existing
+        let stored: Vec<(FixtureId, AttributeKey)> = existing
             .map(|cue| {
                 cue.parts
                     .iter()
-                    .map(|part| (part.fixture, part.attribute))
+                    .map(|part| (part.fixture, part.key()))
                     .collect()
             })
             .unwrap_or_default();
@@ -357,12 +357,12 @@ impl ShowFile {
         mode: StoreMode,
     ) -> StorePreview {
         let existing = self.show.preset(preset_id);
-        let stored: Vec<(FixtureId, AttributeType)> = existing
+        let stored: Vec<(FixtureId, AttributeKey)> = existing
             .map(|preset| {
                 preset
                     .values
                     .iter()
-                    .map(|value| (value.fixture, value.attribute))
+                    .map(|value| (value.fixture, value.key()))
                     .collect()
             })
             .unwrap_or_default();
@@ -1309,6 +1309,7 @@ impl ShowFile {
             | Command::SelectExecutor { .. }
             | Command::SetEncoderBank { .. }
             | Command::SetProgrammerPage { .. }
+            | Command::SetProgrammerOccurrence { .. }
             | Command::SelectProgrammerParam { .. }
             | Command::CommandLineInput { .. }
             // S33's four have no image because the journal is the **show's**:
@@ -1636,8 +1637,8 @@ impl ShowFile {
 /// the store left alone as one it had replaced.
 fn counted(
     name: Option<&str>,
-    stored: &[(FixtureId, AttributeType)],
-    incoming: &[(FixtureId, AttributeType)],
+    stored: &[(FixtureId, AttributeKey)],
+    incoming: &[(FixtureId, AttributeKey)],
     mode: StoreMode,
 ) -> StorePreview {
     let mut overlap = 0;
@@ -1966,6 +1967,7 @@ mod tests {
             },
             Command::SetAttribute {
                 attribute: AttributeType::Red,
+                occurrence: 0,
                 value: 0,
                 relative: false,
             },

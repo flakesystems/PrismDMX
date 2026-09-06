@@ -444,6 +444,7 @@ mod tests {
     use crate::plan::{MergeError, MergePlan};
     use crate::playback::{MAX_SOURCES, MergeScratch, PlaybackLayer};
     use crate::testkit::{attribute_def, fixture_type, moving_head};
+    use prism_domain::AttributeKey;
     use prism_domain::{AttributeType, FixtureId, MergeMode, SequenceId};
     use proptest::prelude::*;
 
@@ -465,7 +466,8 @@ mod tests {
     }
 
     fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
-        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+        plan.index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
+            .unwrap()
     }
 
     #[test]

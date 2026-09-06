@@ -15,7 +15,8 @@
 use std::sync::Arc;
 
 use prism_domain::{
-    AttributeDef, AttributeType, Fixture, FixtureId, FixtureType, SequenceId, UniverseId, Vec3,
+    AttributeDef, AttributeKey, AttributeType, Fixture, FixtureId, FixtureType, SequenceId,
+    UniverseId, Vec3,
 };
 use prism_engine::{
     DmxFrame, Engine, FrameLayout, FramePublisher, FrameSubscriber, ManualClock, MergeBody,
@@ -57,6 +58,8 @@ fn attribute(
 ) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset,
@@ -259,8 +262,14 @@ fn an_active_executor_changes_exactly_the_channels_it_touches() {
     {
         let source = body.layer_mut().source_mut(SequenceId::new(1)).unwrap();
         for fixture in [1, 2] {
-            source.set(slot(fixture, AttributeType::Dimmer), 65_535);
-            source.set(slot(fixture, AttributeType::Pan), 20_000);
+            source.set(
+                slot(fixture, AttributeKey::first(AttributeType::Dimmer)),
+                65_535,
+            );
+            source.set(
+                slot(fixture, AttributeKey::first(AttributeType::Pan)),
+                20_000,
+            );
         }
     }
 
@@ -328,10 +337,13 @@ fn htp_between_two_executors_reaches_the_wire() {
     let mut body = body(&head, &par, &fixtures, &layout);
     let plan = body.plan().clone();
     let dimmer = plan
-        .index_of(FixtureId::new(1), AttributeType::Dimmer)
+        .index_of(
+            FixtureId::new(1),
+            AttributeKey::first(AttributeType::Dimmer),
+        )
         .unwrap();
     let pan = plan
-        .index_of(FixtureId::new(1), AttributeType::Pan)
+        .index_of(FixtureId::new(1), AttributeKey::first(AttributeType::Pan))
         .unwrap();
 
     body.layer_mut()

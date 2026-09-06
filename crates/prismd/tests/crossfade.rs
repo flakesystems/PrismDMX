@@ -82,6 +82,7 @@ fn show_with(fader: ExecutorFaderFunction) -> prism_core::ShowFile {
         parts: vec![CuePart {
             fixture: FixtureId::new(1),
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value,
             preset_ref: None,
             tracking: CueTracking::Track,

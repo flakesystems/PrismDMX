@@ -22,8 +22,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use prism_domain::{
-    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, Fixture, FixtureId, FixtureType,
-    GoDirection, Group, GroupId, Sequence, SequenceId, UniverseId, Vec3,
+    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, FeatureGroup, Fixture, FixtureId,
+    FixtureType, GoDirection, Group, GroupId, MergeMode, Sequence, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Clock, DmxFrame, Engine, FrameLayout, FramePublisher, ManualClock, MergeBody, SystemClock,
@@ -285,6 +285,8 @@ fn fixture_type(attributes: usize, sixteen_bit: bool) -> FixtureType {
         .enumerate()
         .map(|(index, attribute)| AttributeDef {
             attribute: *attribute,
+            label: None,
+            occurrence: 0,
             feature_group: attribute.feature_group(),
             coarse_offset: (index * width) as u16,
             fine_offset: sixteen_bit.then(|| (index * width + 1) as u16),
@@ -302,6 +304,45 @@ fn fixture_type(attributes: usize, sixteen_bit: bool) -> FixtureType {
         name: "Test".to_owned(),
         mode: "test".to_owned(),
         footprint: (attributes.len() * width) as u16,
+        attributes,
+    }
+}
+
+/// A fixture with **thirty-two channels of one kind** — S52.
+///
+/// The shape the occurrence exists for: an LED tube whose profile writes out a
+/// red per pixel. Before S52 this profile was a one-channel fixture with
+/// thirty-one dropped channels, so there was nothing to measure; the question
+/// this answers is whether keeping them costs the tick anything, and the answer
+/// has to be nought like every other path in this file.
+///
+/// The key is wider than it was — `AttributeType` plus a `u8` — so
+/// `MergePlan::index_of` is a binary search over a three-part key and
+/// `ChannelPlan` carries one target per repeat. Neither allocates, and this is
+/// where that is checked rather than assumed.
+fn repeated_fixture_type(repeats: u8) -> FixtureType {
+    let attributes = (0..repeats)
+        .map(|occurrence| AttributeDef {
+            attribute: AttributeType::Red,
+            label: None,
+            occurrence,
+            feature_group: FeatureGroup::Color,
+            coarse_offset: u16::from(occurrence),
+            fine_offset: None,
+            default_value: 32_768,
+            merge_mode: MergeMode::Ltp,
+            invert: false,
+            physical_from: 0.0,
+            physical_to: 100.0,
+            ranges: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+    FixtureType {
+        id: "test.tube".to_owned(),
+        manufacturer: "Test".to_owned(),
+        name: "Test Tube".to_owned(),
+        mode: "32ch".to_owned(),
+        footprint: u16::from(repeats),
         attributes,
     }
 }
@@ -358,6 +399,67 @@ fn merge_body(
         body.layer_mut().activate(SequenceId::new(executor));
     }
     body
+}
+
+/// **A fixture with thirty-two repeated channels costs the tick nothing** —
+/// S52's exit criterion, measured rather than argued.
+///
+/// The tenth path in this file, and it is here because S52 widened the key
+/// every merge slot is filed under. What could have gone wrong is arithmetic
+/// rather than a call — a wider key means a wider binary search — so the
+/// assertion is the same nought the other nine make, taken over a tube-shaped
+/// profile the model could not have expressed before.
+#[test]
+fn a_tick_with_a_fixture_of_thirty_two_repeated_channels_allocates_nothing() {
+    let tube = repeated_fixture_type(32);
+    let layout = FrameLayout::new((1..=8).map(UniverseId::new)).unwrap();
+    let body = merge_body(&layout, &tube, 64, 8);
+    let slots = body.plan().slot_count();
+    // Thirty-two repeats **and the intensity the desk supplies**: this profile
+    // is colour with no dimmer channel, which is the fixture S43 gives one to.
+    // So thirty-three slots a fixture, and every repeat is a slot of its own.
+    assert_eq!(slots, 64 * 33, "every repeat is a slot of its own");
+
+    let mut publisher = FramePublisher::new(Arc::new(layout));
+    let mut subscriber = publisher.subscribe();
+    let (mut producer, consumer) = command_queue(256);
+    let mut engine = Engine::new(body, consumer, publisher);
+    let clock = ManualClock::new();
+
+    let mut cycle =
+        |engine: &mut Engine<MergeBody>, producer: &mut prism_engine::Producer<_>, index: u16| {
+            let executor = SequenceId::new(u32::from(index % 8) + 1);
+            let _ = producer.push(TickCommand::SetExecutorLevel {
+                executor: executor.into(),
+                level: index,
+            });
+            engine.run_ticks(&clock, 1);
+            subscriber.refresh();
+        };
+
+    for index in 0..200 {
+        cycle(&mut engine, &mut producer, index);
+    }
+    engine.reset_stats();
+
+    let calls = allocator_calls(|| {
+        for index in 0..1_000 {
+            cycle(&mut engine, &mut producer, index);
+        }
+    });
+
+    println!("allocator calls in 1000 ticks over {slots} repeated slots: {calls}");
+    assert_eq!(
+        calls, 0,
+        "a repeated parameter called the allocator {calls} times"
+    );
+    assert_eq!(engine.stats().panics, 0);
+    // And it was merging rather than sitting at home, or the nought means
+    // nothing.
+    assert!(
+        engine.body().values().iter().any(|value| *value != 32_768),
+        "the merge produced nothing, so the measurement is meaningless"
+    );
 }
 
 #[test]
@@ -508,6 +610,7 @@ fn loaded_sequence(head: &FixtureType, fixtures: u32, seed: u16) -> Sequence {
                     head.attributes.iter().map(move |def| CuePart {
                         fixture: FixtureId::new(fixture),
                         attribute: def.attribute,
+                        occurrence: 0,
                         value: fixture
                             .wrapping_mul(u32::from(number))
                             .wrapping_add(u32::from(seed)) as u16,

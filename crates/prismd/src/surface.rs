@@ -54,7 +54,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use prism_domain::{AttributeType, Delta, EXECUTORS_PER_PAGE, ExecutorId, NoticeLevel, ViewId};
+use prism_domain::{AttributeKey, Delta, EXECUTORS_PER_PAGE, ExecutorId, NoticeLevel, ViewId};
 use prism_ipc::CommandOutcome;
 use prism_surface::{
     Bindings, ButtonId, Control, DisplayLine, Fader, GlobalButton, LedState, MAX_MESSAGE_BYTES,
@@ -783,26 +783,49 @@ pub fn context_of(core: &Core) -> prism_surface::SurfaceContext {
         previous_view: previous,
         next_view: next,
         programmer_page: session.programmer_page,
-        parameter: parameter_of(session.encoder_bank, session.programmer_param_index),
+        parameter: parameter_of(
+            &core.file.programmer,
+            &core.file.show,
+            session.encoder_bank,
+            session.programmer_param_index,
+            session.programmer_occurrence,
+        ),
     }
 }
 
 /// The attribute the jog wheel turns.
 ///
 /// The encoder bank names a feature group and the parameter index counts within
-/// it, in `AttributeType::ALL`'s order. **This is `FeatureGroup::attributes` and
-/// nothing else**, which is the whole point: S26's encoder bar numbers its
-/// encoders out of the same table — exported to TypeScript with the rest of the
-/// bindings as `FEATURE_GROUP_ATTRIBUTES` — so the wheel turns what is
-/// highlighted. S22 left this as a warning because there was nothing on the
-/// other side of it yet; now there is, and the way the two are kept in step is
-/// that there is one of them.
+/// it. **This is `prism_core::Programmer::bank_parameters` and nothing else**,
+/// which is the whole point: S26's encoder bar numbers its encoders out of the
+/// same call — see that method for why there is one of them and not two. S22
+/// left this as a warning because there was nothing on the other side of it
+/// yet; S26 answered it with one table, and S52 answers it with one *function*,
+/// because the list stopped being a table.
+///
+/// # Why it is no longer a table — S52
+///
+/// A bank's knobs used to be `FeatureGroup::attributes`, the same for every
+/// selection, with a dash under every knob nothing selected had. Two things
+/// ended that: the band now draws **only what the selection has**, and a
+/// fixture may have **two of a parameter**, which no fixed table can enumerate.
+/// So the list is a question about the selection, and the wheel asks it exactly
+/// as the band does.
 ///
 /// An index past the end is nothing rather than the last one: the wheel then
 /// does nothing, which is what an operator who has paged past the parameters
 /// should feel.
-fn parameter_of(group: prism_domain::FeatureGroup, index: u32) -> Option<AttributeType> {
-    group.parameter(index)
+fn parameter_of(
+    programmer: &prism_core::Programmer,
+    show: &prism_core::Show,
+    bank: prism_domain::FeatureGroup,
+    index: u32,
+    part: u32,
+) -> Option<AttributeKey> {
+    programmer
+        .bank_parameters(show, bank, u8::try_from(part).unwrap_or(u8::MAX))
+        .get(index as usize)
+        .copied()
 }
 
 /// The executors one page holds, for a caller that wants to name the slot.
@@ -1216,7 +1239,7 @@ pub fn load_profile(path: &Path) -> Bindings {
 #[cfg(test)]
 mod tests {
     use super::{SurfacePort, legend, load_profile, notice_for, parameter_of};
-    use prism_domain::{AttributeType, Delta, FeatureGroup, NoticeLevel};
+    use prism_domain::{AttributeKey, AttributeType, Delta, FeatureGroup, NoticeLevel};
     use prism_surface::{Bindings, SurfaceHealth};
 
     #[test]
@@ -1298,48 +1321,76 @@ mod tests {
         assert_eq!(legend(None), "");
     }
 
-    #[test]
-    fn the_jog_wheel_turns_the_parameter_the_encoder_bank_and_index_name() {
-        assert_eq!(
-            parameter_of(FeatureGroup::Position, 0),
-            Some(AttributeType::Pan)
-        );
-        assert_eq!(
-            parameter_of(FeatureGroup::Position, 1),
-            Some(AttributeType::Tilt)
-        );
-        assert_eq!(
-            parameter_of(FeatureGroup::Dimmer, 0),
-            Some(AttributeType::Dimmer)
-        );
-        // The position bank got a third knob in S51 (B38).
-        assert_eq!(
-            parameter_of(FeatureGroup::Position, 2),
-            Some(AttributeType::PositionSpeed)
-        );
-        // Past the end is nothing rather than the last one.
-        assert_eq!(parameter_of(FeatureGroup::Position, 3), None);
-        assert_eq!(parameter_of(FeatureGroup::Dimmer, 9), None);
+    /// A programmer with a rig selected, for the two tests below.
+    ///
+    /// `testkit::show_file` patches PARs and a dimmer; selecting them is what
+    /// gives a bank any parameters at all since **S52** — a bank's knobs are a
+    /// question about the selection now, not a fixed table.
+    fn selected() -> (prism_core::Programmer, prism_core::Show) {
+        let file = crate::testkit::show_file();
+        let mut programmer = prism_core::Programmer::default();
+        programmer
+            .apply(
+                &prism_domain::Command::SelectFixtures {
+                    ids: file.show.fixtures().map(|fixture| fixture.id).collect(),
+                    mode: prism_domain::SelectionMode::Set,
+                },
+                &file.show,
+            )
+            .expect("a selection of what is patched");
+        (programmer, file.show)
     }
 
-    /// **The wheel and the encoder bar walk the same list** (S26).
-    ///
-    /// `FeatureGroup::attributes` is what `prism-domain` exports to the
-    /// interface as `FEATURE_GROUP_ATTRIBUTES`, and it is what the wheel
-    /// resolves through here. Asserted for every bank and every index rather
-    /// than for the two the test above happens to name, because the failure
-    /// this prevents — turning one parameter while another is highlighted —
-    /// would show up on whichever bank was got wrong.
     #[test]
-    fn the_wheel_walks_the_table_the_encoder_bar_is_given() {
+    fn the_jog_wheel_turns_the_parameter_the_encoder_bank_and_index_name() {
+        let (programmer, show) = selected();
+        let at = |bank, index| parameter_of(&programmer, &show, bank, index, 0);
+        assert_eq!(
+            at(FeatureGroup::Dimmer, 0),
+            Some(AttributeKey::first(AttributeType::Dimmer))
+        );
+        assert_eq!(
+            at(FeatureGroup::Color, 0),
+            Some(AttributeKey::first(AttributeType::Red))
+        );
+        // Past the end is nothing rather than the last one: a wheel turned past
+        // the parameters does nothing, which is what an operator who has paged
+        // off the end should feel.
+        assert_eq!(at(FeatureGroup::Dimmer, 9), None);
+        // **And a bank nothing selected has is empty**, which is S52's other
+        // half: the band draws only what the fixtures have, so there is no
+        // parameter for the wheel to turn either. A PAR has no gobo wheel.
+        assert_eq!(at(FeatureGroup::Gobo, 0), None);
+    }
+
+    /// **The wheel and the encoder bar walk the same list** (S26, S52).
+    ///
+    /// It used to be one *table* — `FeatureGroup::attributes`, exported to the
+    /// interface as `FEATURE_GROUP_ATTRIBUTES`. Since S52 it is one *function*,
+    /// `prism_core::Programmer::bank_parameters`, because the list depends on
+    /// the selection and on how many of a parameter each fixture has. What is
+    /// asserted is unchanged: the wheel resolves index `n` to whatever the band
+    /// draws at position `n`, for every bank, or an operator would turn the
+    /// wheel and watch a parameter other than the highlighted one move.
+    #[test]
+    fn the_wheel_walks_the_list_the_encoder_bar_is_given() {
+        let (programmer, show) = selected();
         for group in FeatureGroup::ALL {
-            let on_it = group.attributes();
-            for (index, &attribute) in on_it.iter().enumerate() {
+            let on_it = programmer.bank_parameters(&show, group, 0);
+            for (index, &key) in on_it.iter().enumerate() {
                 let index = u32::try_from(index).expect("a bank has few parameters");
-                assert_eq!(parameter_of(group, index), Some(attribute), "{group:?}");
+                assert_eq!(
+                    parameter_of(&programmer, &show, group, index, 0),
+                    Some(key),
+                    "{group:?}"
+                );
             }
             let past = u32::try_from(on_it.len()).expect("a bank has few parameters");
-            assert_eq!(parameter_of(group, past), None, "{group:?}");
+            assert_eq!(
+                parameter_of(&programmer, &show, group, past, 0),
+                None,
+                "{group:?}"
+            );
         }
     }
 

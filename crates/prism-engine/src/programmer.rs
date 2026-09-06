@@ -216,7 +216,8 @@ mod tests {
     use crate::programmer::ProgrammerLayer;
     use crate::testkit::moving_head;
     use prism_domain::{
-        AttributeType, FixtureId, ProgrammerState, ProgrammerValue, ProgrammerValueSource,
+        AttributeKey, AttributeType, FixtureId, ProgrammerState, ProgrammerValue,
+        ProgrammerValueSource,
     };
     use proptest::prelude::*;
 
@@ -227,7 +228,8 @@ mod tests {
     }
 
     fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
-        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+        plan.index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
+            .unwrap()
     }
 
     fn value(value: u16) -> ProgrammerValue {
@@ -403,8 +405,16 @@ mod tests {
     fn a_domain_programmer_state_resolves_into_slot_numbers() {
         let plan = plan();
         let mut state = ProgrammerState::default();
-        state.set_value(FixtureId::new(1), AttributeType::Dimmer, value(60_000));
-        state.set_value(FixtureId::new(3), AttributeType::Pan, value(20_000));
+        state.set_value(
+            FixtureId::new(1),
+            AttributeKey::first(AttributeType::Dimmer),
+            value(60_000),
+        );
+        state.set_value(
+            FixtureId::new(3),
+            AttributeKey::first(AttributeType::Pan),
+            value(20_000),
+        );
 
         let mut programmer = ProgrammerLayer::new(&plan);
         assert_eq!(programmer.load(&plan, &state), 0);
@@ -427,7 +437,11 @@ mod tests {
         programmer.set(slot(&plan, 2, AttributeType::Pan), 500);
 
         let mut state = ProgrammerState::default();
-        state.set_value(FixtureId::new(1), AttributeType::Dimmer, value(60_000));
+        state.set_value(
+            FixtureId::new(1),
+            AttributeKey::first(AttributeType::Dimmer),
+            value(60_000),
+        );
         programmer.load(&plan, &state);
         assert_eq!(programmer.len(), 1);
         assert_eq!(programmer.get(slot(&plan, 2, AttributeType::Pan)), None);
@@ -446,9 +460,21 @@ mod tests {
         // hence the count.
         let plan = plan();
         let mut state = ProgrammerState::default();
-        state.set_value(FixtureId::new(9), AttributeType::Dimmer, value(1));
-        state.set_value(FixtureId::new(1), AttributeType::Tilt, value(2));
-        state.set_value(FixtureId::new(1), AttributeType::Dimmer, value(3));
+        state.set_value(
+            FixtureId::new(9),
+            AttributeKey::first(AttributeType::Dimmer),
+            value(1),
+        );
+        state.set_value(
+            FixtureId::new(1),
+            AttributeKey::first(AttributeType::Tilt),
+            value(2),
+        );
+        state.set_value(
+            FixtureId::new(1),
+            AttributeKey::first(AttributeType::Dimmer),
+            value(3),
+        );
 
         let mut programmer = ProgrammerLayer::new(&plan);
         assert_eq!(programmer.load(&plan, &state), 2);

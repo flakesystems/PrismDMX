@@ -58,6 +58,8 @@ into an argument about one field.
 
 The mode is a property of the attribute definition (`AttributeDef.mergeMode`), not of the fixture or the playback.
 
+> **An attribute is a type and an occurrence (S52).** The unit everything below resolves is one *channel of a kind* of one fixture — `prism_domain::AttributeKey`, which is an `AttributeType` plus a nought-based index. A head with two colour wheels has two `ColorWheel` slots and they merge independently, exactly as two different attributes would; `MergePlan` sorts and searches by `(fixture, attribute, occurrence)`. Until S52 the type alone was the key and a fixture had one of each parameter, so the library reader dropped the second channel of a kind rather than build a fixture that could not be patched. Nothing about the *merge* changed: a slot is a slot.
+
 | Attribute class | Mode | Reason |
 |---|---|---|
 | Dimmer / Intensity | **HTP** — highest takes precedence | Industry standard. A playback must never be able to remove light that another playback is providing. Fading out playback A cannot darken a fixture that playback B is holding up |

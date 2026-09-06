@@ -660,8 +660,8 @@ mod tests {
     use crate::testkit::show_file;
     use prism_core::{JsonMirror, ShowStore};
     use prism_domain::{
-        Answer, AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, OutputHealth,
-        OutputId, OutputInstance, OutputKind, PlaybackTarget, Query, SelectionMode,
+        Answer, AttributeKey, AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection,
+        OutputHealth, OutputId, OutputInstance, OutputKind, PlaybackTarget, Query, SelectionMode,
     };
     use prism_engine::FramePublisher;
     use prism_ipc::CommandOutcome;
@@ -739,6 +739,7 @@ mod tests {
         });
         desk.command(Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 12345,
             relative: false,
         });
@@ -770,7 +771,10 @@ mod tests {
         assert_eq!(
             snapshot
                 .programmer
-                .value(FixtureId::new(1), AttributeType::Dimmer)
+                .value(
+                    FixtureId::new(1),
+                    AttributeKey::first(AttributeType::Dimmer)
+                )
                 .map(|held| held.value),
             Some(12345)
         );

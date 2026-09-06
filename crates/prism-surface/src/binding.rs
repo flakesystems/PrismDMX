@@ -67,7 +67,7 @@
 use core::fmt;
 
 use prism_domain::{
-    AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId, FeatureGroup,
+    AttributeKey, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId, FeatureGroup,
     GlobalButton, ParamDirection, PlaybackTarget, RESERVED_REASON, StripButton, SurfaceBinding,
     ViewId, WindowType,
 };
@@ -108,7 +108,7 @@ pub struct SurfaceContext {
     /// The attribute the jog wheel turns — the programmer parameter the session
     /// has selected. Nothing when nothing is selected, and then a turn of the
     /// wheel produces no command at all rather than a guess.
-    pub parameter: Option<AttributeType>,
+    pub parameter: Option<AttributeKey>,
 }
 
 /// What a control carried with it, for the actions that need it.
@@ -250,11 +250,15 @@ impl Resolve for SurfaceAction {
             Self::SelectProgrammerParam { direction } => {
                 Command::SelectProgrammerParam { direction }
             }
-            Self::AdjustParameter => Command::SetAttribute {
-                attribute: context.parameter?,
-                value: input.steps()?,
-                relative: true,
-            },
+            Self::AdjustParameter => {
+                let key = context.parameter?;
+                Command::SetAttribute {
+                    attribute: key.attribute,
+                    occurrence: key.occurrence,
+                    value: input.steps()?,
+                    relative: true,
+                }
+            }
             Self::SetEncoderBank { group } => Command::SetEncoderBank { group },
             Self::OpenWindow { window } => Command::OpenWindow {
                 window,
@@ -927,8 +931,8 @@ mod tests {
     use crate::model::SurfaceEvent;
     use crate::profile::{Fader, GlobalButton, McuProfile, StripButton, X_TOUCH};
     use prism_domain::{
-        AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId,
-        FeatureGroup, GoDirection, ParamDirection, PlaybackTarget, ViewId, WindowType,
+        AttributeKey, AttributeType, Command, ExecutorButtonFunction, ExecutorButtonRef,
+        ExecutorId, FeatureGroup, GoDirection, ParamDirection, PlaybackTarget, ViewId, WindowType,
     };
 
     fn context() -> SurfaceContext {
@@ -938,7 +942,7 @@ mod tests {
             previous_view: Some(ViewId::new(1)),
             next_view: Some(ViewId::new(7)),
             programmer_page: 3,
-            parameter: Some(AttributeType::Tilt),
+            parameter: Some(AttributeKey::first(AttributeType::Tilt)),
         }
     }
 
@@ -1481,6 +1485,7 @@ mod tests {
             table.command(SurfaceEvent::Jog { steps: -3 }, &context),
             Some(Command::SetAttribute {
                 attribute: AttributeType::Tilt,
+                occurrence: 0,
                 value: -3,
                 relative: true,
             })

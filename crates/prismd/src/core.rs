@@ -39,7 +39,7 @@ use prism_core::{
     Applied, Autosave, Effect, MachineConfig, MachineError, ShowFile, ShowFileError, ShowStore,
 };
 use prism_domain::{
-    AttributeType, Command, Delta, FixtureId, GroupId, NoticeLevel, PlaybackId, ProgrammerState,
+    AttributeKey, Command, Delta, FixtureId, GroupId, NoticeLevel, PlaybackId, ProgrammerState,
     UniverseId,
 };
 use prism_engine::{FrameLayout, MergeBody, MergePlan, PatchError, PlaybackReport, TickCommand};
@@ -1240,26 +1240,26 @@ impl Core {
     /// longer held and the playbacks below decide again.
     fn programmer_changes(&self, current: &ProgrammerState) -> Vec<(u32, Option<u16>)> {
         let mut changes = Vec::new();
-        let mut visit = |fixture: FixtureId, attribute: AttributeType, value: Option<u16>| {
-            if let Some(slot) = self.plan.index_of(fixture, attribute) {
+        let mut visit = |fixture: FixtureId, key: AttributeKey, value: Option<u16>| {
+            if let Some(slot) = self.plan.index_of(fixture, key) {
                 changes.push((u32::try_from(slot).unwrap_or(u32::MAX), value));
             }
         };
         for (&fixture, attributes) in &current.values {
-            for (&attribute, value) in attributes {
+            for (&key, value) in attributes {
                 let before = self
                     .engine_programmer
-                    .value(fixture, attribute)
+                    .value(fixture, key)
                     .map(|held| held.value);
                 if before != Some(value.value) {
-                    visit(fixture, attribute, Some(value.value));
+                    visit(fixture, key, Some(value.value));
                 }
             }
         }
         for (&fixture, attributes) in &self.engine_programmer.values {
-            for &attribute in attributes.keys() {
-                if current.value(fixture, attribute).is_none() {
-                    visit(fixture, attribute, None);
+            for &key in attributes.keys() {
+                if current.value(fixture, key).is_none() {
+                    visit(fixture, key, None);
                 }
             }
         }
@@ -1456,8 +1456,8 @@ mod tests {
     use crate::testkit::{cue, dimmer_type, fixture, sequence, show_file};
     use prism_core::ShowStore;
     use prism_domain::{
-        AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, GroupId, PlaybackId,
-        PlaybackTarget, SelectionMode, SequenceId, UniverseId,
+        AttributeKey, AttributeType, Command, Delta, ExecutorId, FixtureId, GoDirection, GroupId,
+        PlaybackId, PlaybackTarget, SelectionMode, SequenceId, UniverseId,
     };
     use prism_engine::FramePublisher;
     use prism_protocols::{MockOutput, MockOutputHandle, OutputThread, RunnerConfig, spawn};
@@ -1551,6 +1551,7 @@ mod tests {
         let deltas = core
             .apply(&Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 0,
                 relative: false,
             })
@@ -1617,6 +1618,7 @@ mod tests {
         .unwrap();
         core.apply(&Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 32768,
             relative: false,
         })
@@ -1920,12 +1922,14 @@ mod tests {
         .unwrap();
         core.apply(&Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 0,
             relative: false,
         })
         .unwrap();
         core.apply(&Command::SetAttribute {
             attribute: AttributeType::Red,
+            occurrence: 0,
             value: 65535,
             relative: false,
         })
@@ -1945,7 +1949,10 @@ mod tests {
             core.file
                 .programmer
                 .state()
-                .value(FixtureId::new(1), AttributeType::Dimmer)
+                .value(
+                    FixtureId::new(1),
+                    AttributeKey::first(AttributeType::Dimmer)
+                )
                 .is_some(),
             "the dimmer was set by an earlier command and stays"
         );
@@ -2047,6 +2054,7 @@ mod tests {
         .unwrap();
         core.apply(&Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 16384,
             relative: false,
         })

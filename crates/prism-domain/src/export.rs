@@ -240,6 +240,21 @@ export const FEATURE_GROUP_ATTRIBUTES: Readonly<
         out.push_str(&format!("  \"{name}\": [{}],\n", on_it.join(", ")));
     }
     out.push_str("};\n");
+    out.push_str(&format!(
+        "
+/**
+ * How deep a bank's repeats may go before they stop being knobs \u{2014} S52.
+ *
+ * A bank whose deepest repeat is at most this many draws them all, numbered;
+ * past it the band draws one occurrence at a time and grows a part stepper.
+ * `prism_domain::INLINE_OCCURRENCES`, and not a number this side may choose: it
+ * decides which parameters a bank *has*, so the jog wheel and the encoder bar
+ * have to agree about it.
+ */
+export const INLINE_OCCURRENCES = {};
+",
+        crate::INLINE_OCCURRENCES
+    ));
     out
 }
 

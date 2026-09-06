@@ -26,9 +26,14 @@
  * The ones on the encoder bank in force, which is `session.encoderBank` — so the
  * sheet follows the bank buttons and the console's Encoder Assign keys, and an
  * operator working in Position sees pan and tilt rather than fifteen columns of
- * everything. The list is `FEATURE_GROUP_ATTRIBUTES`, generated from
- * `prism_domain::FeatureGroup::attributes`, which is the same table the encoder
- * bar and the jog wheel walk (S26).
+ * everything.
+ *
+ * **Since S52 those are the ones the selection actually has**, repeats
+ * numbered: `desk/programmer.ts`'s `bankParameters`, which is the same call the
+ * encoder band draws from and the same rule the jog wheel walks
+ * (`prism_core::Programmer::bank_parameters`). A sheet with a column nothing on
+ * it could ever hold is a column of blanks, and this sheet is where columns are
+ * expensive.
  *
  * # Selecting — S43, B16 and B17
  *
@@ -56,9 +61,10 @@
 
 import { useMemo } from "react";
 
-import type { AttributeType, JsonValue, ProgrammerState } from "../bindings";
-import { bankParameters, groupOf, valueFor } from "../desk/programmer";
-import { encoderBank } from "../desk/session";
+import type { JsonValue, ProgrammerState } from "../bindings";
+import type { ParameterKey } from "../desk/programmer";
+import { bankParametersOf, groupOf, parameterLabel, valueFor } from "../desk/programmer";
+import { encoderBank, programmerOccurrence } from "../desk/session";
 import { pick, useConsole } from "../desk/consoleshell";
 import { percentOfLevel } from "../desk/level";
 import { ROW_HEIGHT } from "./live";
@@ -76,7 +82,15 @@ export function FixtureSheet({
 }) {
     const rows = useMemo(() => patchRows(show), [show]);
     const bank = encoderBank(session);
-    const attributes = bankParameters(bank);
+    // **The rows and not the selection** — S52. This sheet draws a row per
+    // patched fixture, so its columns are what *those* fixtures have; the
+    // encoder band asks the same question about the selection instead.
+    const attributes = bankParametersOf(
+        show,
+        rows.map((row) => row.id),
+        bank,
+        programmerOccurrence(session),
+    );
     const selected = new Set(programmer?.selection ?? []);
 
     if (rows.length === 0) {
@@ -116,7 +130,7 @@ function SheetBody({
 }: {
     readonly show: JsonValue;
     readonly rows: readonly SheetRow[];
-    readonly attributes: readonly AttributeType[];
+    readonly attributes: readonly ParameterKey[];
     readonly programmer: ProgrammerState | null;
     readonly selected: ReadonlySet<number>;
 }) {
@@ -140,9 +154,9 @@ function SheetBody({
                         <tr>
                             <th scope="col">Fx</th>
                             <th scope="col">Name</th>
-                            {attributes.map((attribute) => (
-                                <th scope="col" key={attribute}>
-                                    {attribute}
+                            {attributes.map((key) => (
+                                <th scope="col" key={columnKey(key)}>
+                                    {parameterLabel(key)}
                                 </th>
                             ))}
                         </tr>
@@ -187,9 +201,12 @@ function SheetBody({
                             >
                                 <td data-testid={`sheet-select-${String(row.id)}`}>{row.id}</td>
                                 <td>{row.name === "" ? "—" : row.name}</td>
-                                {attributes.map((attribute) => (
-                                    <td key={attribute} data-testid={`prog-${String(row.id)}-${attribute}`}>
-                                        {programmerText(show, programmer, row.id, attribute)}
+                                {attributes.map((key) => (
+                                    <td
+                                        key={columnKey(key)}
+                                        data-testid={`prog-${String(row.id)}-${columnKey(key)}`}
+                                    >
+                                        {programmerText(show, programmer, row.id, key)}
                                     </td>
                                 ))}
                             </tr>
@@ -214,11 +231,21 @@ function programmerText(
     show: JsonValue,
     programmer: ProgrammerState | null,
     fixture: number,
-    attribute: AttributeType,
+    key: ParameterKey,
 ): string {
-    if (groupOf(show, fixture, attribute) === null) {
+    if (groupOf(show, fixture, key) === null) {
         return "";
     }
-    const value = valueFor(programmer, fixture, attribute);
+    const value = valueFor(programmer, fixture, key);
     return value === null ? "—" : `${String(percentOfLevel(value))}%`;
+}
+
+/**
+ * What one column is called in the DOM — S52.
+ *
+ * The attribute alone for the first of a kind, so every test id written before
+ * a fixture could have two colour wheels still names the same cell.
+ */
+function columnKey(key: ParameterKey): string {
+    return key.occurrence === 0 ? key.attribute : `${key.attribute}-${String(key.occurrence + 1)}`;
 }

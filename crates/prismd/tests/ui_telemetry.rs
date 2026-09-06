@@ -465,6 +465,7 @@ async fn record_the_telemetry_channel_for_the_interface() {
         },
         Command::SetAttribute {
             attribute: AttributeType::Dimmer,
+            occurrence: 0,
             value: 26_214, // 40 % — 102 on the wire
             relative: false,
         },

@@ -279,6 +279,7 @@ fn select(ids: &[u32]) -> Command {
 fn dial(attribute: AttributeType, value: u16) -> Command {
     Command::SetAttribute {
         attribute,
+        occurrence: 0,
         value: i32::from(value),
         relative: false,
     }

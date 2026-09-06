@@ -24,8 +24,8 @@ mod common;
 use common::{populated_session, populated_show};
 use prism_core::{Applied, ShowFile, ShowFileError};
 use prism_domain::{
-    AttributeType, Command, CommandLineMode, Delta, FixtureId, JsonPatchOp, NoticeLevel, ObjectRef,
-    PresetId, SequenceId, ViewId,
+    AttributeKey, AttributeType, Command, CommandLineMode, Delta, FixtureId, JsonPatchOp,
+    NoticeLevel, ObjectRef, PresetId, SequenceId, ViewId,
 };
 
 /// A file with the populated show, its session and a programmer holding nothing.
@@ -120,7 +120,7 @@ fn a_line_runs_as_the_commands_it_means() {
         programmer
             .values
             .values()
-            .any(|held| held.contains_key(&AttributeType::Dimmer)),
+            .any(|held| held.contains_key(&AttributeKey::first(AttributeType::Dimmer))),
         "the level reached the programmer: {programmer:?}"
     );
     // And the line is cleared, which is what Enter has always looked like — said

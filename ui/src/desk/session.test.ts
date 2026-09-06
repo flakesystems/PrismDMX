@@ -19,11 +19,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import type { AttributeType, FeatureGroup } from "../bindings";
 import { FEATURE_GROUP_VARIANTS } from "../bindings";
+import { FEATURE_GROUP_ATTRIBUTES } from "../bindings/variants";
 import { readServerMessage } from "../ipc/protocol";
 import type { Snapshot } from "../ipc/protocol";
 import { nullSink, setLogSink } from "../log/logger";
 import { DeskStore } from "../store/desk";
-import { bankParameters, touchedBanks, valueFor } from "./programmer";
+import { touchedBanks, valueFor } from "./programmer";
 import {
   EXECUTOR_BUTTONS,
   EXECUTORS_PER_PAGE,
@@ -198,9 +199,13 @@ describe("the readers, against a daemon's answers", () => {
       expect(programmer.clearStage, where).toBe(entry.programmer.clearStage);
       expect(touchedBanks(programmer, show), where).toEqual(entry.programmer.touchedBanks);
       for (const [fixture, attribute, value] of entry.programmer.values) {
-        expect(valueFor(programmer, fixture, attributeOf(attribute)), `${where} ${attribute}`).toBe(
-          value,
-        );
+        expect(
+          valueFor(programmer, fixture, {
+            attribute: attributeOf(attribute),
+            occurrence: 0,
+          }),
+          `${where} ${attribute}`,
+        ).toBe(value);
       }
       expect(programmer.values.length, where).toBe(entry.programmer.values.length);
     }
@@ -235,7 +240,10 @@ describe("the readers, against a daemon's answers", () => {
     // number that came from the thing under test proves nothing.
     expect(banks.length).toBe(7);
     for (const [bank, attributes] of banks) {
-      expect(bankParameters(groupOf(bank))).toEqual(attributes);
+      // **The table, not the filtered list** — S52. `bankParameters` answers a
+      // question about the *selection* now; what this holds to the daemon is
+      // the table both sides filter, which is the order S26 made one of.
+      expect(FEATURE_GROUP_ATTRIBUTES[groupOf(bank)]).toEqual(attributes);
     }
   });
 
@@ -283,7 +291,7 @@ describe("a document that is not one", () => {
     expect(strips.length).toBe(EXECUTORS_PER_PAGE);
     expect(strips.every((strip) => !strip.assigned)).toBe(true);
     expect(touchedBanks(null, null)).toEqual([]);
-    expect(valueFor(null, 1, "Dimmer")).toBeNull();
+    expect(valueFor(null, 1, { attribute: "Dimmer", occurrence: 0 })).toBeNull();
   });
 
   it("keeps a page of eight even when the show is nonsense", () => {
@@ -459,7 +467,7 @@ function bankNames(): {
   return {
     attributes: (name) => {
       for (const bank of Object.keys(recording.encoderBanks)) {
-        for (const attribute of bankParameters(groupOf(bank))) {
+        for (const attribute of FEATURE_GROUP_ATTRIBUTES[groupOf(bank)]) {
           if (attribute === name) {
             return attribute;
           }

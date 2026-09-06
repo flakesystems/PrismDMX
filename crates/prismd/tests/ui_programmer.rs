@@ -77,8 +77,18 @@ fn rig_path() -> PathBuf {
 
 /// An 8-bit attribute at an offset, dark at home.
 fn attribute(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
+    cell(attribute, 0, coarse_offset)
+}
+
+/// The same, for a fixture that has **two of a parameter** — S52.
+///
+/// `occurrence` counts from nought in the manufacturer's own order, which is
+/// channel order: the lower-addressed red is the first.
+fn cell(attribute: AttributeType, occurrence: u8, coarse_offset: u16) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence,
         feature_group: attribute.feature_group(),
         coarse_offset,
         fine_offset: None,
@@ -100,6 +110,12 @@ fn attribute(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
 /// different encoder banks**, so an encoder bar has something to show on more
 /// than one of them and a value set on one bank can be seen not to have moved
 /// when another is selected.
+///
+/// **S52 added a third thing: a fixture with two of a parameter.** Fixture 6 is
+/// a two-cell bar — a red, a green, a blue and a white **per cell** — so the
+/// colour bank has eight knobs for it, numbered, and pages. That is what the
+/// interface's paging test walks, and it could not exist before S52: the second
+/// cell's channels were dropped as duplicates.
 fn desk_show() -> ShowFile {
     let mut show = Show::new();
     show.embed_fixture_type(FixtureType {
@@ -131,6 +147,29 @@ fn desk_show() -> ShowFile {
         ],
     })
     .expect("a moving head is a fixture type");
+    // **A fixture with two of a parameter** — S52. Two cells, each with a red,
+    // a green, a blue and a white, written out the way an Open Fixture Library
+    // profile writes a small matrix. Before S52 this was a four-channel fixture
+    // with four dropped channels; it is eight knobs on the colour bank now,
+    // which is also the only thing in this rig that gives a bank a second page.
+    show.embed_fixture_type(FixtureType {
+        id: "generic.bar.2cell".to_owned(),
+        manufacturer: "Generic".to_owned(),
+        name: "LED Bar".to_owned(),
+        mode: "8ch".to_owned(),
+        footprint: 8,
+        attributes: vec![
+            cell(AttributeType::Red, 0, 0),
+            cell(AttributeType::Green, 0, 1),
+            cell(AttributeType::Blue, 0, 2),
+            cell(AttributeType::White, 0, 3),
+            cell(AttributeType::Red, 1, 4),
+            cell(AttributeType::Green, 1, 5),
+            cell(AttributeType::Blue, 1, 6),
+            cell(AttributeType::White, 1, 7),
+        ],
+    })
+    .expect("a two-cell bar is a fixture type");
 
     for (id, address) in [(1_u32, 1_u16), (2, 2), (3, 3), (4, 4)] {
         show.patch_fixture(Fixture {
@@ -160,6 +199,21 @@ fn desk_show() -> ShowFile {
         invert_tilt: false,
     })
     .expect("the address is free");
+    show.patch_fixture(Fixture {
+        // The bar makes its own light; the desk supplies no intensity for it,
+        // so it stays dark at home like everything else in this rig.
+        software_dimmer: true,
+        id: FixtureId::new(6),
+        name: "Bar 6".to_owned(),
+        type_id: "generic.bar.2cell".to_owned(),
+        universe: UniverseId::new(1),
+        address: 20,
+        position: Vec3::ZERO,
+        rotation: Vec3::ZERO,
+        invert_pan: false,
+        invert_tilt: false,
+    })
+    .expect("the address is free");
 
     for (id, name) in [(1_u32, "Warm Wash"), (2, "Cold Wash")] {
         show.store_sequence(Sequence {
@@ -177,6 +231,7 @@ fn desk_show() -> ShowFile {
                 parts: vec![CuePart {
                     fixture: FixtureId::new(id),
                     attribute: AttributeType::Dimmer,
+                    occurrence: 0,
                     value: 65535,
                     preset_ref: None,
                     tracking: prism_domain::CueTracking::Track,
@@ -492,6 +547,7 @@ fn script() -> Vec<Scripted> {
             Some((6, "1 thru 3 at 50")),
             Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 32767,
                 relative: false,
             },
@@ -517,6 +573,7 @@ fn script() -> Vec<Scripted> {
             Some((9, "5 pan at 25")),
             Command::SetAttribute {
                 attribute: AttributeType::Pan,
+                occurrence: 0,
                 value: 16383,
                 relative: false,
             },
@@ -526,6 +583,7 @@ fn script() -> Vec<Scripted> {
             None,
             Command::SetAttribute {
                 attribute: AttributeType::Pan,
+                occurrence: 0,
                 value: 655,
                 relative: true,
             },
@@ -535,6 +593,7 @@ fn script() -> Vec<Scripted> {
             None,
             Command::SetAttribute {
                 attribute: AttributeType::Pan,
+                occurrence: 0,
                 value: -60000,
                 relative: true,
             },
@@ -551,6 +610,7 @@ fn script() -> Vec<Scripted> {
             None,
             Command::SetAttribute {
                 attribute: AttributeType::Tilt,
+                occurrence: 0,
                 value: 70000,
                 relative: false,
             },
@@ -667,6 +727,7 @@ fn script() -> Vec<Scripted> {
             Some((21, "1 thru 3 at 60")),
             Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 39321,
                 relative: false,
             },
@@ -882,6 +943,7 @@ fn script() -> Vec<Scripted> {
             Some((42, "full")),
             Command::SetAttribute {
                 attribute: AttributeType::Dimmer,
+                occurrence: 0,
                 value: 65535,
                 relative: false,
             },
@@ -1259,10 +1321,16 @@ fn programmer_of(state: &ProgrammerState) -> RecordedProgrammer {
             .values
             .iter()
             .flat_map(|(&fixture, attributes)| {
-                attributes.iter().map(move |(&attribute, value)| {
+                attributes.iter().map(move |(&key, value)| {
                     (
                         fixture.get(),
-                        name_of(&attribute),
+                        // **The key's own spelling** — S52. `Dimmer` for the
+                        // first of a kind, so every recorded script written
+                        // before a fixture could have two of a parameter reads
+                        // back byte for byte; a repeat would record as
+                        // `Dimmer 2` and the reader on the other side would
+                        // refuse it loudly rather than fold it onto the first.
+                        key.to_string(),
                         value.value,
                         name_of(&value.source),
                     )
@@ -1716,6 +1784,13 @@ fn the_typed_lines_are_the_console_being_used() {
 /// A show whose fixtures sit at full at home would make "the encoder reached the
 /// output" unmeasurable — the level would already be there. Checked on the
 /// committed file rather than on the function that wrote it.
+///
+/// **Six fixtures since S52**, and the sixth is the reason the count is
+/// asserted here at all: a two-cell bar with a red, a green, a blue and a white
+/// **per cell**, which is what the interface's paging tests page. Before S52 it
+/// would have been a four-channel fixture with four dropped channels, so a
+/// number that moved without anybody noticing would have meant the interface
+/// was paging something that had quietly stopped existing.
 #[test]
 fn the_committed_rig_is_dark_and_has_more_than_one_encoder_bank_on_it() {
     let path = rig_path();
@@ -1727,7 +1802,20 @@ fn the_committed_rig_is_dark_and_has_more_than_one_encoder_bank_on_it() {
         .load(&mut file)
         .expect("the rig opens with this build");
 
-    assert_eq!(file.show.fixtures().count(), 5, "the rig is five fixtures");
+    assert_eq!(file.show.fixtures().count(), 6, "the rig is six fixtures");
+    // **And one of them has two of a parameter** — S52. The colour bank draws
+    // eight knobs for it, numbered, which is the only thing in this rig that
+    // gives a bank a second page.
+    let repeats = file
+        .show
+        .fixture_types()
+        .flat_map(|fixture_type| fixture_type.attributes.iter())
+        .filter(|def| def.occurrence > 0)
+        .count();
+    assert_eq!(
+        repeats, 4,
+        "the bar's second cell is four repeated channels"
+    );
     for fixture_type in file.show.fixture_types() {
         for def in &fixture_type.attributes {
             assert_eq!(

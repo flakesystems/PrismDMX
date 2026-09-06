@@ -18,9 +18,9 @@
 use std::sync::Arc;
 
 use prism_domain::{
-    AttributeDef, AttributeType, Cue, CuePart, CueTrigger, FeatureGroup, Fixture, FixtureId,
-    FixtureType, GoDirection, Group, GroupId, MergeMode, ProgrammerState, ProgrammerValue,
-    ProgrammerValueSource, Sequence, SequenceId, UniverseId, Vec3,
+    AttributeDef, AttributeKey, AttributeType, Cue, CuePart, CueTrigger, FeatureGroup, Fixture,
+    FixtureId, FixtureType, GoDirection, Group, GroupId, MergeMode, ProgrammerState,
+    ProgrammerValue, ProgrammerValueSource, Sequence, SequenceId, UniverseId, Vec3,
 };
 use prism_engine::{
     Engine, FrameLayout, FramePublisher, FrameSubscriber, ManualClock, MergeBody, TickCommand,
@@ -64,6 +64,8 @@ fn attribute(
 ) -> AttributeDef {
     AttributeDef {
         attribute,
+        label: None,
+        occurrence: 0,
         feature_group,
         coarse_offset,
         fine_offset: Some(coarse_offset + 1),
@@ -127,6 +129,7 @@ fn part(fixture: u32, attribute: AttributeType, value: u16) -> CuePart {
     CuePart {
         fixture: FixtureId::new(fixture),
         attribute,
+        occurrence: 0,
         value,
         preset_ref: None,
         tracking: prism_domain::CueTracking::Track,
@@ -196,7 +199,7 @@ impl Rig {
         self.engine
             .body()
             .plan()
-            .index_of(FixtureId::new(fixture), attribute)
+            .index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
             .unwrap()
     }
 }
@@ -320,7 +323,7 @@ fn an_operator_facing_programmer_state_drives_the_same_channels() {
     let mut state = ProgrammerState::default();
     state.set_value(
         FixtureId::new(2),
-        AttributeType::Dimmer,
+        AttributeKey::first(AttributeType::Dimmer),
         ProgrammerValue {
             value: 65_535,
             source: ProgrammerValueSource::Preset,

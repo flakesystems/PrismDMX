@@ -20,9 +20,9 @@ mod common;
 use common::{cue, populated_show, preset, sequence};
 use prism_core::{ProgrammerError, ShowFile, ShowFileError};
 use prism_domain::{
-    AttributeType, Command, CueEdit, CuePart, CueProperty, FixtureId, ObjectRef, OverwriteMode,
-    PresetId, PresetPool, ProgrammerValueSource, SelectionMode, SequenceId, SequenceStoreMode,
-    StoreMode, StoreTarget,
+    AttributeKey, AttributeType, Command, CueEdit, CuePart, CueProperty, FixtureId, ObjectRef,
+    OverwriteMode, PresetId, PresetPool, ProgrammerValueSource, SelectionMode, SequenceId,
+    SequenceStoreMode, StoreMode, StoreTarget,
 };
 
 /// A file with the populated show and an empty programmer.
@@ -42,6 +42,7 @@ fn dial(file: &mut ShowFile, fixtures: &[u32], attribute: AttributeType, value: 
     .expect("those fixtures are patched");
     file.apply(&Command::SetAttribute {
         attribute,
+        occurrence: 0,
         value: i32::from(value),
         relative: false,
     })
@@ -88,6 +89,7 @@ fn two_part_cue() -> ShowFile {
     sequence.cues[0].parts.push(CuePart {
         fixture: FixtureId::new(2),
         attribute: AttributeType::Green,
+        occurrence: 0,
         value: 2000,
         preset_ref: None,
         tracking: prism_domain::CueTracking::Track,
@@ -338,11 +340,13 @@ fn the_modes_reach_a_preset_pool_as_well() {
                 prism_domain::PresetValue {
                     fixture: FixtureId::new(1),
                     attribute: AttributeType::Red,
+                    occurrence: 0,
                     value: 1000,
                 },
                 prism_domain::PresetValue {
                     fixture: FixtureId::new(2),
                     attribute: AttributeType::Red,
+                    occurrence: 0,
                     value: 2000,
                 },
             ],
@@ -569,13 +573,13 @@ fn editing_a_cue_loads_every_attribute_and_keeps_every_link() {
         "the cue's fixtures are selected, so an encoder reaches them"
     );
     let red = state
-        .value(FixtureId::new(1), AttributeType::Red)
+        .value(FixtureId::new(1), AttributeKey::first(AttributeType::Red))
         .expect("the red is loaded");
     assert_eq!(red.value, 65535, "preset 4 is fixture 1 at full red");
     assert_eq!(red.preset_ref, Some(PresetId::new(4)), "the link survived");
     assert_eq!(red.source, ProgrammerValueSource::Recalled);
     let green = state
-        .value(FixtureId::new(2), AttributeType::Green)
+        .value(FixtureId::new(2), AttributeKey::first(AttributeType::Green))
         .expect("the green is loaded");
     assert_eq!(green.value, 4242);
     assert_eq!(green.preset_ref, None, "a part with no link gains none");
@@ -729,7 +733,7 @@ fn an_update_overrides_rather_than_merging() {
 
     // A second cue is loaded and edited down to one value.
     let mut trimmed = file.programmer.state().clone();
-    trimmed.clear_value(FixtureId::new(2), AttributeType::Green);
+    trimmed.clear_value(FixtureId::new(2), AttributeKey::first(AttributeType::Green));
     file.programmer.restore(trimmed);
 
     file.apply(&Command::Update).expect("an update");

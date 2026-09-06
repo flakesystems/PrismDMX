@@ -64,22 +64,27 @@
  * this one without anything being kept in step.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import type {
   AttributeRange,
-  AttributeType,
   FeatureGroup,
   JsonValue,
   ProgrammerState,
 } from "../bindings";
-import { FEATURE_GROUP_VARIANTS } from "../bindings/variants";
+import { FEATURE_GROUP_VARIANTS, INLINE_OCCURRENCES } from "../bindings/variants";
 import type { SequenceRow } from "../show/looks";
 import { executorInForce, sequenceInForce, sequenceRow } from "../show/looks";
 import { Encoder } from "./encoder";
-import type { ParameterReading } from "./programmer";
-import { bankReadings, encoderPage, selectionSize, touchedBanks } from "./programmer";
-import { encoderBank, programmerPage, programmerParamIndex } from "./session";
+import type { ParameterKey, ParameterReading } from "./programmer";
+import { bankReadings, bankRepeats, encoderPage, selectionSize, touchedBanks } from "./programmer";
+import { RangePicker } from "./rangepicker";
+import {
+  encoderBank,
+  programmerOccurrence,
+  programmerPage,
+  programmerParamIndex,
+} from "./session";
 
 /** What the band needs. */
 export interface ProgrammerBandProps {
@@ -95,6 +100,15 @@ export interface ProgrammerBandProps {
   readonly onParam: (direction: "Prev" | "Next") => void;
   /** Sends a `SetProgrammerPage`, which is absolute. */
   readonly onPage: (page: number) => void;
+  /**
+   * Sends a `SetProgrammerOccurrence` — **S52**, and absolute for the same
+   * reason the page is.
+   *
+   * Which **part** of a repeated fixture the bank is on: a tube with a red per
+   * pixel has more channels of a kind than a bank has knobs, so the bank draws
+   * one occurrence at a time and this walks them.
+   */
+  readonly onPart: (occurrence: number) => void;
   /** Sends a `SetAttribute` with `relative` set. */
   readonly onTurn: (reading: ParameterReading, delta: number) => void;
   /**
@@ -103,14 +117,23 @@ export interface ProgrammerBandProps {
    * A click on an encoder takes that one; a right-click on a bank key takes
    * every attribute on that bank. Never called for an attribute that is already
    * overridden: see `App.tsx`'s `onTake` for why that matters.
+   *
+   * **Keys and not attribute names since S52**, or a head with two colour
+   * wheels would have both taken over by a click on either.
    */
-  readonly onTake: (attributes: readonly AttributeType[]) => void;
+  readonly onTake: (keys: readonly ParameterKey[]) => void;
   /**
    * **B38.** Sets an attribute to the middle of one of its named ranges.
    *
-   * The one absolute gesture in this band — see `App.tsx`'s `onPickRange`.
+   * The one absolute gesture in this band — see `App.tsx`'s `onPickRange`. The
+   * window it comes from is a right-click on the encoder since **S52**
+   * (`./rangepicker.tsx`); the reading carries the occurrence, so the second
+   * colour wheel's steps go to the second colour wheel.
    */
-  readonly onPickRange: (reading: ParameterReading, range: AttributeRange) => void;
+  readonly onPickRange: (
+    reading: ParameterReading,
+    range: AttributeRange,
+  ) => void;
   /** Writes and submits a line — the cue list's rows are list picks (§4.5). */
   readonly onLine: (line: string) => void;
 }
@@ -124,19 +147,39 @@ export function ProgrammerBand({
   onParam,
   onPage,
   onTurn,
+  onPart,
   onTake,
   onPickRange,
   onLine,
 }: ProgrammerBandProps) {
   const bank = encoderBank(session);
-  const readings = bankReadings(programmer, show, bank);
+  // **S52.** How deep this bank's repeats go decides the shape of the band: at
+  // most `INLINE_OCCURRENCES` and every one of them is a knob; past that the
+  // bank draws one part at a time and the stepper below walks them.
+  const repeats = bankRepeats(programmer, show, bank);
+  const part = clampedPart(programmerOccurrence(session), repeats);
+  const stepping = repeats > INLINE_OCCURRENCES;
+  const readings = bankReadings(programmer, show, bank, part);
   const selectedIndex = programmerParamIndex(session);
   const touched = touchedBanks(programmer, show);
   const paged = encoderPage(readings, programmerPage(session));
   useClampedPage(paged.page, programmerPage(session), onPage);
+  useClampedPart(
+    stepping ? part : programmerOccurrence(session),
+    programmerOccurrence(session),
+    onPart,
+  );
+  // **Client-local, and only this** — §4.2. Which encoder's steps are being
+  // looked at is not a fact a second screen should follow, and the value a pick
+  // writes is an ordinary `SetAttribute` that every screen sees.
+  const [steps, setSteps] = useState<ParameterReading | null>(null);
 
   return (
-    <section className="progband" data-testid="programmer-band" aria-label="Programmer">
+    <section
+      className="progband"
+      data-testid="programmer-band"
+      aria-label="Programmer"
+    >
       <div className="progband-groups" data-testid="feature-groups">
         {FEATURE_GROUP_VARIANTS.map((group) => (
           <button
@@ -164,9 +207,12 @@ export function ProgrammerBand({
             onContextMenu={(event) => {
               event.preventDefault();
               onTake(
-                bankReadings(programmer, show, group)
-                  .filter((reading) => !reading.overriding && reading.available > 0)
-                  .map((reading) => reading.attribute),
+                bankReadings(programmer, show, group, part)
+                  .filter((reading) => !reading.overriding)
+                  .map((reading) => ({
+                    attribute: reading.attribute,
+                    occurrence: reading.occurrence,
+                  })),
               );
             }}
           >
@@ -214,6 +260,47 @@ export function ProgrammerBand({
         </button>
       </div>
 
+      {/*
+        **S52 — the part stepper.** Drawn only where the bank has more repeats
+        than it can put side by side: a head with two colour wheels has both
+        knobs on the bank already, and a stepper beside them would be a control
+        that does nothing. An eight-pixel tube has one knob called *Red* and
+        this walks which pixel it is.
+      */}
+      {stepping ? (
+        <div className="progband-parts" data-testid="part-steps">
+          <button
+            type="button"
+            className="page-step"
+            data-testid="encoder-part-prev"
+            aria-label="Previous part"
+            title={`Previous part of this fixture's ${bank}`}
+            disabled={part === 0}
+            onClick={() => {
+              onPart(part - 1);
+            }}
+          >
+            ‹
+          </button>
+          <span className="progband-part-number" data-testid="programmer-part">
+            {`Part ${String(part + 1)}/${String(repeats)}`}
+          </span>
+          <button
+            type="button"
+            className="page-step"
+            data-testid="encoder-part-next"
+            aria-label="Next part"
+            title={`Next part of this fixture's ${bank}`}
+            disabled={part >= repeats - 1}
+            onClick={() => {
+              onPart(part + 1);
+            }}
+          >
+            ›
+          </button>
+        </div>
+      ) : null}
+
       <div className="progband-encoders" data-testid="encoders">
         {paged.readings.length === 0 ? (
           <p className="window-note" data-testid="no-parameters">
@@ -224,7 +311,7 @@ export function ProgrammerBand({
         ) : (
           paged.readings.map((reading) => (
             <Encoder
-              key={reading.attribute}
+              key={`${reading.attribute}-${String(reading.occurrence)}`}
               reading={reading}
               selected={reading.index === selectedIndex}
               selectable={selectionSize(programmer) > 0}
@@ -233,20 +320,66 @@ export function ProgrammerBand({
                 // **A click takes it over.** Only when it is not already
                 // overridden — otherwise a click meant to point the jog wheel at
                 // an encoder would rewrite a preset's value as a manual one.
-                if (!reading.overriding && reading.available > 0) {
-                  onTake([reading.attribute]);
+                if (!reading.overriding) {
+                  onTake([
+                    {
+                      attribute: reading.attribute,
+                      occurrence: reading.occurrence,
+                    },
+                  ]);
                 }
               }}
               onTurn={onTurn}
-              onPickRange={onPickRange}
+              onSteps={setSteps}
             />
           ))
         )}
       </div>
 
       <SelectedSequence show={show} session={session} onLine={onLine} />
+
+      {/*
+        **S52.** The steps of one channel, opened by right-clicking its encoder.
+        Drawn last so it sits over the band, and given the *live* reading rather
+        than the one that was captured on the click — a value the X-Touch moves
+        while the window is open must move the mark inside it too.
+      */}
+      {steps === null ? null : (
+        <RangePicker
+          reading={
+            readings.find(
+              (reading) =>
+                reading.attribute === steps.attribute &&
+                reading.occurrence === steps.occurrence,
+            ) ?? steps
+          }
+          onPick={onPickRange}
+          onClose={() => {
+            setSteps(null);
+          }}
+        />
+      )}
     </section>
   );
+}
+
+/**
+ * The part the session is asking for, clamped to what the bank actually has.
+ *
+ * Nought when the bank has no repeats worth stepping through, so an operator
+ * who walked a tube's parts and then looked at the Dimmer bank is not shown
+ * *part 6 of 1*.
+ *
+ * **The correction is only sent where the stepper is drawn** — see the call
+ * site. A bank with nothing to step through would otherwise write nought back
+ * on every glance, and an operator who walked to part 6 of a tube, looked at
+ * the intensity and came back would find themselves at part 1.
+ */
+function clampedPart(asked: number, repeats: number): number {
+  if (repeats <= 1) {
+    return 0;
+  }
+  return Math.min(Math.max(Math.trunc(asked), 0), repeats - 1);
 }
 
 /**
@@ -270,12 +403,15 @@ function SelectedSequence({
   const executor = executorInForce(session, show);
   // S39's guard: the marker is drawn only where the playback in force is on
   // *this* list, or it would point at a row of a list nobody is on.
-  const playing = executor.sequenceId === sequenceId ? executor.currentCueIndex : null;
+  const playing =
+    executor.sequenceId === sequenceId ? executor.currentCueIndex : null;
 
   return (
     <div className="progband-sequence" data-testid="selected-sequence">
       <h3 data-testid="selected-sequence-name">
-        {sequence === null ? "No sequence selected" : `${String(sequence.id)} ${sequence.name}`}
+        {sequence === null
+          ? "No sequence selected"
+          : `${String(sequence.id)} ${sequence.name}`}
       </h3>
       {sequence === null ? (
         <p className="window-note" data-testid="no-selected-sequence">
@@ -302,7 +438,8 @@ function CueList({
   if (cues.length === 0) {
     return (
       <p className="window-note" data-testid="empty-cue-list">
-        This list has no cues yet. <code>Store Cue 1</code> puts the programmer into one.
+        This list has no cues yet. <code>Store Cue 1</code> puts the programmer
+        into one.
       </p>
     );
   }
@@ -324,7 +461,9 @@ function CueList({
                   title={`Go to cue ${cue.number}`}
                   data-testid={`band-goto-${cue.number}`}
                   onClick={() => {
-                    onLine(`Goto Sequence ${String(sequence.id)} Cue ${cue.number}`);
+                    onLine(
+                      `Goto Sequence ${String(sequence.id)} Cue ${cue.number}`,
+                    );
                   }}
                 >
                   {cue.number}
@@ -368,6 +507,28 @@ function useClampedPage(
 }
 
 /**
+ * Sends the correcting `SetProgrammerOccurrence` when the part is clamped —
+ * **S52**, and `useClampedPage`'s reason exactly.
+ *
+ * `prism-core` cannot bound the part: how deep a bank's repeats go is a
+ * question about the *selection*, and the daemon deliberately does not answer
+ * how many knobs a bank has (S13). So the band clamps for the draw and says so
+ * on the wire, which is what stops the X-Touch holding a number the screen is
+ * not on.
+ */
+function useClampedPart(
+  clamped: number,
+  asked: number,
+  onPart: (occurrence: number) => void,
+): void {
+  useEffect(() => {
+    if (clamped !== asked) {
+      onPart(clamped);
+    }
+  }, [clamped, asked, onPart]);
+}
+
+/**
  * Moves the highlight from `from` to `to`, one command per step.
  *
  * The protocol has `SelectProgrammerParam { direction }` and no absolute form —
@@ -376,7 +537,11 @@ function useClampedPage(
  * bank has at most six parameters, so this is at most five commands and the
  * daemon applies them in order.
  */
-function step(from: number, to: number, onParam: (direction: "Prev" | "Next") => void): void {
+function step(
+  from: number,
+  to: number,
+  onParam: (direction: "Prev" | "Next") => void,
+): void {
   const direction = to > from ? "Next" : "Prev";
   for (let at = 0; at < Math.abs(to - from); at += 1) {
     onParam(direction);

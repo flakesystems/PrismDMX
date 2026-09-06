@@ -1237,8 +1237,8 @@ mod tests {
     use crate::player::{SPEED_UNITY, TAP_WINDOW};
     use crate::testkit::{cue, cue_part, moving_head, sequence};
     use prism_domain::{
-        AttributeType, CrossfadeMode, Cue, CueTrigger, FixtureId, GoDirection, PlaybackId,
-        Sequence, SequenceId,
+        AttributeKey, AttributeType, CrossfadeMode, Cue, CueTrigger, FixtureId, GoDirection,
+        PlaybackId, Sequence, SequenceId,
     };
 
     /// Three moving heads: six slots, alternating HTP dimmer and LTP pan.
@@ -1248,7 +1248,8 @@ mod tests {
     }
 
     fn slot(plan: &MergePlan, fixture: u32, attribute: AttributeType) -> usize {
-        plan.index_of(FixtureId::new(fixture), attribute).unwrap()
+        plan.index_of(FixtureId::new(fixture), AttributeKey::first(attribute))
+            .unwrap()
     }
 
     struct Rig {

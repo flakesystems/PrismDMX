@@ -1054,6 +1054,30 @@
 }
 
 /*
+ * **The part stepper** — S52, and drawn only where a bank has more repeats than
+ * it can put side by side.
+ *
+ * A head with two colour wheels has both knobs on the bank; an eight-pixel tube
+ * would have six pages of things called *Red*, so the bank draws one part at a
+ * time and this walks them. A row rather than the pager's column, because it
+ * sits under the encoders and reads left to right like the words on it.
+ */
+.progband-parts {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+}
+
+.progband-part-number {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.62rem;
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+/*
  * The four boxes — a **fixed** grid of four, not a row that stretches.
  *
  * `ENCODERS_PER_PAGE` is four, and a bank with two parameters draws two boxes in
@@ -1181,11 +1205,6 @@
     box-shadow: inset 0.18rem 0 0 var(--accent);
 }
 
-.encoder-absent {
-    color: var(--ink-dim);
-    cursor: default;
-}
-
 /*
  * **Overriding, and not overriding** — S43, the owner's fourth point.
  *
@@ -1253,76 +1272,82 @@
 }
 
 /*
- * An encoder and the named range under it — **S51, punch-list B38**.
+ * **The step an encoder is standing in** — S51, and a *reading* since S52.
  *
- * The slot is a column so the range button sits under the encoder rather than
- * beside it, and the encoder still fills the height it had: the band's height
- * is fixed (`CLAUDE.md`'s device screen), so a row that appeared under one
- * encoder must not push the others about. Only a channel that *has* named
- * ranges draws one, which is most of why this is cheap.
+ * It was a button under the encoder that dropped a list down. The owner's word
+ * is that a right-click should bring the steps up in a window instead
+ * (`desk/rangepicker.tsx`), so this is only the name now — inside the encoder,
+ * where it costs the band no height at all. `CLAUDE.md`'s device screen: the
+ * band's height is fixed and the canvas takes what is left.
  */
-.encoder-slot {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    gap: 0.15rem;
-}
-
-.encoder-slot .encoder {
-    flex: 1 1 auto;
-    min-height: 0;
-}
-
-/* The name of the range the value is standing in, and the way into the list. */
-.encoder-range {
-    flex: 0 0 auto;
+.encoder-step {
     overflow: hidden;
-    padding: 0 0.3rem;
-    border: 1px solid var(--edge);
-    border-radius: 3px;
-    background: var(--ground);
-    color: var(--ink-dim);
-    font: inherit;
+    color: var(--accent);
     font-size: 0.62rem;
-    text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: pointer;
-}
-
-.encoder-range[data-open="yes"] {
-    border-color: var(--accent);
-    color: var(--accent);
 }
 
 /*
- * The list itself floats **over** the band rather than growing it, for the
- * reason above: the band's height is fixed and the canvas takes what is left,
- * so a list that pushed the layout would move every window on the screen.
+ * The steps window — one row per named range of the channel, in the profile's
+ * own order.
+ *
+ * A grid rather than a list, because a gobo wheel has twenty slots and a single
+ * column of them is a scrollbar. `chrome/modal.tsx` gives it the panel; this is
+ * only what is inside.
  */
-.encoder-ranges {
-    position: absolute;
-    z-index: 5;
-    bottom: 100%;
-    left: 0;
-    max-height: 14rem;
-    min-width: 100%;
-    margin: 0 0 0.2rem;
-    padding: 0.2rem;
+.range-picker-note {
+    margin: 0 0 0.6rem;
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+}
+
+.range-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: 0.3rem;
+    max-height: 22rem;
+    margin: 0;
+    padding: 0;
     overflow-y: auto;
-    border: 1px solid var(--edge-lit);
-    border-radius: 3px;
-    background: var(--panel);
     list-style: none;
 }
 
-.encoder-ranges li {
+.range-step {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    background: var(--ground);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.range-step:hover {
+    border-color: var(--edge-lit);
+}
+
+/* The one the value is standing in. Two signals, for the dark room. */
+.range-step[data-here="yes"] {
+    border-color: var(--accent);
+    box-shadow: inset 0.18rem 0 0 var(--accent);
+}
+
+.range-step-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.encoder-ranges .range-here {
-    color: var(--accent);
+.range-step-at {
+    color: var(--ink-dim);
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
 }
 
 /*
