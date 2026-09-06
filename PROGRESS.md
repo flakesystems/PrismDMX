@@ -4061,6 +4061,24 @@ Control bank reading five attributes where the daemon now says six. That test is
 the only thing holding the interface's idea of a bank to the daemon's, and it
 noticed a change nobody had told it about.
 
+**CI is green on the pushed branch**, which is the half of a gate run that a
+local machine cannot answer for: runs
+[34063301885](https://github.com/flakesystems/PrismDMX/actions/runs/34063301885)
+(push) and
+[34063331612](https://github.com/flakesystems/PrismDMX/actions/runs/34063331612)
+(pull request), both **success**, on
+[#15](https://github.com/flakesystems/PrismDMX/pull/15). The work of S52, S53 and
+S54 went up as **two** commits rather than three, and the reason is worth
+recording because it is a fact about this tree rather than a preference: S53 and
+S54 **overwrote lines S52 had written**, so S52's intermediate text exists
+nowhere any more — the diff against `v0.9.1` goes straight from S51's
+`attribute_of(definition)` to S53's three-argument form. Three commits could
+have been made to *read* like the three sessions, but two of them would not have
+built, and a history that cannot be bisected is worth less than one commit that
+is true. The three sessions are told apart in the places that are meant to tell
+them apart: §2.48, §2.49 and §2.50, the decision log, and `docs/ISSUES.md`
+B44–B52 — all of which ship *inside* that commit.
+
 #### What this changed that nobody asked for
 
 **`B1`'s own test found the one real defect, on a fixture nobody was looking
