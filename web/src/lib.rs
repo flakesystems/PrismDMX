@@ -303,7 +303,11 @@ impl Site {
                 Some(source) => self.rendered(source)?,
                 None => self.composed(page, installer.as_ref()),
             };
-            let html = wrap(page, &body);
+            // Relativised last, over the finished document, so that the
+            // navigation, the composed pages and the link rewriter can all
+            // speak in the site's own absolute paths and exactly one function
+            // knows where the site is actually mounted.
+            let html = relativised(&wrap(page, &body), page.path);
             let directory = if page.path.is_empty() {
                 out.to_path_buf()
             } else {
@@ -554,6 +558,12 @@ fn normalise(path: &Path) -> String {
 
 /// A page's path as an absolute one, with the trailing slash a directory index
 /// wants.
+///
+/// This is the site's **internal** form and not what is written to disk: every
+/// URL is built this way and then made relative by [`relativised`], which is the
+/// last thing that happens to a page. Keeping one canonical form in the middle
+/// means the navigation, the composed pages and the link rewriter all say
+/// `/download/` and exactly one function knows what that turns into.
 #[must_use]
 pub fn absolute(path: &str) -> String {
     if path.is_empty() {
@@ -561,6 +571,62 @@ pub fn absolute(path: &str) -> String {
     } else {
         format!("/{path}/")
     }
+}
+
+/// How many directories deep a page sits.
+fn depth(path: &str) -> usize {
+    if path.is_empty() {
+        0
+    } else {
+        path.split('/').count()
+    }
+}
+
+/// Every site-absolute URL in a page, made relative to that page.
+///
+/// **This is what makes the site work wherever it is put, and it exists because
+/// the first deployment did not.** GitHub Pages served the site as a *project*
+/// page — `flakesystems.github.io/PrismDMX/` — where the whole site sits under a
+/// path prefix. Every `href="/handbuch/operator/"` then points a level above the
+/// project, at somebody else's repository, and every link on every page is dead
+/// while the page itself still looks completely finished. Nothing errors: the
+/// styling is inline, so the site renders perfectly and simply goes nowhere.
+///
+/// The fix is deliberately **not** a `--base` flag. A base path is a setting
+/// that has to match the deployment, and the two get separated the first time
+/// the site moves — which for this project is a certainty, because the domain is
+/// coming and a self-hosted server is being kept in reserve. Relative URLs have
+/// nothing to match: the same output is correct at `/PrismDMX/`, at the apex of
+/// `prismdmx.de`, in a subdirectory of any web server, and from a `file://` URL
+/// on a machine with no network at all — which is the one that matters for a
+/// venue reading a manual off a stick.
+///
+/// **The one thing this depends on** is that a directory URL keeps its trailing
+/// slash: at `/handbuch/operator` without it a browser resolves `../../` one
+/// level too high. Every static server redirects the slashless form to the
+/// slashed one — Pages does, nginx does — which is why relative links are how
+/// portable static sites are built. It is a dependency rather than an assumption,
+/// so it is written down.
+#[must_use]
+pub fn relativised(html: &str, here: &str) -> String {
+    let up = "../".repeat(depth(here));
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(at) = rest.find("href=\"/") {
+        let (before, after) = rest.split_at(at + 6);
+        out.push_str(before);
+        let Some(end) = after.find('"') else {
+            out.push_str(after);
+            return out;
+        };
+        let (target, remainder) = after.split_at(end);
+        let relative = format!("{up}{}", &target[1..]);
+        // The root, seen from the root: a browser needs something to resolve.
+        out.push_str(if relative.is_empty() { "./" } else { &relative });
+        rest = remainder;
+    }
+    out.push_str(rest);
+    out
 }
 
 /* -------------------------------------------------------------------------- */
