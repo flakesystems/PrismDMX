@@ -71,7 +71,7 @@ does not demand a release build of the daemon. The installer lands in
 | | |
 |---|---|
 | Lifecycle, tiers of autostart, the tray | `ARCHITECTURE_SPEC.md` §10.3 |
-| What a person does with it | [`docs/manual/operator.md`](../../docs/manual/operator.md) |
+| What a person does with it | [`docs/manual/operator.de.md`](../../docs/manual/operator.de.md) |
 | What only a desktop can verify | `ARCHITECTURE_SPEC.md` §14, the 🪟 row |
 | Everything else | `cargo doc -p prism-app --open` |
 

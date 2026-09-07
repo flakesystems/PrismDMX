@@ -1,44 +1,72 @@
-# The manuals — who each one is for, and why it is in the language it is in
+# The manuals — who each one is for, and what language it is in
 
-Three manuals, three audiences, and **one language each**. That is a decision
-S41 had to make and is the first thing recorded here, because it is the decision
-a later session is most likely to undo by accident.
+Three manuals, three audiences, and since the owner's decision of 2026-09-07
+**every one of them in both languages**, with English as the default.
 
-| Manual | Audience | Language |
+| Manual | Audience | Source |
 |---|---|---|
-| [`operator.md`](operator.md) | the person running a show | **German** |
-| [`installer.md`](installer.md) | the person who wires the building and sets the desk up | **German** |
-| [`developer.md`](developer.md) | the person who changes the code | **English** |
+| Operator's manual | the person running a show | [`operator.de.md`](operator.de.md), `operator.en.md` |
+| Installer's manual | the person who wires the building and sets the desk up | [`installer.de.md`](installer.de.md), `installer.en.md` |
+| Developer's manual | the person who changes the code | [`developer.en.md`](developer.en.md), `developer.de.md` |
 
-## Why not one language, and why not two of each
+The language is in the **filename**, always, even where only one exists yet.
+Half the files carrying a suffix and half not is how a translation ends up
+overwriting an original.
 
-**Two languages per document is two documents.** They diverge on the first fix
-that only lands in one of them, and the reader who gets the stale one has no way
-of knowing. Every manual here therefore exists exactly once, and translation is
-a decision to be taken deliberately later — with a mechanism that makes a stale
-translation fail a build — rather than a habit started now.
+## The decision this replaces, and why it is not simply reversed
 
-**So each manual takes the language of the people who read it.** PrismDMX was
-written for venues and schools in Germany; the owner writes German,
-`docs/ISSUES.md` is German, and the first building this desk runs a show in is a
-German one. An operator reading under time pressure in a dark room should not be
-reading a second language. The installer is standing in the same building, often
-the same person, and the venue's network, its Art-Net node's front panel and its
-IT department are all German too.
+S41 decided the opposite — one language per manual, no translation — and the
+argument was not that translating is hard. It was this:
 
-**The developer's manual is English** for the opposite reason and it is just as
-strong: every identifier, every commit message, every line of
-`ARCHITECTURE_SPEC.md`, `PROGRESS.md` and the crate documentation is English. A
-German manual over an English code base would be a translation layer between a
-reader and the thing they are about to edit, and every proper noun in it would
-be in the other language anyway.
+> **Two languages per document is two documents.** They diverge on the first fix
+> that only lands in one of them, and the reader who gets the stale one has no
+> way of knowing.
 
-**What this excludes, said out loud:** somebody who wants to run a show and
-reads neither German nor code. The door for them today is the English
-[`README.md`](../../README.md) and the crate documentation, and the honest
-statement is that the operator's manual is not yet for them. When there is a
-second venue that needs it, the manual gets a translation *and* a test that
-holds the two together.
+That is still true, and it is worth saying plainly that **the decision was
+overruled rather than refuted**: the owner wants the documentation readable by
+people who do not read German, which is a reason about readers and beats a
+reason about maintenance. What does not go away is the failure mode.
+
+The old text named the condition under which it would change its mind, and this
+is the whole of why the reversal is safe:
+
+> translation is a decision to be taken deliberately later — **with a mechanism
+> that makes a stale translation fail a build** — rather than a habit started
+> now.
+
+**That mechanism now exists**, and it is three things rather than good
+intentions:
+
+1. **Both languages of a document are held against each other by shape.**
+   `both_languages_of_a_document_have_the_same_chapters` in `web/tests/site.rs`
+   compares the chapter count of the two versions. It cannot tell you a
+   paragraph is out of date — no test can — but it catches what actually
+   happens, which is a chapter added to one language and not the other.
+2. **A page that has no translation yet says so, on the page, before the text.**
+   It is not silently served in the other language and it does not vanish from
+   the navigation: `prism_web::Source::Borrowed` puts a line at the top saying
+   which language the reader is about to get.
+3. **The number of untranslated pages is written into a test.**
+   `the_number_of_untranslated_pages_is_written_down` lists them by name, so
+   adding one is a deliberate edit to a test and translating one is a deliberate
+   deletion. A gap can exist; it cannot be quiet.
+
+## Which documents are *not* on the site
+
+The four specifications — [`ARCHITECTURE_SPEC.md`](../../ARCHITECTURE_SPEC.md),
+[`IPC_PROTOCOL.md`](../IPC_PROTOCOL.md), [`MCU_MAPPING.md`](../MCU_MAPPING.md)
+and [`DMX_MERGE.md`](../DMX_MERGE.md) — and the fault register
+[`ISSUES.md`](../ISSUES.md) are **working documents**, and the owner's decision
+of 2026-09-07 keeps them off the website. They change with the source, every
+identifier in them is English, and a German copy would be a translation layer
+between a reader and the thing they are about to implement.
+
+Two of them have a **public counterpart written for the site instead**, in
+`docs/site/`: `command-line.{en,de}.md`, which explains the twenty-nine words
+rather than listing them, and `known-faults.{en,de}.md`, which carries only the
+faults that are still open. Neither is a copy — both are held to the truth by a
+test, the first against `CONSOLE_WORDS` and the second against the open entries
+in `ISSUES.md`.
 
 ## What is held to the code, and how
 

@@ -47,7 +47,7 @@ the recipe, and it needs an adapter.
 | | |
 |---|---|
 | The outputs, and the rig as data | `ARCHITECTURE_SPEC.md` §7 |
-| What a venue has to configure | [`docs/manual/installer.md`](../../docs/manual/installer.md) |
+| What a venue has to configure | [`docs/manual/installer.de.md`](../../docs/manual/installer.de.md) |
 | Everything else | `cargo doc -p prism-protocols --open` |
 
 ## Sessions

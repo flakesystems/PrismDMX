@@ -67,7 +67,7 @@ prismd --help          # every flag, and every one of them is also a setting
 
 | | |
 |---|---|
-| Every flag, and its setting | [`docs/manual/installer.md`](../../docs/manual/installer.md) |
+| Every flag, and its setting | [`docs/manual/installer.de.md`](../../docs/manual/installer.de.md) |
 | The protocol it serves | [`docs/IPC_PROTOCOL.md`](../../docs/IPC_PROTOCOL.md) |
 | Lifecycle, autostart, the single-instance guarantee | `ARCHITECTURE_SPEC.md` §10.3 |
 | Everything else | `cargo doc -p prismd --open` |
