@@ -637,11 +637,17 @@ fn the_front_page_still_says_how_to_get_to_a_running_desk() {
 }
 
 /// The domain is written by the generator, so it is one constant in one place.
+///
+/// Asserted against [`prism_web::DOMAIN`] rather than against a spelling of it,
+/// because a second copy here is exactly the thing the constant exists to
+/// prevent — and S55 moved it, from the apex to `docs.`, which a test carrying
+/// its own copy would have turned into a failure to edit rather than a
+/// decision to make.
 #[test]
-fn the_apex_domain_is_written_beside_the_pages() {
+fn the_domain_is_written_beside_the_pages() {
     let scratch = built("cname");
     let cname = std::fs::read_to_string(scratch.0.join("CNAME")).expect("CNAME is written");
-    assert_eq!(cname.trim(), "prismdmx.de");
+    assert_eq!(cname.trim(), prism_web::DOMAIN);
 }
 
 /// A missing source is a stopped build, not a hole in the navigation.

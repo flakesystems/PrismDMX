@@ -1,0 +1,34 @@
+[package]
+name = "prism-site"
+description = "The generator for prismdmx.de: the project's own front page."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "prism-site"
+path = "src/main.rs"
+
+[lib]
+name = "prism_site"
+path = "src/lib.rs"
+
+# No dependencies at all, deliberately.
+#
+# `prism-web` renders Markdown and therefore needs a parser; this crate renders
+# **one page it owns the source of**, so what it does is substitution into a
+# template and copying three files. A template engine here would be a
+# dependency, a second vocabulary and a build step, in exchange for something
+# `str::replace` already does — and the page would still have to be written by
+# hand, because it is a design rather than a document.
+#
+# `sha2` is not here either, and that is the difference from `prism-web`: the
+# checksum on **this** site's download panel is not computed, it is linked. The
+# front page points at the release, and the release page and `prism-web`'s
+# download page are where a number somebody derived belongs.
+[dependencies]
+
+[lints]
+workspace = true

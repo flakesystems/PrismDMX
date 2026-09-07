@@ -1184,6 +1184,38 @@ none that writes one.
 - Deployment is reproducible, and the domain serves over TLS
 - **A stranger can get from the front page to a running desk** — download, install, patch one fixture, put it at full — without asking the author anything. That is what an open beta is, and it is the only exit criterion here that a test cannot check: somebody who has not built this has to do it
 
+*S42's first deliverable said "the presentation site **and** the documentation site" and shipped one of the two. What it built was the manuals with an index in front of them — which is the right front page for somebody who already knows what PrismDMX is, and answers nothing for somebody who does not. **S55** is the half that was left.*
+
+---
+
+## S55 · `site` + `deploy` — prismdmx.de, and where both sites are served from
+**Size:** M · **Depends on:** S42
+
+**Goal:** the front page S42 named and did not build, and a home for both sites that is the owner's own machine.
+
+Asked for on 2026-09-07, with three things stated as requirements rather than left to be inferred, and one of them is a reversal worth writing down:
+
+- **Design comes before performance and before test coverage here, and that is explicit.** This site steers no light. `CLAUDE.md`'s coverage targets are about `engine/`, `programmer/` and `protocols/`, and a test over a colour ramp would be a test over a taste. So the page is allowed a script, animation and weight that `prism-web` is not — and the reason `prism-web` may not have them is unchanged, which is why this is a **second crate** and not a flag on the first.
+- **Small venues, not schools.** The owner's own observation: the word *school* had crept into nearly every description of this project, and it undersells what the desk is for. Clubs, cellar stages, community halls, independent productions. `ARCHITECTURE_SPEC.md` §0 keeps *school-grade operability* as a **requirement** — installation without an IT department, on ageing hardware — because that is a statement about the software and not about the audience.
+- **The far future is on the page.** Every planned feature, and beyond them the one thing this project has never written down and has always been built towards: **a console of its own, in metal.**
+
+**Deliverables**
+- `site/` — `prism-site`, a workspace member with **no dependencies**: a hand-written page, the style sheet and the script beside it, and the four things that go stale (`version`, the installer's file name, the documentation's address, the repository) substituted from constants
+- A front page that answers *what is this* before it answers *where does it say*: the process split as an argument somebody can press a button on, the feature set, **four playable rebuilds of the interface** — the command line, executors and cues, the programmer, the DMX sheet — the honest state of the beta with its *not yet* list as long as its *today* list, the roadmap, and the download
+- The five planned sessions as the roadmap (**S30** 3D viewer, **S31** Web Remote, **S47** timecode, **S32** PSN/OSC, **S50** macros), the small print behind them, and **own hardware** as the far horizon with no date on it
+- `prism-web` moves to **`docs.prismdmx.de`**, which is one constant and the CNAME it already writes
+- `deploy/` — the container both sites are served from: one image, two vhosts, built from one commit so the two cannot drift; a compose file; the nginx configuration; and `update.sh` for an LXC with no Docker in it
+- Two CI jobs, for the same reason the seventh exists: a site that only builds on one machine, and an image that only builds on the machine it is deployed to
+
+**Exit criteria**
+- The page names the version this build is, and **no placeholder survives** — the one failure a template makes that nobody sees
+- Every claim on it is also in `README.md`, `docs/RELEASE_NOTES.md` or this file, with its caveats. The page may sharpen and it may design; it may not promise something that is not written down somewhere with its limits
+- It is readable with the script switched off, and `prefers-reduced-motion` stops **every** animation rather than shortening it
+- `prism-web` still has no `<script>` on any page — the test that says so is untouched, which is the point of the crate being separate
+- The container serves `prismdmx.de` and `docs.prismdmx.de` from one port and gives an unknown host neither
+- **The server pulls; nothing is pushed into it.** SSH into it is VPN-only, so a build runner cannot reach it and no exception is made for one
+- 🚪 S42's last criterion is still open and is **not** closed by this session. A front page that answers the first question is the thing that was missing; whether it is enough is still a stranger's to say
+
 ---
 
 # Phase 11 — What the closed beta sent back
@@ -1331,7 +1363,7 @@ flowchart LR
     S33 --> S46
     S34 & S39 & S36 --> S47
     S29 & S44 & S45 --> S51
-    S37 & S40 & S51 --> S41 --> S42
+    S37 & S40 & S51 --> S41 --> S42 --> S55
     S51 --> S52 --> S53 --> S54
 ```
 
@@ -1373,4 +1405,5 @@ is, is the order the work was planned to make sense in.
 | 20 | **S52** domain/core/engine/`ui` — a fixture may have two of a parameter | **Done 2026-09-06**, and it ran **before** S41/S42 rather than after, because the owner reported the rig it stops: a lamp with dedicated warm and cold white channels, on which the second channel did not answer at all. That is the same fault as the second colour wheel — `Warm White` and `Cold White` were one attribute, so the second collided with the first — and it was not a question the open beta had to be asked. It carried four more things the owner asked for in the same breath: only the attributes a fixture *has* on the encoder banks, the steps of a wheel by right-click and under the manufacturer's own names, and the 90 matrix profiles that could not be patched at all. See `PROGRESS.md` §2.48 |
 | 21 | **S53** core/domain/`ui` — every capability the format distinguishes | **Done 2026-09-06**, straight out of S52 and out of a question the owner asked about it: could the parameter names not be taken **dynamically out of the fixture file**? Reading the Open Fixture Library's own `capability-types.md` and `fixture-format.md` properly gave a better answer than the question suggested — the format is a **closed set of 43 capability types** with **discriminators** beside them, and S51's table read the type and threw the discriminators away. That is lossy in a way no counter shows: `channels_unmapped` was nought while **115 wheel channels** sat on the wrong encoder bank. So the *key* stays closed (forty attributes) and the *label* comes out of the file. See `PROGRESS.md` §2.49 and `docs/ISSUES.md` B50 |
 | 22 | **S54** core/domain — no slot of a patched fixture is out of reach | **Done 2026-09-06**, out of one sentence the owner wrote after reading S53: under the current principle, some channels of some fixtures cannot be driven at all. Measured, it was **707 DMX slots in 337 of the 2 871 profiles** — and **no counter could see it**, because every counter the reader had asks what it failed to understand and none asked whether every slot has a knob. The answer is a floor rather than four fixes: `AttributeType::Raw`, the 41st, so that a capability type a later format grows arrives as a named knob instead of as silence. **B49 closed** in the same pass, with its own question corrected — a switching alias never moves the footprint. See `PROGRESS.md` §2.50 and `docs/ISSUES.md` B51 |
-| 23 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |
+| 23 | **S55** `site` + `deploy` — prismdmx.de and its container | Asked for on 2026-09-07, and it is S42's other half: that session's first deliverable named a presentation site beside the documentation site and shipped the documentation site. A manual index is the right front page for somebody who already knows what this is. Immediately after S41/S42 because it is the same subject and because an **open** beta is a release strangers install — and a stranger arrives at a front page, not at a table of contents |
+| 24 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |

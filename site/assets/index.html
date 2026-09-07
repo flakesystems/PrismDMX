@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrismDMX — Lichtpult für kleine Häuser</title>
+<meta name="description" content="PrismDMX ist ein DMX-Lichtpult aus Engine und Oberfläche in einem Programm. Art-Net, sACN und Open DMX USB, 64 Universen, X-Touch, und ein Ausgang, der weiterläuft, wenn das Fenster stirbt.">
+<meta name="theme-color" content="#0a0b10">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="logo.png">
+<meta property="og:image" content="https://prismdmx.de/logo.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="PrismDMX — Lichtpult für kleine Häuser">
+<meta property="og:description" content="Engine und Pult in einem Programm. Wenn das Fenster stirbt, läuft das Licht weiter.">
+<meta property="og:url" content="https://prismdmx.de/">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<a class="skip" href="#inhalt">Zum Inhalt springen</a>
+
+<div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<header class="top" id="top">
+  <a class="brand" href="#top" aria-label="PrismDMX — Startseite">
+    <img class="mark" src="logo.png" width="256" height="256" alt="" decoding="async">
+    <span class="wordmark">Prism<b>DMX</b></span>
+  </a>
+
+  <nav class="nav" aria-label="Hauptnavigation">
+    <a href="#kern">Warum</a>
+    <a href="#funktionen">Funktionen</a>
+    <a href="#demos">Demos</a>
+    <a href="#stand">Stand</a>
+    <a href="#zukunft">Zukunft</a>
+    <a href="#download">Download</a>
+    <a class="out" href="{{docs}}">Doku<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 9 9 3M4.2 3H9v4.8"/></svg></a>
+    <a class="out" href="{{repository}}">GitHub<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 9 9 3M4.2 3H9v4.8"/></svg></a>
+  </nav>
+
+  <button class="burger" type="button" aria-expanded="false" aria-controls="nav-mobil" aria-label="Menü">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<div class="nav-mobil" id="nav-mobil" hidden>
+  <a href="#kern">Warum</a>
+  <a href="#funktionen">Funktionen</a>
+  <a href="#demos">Demos</a>
+  <a href="#stand">Stand</a>
+  <a href="#zukunft">Zukunft</a>
+  <a href="#download">Download</a>
+  <a href="{{docs}}">Dokumentation ↗</a>
+  <a href="{{repository}}">GitHub ↗</a>
+</div>
+
+<main id="inhalt">
+
+<!-- ====================================================================== -->
+<!-- Hero                                                                   -->
+<!-- ====================================================================== -->
+<section class="hero">
+  <div class="hero-text">
+    <p class="badge"><span class="dot"></span>Version {{version}} · Offene Beta</p>
+
+    <h1>
+      Ein Pult, das <em>weiterläuft</em>,<br>
+      wenn alles andere aufgibt.
+    </h1>
+
+    <p class="lede">
+      PrismDMX ist eine DMX-Lichtsteuerung für kleine Häuser: Clubs, Kellerbühnen,
+      Gemeindesäle, freie Produktionen. Engine und Oberfläche sind zwei Prozesse in
+      einem Programm — <strong>schließt du das Fenster, läuft die Show weiter.</strong>
+    </p>
+
+    <div class="cta">
+      <a class="btn primary" href="#download">
+        Für Windows herunterladen
+        <span class="sub">{{version}} · 64-bit · ohne Adminrechte</span>
+      </a>
+      <a class="btn ghost" href="#demos">Demos ansehen</a>
+    </div>
+
+    <ul class="stats" role="list">
+      <li><b data-count="44" data-suffix=" Hz">44 Hz</b><span>Tick, eigener Thread,<br>ohne eine Allokation</span></li>
+      <li><b data-count="64">64</b><span>Universen<br>gleichzeitig</span></li>
+      <li><b data-count="2871" data-sep>2 871</b><span>Fixture-Profile<br>ab Werk</span></li>
+      <li><b data-count="3">3</b><span>Ausgabearten:<br>Art-Net, sACN, USB</span></li>
+    </ul>
+  </div>
+
+  <!-- Das Signet: ein Strahl geht hinein, ein Spektrum kommt heraus. -->
+  <div class="hero-art" aria-hidden="true">
+    <svg class="prism" viewBox="0 0 460 400">
+      <defs>
+        <linearGradient id="beam" gradientUnits="userSpaceOnUse" x1="0" y1="196" x2="200" y2="196">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+          <stop offset=".45" stop-color="#e9d5ff" stop-opacity=".7"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity="1"/>
+        </linearGradient>
+        <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#c084fc" stop-opacity=".30"/>
+          <stop offset="1" stop-color="#22d3ee" stop-opacity=".08"/>
+        </linearGradient>
+        <filter id="soft" filterUnits="userSpaceOnUse" x="-40" y="120" width="320" height="160">
+          <feGaussianBlur stdDeviation="7"/>
+        </filter>
+        <filter id="tight" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="2.2"/>
+        </filter>
+      </defs>
+
+      <!-- Der eintreffende Strahl -->
+      <g class="in-beam">
+        <line x1="0" y1="196" x2="188" y2="196" stroke="url(#beam)" stroke-width="15" filter="url(#soft)" opacity=".5"/>
+        <line x1="0" y1="196" x2="188" y2="196" stroke="url(#beam)" stroke-width="3"/>
+      </g>
+
+      <!-- Das Spektrum -->
+      <g class="fan" filter="url(#tight)">
+        <path class="ray r1" d="M212 196 L452 92"  stroke="#a855f7"/>
+        <path class="ray r2" d="M212 196 L452 128" stroke="#818cf8"/>
+        <path class="ray r3" d="M212 196 L452 164" stroke="#22d3ee"/>
+        <path class="ray r4" d="M212 196 L452 200" stroke="#4ade80"/>
+        <path class="ray r5" d="M212 196 L452 236" stroke="#fbbf24"/>
+        <path class="ray r6" d="M212 196 L452 272" stroke="#fb7185"/>
+        <path class="ray r7" d="M212 196 L452 308" stroke="#ec4899"/>
+      </g>
+
+      <!-- Das Glas -->
+      <g class="glass">
+        <path d="M196 96 L268 232 L124 232 Z" fill="url(#glass)" stroke="#e9d5ff" stroke-opacity=".5" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M196 96 L268 232" stroke="#ffffff" stroke-opacity=".35" stroke-width="1"/>
+      </g>
+
+      <!-- Was am Ende herauskommt: Kanäle -->
+      <g class="slots">
+        <rect x="426" y="78"  width="28" height="28" rx="3"/>
+        <rect x="426" y="114" width="28" height="28" rx="3"/>
+        <rect x="426" y="150" width="28" height="28" rx="3"/>
+        <rect x="426" y="186" width="28" height="28" rx="3"/>
+        <rect x="426" y="222" width="28" height="28" rx="3"/>
+        <rect x="426" y="258" width="28" height="28" rx="3"/>
+        <rect x="426" y="294" width="28" height="28" rx="3"/>
+      </g>
+    </svg>
+  </div>
+
+  <a class="scroll-hint" href="#kern" aria-hidden="true" tabindex="-1"><span></span></a>
+</section>
+
+<!-- ====================================================================== -->
+<!-- Der Kern                                                               -->
+<!-- ====================================================================== -->
+<section class="band" id="kern">
+  <div class="wrap">
+    <p class="eyebrow reveal">Die eine Entscheidung</p>
+    <h2 class="reveal">Die Engine hat gar keine Oberfläche.</h2>
+    <p class="section-lede reveal">
+      Ein Pult, dessen Ausgang von seinem Fenster abhängt, ist ein Pult, das in der
+      Vorstellung schwarz wird. Also gibt es zwei Prozesse — und das Licht wohnt in
+      dem, der nichts zeichnet.
+    </p>
+
+    <div class="split reveal">
+      <!-- Der interaktive Beweis -->
+      <div class="proof" id="proof">
+        <div class="proof-row">
+          <div class="proc daemon" id="proc-daemon">
+            <p class="proc-name">prismd</p>
+            <p class="proc-role">Show · Timing · Ausgänge · X-Touch</p>
+            <p class="proc-state"><span class="led ok"></span><span id="daemon-state">läuft · 44 Hz</span></p>
+          </div>
+
+          <div class="wire" aria-hidden="true"><i></i><i></i><i></i></div>
+
+          <div class="proc client" id="proc-client">
+            <p class="proc-name">Das Pult</p>
+            <p class="proc-role">Fenster · Canvas · Eingaben</p>
+            <p class="proc-state"><span class="led ok" id="client-led"></span><span id="client-state">verbunden</span></p>
+          </div>
+        </div>
+
+        <div class="proof-out">
+          <p class="proof-label">DMX am Ausgang</p>
+          <div class="bars" id="proof-bars" aria-hidden="true"></div>
+          <p class="proof-frames"><b id="proof-count">0</b> Frames gesendet · <b id="proof-gap">0</b> ausgelassen</p>
+        </div>
+
+        <button class="btn small danger" type="button" id="kill">Das Fenster abstürzen lassen</button>
+        <p class="proof-note" id="proof-note">Drück den Knopf. Die Balken sind das Argument.</p>
+      </div>
+
+      <div class="proof-text">
+        <h3>Was der Prozessschnitt kauft</h3>
+        <ul class="ticks">
+          <li><b>Die Oberfläche darf sterben.</b> Sie hält keinen eigenen Zustand — sie zeichnet, was die Engine sagt, und schickt, was du drückst.</li>
+          <li><b>Der X-Touch bedient das Pult, nicht das Fenster.</b> Ansicht, Fenster, Seite und Auswahl liegen in der Engine. Ein Fader schaltet die Ansicht um, auch wenn kein Bildschirm angeschlossen ist.</li>
+          <li><b>Ein zweiter Bildschirm ist kein Sonderfall.</b> Laptop hinten im Saal, Pult vorn, X-Touch daneben — drei Blicke auf denselben Zustand.</li>
+          <li><b>Der Tick allokiert nichts.</b> Kein Lock, auf das er wartet, kein Log, das schreibt, keine Zuteilung, die stocken kann. Gemessen auf zehn Pfaden, mit einem elften Test, der absichtlich allokiert, damit die Messung nicht still kaputtgehen kann.</li>
+        </ul>
+        <a class="linkish" href="{{docs}}/handbuch/entwickler/">Wie es gebaut ist →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- Funktionen                                                             -->
+<!-- ====================================================================== -->
+<section class="band alt" id="funktionen">
+  <div class="wrap">
+    <p class="eyebrow reveal">Was drin ist</p>
+    <h2 class="reveal">Ein ganzes Pult, nicht ein Sender.</h2>
+    <p class="section-lede reveal">
+      Patch, Programmer, Cue-Listen, Executoren, Kommandozeile, Konsole, Einstellungen.
+      Nichts davon liegt hinter einem Kommandozeilen-Flag, das niemand findet.
+    </p>
+
+    <div class="grid features">
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="8" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="6" cy="18" r="2"/></svg></div>
+        <h3>Patch aus einer echten Bibliothek</h3>
+        <p>634 Fixtures mit 2 871 Profilen aus der Open Fixture Library liegen bei, dazu generische Profile. Bis zu 64 Universen.</p>
+        <p class="fine">Und: <b>jeder DMX-Slot eines gepatchten Fixtures hat einen Regler.</b> Auch der, den kein Profil erklärt — der landet als benannter Knopf auf der Control-Bank statt still auf null.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M5 8 12 3l7 5"/><circle cx="5" cy="14" r="2.5"/><circle cx="12" cy="17" r="2.5"/><circle cx="19" cy="14" r="2.5"/></svg></div>
+        <h3>Drei Ausgabearten, gleichzeitig</h3>
+        <p>Art-Net mit Node-Discovery, sACN (E1.31) und Open DMX USB über FTDI — mehrere nebeneinander, jeder mit genau den Universen, für die er verkabelt ist.</p>
+        <p class="fine">Ein Ausgang, der im laufenden Betrieb dazukommt oder verschwindet, kostet die anderen <b>keinen Frame und keinen Tick</b>.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h4M7 13h7"/><path d="M16 8v8"/></svg></div>
+        <h3>Die Kommandozeile <em>ist</em> die Oberfläche</h3>
+        <p>Jede Taste, jede Kachel und jeder Knopf schreibt eine Zeile, statt zu handeln. Eine Geste und ein getippter Satz sind dasselbe Ding.</p>
+        <p class="fine">Deshalb lässt sich jede Zeile auf eine X-Touch-Taste legen — und der Parser sitzt in der Engine, nicht im Browser. Er kann nicht werfen: jede Eingabe wird zu Kommandos oder zu einem Satz, den man jemandem zeigen kann.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 5v4"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg></div>
+        <h3>Programmer mit Gedächtnis</h3>
+        <p>Gruppen, Presets, Cue-Listen, Cue-Tracking, Fade- und Delay-Zeiten, Store-Modi und eine Undo-Historie („Oops").</p>
+        <p class="fine">Die Encoder-Banks zeigen <b>nur, was die gewählten Fixtures wirklich haben</b>. Ein vierfarbiger PAR sind vier Knöpfe, keine Bank zum Durchblättern.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M5 20V9M12 20V4M19 20v-7"/><circle cx="5" cy="13" r="2"/><circle cx="12" cy="9" r="2"/><circle cx="19" cy="16" r="2"/></svg></div>
+        <h3>Playback, das reproduzierbar ist</h3>
+        <p>Executoren mit Fadern, Encodern und frei belegbaren Tasten, Speed-Master, und eine Cue-Liste, die an derselben Stelle landet — egal ob du hingelaufen oder hingesprungen bist.</p>
+        <p class="fine">Ein Executor ist ein Griff an der Liste, nicht ihre Kopie: zwei Fader auf derselben Liste sind zwei Griffe an <b>einer</b> Zahl.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10v4M10 10v4M14 10v4M18 10v4"/></svg></div>
+        <h3>Behringer X-Touch über USB</h3>
+        <p>Mackie Control, dreischichtig übersetzt: Codec, Flächenmodell, Bindungstabelle. Alle 73 Bedienelemente sind im Pult selbst belegbar.</p>
+        <p class="fine"><b>Learn</b> heißt: drück die Taste, die du meinst — die Engine benennt sie, ohne sie auszulösen.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+        <h3>Alles ist eine Einstellung</h3>
+        <p>Rig, Geräte, Showdateien, Netzwerk, Autostart, Logstufe. Jede betriebliche Option des Daemons ist auch ein Feld im Fenster.</p>
+        <p class="fine">Und wenn ein Flag eine Zeile festhält, sagt die Oberfläche <b>welches</b> — statt ein Feld anzubieten, das nichts tut.</p>
+      </article>
+
+      <article class="card reveal">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 7h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/><path d="M9.5 13.5 11 15l3.5-3.5"/></svg></div>
+        <h3>Installation ohne IT-Abteilung</h3>
+        <p>Der Installer ist <b>pro Benutzer</b> — keine Adminrechte, keine Runtime hinterher, kein VC++-Redistributable. Deinstallieren nimmt das Programm mit und deine Shows nicht.</p>
+        <p class="fine">Autostart ist ein Häkchen. Ein Rack-Rechner oder ein Raspberry Pi fährt <code>prismd</code> allein — dieselbe Engine, nur ohne Fenster.</p>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- Demos                                                                  -->
+<!-- ====================================================================== -->
+<section class="band" id="demos">
+  <div class="wrap">
+    <p class="eyebrow reveal">Software-Demos</p>
+    <h2 class="reveal">Vier Minuten am Pult, ohne es zu installieren.</h2>
+    <p class="section-lede reveal">
+      Nachbauten der echten Oberfläche — dieselben Farben, dieselbe Dichte, dieselben
+      Worte. Sie laufen von selbst; du kannst sie anhalten und selbst anfassen.
+    </p>
+
+    <div class="demo reveal" id="demo">
+      <div class="demo-tabs" role="tablist" aria-label="Demos">
+        <button role="tab" id="tab-line" aria-controls="pane-line" aria-selected="true" class="on">Kommandozeile</button>
+        <button role="tab" id="tab-exec" aria-controls="pane-exec" aria-selected="false">Executoren &amp; Cues</button>
+        <button role="tab" id="tab-prog" aria-controls="pane-prog" aria-selected="false">Programmer</button>
+        <button role="tab" id="tab-dmx"  aria-controls="pane-dmx"  aria-selected="false">DMX-Sheet</button>
+        <span class="demo-spacer"></span>
+        <button class="demo-play" type="button" id="demo-play" aria-label="Demo anhalten" data-playing="1">
+          <svg viewBox="0 0 16 16" class="i-pause"><rect x="4" y="3" width="3" height="10" rx="1"/><rect x="9" y="3" width="3" height="10" rx="1"/></svg>
+          <svg viewBox="0 0 16 16" class="i-play"><path d="M5 3l8 5-8 5Z"/></svg>
+        </button>
+      </div>
+
+      <!-- ---- Der Rahmen: das Pult ------------------------------------- -->
+      <div class="desk">
+        <div class="desk-head">
+          <span class="desk-title"><i class="led ok"></i>PrismDMX</span>
+          <span class="views">
+            <b class="view on">Bühne</b><b class="view">Patch</b><b class="view">Cues</b><b class="view">Ausgänge</b>
+          </span>
+          <span class="desk-clear">Clear</span>
+        </div>
+
+        <div class="desk-body">
+
+          <!-- ---- Demo 1: Kommandozeile ------------------------------- -->
+          <div class="pane on" id="pane-line" role="tabpanel" aria-labelledby="tab-line">
+            <div class="rig" id="rig"></div>
+            <div class="line-hint" id="line-hint">Die Zeile unten wird getippt — die Lampen sind, was daraus folgt.</div>
+          </div>
+
+          <!-- ---- Demo 2: Executoren ---------------------------------- -->
+          <div class="pane" id="pane-exec" role="tabpanel" aria-labelledby="tab-exec" hidden>
+            <div class="exec-wrap">
+              <div class="cuelist" id="cuelist">
+                <p class="win-title">Cue-Liste 1 — <span>Abendspielplan</span></p>
+                <table>
+                  <thead><tr><th>Cue</th><th>Name</th><th>Fade</th><th>Delay</th></tr></thead>
+                  <tbody id="cue-rows"></tbody>
+                </table>
+              </div>
+              <div class="execbar" id="execbar"></div>
+            </div>
+          </div>
+
+          <!-- ---- Demo 3: Programmer ---------------------------------- -->
+          <div class="pane" id="pane-prog" role="tabpanel" aria-labelledby="tab-prog" hidden>
+            <div class="prog-wrap">
+              <div class="banks" id="banks">
+                <b class="bank">Dimmer</b><b class="bank on">Farbe</b><b class="bank">Position</b><b class="bank">Beam</b><b class="bank">Fokus</b><b class="bank">Control</b>
+              </div>
+              <div class="encoders" id="encoders"></div>
+              <div class="prog-out">
+                <div class="swatch" id="swatch"><span id="swatch-hex">#000000</span></div>
+                <div class="prog-sel">
+                  <p class="win-title">Programmer</p>
+                  <p class="prog-count"><b id="prog-sel">6</b> Fixtures ausgewählt · <b id="prog-touched">0</b> Werte angefasst</p>
+                  <p class="fine">Nur die Parameter, die diese Fixtures wirklich haben. Rechtsklick auf einen Encoder öffnet die benannten Positionen aus der Herstellerdatei.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ---- Demo 4: DMX-Sheet ----------------------------------- -->
+          <div class="pane" id="pane-dmx" role="tabpanel" aria-labelledby="tab-dmx" hidden>
+            <div class="sheet-head">
+              <p class="win-title">DMX-Sheet — <span>Universum 1</span></p>
+              <p class="sheet-tele"><b id="tele-hz">30,2 Hz</b> Telemetrie · <b id="tele-paint">0,20 ms</b> Zeichnen · <b id="tele-frames">0</b> Frames</p>
+            </div>
+            <div class="sheet" id="sheet" aria-hidden="true"></div>
+          </div>
+
+        </div>
+
+        <!-- ---- Die Kommandozeile: immer da ------------------------- -->
+        <div class="desk-line">
+          <span class="prompt">›</span>
+          <span class="typed" id="typed"></span><span class="caret"></span>
+          <span class="hint" id="hint">Enter</span>
+        </div>
+      </div>
+
+      <p class="demo-note" id="demo-note">
+        Nachbau. Die echte Oberfläche ist dichter und hat mehr Fenster — vierzehn Typen,
+        alle im <a href="{{docs}}/handbuch/operator/">Handbuch für den Operator</a>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- Stand                                                                  -->
+<!-- ====================================================================== -->
+<section class="band alt" id="stand">
+  <div class="wrap">
+    <p class="eyebrow reveal">Ehrlicher Stand</p>
+    <h2 class="reveal">Offene Beta. Hier steht, was das heißt.</h2>
+    <p class="section-lede reveal">
+      Das Pult kann ein Rig bauen, eine Show programmieren und sie auf echter Hardware
+      fahren. Was es <em>nicht</em> kann, steht hier — und nicht erst in dem Moment, in
+      dem du es brauchst.
+    </p>
+
+    <div class="two reveal">
+      <div class="panel yes">
+        <h3><span class="tick">✓</span> Läuft heute</h3>
+        <ul>
+          <li>Rig patchen, 64 Universen, jeder Slot erreichbar</li>
+          <li>Art-Net (mit Node-Discovery), sACN, Open DMX USB</li>
+          <li>Programmer, Gruppen, Presets, Cue-Listen, Tracking</li>
+          <li>Executoren, Speed-Master, belegbare Tasten</li>
+          <li>Kommandozeile als Oberfläche, in der Engine</li>
+          <li>Behringer X-Touch, jede Taste belegbar</li>
+          <li>Einstellungsfenster für alles Betriebliche</li>
+          <li>Windows-Installer ohne Adminrechte</li>
+        </ul>
+      </div>
+
+      <div class="panel no">
+        <h3><span class="tick">–</span> Noch nicht</h3>
+        <ul>
+          <li>Kein 3D-Visualizer <em>(geplant)</em></li>
+          <li>Kein Web-Remote — Handy und Tablet steuern noch nicht <em>(geplant)</em></li>
+          <li>Kein Timecode, kein OSC, kein PSN <em>(geplant)</em></li>
+          <li>Das Pult folgt einem Switching-Kanal nicht im laufenden Betrieb</li>
+          <li>Executor-Beschriftungen folgen nicht in jedem Fall einem Showwechsel</li>
+          <li>Autostart nur unter Windows</li>
+          <li>macOS und Linux sind portabel, aber nicht veröffentlicht</li>
+          <li>Der Build ist <b>nicht signiert</b> — SmartScreen meldet sich</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="beta-note reveal">
+      <b>Es hat noch keine echte Vorstellung in einem fremden Haus gefahren.</b>
+      Genau dafür ist die Beta da. Wenn du es auf eine Show legst, die zählt, lies
+      vorher <a href="{{repository}}#being-a-beta-tester">Being a beta tester</a>.
+    </p>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- Zukunft                                                                -->
+<!-- ====================================================================== -->
+<section class="band" id="zukunft">
+  <div class="wrap">
+    <p class="eyebrow reveal">Was kommt</p>
+    <h2 class="reveal">Die Reihenfolge entscheidet die Beta.</h2>
+    <p class="section-lede reveal">
+      Diese fünf sind geplant und beschrieben — mit Zielen und Abnahmekriterien, im
+      Implementierungsplan des Projekts. In welcher Reihenfolge sie kommen, soll das
+      Feedback aus echten Häusern entscheiden und nicht ein Dokument.
+    </p>
+
+    <ol class="roadmap" role="list">
+
+      <li class="stop reveal">
+        <span class="stop-tag">S30</span>
+        <h3>3D-Visualizer</h3>
+        <p>Jedes gepatchte Fixture an seiner Position und in seiner Ausrichtung, Beams
+        aus dem echten Ausgang. Er darf weder den Telemetrie-Canvas noch die Engine
+        aufhalten — das ist das Abnahmekriterium, nicht ein Wunsch.</p>
+      </li>
+
+      <li class="stop reveal">
+        <span class="stop-tag">S31</span>
+        <h3>Web-Remote</h3>
+        <p>Derselbe Client, über das Netz ausgeliefert. Ein Handy im Saal fährt
+        Executoren. Loopback ist die Voreinstellung; ins LAN nur ausdrücklich und mit
+        Token — und die <em>Maschinen</em>-Einstellungen verweigert der Daemon einem
+        entfernten Client, mit Begründung statt mit einem versteckten Knopf.</p>
+      </li>
+
+      <li class="stop reveal">
+        <span class="stop-tag">S47</span>
+        <h3>Timecode</h3>
+        <p>MIDI-Timecode und Art-Net-Timecode als Quellen, eine Timecode-Spur an einer
+        Sequenz, alle vier Standardraten inklusive 29,97 Drop-Frame. Rückwärts scrubben
+        schärft jeden passierten Cue neu und feuert keinen davon — das ist der
+        Unterschied zwischen einer Implementierung und einer Vorführung.</p>
+      </li>
+
+      <li class="stop reveal">
+        <span class="stop-tag">S32</span>
+        <h3>PSN &amp; OSC</h3>
+        <p>Tracker-Positionen aus PSN steuern Pan und Tilt durch die 3D-Rechnung;
+        OSC rein und raus. Fällt ein Tracker aus, hält die letzte Position — mit
+        Warnung und <em>ohne</em> Sprung. OSC ist außerdem eine Bedienfläche: eine
+        OSC-Nachricht auf ein Kommando zu legen, geht durch den Control-Editor und
+        nicht durch ein zweites Mapping-System.</p>
+      </li>
+
+      <li class="stop reveal">
+        <span class="stop-tag">S50</span>
+        <h3>Makros</h3>
+        <p>Mehrere Kommandozeilen als ein benanntes Ding, auslösbar von einer Taste,
+        einem Executor oder einem Cue.</p>
+      </li>
+
+      <li class="stop reveal">
+        <span class="stop-tag">·</span>
+        <h3>Und das Kleingedruckte</h3>
+        <p>Ein signierter Build, damit SmartScreen schweigt. Ein macOS- und ein
+        Linux-Release — die Engine wird für ARM64 bei jedem Commit gebaut, es fehlt der
+        Installer. Enttec-Pro-Protokoll neben Open DMX USB. Und der Switching-Kanal,
+        der dem Moduskanal unter der Hand folgt.</p>
+      </li>
+
+      <!-- Der weite Blick -->
+      <li class="stop far reveal">
+        <span class="stop-tag">∞</span>
+        <h3>Irgendwann: ein eigenes Pult. Aus Blech.</h3>
+        <p>
+          Der weiteste Punkt auf dieser Liste und der ehrlichste: <b>eigene Hardware.</b>
+          Eine Konsole, die PrismDMX nicht steuert, sondern <em>ist</em> — Fader,
+          Encoder, beschriftete Tasten, ein Display, und darin derselbe
+          <code>prismd</code>, der heute schon auf einem Raspberry Pi ohne Bildschirm
+          läuft.
+        </p>
+        <p>
+          Architektonisch ist der Weg dahin auffällig kurz, und das ist kein Zufall: die
+          Engine hat nie eine Oberfläche gehabt, die Bedienfläche ist seit dem ersten Tag
+          eine Übersetzungsschicht auf ein Bindungsmodell, und ein X-Touch ist bereits
+          nichts anderes als ein Gehäuse voller Fader an einem USB-Kabel. Ein eigenes
+          Gehäuse wäre eine dritte Implementierung derselben Schnittstelle.
+        </p>
+        <p class="far-cav">
+          Kein Termin, kein Preis, kein Versprechen. Es steht hier, weil es die Richtung
+          ist, in die alles gebaut wurde — und weil man das wissen sollte, bevor man ein
+          Haus darauf plant.
+        </p>
+      </li>
+    </ol>
+
+    <a class="linkish center reveal" href="{{repository}}/blob/master/IMPLEMENTATION_PLAN.md">Der ganze Implementierungsplan →</a>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- Download                                                               -->
+<!-- ====================================================================== -->
+<section class="band alt" id="download">
+  <div class="wrap">
+    <p class="eyebrow reveal">Holen und loslegen</p>
+    <h2 class="reveal">Herunterladen, installieren, <code>1 at full</code>.</h2>
+
+    <div class="dl reveal">
+      <div class="dl-main">
+        <a class="btn primary big" href="{{releases}}">
+          {{installer}}
+          <span class="sub">Windows 10/11 · 64-bit · ca. 10 MB</span>
+        </a>
+        <p class="dl-meta">
+          Version <b>{{version}}</b> · Vorabversion · MIT-Lizenz ·
+          <a href="{{repository}}/releases">alle Releases</a>
+        </p>
+        <ul class="dl-facts">
+          <li><b>Keine Adminrechte.</b> Der Installer legt das Programm in dein eigenes Profil.</li>
+          <li><b>Nichts nachzuinstallieren</b> außer der Edge-WebView2-Runtime, die der Installer selbst holt, falls sie fehlt.</li>
+          <li><b>Nicht signiert.</b> Windows zeigt beim ersten Start <i>„Der Computer wurde geschützt"</i> → <i>Weitere Informationen</i> → <i>Trotzdem ausführen</i>. Oder prüf vorher die SHA-256 aus den Release-Notes.</li>
+          <li><b>Deinstallieren nimmt nur das Programm.</b> Shows, Rig und Einstellungen bleiben in <code>%APPDATA%\PrismDMX</code>.</li>
+        </ul>
+      </div>
+
+      <div class="dl-side">
+        <h3>Der erste Abend</h3>
+        <ol class="steps">
+          <li><b>Ausgang anlegen.</b> <i>Einstellungen → Ausgänge</i> — Art-Net-Node, sACN-Empfänger oder USB-Adapter. Nichts da? <code>--mock-output</code> und das DMX-Sheet.</li>
+          <li><b>Rig patchen.</b> Das <i>Patch</i>-Fenster, Bibliothek nach Namen durchsuchen, Nummer und Adresse vergeben.</li>
+          <li><b>Licht machen.</b> <code>1 at full</code>, Enter.</li>
+        </ol>
+        <div class="side-links">
+          <a class="linkish" href="{{docs}}/handbuch/operator/">Handbuch für den Operator →</a>
+          <a class="linkish" href="{{docs}}/handbuch/installateur/">Handbuch für den Installateur →</a>
+          <a class="linkish" href="{{docs}}/aenderungen/">Was sich zuletzt geändert hat →</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="dl-alt reveal">
+      <p><b>Ohne Fenster.</b> <code>prismd.exe</code> liegt neben <code>PrismDMX.exe</code> und läuft allein — ein Rack-Rechner ohne Bildschirm, eine feste Installation, ein Raspberry Pi. Dieselbe Engine, bedient über X-Touch. <code>prismd --help</code> listet alles.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <img class="mark" src="logo.png" width="256" height="256" alt="" decoding="async" loading="lazy">
+      <p class="wordmark">Prism<b>DMX</b></p>
+      <p class="fine">DMX-Lichtsteuerung für kleine Häuser.<br>Version {{version}}, offene Beta.</p>
+    </div>
+    <nav class="foot-col" aria-label="Dokumentation">
+      <p class="foot-h">Dokumentation</p>
+      <a href="{{docs}}">docs.prismdmx.de</a>
+      <a href="{{docs}}/handbuch/operator/">Operator</a>
+      <a href="{{docs}}/handbuch/installateur/">Installateur</a>
+      <a href="{{docs}}/handbuch/entwickler/">Developer</a>
+    </nav>
+    <nav class="foot-col" aria-label="Projekt">
+      <p class="foot-h">Projekt</p>
+      <a href="{{repository}}">GitHub</a>
+      <a href="{{releases}}">Releases</a>
+      <a href="{{repository}}/issues">Fehler melden</a>
+      <a href="{{repository}}/blob/master/LICENSE">MIT-Lizenz</a>
+    </nav>
+    <div class="foot-col">
+      <p class="foot-h">Stand</p>
+      <p class="fine">Diese Seite wird aus dem Repository gebaut und trägt dessen Version. Was hier steht, ist der Stand von <b>{{version}}</b>.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="site.js" defer></script>
+</body>
+</html>
