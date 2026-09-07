@@ -1,4 +1,5 @@
-//! **docs.prismdmx.de, generated out of this repository** — S42.
+//! **docs.prismdmx.de, generated out of this repository** — S42, moved to the
+//! `docs.` label in S55 when `prism-site` took the apex.
 //!
 //! # Why the site is built here rather than anywhere else
 //!
@@ -65,12 +66,14 @@ pub const REPOSITORY: &str = "https://github.com/flakesystems/PrismDMX";
 
 /// The domain this site is served from.
 ///
-/// **A subdomain rather than the apex**, because the apex belongs to the
-/// promotion site, which is a different job on different hosting: this one is
-/// generated out of the repository and follows the code, that one is designed
-/// and follows a release. Keeping them apart means neither has to be a
-/// compromise, and a subdomain is also the easier DNS — a plain `CNAME` record,
-/// where an apex needs `ALIAS`, `ANAME` or Pages' four `A` records.
+/// **`docs.` since S55**, and the move is what made room for a front page.
+/// Until then this site *was* prismdmx.de, because it was the only site there
+/// was — and its first page is a list of manuals, which answers *where does it
+/// say* for somebody who already knows what this is. A stranger's first
+/// question is *what is this*, and `prism-site` is the crate that answers it.
+/// The apex is that one's now; the manuals moved one label to the left and lost
+/// nothing, because every URL on this site is relative and it is served from
+/// wherever it is mounted.
 pub const DOMAIN: &str = "docs.prismdmx.de";
 
 /// The style sheet, inlined into every page.

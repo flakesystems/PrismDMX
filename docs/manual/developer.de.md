@@ -453,7 +453,7 @@ cd ui && npx tsc -b --force
 Dateien, `--noEmit` darauf prüft also überhaupt nichts. `--force`, weil eine
 zwischengespeicherte Build-Info einen alten Fehler durchlassen würde.
 
-Die CI fährt sieben Jobs, und jeder ist aus einem Grund da, den man kennen
+Die CI fährt neun Jobs, und jeder ist aus einem Grund da, den man kennen
 sollte:
 
 | Job | Wofür er da ist |
@@ -465,6 +465,8 @@ sollte:
 | **UI — Typecheck, Lint, Test, Build** | Mit den aus Rust neu erzeugten Bindings zuerst, damit eine veraltete Bindung nicht durchgehen kann |
 | **UI — End-to-End gegen einen Daemon** | Ein echter `prismd`, ein echtes Chromium, und ein Daemon, den die Spezifikation unter dem Browser *tötet* |
 | **Web — die Dokumentationsseite** | Eine Seite, die nur auf einem Rechner baut, ist dasselbe Problem wie ein Installer, der das tut |
+| **Web — die Startseite** | Dasselbe Argument für `site/`. Ein eigener Job und kein Schritt im vorigen, weil die beiden Crates Entgegengesetztes versprechen: von der Dokumentationsseite ist zugesichert, dass sie **kein** Skript trägt, die Startseite trägt eines mit Absicht |
+| **Web — der Auslieferungs-Container** | `deploy/` ist der selbstgehostete Weg, und ein Image, das nur auf der Maschine baut, auf der es ausgeliefert wird, ist die dritte Gestalt desselben Problems. Er stellt außerdem die eine Frage, für die es die beiden vhosts gibt: unterscheidet derselbe Port `prismdmx.de` und `docs.prismdmx.de`, und bekommt ein unbekannter Host keines von beiden |
 
 Das Doc-Gate ist eine Anmerkung wert: `cargo doc` läuft mit verbotenen Warnungen,
 ein kaputter Intra-Doc-Link lässt den Build also scheitern. Die

@@ -868,6 +868,12 @@ fn the_front_page_is_an_index_of_the_documentation() {
 }
 
 /// The domain is written by the generator, so it is one constant in one place.
+///
+/// Asserted against [`prism_web::DOMAIN`] rather than against a spelling of it,
+/// because a second copy here is exactly the thing the constant exists to
+/// prevent — and S55 moved it, from the apex to `docs.`, which a test carrying
+/// its own copy would have turned into a failure to edit rather than a
+/// decision to make.
 #[test]
 fn the_domain_is_written_beside_the_pages() {
     let scratch = built("cname");

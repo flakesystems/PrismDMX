@@ -1,0 +1,58 @@
+# prismdmx.de und docs.prismdmx.de auf dem eigenen Server.
+#
+#     cd /opt/prismdmx && git pull && docker compose -f deploy/docker-compose.yml up -d --build
+#
+# Ein Dienst, weil es ein Image ist und ein Image beide Namen bedient — die
+# Begründung steht im Dockerfile. Kein TLS hier: das terminiert der Reverse
+# Proxy, der auf diesem Server ohnehin vor allem anderen steht.
+
+name: prismdmx-web
+
+services:
+  web:
+    build:
+      # Der Kontext ist die **Wurzel des Repositories** und nicht dieses
+      # Verzeichnis: die Bauphase braucht `crates/`, `web/`, `site/` und
+      # `docs/`, weil `prism-web` die Handbücher zur Bauzeit liest.
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: prismdmx-web:local
+    container_name: prismdmx-web
+
+    # Nur auf die Loopback-Adresse. Erreichbar ist der Container über den
+    # Reverse Proxy davor, und was nicht auf der öffentlichen Adresse hört,
+    # kann auch nicht versehentlich ohne TLS aufgerufen werden. Wer keinen
+    # Proxy hat, nimmt `8080:80` — dann ist es HTTP im LAN, und das ist für
+    # eine Vorschau in Ordnung und für eine Domain nicht.
+    ports:
+      - "127.0.0.1:8080:80"
+
+    # Ein Webserver, der nur ausliefert, braucht kein Schreibrecht auf sein
+    # Dateisystem. `nginx:alpine` legt nur unter `/var/cache/nginx`,
+    # `/var/run` und `/tmp` etwas an, also bekommen die drei ein tmpfs und
+    # alles andere bleibt schreibgeschützt.
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+    restart: unless-stopped
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Wenn der Reverse Proxy selbst ein Container ist, gehören beide in dasselbe
+# Netz und die `ports` oben können ganz entfallen — der Proxy erreicht den
+# Dienst dann unter `prismdmx-web:80`. Auskommentiert statt weggelassen, weil
+# das die häufigere Variante ist und niemand sie erraten soll:
+#
+# networks:
+#   default:
+#     name: proxy
+#     external: true
