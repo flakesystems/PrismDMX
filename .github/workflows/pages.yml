@@ -21,6 +21,14 @@
 # release publishes the site itself, with `--installer` pointing at the `.exe`
 # it is about to attach, and this workflow deliberately does not fire on tags.
 #
+# **If this ever moves to a self-hosted server, it has to invert.** SSH into that
+# server is allowed only over VPN, so a build runner cannot `rsync` into it and
+# the answer is not to make an exception for one. The server would **pull**
+# instead: `release.yml` attaches the generated site as a release asset, and a
+# timer on the server fetches it over outbound HTTPS, verifies its digest and
+# unpacks it. Outbound only, no inbound port, and no deploy key held by GitHub —
+# which is the same property this workflow has today and worth not losing.
+#
 # **What a human still has to do, once.** Enable Pages for this repository with
 # *GitHub Actions* as the source, and point `prismdmx.de` at it — an `ALIAS`,
 # `ANAME` or flattened `CNAME` on the apex to `flakesystems.github.io`, or the
