@@ -166,7 +166,14 @@ describe("the programmer", () => {
       ],
       clearStage: 2,
     };
-    expect(readProgrammerState(state, "p")).toEqual(state);
+    // `occurrence` is **normalised** rather than carried through absent, so
+    // this is the wire's state with the first-of-a-kind spelled out. See
+    // `readOccurrence`: defaulting once here is what stops each reader having
+    // to remember `?? 0`.
+    expect(readProgrammerState(state, "p")).toEqual({
+      ...state,
+      values: state.values.map((entry) => ({ ...entry, occurrence: 0 })),
+    });
   });
 
   /**
@@ -188,6 +195,70 @@ describe("the programmer", () => {
       selectedGroups: [],
       manualSelection: [],
     });
+  });
+
+  /**
+   * **The second channel of a kind keeps its number** — S52, and this is the
+   * test that was missing.
+   *
+   * `occurrence` reached the Rust struct, the command, the applier, the
+   * serialiser and the generated binding, and did not reach **this decoder**.
+   * So the daemon sent `White` occurrence 1, the interface filed it under
+   * occurrence 0, and a fixture with a warm and a cold white had the cold one
+   * apply to the lamp and read back on the *warm* encoder — reported from a
+   * Stairville MH z195, whose profile declares both channels as `White`.
+   *
+   * It survived because the field is **optional on the wire**: a `.prism` file
+   * written before S52 does not carry it, so `ProgrammerEntry.occurrence` is
+   * `occurrence?: number` and an object without one is a valid `ProgrammerEntry`
+   * as far as the compiler is concerned. Optionality for the sake of an old file
+   * is what made forgetting it legal.
+   */
+  it("keeps the occurrence of a second channel of a kind", () => {
+    const state = {
+      selection: [5],
+      selectedGroups: [],
+      manualSelection: [5],
+      activeFeatureGroup: "Color",
+      values: [
+        {
+          fixture: 5,
+          attribute: "White",
+          occurrence: 0,
+          value: { value: 65535, source: "Manual", presetRef: null },
+        },
+        {
+          fixture: 5,
+          attribute: "White",
+          occurrence: 1,
+          value: { value: 32768, source: "Manual", presetRef: null },
+        },
+      ],
+      clearStage: 2,
+    };
+    // The two are **two entries** and stay two: this is the assertion the
+    // reported fault would fail, because both collapsed onto occurrence 0.
+    expect(readProgrammerState(state, "p")).toEqual(state);
+  });
+
+  /**
+   * **An absent occurrence is the first**, which is what keeps a show written
+   * before S52 reading back with every value where it always was. Asserted
+   * rather than assumed, because the fix above could equally have been written
+   * to default it to something.
+   */
+  it("reads an absent occurrence as the first", () => {
+    const state = {
+      selection: [1],
+      selectedGroups: [],
+      manualSelection: [],
+      activeFeatureGroup: "Color",
+      values: [
+        { fixture: 1, attribute: "Red", value: { value: 1, source: "Manual", presetRef: null } },
+      ],
+      clearStage: 2,
+    };
+    expect(readProgrammerState(state, "p").values[0]?.occurrence).toBe(0);
   });
 
   it("refuses a value the daemon's vocabulary does not have", () => {
@@ -368,12 +439,38 @@ describe("an answer", () => {
         { number: "1", inherited: [], blocks: true },
         {
           number: "2",
-          inherited: [{ fixture: 7, attribute: "Pan", value: 32768 }],
+          // `occurrence` spelled out because the decoder normalises an absent
+          // one to the first — `readOccurrence`.
+          inherited: [{ fixture: 7, attribute: "Pan", occurrence: 0, value: 32768 }],
           blocks: false,
         },
       ],
     };
     expect(readAnswer(tracking, "a")).toEqual(tracking);
+  });
+
+  /**
+   * **A tracked value carries its occurrence too** — the same omission, in the
+   * decoder next door. `TrackedValue` gained `occurrence` in S52 for the reason
+   * `ProgrammerEntry` did, and a cue sheet that dropped it would show the second
+   * colour wheel's tracked value on the first one's row.
+   */
+  it("keeps the occurrence of a tracked value", () => {
+    const answer = {
+      t: "CueTracking",
+      sequenceId: 1,
+      cues: [
+        {
+          number: "1",
+          inherited: [
+            { fixture: 7, attribute: "ColorWheel", occurrence: 0, value: 100 },
+            { fixture: 7, attribute: "ColorWheel", occurrence: 1, value: 200 },
+          ],
+          blocks: false,
+        },
+      ],
+    };
+    expect(readAnswer(answer, "a")).toEqual(answer);
   });
 
   it("names the field that was not what it should be", () => {

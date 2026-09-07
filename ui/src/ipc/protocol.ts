@@ -336,8 +336,40 @@ function readProgrammerEntry(value: unknown, path: string): ProgrammerEntry {
   return {
     fixture: asInteger(field(record, "fixture"), `${path}.fixture`),
     attribute: asVariant(field(record, "attribute"), `${path}.attribute`, ATTRIBUTE_TYPE_VARIANTS),
+    occurrence: readOccurrence(record, path),
     value: readProgrammerValue(field(record, "value"), `${path}.value`),
   };
+}
+
+/**
+ * Which channel of a kind an entry is — **S52**, and it is read here rather
+ * than left out.
+ *
+ * # What leaving it out cost
+ *
+ * It reached the Rust struct, the command, the applier, the serialiser and the
+ * generated binding, and it did not reach the two hand-written decoders. So a
+ * daemon that sent `White` occurrence 1 was understood as occurrence 0: on a
+ * Stairville MH z195 — whose profile declares a warm *and* a cold white, both
+ * as `White` — turning the cold one moved the lamp and moved the **warm**
+ * encoder's number, while the encoder that was turned sat still.
+ *
+ * The reason nothing caught it is worth keeping. The field is optional on the
+ * wire, because a `.prism` file written before S52 does not carry one, so the
+ * binding is `occurrence?: number` and an object without it is a valid
+ * `ProgrammerEntry` as far as the compiler is concerned. **Optionality granted
+ * for the sake of an old file is what made forgetting it legal**, and that is
+ * the shape to look for wherever a `#[serde(default)]` meets a hand decoder.
+ *
+ * # Absent is the first, and it is normalised here
+ *
+ * Not left absent for every reader to default: the two provenance lists a few
+ * lines below are already normalised to `[]` the same way, and the alternative
+ * is `?? 0` written at each call site — the second one of which is the one that
+ * gets forgotten.
+ */
+function readOccurrence(record: Record<string, unknown>, path: string): number {
+  return asInteger(field(record, "occurrence") ?? 0, `${path}.occurrence`);
 }
 
 /**
@@ -747,6 +779,10 @@ function readTrackedValue(value: unknown, path: string): TrackedValue {
   return {
     fixture: asInteger(field(record, "fixture"), `${path}.fixture`),
     attribute: asVariant(field(record, "attribute"), `${path}.attribute`, ATTRIBUTE_TYPE_VARIANTS),
+    // The same field, dropped in the same way — see {@link readOccurrence}. A
+    // cue sheet without it shows the second colour wheel's tracked value on the
+    // first one's row.
+    occurrence: readOccurrence(record, path),
     value: asInteger(field(record, "value"), `${path}.value`),
   };
 }

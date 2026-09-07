@@ -237,7 +237,31 @@ zurückspielt und vergleicht.
 
 Fügen Sie einem persistierten oder gespiegelten Typ ein Feld hinzu, ist die
 Checkliste: die Struktur, das Command, der Applier, **der Diff**, die
-Klassifikationsprädikate und das TypeScript.
+Klassifikationsprädikate, das TypeScript — und **der handgeschriebene Decoder in
+`ui/src/ipc/protocol.ts`**, für den die generierte Definition nicht einspringt.
+
+### Ein optionales Feld ist ein Feld, das ein handgeschriebener Decoder vergessen darf
+
+`occurrence` (S52) erreichte die Struktur, das Command, den Applier, den
+Serialisierer und das generierte TypeScript — und **nicht**
+`readProgrammerEntry` in `ui/src/ipc/protocol.ts`, das von Hand geschrieben ist,
+weil es ungeprüfte Eingaben validiert. Der Daemon schickte `White` Vorkommen 1,
+die Oberfläche legte es unter 0 ab, und ein Kopf mit einem warmen **und** einem
+kalten Weiß führte das kalte auf der Lampe aus, während die Zahl unter dem
+gedrehten Encoder stehen blieb.
+
+Unsichtbar gemacht hat es die Regel darunter, die funktionierte: das Feld ist
+`#[serde(default, skip_serializing_if = …)]`, damit eine `.prism`-Datei von vor
+S52 noch öffnet, also ist die Definition `occurrence?: number`, **also ist ein
+Objekt ohne dieses Feld ein gültiges `ProgrammerEntry` und der Compiler hatte
+nichts zu sagen.** Die Optionalität, die es für eine alte Datei gibt, hat das
+Vergessen erlaubt.
+
+Zweierlei folgt daraus. Ein Feld an einem gespiegelten Typ gibt der Checkliste
+oben einen siebten Punkt: **den handgeschriebenen Decoder**. Und ein Decoder
+soll den Vorgabewert *normalisieren*, statt das Loch weiterzureichen —
+`readOccurrence` antwortet `0`, sodass kein Leser sich `?? 0` merken muss, und
+der zweite Leser ist der, der es vergisst.
 
 ### Ein fehlendes Feld ist die bessere Migration als eine Migration
 
