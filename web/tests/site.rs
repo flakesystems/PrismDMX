@@ -389,15 +389,59 @@ fn percent_decoded(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// A link from one page to a heading on another lands on a heading that exists.
+/// Resolves an `href` found on page `here` the way a browser would.
 ///
-/// The same silent failure as the test above, one page along, and it is the one
-/// that matters most: the **front page's four steps** point into the two
-/// manuals by anchor, and those four links are the whole of what S42 exists to
-/// make work. A renumbered chapter would break them with no error anywhere.
+/// A page is served as `<path>/index.html`, so the document's base directory is
+/// `<path>/` itself and a relative link is resolved against that. Returns the
+/// site path of the target page and its fragment, or `None` for a link that
+/// leaves the site.
+fn resolve(here: &str, href: &str) -> Option<(String, String)> {
+    if href.starts_with("http://")
+        || href.starts_with("https://")
+        || href.starts_with("mailto:")
+        || href.starts_with('#')
+    {
+        return None;
+    }
+    let (path, fragment) = match href.split_once('#') {
+        Some((path, fragment)) => (path, percent_decoded(fragment)),
+        None => (href, String::new()),
+    };
+    let mut parts: Vec<&str> = if here.is_empty() {
+        Vec::new()
+    } else {
+        here.split('/').collect()
+    };
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            other => parts.push(other),
+        }
+    }
+    Some((parts.join("/"), fragment))
+}
+
+/// Every link on every page lands on a page that exists, and on a heading it has.
+///
+/// **This is the test the first deployment did not have, and the fault it would
+/// have caught was total.** GitHub Pages served the site as a *project* page at
+/// `flakesystems.github.io/PrismDMX/`, under a path prefix — and every URL the
+/// generator wrote was absolute from `/`, so every link on every page pointed a
+/// level above the project at somebody else's repository. Nothing errored: the
+/// stylesheet is inline, so the site rendered perfectly and went nowhere. The
+/// front page's four steps, which are the whole of what S42 exists to make work,
+/// were four dead links on a page that looked finished.
+///
+/// So this resolves each link the way a browser does — against the directory the
+/// page is served from — rather than checking the strings the generator wrote.
+/// A site whose links only resolve when it is mounted at a root passes the one
+/// and fails the other.
 #[test]
-fn a_link_into_another_page_lands_on_a_heading_that_page_has() {
-    let scratch = built("cross-anchors");
+fn every_link_on_every_page_lands_on_a_page_that_exists() {
+    let scratch = built("resolution");
     let ids: std::collections::BTreeMap<String, Vec<String>> = PAGES
         .iter()
         .map(|entry| {
@@ -409,36 +453,73 @@ fn a_link_into_another_page_lands_on_a_heading_that_page_has() {
                     rest.find('"').map(|end| rest[..end].to_owned())
                 })
                 .collect();
-            (absolute(entry.path), found)
+            (entry.path.to_owned(), found)
         })
         .collect();
-    let mut checked = 0_usize;
+    let mut links = 0_usize;
+    let mut anchored_links = 0_usize;
     for entry in &PAGES {
         let html = page(&scratch, entry.path);
-        for (at, _) in html.match_indices("href=\"/") {
+        for (at, _) in html.match_indices("href=\"") {
             let rest = &html[at + 6..];
             let Some(end) = rest.find('"') else { continue };
-            let target = &rest[..end];
-            let Some((path, fragment)) = target.split_once('#') else {
+            let Some((target, fragment)) = resolve(entry.path, &rest[..end]) else {
                 continue;
             };
-            let anchors = ids
-                .get(path)
-                .unwrap_or_else(|| panic!("{} links to {path}, which is not a page", entry.path));
-            let fragment = percent_decoded(fragment);
-            assert!(
-                anchors.contains(&fragment),
-                "{} links to {path}#{fragment} and that page has no such heading",
-                entry.path
-            );
-            checked += 1;
+            links += 1;
+            let anchors = ids.get(&target).unwrap_or_else(|| {
+                panic!(
+                    "{} links to “{}”, which resolves to “{target}” — no such page",
+                    entry.path,
+                    &rest[..end]
+                )
+            });
+            if !fragment.is_empty() {
+                anchored_links += 1;
+                assert!(
+                    anchors.contains(&fragment),
+                    "{} links to {target}#{fragment} and that page has no such heading",
+                    entry.path
+                );
+            }
         }
     }
     assert!(
-        checked >= 3,
-        "the front page's steps link into the manuals by anchor; only {checked} such links were \
-         found, so this test is no longer checking what it was written for"
+        links >= 140,
+        "only {links} internal links were resolved; the navigation alone should give twelve per \
+         page, so this test is no longer seeing the site it was written for"
     );
+    assert!(
+        anchored_links >= 3,
+        "the front page's steps link into the manuals by anchor; only {anchored_links} such links \
+         were found, so this test is no longer checking what it was written for"
+    );
+}
+
+/// No page asks for a path from the site's root, because it may not have one.
+///
+/// The invariant behind the test above, stated directly so a regression names
+/// itself rather than showing up as a resolution failure somewhere else: the
+/// site has to work wherever it is mounted — under `/PrismDMX/` on a GitHub
+/// project page, at the apex of `prismdmx.de`, in a subdirectory of a
+/// self-hosted server, or from a `file://` URL on a machine with no network.
+/// One `href="/…"` is enough to break all but the second of those.
+#[test]
+fn no_page_links_to_a_path_from_the_site_root() {
+    let scratch = built("portable");
+    for entry in &PAGES {
+        let html = page(&scratch, entry.path);
+        if let Some(at) = html.find("href=\"/") {
+            let rest = &html[at + 6..];
+            let end = rest.find('"').unwrap_or(rest.len());
+            panic!(
+                "{} links to “{}” — a path from the site root, which is only correct when the \
+                 site happens to be mounted at one",
+                entry.path,
+                &rest[..end]
+            );
+        }
+    }
 }
 
 /// The table of contents of the operator's manual, by name.
@@ -538,7 +619,21 @@ fn the_front_page_still_says_how_to_get_to_a_running_desk() {
             "the front page no longer says “{step}”"
         );
     }
-    assert!(html.contains("href=\"/download/\""));
+    // And the first step still goes to the download page — checked by resolving
+    // the link rather than by matching the string, because the string is now
+    // relative to wherever the site is mounted and the destination is not.
+    let goes_to_download = html
+        .match_indices("href=\"")
+        .filter_map(|(at, _)| {
+            let rest = &html[at + 6..];
+            let end = rest.find('"')?;
+            resolve("", &rest[..end])
+        })
+        .any(|(target, _)| target == "download");
+    assert!(
+        goes_to_download,
+        "the front page's first step no longer links to the download page"
+    );
 }
 
 /// The domain is written by the generator, so it is one constant in one place.
