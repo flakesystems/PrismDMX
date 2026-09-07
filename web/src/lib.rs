@@ -288,11 +288,7 @@ pub const PAGES: [Page; 8] = [
         de: Variant {
             path: "handbuch/entwickler",
             title: "Handbuch für Entwickler",
-            source: Source::Borrowed {
-                file: "docs/manual/developer.en.md",
-                lang: "en",
-                why: Borrowed::NotYet,
-            },
+            source: Source::Own("docs/manual/developer.de.md"),
         },
     },
     Page {
@@ -310,19 +306,20 @@ pub const PAGES: [Page; 8] = [
     },
     Page {
         id: "changelog",
+        // The one document whose German version has no language suffix:
+        // `CHANGELOG.md` is a root file with a conventional name that GitHub
+        // shows and that two tests already read, and renaming it to satisfy a
+        // naming rule would cost more than the rule is worth. The English one
+        // sits in `docs/` with its suffix, like everything else.
         en: Variant {
             path: "changelog",
             title: "Changelog",
-            source: Source::Own("CHANGELOG.md"),
+            source: Source::Own("docs/CHANGELOG.en.md"),
         },
         de: Variant {
             path: "aenderungen",
             title: "Änderungen",
-            source: Source::Borrowed {
-                file: "CHANGELOG.md",
-                lang: "en",
-                why: Borrowed::NotYet,
-            },
+            source: Source::Own("CHANGELOG.md"),
         },
     },
     Page {

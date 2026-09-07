@@ -426,7 +426,12 @@ fn every_readme_names_the_crate_it_belongs_to() {
 #[test]
 fn every_manual_says_which_version_it_describes() {
     let version = env!("CARGO_PKG_VERSION");
-    for manual in ["operator.de.md", "installer.de.md", "developer.en.md"] {
+    for manual in [
+        "operator.de.md",
+        "installer.de.md",
+        "developer.en.md",
+        "developer.de.md",
+    ] {
         let path = root().join("docs/manual").join(manual);
         let text = read(&path);
         assert!(
@@ -516,4 +521,35 @@ fn the_sites_command_line_page_names_every_word_the_desk_knows() {
             CONSOLE_WORDS.len()
         );
     }
+}
+
+/// Both changelogs list exactly the same versions.
+///
+/// The chapter-count test in `web/tests/site.rs` would catch a version added to
+/// one language and not the other, but only by number — this says *which*, which
+/// is the sentence somebody actually needs when it fails. It is also the one
+/// piece of a changelog that is genuinely mechanical: the prose is written for
+/// readers and cannot be checked, the set of versions cannot be argued with.
+#[test]
+fn both_changelogs_list_the_same_versions() {
+    let versions = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter_map(|line| line.strip_prefix("## "))
+            .filter_map(|heading| heading.split_whitespace().next())
+            .filter(|word| word.chars().next().is_some_and(|c| c.is_ascii_digit()))
+            .map(str::to_owned)
+            .collect()
+    };
+    let german = versions(&read(&root().join("CHANGELOG.md")));
+    let english = versions(&read(&root().join("docs/CHANGELOG.en.md")));
+    assert!(
+        !german.is_empty(),
+        "CHANGELOG.md lists no version at all, which is more likely a fault in this test than in \
+         the file"
+    );
+    assert_eq!(
+        german, english,
+        "the two changelogs do not list the same versions — a release was written up in one \
+         language and not the other"
+    );
 }

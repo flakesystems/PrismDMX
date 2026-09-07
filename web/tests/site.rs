@@ -472,8 +472,6 @@ fn the_number_of_untranslated_pages_is_written_down() {
         vec![
             "en/manual/operator".to_owned(),
             "en/manual/installer".to_owned(),
-            "de/handbuch/entwickler".to_owned(),
-            "de/aenderungen".to_owned(),
         ],
         "the set of pages waiting for a translation has changed — if one was translated, take it \\
          out of this list; if one was added, put it in and say why in the commit"
