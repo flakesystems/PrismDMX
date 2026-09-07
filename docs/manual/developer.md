@@ -420,7 +420,7 @@ cd ui && npx tsc -b --force
 own, so `--noEmit` on it checks nothing at all. `--force` because a cached build
 info file would let a stale error through.
 
-CI runs seven jobs, and each is there for a reason worth knowing:
+CI runs nine jobs, and each is there for a reason worth knowing:
 
 | Job | What it is for |
 |---|---|
@@ -431,6 +431,8 @@ CI runs seven jobs, and each is there for a reason worth knowing:
 | **UI — typecheck, lint, test, build** | With the bindings regenerated from Rust first, so a stale binding cannot pass |
 | **UI — end-to-end against a daemon** | A real `prismd`, a real Chromium, and a daemon the spec *kills* under the browser |
 | **Web — the documentation site** | A site that only builds on one machine is the same problem as an installer that does |
+| **Web — the front page** | The same argument for `site/`. It is a job of its own rather than a step in the one above because the two crates promise opposite things — the documentation site is asserted to carry **no** script, and the front page carries one on purpose |
+| **Web — the deployment container** | `deploy/` is the self-hosted path, and an image that only ever builds on the machine it is deployed to is the third shape of the same problem. It also asks the one question the two vhosts exist for: does the same port tell `prismdmx.de` and `docs.prismdmx.de` apart, and does an unknown host get neither |
 
 The doc gate is worth a note: `cargo doc` is run with warnings denied, so a
 broken intra-doc link fails the build. The crate documentation is a large part

@@ -225,8 +225,11 @@ jobs:
       # attached above. It is uploaded here rather than deployed here because
       # deploying needs permissions this job should not have - the job below
       # has them and nothing else.
+      # `docs-site/` and not `site/`: since S55 a crate of that name lives one
+      # directory up, and a generator writing into it would attach and publish
+      # `prism-site`'s sources beside the manuals. See `ci.yml`'s `web` job.
       - name: Build the site with this release's checksum
-        run: cargo run -p prism-web -- --out site --installer "${{ steps.installer.outputs.path }}"
+        run: cargo run -p prism-web -- --out docs-site --installer "${{ steps.installer.outputs.path }}"
 
       # A plain artefact, not a Pages one. `upload-pages-artifact` builds a tar
       # the Pages service expects and is a Linux action; this job is on Windows
@@ -235,7 +238,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: prismdmx-site
-          path: site
+          path: docs-site
           retention-days: 14
 
   # A job of its own for two reasons. `contents: write` and `pages: write` are
@@ -261,10 +264,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: prismdmx-site
-          path: site
+          path: docs-site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs-site
       - id: deployment
         uses: actions/deploy-pages@v4

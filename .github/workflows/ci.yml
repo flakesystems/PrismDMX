@@ -422,30 +422,127 @@ jobs:
       # from the file a release built, and this run has built no file. A page
       # that printed a number nobody derived would be the thing generating the
       # site was meant to prevent. `release.yml` is where the flag is passed.
+      # **Into `docs-site/`, and the name is the fix rather than a preference.**
+      # This was `site/` until S55, when a crate of that name arrived one
+      # directory up: the generator then wrote its pages *into the source tree
+      # of `prism-site`*, and the check below — which greps the output for a
+      # `<script>` — found the front page's own and failed. It would have been
+      # worse where it did not fail: `pages.yml` and `release.yml` would have
+      # published a crate's sources beside the manuals.
+      #
+      # An output directory named after nothing in the repository is what stops
+      # that from happening again.
       - name: Build the site
-        run: cargo run -p prism-web -- --out site
+        run: cargo run -p prism-web -- --out docs-site
 
       # Not "did it exit zero" but "is the site the site". The generator's own
       # suite asserts the content; this asserts that a run in a clean checkout
       # produced the files a deployment would serve.
       - name: What was produced
         run: |
-          test -f site/index.html
-          test -f site/download/index.html
-          test -f site/handbuch/operator/index.html
-          test -f site/handbuch/installateur/index.html
-          test -f site/handbuch/entwickler/index.html
-          test -f site/aenderungen/index.html
-          test -f site/CNAME
-          if grep -rqi '<script' site; then
+          test -f docs-site/index.html
+          test -f docs-site/download/index.html
+          test -f docs-site/handbuch/operator/index.html
+          test -f docs-site/handbuch/installateur/index.html
+          test -f docs-site/handbuch/entwickler/index.html
+          test -f docs-site/aenderungen/index.html
+          test -f docs-site/CNAME
+          if grep -rqi '<script' docs-site; then
             echo "::error::the site has JavaScript on it and is supposed to have none"
             exit 1
           fi
-          du -sh site
-          find site -name index.html | sort
+          du -sh docs-site
+          find docs-site -name index.html | sort
 
       - uses: actions/upload-artifact@v4
         with:
           name: prismdmx-site
-          path: site
+          path: docs-site
           retention-days: 7
+
+  site:
+    name: Web - the front page
+    runs-on: ubuntu-latest
+    # One page and three files it carries. The whole job is a `cargo build` of a
+    # crate with no dependencies and a run of it.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # S55, and it is here for the same reason the `web` job above is: **a site
+      # that only builds on one person's machine is the same problem as an
+      # installer that only builds on one person's machine.**
+      #
+      # It is a *second* job rather than a second step in that one because the
+      # two crates make opposite promises and a shared job would blur them. The
+      # documentation site is asserted to have **no** script on it; this one has
+      # one on purpose. Two jobs say which is which in their names.
+      - name: Build the front page
+        run: cargo run -p prism-site -- --out front
+
+      # Not "did it exit zero" but "is the page the page". The crate's own suite
+      # asserts what is written; this asserts that a run in a clean checkout
+      # produced the files a deployment would serve, and that the one failure a
+      # template makes silently did not happen.
+      - name: What was produced
+        run: |
+          test -f front/index.html
+          test -f front/site.css
+          test -f front/site.js
+          test -f front/logo.png
+          test -f front/favicon.ico
+          # The mark on the page is the one the desk wears, not a redrawing of
+          # it. The crate's suite compares the bytes; this says the file that
+          # was actually served is the one it compared.
+          cmp front/favicon.ico ui/public/favicon.ico
+          if grep -rq '{{' front/index.html; then
+            echo "::error::a placeholder is still on the page"
+            exit 1
+          fi
+          if ! grep -q "$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" front/index.html; then
+            echo "::error::the page does not name the version this build is"
+            exit 1
+          fi
+          du -sh front
+          wc -c front/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prismdmx-front
+          path: front
+          retention-days: 7
+
+  # The container both sites are served from, built the way the server builds
+  # it. `deploy/` is the self-hosted path, and an image that only ever builds on
+  # the machine it is deployed to is the third shape of the same problem the two
+  # jobs above exist for. Nothing is pushed anywhere: the server pulls and
+  # builds for itself, because SSH into it is VPN-only.
+  container:
+    name: Web - the deployment container
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the image
+        run: docker build -f deploy/Dockerfile -t prismdmx-web:ci .
+
+      # A configuration that parses is not a configuration that answers. What is
+      # asserted is the one thing the two vhosts are for: the same port tells
+      # the two sites apart by the `Host` header, and an unknown host gets
+      # neither of them.
+      - name: Does it serve both names
+        run: |
+          docker run -d --name prismdmx-ci -p 127.0.0.1:8080:80 prismdmx-web:ci
+          for _ in $(seq 30); do
+            curl -sf -o /dev/null -H 'Host: prismdmx.de' http://127.0.0.1:8080/ && break
+            sleep 1
+          done
+          front=$(curl -s -H 'Host: prismdmx.de'      http://127.0.0.1:8080/)
+          docs=$( curl -s -H 'Host: docs.prismdmx.de' http://127.0.0.1:8080/)
+          echo "$front" | grep -q 'Lichtpult'             || { echo '::error::prismdmx.de did not serve the front page'; exit 1; }
+          echo "$docs" | grep -q 'Handbuch'             || { echo '::error::docs.prismdmx.de did not serve the manuals'; exit 1; }
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: example.invalid' http://127.0.0.1:8080/)" = 404             || { echo '::error::an unknown host was served a page'; exit 1; }
+          docker rm -f prismdmx-ci

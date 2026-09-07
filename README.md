@@ -9,8 +9,9 @@ program: install it, start it, and the show runs — with or without a window op
 > [Being a beta tester](#being-a-beta-tester) before you put it on a show that
 > matters.
 
-**The manuals are at [prismdmx.de](https://prismdmx.de)**, and in this
-repository under [`docs/manual/`](docs/manual/):
+**The project is at [prismdmx.de](https://prismdmx.de)** and **the manuals are
+at [docs.prismdmx.de](https://docs.prismdmx.de)**, and in this repository under
+[`docs/manual/`](docs/manual/):
 
 | | |
 |---|---|
@@ -414,7 +415,9 @@ laptop with nothing plugged in.
 | `crates/prism-ipc`, `crates/prismd` | The protocol, and the daemon |
 | `crates/prism-app` | This shell |
 | `ui/` | The interface |
-| `web/` | The generator for [prismdmx.de](https://prismdmx.de), which renders the manuals out of this repository |
+| `web/` | The generator for [docs.prismdmx.de](https://docs.prismdmx.de), which renders the manuals out of this repository |
+| `site/` | The generator for [prismdmx.de](https://prismdmx.de), the front page |
+| `deploy/` | The container both of those are served from |
 | `docs/manual/` | The three manuals |
 | `ARCHITECTURE_SPEC.md` | Why it is built this way |
 | `docs/IPC_PROTOCOL.md` | What travels between the two halves |

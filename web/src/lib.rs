@@ -1,4 +1,5 @@
-//! **prismdmx.de, generated out of this repository** — S42.
+//! **docs.prismdmx.de, generated out of this repository** — S42, moved to the
+//! `docs.` label in S55 when `prism-site` took the apex.
 //!
 //! # Why the site is built here rather than anywhere else
 //!
@@ -64,7 +65,16 @@ pub const RELEASES: &str = "https://github.com/flakesystems/PrismDMX/releases";
 pub const REPOSITORY: &str = "https://github.com/flakesystems/PrismDMX";
 
 /// The domain this site is served from.
-pub const DOMAIN: &str = "prismdmx.de";
+///
+/// **`docs.` since S55**, and the move is what made room for a front page.
+/// Until then this site *was* prismdmx.de, because it was the only site there
+/// was — and its first page is a list of manuals, which answers *where does it
+/// say* for somebody who already knows what this is. A stranger's first
+/// question is *what is this*, and `prism-site` is the crate that answers it.
+/// The apex is that one's now; the manuals moved one label to the left and lost
+/// nothing, because every URL on this site is relative and it is served from
+/// wherever it is mounted.
+pub const DOMAIN: &str = "docs.prismdmx.de";
 
 /// The style sheet, inlined into every page.
 const STYLE: &str = include_str!("../assets/site.css");
@@ -239,7 +249,7 @@ where
 #[must_use]
 pub fn usage() -> String {
     format!(
-        "prism-web — renders prismdmx.de out of this repository.\n\n\
+        "prism-web — renders docs.prismdmx.de out of this repository.\n\n\
          Usage: prism-web [OPTIONS]\n\n\
          Options:\n\
          \x20 --out <DIR>        where to write the site (default: web/dist)\n\
@@ -597,7 +607,7 @@ fn depth(path: &str) -> usize {
 /// the site moves — which for this project is a certainty, because the domain is
 /// coming and a self-hosted server is being kept in reserve. Relative URLs have
 /// nothing to match: the same output is correct at `/PrismDMX/`, at the apex of
-/// `prismdmx.de`, in a subdirectory of any web server, and from a `file://` URL
+/// `docs.prismdmx.de`, in a subdirectory of any web server, and from a `file://` URL
 /// on a machine with no network at all — which is the one that matters for a
 /// venue reading a manual off a stick.
 ///
