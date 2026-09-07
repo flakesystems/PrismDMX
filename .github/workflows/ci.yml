@@ -422,32 +422,42 @@ jobs:
       # from the file a release built, and this run has built no file. A page
       # that printed a number nobody derived would be the thing generating the
       # site was meant to prevent. `release.yml` is where the flag is passed.
+      # **Into `docs-site/`, and the name is the fix rather than a preference.**
+      # This was `site/` until S55, when a crate of that name arrived one
+      # directory up: the generator then wrote its pages *into the source tree
+      # of `prism-site`*, and the check below — which greps the output for a
+      # `<script>` — found the front page's own and failed. It would have been
+      # worse where it did not fail: `pages.yml` and `release.yml` would have
+      # published a crate's sources beside the manuals.
+      #
+      # An output directory named after nothing in the repository is what stops
+      # that from happening again.
       - name: Build the site
-        run: cargo run -p prism-web -- --out site
+        run: cargo run -p prism-web -- --out docs-site
 
       # Not "did it exit zero" but "is the site the site". The generator's own
       # suite asserts the content; this asserts that a run in a clean checkout
       # produced the files a deployment would serve.
       - name: What was produced
         run: |
-          test -f site/index.html
-          test -f site/download/index.html
-          test -f site/handbuch/operator/index.html
-          test -f site/handbuch/installateur/index.html
-          test -f site/handbuch/entwickler/index.html
-          test -f site/aenderungen/index.html
-          test -f site/CNAME
-          if grep -rqi '<script' site; then
+          test -f docs-site/index.html
+          test -f docs-site/download/index.html
+          test -f docs-site/handbuch/operator/index.html
+          test -f docs-site/handbuch/installateur/index.html
+          test -f docs-site/handbuch/entwickler/index.html
+          test -f docs-site/aenderungen/index.html
+          test -f docs-site/CNAME
+          if grep -rqi '<script' docs-site; then
             echo "::error::the site has JavaScript on it and is supposed to have none"
             exit 1
           fi
-          du -sh site
-          find site -name index.html | sort
+          du -sh docs-site
+          find docs-site -name index.html | sort
 
       - uses: actions/upload-artifact@v4
         with:
           name: prismdmx-site
-          path: site
+          path: docs-site
           retention-days: 7
 
   site:

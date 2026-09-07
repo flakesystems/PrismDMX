@@ -78,3 +78,10 @@ ui/.playwright/
 # generating a site from this repository (S42, S55).
 web/dist/
 site/dist/
+
+# The output directory names CI builds into. They are not `site/` — that is a
+# crate now, and a generator writing into it was S55's first red check: the
+# pages landed in `prism-site`'s source tree and the *no JavaScript* grep found
+# the front page's own script. `ci.yml`'s `web` job carries the reasoning.
+docs-site/
+front/

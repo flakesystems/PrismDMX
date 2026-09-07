@@ -74,14 +74,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
+      # `docs-site/` and not `site/`: since S55 a crate of that name lives one
+      # directory up, and a generator writing into it would put `prism-site`'s
+      # sources on the deployed page. See `ci.yml`'s `web` job.
       - name: Build the site
-        run: cargo run -p prism-web -- --out site
+        run: cargo run -p prism-web -- --out docs-site
 
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: docs-site
 
       - id: deployment
         uses: actions/deploy-pages@v4
