@@ -413,9 +413,9 @@ Store Cue 5                     in Cue 5 der ausgewählten Sequenz
 Store Sequence 5 Cue 3          in eine Cue einer benannten Liste
 Store Sequence 4                in Cue-Liste 4 — und legt sie an, wenn die Nummer frei ist
 Store Preset 1                  in Preset 1, in der Bank, die die Encoder gerade zeigen
-Store Preset 1 Color            in einen **benannten** Pool
+Store Preset 1 Color            in einen benannten Pool
 Store Preset 1 Multi "Der Look"  alles, was der Programmer hält, über die Bänke hinweg
-Store Group 3 "Frontlicht"      die **Auswahl** als Gruppe 3
+Store Group 3 "Frontlicht"      die Auswahl als Gruppe 3
 Store View 2 "Programmieren"    die Leinwand als View 2
 ```
 
@@ -486,7 +486,7 @@ Assign Executor 1 Fader Master     Empty · Master · Speed · XFade · Fade
 Assign Executor 1 Encoder Speed    Empty · Master · Speed
 Assign Executor 1 Button 2 Go+     Empty · Go+ · Go- · LearnSpeed · Off · On ·
                                    Flash · Toggle — die vier Tasten sind
-                                   **von eins** durchnummeriert
+                                   von eins durchnummeriert
 Assign Executor 1 Button 4 Command "Go+ Sequence 3"
 ```
 

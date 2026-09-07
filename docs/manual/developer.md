@@ -402,13 +402,23 @@ at once makes browser tests fail on timeouts that pass on their own.
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
-cargo doc --workspace --no-deps          # with RUSTDOCFLAGS="-D warnings"
-npx --prefix ui tsc -b --force
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 npm --prefix ui run lint
 npm --prefix ui run test
 npm --prefix ui run build
 npm --prefix ui run e2e
 ```
+
+and the typecheck, which has to be run **from `ui/`** because `tsc -b` resolves
+its solution file relative to the working directory:
+
+```bash
+cd ui && npx tsc -b --force
+```
+
+`-b`, not `--noEmit`: `ui/tsconfig.json` is a solution file with no files of its
+own, so `--noEmit` on it checks nothing at all. `--force` because a cached build
+info file would let a stale error through.
 
 CI runs seven jobs, and each is there for a reason worth knowing:
 
