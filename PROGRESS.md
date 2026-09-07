@@ -4127,9 +4127,9 @@ Markdown and is not part of the desk. No file under `ui/src` was opened at all.
 | **The operator's manual covers every `WindowType`** | ✅ **fourteen of fourteen**, twice over: a generated row in the window table, and a `###` section of its own. `the_window_chapter_is_every_window_type_there_is` and `every_window_type_has_a_section_in_the_operators_manual` |
 | **…and every word of the console line** | ✅ **twenty-nine of twenty-nine**, generated from `prism_core::console::CONSOLE_WORDS`. `VERB_WORDS` has twenty-one and differs from it by exactly one entry — `goback`, the token the tokeniser rewrites `go-` to — which is asserted as *the one exception* rather than assumed, so a verb that entered the grammar without entering the completion table would go red here as well as in the parser's own suite |
 | **…and the test **generates** the chapter rather than checking a mention** | ✅ the stronger of the two options S41 was given, and the reason is that the weaker one passes for a manual that names a window in a footnote. Each list lives between markers; the test rebuilds the block from the code, **keeps the prose already written against each row**, inserts `TODO` for a row that is new, and — when the result differs — *writes the file* and fails. So the next `cargo test` shows a diff in `git status` rather than a sentence in a log, and it fails a second time while a `TODO` is left. It is `export_bindings`' idea with the output committed, because a manual is read by people who do not run `cargo test` |
-| **Every 🔌 and 🪟 procedure has a form somebody without this repository can follow** | ✅ `docs/manual/installer.md` §11 — *Abnahme: was Sie prüfen, bevor Sie gehen* — is `ARCHITECTURE_SPEC.md` §14's 🪟 row as eleven numbered steps in the order an installer would do them anyway; §5 is the Art-Net and sACN rows met from the venue's end, §6 the Open DMX serial row, §7 and §10 the two MIDI rows. §14 now says so and keeps its own recipes, which name the functions and the tests. **A row is closed by whichever of the two somebody actually followed** |
+| **Every 🔌 and 🪟 procedure has a form somebody without this repository can follow** | ✅ `docs/manual/installer.de.md` §11 — *Abnahme: was Sie prüfen, bevor Sie gehen* — is `ARCHITECTURE_SPEC.md` §14's 🪟 row as eleven numbered steps in the order an installer would do them anyway; §5 is the Art-Net and sACN rows met from the venue's end, §6 the Open DMX serial row, §7 and §10 the two MIDI rows. §14 now says so and keeps its own recipes, which name the functions and the tests. **A row is closed by whichever of the two somebody actually followed** |
 | **The site builds from this repository** | ✅ `prism-web`, a workspace member, and it holds **no content**: every page is a Markdown file this repository already keeps beside the code, read at run time. There is nothing to drift, because there is no copy. A missing source stops the build rather than leaving a hole in the navigation, asserted |
-| **The manuals are S41's source and not a copy of it** | ✅ `a_manual_is_rendered_from_the_file_in_docs` asserts sentences that exist in `docs/manual/operator.md` and nowhere in the generator |
+| **The manuals are S41's source and not a copy of it** | ✅ `a_manual_is_rendered_from_the_file_in_docs` asserts sentences that exist in `docs/manual/operator.de.md` and nowhere in the generator |
 | **Readable without JavaScript** | ✅ `no_page_has_any_javascript_on_it` over every page, for `<script`, `javascript:`, `onclick=` and `onload=`. The style sheet is inlined, so a page is one request; there is no font, no analytics and no CDN |
 | **Every page says which version it documents** | ✅ `every_page_says_which_version_it_documents`, and the number is `env!("CARGO_PKG_VERSION")` — the workspace's, the same one `prismd --version` prints — rather than a string in a template. The three manuals say it in their own front matter as well, checked separately, so a reader on GitHub gets it too |
 | **…and every page carries the language of its own source** | ✅ two German manuals and an English one, each with its own `lang`, asserted per page |
@@ -5310,7 +5310,7 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 **A manual that nothing checks is a manual that goes stale, so two of its
 chapters are generated.** *(S41)* The list of window types and the list of
 console words are in the code and change without anybody opening a manual. They
-are now written into `docs/manual/operator.md` between markers by
+are now written into `docs/manual/operator.de.md` between markers by
 `crates/prism-core/tests/documentation.rs`, which keeps the prose already written
 against each row, inserts `TODO` for a row that is new, **rewrites the file** and
 fails. The choice was between that and *check every variant appears somewhere*,
@@ -7634,7 +7634,7 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 5.  PROGRESS.md §2.51             — was S41/S42 gebaut haben, und §7 mit allen
                                     „Carried out of"-Listen: die Regeln, die aus
                                     Fehlern entstanden sind
-6.  docs/manual/developer.md      — **das kürzeste, was es über dieses Projekt
+6.  docs/manual/developer.en.md      — **das kürzeste, was es über dieses Projekt
                                     gibt**: die Architektur, wie sie geworden
                                     ist, die destillierten Regeln, und vier
                                     Rezepte — ein Kommando, ein Fenstertyp, ein
@@ -7662,7 +7662,7 @@ Anforderung, vollständig und ohne Ausnahme.**
   zu sein.
 - **Ein neuer `WindowType` oder ein neues Konsolenwort schreibt das Handbuch
   um.** `crates/prism-core/tests/documentation.rs` erzeugt zwei Kapitel von
-  `docs/manual/operator.md` aus dem Code: es behält die vorhandene Prosa, setzt
+  `docs/manual/operator.de.md` aus dem Code: es behält die vorhandene Prosa, setzt
   `TODO` für eine neue Zeile, **schreibt die Datei** und geht rot. Das ist
   Absicht — die Prosa für die neue Zeile schreiben und committen.
 - **Jedes Workspace-Mitglied braucht ein `README.md`** mit den drei Abschnitten,

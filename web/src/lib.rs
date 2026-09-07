@@ -1,4 +1,4 @@
-//! **prismdmx.de, generated out of this repository** — S42.
+//! **docs.prismdmx.de, generated out of this repository** — S42.
 //!
 //! # Why the site is built here rather than anywhere else
 //!
@@ -64,7 +64,14 @@ pub const RELEASES: &str = "https://github.com/flakesystems/PrismDMX/releases";
 pub const REPOSITORY: &str = "https://github.com/flakesystems/PrismDMX";
 
 /// The domain this site is served from.
-pub const DOMAIN: &str = "prismdmx.de";
+///
+/// **A subdomain rather than the apex**, because the apex belongs to the
+/// promotion site, which is a different job on different hosting: this one is
+/// generated out of the repository and follows the code, that one is designed
+/// and follows a release. Keeping them apart means neither has to be a
+/// compromise, and a subdomain is also the easier DNS — a plain `CNAME` record,
+/// where an apex needs `ALIAS`, `ANAME` or Pages' four `A` records.
+pub const DOMAIN: &str = "docs.prismdmx.de";
 
 /// The style sheet, inlined into every page.
 const STYLE: &str = include_str!("../assets/site.css");
@@ -73,98 +80,263 @@ const STYLE: &str = include_str!("../assets/site.css");
 /* What a page is                                                             */
 /* -------------------------------------------------------------------------- */
 
-/// One page of the site.
-pub struct Page {
-    /// Where it is written, relative to the output directory, without
-    /// `index.html`. The empty string is the front page.
+/// A language the site is published in.
+pub struct Language {
+    /// The ISO code, which is both the URL prefix and the `lang` attribute.
+    pub code: &'static str,
+    /// What the switcher calls it — in that language, because the person who
+    /// wants it cannot necessarily read the other one.
+    pub name: &'static str,
+    /// The line a page shows when its text is not in this language yet.
+    pub borrowed_not_yet: &'static str,
+    /// What the switcher's link is labelled for screen readers.
+    pub switch_label: &'static str,
+}
+
+/// The two languages, **English first because it is the default**.
+///
+/// The order is the order of the switcher and of `hreflang`, and the first entry
+/// is what the site's root redirects to.
+pub const LANGUAGES: [Language; 2] = [
+    Language {
+        code: "en",
+        name: "English",
+        borrowed_not_yet: "This page is not translated yet — you are reading the German original.",
+        switch_label: "Read this page in English",
+    },
+    Language {
+        code: "de",
+        name: "Deutsch",
+        borrowed_not_yet: "Diese Seite ist noch nicht übersetzt — Sie lesen das englische Original.",
+        switch_label: "Diese Seite auf Deutsch lesen",
+    },
+];
+
+/// Why a page's text is not in the language of the page.
+///
+/// One case only, deliberately: **everything this site publishes is meant to
+/// exist in both languages.** The documents that are English on purpose — the
+/// architecture, the IPC protocol, the X-Touch mapping, the DMX merge — are
+/// internal to the repository and are not published here at all, so the site
+/// never has to explain a language it chose to keep. What is left is a gap that
+/// is going to be filled.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Borrowed {
+    /// No translation exists **yet**.
+    ///
+    /// The page is still published, still in the navigation and still says which
+    /// language it is actually in — because a reader who hits a missing page
+    /// learns nothing, and a reader who silently gets the other language learns
+    /// something false. A test counts these, so the number is visible and can
+    /// only be argued down.
+    NotYet,
+}
+
+/// Where one language's version of a page gets its text.
+#[derive(Clone, Copy)]
+pub enum Source {
+    /// Rendered from this Markdown file, which is written in this language.
+    Own(&'static str),
+    /// Composed by this crate, in this language.
+    Composed,
+    /// Written in another language, for the reason given.
+    Borrowed {
+        /// The file to render.
+        file: &'static str,
+        /// The language it is actually in.
+        lang: &'static str,
+        /// Why.
+        why: Borrowed,
+    },
+}
+
+/// One language's version of a page.
+pub struct Variant {
+    /// The path **under the language prefix**, without `index.html`. The empty
+    /// string is that language's index page.
     pub path: &'static str,
-    /// What the browser tab and the navigation call it.
+    /// What the tab and the navigation call it.
     pub title: &'static str,
-    /// `de` or `en` — the language of the **source**, not of the site.
-    pub lang: &'static str,
-    /// The Markdown file it is rendered from, relative to the repository root,
-    /// or `None` for a page this crate composes.
-    pub source: Option<&'static str>,
+    /// Where the text comes from.
+    pub source: Source,
+}
+
+/// One page of the site, in every language it is published in.
+///
+/// A page is one thing with two texts rather than two pages that happen to be
+/// about the same subject: that is what lets the switcher say *this page, in the
+/// other language* instead of dropping the reader on a front page, and what lets
+/// a test hold the two versions against each other.
+pub struct Page {
+    /// A stable name for the page, independent of language and of URL.
+    ///
+    /// Nothing outside the crate is built from it and no reader ever sees it; it
+    /// exists so that a German path can be renamed without a test losing track
+    /// of which English page it is the counterpart of.
+    pub id: &'static str,
+    /// The English version.
+    pub en: Variant,
+    /// The German version.
+    pub de: Variant,
+}
+
+impl Page {
+    /// This page in one language.
+    ///
+    /// # Panics
+    ///
+    /// On a language code the site does not publish, which is a programming
+    /// error rather than input: `LANGUAGES` is the only source of codes.
+    #[must_use]
+    pub fn variant(&self, lang: &str) -> &Variant {
+        match lang {
+            "en" => &self.en,
+            "de" => &self.de,
+            other => panic!("the site does not publish {other}"),
+        }
+    }
+
+    /// This page's full path in one language, language prefix included.
+    #[must_use]
+    pub fn located(&self, lang: &str) -> String {
+        let path = self.variant(lang).path;
+        if path.is_empty() {
+            lang.to_owned()
+        } else {
+            format!("{lang}/{path}")
+        }
+    }
 }
 
 /// The navigation, which is the same on every page and is the site's own map.
 ///
-/// Ordered the way somebody arrives: what it is, then how to get it, then what
-/// to do with it, then what changed, then the references. A reader who does not
-/// know what they want should be able to get to a running desk by going down
-/// this list.
-pub const PAGES: [Page; 12] = [
+/// Ordered the way somebody arrives: what this is, then how to get it, then what
+/// to do with it, then what changed, then the references and what is broken.
+///
+/// **The paths differ per language on purpose.** `/de/handbuch/operator/` and
+/// `/en/manual/operator/` are the same page, and a German reader should not have
+/// to read an English noun to find it. The `id` is what ties them together, so
+/// the switcher and the tests never have to guess.
+pub const PAGES: [Page; 8] = [
     Page {
-        path: "",
-        title: "PrismDMX",
-        lang: "de",
-        source: None,
+        id: "index",
+        en: Variant {
+            path: "",
+            title: "Documentation",
+            source: Source::Composed,
+        },
+        de: Variant {
+            path: "",
+            title: "Dokumentation",
+            source: Source::Composed,
+        },
     },
     Page {
-        path: "download",
-        title: "Herunterladen",
-        lang: "de",
-        source: None,
+        id: "download",
+        en: Variant {
+            path: "download",
+            title: "Download",
+            source: Source::Composed,
+        },
+        de: Variant {
+            path: "download",
+            title: "Herunterladen",
+            source: Source::Composed,
+        },
     },
     Page {
-        path: "handbuch/operator",
-        title: "Handbuch für den Operator",
-        lang: "de",
-        source: Some("docs/manual/operator.md"),
+        id: "manual-operator",
+        en: Variant {
+            path: "manual/operator",
+            title: "Operator's manual",
+            source: Source::Borrowed {
+                file: "docs/manual/operator.de.md",
+                lang: "de",
+                why: Borrowed::NotYet,
+            },
+        },
+        de: Variant {
+            path: "handbuch/operator",
+            title: "Handbuch für den Operator",
+            source: Source::Own("docs/manual/operator.de.md"),
+        },
     },
     Page {
-        path: "handbuch/installateur",
-        title: "Handbuch für den Installateur",
-        lang: "de",
-        source: Some("docs/manual/installer.md"),
+        id: "manual-installer",
+        en: Variant {
+            path: "manual/installer",
+            title: "Installer's manual",
+            source: Source::Borrowed {
+                file: "docs/manual/installer.de.md",
+                lang: "de",
+                why: Borrowed::NotYet,
+            },
+        },
+        de: Variant {
+            path: "handbuch/installateur",
+            title: "Handbuch für den Installateur",
+            source: Source::Own("docs/manual/installer.de.md"),
+        },
     },
     Page {
-        path: "handbuch/entwickler",
-        title: "Developer's manual",
-        lang: "en",
-        source: Some("docs/manual/developer.md"),
+        id: "manual-developer",
+        en: Variant {
+            path: "manual/developer",
+            title: "Developer's manual",
+            source: Source::Own("docs/manual/developer.en.md"),
+        },
+        de: Variant {
+            path: "handbuch/entwickler",
+            title: "Handbuch für Entwickler",
+            source: Source::Borrowed {
+                file: "docs/manual/developer.en.md",
+                lang: "en",
+                why: Borrowed::NotYet,
+            },
+        },
     },
     Page {
-        path: "aenderungen",
-        title: "Änderungen",
-        lang: "de",
-        source: Some("CHANGELOG.md"),
+        id: "command-line",
+        en: Variant {
+            path: "command-line",
+            title: "The command line",
+            source: Source::Own("docs/site/command-line.en.md"),
+        },
+        de: Variant {
+            path: "kommandozeile",
+            title: "Die Kommandozeile",
+            source: Source::Own("docs/site/command-line.de.md"),
+        },
     },
     Page {
-        path: "referenz/kommandozeile",
-        title: "Referenz: die Kommandozeile",
-        lang: "en",
-        source: Some("docs/COMMAND_LINE.md"),
+        id: "changelog",
+        en: Variant {
+            path: "changelog",
+            title: "Changelog",
+            source: Source::Own("CHANGELOG.md"),
+        },
+        de: Variant {
+            path: "aenderungen",
+            title: "Änderungen",
+            source: Source::Borrowed {
+                file: "CHANGELOG.md",
+                lang: "en",
+                why: Borrowed::NotYet,
+            },
+        },
     },
     Page {
-        path: "referenz/dmx-merge",
-        title: "Referenz: der DMX-Merge",
-        lang: "en",
-        source: Some("docs/DMX_MERGE.md"),
-    },
-    Page {
-        path: "referenz/ipc-protokoll",
-        title: "Referenz: das IPC-Protokoll",
-        lang: "en",
-        source: Some("docs/IPC_PROTOCOL.md"),
-    },
-    Page {
-        path: "referenz/mcu-mapping",
-        title: "Referenz: das X-Touch",
-        lang: "en",
-        source: Some("docs/MCU_MAPPING.md"),
-    },
-    Page {
-        path: "referenz/architektur",
-        title: "Referenz: die Architektur",
-        lang: "en",
-        source: Some("ARCHITECTURE_SPEC.md"),
-    },
-    Page {
-        path: "fehler",
-        title: "Bekannte Fehler",
-        lang: "de",
-        source: Some("docs/ISSUES.md"),
+        id: "known-faults",
+        en: Variant {
+            path: "known-faults",
+            title: "Known faults",
+            source: Source::Own("docs/site/known-faults.en.md"),
+        },
+        de: Variant {
+            path: "fehler",
+            title: "Bekannte Fehler",
+            source: Source::Own("docs/site/known-faults.de.md"),
+        },
     },
 ];
 
@@ -239,16 +411,18 @@ where
 #[must_use]
 pub fn usage() -> String {
     format!(
-        "prism-web — renders prismdmx.de out of this repository.\n\n\
+        "prism-web — renders {DOMAIN} out of this repository.\n\n\
          Usage: prism-web [OPTIONS]\n\n\
          Options:\n\
          \x20 --out <DIR>        where to write the site (default: web/dist)\n\
          \x20 --root <DIR>       the repository to read the documents from\n\
          \x20 --installer <PATH> hash this file for the download page's checksum\n\
          \x20 -h, --help         print this and stop\n\n\
-         {} pages, every one of them a document this repository already keeps\n\
-         beside the code.",
-        PAGES.len()
+         {} pages in {} languages — {} files — every one of them a document this\n\
+         repository already keeps beside the code.",
+        PAGES.len(),
+        LANGUAGES.len(),
+        PAGES.len() * LANGUAGES.len()
     )
 }
 
@@ -298,29 +472,45 @@ impl Site {
     /// navigation is worse than a build that stopped.
     pub fn build(&self, out: &Path) -> Result<usize, BuildError> {
         let installer = self.installer()?;
-        for page in &PAGES {
-            let body = match page.source {
-                Some(source) => self.rendered(source)?,
-                None => self.composed(page, installer.as_ref()),
-            };
-            // Relativised last, over the finished document, so that the
-            // navigation, the composed pages and the link rewriter can all
-            // speak in the site's own absolute paths and exactly one function
-            // knows where the site is actually mounted.
-            let html = relativised(&wrap(page, &body), page.path);
-            let directory = if page.path.is_empty() {
-                out.to_path_buf()
-            } else {
-                out.join(page.path)
-            };
-            std::fs::create_dir_all(&directory)
-                .map_err(|error| BuildError(format!("{}: {error}", directory.display())))?;
-            let file = directory.join("index.html");
-            std::fs::write(&file, html)
-                .map_err(|error| BuildError(format!("{}: {error}", file.display())))?;
+        let mut written = 0_usize;
+        for language in &LANGUAGES {
+            for page in &PAGES {
+                let variant = page.variant(language.code);
+                let located = page.located(language.code);
+                let body = match variant.source {
+                    Source::Own(file) => self.rendered(file, language.code)?,
+                    Source::Borrowed { file, lang, why } => {
+                        // The banner opens a `<div lang=…>` around the text it
+                        // is warning about, and this closes it: the language of
+                        // the document is a property of the text, not of the
+                        // sentence above it.
+                        let notice = banner(language, lang, why);
+                        format!("{notice}{}</div>\n", self.rendered(file, language.code)?)
+                    }
+                    Source::Composed => self.composed(page, language, installer.as_ref()),
+                };
+                // Relativised last, over the finished document, so that the
+                // navigation, the composed pages and the link rewriter can all
+                // speak in the site's own absolute paths and exactly one
+                // function knows where the site is actually mounted.
+                let html = relativised(&wrap(page, language, &body), &located);
+                let directory = out.join(&located);
+                std::fs::create_dir_all(&directory)
+                    .map_err(|error| BuildError(format!("{}: {error}", directory.display())))?;
+                let file = directory.join("index.html");
+                std::fs::write(&file, html)
+                    .map_err(|error| BuildError(format!("{}: {error}", file.display())))?;
+                written += 1;
+            }
         }
-        // GitHub Pages serves the apex domain from this file, and it is written
-        // rather than committed so that the domain is one constant in one place.
+        // The root, which belongs to no language and therefore has to choose
+        // one. GitHub Pages cannot redirect, so this is the only thing it can
+        // be: a page that sends the reader on. No JavaScript — a `meta refresh`
+        // and a link that works when even that is refused.
+        std::fs::write(out.join("index.html"), relativised(&root_redirect(), ""))
+            .map_err(|error| BuildError(format!("index.html: {error}")))?;
+        // Pages serves the domain from this file, and it is written rather than
+        // committed so that the domain is one constant in one place.
         std::fs::write(out.join("CNAME"), format!("{DOMAIN}\n"))
             .map_err(|error| BuildError(format!("CNAME: {error}")))?;
         // Nothing here is a search engine's business until the domain is live,
@@ -328,7 +518,7 @@ impl Site {
         // half-built. Removed by hand when the domain is answering.
         std::fs::write(out.join(".nojekyll"), "")
             .map_err(|error| BuildError(format!(".nojekyll: {error}")))?;
-        Ok(PAGES.len())
+        Ok(written)
     }
 
     /// The installer's name and checksum, computed from the file.
@@ -356,7 +546,7 @@ impl Site {
     }
 
     /// One Markdown source, rendered, with its links rewritten.
-    fn rendered(&self, source: &str) -> Result<String, BuildError> {
+    fn rendered(&self, source: &str, lang: &str) -> Result<String, BuildError> {
         let path = self.root.join(source);
         let text = std::fs::read_to_string(&path).map_err(|error| {
             BuildError(format!(
@@ -365,14 +555,14 @@ impl Site {
                 path.display()
             ))
         })?;
-        Ok(rewrite_links(&anchored(&to_html(&text)), source))
+        Ok(rewrite_links(&anchored(&to_html(&text)), source, lang))
     }
 
     /// A page this crate composes rather than renders.
-    fn composed(&self, page: &Page, installer: Option<&Installer>) -> String {
-        let markdown = match page.path {
-            "download" => download_page(installer),
-            _ => front_page(),
+    fn composed(&self, page: &Page, language: &Language, installer: Option<&Installer>) -> String {
+        let markdown = match page.id {
+            "download" => download_page(language, installer),
+            _ => front_page(language),
         };
         // Anchored like a rendered page, but **not** link-rewritten: these two
         // write the site's own paths already, and putting them through the
@@ -496,10 +686,21 @@ pub fn slug(text: &str) -> String {
 /// `from` is the source's path in the repository, because a relative link is
 /// relative to the document that carries it.
 #[must_use]
-pub fn rewrite_links(html: &str, from: &str) -> String {
+pub fn rewrite_links(html: &str, from: &str, lang: &str) -> String {
+    // Keyed by source file, valued with **this language's** page. A file can
+    // serve two languages — the references are English text under a German path
+    // as well as an English one — so the map has to be built per language or a
+    // German manual would link its reader out of German.
     let published: BTreeMap<&str, String> = PAGES
         .iter()
-        .filter_map(|page| page.source.map(|source| (source, absolute(page.path))))
+        .filter_map(|page| {
+            let variant = page.variant(lang);
+            let file = match variant.source {
+                Source::Own(file) | Source::Borrowed { file, .. } => file,
+                Source::Composed => return None,
+            };
+            Some((file, absolute(&page.located(lang))))
+        })
         .collect();
     let base = Path::new(from).parent().unwrap_or(Path::new(""));
     let mut out = String::with_capacity(html.len());
@@ -597,7 +798,7 @@ fn depth(path: &str) -> usize {
 /// the site moves — which for this project is a certainty, because the domain is
 /// coming and a self-hosted server is being kept in reserve. Relative URLs have
 /// nothing to match: the same output is correct at `/PrismDMX/`, at the apex of
-/// `prismdmx.de`, in a subdirectory of any web server, and from a `file://` URL
+/// `docs.prismdmx.de`, in a subdirectory of any web server, and from a `file://` URL
 /// on a machine with no network at all — which is the one that matters for a
 /// venue reading a manual off a stick.
 ///
@@ -647,29 +848,88 @@ fn escape(text: &str) -> String {
 /// criterion, and it is `VERSION` rather than a string in a template — so it
 /// moves when the workspace's does and cannot be forgotten.
 #[must_use]
-pub fn wrap(page: &Page, body: &str) -> String {
+pub fn wrap(page: &Page, language: &Language, body: &str) -> String {
+    let variant = page.variant(language.code);
+    let located = page.located(language.code);
     let mut out = String::with_capacity(body.len() + STYLE.len() + 4096);
-    let title = if page.path.is_empty() {
-        "PrismDMX — DMX-Lichtpult für Häuser und Schulen".to_owned()
+    let title = if variant.path.is_empty() {
+        match language.code {
+            "de" => "PrismDMX — Dokumentation".to_owned(),
+            _ => "PrismDMX — Documentation".to_owned(),
+        }
     } else {
-        format!("{} — PrismDMX", page.title)
+        format!("{} — PrismDMX", variant.title)
     };
     let _ = write!(
         out,
         "<!DOCTYPE html>\n<html lang=\"{}\">\n<head>\n<meta charset=\"utf-8\">\n<meta \
          name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{}</title>\n",
-        page.lang,
+        language.code,
         escape(&title)
     );
-    let _ = write!(out, "<style>\n{STYLE}</style>\n</head>\n<body>\n");
-    out.push_str("<header class=\"top\">\n<a class=\"wordmark\" href=\"/\">PrismDMX</a>\n");
+    // Every language of this page, named to a search engine — so the reader who
+    // arrives from a search arrives in their own language rather than in the
+    // one that happened to be indexed. `x-default` is the site's default.
+    for other in &LANGUAGES {
+        let _ = writeln!(
+            out,
+            "<link rel=\"alternate\" hreflang=\"{}\" href=\"{}\">",
+            other.code,
+            absolute(&page.located(other.code))
+        );
+    }
     let _ = writeln!(
         out,
-        "<p class=\"version\">Diese Seite beschreibt Version <strong>{VERSION}</strong></p>"
+        "<link rel=\"alternate\" hreflang=\"x-default\" href=\"{}\">",
+        absolute(&page.located(LANGUAGES[0].code))
     );
-    out.push_str("</header>\n<nav aria-label=\"Seiten\"><ul>\n");
+    let _ = write!(out, "<style>\n{STYLE}</style>\n</head>\n<body>\n");
+    let _ = write!(
+        out,
+        "<header class=\"top\">\n<a class=\"wordmark\" href=\"{}\">PrismDMX</a>\n",
+        absolute(language.code)
+    );
+    let _ = writeln!(
+        out,
+        "<p class=\"version\">{}</p>",
+        match language.code {
+            "de" => format!("Diese Seite beschreibt Version <strong>{VERSION}</strong>"),
+            _ => format!("This page documents version <strong>{VERSION}</strong>"),
+        }
+    );
+    // The switcher, and it points at **this page** in the other language rather
+    // than at that language's front page. Landing a reader on a front page
+    // because they wanted to read the same thing in their own language is the
+    // commonest way a language switcher is useless.
+    out.push_str("<ul class=\"languages\">\n");
+    for other in &LANGUAGES {
+        let current = other.code == language.code;
+        let mark = if current {
+            " class=\"here\" aria-current=\"true\""
+        } else {
+            ""
+        };
+        let _ = writeln!(
+            out,
+            "<li><a href=\"{}\" hreflang=\"{}\" lang=\"{}\" title=\"{}\"{mark}>{}</a></li>",
+            absolute(&page.located(other.code)),
+            other.code,
+            other.code,
+            escape(other.switch_label),
+            escape(other.name)
+        );
+    }
+    out.push_str("</ul>\n");
+    let _ = writeln!(
+        out,
+        "</header>\n<nav aria-label=\"{}\"><ul>",
+        match language.code {
+            "de" => "Seiten",
+            _ => "Pages",
+        }
+    );
     for entry in &PAGES {
-        let here = if entry.path == page.path {
+        let here = if entry.id == page.id {
             " class=\"here\" aria-current=\"page\""
         } else {
             ""
@@ -677,8 +937,8 @@ pub fn wrap(page: &Page, body: &str) -> String {
         let _ = writeln!(
             out,
             "<li><a href=\"{}\"{here}>{}</a></li>",
-            absolute(entry.path),
-            escape(entry.title)
+            absolute(&entry.located(language.code)),
+            escape(entry.variant(language.code).title)
         );
     }
     out.push_str("</ul></nav>\n<main>\n");
@@ -686,11 +946,81 @@ pub fn wrap(page: &Page, body: &str) -> String {
     out.push_str("</main>\n<footer>\n");
     let _ = write!(
         out,
-        "<p>PrismDMX {VERSION} · <a href=\"{REPOSITORY}\">Quelltext auf GitHub</a> · <a \
-         href=\"{REPOSITORY}/blob/master/LICENSE\">MIT</a></p>\n<p>Diese Seite wird aus dem \
-         Repository erzeugt: was hier steht, steht dort. Kein JavaScript.</p>\n"
+        "<p>PrismDMX {VERSION} · <a href=\"{REPOSITORY}\">{}</a> · <a \
+         href=\"{REPOSITORY}/blob/master/LICENSE\">MIT</a></p>\n<p>{}</p>\n",
+        match language.code {
+            "de" => "Quelltext auf GitHub",
+            _ => "Source on GitHub",
+        },
+        match language.code {
+            "de" =>
+                "Diese Seite wird aus dem Repository erzeugt: was hier steht, steht dort. Kein \
+                 JavaScript.",
+            _ =>
+                "This site is generated out of the repository: what it says is what is there. No \
+                 JavaScript.",
+        }
     );
+    let _ = writeln!(out, "<!-- {located} -->");
     out.push_str("</footer>\n</body>\n</html>\n");
+    out
+}
+
+/// The line a page shows when its text is not in the page's own language.
+///
+/// It is the **first** thing in the body, before the document's own title,
+/// because a reader who is going to hit a language they did not ask for should
+/// find that out before they start reading rather than three paragraphs in.
+#[must_use]
+pub fn banner(page_language: &Language, text_language: &str, why: Borrowed) -> String {
+    let Borrowed::NotYet = why;
+    let sentence = page_language.borrowed_not_yet;
+    format!("<p class=\"borrowed\" lang=\"{}\">{}</p>\n", page_language.code, escape(sentence))
+        // The text that follows is in another language, and saying so is what
+        // lets a screen reader change voice rather than read German with an
+        // English one.
+        + &format!("<div lang=\"{text_language}\">\n")
+}
+
+/// The page at the site's root, which belongs to no language.
+///
+/// GitHub Pages cannot redirect, so the root has to be a document that sends the
+/// reader on. It uses `meta refresh` rather than JavaScript, and it carries a
+/// real link as well, because a `meta refresh` is something a browser is allowed
+/// to refuse. Both languages are named on it, so a reader who lands here and
+/// wants the other one does not have to follow the default first.
+#[must_use]
+pub fn root_redirect() -> String {
+    let default = LANGUAGES[0].code;
+    let mut out = String::with_capacity(1024);
+    let _ = write!(
+        out,
+        "<!DOCTYPE html>\n<html lang=\"{default}\">\n<head>\n<meta charset=\"utf-8\">\n<meta \
+         http-equiv=\"refresh\" content=\"0; url={default}/\">\n<link rel=\"canonical\" \
+         href=\"{}\">\n<title>PrismDMX — Documentation</title>\n",
+        absolute(default)
+    );
+    for other in &LANGUAGES {
+        let _ = writeln!(
+            out,
+            "<link rel=\"alternate\" hreflang=\"{}\" href=\"{}\">",
+            other.code,
+            absolute(other.code)
+        );
+    }
+    let _ = write!(out, "<style>\n{STYLE}</style>\n</head>\n<body>\n<main>\n");
+    out.push_str("<h1>PrismDMX</h1>\n<ul>\n");
+    for other in &LANGUAGES {
+        let _ = writeln!(
+            out,
+            "<li><a href=\"{}\" hreflang=\"{}\" lang=\"{}\">{}</a></li>",
+            absolute(other.code),
+            other.code,
+            other.code,
+            escape(other.name)
+        );
+    }
+    out.push_str("</ul>\n</main>\n</body>\n</html>\n");
     out
 }
 
@@ -698,74 +1028,112 @@ pub fn wrap(page: &Page, body: &str) -> String {
 /* The two composed pages                                                     */
 /* -------------------------------------------------------------------------- */
 
-/// The front page, whose one job is the sentence S42 exists to make true.
+/// The front page, which is an **index of the documentation** and nothing else.
 ///
-/// *A stranger gets from here to a running desk.* So the four steps are above
-/// everything else, they are numbered, and each one names the page that has the
-/// rest of it. Everything below them is context for somebody who has already
-/// decided.
-fn front_page() -> String {
-    let markdown = format!(
-        r#"# Ein DMX-Lichtpult für Häuser und Schulen
+/// It used to be a landing page — what PrismDMX is, what it can do, what it
+/// cannot. That job now belongs to the promotion site on its own hosting, and
+/// two pages telling the same story is two stories that diverge. So this one
+/// answers only the question a person on a documentation site actually has:
+/// *which of these documents is mine, and where do I start.*
+///
+/// The four steps survive as **one line with a link**, because the path from
+/// nothing to a running desk is the thing this whole site exists to make work
+/// and it belongs where a reader looking for it will look.
+fn front_page(language: &Language) -> String {
+    let markdown = match language.code {
+        "de" => format!(
+            r#"# Dokumentation
 
-PrismDMX ist ein Lichtpult, das als Programm läuft: **Engine und Oberfläche sind
-ein Installationsprogramm**, und die Engine läuft weiter, wenn Sie das Fenster
-schließen. Für Windows, ohne Administratorrechte, kostenlos und quelloffen.
+Alles, was zu PrismDMX **{VERSION}** geschrieben ist, erzeugt aus dem Repository:
+was hier steht, steht dort.
 
-> **Offene Beta.** Version {VERSION} ist vollständig genug, um ein Rig zu bauen,
-> eine Show zu programmieren und sie auf echter Hardware zu fahren. Sie hat noch
-> keine Vorstellung in einem fremden Haus gefahren. Genau dafür ist die Beta da —
-> und ein Weg zurück gehört dazu.
+## Wo Sie anfangen
 
-## Von hier zu laufendem Licht
+| Sie sind | Lesen Sie |
+|---|---|
+| Jemand, der eine Show baut und fährt | [Handbuch für den Operator](/de/handbuch/operator/) |
+| Jemand, der das Haus verkabelt und das Pult einrichtet | [Handbuch für den Installateur](/de/handbuch/installateur/) |
+| Jemand, der den Quelltext ändert | [Handbuch für Entwickler](/de/handbuch/entwickler/) |
 
-1. **[Herunterladen und installieren](/download/)** — Windows 10 oder 11, ein
-   Installationsprogramm, keine Administratorrechte, nichts danebenzuinstallieren.
-2. **Sagen, womit das Haus verkabelt ist** — *Settings → Outputs*: Art-Net, sACN
-   oder ein Open-DMX-USB-Adapter. Das steht im
-   [Handbuch für den Installateur](/handbuch/installateur/#4-die-ausgänge).
-3. **Ein Fixture patchen** — Fenster *Patch*, die Bibliothek nach Namen
-   durchsuchen, Nummer und Adresse vergeben.
-   [Kapitel 5 des Operator-Handbuchs](/handbuch/operator/#5-ein-rig-patchen).
-4. **Auf voll ziehen** — `1 at full` in die Kommandozeile tippen und `Enter`.
-   Wenn Licht kommt, läuft das Pult.
+**Zum ersten Mal hier?** Der kürzeste Weg von nichts zu laufendem Licht sind vier
+Schritte: [herunterladen und installieren](/de/download/), sagen, womit das Haus
+verkabelt ist (*Settings → Outputs*, siehe
+[Kapitel 4 des Installateur-Handbuchs](/de/handbuch/installateur/#4-die-ausgänge)),
+[ein Fixture patchen](/de/handbuch/operator/#5-ein-rig-patchen), und `1 at full`
+in die Kommandozeile tippen. Kommt Licht, läuft das Pult.
 
-Wenn Sie dabei irgendwo hängen bleiben, ist das ein Fehler in dieser Seite und
-kein Fehler bei Ihnen: [schreiben Sie ihn auf]({REPOSITORY}/issues).
+Wenn Sie unterwegs hängen bleiben, ist das ein Fehler in dieser Dokumentation und
+keiner bei Ihnen: [schreiben Sie ihn auf]({REPOSITORY}/issues).
 
-## Was es kann
+## Was es sonst noch gibt
 
-- **Ein Rig** aus 634 Fixtures und 2 871 Profilen der Open Fixture Library, über
-  bis zu 64 Universen. Jeder DMX-Kanal eines gepatchten Fixtures hat einen Knopf.
-- **Ausgänge für ein echtes Haus**: Art-Net mit Node-Erkennung, sACN (E1.31) und
-  Open DMX USB / FTDI — mehrere gleichzeitig, jeder mit den Universen, für die er
-  verkabelt ist, umkonfigurierbar im laufenden Betrieb.
-- **Programmieren und Fahren**: Gruppen, Presets, Cue-Listen mit Tracking,
-  Fade- und Delay-Zeiten, Speichermodi, Undo, Executors mit belegbaren Fadern,
-  Encodern und Tasten.
-- **Die Kommandozeile ist die Bedienung**: jede Taste schreibt eine Zeile, und
-  jede Zeile lässt sich auf eine Taste legen.
-- **Ein Behringer X-Touch** über USB, jede Taste umbelegbar — und es bedient das
-  Pult, **ohne dass ein Fenster offen ist**.
+- [Die Kommandozeile](/de/kommandozeile/) — alle neunundzwanzig Wörter, die das
+  Pult versteht, mit Beispielen.
+- [Herunterladen](/de/download/) — der Installer, was er tut und wohin er
+  schreibt.
+- [Änderungen](/de/aenderungen/) — was sich zwischen den Versionen geändert hat.
+- [Bekannte Fehler](/de/fehler/) — was offen ist, bevor Sie es entdecken.
 
-## Was es noch nicht kann
+Die Spezifikationen des Projekts — Architektur, IPC-Protokoll, X-Touch-Mapping
+und DMX-Merge — stehen bewusst nicht hier: das sind Arbeitsdokumente, die sich
+mit dem Quelltext ändern, und sie liegen im
+[Repository]({REPOSITORY}) neben dem Code, zu dem sie gehören.
 
-Hier genannt, statt von Ihnen entdeckt zu werden: kein 3D-Visualizer, keine
-Web-Fernbedienung, kein Timecode, kein OSC, kein PSN, keine Effekt-Engine.
-Autostart nur unter Windows, und ein Installationsprogramm nur für Windows. Die
-[vollständige Liste](/handbuch/operator/#13-was-dieses-pult-noch-nicht-kann)
-steht im Handbuch, die [bekannten Fehler](/fehler/) auf ihrer eigenen Seite.
+## Zwei Sprachen
 
-## Die Handbücher
-
-- **[Für den Operator](/handbuch/operator/)** — wer damit eine Show baut und
-  fährt.
-- **[Für den Installateur](/handbuch/installateur/)** — wer das Haus verkabelt
-  und das Pult einrichtet.
-- **[Für Entwickler](/handbuch/entwickler/)** — wer den Quelltext ändert.
-  Englisch, wie der Quelltext.
+Diese Dokumentation gibt es auf Englisch und auf Deutsch; oben rechts wird
+umgeschaltet, und die Umschaltung führt auf **dieselbe Seite** in der anderen
+Sprache. Englisch ist die Standardsprache. Seiten, die noch nicht übersetzt sind,
+sagen das oben auf der Seite, statt Sie stillschweigend in der anderen Sprache
+lesen zu lassen.
 "#
-    );
+        ),
+        _ => format!(
+            r#"# Documentation
+
+Everything written about PrismDMX **{VERSION}**, generated out of the repository:
+what it says here is what is there.
+
+## Where to start
+
+| You are | Read |
+|---|---|
+| Someone building and running a show | [Operator's manual](/en/manual/operator/) |
+| Someone wiring the building and setting the desk up | [Installer's manual](/en/manual/installer/) |
+| Someone changing the source | [Developer's manual](/en/manual/developer/) |
+
+**First time here?** The shortest path from nothing to light on a stage is four
+steps: [download and install](/en/download/), tell it how the building is wired
+(*Settings → Outputs*, see
+[chapter 4 of the installer's manual](/en/manual/installer/#4-die-ausgänge)),
+[patch a fixture](/en/manual/operator/#5-ein-rig-patchen), and type `1 at full`
+into the command line. If light comes on, the desk is running.
+
+If you get stuck anywhere along it, that is a fault in this documentation and not
+in you: [write it down]({REPOSITORY}/issues).
+
+## What else is here
+
+- [The command line](/en/command-line/) — all twenty-nine words the desk
+  understands, with examples.
+- [Download](/en/download/) — the installer, what it does and where it writes.
+- [Changelog](/en/changelog/) — what changed between versions.
+- [Known faults](/en/known-faults/) — what is open, before you find it.
+
+The project's specifications — the architecture, the IPC protocol, the X-Touch
+mapping and the DMX merge — are deliberately not here: they are working documents
+that change with the source, and they live in the
+[repository]({REPOSITORY}) next to the code they describe.
+
+## Two languages
+
+This documentation is published in English and German; the switch is at the top
+right, and it lands you on **the same page** in the other language. English is
+the default. A page that is not translated yet says so at the top rather than
+quietly handing you the other language.
+"#
+        ),
+    };
     to_html(&markdown)
 }
 
@@ -775,10 +1143,12 @@ steht im Handbuch, die [bekannten Fehler](/fehler/) auf ihrer eigenen Seite.
 /// hash. A page that carried a transcribed number would be one more place for a
 /// number to be wrong, and the number is the one thing on this page that has to
 /// be right.
-fn download_page(installer: Option<&Installer>) -> String {
-    let checksum = match installer {
-        Some(installer) => format!(
-            r#"## Die Prüfsumme
+fn download_page(language: &Language, installer: Option<&Installer>) -> String {
+    let markdown = match language.code {
+        "de" => {
+            let checksum = match installer {
+                Some(installer) => format!(
+                    r#"## Die Prüfsumme
 
 Der Build ist **nicht signiert**, deshalb ist die Prüfsumme das, was Sie statt
 einer Signatur prüfen können. Sie wird von demselben Lauf gebildet, der die Datei
@@ -792,10 +1162,10 @@ erzeugt hat; niemand tippt sie ab.
 Get-FileHash .\{} -Algorithm SHA256
 ```
 "#,
-            installer.name, installer.sha256, installer.name
-        ),
-        None => format!(
-            r#"## Die Prüfsumme
+                    installer.name, installer.sha256, installer.name
+                ),
+                None => format!(
+                    r#"## Die Prüfsumme
 
 Der Build ist **nicht signiert**, deshalb ist die Prüfsumme das, was Sie statt
 einer Signatur prüfen können. Sie steht auf der
@@ -806,10 +1176,10 @@ Datei erzeugt hat.
 Get-FileHash .\PrismDMX_{VERSION}_x64-setup.exe -Algorithm SHA256
 ```
 "#
-        ),
-    };
-    let markdown = format!(
-        r#"# Herunterladen
+                ),
+            };
+            format!(
+                r#"# Herunterladen
 
 **Version {VERSION}**, eine Vorabversion.
 
@@ -855,15 +1225,105 @@ die Prüfsumme, oder warten Sie auf einen signierten Build.
 
 Jede Version mit ihren Anmerkungen steht auf der
 [Release-Seite]({RELEASES}). Was sich zwischen ihnen geändert hat, steht unter
-[Änderungen](/aenderungen/).
+[Änderungen](/de/aenderungen/).
 
 ## Aus dem Quelltext bauen
 
 Für Linux, macOS oder einen Raspberry Pi gibt es kein Installationsprogramm — die
 Engine ist portabel und wird bei jedem Commit für ARM64 gegengeprüft, aber
 veröffentlicht wird nur Windows. Der Weg steht im
-[Handbuch für Entwickler](/handbuch/entwickler/#1-getting-a-build).
+[Handbuch für Entwickler](/de/handbuch/entwickler/).
 "#
-    );
+            )
+        }
+        _ => {
+            let checksum = match installer {
+                Some(installer) => format!(
+                    r#"## The checksum
+
+The build is **not signed**, so the checksum is what you can check instead of a
+signature. It is computed by the same run that produced the file; nobody types it
+out.
+
+| File | SHA-256 |
+|---|---|
+| `{}` | `{}` |
+
+```powershell
+Get-FileHash .\{} -Algorithm SHA256
+```
+"#,
+                    installer.name, installer.sha256, installer.name
+                ),
+                None => format!(
+                    r#"## The checksum
+
+The build is **not signed**, so the checksum is what you can check instead of a
+signature. It is on the [release page]({RELEASES}) under the file, computed by
+the same run that produced it.
+
+```powershell
+Get-FileHash .\PrismDMX_{VERSION}_x64-setup.exe -Algorithm SHA256
+```
+"#
+                ),
+            };
+            format!(
+                r#"# Download
+
+**Version {VERSION}**, a pre-release.
+
+<p class="cta"><a href="{RELEASES}/latest">Download PrismDMX {VERSION} for
+Windows</a></p>
+
+Windows 10 or 11, 64-bit. The file is called `PrismDMX_{VERSION}_x64-setup.exe`.
+
+## What the installation does
+
+It installs **per user** and needs **no administrator rights** — a school laptop
+the operator is not allowed to administer is the normal case.
+
+Nothing has to be installed alongside it: the whole program is linked against the
+static C runtime, so there is no Visual C++ redistributable to find. The one
+exception is the **Edge WebView2 runtime**, which draws the window — Windows 11
+has it, Windows 10 has it anywhere Edge has been updated, and the installer
+fetches it from Microsoft if it is missing. That is the only step that needs the
+internet.
+
+| | Where |
+|---|---|
+| The program | `%LOCALAPPDATA%\PrismDMX` |
+| Shows, settings, your own profiles | `%APPDATA%\PrismDMX` |
+
+**Uninstalling removes the program and nothing else.** Your shows and settings
+stay where they are, and a later installation finds them again.
+
+## Windows will warn you
+
+The build is **not signed**, so on first start Windows shows *Windows protected
+your PC*. That is not a judgement about the file; it is what Windows says about
+any executable it has rarely seen, and this project does not have a signing
+certificate yet.
+
+You continue with **More info** → **Run anyway**. If that is further than you
+want to go, that is an entirely reasonable position: check the checksum instead,
+or wait for a signed build.
+
+{checksum}
+
+## Older versions
+
+Every version with its notes is on the [release page]({RELEASES}). What changed
+between them is under [changelog](/en/changelog/).
+
+## Building from source
+
+There is no installer for Linux, macOS or a Raspberry Pi — the engine is portable
+and is cross-checked for ARM64 on every commit, but only Windows is published.
+The route is in the [developer's manual](/en/manual/developer/#1-getting-a-build).
+"#
+            )
+        }
+    };
     to_html(&markdown)
 }

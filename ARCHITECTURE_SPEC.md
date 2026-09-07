@@ -1221,7 +1221,7 @@ repository open can follow.** The recipes below are written for a reader who
 knows what `attach::approach` is; the people who can actually close these rows
 are an installer in a hall and a beta tester on a Windows machine, and neither
 of them has this file. So the 🪟 row's six-then-eight steps are
-[`docs/manual/installer.md`](docs/manual/installer.md) §11 — *Abnahme: was Sie
+[`docs/manual/installer.de.md`](docs/manual/installer.de.md) §11 — *Abnahme: was Sie
 prüfen, bevor Sie gehen* — in the order an installer would do them anyway; the
 Art-Net and sACN rows are that manual's §5, met from the venue's end; the Open
 DMX serial row is its §6; and the two MIDI rows are its §7 and §10. The recipes

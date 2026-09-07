@@ -1,4 +1,4 @@
-//! `prism-web` — renders prismdmx.de out of this repository.
+//! `prism-web` — renders docs.prismdmx.de out of this repository.
 //!
 //! ```text
 //! prism-web [--out <dir>] [--root <dir>] [--installer <path>]

@@ -312,7 +312,7 @@ A command is the only way anything changes. The path, in order:
    exactly that, on purpose: an operator who opens one from an X-Touch F-key
    should find an answer rather than an empty rectangle they will file a bug
    about.
-5. **Write its chapter** in [`operator.md`](operator.md) — a section headed with
+5. **Write its chapter** in [`operator.md`](operator.de.md) — a section headed with
    the variant name, and a row in the generated table. The test will rewrite the
    table with a `TODO` and fail until both exist.
 6. `cargo test -p prism-domain` for the bindings, then `npm --prefix ui run test`.

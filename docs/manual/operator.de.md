@@ -68,7 +68,7 @@ sondern was Windows über jede ausführbare Datei sagt, die es selten gesehen
 hat. *Weitere Informationen* → *Trotzdem ausführen*. Wenn Ihnen das zu weit
 geht, ist das eine völlig vernünftige Haltung: prüfen Sie vorher die SHA-256 der
 Datei gegen die auf der Release-Seite. Der ausführliche Weg steht im
-[Installationshandbuch](installer.md).
+[Installationshandbuch](installer.de.md).
 
 **Starten.** *PrismDMX* im Startmenü. Der erste Start legt ein Datenverzeichnis
 an, macht eine leere Show und die Identität dieses Pults und öffnet ein Fenster.
@@ -163,7 +163,7 @@ nicht veralten, ohne dass ein Test rot wird.
 | `CueViewer` | *Cue Viewer* — die **Cue**: was sie setzt, Fixture für Fixture, mit den Preset-Verweisen. Zum Ansehen, nicht zum Bearbeiten |
 | `PresetPool` | *Preset Pool* — die **Pools**: benannte Looks je Kategorie, mit der Farbe, die die Scribble-Strips zeigen |
 | `Patch` | *Patch* — das **Rig**: welche Fixtures es gibt und wo ihre Kanäle liegen. Das einzige Fenster, das die Gestalt der Show ändert |
-| `Settings` | *Settings* — das **Pult**: Ausgänge, Geräte, Tastenbelegung, Show-Dateien und diese Maschine. Kapitel 5 des [Installationshandbuchs](installer.md) |
+| `Settings` | *Settings* — das **Pult**: Ausgänge, Geräte, Tastenbelegung, Show-Dateien und diese Maschine. Kapitel 5 des [Installationshandbuchs](installer.de.md) |
 | `Executors` | *Executors* — der **Strip**: die acht Executors der aktuellen Seite, ihre Fader und ihre je vier Tasten, und der Editor dafür |
 | `CommandKeys` | *Command Keys* — die Wörter der Kommandozeile als Knöpfe. Wer die Wörter kann, schließt das Fenster; wer sie lernt, lässt es offen |
 | `Status` | *Status* — die Messwerte: die Show, die Sitzung, die Engine und die Ausgänge |
@@ -243,7 +243,7 @@ Adresse. Kapitel 5.
 Fünf Reiter: *Outputs*, *Devices*, *Controls*, *Show files*, *This machine*. Es
 ist ein **Fenster** und kein Dialog: es liegt auf der Leinwand wie jedes andere,
 die Show läuft dahinter weiter, und Sie können es auf einem zweiten Bildschirm
-offen lassen. Alles darin ist im [Installationshandbuch](installer.md)
+offen lassen. Alles darin ist im [Installationshandbuch](installer.de.md)
 beschrieben, außer *Show files*, das in Kapitel 12 steht.
 
 ### Executors · `Executors`
@@ -272,7 +272,7 @@ liest **Degraded** und nicht *OK*.
 In der Reihenfolge, in der es üblicherweise gemacht wird:
 
 **1. Sagen, womit das Haus verkabelt ist.** *Settings → Outputs*. Das ist die
-Arbeit des Installateurs und steht in dessen [Handbuch](installer.md); wenn Sie
+Arbeit des Installateurs und steht in dessen [Handbuch](installer.de.md); wenn Sie
 in einem eingerichteten Haus sind, ist es schon da.
 
 **2. Sagen, was daran hängt.** Das Fenster *Patch*. Die Fixture-Bibliothek wird

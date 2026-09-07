@@ -1,4 +1,4 @@
-# `prism-web` — prismdmx.de, generated out of this repository
+# `prism-web` — docs.prismdmx.de, generated out of this repository
 
 The documentation site. It has **no content of its own**: every page is one of
 the Markdown files this repository already keeps beside the code, read at build

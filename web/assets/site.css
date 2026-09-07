@@ -1,4 +1,4 @@
-/* prismdmx.de — one style sheet, inlined into every page, and no JavaScript.
+/* docs.prismdmx.de — one style sheet, inlined into every page, and no JavaScript.
  *
  * A documentation page that needs a script to be read is one that cannot be
  * read on the machine in the lighting rack. So: system fonts, one column, and
@@ -16,6 +16,8 @@
   --accent-ink: #ffffff;
   --code-ground: #f2f0ec;
   --note-ground: #f5f1fa;
+  --warn: #b8860b;
+  --warn-ground: #fdf6e3;
   color-scheme: light dark;
 }
 
@@ -30,6 +32,8 @@
     --accent-ink: #17171a;
     --code-ground: #26262c;
     --note-ground: #241f2c;
+    --warn: #d9a441;
+    --warn-ground: #2a2419;
   }
 }
 
@@ -166,3 +170,52 @@ footer {
   font-size: 0.85rem;
 }
 footer p { margin: 0.25rem 0; }
+
+/* The language switcher, in the header beside the version.
+ *
+ * Two links rather than a dropdown: with two languages a menu is a click to
+ * find out what a glance could have told you, and the one you are on is marked
+ * rather than removed, so the pair stays in the same place on every page. */
+.languages {
+  display: flex;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.languages a {
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  color: var(--quiet);
+  display: block;
+  font-size: 0.85rem;
+  padding: 0.15rem 0.5rem;
+  text-decoration: none;
+}
+
+.languages a:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.languages a.here {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* A page whose text is not in the language of the page says so, first thing.
+ *
+ * Deliberately loud: it is the one sentence on the page that the reader has to
+ * see before they start reading, because everything after it is in a language
+ * they did not choose. */
+.borrowed {
+  background: var(--warn-ground);
+  border-left: 3px solid var(--warn);
+  color: var(--ink);
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem;
+  padding: 0.6rem 0.8rem;
+}

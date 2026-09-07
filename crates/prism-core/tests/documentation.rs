@@ -17,7 +17,7 @@
 //! that keeps the manual a **reviewable file in the repository** rather than
 //! build output.
 //!
-//! Each list lives between markers in `docs/manual/operator.md`:
+//! Each list lives between markers in `docs/manual/operator.de.md`:
 //!
 //! ```text
 //! <!-- generated:window-types -->
@@ -69,7 +69,7 @@ fn root() -> PathBuf {
 
 /// The operator's manual, which is the one holding both generated blocks.
 fn operator_manual() -> PathBuf {
-    root().join("docs/manual/operator.md")
+    root().join("docs/manual/operator.de.md")
 }
 
 /// Reads a file that the repository is supposed to contain.
@@ -136,7 +136,7 @@ fn block_of<'a>(text: &'a str, name: &str) -> &'a str {
     let (open, close) = markers(name);
     let start = text
         .find(&open)
-        .unwrap_or_else(|| panic!("docs/manual/operator.md has no {open}"))
+        .unwrap_or_else(|| panic!("docs/manual/operator.de.md has no {open}"))
         + open.len();
     let end = text[start..]
         .find(&close)
@@ -198,7 +198,7 @@ fn the_window_chapter_is_every_window_type_there_is() {
     let rewritten = regenerate(&manual, "window-types", ("Fenster", "Wofür"), &keys);
     assert!(
         !rewritten,
-        "docs/manual/operator.md's window table did not match WindowType::ALL and has been \
+        "docs/manual/operator.de.md's window table did not match WindowType::ALL and has been \
          rewritten — read the diff, fill in any TODO, and commit it"
     );
     let text = read(&manual);
@@ -206,7 +206,7 @@ fn the_window_chapter_is_every_window_type_there_is() {
     for row in rows_in(block) {
         assert_ne!(
             row.prose, TODO,
-            "the window type {} has no description in docs/manual/operator.md",
+            "the window type {} has no description in docs/manual/operator.de.md",
             row.key
         );
     }
@@ -229,7 +229,7 @@ fn every_window_type_has_a_section_in_the_operators_manual() {
             .count();
         assert_eq!(
             sections, 1,
-            "docs/manual/operator.md should have exactly one `### …{needle}` section, it has \
+            "docs/manual/operator.de.md should have exactly one `### …{needle}` section, it has \
              {sections}"
         );
     }
@@ -255,7 +255,7 @@ fn the_console_chapter_is_every_word_the_line_knows() {
     let rewritten = regenerate(&manual, "console-words", ("Wort", "Was es tut"), &keys);
     assert!(
         !rewritten,
-        "docs/manual/operator.md's word table did not match prism_core::console::CONSOLE_WORDS \
+        "docs/manual/operator.de.md's word table did not match prism_core::console::CONSOLE_WORDS \
          and has been rewritten — read the diff, fill in any TODO, and commit it"
     );
     let text = read(&manual);
@@ -263,7 +263,7 @@ fn the_console_chapter_is_every_word_the_line_knows() {
     for row in rows_in(block) {
         assert_ne!(
             row.prose, TODO,
-            "the console word {} has no description in docs/manual/operator.md",
+            "the console word {} has no description in docs/manual/operator.de.md",
             row.key
         );
     }
@@ -426,7 +426,7 @@ fn every_readme_names_the_crate_it_belongs_to() {
 #[test]
 fn every_manual_says_which_version_it_describes() {
     let version = env!("CARGO_PKG_VERSION");
-    for manual in ["operator.md", "installer.md", "developer.md"] {
+    for manual in ["operator.de.md", "installer.de.md", "developer.en.md"] {
         let path = root().join("docs/manual").join(manual);
         let text = read(&path);
         assert!(
@@ -484,4 +484,36 @@ fn the_changelog_has_an_entry_for_this_version() {
         text.contains(&heading),
         "CHANGELOG.md has no `{heading}` section"
     );
+}
+
+/// The site's command-line page names every word the desk understands.
+///
+/// `docs/site/command-line.{en,de}.md` are written **for the website** rather
+/// than generated: a reference somebody reaches for while a show is loading
+/// should explain the words, not list them in the order an array happens to
+/// have. What that buys in readability it risks in currency, so the currency is
+/// checked here — beside `CONSOLE_WORDS`, which is the truth — rather than in
+/// the site generator, which would need a dependency on this crate to ask.
+///
+/// A word the desk gains and the page never mentions is a reference that is
+/// quietly incomplete, and quietly is the worst way for a reference to be wrong.
+#[test]
+fn the_sites_command_line_page_names_every_word_the_desk_knows() {
+    for page in [
+        "docs/site/command-line.en.md",
+        "docs/site/command-line.de.md",
+    ] {
+        let text = read(&root().join(page));
+        let missing: Vec<&str> = CONSOLE_WORDS
+            .iter()
+            .copied()
+            .filter(|word| !text.contains(&format!("`{word}`")))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{page} does not mention {missing:?} — the desk knows {} words and a reference for \
+             the website has to name all of them",
+            CONSOLE_WORDS.len()
+        );
+    }
 }

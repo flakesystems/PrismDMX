@@ -42,7 +42,7 @@ läuft.
 
 **Für diese Session heißt das:** beide Handbücher sagen es ausdrücklich, mit der
 Nummer daneben —
-[`manual/operator.md`](manual/operator.md#jeder-kanal-hat-einen-knopf) und
+[`manual/operator.de.md`](manual/operator.de.md#jeder-kanal-hat-einen-knopf) und
 `README.md` unter *was es noch nicht kann*. Kein Text in dieser Session
 behauptet, das Pult folge dem Umschalten.
 

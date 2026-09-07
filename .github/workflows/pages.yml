@@ -1,4 +1,4 @@
-# prismdmx.de — the deployment, which is a push.
+# docs.prismdmx.de — the deployment, which is a push.
 #
 # S42's exit criteria say the deployment is reproducible and that the domain
 # serves over TLS. Both are met by *not* having a deployment procedure: the site
@@ -29,13 +29,13 @@
 # unpacks it. Outbound only, no inbound port, and no deploy key held by GitHub —
 # which is the same property this workflow has today and worth not losing.
 #
-# **What a human still has to do, once.** Enable Pages for this repository with
-# *GitHub Actions* as the source, and point `prismdmx.de` at it — an `ALIAS`,
-# `ANAME` or flattened `CNAME` on the apex to `flakesystems.github.io`, or the
-# four `A` records Pages documents. The generator writes `CNAME` itself, so the
-# domain is one constant in one place (`prism_web::DOMAIN`). Until that is done
-# this workflow's deploy step is the only thing in the repository that fails,
-# and it fails alone.
+# **What a human still has to do, once.** Pages is enabled. What is left is the
+# DNS: a plain `CNAME` record for `docs.prismdmx.de` pointing at
+# `flakesystems.github.io`. A subdomain rather than the apex, deliberately — the
+# apex belongs to the promotion site on its own hosting — and a subdomain is the
+# easy case, needing none of the `ALIAS`, `ANAME` or four-`A`-record juggling an
+# apex does. The generator writes `CNAME` itself, so the domain is one constant
+# in one place (`prism_web::DOMAIN`).
 
 name: Pages
 
@@ -63,7 +63,7 @@ env:
 
 jobs:
   deploy:
-    name: Build and deploy prismdmx.de
+    name: Build and deploy docs.prismdmx.de
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:

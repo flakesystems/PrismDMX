@@ -9,17 +9,21 @@ program: install it, start it, and the show runs — with or without a window op
 > [Being a beta tester](#being-a-beta-tester) before you put it on a show that
 > matters.
 
-**The manuals are at [prismdmx.de](https://prismdmx.de)**, and in this
+**The manuals are at [docs.prismdmx.de](https://docs.prismdmx.de)**, and in this
 repository under [`docs/manual/`](docs/manual/):
 
 | | |
 |---|---|
-| [Handbuch für den Operator](docs/manual/operator.md) | Running a show. German |
-| [Handbuch für den Installateur](docs/manual/installer.md) | Outputs, the network, the machine, autostart. German |
-| [Developer's manual](docs/manual/developer.md) | Changing the code. English |
+| [Operator's manual](docs/manual/operator.de.md) | Running a show |
+| [Installer's manual](docs/manual/installer.de.md) | Outputs, the network, the machine, autostart |
+| [Developer's manual](docs/manual/developer.en.md) | Changing the code |
 
-[`docs/manual/README.md`](docs/manual/README.md) says why each is in the
-language it is in. This file is the short version of all three.
+The site publishes all three in **English and German**, with English as the
+default and a switcher that lands on the same page in the other language. The
+language is in the filename — `operator.de.md`, `developer.en.md` — and
+[`docs/manual/README.md`](docs/manual/README.md) records the decision, the one
+it replaced, and the three tests that stop a translation going quietly stale.
+This file is the short version of all three manuals.
 
 ---
 
@@ -256,7 +260,7 @@ self-contained, so it opens the same way on a desk that has never seen your
 directory.
 
 **There is a manual now**, and this section is its summary: [Kapitel 5 des
-Operator-Handbuchs](docs/manual/operator.md#5-ein-rig-patchen) has the whole of
+Operator-Handbuchs](docs/manual/operator.de.md#5-ein-rig-patchen) has the whole of
 patching, including your own profiles.
 
 ---
@@ -414,7 +418,7 @@ laptop with nothing plugged in.
 | `crates/prism-ipc`, `crates/prismd` | The protocol, and the daemon |
 | `crates/prism-app` | This shell |
 | `ui/` | The interface |
-| `web/` | The generator for [prismdmx.de](https://prismdmx.de), which renders the manuals out of this repository |
+| `web/` | The generator for [docs.prismdmx.de](https://docs.prismdmx.de), which renders the manuals out of this repository in both languages |
 | `docs/manual/` | The three manuals |
 | `ARCHITECTURE_SPEC.md` | Why it is built this way |
 | `docs/IPC_PROTOCOL.md` | What travels between the two halves |

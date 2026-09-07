@@ -221,7 +221,7 @@ jobs:
       # ---- The site ----
       # S42, and this is the whole of what *the checksum is not typed by
       # anybody* means: the generator is handed the file that was just built and
-      # hashes it, so the number on prismdmx.de is the number of the `.exe`
+      # hashes it, so the number on docs.prismdmx.de is the number of the `.exe`
       # attached above. It is uploaded here rather than deployed here because
       # deploying needs permissions this job should not have - the job below
       # has them and nothing else.
@@ -246,7 +246,7 @@ jobs:
   # comes through here instead, because only this run has an installer to take a
   # checksum from.
   site:
-    name: Deploy prismdmx.de
+    name: Deploy docs.prismdmx.de
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
