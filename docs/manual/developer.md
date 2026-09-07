@@ -223,7 +223,29 @@ commands that replays every emitted delta into a mirror and compares.
 
 If you add a field to a persisted or mirrored type, the checklist is: the
 struct, the command, the applier, **the diff**, the classification predicates,
-and the TypeScript.
+the TypeScript — and **the hand-written decoder in `ui/src/ipc/protocol.ts`**,
+which the generated binding does not stand in for.
+
+### An optional field is a field a hand-written decoder may forget
+
+`occurrence` (S52) reached the struct, the command, the applier, the serialiser
+and the generated TypeScript — and not `ui/src/ipc/protocol.ts`'s
+`readProgrammerEntry`, which is hand-written because it validates untrusted
+input. The daemon sent `White` occurrence 1, the interface filed it under 0, and
+a head with a warm **and** a cold white applied the cold one to the lamp while
+the number under the encoder that was turned sat still.
+
+What made it invisible is the previous rule, working: the field is
+`#[serde(default, skip_serializing_if = …)]` so that a `.prism` file written
+before S52 still opens, so the binding is `occurrence?: number`, **so an object
+without one is a valid `ProgrammerEntry` and the compiler had nothing to say.**
+Optionality granted for the sake of an old file is what made forgetting it
+legal.
+
+Two things follow. Add a field to a mirrored type and the checklist above gains
+a seventh entry: **the hand decoder**. And a decoder should *normalise* the
+default rather than pass the hole on — `readOccurrence` answers `0`, so no
+reader has to remember `?? 0`, and the second reader is the one that forgets.
 
 ### An absent field is a better migration than a migration
 
