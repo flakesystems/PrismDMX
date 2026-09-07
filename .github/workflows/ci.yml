@@ -583,4 +583,11 @@ jobs:
               || { echo "::error::docs.prismdmx.de/$path did not serve the manuals"; exit 1; }
           done
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: example.invalid' http://127.0.0.1:8080/)" = 404             || { echo '::error::an unknown host was served a page'; exit 1; }
+          # The front page ships a real `/favicon.ico` and the manuals do not.
+          # A `location = /favicon.ico` that answered 204 for both swallowed the
+          # file that was sitting right there, and nothing said so — the tab was
+          # simply blank. Found with `curl` against the running server rather
+          # than by a test, so it is a check now.
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: prismdmx.de' http://127.0.0.1:8080/favicon.ico)" = 200             || { echo '::error::the front page did not serve its own favicon'; exit 1; }
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: docs.prismdmx.de' http://127.0.0.1:8080/favicon.ico)" = 204             || { echo '::error::the manuals should answer 204 rather than log a 404'; exit 1; }
           docker rm -f prismdmx-ci

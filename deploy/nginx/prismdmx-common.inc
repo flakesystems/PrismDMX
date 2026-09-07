@@ -49,6 +49,17 @@ gzip_types text/plain text/css text/html application/javascript image/svg+xml ap
 
 server_tokens off;
 
-# Beide Seiten führen ihr Symbol als SVG. Ein Browser, der trotzdem nach der
-# `.ico` fragt, soll keine 404-Zeile im Log erzeugen.
-location = /favicon.ico { return 204; access_log off; }
+# Ein Browser fragt nach `/favicon.ico`, ob die Seite eine anbietet oder nicht.
+# Die Startseite liefert eine — das Zeichen, das auch das Pult trägt —, die
+# Handbücher nicht.
+#
+# **`try_files` und nicht `return 204`**, und das ist eine Korrektur: die Regel
+# stand hier als glattes `return 204`, aus der Zeit, in der die Startseite ihr
+# Symbol nur als SVG führte. Seit sie eine echte `.ico` ausliefert, verschluckte
+# genau diese Regel sie — die Datei lag im Verzeichnis, nginx antwortete
+# trotzdem mit *kein Inhalt*, und im Reiter blieb das Symbol leer. Gefunden hat
+# das kein Test, sondern ein `curl` gegen den laufenden Server.
+#
+# So bekommt die Startseite ihre Datei, und die Handbücher geben weiterhin 204
+# statt einer 404-Zeile im Log.
+location = /favicon.ico { try_files $uri =204; access_log off; }
