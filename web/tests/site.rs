@@ -467,14 +467,11 @@ fn the_number_of_untranslated_pages_is_written_down() {
                 .map(move |entry| entry.located(language.code))
         })
         .collect();
-    assert_eq!(
-        waiting,
-        vec![
-            "en/manual/operator".to_owned(),
-            "en/manual/installer".to_owned(),
-        ],
-        "the set of pages waiting for a translation has changed — if one was translated, take it \\
-         out of this list; if one was added, put it in and say why in the commit"
+    assert!(
+        waiting.is_empty(),
+        "every page of this site exists in both languages now, and these do not: {waiting:?} — if \
+         a page was added in one language only, either translate it or record here why it is \
+         waiting"
     );
 }
 

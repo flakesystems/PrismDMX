@@ -67,9 +67,37 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// The operator's manual, which is the one holding both generated blocks.
-fn operator_manual() -> PathBuf {
-    root().join("docs/manual/operator.de.md")
+/// One language's operator manual, and the headers its two generated tables get.
+struct Manual {
+    /// The file, relative to nothing — an absolute path.
+    path: PathBuf,
+    /// The two column headings of the window table.
+    windows: (&'static str, &'static str),
+    /// The two column headings of the console-word table.
+    words: (&'static str, &'static str),
+}
+
+/// The operator's manual in each language, with the headers its tables carry.
+///
+/// **Both languages hold both generated blocks**, and the generator handles that
+/// without knowing any German: it keeps whatever prose the file already has
+/// against each key and only ever rewrites the *set* and *order* of rows. So the
+/// English manual is held to `WindowType::ALL` exactly as the German one is, and
+/// a variant added in Rust puts a `TODO` in **both** files rather than in the one
+/// whoever added it happened to open.
+fn operator_manuals() -> [Manual; 2] {
+    [
+        Manual {
+            path: root().join("docs/manual/operator.de.md"),
+            windows: ("Fenster", "Wofür"),
+            words: ("Wort", "Was es tut"),
+        },
+        Manual {
+            path: root().join("docs/manual/operator.en.md"),
+            windows: ("Window", "What for"),
+            words: ("Word", "What it does"),
+        },
+    ]
 }
 
 /// Reads a file that the repository is supposed to contain.
@@ -194,21 +222,30 @@ fn the_window_chapter_is_every_window_type_there_is() {
         .iter()
         .map(|window| format!("{window:?}"))
         .collect();
-    let manual = operator_manual();
-    let rewritten = regenerate(&manual, "window-types", ("Fenster", "Wofür"), &keys);
-    assert!(
-        !rewritten,
-        "docs/manual/operator.de.md's window table did not match WindowType::ALL and has been \
-         rewritten — read the diff, fill in any TODO, and commit it"
-    );
-    let text = read(&manual);
-    let block = block_of(&text, "window-types");
-    for row in rows_in(block) {
-        assert_ne!(
-            row.prose, TODO,
-            "the window type {} has no description in docs/manual/operator.de.md",
-            row.key
+    for Manual {
+        path: manual,
+        windows: window_header,
+        ..
+    } in operator_manuals()
+    {
+        let rewritten = regenerate(&manual, "window-types", window_header, &keys);
+        assert!(
+            !rewritten,
+            "{}'s window table did not match WindowType::ALL and has been rewritten — read the \
+             diff, fill in any TODO, and commit it",
+            manual.display()
         );
+        let text = read(&manual);
+        let block = block_of(&text, "window-types");
+        for row in rows_in(block) {
+            assert_ne!(
+                row.prose,
+                TODO,
+                "the window type {} has no description in {}",
+                row.key,
+                manual.display()
+            );
+        }
     }
 }
 
@@ -220,18 +257,21 @@ fn the_window_chapter_is_every_window_type_there_is() {
 /// German title was written.
 #[test]
 fn every_window_type_has_a_section_in_the_operators_manual() {
-    let text = read(&operator_manual());
-    for window in WindowType::ALL {
-        let needle = format!("`{window:?}`");
-        let sections = text
-            .lines()
-            .filter(|line| line.starts_with("### ") && line.contains(&needle))
-            .count();
-        assert_eq!(
-            sections, 1,
-            "docs/manual/operator.de.md should have exactly one `### …{needle}` section, it has \
-             {sections}"
-        );
+    for Manual { path: manual, .. } in operator_manuals() {
+        let text = read(&manual);
+        for window in WindowType::ALL {
+            let needle = format!("`{window:?}`");
+            let sections = text
+                .lines()
+                .filter(|line| line.starts_with("### ") && line.contains(&needle))
+                .count();
+            assert_eq!(
+                sections,
+                1,
+                "{} should have exactly one `### …{needle}` section, it has {sections}",
+                manual.display()
+            );
+        }
     }
 }
 
@@ -251,21 +291,30 @@ fn the_console_chapter_is_every_word_the_line_knows() {
         .map(|word| (*word).to_owned())
         .collect();
     keys.sort_unstable();
-    let manual = operator_manual();
-    let rewritten = regenerate(&manual, "console-words", ("Wort", "Was es tut"), &keys);
-    assert!(
-        !rewritten,
-        "docs/manual/operator.de.md's word table did not match prism_core::console::CONSOLE_WORDS \
-         and has been rewritten — read the diff, fill in any TODO, and commit it"
-    );
-    let text = read(&manual);
-    let block = block_of(&text, "console-words");
-    for row in rows_in(block) {
-        assert_ne!(
-            row.prose, TODO,
-            "the console word {} has no description in docs/manual/operator.de.md",
-            row.key
+    for Manual {
+        path: manual,
+        words: word_header,
+        ..
+    } in operator_manuals()
+    {
+        let rewritten = regenerate(&manual, "console-words", word_header, &keys);
+        assert!(
+            !rewritten,
+            "{}'s word table did not match prism_core::console::CONSOLE_WORDS and has been \
+             rewritten — read the diff, fill in any TODO, and commit it",
+            manual.display()
         );
+        let text = read(&manual);
+        let block = block_of(&text, "console-words");
+        for row in rows_in(block) {
+            assert_ne!(
+                row.prose,
+                TODO,
+                "the console word {} has no description in {}",
+                row.key,
+                manual.display()
+            );
+        }
     }
 }
 
@@ -431,6 +480,8 @@ fn every_manual_says_which_version_it_describes() {
         "installer.de.md",
         "developer.en.md",
         "developer.de.md",
+        "installer.en.md",
+        "operator.en.md",
     ] {
         let path = root().join("docs/manual").join(manual);
         let text = read(&path);

@@ -249,11 +249,7 @@ pub const PAGES: [Page; 8] = [
         en: Variant {
             path: "manual/operator",
             title: "Operator's manual",
-            source: Source::Borrowed {
-                file: "docs/manual/operator.de.md",
-                lang: "de",
-                why: Borrowed::NotYet,
-            },
+            source: Source::Own("docs/manual/operator.en.md"),
         },
         de: Variant {
             path: "handbuch/operator",
@@ -266,11 +262,7 @@ pub const PAGES: [Page; 8] = [
         en: Variant {
             path: "manual/installer",
             title: "Installer's manual",
-            source: Source::Borrowed {
-                file: "docs/manual/installer.de.md",
-                lang: "de",
-                why: Borrowed::NotYet,
-            },
+            source: Source::Own("docs/manual/installer.en.md"),
         },
         de: Variant {
             path: "handbuch/installateur",
@@ -1102,8 +1094,8 @@ what it says here is what is there.
 **First time here?** The shortest path from nothing to light on a stage is four
 steps: [download and install](/en/download/), tell it how the building is wired
 (*Settings → Outputs*, see
-[chapter 4 of the installer's manual](/en/manual/installer/#4-die-ausgänge)),
-[patch a fixture](/en/manual/operator/#5-ein-rig-patchen), and type `1 at full`
+[chapter 4 of the installer's manual](/en/manual/installer/#4-the-outputs)),
+[patch a fixture](/en/manual/operator/#5-patching-a-rig), and type `1 at full`
 into the command line. If light comes on, the desk is running.
 
 If you get stuck anywhere along it, that is a fault in this documentation and not
