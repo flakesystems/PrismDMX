@@ -403,8 +403,9 @@ jobs:
   web:
     name: Web - the documentation site
     runs-on: ubuntu-latest
-    # Twelve pages, ten of them Markdown files this repository already keeps. The
-    # whole job is a `cargo build` of one small crate and a run of it.
+    # Eight pages in two languages — sixteen files — six of them from Markdown
+    # this repository already keeps. The whole job is a `cargo build` of one
+    # small crate and a run of it.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
@@ -430,15 +431,35 @@ jobs:
       # produced the files a deployment would serve.
       - name: What was produced
         run: |
+          # The root, which belongs to no language and sends the reader on.
           test -f site/index.html
-          test -f site/download/index.html
-          test -f site/handbuch/operator/index.html
-          test -f site/handbuch/installateur/index.html
-          test -f site/handbuch/entwickler/index.html
-          test -f site/aenderungen/index.html
+          grep -q 'http-equiv="refresh"' site/index.html
+          # Every page, in every language. Listed rather than counted, because a
+          # count stays right while two pages swap names.
+          for page in "" download manual/operator manual/installer \
+                      manual/developer command-line changelog known-faults; do
+            test -f "site/en/$page/index.html" || {
+              echo "::error::site/en/$page/index.html is missing"; exit 1; }
+          done
+          for page in "" download handbuch/operator handbuch/installateur \
+                      handbuch/entwickler kommandozeile aenderungen fehler; do
+            test -f "site/de/$page/index.html" || {
+              echo "::error::site/de/$page/index.html is missing"; exit 1; }
+          done
           test -f site/CNAME
           if grep -rqi '<script' site; then
             echo "::error::the site has JavaScript on it and is supposed to have none"
+            exit 1
+          fi
+          # No page may ask for a path from the site's root: the site has to work
+          # wherever it is mounted, and the first deployment proved that is not
+          # theoretical — it went out as a GitHub *project* page under a path
+          # prefix, where one `href="/…"` breaks every link on every page while
+          # the site still looks finished. The generator's suite asserts this
+          # too; it is here as well because this is the artefact that ships.
+          if grep -rq 'href="/' site; then
+            echo "::error::a page links to a path from the site root"
+            grep -rn 'href="/' site | head -5
             exit 1
           fi
           du -sh site
