@@ -33,7 +33,8 @@ use crate::PortList;
 
 /// The longest a port that is not there waits between attempts.
 ///
-/// The backoff doubles from [`FIRST_ATTEMPT`] to here and stays. Five seconds
+/// The backoff doubles from `FIRST_ATTEMPT` — private, beside this one — to
+/// here and stays. Five seconds
 /// because that is about how long it takes to walk to a desk and plug it in:
 /// long enough that a missing port costs a rehearsal nothing, short enough that
 /// nobody stands there wondering.

@@ -490,8 +490,10 @@ pub enum Command {
     /// answer (`AttributeDef::featureGroup`) rather than the attribute name's, so
     /// this is a question only the daemon can settle.
     ///
-    /// Added in **S28**, with [`Self::CreateSequence`], [`Self::SetCueProperty`],
-    /// [`Self::DeleteCue`] and [`Self::AssignExecutor`]: before them
+    /// Added in **S28**, with the three commands that made a cue list editable
+    /// at all — they were `CreateSequence`, `SetCueProperty` and `DeleteCue`
+    /// then, and are [`Self::StoreSequence`], [`Self::SetCueProperty`] and
+    /// [`Self::Delete`] now — and with [`Self::AssignExecutor`]: before them
     /// `ApplyPreset` could apply a preset no interface could create.
     StorePreset {
         /// The preset number. Unique across pools — `prism_core::Show::

@@ -13,7 +13,8 @@
 //!    announcing four gigabytes is disconnected after four bytes have been
 //!    read, having cost four bytes of memory — see [`payload_length`], and
 //!    `tests/oversized_frame.rs`, which counts what the allocator was asked for.
-//! 2. **Too deep.** [`crate::scan::depth_of`] walks the payload with an explicit
+//! 2. **Too deep.** `scan::depth_of`, private to this crate, walks the payload
+//!    with an explicit
 //!    stack before `serde` is allowed near it. The reason is written out in
 //!    `scan`'s module documentation: a stack overflow aborts the process, and
 //!    this process is holding the DMX output.

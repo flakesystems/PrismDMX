@@ -548,7 +548,7 @@ impl FramePublisher {
     /// Hands the current frame to every subscriber.
     ///
     /// Also the moment an output that has been added or removed since the last
-    /// tick takes effect: [`take_enrolments`](Self::take_enrolments) is one
+    /// tick takes effect: `take_enrolments`, private, is one
     /// atomic load away from free and is why a reconfiguration costs no tick.
     pub fn publish(&mut self) {
         self.take_enrolments();

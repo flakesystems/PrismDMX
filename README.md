@@ -3,11 +3,23 @@
 A DMX lighting console for venues and schools. The desk and its engine are one
 program: install it, start it, and the show runs — with or without a window open.
 
-> **Closed beta.** This is a pre-release. It is complete enough to build a rig,
+> **Open beta.** This is a pre-release. It is complete enough to build a rig,
 > program a show and run it on real hardware, and it has not yet run a real
 > performance in anybody's building. That is what the beta is for. Read
 > [Being a beta tester](#being-a-beta-tester) before you put it on a show that
 > matters.
+
+**The manuals are at [prismdmx.de](https://prismdmx.de)**, and in this
+repository under [`docs/manual/`](docs/manual/):
+
+| | |
+|---|---|
+| [Handbuch für den Operator](docs/manual/operator.md) | Running a show. German |
+| [Handbuch für den Installateur](docs/manual/installer.md) | Outputs, the network, the machine, autostart. German |
+| [Developer's manual](docs/manual/developer.md) | Changing the code. English |
+
+[`docs/manual/README.md`](docs/manual/README.md) says why each is in the
+language it is in. This file is the short version of all three.
 
 ---
 
@@ -29,9 +41,9 @@ no user interface in it at all.
 
 ### What it can do today
 
-- **A rig**: patch fixtures from the Open Fixture Library (634 fixtures, 2 157
+- **A rig**: patch fixtures from the Open Fixture Library (634 fixtures, 2 871
   profiles ship with it) or from built-in generic profiles, addressed across up
-  to 64 universes.
+  to 64 universes. Every DMX slot of a patched fixture has a knob on it.
 - **Output**: Art-Net (with node discovery), sACN (E1.31), and Open DMX USB /
   FTDI adapters — several at once, each carrying the universes it is actually
   wired for.
@@ -55,11 +67,13 @@ Named here rather than discovered by you:
 - **No 3D visualiser** (planned).
 - **No Web Remote** — a phone or tablet cannot drive the desk yet (planned).
 - **No timecode, OSC or PSN** (planned).
-- **A profile whose channels switch on another channel's value is skipped.** The
-  Open Fixture Library calls those *switching channels*; a mode with one loses
-  the channels that depend on it, because a footprint that changes while the
-  show runs is not one this desk can address yet. Matrix profiles — a red per
-  pixel — do arrive.
+- **The desk does not follow a switching channel while the show runs.** The
+  Open Fixture Library calls a channel whose meaning depends on another
+  channel's value a *switching channel*. It is always reachable, and where every
+  position of the switch agrees about what the slot is, the knob is that; where
+  they disagree it is a raw knob under the channel's own name. What it does not
+  do is change under your hand when you turn the mode channel — `docs/ISSUES.md`
+  **B52**.
 - **Executor labels do not follow a show change** in every case: after loading a
   second show, a strip may keep the previous show's labels until you switch
   windows.
@@ -241,9 +255,9 @@ with it, the profile is **copied into the show**: a `.prism` file is
 self-contained, so it opens the same way on a desk that has never seen your
 directory.
 
-**The manual is not written yet.** It is a session of its own; until then, this
-list and the hints inside each window are what there is, and the beta is a good
-time to say which of them was not enough.
+**There is a manual now**, and this section is its summary: [Kapitel 5 des
+Operator-Handbuchs](docs/manual/operator.md#5-ein-rig-patchen) has the whole of
+patching, including your own profiles.
 
 ---
 
@@ -368,6 +382,10 @@ cargo fmt --all --check
 ```
 
 ```bash
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+```
+
+```bash
 npm --prefix ui run test
 ```
 
@@ -396,6 +414,8 @@ laptop with nothing plugged in.
 | `crates/prism-ipc`, `crates/prismd` | The protocol, and the daemon |
 | `crates/prism-app` | This shell |
 | `ui/` | The interface |
+| `web/` | The generator for [prismdmx.de](https://prismdmx.de), which renders the manuals out of this repository |
+| `docs/manual/` | The three manuals |
 | `ARCHITECTURE_SPEC.md` | Why it is built this way |
 | `docs/IPC_PROTOCOL.md` | What travels between the two halves |
 

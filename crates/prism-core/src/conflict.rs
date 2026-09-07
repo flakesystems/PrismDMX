@@ -96,7 +96,7 @@ pub enum ShowIssue {
     /// universe 7 would be a desk that cannot be prepared in advance. What it
     /// must never be is *silent* — an operator whose universe 7 goes nowhere has
     /// to read that before the show rather than discover it when the light does
-    /// not come up. See [`crate::outputs`].
+    /// not come up. See `crates/prism-core/src/outputs.rs`.
     UniverseNotOutput {
         /// The universe the patch uses and nothing sends.
         universe: UniverseId,
@@ -321,9 +321,10 @@ pub(crate) fn issues(show: &Show) -> Vec<ShowIssue> {
 
 /// The universes this show patches that `carried` does not cover — S33.
 ///
-/// A separate function rather than a branch inside [`issues`] because it needs
-/// something [`Show`] deliberately does not hold: the output patch belongs to the
-/// **building** and lives in [`crate::MachineConfig`] (see [`crate::outputs`]).
+/// A separate function rather than a branch inside `Show::issues` because it
+/// needs something [`Show`] deliberately does not hold: the output patch belongs
+/// to the **building** and lives in [`crate::MachineConfig`] (see
+/// `crates/prism-core/src/outputs.rs`).
 /// Folding it in would have meant giving `Show::issues` an argument that is not
 /// the show's, which is the seam this whole session is about.
 ///

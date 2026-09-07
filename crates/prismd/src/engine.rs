@@ -268,7 +268,7 @@ pub struct EngineThread {
 ///
 /// Two ticks' worth of a busy fader bank and then some. A command that does not
 /// fit is reported rather than dropped silently — the queue counts refusals and
-/// [`EngineThread::rejected`] is what a status panel shows.
+/// [`EngineThread::refused`] is what a status panel shows.
 pub const COMMAND_QUEUE: usize = 1024;
 
 impl EngineThread {

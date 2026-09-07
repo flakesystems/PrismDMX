@@ -153,7 +153,7 @@ has not said they want to move there.
 | `Move View 1 View 3` | swaps the two layouts; the numbers stay where they are |
 | `Copy Sequence 2 Sequence 6` | copies. The same for cues, groups, presets and views |
 | `Assign Sequence 5 Executor 1` | puts a cue list on a fader |
-| `Assign Executor 1 Fader Master` | says what that executor's fader does — `Empty`, `Master`, `Speed`, `XFade` |
+| `Assign Executor 1 Fader Master` | says what that executor's fader does — `Empty`, `Master`, `Speed`, `XFade`, `Fade` |
 | `Assign Executor 1 Encoder Speed` | the same for its encoder — `Empty`, `Master`, `Speed` |
 | `Assign Executor 1 Button 2 Go+` | the same for one of its four keys, **numbered from one** |
 | `Assign Executor 1 Button 4 Command "Go+ Sequence 3"` | the custom row: that key sends this line |

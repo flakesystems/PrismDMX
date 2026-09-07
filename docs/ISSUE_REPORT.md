@@ -1,64 +1,66 @@
-# Issue Report — 2026-09-05
+# Issue Report — 2026-09-07
 
-Automatisch erstellter Bericht des Scheduled Issue-Tracking-Laufs.
+Automatisch erstellter Bericht des Issue-Tracking-Laufs, hier als erster Schritt
+von **S41/S42** durchgeführt: bevor ein Handbuch geschrieben wird, muss
+feststehen, was bekannt kaputt ist. Ein Fehler, den ein Handbuch beschreibt, als
+wäre er Absicht, ist der teuerste Text in diesem Projekt.
 
 ---
 
 ## Überblick
 
-| GitHub # | ISSUES.md | Titel (nach Umbenennung) | Status |
-|---|---|---|---|
-| #1 | B37 | (bug) Wrongly ordered clear steps | ☐ offen — keine Änderung |
-| #2 | B38 | (bug) Missing OFL channel mappings and capability support in programmer | ☐ offen — OFL-Doku-Links ergänzt |
-| #3 | B39 | (bug) Tray icon refuses to close if the daemon is closed manually | ☐ offen — keine Änderung |
-| #5 | B40 | (bug) Flakey e2e test in looks.spec.ts | ✅ behoben — **GitHub-Issue geschlossen** |
-| #8 | B42 | (feat) Add fullscreen support | ☐ offen — **neu: Titel aktualisiert, Tracking-Kommentar gepostet** |
-| #9 | B43 | (feat) Add better support for custom fixtures | ☐ offen — **neu: Titel aktualisiert, Tracking-Kommentar gepostet** |
+**Keine offenen GitHub-Issues.** Alle sechs jemals angelegten sind geschlossen.
 
-Keine geschlossenen Issues vorhanden. Keine Duplikate gefunden.
+| GitHub # | ISSUES.md | Titel | Status |
+|---|---|---|---|
+| #1 | B37 | (bug) Wrongly ordered clear steps | ✅ geschlossen — behoben in S51 |
+| #2 | B38 | (bug) Missing OFL channel mappings and capability support in programmer | ✅ geschlossen — behoben in S51, fortgesetzt in S52–S54 |
+| #3 | B39 | (bug) Tray icon refuses to close if the daemon is closed manually | ✅ geschlossen — behoben in S51 |
+| #5 | B40 | (bug) Flakey e2e test in looks.spec.ts | ✅ geschlossen |
+| #8 | B42 | (feat) Add fullscreen support | ✅ geschlossen — behoben in S51 |
+| #9 | B43 | (feat) Add better support for custom fixtures | ✅ geschlossen — behoben in S51 |
+
+Seit `v0.9.1` und `v0.9.2` ist **nichts Neues gemeldet worden**. Das ist kein
+Beleg dafür, dass nichts kaputt ist — es ist der Beleg dafür, dass die Beta
+bisher **geschlossen** war und wenige Leute darin waren. Genau das ändern S41
+und S42.
+
+---
+
+## Was in `docs/ISSUES.md` offen ist
+
+Ein Eintrag, und er ist bewusst offen:
+
+### B52 — Das Pult folgt einem Switching Channel nicht, während die Show läuft
+
+Seit S54 ist ein Switching-Alias **immer erreichbar**, und wo sich alle
+Stellungen über den Parameter einig sind, trägt der Slot diesen Parameter. Was
+das Pult nicht tut, ist dem Umschalten während der Show zu folgen. Das ist keine
+kleine Ergänzung des Readers, sondern eine Frage an das Modell: der Schlüssel,
+unter dem eine Cue einen Wert ablegt, dürfte sich nicht ändern, während die Cue
+läuft.
+
+**Für diese Session heißt das:** beide Handbücher sagen es ausdrücklich, mit der
+Nummer daneben —
+[`manual/operator.md`](manual/operator.md#jeder-kanal-hat-einen-knopf) und
+`README.md` unter *was es noch nicht kann*. Kein Text in dieser Session
+behauptet, das Pult folge dem Umschalten.
+
+Die beiden anderen `☐` in `docs/ISSUES.md` sind die **Vorlagen**, die die Datei
+in ihrem eigenen Kopf als Vorlagen bezeichnet. Sie tragen `Bxx` und keine
+Nummer, genau damit sie beim Durchzählen nicht als Einträge mitgezählt werden.
 
 ---
 
 ## Durchgeführte Aktionen
 
-### Issue #5 / B40 — geschlossen
-
-B40 war in `docs/ISSUES.md` bereits als ✅ behoben markiert, GitHub-Issue #5 stand aber noch offen. Schließungskommentar mit Begründung gepostet, Issue als *completed* geschlossen.
-
-**Ursachen des Fehlers (aus ISSUES.md B40):** Zwei Race Conditions im Command-Line-Dispatch seit S49 plus ein nicht-wartendes `count()` im Playwright-Test:
-1. `useMirror.ran` ersetzt `cancel` — verhindert, dass das Daemon-Leeren nach Ausführen als fremde Neuigkeit übernommen wird.
-2. `pick` vergleicht das Feld beim Eintreffen der Antwort — überschreibt nicht mehr die seither getippte Zeile.
-3. `store()` wartet auf einen der beiden Daemon-Zustände (Frage steht / Feld leer).
-
-Tests: `keeps a line typed while a key's line is still in flight`, `does not let a pick decided late overwrite the line typed since` (`ui/src/desk/desk.test.tsx`).
-
-### Issues #8 und #9 — neu aufgenommen und Titel angepasst
-
-Beide Issues wurden vom Eigentümer mit dem Label `enhancement` versehen (Priority: Medium). Die Einträge **B42** und **B43** waren in `docs/ISSUES.md` bereits vorhanden (aus einem früheren Session-Commit). Die Titel wurden auf das `(type) Short explanation`-Format angepasst und Tracking-Kommentare auf GitHub gepostet.
-
-#### B42 — Kein Vollbild (GitHub #8)
-- Titel: `Add fullscreen support` → `(feat) Add fullscreen support`
-- Tracking-Kommentar gepostet.
-
-#### B43 — Für eigene Fixture-Profile gibt es keinen Ort (GitHub #9)
-- Titel: `Add better support for custom fixtures` → `(feat) Add better support for custom fixtures`
-- Tracking-Kommentar gepostet.
-
-### Issue #2 / B38 — OFL-Dokumentationslinks ergänzt
-
-Der Eigentümer hatte unter Issue #2 zwei Referenz-Links zur OFL-Dokumentation hinterlassen (Fixture Format und Capability Types). Diese wurden in den B38-Eintrag in `docs/ISSUES.md` unter **Referenzen** aufgenommen, da sie für die Implementierung direkt relevant sind.
-
----
-
-## Keine Aktion erforderlich
-
-- **#1 / B37:** Offen, kein neuer Kommentar, kein Fortschritt.
-- **#3 / B39:** Offen, kein neuer Kommentar, kein Fortschritt.
-- Keine geschlossenen Issues mit neuen Kommentaren.
-- Keine Duplikate identifiziert.
+Keine. Es gab nichts zu schließen, nichts umzubenennen und nichts aufzunehmen.
 
 ---
 
 ## Vorheriger Lauf
 
-Der Lauf vom 2026-09-02 hatte B39 und B40 erstmals aufgenommen und deren Tracking-Kommentare auf GitHub gepostet. B40 wurde seitdem behoben; dieser Lauf schließt den Issue entsprechend.
+Der Lauf vom **2026-09-05** schloss #5 (B40), passte die Titel von #8 und #9 an
+und ergänzte in B38 die beiden OFL-Dokumentationslinks des Eigentümers. Die
+Issues #1, #2, #3, #8 und #9 wurden danach durch S51–S54 behoben und
+geschlossen.

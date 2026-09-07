@@ -8,7 +8,8 @@
 //! on it, and opening a MIDI port is nothing *but* platform code: WinMM on
 //! Windows, ALSA on Linux, CoreMIDI on macOS. So S20's probe — the only code in
 //! the repository that had ever opened one — lived outside the workspace
-//! (`tools/xtouch-probe/`), and the daemon's [`SurfacePort`] seam had two
+//! (`tools/xtouch-probe/`), and the daemon's `prismd::surface::SurfacePort` seam
+//! had two
 //! implementations, neither of which touched a device.
 //!
 //! **A backend needs a home before it can have an implementation.** This is the

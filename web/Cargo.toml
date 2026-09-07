@@ -1,0 +1,29 @@
+[package]
+name = "prism-web"
+description = "The generator for prismdmx.de: the manuals of this repository, rendered."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "prism-web"
+path = "src/main.rs"
+
+[lib]
+name = "prism_web"
+path = "src/lib.rs"
+
+[dependencies]
+# Markdown to HTML. The manuals are the source and this is the only thing
+# between them and a page — no template engine, no front-matter, no second
+# vocabulary to learn. `default-features = false` drops `getopts`, which is a
+# command-line parser for a binary this crate does not build.
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+# The checksum on the download page is computed from the installer that was
+# just built rather than transcribed from anywhere. That needs a hash.
+sha2 = "0.10"
+
+[lints]
+workspace = true

@@ -930,14 +930,35 @@ prismdmx/
 │                        # — it walks a panel button by button and floods a
 │                        # surface until it stops answering — and no test may.
 │                        # `prism-midi` is where the shipping backend lives.
-├─ docs/                 # MCU_MAPPING.md, IPC_PROTOCOL.md, DMX_MERGE.md,
-│                        # PRERELEASE_PUNCHLIST.md, RELEASE_NOTES.md
+├─ docs/                 # COMMAND_LINE.md, MCU_MAPPING.md, IPC_PROTOCOL.md,
+│  │                     # DMX_MERGE.md, ISSUES.md, RELEASE_NOTES.md
+│  └─ manual/            # S41: operator.md and installer.md (German), and
+│                        # developer.md (English). Its own README.md carries
+│                        # the language decision and the mechanism that stops
+│                        # a manual going stale — the window-type and console
+│                        # word lists are **generated** into it by
+│                        # `crates/prism-core/tests/documentation.rs`, which
+│                        # rewrites the file and fails rather than complaining
+├─ web/                  # S42: `prism-web`, the generator for prismdmx.de, and
+│                        # a workspace member so it gets fmt, clippy, the ARM64
+│                        # cross-check and the crate-README rule. It holds **no
+│                        # content**: every page is one of this repository's own
+│                        # Markdown files, read at build time, so the site
+│                        # cannot drift from a release. `web/dist/` is output
+│                        # and is not committed
 ├─ .github/workflows/    # ci.yml on every commit — including, since S29, the
-│                        # shell and its installer — and release.yml, which
-│                        # runs the gates again on a `v*` tag and attaches the
-│                        # installer to the release it makes
+│                        # shell and its installer, and since S42 the site —
+│                        # release.yml, which runs the gates again on a `v*`
+│                        # tag, attaches the installer and publishes the site
+│                        # with that installer's checksum in it, and pages.yml,
+│                        # which publishes the site on an ordinary push
 └─ tests/                # integration and stress/latency suites
 ```
+
+**Every workspace member has a `README.md`** since S41, saying what the crate is
+for, which side of §10.1's rules it is on — in a sentence with a link, never a
+copy of the rule — how to test it and which sessions built it. That is checked
+by a test over the members rather than by a reviewer.
 
 ---
 
@@ -1194,6 +1215,19 @@ is a function `crates/prism-app`'s suite calls with no Tauri anywhere: spawn or
 attach, the autostart comparison, the dialogue table, the daemon's arguments.
 What is left is the platform's own behaviour, and it is a recipe below rather
 than a claim nobody checked.
+
+**Since S41 every one of these rows also has a form somebody without this
+repository open can follow.** The recipes below are written for a reader who
+knows what `attach::approach` is; the people who can actually close these rows
+are an installer in a hall and a beta tester on a Windows machine, and neither
+of them has this file. So the 🪟 row's six-then-eight steps are
+[`docs/manual/installer.md`](docs/manual/installer.md) §11 — *Abnahme: was Sie
+prüfen, bevor Sie gehen* — in the order an installer would do them anyway; the
+Art-Net and sACN rows are that manual's §5, met from the venue's end; the Open
+DMX serial row is its §6; and the two MIDI rows are its §7 and §10. The recipes
+here stay, because they name the functions and the tests; the manual is the same
+procedure with none of that in it. A row is closed by whichever of the two
+somebody actually followed.
 
 | Item | Where | What to do |
 |---|---|---|
