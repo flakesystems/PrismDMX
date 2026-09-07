@@ -403,8 +403,9 @@ jobs:
   web:
     name: Web - the documentation site
     runs-on: ubuntu-latest
-    # Twelve pages, ten of them Markdown files this repository already keeps. The
-    # whole job is a `cargo build` of one small crate and a run of it.
+    # Eight pages in two languages — sixteen files — six of them from Markdown
+    # this repository already keeps. The whole job is a `cargo build` of one
+    # small crate and a run of it.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
@@ -440,15 +441,35 @@ jobs:
       # produced the files a deployment would serve.
       - name: What was produced
         run: |
+          # The root, which belongs to no language and sends the reader on.
           test -f docs-site/index.html
-          test -f docs-site/download/index.html
-          test -f docs-site/handbuch/operator/index.html
-          test -f docs-site/handbuch/installateur/index.html
-          test -f docs-site/handbuch/entwickler/index.html
-          test -f docs-site/aenderungen/index.html
+          grep -q 'http-equiv="refresh"' docs-site/index.html
+          # Every page, in every language. Listed rather than counted, because a
+          # count stays right while two pages swap names.
+          for page in "" download manual/operator manual/installer \
+                      manual/developer command-line changelog known-faults; do
+            test -f "docs-site/en/$page/index.html" || {
+              echo "::error::docs-site/en/$page/index.html is missing"; exit 1; }
+          done
+          for page in "" download handbuch/operator handbuch/installateur \
+                      handbuch/entwickler kommandozeile aenderungen fehler; do
+            test -f "docs-site/de/$page/index.html" || {
+              echo "::error::docs-site/de/$page/index.html is missing"; exit 1; }
+          done
           test -f docs-site/CNAME
           if grep -rqi '<script' docs-site; then
             echo "::error::the site has JavaScript on it and is supposed to have none"
+            exit 1
+          fi
+          # No page may ask for a path from the site's root: the site has to work
+          # wherever it is mounted, and the first deployment proved that is not
+          # theoretical — it went out as a GitHub *project* page under a path
+          # prefix, where one `href="/…"` breaks every link on every page while
+          # the site still looks finished. The generator's suite asserts this
+          # too; it is here as well because this is the artefact that ships.
+          if grep -rq 'href="/' docs-site; then
+            echo "::error::a page links to a path from the site root"
+            grep -rn 'href="/' docs-site | head -5
             exit 1
           fi
           du -sh docs-site
@@ -540,9 +561,26 @@ jobs:
             curl -sf -o /dev/null -H 'Host: prismdmx.de' http://127.0.0.1:8080/ && break
             sleep 1
           done
-          front=$(curl -s -H 'Host: prismdmx.de'      http://127.0.0.1:8080/)
-          docs=$( curl -s -H 'Host: docs.prismdmx.de' http://127.0.0.1:8080/)
-          echo "$front" | grep -q 'Lichtpult'             || { echo '::error::prismdmx.de did not serve the front page'; exit 1; }
-          echo "$docs" | grep -q 'Handbuch'             || { echo '::error::docs.prismdmx.de did not serve the manuals'; exit 1; }
+          front=$(curl -s -H 'Host: prismdmx.de' http://127.0.0.1:8080/)
+          echo "$front" | grep -q 'Lichtpult' \
+            || { echo '::error::prismdmx.de did not serve the front page'; exit 1; }
+
+          # The documentation site's root belongs to no language and sends the
+          # reader on; the manuals themselves live one segment down. Asking the
+          # root for the word "Handbuch" is what this check used to do, and it
+          # stopped meaning anything the moment the site gained a second
+          # language — so it asks for the redirect, and then for each language's
+          # index, and then for one page deep inside each. That last pair is the
+          # one that exercises nginx's `try_files … $uri/index.html`, which is
+          # the only part of the vhost the page layout can break.
+          docs=$(curl -s -H 'Host: docs.prismdmx.de' http://127.0.0.1:8080/)
+          echo "$docs" | grep -q 'url=en/' \
+            || { echo '::error::the documentation root does not send the reader to a language'; exit 1; }
+          for probe in "en/:Operator" "de/:Handbuch" \
+                       "en/manual/operator/:Operator" "de/handbuch/operator/:Handbuch"; do
+            path="${probe%%:*}"; want="${probe##*:}"
+            curl -s -H 'Host: docs.prismdmx.de' "http://127.0.0.1:8080/$path" | grep -q "$want" \
+              || { echo "::error::docs.prismdmx.de/$path did not serve the manuals"; exit 1; }
+          done
           test "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: example.invalid' http://127.0.0.1:8080/)" = 404             || { echo '::error::an unknown host was served a page'; exit 1; }
           docker rm -f prismdmx-ci

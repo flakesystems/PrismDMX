@@ -2,7 +2,7 @@
 
 **Für:** wer das Pult in einem Haus einrichtet — Ausgänge, Netz, Maschine,
 Autostart —, nicht für den, der damit eine Show fährt. Dafür gibt es das
-[Operator-Handbuch](operator.md).
+[Operator-Handbuch](operator.de.md).
 **Gilt für:** Version `0.9.2`.
 **Sprache:** Deutsch. Alles, was das Programm auf den Bildschirm schreibt oder
 auf der Kommandozeile heißt, steht englisch da, wo es englisch ist.
@@ -477,8 +477,8 @@ Für einen Fehler an Ausgängen, Netz oder Bedienpult gehört `machine.json` daz
 
 | | |
 |---|---|
-| [Operator-Handbuch](operator.md) | Was ein Operator damit tut |
-| [Entwicklerhandbuch](developer.md) | Wie das Programm gebaut ist |
+| [Operator-Handbuch](operator.de.md) | Was ein Operator damit tut |
+| [Entwicklerhandbuch](developer.en.md) | Wie das Programm gebaut ist |
 | [`../../ARCHITECTURE_SPEC.md`](../../ARCHITECTURE_SPEC.md) §7 | Ausgänge, Feld für Feld |
 | [`../../ARCHITECTURE_SPEC.md`](../../ARCHITECTURE_SPEC.md) §10.3 | Lebenszyklus und Autostart |
 | [`../ISSUES.md`](../ISSUES.md) | Was bekannt nicht stimmt |

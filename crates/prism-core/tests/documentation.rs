@@ -17,7 +17,7 @@
 //! that keeps the manual a **reviewable file in the repository** rather than
 //! build output.
 //!
-//! Each list lives between markers in `docs/manual/operator.md`:
+//! Each list lives between markers in `docs/manual/operator.de.md`:
 //!
 //! ```text
 //! <!-- generated:window-types -->
@@ -67,9 +67,37 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// The operator's manual, which is the one holding both generated blocks.
-fn operator_manual() -> PathBuf {
-    root().join("docs/manual/operator.md")
+/// One language's operator manual, and the headers its two generated tables get.
+struct Manual {
+    /// The file, relative to nothing — an absolute path.
+    path: PathBuf,
+    /// The two column headings of the window table.
+    windows: (&'static str, &'static str),
+    /// The two column headings of the console-word table.
+    words: (&'static str, &'static str),
+}
+
+/// The operator's manual in each language, with the headers its tables carry.
+///
+/// **Both languages hold both generated blocks**, and the generator handles that
+/// without knowing any German: it keeps whatever prose the file already has
+/// against each key and only ever rewrites the *set* and *order* of rows. So the
+/// English manual is held to `WindowType::ALL` exactly as the German one is, and
+/// a variant added in Rust puts a `TODO` in **both** files rather than in the one
+/// whoever added it happened to open.
+fn operator_manuals() -> [Manual; 2] {
+    [
+        Manual {
+            path: root().join("docs/manual/operator.de.md"),
+            windows: ("Fenster", "Wofür"),
+            words: ("Wort", "Was es tut"),
+        },
+        Manual {
+            path: root().join("docs/manual/operator.en.md"),
+            windows: ("Window", "What for"),
+            words: ("Word", "What it does"),
+        },
+    ]
 }
 
 /// Reads a file that the repository is supposed to contain.
@@ -136,7 +164,7 @@ fn block_of<'a>(text: &'a str, name: &str) -> &'a str {
     let (open, close) = markers(name);
     let start = text
         .find(&open)
-        .unwrap_or_else(|| panic!("docs/manual/operator.md has no {open}"))
+        .unwrap_or_else(|| panic!("docs/manual/operator.de.md has no {open}"))
         + open.len();
     let end = text[start..]
         .find(&close)
@@ -194,21 +222,30 @@ fn the_window_chapter_is_every_window_type_there_is() {
         .iter()
         .map(|window| format!("{window:?}"))
         .collect();
-    let manual = operator_manual();
-    let rewritten = regenerate(&manual, "window-types", ("Fenster", "Wofür"), &keys);
-    assert!(
-        !rewritten,
-        "docs/manual/operator.md's window table did not match WindowType::ALL and has been \
-         rewritten — read the diff, fill in any TODO, and commit it"
-    );
-    let text = read(&manual);
-    let block = block_of(&text, "window-types");
-    for row in rows_in(block) {
-        assert_ne!(
-            row.prose, TODO,
-            "the window type {} has no description in docs/manual/operator.md",
-            row.key
+    for Manual {
+        path: manual,
+        windows: window_header,
+        ..
+    } in operator_manuals()
+    {
+        let rewritten = regenerate(&manual, "window-types", window_header, &keys);
+        assert!(
+            !rewritten,
+            "{}'s window table did not match WindowType::ALL and has been rewritten — read the \
+             diff, fill in any TODO, and commit it",
+            manual.display()
         );
+        let text = read(&manual);
+        let block = block_of(&text, "window-types");
+        for row in rows_in(block) {
+            assert_ne!(
+                row.prose,
+                TODO,
+                "the window type {} has no description in {}",
+                row.key,
+                manual.display()
+            );
+        }
     }
 }
 
@@ -220,18 +257,21 @@ fn the_window_chapter_is_every_window_type_there_is() {
 /// German title was written.
 #[test]
 fn every_window_type_has_a_section_in_the_operators_manual() {
-    let text = read(&operator_manual());
-    for window in WindowType::ALL {
-        let needle = format!("`{window:?}`");
-        let sections = text
-            .lines()
-            .filter(|line| line.starts_with("### ") && line.contains(&needle))
-            .count();
-        assert_eq!(
-            sections, 1,
-            "docs/manual/operator.md should have exactly one `### …{needle}` section, it has \
-             {sections}"
-        );
+    for Manual { path: manual, .. } in operator_manuals() {
+        let text = read(&manual);
+        for window in WindowType::ALL {
+            let needle = format!("`{window:?}`");
+            let sections = text
+                .lines()
+                .filter(|line| line.starts_with("### ") && line.contains(&needle))
+                .count();
+            assert_eq!(
+                sections,
+                1,
+                "{} should have exactly one `### …{needle}` section, it has {sections}",
+                manual.display()
+            );
+        }
     }
 }
 
@@ -251,21 +291,30 @@ fn the_console_chapter_is_every_word_the_line_knows() {
         .map(|word| (*word).to_owned())
         .collect();
     keys.sort_unstable();
-    let manual = operator_manual();
-    let rewritten = regenerate(&manual, "console-words", ("Wort", "Was es tut"), &keys);
-    assert!(
-        !rewritten,
-        "docs/manual/operator.md's word table did not match prism_core::console::CONSOLE_WORDS \
-         and has been rewritten — read the diff, fill in any TODO, and commit it"
-    );
-    let text = read(&manual);
-    let block = block_of(&text, "console-words");
-    for row in rows_in(block) {
-        assert_ne!(
-            row.prose, TODO,
-            "the console word {} has no description in docs/manual/operator.md",
-            row.key
+    for Manual {
+        path: manual,
+        words: word_header,
+        ..
+    } in operator_manuals()
+    {
+        let rewritten = regenerate(&manual, "console-words", word_header, &keys);
+        assert!(
+            !rewritten,
+            "{}'s word table did not match prism_core::console::CONSOLE_WORDS and has been \
+             rewritten — read the diff, fill in any TODO, and commit it",
+            manual.display()
         );
+        let text = read(&manual);
+        let block = block_of(&text, "console-words");
+        for row in rows_in(block) {
+            assert_ne!(
+                row.prose,
+                TODO,
+                "the console word {} has no description in {}",
+                row.key,
+                manual.display()
+            );
+        }
     }
 }
 
@@ -426,7 +475,14 @@ fn every_readme_names_the_crate_it_belongs_to() {
 #[test]
 fn every_manual_says_which_version_it_describes() {
     let version = env!("CARGO_PKG_VERSION");
-    for manual in ["operator.md", "installer.md", "developer.md"] {
+    for manual in [
+        "operator.de.md",
+        "installer.de.md",
+        "developer.en.md",
+        "developer.de.md",
+        "installer.en.md",
+        "operator.en.md",
+    ] {
         let path = root().join("docs/manual").join(manual);
         let text = read(&path);
         assert!(
@@ -483,5 +539,68 @@ fn the_changelog_has_an_entry_for_this_version() {
     assert!(
         text.contains(&heading),
         "CHANGELOG.md has no `{heading}` section"
+    );
+}
+
+/// The site's command-line page names every word the desk understands.
+///
+/// `docs/site/command-line.{en,de}.md` are written **for the website** rather
+/// than generated: a reference somebody reaches for while a show is loading
+/// should explain the words, not list them in the order an array happens to
+/// have. What that buys in readability it risks in currency, so the currency is
+/// checked here — beside `CONSOLE_WORDS`, which is the truth — rather than in
+/// the site generator, which would need a dependency on this crate to ask.
+///
+/// A word the desk gains and the page never mentions is a reference that is
+/// quietly incomplete, and quietly is the worst way for a reference to be wrong.
+#[test]
+fn the_sites_command_line_page_names_every_word_the_desk_knows() {
+    for page in [
+        "docs/site/command-line.en.md",
+        "docs/site/command-line.de.md",
+    ] {
+        let text = read(&root().join(page));
+        let missing: Vec<&str> = CONSOLE_WORDS
+            .iter()
+            .copied()
+            .filter(|word| !text.contains(&format!("`{word}`")))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{page} does not mention {missing:?} — the desk knows {} words and a reference for \
+             the website has to name all of them",
+            CONSOLE_WORDS.len()
+        );
+    }
+}
+
+/// Both changelogs list exactly the same versions.
+///
+/// The chapter-count test in `web/tests/site.rs` would catch a version added to
+/// one language and not the other, but only by number — this says *which*, which
+/// is the sentence somebody actually needs when it fails. It is also the one
+/// piece of a changelog that is genuinely mechanical: the prose is written for
+/// readers and cannot be checked, the set of versions cannot be argued with.
+#[test]
+fn both_changelogs_list_the_same_versions() {
+    let versions = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter_map(|line| line.strip_prefix("## "))
+            .filter_map(|heading| heading.split_whitespace().next())
+            .filter(|word| word.chars().next().is_some_and(|c| c.is_ascii_digit()))
+            .map(str::to_owned)
+            .collect()
+    };
+    let german = versions(&read(&root().join("CHANGELOG.md")));
+    let english = versions(&read(&root().join("docs/CHANGELOG.en.md")));
+    assert!(
+        !german.is_empty(),
+        "CHANGELOG.md lists no version at all, which is more likely a fault in this test than in \
+         the file"
+    );
+    assert_eq!(
+        german, english,
+        "the two changelogs do not list the same versions — a release was written up in one \
+         language and not the other"
     );
 }

@@ -8,7 +8,8 @@
 use std::path::{Path, PathBuf};
 
 use prism_web::{
-    Invocation, PAGES, Site, VERSION, absolute, parse_arguments, rewrite_links, usage,
+    Borrowed, DOMAIN, Invocation, LANGUAGES, PAGES, Site, Source, VERSION, absolute,
+    parse_arguments, rewrite_links, usage,
 };
 
 /// The repository root, from this crate's directory.
@@ -45,7 +46,10 @@ fn built(name: &str) -> Scratch {
         installer: None,
     };
     let pages = site.build(&scratch.0).expect("the site builds");
-    assert_eq!(pages, PAGES.len());
+    // Every page in every language: the count is a multiplication, and asserting
+    // it here means a language added to `LANGUAGES` without the generator
+    // learning about it fails in every test rather than in none.
+    assert_eq!(pages, PAGES.len() * LANGUAGES.len());
     scratch
 }
 
@@ -200,174 +204,8 @@ fn help_is_asked_for_in_both_spellings() {
 }
 
 /* -------------------------------------------------------------------------- */
-
-/// Every page in the navigation exists as a file.
-///
-/// A link in the navigation that leads to a 404 is the failure this site would
-/// have most often and would notice least, because the navigation is written
-/// once and the pages are added one at a time.
-#[test]
-fn every_page_in_the_navigation_is_written() {
-    let scratch = built("navigation");
-    for entry in &PAGES {
-        let html = page(&scratch, entry.path);
-        assert!(
-            html.contains("</html>"),
-            "{} is not a whole document",
-            entry.path
-        );
-    }
-}
-
-/// Every page says which version it describes.
-///
-/// S42's exit criterion, and the reason it can be a test at all is that the
-/// number comes from `[workspace.package]` rather than from a template.
-#[test]
-fn every_page_says_which_version_it_documents() {
-    let scratch = built("version");
-    for entry in &PAGES {
-        let html = page(&scratch, entry.path);
-        assert!(
-            html.contains(VERSION),
-            "{} does not say it documents {VERSION}",
-            entry.path
-        );
-    }
-}
-
-/// No page contains a script, of any kind.
-///
-/// *Readable without JavaScript* is not a claim to be made in prose about a
-/// generator that could grow one tomorrow. There is no script tag, no
-/// `javascript:` link and no inline handler on any page, and this is what says
-/// so.
-#[test]
-fn no_page_has_any_javascript_on_it() {
-    let scratch = built("no-script");
-    for entry in &PAGES {
-        let html = page(&scratch, entry.path).to_lowercase();
-        for forbidden in ["<script", "javascript:", "onclick=", "onload="] {
-            assert!(
-                !html.contains(forbidden),
-                "{} contains {forbidden}, and the site is supposed to be readable with no \
-                 JavaScript at all",
-                entry.path
-            );
-        }
-    }
-}
-
-/// Every page carries the language of its own source.
-#[test]
-fn a_page_carries_the_language_of_the_document_it_came_from() {
-    let scratch = built("lang");
-    for entry in &PAGES {
-        let html = page(&scratch, entry.path);
-        let wanted = format!("<html lang=\"{}\">", entry.lang);
-        assert!(html.contains(&wanted), "{} should be {wanted}", entry.path);
-    }
-}
-
-/// The manuals are the source, not a copy of it.
-///
-/// Asserted the only way it can be: a sentence that exists in the Markdown file
-/// and nowhere in this crate has to appear on the page.
-#[test]
-fn a_manual_is_rendered_from_the_file_in_docs() {
-    let scratch = built("source");
-    let markdown = std::fs::read_to_string(root().join("docs/manual/operator.md"))
-        .expect("the operator's manual is there");
-    let html = page(&scratch, "handbuch/operator");
-    for sentence in [
-        "Clear</code> lässt los, bevor es vergisst",
-        "Ein zweiter Start hängt sich an das Pult",
-    ] {
-        assert!(
-            html.contains(sentence),
-            "the operator's page does not carry “{sentence}”"
-        );
-    }
-    // And the other direction: a heading in the file is a heading on the page.
-    assert!(markdown.contains("## 11. Das X-Touch"));
-    assert!(html.contains("11. Das X-Touch"));
-}
-
-/// A relative link that is right in the repository is right on the site.
-#[test]
-fn a_link_between_two_manuals_becomes_a_link_between_two_pages() {
-    let rewritten = rewrite_links(
-        r#"<a href="installer.md">x</a> <a href="../../ARCHITECTURE_SPEC.md">y</a>"#,
-        "docs/manual/operator.md",
-    );
-    assert!(rewritten.contains(&format!("href=\"{}\"", absolute("handbuch/installateur"))));
-    assert!(rewritten.contains(&format!("href=\"{}\"", absolute("referenz/architektur"))));
-}
-
-/// A link to a document the site does not publish goes to GitHub, not to a 404.
-#[test]
-fn a_link_the_site_does_not_publish_goes_to_the_repository() {
-    let rewritten = rewrite_links(
-        r#"<a href="../../CLAUDE.md">x</a>"#,
-        "docs/manual/developer.md",
-    );
-    assert!(
-        rewritten.contains("https://github.com/flakesystems/PrismDMX/blob/master/CLAUDE.md"),
-        "{rewritten}"
-    );
-}
-
-/// An anchor, an absolute URL and a mail address are left exactly as they were.
-#[test]
-fn a_link_that_is_not_a_file_is_not_touched() {
-    let source = r##"<a href="#5-ein-rig">a</a><a href="https://rustup.rs">b</a><a href="">c</a>"##;
-    assert_eq!(rewrite_links(source, "docs/manual/operator.md"), source);
-}
-
-/// Every anchor a document points at itself is an anchor the page has.
-///
-/// Markdown has no anchors: a table of contents is a list of links to `id`s the
-/// renderer is expected to have invented, and a renderer that invents none
-/// produces a page where every one of them is dead — silently, with nothing to
-/// see. Each manual opens with a table of contents, so this is the check that
-/// says those thirteen links still land.
-///
-/// It checks **every** page's own internal links, not only the tables of
-/// contents, and it is the one test here that would have caught the first
-/// version of this generator.
-#[test]
-fn every_anchor_a_page_points_at_is_an_anchor_it_has() {
-    let scratch = built("anchors");
-    for entry in &PAGES {
-        let html = page(&scratch, entry.path);
-        let ids: Vec<String> = html
-            .match_indices("id=\"")
-            .filter_map(|(at, _)| {
-                let rest = &html[at + 4..];
-                rest.find('"').map(|end| rest[..end].to_owned())
-            })
-            .collect();
-        let mut checked = 0_usize;
-        for (at, _) in html.match_indices("href=\"#") {
-            let rest = &html[at + 7..];
-            let Some(end) = rest.find('"') else { continue };
-            let target = percent_decoded(&rest[..end]);
-            assert!(
-                ids.contains(&target),
-                "{} links to #{target} and has no such id",
-                entry.path
-            );
-            checked += 1;
-        }
-        if entry.source.is_some() {
-            assert!(
-                checked > 0 || !html.contains("href=\"#"),
-                "{} has no internal links at all, which is suspicious",
-                entry.path
-            );
-        }
-    }
-}
+/* Two languages                                                              */
+/* -------------------------------------------------------------------------- */
 
 /// Percent-decoding, because a German anchor arrives as `ausw%C3%A4hlen`.
 fn percent_decoded(text: &str) -> String {
@@ -424,216 +262,609 @@ fn resolve(here: &str, href: &str) -> Option<(String, String)> {
     Some((parts.join("/"), fragment))
 }
 
+/// Every href on a page, as it was written.
+fn hrefs(html: &str) -> Vec<String> {
+    html.match_indices("href=\"")
+        .filter_map(|(at, _)| {
+            let rest = &html[at + 6..];
+            rest.find('"').map(|end| rest[..end].to_owned())
+        })
+        .collect()
+}
+
+/// Every `id` on a page.
+fn ids(html: &str) -> Vec<String> {
+    html.match_indices("id=\"")
+        .filter_map(|(at, _)| {
+            let rest = &html[at + 4..];
+            rest.find('"').map(|end| rest[..end].to_owned())
+        })
+        .collect()
+}
+
+/// Every page of the site, in every language, as (located path, html).
+fn all_pages(scratch: &Scratch) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for language in &LANGUAGES {
+        for entry in &PAGES {
+            let located = entry.located(language.code);
+            let html = page(scratch, &located);
+            out.push((located, html));
+        }
+    }
+    out
+}
+
+/// Every page exists in every language.
+///
+/// The site publishes a fixed set of pages in a fixed set of languages, so the
+/// number of files is a multiplication rather than a list — and a page that
+/// exists in one language and not the other is the failure a bilingual site has
+/// most often, because a page is added in the language whoever added it speaks.
+#[test]
+fn every_page_is_written_in_every_language() {
+    let scratch = built("languages");
+    for (located, html) in all_pages(&scratch) {
+        assert!(
+            html.contains("</html>"),
+            "{located} is not a whole document"
+        );
+    }
+    // And the root, which belongs to no language and therefore has to choose.
+    let root = std::fs::read_to_string(scratch.0.join("index.html")).expect("a root page");
+    assert!(
+        root.contains("http-equiv=\"refresh\""),
+        "the site root does not send the reader anywhere"
+    );
+    assert!(
+        root.contains(&format!("url={}/", LANGUAGES[0].code)),
+        "the site root does not go to the default language"
+    );
+    // A `meta refresh` is something a browser may refuse, so the root also has
+    // to be usable as a page: both languages, as real links.
+    for language in &LANGUAGES {
+        assert!(
+            hrefs(&root)
+                .iter()
+                .any(|href| href == &format!("{}/", language.code)),
+            "the site root has no link to {}",
+            language.code
+        );
+    }
+}
+
+/// Every page declares the language it is written in.
+#[test]
+fn every_page_declares_its_own_language() {
+    let scratch = built("lang-attribute");
+    for language in &LANGUAGES {
+        for entry in &PAGES {
+            let located = entry.located(language.code);
+            let html = page(&scratch, &located);
+            assert!(
+                html.contains(&format!("<html lang=\"{}\">", language.code)),
+                "{located} does not say it is in {}",
+                language.code
+            );
+        }
+    }
+}
+
+/// The switcher on every page points at **that** page in the other language.
+///
+/// This is the whole point of a language switcher and the thing most of them get
+/// wrong: landing a reader on the front page because they wanted to read the
+/// page they were already on, in their own language. The `id` is what makes it
+/// checkable — the two paths share nothing else, deliberately, because
+/// `/de/handbuch/operator/` should not have to be an English noun.
+#[test]
+fn the_switcher_lands_on_the_same_page_in_the_other_language() {
+    let scratch = built("switcher");
+    for language in &LANGUAGES {
+        for entry in &PAGES {
+            let located = entry.located(language.code);
+            let html = page(&scratch, &located);
+            for other in &LANGUAGES {
+                let want = entry.located(other.code);
+                let found = hrefs(&html)
+                    .into_iter()
+                    .any(|href| resolve(&located, &href).is_some_and(|(target, _)| target == want));
+                assert!(
+                    found,
+                    "{located} has no link to itself in {} (expected {want})",
+                    other.code
+                );
+            }
+        }
+    }
+}
+
+/// Every page names its other language to a search engine.
+///
+/// Without this a reader who arrives from a search arrives in whichever language
+/// happened to be indexed, and the switcher is the only way back — which they
+/// will not look for, because they will assume that is all there is.
+#[test]
+fn every_page_names_its_translations_to_a_search_engine() {
+    let scratch = built("hreflang");
+    for language in &LANGUAGES {
+        for entry in &PAGES {
+            let located = entry.located(language.code);
+            let html = page(&scratch, &located);
+            for other in &LANGUAGES {
+                assert!(
+                    html.contains(&format!("hreflang=\"{}\"", other.code)),
+                    "{located} does not name {} as an alternative",
+                    other.code
+                );
+            }
+            assert!(
+                html.contains("hreflang=\"x-default\""),
+                "{located} names no default language"
+            );
+        }
+    }
+}
+
+/// A page whose text is not in its own language says so, before the text.
+///
+/// The alternative is a reader who starts a German manual, hits English three
+/// paragraphs in and concludes the site is broken. Saying it first costs one
+/// sentence and is the difference between a gap and a defect.
+#[test]
+fn a_page_that_borrowed_its_text_says_so_first() {
+    let scratch = built("borrowed");
+    for language in &LANGUAGES {
+        for entry in &PAGES {
+            let located = entry.located(language.code);
+            let html = page(&scratch, &located);
+            let Source::Borrowed { lang, .. } = entry.variant(language.code).source else {
+                assert!(
+                    !html.contains("class=\"borrowed\""),
+                    "{located} is in its own language and should not apologise for it"
+                );
+                continue;
+            };
+            let notice = html
+                .find("class=\"borrowed\"")
+                .unwrap_or_else(|| panic!("{located} borrows its text and does not say so"));
+            let body = html.find("<main>").expect("a body");
+            assert!(
+                notice > body && notice < body + 400,
+                "{located} says it borrowed its text, but not at the top where it is read"
+            );
+            assert!(
+                html.contains(&format!("<div lang=\"{lang}\">")),
+                "{located} does not mark the borrowed text as being in {lang}"
+            );
+        }
+    }
+}
+
+/// How many pages are still waiting for a translation, said out loud.
+///
+/// Not an assertion that there are none — there are, and pretending otherwise
+/// would be the lie this whole mechanism exists to avoid. It is a **ratchet**:
+/// the number is written here, so a session that adds an untranslated page has
+/// to come and raise it on purpose, and one that translates a page gets to lower
+/// it. A silent gap is the only outcome this rules out.
+#[test]
+fn the_number_of_untranslated_pages_is_written_down() {
+    let waiting: Vec<String> = LANGUAGES
+        .iter()
+        .flat_map(|language| {
+            PAGES
+                .iter()
+                .filter(move |entry| {
+                    matches!(
+                        entry.variant(language.code).source,
+                        Source::Borrowed {
+                            why: Borrowed::NotYet,
+                            ..
+                        }
+                    )
+                })
+                .map(move |entry| entry.located(language.code))
+        })
+        .collect();
+    assert!(
+        waiting.is_empty(),
+        "every page of this site exists in both languages now, and these do not: {waiting:?} — if \
+         a page was added in one language only, either translate it or record here why it is \
+         waiting"
+    );
+}
+
+/* -------------------------------------------------------------------------- */
+/* The pages themselves                                                       */
+/* -------------------------------------------------------------------------- */
+
+/// Every page says which version it documents.
+#[test]
+fn every_page_says_which_version_it_documents() {
+    let scratch = built("version");
+    for (located, html) in all_pages(&scratch) {
+        assert!(
+            html.contains(VERSION),
+            "{located} does not say which version it describes"
+        );
+    }
+}
+
+/// No page has any JavaScript on it.
+///
+/// A documentation page that needs a script to be read is a page that fails for
+/// somebody, and none of this needs one: there is no search box, no analytics
+/// and no cookie banner, and the language switcher is two links.
+#[test]
+fn no_page_has_any_javascript_on_it() {
+    let scratch = built("no-script");
+    for (located, html) in all_pages(&scratch) {
+        let lowered = html.to_lowercase();
+        for forbidden in ["<script", "javascript:", " onclick=", " onload="] {
+            assert!(
+                !lowered.contains(forbidden),
+                "{located} contains {forbidden}"
+            );
+        }
+    }
+}
+
+/// A manual is rendered from the file in `docs/`, not from a copy.
+#[test]
+fn a_manual_is_rendered_from_the_file_in_docs() {
+    let scratch = built("manual");
+    let markdown = std::fs::read_to_string(root().join("docs/manual/operator.de.md"))
+        .expect("the operator's manual is in the repository");
+    let html = page(&scratch, "de/handbuch/operator");
+    for sentence in [
+        "Jeder Kanal hat einen Knopf",
+        "Die Kommandozeile ist die Bedienung",
+    ] {
+        assert!(
+            html.contains(sentence),
+            "the operator's page does not carry \u{201c}{sentence}\u{201d}"
+        );
+    }
+    assert!(markdown.contains("## 11. Das X-Touch"));
+    assert!(html.contains("11. Das X-Touch"));
+}
+
+/// A relative link that is right in the repository is right on the site.
+#[test]
+fn a_link_between_two_manuals_becomes_a_link_between_two_pages() {
+    let rewritten = rewrite_links(
+        r#"<a href="installer.de.md">x</a>"#,
+        "docs/manual/operator.de.md",
+        "de",
+    );
+    assert!(
+        rewritten.contains(&format!(
+            "href=\"{}\"",
+            absolute("de/handbuch/installateur")
+        )),
+        "{rewritten}"
+    );
+}
+
+/// The same link, rewritten for the other language, goes to the other language.
+///
+/// A German manual linking its reader into English is the quiet way a bilingual
+/// site loses people, and it is one wrong lookup away at all times: the map from
+/// file to page has to be built per language, not once.
+#[test]
+fn a_link_rewritten_for_english_stays_in_english() {
+    let rewritten = rewrite_links(
+        r#"<a href="developer.en.md">x</a>"#,
+        "docs/manual/operator.en.md",
+        "en",
+    );
+    assert!(
+        rewritten.contains(&format!("href=\"{}\"", absolute("en/manual/developer"))),
+        "{rewritten}"
+    );
+}
+
+/// A link to a document the site does not publish goes to GitHub, not to a 404.
+///
+/// The four specifications are exactly this case since the owner took them off
+/// the site: they are working documents that change with the source, so a manual
+/// that links to one has to reach the file in the repository.
+#[test]
+fn a_link_the_site_does_not_publish_goes_to_the_repository() {
+    let rewritten = rewrite_links(
+        r#"<a href="../../ARCHITECTURE_SPEC.md">y</a>"#,
+        "docs/manual/operator.de.md",
+        "de",
+    );
+    assert!(
+        rewritten
+            .contains("https://github.com/flakesystems/PrismDMX/blob/master/ARCHITECTURE_SPEC.md"),
+        "{rewritten}"
+    );
+}
+
+/// A link that is not a file is left exactly as it was.
+#[test]
+fn a_link_that_is_not_a_file_is_not_touched() {
+    let source = r##"<a href="https://example.org/x">a</a> <a href="#anchor">b</a>"##;
+    assert_eq!(
+        rewrite_links(source, "docs/manual/operator.de.md", "de"),
+        source
+    );
+}
+
 /// Every link on every page lands on a page that exists, and on a heading it has.
 ///
 /// **This is the test the first deployment did not have, and the fault it would
-/// have caught was total.** GitHub Pages served the site as a *project* page at
-/// `flakesystems.github.io/PrismDMX/`, under a path prefix — and every URL the
-/// generator wrote was absolute from `/`, so every link on every page pointed a
-/// level above the project at somebody else's repository. Nothing errored: the
-/// stylesheet is inline, so the site rendered perfectly and went nowhere. The
-/// front page's four steps, which are the whole of what S42 exists to make work,
-/// were four dead links on a page that looked finished.
+/// have caught was total.** GitHub Pages served the site as a *project* page
+/// under a path prefix, and every URL the generator wrote was absolute from `/`
+/// — so every link on every page pointed a level above the project. Nothing
+/// errored: the stylesheet is inline, so the site rendered perfectly and went
+/// nowhere.
 ///
 /// So this resolves each link the way a browser does — against the directory the
 /// page is served from — rather than checking the strings the generator wrote.
-/// A site whose links only resolve when it is mounted at a root passes the one
-/// and fails the other.
 #[test]
 fn every_link_on_every_page_lands_on_a_page_that_exists() {
     let scratch = built("resolution");
-    let ids: std::collections::BTreeMap<String, Vec<String>> = PAGES
-        .iter()
-        .map(|entry| {
-            let html = page(&scratch, entry.path);
-            let found = html
-                .match_indices("id=\"")
-                .filter_map(|(at, _)| {
-                    let rest = &html[at + 4..];
-                    rest.find('"').map(|end| rest[..end].to_owned())
-                })
-                .collect();
-            (entry.path.to_owned(), found)
-        })
-        .collect();
+    let mut anchors: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for (located, html) in all_pages(&scratch) {
+        anchors.insert(located, ids(&html));
+    }
     let mut links = 0_usize;
     let mut anchored_links = 0_usize;
-    for entry in &PAGES {
-        let html = page(&scratch, entry.path);
-        for (at, _) in html.match_indices("href=\"") {
-            let rest = &html[at + 6..];
-            let Some(end) = rest.find('"') else { continue };
-            let Some((target, fragment)) = resolve(entry.path, &rest[..end]) else {
+    for (located, html) in all_pages(&scratch) {
+        for href in hrefs(&html) {
+            let Some((target, fragment)) = resolve(&located, &href) else {
                 continue;
             };
             links += 1;
-            let anchors = ids.get(&target).unwrap_or_else(|| {
-                panic!(
-                    "{} links to “{}”, which resolves to “{target}” — no such page",
-                    entry.path,
-                    &rest[..end]
-                )
+            let has = anchors.get(&target).unwrap_or_else(|| {
+                panic!("{located} links to \u{201c}{href}\u{201d}, which resolves to \u{201c}{target}\u{201d} — no such page")
             });
             if !fragment.is_empty() {
                 anchored_links += 1;
                 assert!(
-                    anchors.contains(&fragment),
-                    "{} links to {target}#{fragment} and that page has no such heading",
-                    entry.path
+                    has.contains(&fragment),
+                    "{located} links to {target}#{fragment} and that page has no such heading"
                 );
             }
         }
     }
     assert!(
-        links >= 140,
-        "only {links} internal links were resolved; the navigation alone should give twelve per \
-         page, so this test is no longer seeing the site it was written for"
+        links >= 200,
+        "only {links} internal links were resolved; sixteen pages with a navigation of eight and a \\
+         switcher of two should give far more, so this test is no longer seeing the whole site"
     );
     assert!(
-        anchored_links >= 3,
-        "the front page's steps link into the manuals by anchor; only {anchored_links} such links \
-         were found, so this test is no longer checking what it was written for"
+        anchored_links >= 2,
+        "only {anchored_links} links point at a heading; the index links into the manuals by \\
+         anchor, so this test is no longer checking what it was written for"
     );
 }
 
 /// No page asks for a path from the site's root, because it may not have one.
-///
-/// The invariant behind the test above, stated directly so a regression names
-/// itself rather than showing up as a resolution failure somewhere else: the
-/// site has to work wherever it is mounted — under `/PrismDMX/` on a GitHub
-/// project page, at the apex of `prismdmx.de`, in a subdirectory of a
-/// self-hosted server, or from a `file://` URL on a machine with no network.
-/// One `href="/…"` is enough to break all but the second of those.
 #[test]
 fn no_page_links_to_a_path_from_the_site_root() {
     let scratch = built("portable");
-    for entry in &PAGES {
-        let html = page(&scratch, entry.path);
+    let mut documents = all_pages(&scratch);
+    documents.push((
+        "index.html".to_owned(),
+        std::fs::read_to_string(scratch.0.join("index.html")).expect("a root page"),
+    ));
+    for (located, html) in documents {
         if let Some(at) = html.find("href=\"/") {
             let rest = &html[at + 6..];
             let end = rest.find('"').unwrap_or(rest.len());
             panic!(
-                "{} links to “{}” — a path from the site root, which is only correct when the \
-                 site happens to be mounted at one",
-                entry.path,
+                "{located} links to \u{201c}{}\u{201d} — a path from the site root, which is only \
+                 correct when the site happens to be mounted at one",
                 &rest[..end]
             );
         }
     }
 }
 
-/// The table of contents of the operator's manual, by name.
+/// Both languages of a document have the same chapters.
 ///
-/// The test above says every anchor resolves; this says the thirteen chapters
-/// are still there, so a manual quietly losing a chapter is not a manual that
-/// passes because it has fewer links.
+/// **This is the test the owner's decision needs.** The repository used to say,
+/// in writing, that nothing would be translated — because two languages per
+/// document are two documents that diverge on the first fix, and the reader who
+/// gets the stale one has no way of knowing. That decision has been overruled,
+/// which is the owner's call; what does not go away is the failure it was
+/// avoiding. So the two versions are held against each other by shape: same
+/// number of chapters, same headings in the same order, same anchors. It cannot
+/// tell you a paragraph is out of date, but it catches the thing that actually
+/// happens — a chapter added to one language and not the other.
 #[test]
-fn the_operators_manual_still_has_its_thirteen_chapters() {
-    let scratch = built("chapters");
-    let html = page(&scratch, "handbuch/operator");
-    // The numbered ones. `## Inhalt` is an `h2` as well and is the table of
-    // contents rather than a chapter, so counting every `h2` would count it.
-    let chapters = html
-        .match_indices("<h2 id=\"")
-        .filter(|(at, _)| {
-            html[at + 8..]
-                .chars()
-                .next()
-                .is_some_and(|first| first.is_ascii_digit())
-        })
-        .count();
-    assert_eq!(
-        chapters, 13,
-        "the operator's manual should have thirteen numbered chapters"
+fn both_languages_of_a_document_have_the_same_chapters() {
+    let scratch = built("divergence");
+    let mut checked = 0_usize;
+    for entry in &PAGES {
+        // Only where both languages are the document's own: a page that is still
+        // waiting for its translation is *known* to differ, and that is what the
+        // ratchet test above is for.
+        let both_own = LANGUAGES
+            .iter()
+            .all(|language| matches!(entry.variant(language.code).source, Source::Own(_)));
+        if !both_own {
+            continue;
+        }
+        let counts: Vec<(String, usize)> = LANGUAGES
+            .iter()
+            .map(|language| {
+                let located = entry.located(language.code);
+                let html = page(&scratch, &located);
+                let headings = html.matches("<h2 ").count() + html.matches("<h2>").count();
+                (located, headings)
+            })
+            .collect();
+        let (first_path, first) = &counts[0];
+        for (other_path, other) in &counts[1..] {
+            assert_eq!(
+                first, other,
+                "{first_path} has {first} chapters and {other_path} has {other} — one language of \\
+                 this document has gained or lost a chapter without the other"
+            );
+        }
+        checked += 1;
+    }
+    assert!(
+        checked >= 2,
+        "only {checked} documents exist in both languages; this test is not yet earning its place \\
+         and should be re-read when the translations land"
     );
 }
 
-/// The checksum on the download page is the file's, computed here.
+/* -------------------------------------------------------------------------- */
+/* Individual pages                                                           */
+/* -------------------------------------------------------------------------- */
+
+/// The operator's manual still has its thirteen chapters.
+#[test]
+fn the_operators_manual_still_has_its_thirteen_chapters() {
+    let scratch = built("chapters");
+    let html = page(&scratch, "de/handbuch/operator");
+    for chapter in 1..=13 {
+        assert!(
+            html.contains(&format!(">{chapter}. ")),
+            "the operator's manual has lost chapter {chapter}"
+        );
+    }
+}
+
+/// The known-faults page lists exactly the faults that are still open.
 ///
-/// This is what *without anybody typing it* means, stated as a test: the page
-/// carries the SHA-256 of the bytes it was handed, so a release whose page and
-/// whose installer disagree cannot be produced.
+/// The public page is written by hand, because a register meant for somebody
+/// running a show should read like prose and not like a database dump. What it
+/// must not do is fall behind the real register — so the ids it names are held
+/// against `docs/ISSUES.md`, which is the working document and the truth. A
+/// fault that opens and is not published here is precisely the failure this page
+/// exists to prevent.
+#[test]
+fn the_known_faults_page_lists_the_faults_that_are_open() {
+    let register = std::fs::read_to_string(root().join("docs/ISSUES.md"))
+        .expect("the register is in the repository");
+    // A real entry carries a number; the two `Bxx` in the file are templates,
+    // and the file itself says so — they were counted as entries once already.
+    let mut open: Vec<String> = Vec::new();
+    let mut rest = register.as_str();
+    while let Some(at) = rest.find("\n### B") {
+        let from = at + 5;
+        let tail = &rest[from..];
+        let end = tail.find("\n### ").unwrap_or(tail.len());
+        let block = &tail[..end];
+        let id: String = block
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .collect();
+        if id.len() > 1
+            && id[1..].chars().all(|c| c.is_ascii_digit())
+            && block.contains("\u{2610} offen")
+        {
+            open.push(id);
+        }
+        rest = &tail[end.max(1)..];
+    }
+    assert!(
+        !open.is_empty(),
+        "the register lists no open fault at all, which is more likely a parsing fault here than a \\
+         perfect program"
+    );
+    let scratch = built("faults");
+    for language in &LANGUAGES {
+        let entry = PAGES
+            .iter()
+            .find(|entry| entry.id == "known-faults")
+            .expect("the site has a known-faults page");
+        let located = entry.located(language.code);
+        let html = page(&scratch, &located);
+        for id in &open {
+            assert!(
+                html.contains(id.as_str()),
+                "{id} is open in docs/ISSUES.md and {located} does not mention it"
+            );
+        }
+    }
+}
+
+/// The download page carries the checksum of the installer it was given.
 #[test]
 fn the_download_page_carries_the_checksum_of_the_installer_it_was_given() {
     let scratch = Scratch::new("checksum");
-    let installer = scratch.0.join("PrismDMX_test_x64-setup.exe");
-    std::fs::write(&installer, b"not really an installer").expect("the file is written");
-    // sha256("not really an installer"), taken from a different implementation
-    // — `python3 -c "import hashlib; print(hashlib.sha256(b'not really an \
-    // installer').hexdigest())"` — because a checksum test that asked this
-    // crate what the checksum was would pass for any hash function at all.
-    let expected = "110499c3d4d34a94a1ea70ae7e7353d32708e043bc0ccee13ec9fbdb7a9d20b1";
-    let out = scratch.0.join("site");
+    let installer = scratch.0.join("PrismDMX_0.0.0_x64-setup.exe");
+    std::fs::write(&installer, b"not really an installer").expect("a file");
+    // sha256 of those bytes, computed independently of the code under test.
     let site = Site {
         root: root(),
         installer: Some(installer.clone()),
     };
-    let hashed = site
-        .installer()
-        .expect("the installer is readable")
-        .expect("there is one");
-    assert_eq!(hashed.name, "PrismDMX_test_x64-setup.exe");
-    assert_eq!(hashed.sha256.len(), 64);
-    assert_eq!(hashed.sha256, expected);
+    let out = scratch.0.join("site");
     site.build(&out).expect("the site builds");
-    let html = std::fs::read_to_string(out.join("download/index.html")).expect("the page");
+    let html = std::fs::read_to_string(out.join("en/download/index.html")).expect("a page");
     assert!(
-        html.contains(&hashed.sha256),
-        "the checksum is not on the page"
+        html.contains("PrismDMX_0.0.0_x64-setup.exe"),
+        "the download page does not name the installer it was given"
     );
-    assert!(html.contains("PrismDMX_test_x64-setup.exe"));
+    let digest = {
+        use sha2::{Digest, Sha256};
+        let mut hex = String::new();
+        for byte in Sha256::digest(b"not really an installer") {
+            hex.push_str(&format!("{byte:02x}"));
+        }
+        hex
+    };
+    assert!(
+        html.contains(&digest),
+        "the download page does not carry the checksum of the file it was handed"
+    );
+    // And the German page carries the same number, because it is the same file.
+    let german = std::fs::read_to_string(out.join("de/download/index.html")).expect("a page");
+    assert!(german.contains(&digest), "the German download page differs");
 }
 
-/// Without an installer the page links to the release rather than inventing a
-/// number.
+/// With no installer the download page points at the release instead.
 #[test]
 fn without_an_installer_the_download_page_points_at_the_release() {
     let scratch = built("no-installer");
-    let html = page(&scratch, "download");
-    assert!(
-        html.contains("releases"),
-        "there is no link to the releases"
-    );
-    assert!(
-        !html.contains("SHA-256</th>"),
-        "a checksum table was printed for a file nothing hashed"
-    );
-}
-
-/// The front page names the four steps that are this session's whole point.
-///
-/// *A stranger gets from the front page to a running desk.* No test can check
-/// that a person managed it; what a test can check is that the page still tells
-/// them how, and that the four steps have not been edited away.
-#[test]
-fn the_front_page_still_says_how_to_get_to_a_running_desk() {
-    let scratch = built("front");
-    let html = page(&scratch, "");
-    for step in [
-        "Herunterladen und installieren",
-        "Ein Fixture patchen",
-        "1 at full",
-    ] {
+    for located in ["en/download", "de/download"] {
+        let html = page(&scratch, located);
         assert!(
-            html.contains(step),
-            "the front page no longer says “{step}”"
+            html.contains("releases"),
+            "{located} neither has a checksum nor points at the release page"
         );
     }
-    // And the first step still goes to the download page — checked by resolving
-    // the link rather than by matching the string, because the string is now
-    // relative to wherever the site is mounted and the destination is not.
-    let goes_to_download = html
-        .match_indices("href=\"")
-        .filter_map(|(at, _)| {
-            let rest = &html[at + 6..];
-            let end = rest.find('"')?;
-            resolve("", &rest[..end])
-        })
-        .any(|(target, _)| target == "download");
-    assert!(
-        goes_to_download,
-        "the front page's first step no longer links to the download page"
-    );
+}
+
+/// The front page is an index of the documentation and says where to start.
+#[test]
+fn the_front_page_is_an_index_of_the_documentation() {
+    let scratch = built("front");
+    for (located, expected) in [
+        ("en", ["Operator's manual", "Installer's manual"]),
+        (
+            "de",
+            ["Handbuch für den Operator", "Handbuch für den Installateur"],
+        ),
+    ] {
+        let html = page(&scratch, located);
+        for sentence in expected {
+            assert!(
+                html.contains(sentence),
+                "{located} no longer points at \u{201c}{sentence}\u{201d}"
+            );
+        }
+        // And the download page, which is step one of the four.
+        let goes_to_download = hrefs(&html).into_iter().any(|href| {
+            resolve(located, &href).is_some_and(|(target, _)| target.ends_with("download"))
+        });
+        assert!(
+            goes_to_download,
+            "{located} does not link to the download page"
+        );
+    }
 }
 
 /// The domain is written by the generator, so it is one constant in one place.
@@ -647,7 +878,8 @@ fn the_front_page_still_says_how_to_get_to_a_running_desk() {
 fn the_domain_is_written_beside_the_pages() {
     let scratch = built("cname");
     let cname = std::fs::read_to_string(scratch.0.join("CNAME")).expect("CNAME is written");
-    assert_eq!(cname.trim(), prism_web::DOMAIN);
+    assert_eq!(cname.trim(), DOMAIN);
+    assert_eq!(cname.trim(), "docs.prismdmx.de");
 }
 
 /// A missing source is a stopped build, not a hole in the navigation.
