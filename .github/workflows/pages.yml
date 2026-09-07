@@ -1,0 +1,79 @@
+# prismdmx.de — the deployment, which is a push.
+#
+# S42's exit criteria say the deployment is reproducible and that the domain
+# serves over TLS. Both are met by *not* having a deployment procedure: the site
+# is built by a runner from a commit, and GitHub Pages serves the apex domain
+# with a certificate it issues and renews itself. There is nothing to run on
+# anybody's machine and no key anywhere.
+#
+# **Why this is a workflow of its own and not a step in `ci.yml`'s `web` job.**
+# `ci.yml` runs on every branch and every pull request, and the job there builds
+# the site and stops — so a commit's CI answers one question, *does the site
+# still generate*, on a machine that is not the author's. Publishing is a
+# different question with a different failure mode: Pages has to be enabled for
+# the repository and the DNS has to point here, and neither is something a
+# commit can be wrong about. Keeping them apart means a deployment that cannot
+# happen yet does not turn a green commit red.
+#
+# **A tag deploys from `release.yml` instead**, and that is the one difference
+# worth knowing: the download page's checksum is computed from the installer,
+# and the only run that has an installer is the one that just built it. So a
+# release publishes the site itself, with `--installer` pointing at the `.exe`
+# it is about to attach, and this workflow deliberately does not fire on tags.
+#
+# **What a human still has to do, once.** Enable Pages for this repository with
+# *GitHub Actions* as the source, and point `prismdmx.de` at it — an `ALIAS`,
+# `ANAME` or flattened `CNAME` on the apex to `flakesystems.github.io`, or the
+# four `A` records Pages documents. The generator writes `CNAME` itself, so the
+# domain is one constant in one place (`prism_web::DOMAIN`). Until that is done
+# this workflow's deploy step is the only thing in the repository that fails,
+# and it fails alone.
+
+name: Pages
+
+on:
+  push:
+    branches: ["master"]
+  # So a deployment can be made without waiting for a commit.
+  workflow_dispatch:
+
+# Only what deploying needs, and nothing else.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and a newer commit wins. Cancelling a running
+# deployment is safe here because the site is generated: there is no state to
+# leave half written.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    name: Build and deploy prismdmx.de
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the site
+        run: cargo run -p prism-web -- --out site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

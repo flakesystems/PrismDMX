@@ -30,7 +30,9 @@
 //!
 //! `ARCHITECTURE_SPEC.md` §10.1 names it, for the autostart integration: a
 //! `HKCU\…\Run` value is a Windows API and there is no portable spelling of it.
-//! It is confined to [`autostart::entry`], and everything above the seam — the
+//! It is confined to the Windows implementation of [`autostart::Entry`] —
+//! `autostart::windows::RunKey`, which exists only on that target — and
+//! everything above the seam — the
 //! comparison, the report a settings panel reads, the command line an entry
 //! carries — is one code path on every target.
 //!

@@ -160,7 +160,7 @@ impl<'de> Deserialize<'de> for DeskId {
 /// wrote *"the question it answers — what is this desk, as opposed to what is it
 /// playing? — comes up again for output configuration and for the DMX adapter on
 /// this machine, and those must not end up in the show file either"*. S33 is
-/// that session, and [`crate::outputs`] has the argument in full.
+/// that session, and `crates/prism-core/src/outputs.rs` has the argument in full.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MachineConfig {
@@ -441,7 +441,7 @@ impl MachineConfig {
     /// Gives this desk an identity — S37's `MachineChange::NewIdentity`,
     /// carried out one layer up.
     ///
-    /// `pub` rather than `pub(crate)`, unlike [`Self::set_surface_port`], and
+    /// `pub` rather than `pub(crate)`, unlike `set_surface_port`, and
     /// the difference is where the value comes from: a port name travels in a
     /// command and this does not exist until `prismd` has made it. The rule that
     /// nothing reaches the configuration without having been a command still
@@ -481,7 +481,7 @@ impl MachineConfig {
 
     /// Writes the whole table down — S38.
     ///
-    /// `pub` rather than `pub(crate)`, unlike [`Self::insert_output`], and for
+    /// `pub` rather than `pub(crate)`, unlike `insert_output`, and for
     /// [`Self::set_token`]'s reason exactly: the value has to be made somewhere
     /// this crate cannot reach. A token needs entropy; a **table** needs the
     /// built-in defaults of `docs/MCU_MAPPING.md` §4.1, and those live in
@@ -657,7 +657,8 @@ impl MachineConfig {
 
     /// Applies one of S33's four output commands.
     ///
-    /// The third applier — see [`crate::outputs`] for why the rig is neither
+    /// The third applier — see `crates/prism-core/src/outputs.rs` for why the
+    /// rig is neither
     /// show state nor session state, and `Command::is_machine_command` for the
     /// predicate a daemon routes on.
     ///

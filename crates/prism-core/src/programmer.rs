@@ -612,7 +612,7 @@ impl Programmer {
     /// every value the programmer holds, across the categories, so one number
     /// recalls a whole look. It needed no code of its own: `Multi` answers
     /// `None` from `PresetPool::group`, and `None` is the argument
-    /// [`Self::touched`] has taken since S28 for a *cue*, which names no pool
+    /// `touched` — private — has taken since S28 for a *cue*, which names no pool
     /// either. A cue and a Multi preset take the same values for the same
     /// reason, and they take them through the same line.
     ///

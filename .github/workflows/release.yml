@@ -27,6 +27,13 @@
 # and nothing else. There is no signing certificate here yet — the release notes
 # say so, and say what SmartScreen will do about it, which is where a beta tester
 # should read it rather than in a support request.
+#
+# **And it publishes the site, in a second job** — S42. The download page's
+# checksum is computed from the installer rather than transcribed, so the only
+# run that can produce that page is the one that has just built the file. The
+# deployment is a job of its own so that the two write permissions are never
+# held together: the build job may write releases and not Pages, and the site
+# job may write Pages and not releases.
 
 name: Release
 
@@ -210,3 +217,54 @@ jobs:
           prerelease: true
           generate_release_notes: false
           body_path: release-body.md
+
+      # ---- The site ----
+      # S42, and this is the whole of what *the checksum is not typed by
+      # anybody* means: the generator is handed the file that was just built and
+      # hashes it, so the number on prismdmx.de is the number of the `.exe`
+      # attached above. It is uploaded here rather than deployed here because
+      # deploying needs permissions this job should not have - the job below
+      # has them and nothing else.
+      - name: Build the site with this release's checksum
+        run: cargo run -p prism-web -- --out site --installer "${{ steps.installer.outputs.path }}"
+
+      # A plain artefact, not a Pages one. `upload-pages-artifact` builds a tar
+      # the Pages service expects and is a Linux action; this job is on Windows
+      # because that is where the installer it hashed came from. So the pages
+      # artefact is made in the job below, out of these files.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prismdmx-site
+          path: site
+          retention-days: 14
+
+  # A job of its own for two reasons. `contents: write` and `pages: write` are
+  # never held by the same one; and the Pages actions want a Linux runner, where
+  # the installer this site's checksum came from is necessarily a Windows one.
+  #
+  # `.github/workflows/pages.yml` deploys an ordinary push to `master`; a tag
+  # comes through here instead, because only this run has an installer to take a
+  # checksum from.
+  site:
+    name: Deploy prismdmx.de
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: prismdmx-site
+          path: site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

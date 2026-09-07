@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+members = ["crates/*", "web"]
 
 [workspace.package]
 # **One version for the whole program** — S29. Every crate takes it

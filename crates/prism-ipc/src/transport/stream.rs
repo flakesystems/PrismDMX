@@ -8,7 +8,8 @@
 //!
 //! # The oversized frame, and where the criterion is actually met
 //!
-//! [`read_loop`] reads four bytes, hands them to [`crate::payload_length`], and
+//! `read_loop`, private to this module, reads four bytes, hands them to
+//! [`crate::payload_length`], and
 //! only builds a body buffer if that answers `Ok`. A peer announcing four
 //! gigabytes therefore costs four bytes of stack, one comparison and a
 //! disconnection — never a `Vec::with_capacity` it will not fill.

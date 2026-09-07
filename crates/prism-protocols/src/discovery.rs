@@ -83,7 +83,8 @@ use crate::udp::{UdpError, UdpNode};
 ///
 /// One Ethernet MTU, which is more than any Art-Net packet and enough that a
 /// node padding its reply is read rather than refused — see
-/// [`NodeDiscovery::buffer`]. A datagram larger than this is still dropped, and
+/// `NodeDiscovery::buffer`, which is private. A datagram larger than this is
+/// still dropped, and
 /// dropped **without ending the pass**, because a stranger sending one giant
 /// packet must not stop the reply behind it being read.
 pub const RECV_BUFFER_BYTES: usize = 1_500;

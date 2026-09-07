@@ -49,7 +49,8 @@ pub enum StripButton {
     /// Select.
     Select,
     /// Pushing the V-Pot in. A button, not a rotation — see
-    /// [`ControlEvent::VPot`](crate::ControlEvent::VPot) for the turn.
+    /// `prism_surface::ControlEvent::VPot` for the turn. (Not a link: the codec
+    /// that produces it is a layer above this crate, which cannot depend on it.)
     VPotPush,
 }
 
@@ -181,7 +182,7 @@ pub enum GlobalButton {
     /// Automation: Trim.
     AutoTrim,
     /// Automation: Touch. Not the fader touch sensor — that is
-    /// [`ControlEvent::Touch`](crate::ControlEvent::Touch).
+    /// `prism_surface::ControlEvent::Touch`, a layer above this crate.
     AutoTouch,
     /// Automation: Latch.
     AutoLatch,
@@ -582,7 +583,7 @@ pub enum SurfaceAction {
     /// the reason is good: *bei Send Command soll es eine Option geben, den Text
     /// nur in die Konsole zu schreiben, oder zu schreiben und direkt
     /// abzusenden*. A key bound to `Go Executor 1` that needs Enter afterwards
-    /// is not a Go key. So [`Self::submit`] is the operator's answer, per
+    /// is not a Go key. So this variant's `submit` is the operator's answer, per
     /// binding, and the default is the old behaviour.
     ///
     /// # Who runs it — the daemon, since S49
@@ -597,8 +598,8 @@ pub enum SurfaceAction {
     /// was exactly right; on two focused screens on two machines it ran the line
     /// twice, and a doubled Go is what the move was for.
     ///
-    /// Resolves to `Command::CommandLineInput` with `run` carrying
-    /// [`Self::submit`] unchanged.
+    /// Resolves to `Command::CommandLineInput` with `run` carrying `submit`
+    /// unchanged.
     WriteCommandLine {
         /// The line to write, exactly as it would be typed.
         line: String,

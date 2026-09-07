@@ -70,3 +70,9 @@ ui/.playwright/
 # one that is out of date.
 /profiles/fixtures/*
 !/profiles/fixtures/SOURCE.md
+
+# The generated site. `web/` is the generator and its sources; the pages are
+# built by `cargo run -p prism-web` and deployed by CI, so a copy in the tree
+# would be the second one — the one that is out of date. That is the whole point
+# of generating the site from this repository (S42).
+web/dist/

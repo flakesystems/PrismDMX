@@ -227,7 +227,7 @@ impl SurfaceLink {
     /// disconnected (S36). That is the exit criterion rather than a nicety: a
     /// configured port whose desk is switched off is a warning and a daemon that
     /// starts, the picture goes on being maintained while it is away, and the
-    /// moment somebody plugs it in [`follow_the_cable`](Self::follow_the_cable)
+    /// moment somebody plugs it in `follow_the_cable` — private —
     /// draws the whole of it. Starting *connected* and discovering otherwise on
     /// the first poll would have said *the surface has gone* about a surface
     /// that was never there.

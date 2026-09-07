@@ -643,7 +643,7 @@ impl CuePlayer {
 
     /// Records a tap of `ExecutorButtonFunction::LearnSpeed`.
     ///
-    /// The moment is taken on the next [`Self::advance`], for the same reason a
+    /// The moment is taken on the next `advance` — private — for the same reason a
     /// Go is: a command is applied before the tick that renders it and does not
     /// know its index.
     pub const fn tap(&mut self) {
@@ -680,7 +680,8 @@ impl CuePlayer {
     /// Engaging one takes the fader where it stands and arms **nothing**, so
     /// switching a fader to a crossfade never moves any light by itself and the
     /// playback goes on reading the cue it is actually on. The first movement is
-    /// what arms a stroke; see [`Manual::moved`] for the four cases and the
+    /// what arms a stroke; see `Manual::moved`, private to this module, for the
+    /// four cases and the
     /// module documentation for the two modes.
     ///
     /// Changing the mode under a stroke abandons it and leaves every attribute

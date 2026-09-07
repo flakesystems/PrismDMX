@@ -117,7 +117,8 @@ pub type OutputSpec = OutputInstance;
 ///
 /// `--open-dmx 3` names its universe; the rest carry the show's, because that is
 /// what "put this show on this interface" means when a flag is all there is to
-/// say it with. Called once, in [`crate::Daemon::start`], after the show is open
+/// say it with. Called once, in [`crate::daemon::Daemon::start`], after the show
+/// is open
 /// and before the rig is validated.
 #[must_use]
 pub fn fill_universes(outputs: &[OutputInstance], show: &[UniverseId]) -> Vec<OutputInstance> {
@@ -176,7 +177,7 @@ pub struct Options {
     ///
     /// **The whole rig for this run when it is not empty** — the machine
     /// configuration's own is not read, and nothing is written back to it. See
-    /// [`crate::daemon::rig_for`] for the reasoning: a flag is what a test and a
+    /// `daemon::rig_for` — private — for the reasoning: a flag is what a test and a
     /// bring-up use, and a daemon started with `--mock-output` must neither
     /// inherit a venue's cabling nor overwrite it.
     ///

@@ -156,7 +156,8 @@ fn remedy_for(listening: bool, counters: &DiscoveryCounters) -> Option<String> {
 }
 
 impl DiscoveryTable {
-    /// What to try, in the daemon's own words — see [`remedy_for`].
+    /// What to try, in the daemon's own words — see `remedy_for`, private to
+    /// this module.
     #[must_use]
     pub fn remedy(&self) -> Option<String> {
         remedy_for(self.listening, &self.counters)

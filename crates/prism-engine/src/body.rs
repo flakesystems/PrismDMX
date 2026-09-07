@@ -291,7 +291,7 @@ impl MergeBody {
     ///
     /// # Errors
     ///
-    /// [`CueError::UnknownExecutor`] if this body has no such playback, or
+    /// [`CueError::UnknownPlayback`] if this body has no such playback, or
     /// [`CueError::TooManyCues`] / [`CueError::TooManyParts`] if the sequence is
     /// implausibly large.
     pub fn load_sequence(

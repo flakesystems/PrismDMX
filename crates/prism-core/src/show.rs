@@ -546,7 +546,8 @@ impl Show {
     /// value exist": no.
     ///
     /// **A fixture whose intensity the desk supplies has a `Dimmer` here that
-    /// its profile has not** — S43. It is [`SOFTWARE_DIMMER`], and it is the
+    /// its profile has not** — S43. It is this module's `SOFTWARE_DIMMER`, and
+    /// it is the
     /// same answer the merge gives (`prism_engine::MergePlan::build` adds the
     /// matching slot): a value on it may exist, it rests at nought, and it is
     /// filed under the intensity bank, so the programmer, the encoders and the
@@ -683,7 +684,8 @@ impl Show {
     ///
     /// The answer to `Query::PatchPreview`, and the reason S27 could show an
     /// address conflict **before** it was committed rather than warning about
-    /// one afterwards. See [`crate::conflict`]: an overlap is legal, so the
+    /// one afterwards. See `crates/prism-core/src/conflict.rs`: an overlap is
+    /// legal, so the
     /// answer distinguishes *would be refused* from *would overlap*.
     #[must_use]
     pub fn preview_patch(

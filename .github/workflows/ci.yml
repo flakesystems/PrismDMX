@@ -52,6 +52,20 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # S41. The crate documentation is a large part of what this project knows,
+      # and until this session nothing had ever rendered it - a broken
+      # intra-doc link is a paragraph nobody will read, and there were thirty of
+      # them. `RUSTDOCFLAGS` rather than `RUSTFLAGS`, because rustdoc reads its
+      # own variable and the job's `-D warnings` never reached it.
+      #
+      # Here rather than in the Linux job because this is the one that builds
+      # `prism-app`: the shell needs a webview toolkit the neutral jobs have no
+      # business installing, and `--workspace` is the whole claim.
+      - name: Document
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --workspace --no-deps
+
       # The Open Fixture Library, which is **downloaded at install time and not
       # committed** (S44, profiles/fixtures/SOURCE.md). Fetched here so the
       # corpus tests run against the real thing rather than skipping themselves:
@@ -109,6 +123,7 @@ jobs:
           -p prism-ipc
           -p prism-protocols
           -p prismd
+          -p prism-web
 
   linux-arm64-check:
     name: Linux ARM64 - cross-compile check
@@ -383,4 +398,54 @@ jobs:
         with:
           name: playwright-report
           path: ui/playwright-report/
+          retention-days: 7
+
+  web:
+    name: Web - the documentation site
+    runs-on: ubuntu-latest
+    # Twelve pages, ten of them Markdown files this repository already keeps. The
+    # whole job is a `cargo build` of one small crate and a run of it.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # S42, and the reason it is a job at all is S29's argument about the
+      # installer, one document along: **a site that only builds on one person's
+      # machine is the same problem as an installer that only builds on one
+      # person's machine.** The site is generated out of this repository so that
+      # the documentation cannot drift from a release, and this is what says the
+      # generation still works on a machine that is not the author's.
+      #
+      # No `--installer` here: the checksum on the download page is computed
+      # from the file a release built, and this run has built no file. A page
+      # that printed a number nobody derived would be the thing generating the
+      # site was meant to prevent. `release.yml` is where the flag is passed.
+      - name: Build the site
+        run: cargo run -p prism-web -- --out site
+
+      # Not "did it exit zero" but "is the site the site". The generator's own
+      # suite asserts the content; this asserts that a run in a clean checkout
+      # produced the files a deployment would serve.
+      - name: What was produced
+        run: |
+          test -f site/index.html
+          test -f site/download/index.html
+          test -f site/handbuch/operator/index.html
+          test -f site/handbuch/installateur/index.html
+          test -f site/handbuch/entwickler/index.html
+          test -f site/aenderungen/index.html
+          test -f site/CNAME
+          if grep -rqi '<script' site; then
+            echo "::error::the site has JavaScript on it and is supposed to have none"
+            exit 1
+          fi
+          du -sh site
+          find site -name index.html | sort
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prismdmx-site
+          path: site
           retention-days: 7
