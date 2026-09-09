@@ -1,66 +1,57 @@
-# Issue Report — 2026-09-07
-
-Automatisch erstellter Bericht des Issue-Tracking-Laufs, hier als erster Schritt
-von **S41/S42** durchgeführt: bevor ein Handbuch geschrieben wird, muss
-feststehen, was bekannt kaputt ist. Ein Fehler, den ein Handbuch beschreibt, als
-wäre er Absicht, ist der teuerste Text in diesem Projekt.
-
----
+# Issue Report — 2026-09-09
 
 ## Überblick
 
-**Keine offenen GitHub-Issues.** Alle sechs jemals angelegten sind geschlossen.
-
-| GitHub # | ISSUES.md | Titel | Status |
-|---|---|---|---|
-| #1 | B37 | (bug) Wrongly ordered clear steps | ✅ geschlossen — behoben in S51 |
-| #2 | B38 | (bug) Missing OFL channel mappings and capability support in programmer | ✅ geschlossen — behoben in S51, fortgesetzt in S52–S54 |
-| #3 | B39 | (bug) Tray icon refuses to close if the daemon is closed manually | ✅ geschlossen — behoben in S51 |
-| #5 | B40 | (bug) Flakey e2e test in looks.spec.ts | ✅ geschlossen |
-| #8 | B42 | (feat) Add fullscreen support | ✅ geschlossen — behoben in S51 |
-| #9 | B43 | (feat) Add better support for custom fixtures | ✅ geschlossen — behoben in S51 |
-
-Seit `v0.9.1` und `v0.9.2` ist **nichts Neues gemeldet worden**. Das ist kein
-Beleg dafür, dass nichts kaputt ist — es ist der Beleg dafür, dass die Beta
-bisher **geschlossen** war und wenige Leute darin waren. Genau das ändern S41
-und S42.
+Dieser Lauf hat **2 offene, gelabelte GitHub Issues** geprüft und **2 neue Einträge** in `docs/ISSUES.md` aufgenommen. Kein geschlossener Issue trägt einen neuen Kommentar, der auf ein fortbestehendes Problem hindeutet.
 
 ---
 
-## Was in `docs/ISSUES.md` offen ist
+## Verarbeitete Issues
 
-Ein Eintrag, und er ist bewusst offen:
+### GitHub #21 — Input Selector Tests to restricive
 
-### B52 — Das Pult folgt einem Switching Channel nicht, während die Show läuft
+**Status:** Neu aufgenommen als **B53**  
+**Titel aktualisiert:** `(bug) Input selector validation too restrictive during editing`
 
-Seit S54 ist ein Switching-Alias **immer erreichbar**, und wo sich alle
-Stellungen über den Parameter einig sind, trägt der Slot diesen Parameter. Was
-das Pult nicht tut, ist dem Umschalten während der Show zu folgen. Das ist keine
-kleine Ergänzung des Readers, sondern eine Frage an das Modell: der Schlüssel,
-unter dem eine Cue einen Wert ablegt, dürfte sich nicht ändern, während die Cue
-läuft.
+Der Issue war nicht in `docs/ISSUES.md` erfasst. Inhalt: Required Input-Felder verhindern das vollständige Leeren während der Eingabe, was das Ändern der ersten Stelle einer Zahl oder des ersten Buchstabens eines Worts blockiert. Die Validierung soll nur beim Apply greifen, nicht während der Eingabe.
 
-**Für diese Session heißt das:** beide Handbücher sagen es ausdrücklich, mit der
-Nummer daneben —
-[`manual/operator.de.md`](manual/operator.de.md#jeder-kanal-hat-einen-knopf) und
-`README.md` unter *was es noch nicht kann*. Kein Text in dieser Session
-behauptet, das Pult folge dem Umschalten.
-
-Die beiden anderen `☐` in `docs/ISSUES.md` sind die **Vorlagen**, die die Datei
-in ihrem eigenen Kopf als Vorlagen bezeichnet. Sie tragen `Bxx` und keine
-Nummer, genau damit sie beim Durchzählen nicht als Einträge mitgezählt werden.
+**Aufgenommen als B53** im Abschnitt *Sonstiges* — Status: ☐ offen.  
+GitHub-Kommentar und Titelkorrektur wurden gepostet.
 
 ---
 
-## Durchgeführte Aktionen
+### GitHub #9 — (feat) Add better support for custom fixtures
 
-Keine. Es gab nichts zu schließen, nichts umzubenennen und nichts aufzunehmen.
+**Status:** Teilweise behoben (B43 ✅), neuer Sub-Issue aufgenommen als **B54**
+
+B43 in `docs/ISSUES.md` ist als ✅ behoben in S51 markiert: eigene Fixture-Profile können unter `fixtures/` im Datenverzeichnis abgelegt werden, werden vom Daemon mitgelesen und im Auswahlfenster als `yours` gekennzeichnet.
+
+Ein neuer Kommentar des Eigentümers vom 2026-09-07 meldet jedoch: *"The folder doesnt get created on installation. This can be confusing for users"*. Dieses Sub-Issue ist von B43 unabhängig und wurde als **B54** aufgenommen.
+
+Issue #9 bleibt offen, da B54 noch unbehoben ist.  
+GitHub-Kommentar wurde mit dem neuen Tracking-Eintrag gepostet.
 
 ---
 
-## Vorheriger Lauf
+## Geschlossene Issues
 
-Der Lauf vom **2026-09-05** schloss #5 (B40), passte die Titel von #8 und #9 an
-und ergänzte in B38 die beiden OFL-Dokumentationslinks des Eigentümers. Die
-Issues #1, #2, #3, #8 und #9 wurden danach durch S51–S54 behoben und
-geschlossen.
+Alle fünf geschlossenen Issues (#1, #2, #3, #5, #8) wurden geprüft. Keiner hat neue Kommentare von Nicht-Claude-Quellen, die auf ein fortbestehendes Problem hinweisen. Kein Wiedereröffnen erforderlich.
+
+---
+
+## Neue Einträge in ISSUES.md
+
+| Eintrag | GitHub | Schwere   | Status  | Beschreibung |
+|---------|--------|-----------|---------|--------------|
+| B53     | #21    | ärgerlich | ☐ offen | Input-Felder lassen sich während der Eingabe nicht vollständig leeren |
+| B54     | #9     | ärgerlich | ☐ offen | Das `fixtures/`-Verzeichnis wird bei der Installation nicht angelegt |
+
+---
+
+## Ausstehende offene Einträge (Gesamtübersicht nach diesem Lauf)
+
+| Eintrag | Beschreibung |
+|---------|-------------|
+| B52     | Das Pult folgt einem Switching Channel nicht, während die Show läuft |
+| B53     | Input-Felder lassen sich während der Eingabe nicht vollständig leeren (GitHub #21) |
+| B54     | Das fixtures/-Verzeichnis wird bei der Installation nicht angelegt (GitHub #9) |

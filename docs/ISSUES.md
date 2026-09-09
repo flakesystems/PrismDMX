@@ -579,6 +579,15 @@ angezeigt wird.*
   Tests: `a_venues_own_profiles_survive_a_library_re_download` (`crates/prismd/tests/fixture_install.rs`) — das **echte Installationsskript** läuft, samt Löschschritt, gegen ein Archiv, das der Test baut; dafür haben beide Skripte ein `PRISMDMX_OFL_ARCHIVE` bekommen, das ein Saal ohne Netz ohnehin braucht. Dazu `the_venues_own_directory_takes_a_loose_file_and_a_manufacturer_directory`, `a_venues_profile_replaces_the_vendored_one_it_names` und `an_entry_says_whether_it_is_the_venues_own` (`crates/prism-core/src/library/mod.rs`) und *marks a profile as the venue's own, beside one that came with the desk* (`ui/src/patch/patchwindow.test.tsx`).
 
 
+### B54 — Das fixtures/-Verzeichnis wird bei der Installation nicht angelegt (GitHub #9)
+
+- **Wo:** Installation, Datenverzeichnis des Daemons
+- **Schwere:** ärgerlich
+- **Was passiert:** Das Verzeichnis `fixtures/` im Datenverzeichnis (`%APPDATA%\PrismDMX\fixtures` unter Windows) wird bei der Installation oder beim ersten Start nicht automatisch erstellt. Wer ein eigenes Profil ablegen möchte, findet kein Zielverzeichnis vor und muss es von Hand anlegen — ohne Hinweis darauf, wo und warum
+- **Was passieren soll:** Der Daemon legt `fixtures/` beim ersten Start an, wenn es noch nicht existiert. Das Verzeichnis soll für nutzende sichtbar und erreichbar sein, ohne dass sie die Dokumentation lesen müssen
+- **So sieht man es:** PrismDMX nach einer Neuinstallation starten, im Datenverzeichnis nach `fixtures/` suchen — es ist nicht da
+- **Ergebnis:** ☐ offen
+
 ## Einstellungen und Pult
 
 *Das Einstellungs-Fenster, die fünf Panels, der Control-Editor, das X-Touch.*
@@ -774,6 +783,15 @@ Meldungen, Tastatur, Leerzustände, Verhalten beim Start, Verbindungsabbrüche.*
 
   Tests, alle in `ui/src/desk/desk.test.tsx`: `keeps a line typed while a key's line is still in flight`, `still adopts a line typed on another screen after a key has run one` und `does not let a pick decided late overwrite the line typed since`. Jeder wurde gegengeprüft — ohne seine Hälfte der Behebung geht er rot.
 
+
+### B53 — Input-Felder lassen sich während der Eingabe nicht vollständig leeren (GitHub #21)
+
+- **Wo:** UI, Required Input-Felder
+- **Schwere:** ärgerlich
+- **Was passiert:** Felder, die als Pflichtfelder markiert sind, lassen das vollständige Leeren während der Eingabe nicht zu. Das verhindert, die erste Stelle einer Zahl oder den ersten Buchstaben eines Worts zu ändern
+- **Was passieren soll:** Die Leer-Prüfung soll nur beim Anwenden (Apply) greifen, nicht während der Eingabe — ein momentan leeres Feld ist ein Feld, das gerade bearbeitet wird, kein ungültiges
+- **So sieht man es:** Ein Required Input-Feld öffnen, den gesamten Inhalt markieren und neu tippen wollen — der erste Tastendruck wird blockiert
+- **Ergebnis:** ☐ offen
 
 ### B34 — Ein Rig aus RGBW-PARs geht beim Start des Daemons an
 
