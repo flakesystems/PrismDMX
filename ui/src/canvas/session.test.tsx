@@ -297,7 +297,7 @@ describe("opening and closing a window", () => {
 
 describe("the View Selector Bar", () => {
   it("lights the view the session says is active, and asks for another", async () => {
-    const { ran, answer, settle } = desk();
+    const { acted, ran, answer, settle } = desk();
     expect(screen.getByTestId("view-1").dataset["active"]).toBe("yes");
 
     // Store the canvas as view 2, so there are two. **By name**, because B10
@@ -307,11 +307,40 @@ describe("the View Selector Bar", () => {
     expect(screen.getByTestId("view-2")).not.toBeNull();
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("no");
 
+    const lines = ran().length;
     fireEvent.click(screen.getByTestId("view-2"));
     await settle();
-    expect(ran().at(-1)).toBe("View 2");
+    // **A switch, not a line** — B56. Choosing a view is navigation, the same
+    // `SelectView` the X-Touch's `Channel ◀▶` sends.
+    expect(acted().at(-1)).toEqual({ t: "SelectView", viewId: 2 });
+    expect(ran()).toHaveLength(lines);
     // Not lit yet: `activeViewId` is the daemon's.
     expect(screen.getByTestId("view-2").dataset["active"]).toBe("no");
+  });
+
+  /**
+   * **Punch-list B56 (GitHub #24).** A view was switched by running the line
+   * `View 2`, and running a line clears it — so an operator half way through
+   * `Fixture 1 thru` who changed view to reach a pool lost what they had typed.
+   */
+  it("leaves a line being typed exactly where it is when the view changes", async () => {
+    const { commands, answer, settle } = desk();
+    playThrough(answer, "store the canvas as view 2");
+    const input = screen.getByTestId<HTMLInputElement>("command-input");
+    fireEvent.change(input, { target: { value: "Fixture 1 thru " } });
+    await settle();
+    const before = commands().length;
+
+    fireEvent.click(screen.getByTestId("view-2"));
+    await settle();
+
+    expect(input.value).toBe("Fixture 1 thru ");
+    // Nothing that writes or runs a line went out for the click.
+    const sent = commands().slice(before);
+    expect(sent.filter((command) => command.t === "CommandLineInput" && command.run)).toEqual(
+      [],
+    );
+    expect(sent).toContainEqual({ t: "SelectView", viewId: 2 });
   });
 
   it("stores the active view under the name it already has", async () => {

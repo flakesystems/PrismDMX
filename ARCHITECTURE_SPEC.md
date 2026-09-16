@@ -321,7 +321,10 @@ rather than three code paths that have to be kept in step.
 The exceptions are the ones a line cannot express and are deliberately small:
 the **executor keys and faders** (a Go is a gesture with timing in it, §4.3),
 the **encoders**, direct manipulation of the canvas — dragging a window, resizing
-it (§4.2) — and, since **S37**, the **settings window**, whose control editor
+it (§4.2), and **choosing a view** in the View Selector Bar, which is the same
+`SelectView` `Channel ◀▶` sends and which ran the line `View 2` until punch-list
+**B56** found that running it cleared a line the operator was half way through —
+and, since **S37**, the **settings window**, whose control editor
 (**S38**) is the clearest case of the test being applied rather than assumed: a
 line cannot say *this key does that*, because S40's grammar has no noun for a
 key any more than it has one for a file. A path is not a word an

@@ -208,7 +208,7 @@ alles, was sie annehmen oder ablehnen sollte und nicht tut.*
 - **Was passiert:** Wenn man während einer laufenden Eingabe die Ansicht wechselt, wird die Kommandozeile geleert — da Ansichtswechsel intern als Kommando ausgeführt werden
 - **Was passieren soll:** Die Kommandozeile soll beim Wechsel zwischen Views erhalten bleiben
 - **So sieht man es:** Etwas in die Kommandozeile tippen, dann die Ansicht wechseln
-- **Ergebnis:** ☐ offen
+- **Ergebnis:** ✅ **behoben** — die View-Leiste lief `View 2` als Zeile, und der Daemon leert eine Zeile, nachdem er sie ausgeführt hat (`ShowFile::run_command_line`). Die Auswahl eines Views schickt jetzt direkt `SelectView` — dasselbe, was `Channel ◀▶` am X-Touch immer geschickt hat, und das die Zeile nie angefasst hat. **Eine bewusste Ausnahme von §4.5**, und sie steht jetzt dort und in `docs/COMMAND_LINE.md` §1 neben *Fenster ziehen*: einen View wählen ist *schauen*, nicht *programmieren*. Das Menü der Leiste — Store, New, Label, Move, Delete — schreibt weiter seine Zeilen, weil es Befehle sind, die ein Operator bewusst auswählt und die er genauso tippen könnte. Tests: *leaves a line being typed exactly where it is when the view changes* (`ui/src/canvas/session.test.tsx`: `Fixture 1 thru ` getippt, View 2 geklickt — die Zeile steht, und kein `CommandLineInput` mit `run` ging raus) und *lights the view the session says is active, and asks for another*, das jetzt `SelectView` statt der Zeile erwartet; beide vor dem Fix rot.
 
 
 ### B58 — Oops soll Wörter aus der Kommandozeile löschen, bevor er Aktionen rückgängig macht (GitHub #26)

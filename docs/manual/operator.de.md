@@ -145,7 +145,9 @@ eine Zeile ist es nicht, weil es kein Wort dafür gibt.
 **Ein Layout ist ein View.** `Store View 2 "Programmieren"` legt die geöffneten
 Fenster mit ihren Rechtecken ab, `View 2` holt sie zurück, und weil ein View
 Sitzungszustand ist, schaltet er auf **jedem** angehängten Bildschirm um — auch
-vom X-Touch aus, ohne dass ein Client läuft.
+vom X-Touch aus, ohne dass ein Client läuft. Ein Klick auf einen View in der
+Leiste schaltet um, **ohne die Kommandozeile anzufassen**: eine halb getippte
+Zeile bleibt stehen, während Sie den View wechseln, um an einen Pool zu kommen.
 
 Vierzehn Fenstertypen, und diese Tabelle wird aus dem Code erzeugt: sie kann
 nicht veralten, ohne dass ein Test rot wird.

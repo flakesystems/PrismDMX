@@ -61,7 +61,7 @@ import { CLEAR_TITLES } from "./desk/keys";
 import { clearStage } from "./desk/programmer";
 import { ProgrammerBand } from "./desk/programmerband";
 import { commandLine, windowPickerOpen } from "./desk/session";
-import { objectLine, useConsole } from "./desk/consoleshell";
+import { useConsole } from "./desk/consoleshell";
 import { ConsoleProvider } from "./desk/shell";
 import type { ConnectionStatus } from "./ipc/connection";
 import { documentIsFullscreen, isFullscreenKey, setFullscreen } from "./shell/fullscreen";
@@ -264,16 +264,23 @@ function NotConnected({ status }: { readonly status: ConnectionStatus }) {
 function Views() {
     const documents = useDesk(selectDocuments);
     const { run } = useConsole();
-    // **Every one of these writes a line and submits it** (§4.5): the pointer
-    // has supplied the argument the line was waiting for, so there is nothing
-    // left to type. They are the same lines an operator could have typed, which
-    // is what makes the screen teach the vocabulary.
+    const send = useSend();
+    // **Choosing a view is navigation, not a line** — B56. It used to run
+    // `View 2`, and running a line clears it, so an operator half way through
+    // `Fixture 1 thru` who changed view to reach a pool lost what they had
+    // typed. It is the same `SelectView` the X-Touch's `Channel ◀▶` sends,
+    // which never touched the line either; `ARCHITECTURE_SPEC.md` §4.5 lists it
+    // beside dragging a window.
     const onSelectView = useCallback(
         (viewId: number) => {
-            run(objectLine({ t: "View", viewId }));
+            send({ t: "SelectView", viewId });
         },
-        [run],
+        [send],
     );
+    // **The management items write a line and submit it** (§4.5): they are
+    // authoring rather than looking, an operator picks them deliberately from
+    // a menu, and they are the same lines an operator could have typed, which
+    // is what makes the screen teach the vocabulary.
     const onStoreView = useCallback(
         (viewId: number, name: string) => {
             run(`Store View ${String(viewId)} ${JSON.stringify(name)}`);

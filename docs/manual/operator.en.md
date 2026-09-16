@@ -142,7 +142,9 @@ there is no word for them.
 **A layout is a view.** `Store View 2 "Programming"` files the open windows with
 their rectangles, `View 2` brings them back, and because a view is session state
 it switches on **every** attached screen — including from the X-Touch, with no
-client running.
+client running. Clicking a view in the bar switches to it **without touching the
+command line**: a line half typed stays where it is while you change view to
+reach a pool.
 
 Fourteen window types, and this table is generated from the code: it cannot go
 stale without a test going red.

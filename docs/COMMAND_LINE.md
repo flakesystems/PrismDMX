@@ -50,6 +50,11 @@ the line was waiting for.
 - the **encoders**, the five bank keys and the two parameter arrows: the
   vocabulary has no word for a bank, and the encoders are what one selects;
 - **dragging and resizing a window** on the canvas (§4.2);
+- **choosing a view** in the View Selector Bar — B56. It ran `View 2` until
+  then, and running a line clears it, so a line half typed was lost to changing
+  view to reach a pool. Choosing a view is looking, not authoring, and it now
+  sends the same `SelectView` the X-Touch's `Channel ◀▶` always has. The bar's
+  *menu* — store, new, rename, move, delete — still writes its lines;
 - **Add window**, which names a window *type* rather than a number;
 - the three **times** and the trigger of a cue, and the fields of the patch form:
   they carry a value rather than naming a place, and inventing `fade 2.5` would
