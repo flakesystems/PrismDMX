@@ -27,6 +27,7 @@ import {
   nextFreeFixtureId,
   patchRows,
   profileLabel,
+  wholeNumber,
 } from "./patch";
 
 import recordingText from "../../tests/fixtures/patch-recording.json?raw";
@@ -192,6 +193,15 @@ describe("the patch, read out of the show document", () => {
     expect(nextFreeFixtureId(rows([1, 2, 3]))).toBe(4);
     expect(nextFreeFixtureId(rows([1, 3]))).toBe(2);
     expect(nextFreeFixtureId(rows([2, 3]))).toBe(1);
+  });
+
+  it("reads a whole number out of a field, and nothing else (B53)", () => {
+    expect(wholeNumber("12")).toBe(12);
+    expect(wholeNumber(" 7 ")).toBe(7);
+    expect(wholeNumber("0")).toBe(0);
+    for (const rubbish of ["", "  ", "-4", "1.5", "twelve", "1e"]) {
+      expect(wholeNumber(rubbish)).toBeNull();
+    }
   });
 
   it("names a profile the way an operator would choose one", () => {

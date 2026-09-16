@@ -157,6 +157,23 @@ export function footprintOf(show: JsonValue | null, typeId: string): number {
 }
 
 /**
+ * A whole number as it was typed into a patch field, or `null` for anything
+ * else — **B53**.
+ *
+ * The field keeps the text and this is asked where a number is *needed*: for
+ * the preview and at Apply. Asking it on every keystroke and refusing what is
+ * not a number was the fault: an empty box is how a first digit gets changed.
+ */
+export function wholeNumber(text: string): number | null {
+  const trimmed = text.trim();
+  if (trimmed === "") {
+    return null;
+  }
+  const value = Number(trimmed);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+/**
  * The lowest fixture number nothing is patched at.
  *
  * A convenience for the *number* field of a new row and nothing more: the

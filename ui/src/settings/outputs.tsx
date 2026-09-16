@@ -155,8 +155,12 @@ function nodeNote(nodes: readonly NodeReach[], now: number): string | null {
 
 /** The row being typed into. Local, and dropped when it is submitted. */
 interface Draft {
-  /** The output number, which is the key everything else uses. */
-  readonly id: number;
+  /**
+   * The output number **as typed**, which is the key everything else uses once
+   * it is one. Text since B53, like the universes always were: a box that took
+   * only valid numbers could never be emptied. {@link readDraft} reads it.
+   */
+  readonly id: string;
   /** The number this row started at, or `null` for a row that is being added. */
   readonly wasId: number | null;
   readonly name: string;
@@ -165,8 +169,8 @@ interface Draft {
   readonly serial: string;
   /** Node or receiver addresses, one per line. */
   readonly addresses: string;
-  /** The sACN multicast hop limit. */
-  readonly ttl: number;
+  /** The sACN multicast hop limit, as typed. */
+  readonly ttl: string;
   /** The universes, as they are typed. */
   readonly universes: string;
 }
@@ -174,7 +178,7 @@ interface Draft {
 /** A draft built from a configured row. */
 function draftOf(output: OutputInstance): Draft {
   return {
-    id: output.id,
+    id: String(output.id),
     wasId: output.id,
     name: output.name,
     kind: output.kind.t,
@@ -185,9 +189,41 @@ function draftOf(output: OutputInstance): Draft {
         : output.kind.t === "Sacn"
           ? output.kind.receivers.join("\n")
           : "",
-    ttl: output.kind.t === "Sacn" ? output.kind.ttl : 1,
+    ttl: String(output.kind.t === "Sacn" ? output.kind.ttl : 1),
     universes: writeUniverses(output.universes),
   };
+}
+
+/** What a draft's typed fields mean, or the sentence that says which one does not. */
+type ReadDraft =
+  | {
+      readonly id: number;
+      readonly ttl: number;
+      readonly universes: number[];
+    }
+  | { readonly problem: string };
+
+/**
+ * Reads the three typed fields of a draft — **B53**.
+ *
+ * Asked by the form's note and by Apply, never per keystroke: an operator
+ * changing the first digit of a number goes through an empty box, and a field
+ * that refused it could not be edited at all.
+ */
+function readDraft(draft: Draft): ReadDraft {
+  const id = Number(draft.id.trim());
+  if (draft.id.trim() === "" || !Number.isInteger(id) || id < 1) {
+    return { problem: "The number has to be a whole number, 1 upwards." };
+  }
+  const ttl = Number(draft.ttl.trim());
+  if (draft.ttl.trim() === "" || !Number.isInteger(ttl) || ttl < 0) {
+    return { problem: "The hop limit has to be a whole number, 0 upwards." };
+  }
+  const universes = readUniverses(draft.universes);
+  if (universes === null) {
+    return { problem: "The universes have to be whole numbers, 1 upwards." };
+  }
+  return { id, ttl, universes };
 }
 
 /**
@@ -199,7 +235,7 @@ function draftOf(output: OutputInstance): Draft {
  * loss. A row being added has none, which is `ARCHITECTURE_SPEC.md` §7.0's
  * default — universe N goes to port N − 1.
  */
-function kindOf(draft: Draft, existing: OutputInstance | null): OutputKind {
+function kindOf(draft: Draft, ttl: number, existing: OutputInstance | null): OutputKind {
   const lines = draft.addresses
     .split("\n")
     .map((line) => line.trim())
@@ -220,7 +256,7 @@ function kindOf(draft: Draft, existing: OutputInstance | null): OutputKind {
       return {
         t: "Sacn",
         receivers: lines,
-        ttl: draft.ttl,
+        ttl,
         ports: existing?.kind.t === "Sacn" ? existing.kind.ports : [],
       };
   }
@@ -328,13 +364,13 @@ export function OutputsPanel() {
 
   const add = useCallback(() => {
     setDraft({
-      id: nextId,
+      id: String(nextId),
       wasId: null,
       name: `Output ${String(nextId)}`,
       kind: "ArtNet",
       serial: "",
       addresses: "",
-      ttl: 1,
+      ttl: "1",
       universes: "1",
     });
   }, [nextId]);
@@ -358,13 +394,13 @@ export function OutputsPanel() {
   const addDiscovered = useCallback(
     (node: ArtNetNodeInfo) => {
       setDraft({
-        id: nextId,
+        id: String(nextId),
         wasId: null,
         name: node.shortName.trim() === "" ? `Output ${String(nextId)}` : node.shortName,
         kind: "ArtNet",
         serial: "",
         addresses: node.address,
-        ttl: 1,
+        ttl: "1",
         universes: writeUniverses(node.suggestedUniverses),
       });
     },
@@ -375,13 +411,15 @@ export function OutputsPanel() {
     if (draft === null) {
       return;
     }
-    const universes = readUniverses(draft.universes);
-    if (universes === null) {
+    // **Where a field that is not a number is refused** — B53, and only here.
+    const read = readDraft(draft);
+    if ("problem" in read) {
       return;
     }
+    const { id, universes } = read;
     const existing = rows.find((row) => row.id === draft.wasId)?.output ?? null;
-    const kind = kindOf(draft, existing);
-    if (draft.wasId === null || draft.wasId !== draft.id) {
+    const kind = kindOf(draft, read.ttl, existing);
+    if (draft.wasId === null || draft.wasId !== id) {
       // A number change is a remove and an add, **said out loud**: the number is
       // the key the row is filed under, and `ConfigureOutput` deliberately
       // carries no `id` for that reason. The remove goes first, so the number
@@ -393,7 +431,7 @@ export function OutputsPanel() {
       send({
         t: "AddOutput",
         output: {
-          id: draft.id,
+          id,
           name: draft.name,
           kind,
           universes,
@@ -406,13 +444,13 @@ export function OutputsPanel() {
       // where one field changed would make an operator watch their rig blink
       // for a typo they corrected.
       if (existing === null || existing.name !== draft.name) {
-        send({ t: "ConfigureOutput", id: draft.id, change: { t: "Name", name: draft.name } });
+        send({ t: "ConfigureOutput", id, change: { t: "Name", name: draft.name } });
       }
       if (existing === null || JSON.stringify(existing.kind) !== JSON.stringify(kind)) {
-        send({ t: "ConfigureOutput", id: draft.id, change: { t: "Kind", kind } });
+        send({ t: "ConfigureOutput", id, change: { t: "Kind", kind } });
       }
       if (existing === null || writeUniverses(existing.universes) !== writeUniverses(universes)) {
-        send({ t: "ConfigureOutput", id: draft.id, change: { t: "Universes", universes } });
+        send({ t: "ConfigureOutput", id, change: { t: "Universes", universes } });
       }
     }
     // **Dropped, not kept.** What the rig is comes back as `OutputsChanged`; a
@@ -761,7 +799,8 @@ function OutputForm({
   readonly onApply: () => void;
   readonly onCancel: () => void;
 }) {
-  const universes = readUniverses(draft.universes);
+  const read = readDraft(draft);
+  const universes = "problem" in read ? readUniverses(draft.universes) : read.universes;
   return (
     <form
       className="settings-form"
@@ -778,12 +817,9 @@ function OutputForm({
           <input
             data-testid="output-draft-id"
             inputMode="numeric"
-            value={String(draft.id)}
+            value={draft.id}
             onChange={(event) => {
-              const typed = Number(event.target.value.trim());
-              if (Number.isInteger(typed) && typed > 0) {
-                onChange({ ...draft, id: typed });
-              }
+              onChange({ ...draft, id: event.target.value });
             }}
           />
         </label>
@@ -849,12 +885,9 @@ function OutputForm({
             <input
               data-testid="output-draft-ttl"
               inputMode="numeric"
-              value={String(draft.ttl)}
+              value={draft.ttl}
               onChange={(event) => {
-                const typed = Number(event.target.value.trim());
-                if (Number.isInteger(typed) && typed >= 0) {
-                  onChange({ ...draft, ttl: typed });
-                }
+                onChange({ ...draft, ttl: event.target.value });
               }}
             />
           </label>
@@ -872,14 +905,14 @@ function OutputForm({
         </label>
       </fieldset>
       <p className="settings-hint" role="status" data-testid="output-draft-note">
-        {universes === null
-          ? "The universes have to be whole numbers, 1 upwards."
-          : draft.kind === "OpenDmx" && universes.length > 1
+        {"problem" in read
+          ? read.problem
+          : draft.kind === "OpenDmx" && universes !== null && universes.length > 1
             ? "An Open DMX adapter is one DMX line and carries exactly one universe."
             : "Changing the kind, the universes or the number restarts this output's driver. A rename costs it nothing."}
       </p>
       <div className="settings-actions">
-        <button type="submit" data-testid="output-draft-apply" disabled={universes === null}>
+        <button type="submit" data-testid="output-draft-apply" disabled={"problem" in read}>
           {draft.wasId === null ? "Add" : "Apply"}
         </button>
         <button type="button" onClick={onCancel} data-testid="output-draft-cancel">

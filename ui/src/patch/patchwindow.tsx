@@ -88,7 +88,7 @@ import { Modal } from "../chrome/modal";
 import { useAsk, useDesk, useSend } from "../store/hooks";
 import type { DeskState } from "../store/desk";
 import type { PatchRow, ProfileRow } from "./patch";
-import { embeddedProfiles, nextFreeFixtureId, patchRows, profileLabel } from "./patch";
+import { embeddedProfiles, nextFreeFixtureId, patchRows, profileLabel, wholeNumber } from "./patch";
 import { PreviewRequester, conflictedFixtures, conflictsOf, isAcceptable, previewText } from "./preview";
 
 const selectLibrarySize = (state: DeskState): number | null => state.fixtureLibrary;
@@ -105,20 +105,49 @@ const SEARCH_LIMIT = 60;
 
 /** The row being typed into. Local, and dropped when it is submitted. */
 interface Draft {
-    /** The fixture number as it stands now, which is the key everything uses. */
-    readonly id: number;
+    /**
+     * The fixture number **as typed**, which is the key everything uses once it
+     * is one.
+     *
+     * The three number fields are text since B53: a box that only ever took a
+     * valid number could never be empty, so the first digit of a number could
+     * not be changed. {@link numbersOf} reads them where a number is needed.
+     */
+    readonly id: string;
     /** The number this row started at, so a change of number is a renumber. */
     readonly wasId: number | null;
     /** The name. */
     readonly name: string;
     /** The profile key. */
     readonly typeId: string;
-    /** The universe. */
-    readonly universe: number;
-    /** The start address. */
-    readonly address: number;
+    /** The universe, as typed. */
+    readonly universe: string;
+    /** The start address, as typed. */
+    readonly address: string;
     /** Whether the desk supplies this fixture's intensity — S43. */
     readonly softwareDimmer: boolean;
+}
+
+/** The three numbers of a draft, or the name of the first field that is not one. */
+type DraftNumbers =
+    | { readonly id: number; readonly universe: number; readonly address: number }
+    | { readonly missing: string };
+
+/** Reads a draft's number fields — B53. Asked for the preview and at Apply, never per keystroke. */
+function numbersOf(draft: Draft): DraftNumbers {
+    const id = wholeNumber(draft.id);
+    if (id === null) {
+        return { missing: "Number" };
+    }
+    const universe = wholeNumber(draft.universe);
+    if (universe === null) {
+        return { missing: "Universe" };
+    }
+    const address = wholeNumber(draft.address);
+    if (address === null) {
+        return { missing: "Address" };
+    }
+    return { id, universe, address };
 }
 
 /** The whole window. */
@@ -163,23 +192,29 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
             setPreview(null);
             return;
         }
+        const numbers = numbersOf(draft);
+        if ("missing" in numbers) {
+            // Nothing to ask about: the line says which field it is waiting for.
+            setPreview(null);
+            return;
+        }
         requester.current?.request({
             t: "PatchPreview",
-            id: draft.id,
+            id: numbers.id,
             typeId: draft.typeId,
-            universe: draft.universe,
-            address: draft.address,
+            universe: numbers.universe,
+            address: numbers.address,
         });
     }, [draft]);
 
     const edit = useCallback((row: PatchRow) => {
         setDraft({
-            id: row.id,
+            id: String(row.id),
             wasId: row.id,
             name: row.name,
             typeId: row.typeId,
-            universe: row.universe,
-            address: row.address,
+            universe: String(row.universe),
+            address: String(row.address),
             softwareDimmer: row.softwareDimmer,
         });
     }, []);
@@ -190,12 +225,12 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
     const add = useCallback(() => {
         const first = profiles[0];
         setDraft({
-            id: nextFreeFixtureId(rows),
+            id: String(nextFreeFixtureId(rows)),
             wasId: null,
             name: "",
             typeId: first?.id ?? "",
-            universe: 1,
-            address: 1,
+            universe: "1",
+            address: "1",
             // On, which is what makes a colour-only fixture dark at home — S43.
             // An operator whose PAR is on a dimmer pack switches it off; nobody
             // should have to switch it on to stop the rig lighting itself.
@@ -207,20 +242,27 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
         if (draft === null) {
             return;
         }
+        // **This is where a field that is not a number is refused** — B53, and
+        // only here: the key is disabled for it too, but Enter in a field
+        // submits the form whatever the key says.
+        const numbers = numbersOf(draft);
+        if ("missing" in numbers) {
+            return;
+        }
         // A change of number is its own command, and it goes first: the number is
         // the key the patch is filed under, so an unpatch-and-patch pair would
         // leave the rig without that fixture in between — which is why
         // `RenumberFixture` exists at all. Both travel on one ordered channel.
-        if (draft.wasId !== null && draft.wasId !== draft.id) {
-            send({ t: "RenumberFixture", id: draft.wasId, to: draft.id });
+        if (draft.wasId !== null && draft.wasId !== numbers.id) {
+            send({ t: "RenumberFixture", id: draft.wasId, to: numbers.id });
         }
         send({
             t: "PatchFixture",
-            id: draft.id,
+            id: numbers.id,
             name: draft.name,
             typeId: draft.typeId,
-            universe: draft.universe,
-            address: draft.address,
+            universe: numbers.universe,
+            address: numbers.address,
             softwareDimmer: draft.softwareDimmer,
         });
         // **Dropped, not kept.** What the fixture is comes back as a `ShowPatch`;
@@ -594,6 +636,7 @@ function PatchForm({
     readonly onCancel: () => void;
 }) {
     const clashes = preview !== null && preview.accepted && preview.conflicts.length > 0;
+    const numbers = numbersOf(draft);
     return (
         <form
             className="patch-form"
@@ -663,14 +706,20 @@ function PatchForm({
                 />
             </fieldset>
             <p
-                className={`patch-preview ${previewClass(preview, clashes)}`}
+                className={`patch-preview ${"missing" in numbers ? "preview-refused" : previewClass(preview, clashes)}`}
                 data-testid="patch-preview"
                 role="status"
             >
-                {previewText(preview, draft.id)}
+                {"missing" in numbers
+                    ? `${numbers.missing} has to be a whole number.`
+                    : previewText(preview, numbers.id)}
             </p>
             <div className="patch-actions">
-                <button type="submit" disabled={!isAcceptable(preview)} data-testid="draft-apply">
+                <button
+                    type="submit"
+                    disabled={"missing" in numbers || !isAcceptable(preview)}
+                    data-testid="draft-apply"
+                >
                     {draft.wasId === null ? "Patch" : "Apply"}
                 </button>
                 {draft.wasId === null ? null : (
@@ -678,7 +727,9 @@ function PatchForm({
                         type="button"
                         data-testid="draft-remove"
                         onClick={() => {
-                            onRemove(draft.wasId ?? draft.id);
+                            if (draft.wasId !== null) {
+                                onRemove(draft.wasId);
+                            }
                         }}
                     >
                         Unpatch
@@ -763,10 +814,11 @@ function previewClass(preview: PatchPreview | null, clashes: boolean): string {
 /**
  * A whole number, typed.
  *
- * Held as text while it is being typed and reported as a number, so an operator
- * clearing the box to type a new number does not get a 0 sent under them — the
- * empty string is *no answer yet*, not zero. The last number typed stands until
- * a new one is.
+ * **Held as text, whatever is typed** — B53. It used to take only what was
+ * already a valid number, so the box could never be emptied and the first digit
+ * of a number could not be changed. What the text means is asked where a number
+ * is needed — {@link numbersOf} — and a box that is not a number yet is *no
+ * answer yet*, which the preview line says and the Apply key refuses.
  */
 function NumberField({
     label,
@@ -776,8 +828,8 @@ function NumberField({
 }: {
     readonly label: string;
     readonly testId: string;
-    readonly value: number;
-    readonly onChange: (value: number) => void;
+    readonly value: string;
+    readonly onChange: (value: string) => void;
 }) {
     return (
         <label>
@@ -785,12 +837,9 @@ function NumberField({
             <input
                 data-testid={testId}
                 inputMode="numeric"
-                value={String(value)}
+                value={value}
                 onChange={(event) => {
-                    const typed = Number(event.target.value.trim());
-                    if (event.target.value.trim() !== "" && Number.isInteger(typed) && typed >= 0) {
-                        onChange(typed);
-                    }
+                    onChange(event.target.value);
                 }}
             />
         </label>

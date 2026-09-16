@@ -876,6 +876,33 @@ describe("the rows that are easy to leave untested", () => {
     expect(commands().at(-1)).toMatchObject({ t: "AddOutput" });
   });
 
+  /** **Punch-list B53 (GitHub #21)**, in the output form. */
+  it("lets the number and the hop limit be cleared while typing, and checks them at Apply", async () => {
+    const { commands } = await desk();
+    fireEvent.click(screen.getByTestId("output-add"));
+    fireEvent.change(screen.getByTestId("output-draft-kind"), { target: { value: "Sacn" } });
+    const before = commands().length;
+    for (const field of ["output-draft-id", "output-draft-ttl"]) {
+      fireEvent.change(screen.getByTestId(field), { target: { value: "" } });
+      expect((screen.getByTestId(field) as HTMLInputElement).value).toBe("");
+      expect(screen.getByTestId("output-draft-apply")).toHaveProperty("disabled", true);
+      fireEvent.submit(screen.getByTestId("output-form"));
+      expect(commands()).toHaveLength(before);
+      fireEvent.change(screen.getByTestId(field), { target: { value: "9" } });
+      expect((screen.getByTestId(field) as HTMLInputElement).value).toBe("9");
+    }
+    fireEvent.change(screen.getByTestId("output-draft-id"), { target: { value: "0" } });
+    expect(screen.getByTestId("output-draft-note").textContent).toContain("number");
+    expect(screen.getByTestId("output-draft-apply")).toHaveProperty("disabled", true);
+    fireEvent.change(screen.getByTestId("output-draft-id"), { target: { value: "9" } });
+    fireEvent.change(screen.getByTestId("output-draft-universes"), { target: { value: "3" } });
+    fireEvent.submit(screen.getByTestId("output-form"));
+    expect(commands().at(-1)).toMatchObject({
+      t: "AddOutput",
+      output: { id: 9, kind: { t: "Sacn", ttl: 9 } },
+    });
+  });
+
   it("will not send a list of universes that is not a list of universes", async () => {
     const { commands } = await desk();
     fireEvent.click(screen.getByTestId("output-add"));

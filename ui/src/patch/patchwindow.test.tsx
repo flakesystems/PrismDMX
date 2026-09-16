@@ -674,14 +674,52 @@ describe("the patch window", () => {
     });
   });
 
-  it("ignores a number typed as something that is not one", async () => {
+  /**
+   * **Punch-list B53 (GitHub #21).** A number field used to refuse anything that
+   * was not a number *as it was typed*, so the box could never be empty and the
+   * first digit of a number could not be changed. The box takes what is typed;
+   * **Apply** is what refuses.
+   */
+  it("lets a number be cleared and typed again, and refuses only at Apply", async () => {
     const { commands } = await desk();
     fireEvent.click(screen.getByTestId("patch-row-1"));
-    for (const rubbish of ["", "  ", "-4", "1.5", "twelve"]) {
-      type("draft-address", rubbish);
-      expect((screen.getByTestId("draft-address") as HTMLInputElement).value).toBe("1");
-    }
+    const address = screen.getByTestId("draft-address") as HTMLInputElement;
+    const apply = screen.getByTestId("draft-apply");
+    const before = commands().length;
+
+    type("draft-address", "");
+    expect(address.value).toBe("");
+    expect(apply.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByTestId("patch-preview").textContent).toContain("Address");
+    fireEvent.click(apply);
+    expect(commands()).toHaveLength(before);
+
+    type("draft-address", "3");
+    expect(address.value).toBe("3");
     fireEvent.click(screen.getByTestId("draft-apply"));
-    expect(commands().at(-1)).toMatchObject({ address: 1 });
+    expect(commands().at(-1)).toMatchObject({ t: "PatchFixture", address: 3 });
+  });
+
+  it("shows what was typed when it is not a number, and will not send it", async () => {
+    const { commands } = await desk();
+    fireEvent.click(screen.getByTestId("patch-row-1"));
+    const before = commands().length;
+    for (const [field, label] of [
+      ["draft-id", "Number"],
+      ["draft-universe", "Universe"],
+      ["draft-address", "Address"],
+    ] as const) {
+      for (const rubbish of ["  ", "-4", "1.5", "twelve"]) {
+        type(field, rubbish);
+        expect((screen.getByTestId(field) as HTMLInputElement).value).toBe(rubbish);
+        expect(screen.getByTestId("draft-apply").hasAttribute("disabled")).toBe(true);
+        expect(screen.getByTestId("patch-preview").textContent).toContain(label);
+      }
+      type(field, "1");
+    }
+    // Nothing went out for any of it: no preview asked about a number that is
+    // not one, and no patch.
+    fireEvent.click(screen.getByTestId("draft-apply"));
+    expect(commands().slice(before)).toHaveLength(1);
   });
 });
