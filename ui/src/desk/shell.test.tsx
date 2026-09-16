@@ -24,7 +24,7 @@
  * in TypeScript — even a test's — is the thing S49 removed.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Answer, Command, JsonValue } from "../bindings";
@@ -57,6 +57,7 @@ const READINGS: Readonly<Record<string, Partial<CommandLineReading>>> = {
   "": { kind: "Empty", completions: ["At", "Clear", "Store"] },
   Clear: { kind: "Commands", commands: 1, reading: "clear", verb: true },
   Oops: { kind: "Commands", commands: 1, reading: "oops", verb: true },
+  Update: { kind: "Commands", commands: 1, reading: "update", verb: true },
   "Store ": { kind: "Error", reading: "which one?", verb: true, completions: ["Sequence"] },
   "Store Cue ": { kind: "Error", reading: "cue which one?", verb: true },
   "Cue ": { kind: "Error", reading: "a cue on its own is ambiguous." },
@@ -131,7 +132,7 @@ function shell(session: JsonValue = SESSION) {
           rule that binds them: every key writes into the line and none of them
           sends a command of its own.
         */}
-        <Keypad />
+        <Keypad session={session} />
         <Probe />
       </ConsoleProvider>
     </DeskProvider>,
@@ -762,5 +763,46 @@ describe("the line the daemon holds, and the one being typed", () => {
       </DeskProvider>,
     );
     expect(input().value).toBe("Group ");
+  });
+});
+
+/**
+ * **The Update key blinks where a console has it** — B62. It lived on the Cue
+ * Viewer's store bar, which is gone; the blink is still `Session::editingCue`,
+ * the daemon's, so every screen's key blinks together.
+ */
+describe("the Update key", () => {
+  const editing = (modified: boolean): JsonValue => ({
+    session: {
+      commandLine: "",
+      editingCue: { sequenceId: 1, cueNumber: "3", modified },
+    },
+  });
+
+  it("is an ordinary key while no cue is being edited", () => {
+    shell();
+    const key = screen.getByTestId("key-update");
+    expect(key.dataset["modified"]).toBe("no");
+    expect(key.className).not.toContain("update-blinking");
+  });
+
+  it("names the cue it would write back into, and blinks once the programmer moved", () => {
+    shell(editing(false));
+    expect(screen.getByTestId("key-update").title).toContain("cue 3");
+    expect(screen.getByTestId("key-update").className).not.toContain("update-blinking");
+    cleanup();
+
+    shell(editing(true));
+    const key = screen.getByTestId("key-update");
+    expect(key.dataset["modified"]).toBe("yes");
+    expect(key.className).toContain("update-blinking");
+  });
+
+  it("still writes its word and runs it, and carries nothing", async () => {
+    const { acted } = shell(editing(true));
+    fireEvent.click(screen.getByTestId("key-update"));
+    await waitFor(() => {
+      expect(acted()).toEqual(["Update"]);
+    });
   });
 });

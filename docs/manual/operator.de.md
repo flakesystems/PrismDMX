@@ -222,7 +222,8 @@ das Fenster nennt die fehlenden Spalten selbst, statt sie leer zu zeigen.
 
 Was die laufende Cue eines Executors tatsächlich setzt, Fixture für Fixture, und
 wo ein Wert aus einem Preset kommt. Ein Fenster zum Hinsehen: bearbeitet wird
-mit `Edit Cue 3`, was die Cue in den Programmer lädt.
+mit `Edit Cue 3`, was die Cue in den Programmer lädt. Gespeichert wird auf der
+Kommandozeile — `Store Cue 5` —, nicht in diesem Fenster.
 
 ### Preset Pool · `PresetPool`
 
@@ -440,7 +441,7 @@ Stelle. In eine Liste zu speichern, die es schon gibt, ändert die Auswahl
 dagegen nicht: was Sie bearbeiten, sagt `Sequence 4`.
 
 **`Update`** speichert den Programmer in die Cue zurück, aus der er geladen
-wurde, im Override-Modus. Die Taste **blinkt**, wenn es etwas zurückzuschreiben
+wurde, im Override-Modus. Die Taste im Fenster *CommandKeys* **blinkt**, wenn es etwas zurückzuschreiben
 gibt — und weil das Sitzungszustand ist, blinkt sie auf jedem Bildschirm
 gleichzeitig.
 

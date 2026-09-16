@@ -61,7 +61,6 @@ function shell(): { readonly lines: string[]; readonly value: ConsoleShell } {
       run: (text: string) => {
         lines.push(text);
       },
-      runWithMode: () => undefined,
       oops: () => undefined,
       submit: () => undefined,
       answer: () => undefined,

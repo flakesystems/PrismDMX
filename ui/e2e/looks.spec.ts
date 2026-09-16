@@ -8,8 +8,10 @@
  *
  * 1. **Cues are stored, edited and fired from the interface** — starting from a
  *    rig with no sequence, no cue and no executor on it.
- * 2. **A store that would overwrite says what it will do first** — the counts
- *    are on the button, in the daemon's own words, with the command not sent.
+ * 2. **A store that would overwrite asks first** — in the command line, with
+ *    the command not sent until the operator answers. It was a sentence on the
+ *    Cue Viewer's Store button until B62 took the store bar away: a cue is
+ *    stored from the command line.
  * 3. **Preset pools apply and store, and the links stay alive** — a preset is
  *    stored, applied, put into a cue, and then *edited*; the cue follows it, and
  *    the proof is the **light on the rig**, counted off the telemetry canvas.
@@ -19,8 +21,9 @@
  *
  * S39 added a fifth, which is the answer to the question S28 raised and did not
  * answer: **the operator chooses the store mode**, the question carries the
- * choice, the sentence on the button is the daemon's answer about *that* choice,
- * and a cue can be loaded back into the programmer and put down again.
+ * choice, and a cue can be loaded back into the programmer and put down again —
+ * with the keypad's Update key, which blinks since B62 where the store bar's
+ * used to.
  *
  * # Nothing here touches a device
  *
@@ -261,23 +264,26 @@ test("a show is written, corrected and fired entirely from the interface", async
   await command(page, "Assign Sequence 1 Executor 3");
   await expect(page.getByTestId("looks-executor-name")).toHaveText("Executor 3 · Sequence 1");
 
-  // 2. A look in the programmer, and the Store button says what it will do
-  //    **before** it is pressed: nothing is there yet, so this is a create.
-  //    The rig is PARs, so the value goes on a colour rather than on a dimmer
-  //    they have not got.
+  // 2. A look in the programmer, stored from the command line. Nothing is
+  //    there yet, so this is a create and nothing is asked. The rig is PARs,
+  //    so the value goes on a colour rather than on a dimmer they have not got.
   await command(page, "1 thru 3 red at 100");
-  await expect(page.getByTestId("store-cue")).toContainText("Nothing is there yet");
-  await expect(page.getByTestId("store-cue")).toContainText("Merge");
-  await page.getByTestId("store-cue").click();
+  await command(page, "Store Cue 1");
   await expect(page.getByTestId("cue-row-1")).toBeVisible();
   await expect(page.getByTestId("cue-viewer-count")).toContainText("3 values");
 
-  // And now the sentence changes, because something *is* there: the same
-  // gesture over the same number is an overwrite, and the counts say what it
-  // costs. This is the exit criterion in one assertion.
-  await page.getByTestId("store-number").fill("1");
-  await expect(page.getByTestId("store-cue")).toContainText("3 replaced");
-  await expect(page.getByTestId("store-cue")).not.toContainText("Nothing is there yet");
+  // And now the same line **asks**, because something *is* there: the same
+  // store over the same number is an overwrite, and nothing is sent until the
+  // operator answers. This is the exit criterion in one gesture.
+  await typeLine(page, "Store Cue 1");
+  await expect(page.getByTestId("command-prompt")).toBeVisible();
+  await expect(page.getByTestId("command-prompt-what")).toContainText("cue 1");
+  await page.getByTestId("command-input").press("Escape");
+  await expect(page.getByTestId("command-prompt")).toHaveCount(0);
+  await expect(page.getByTestId("cue-viewer-count")).toContainText("3 values");
+  // Escape leaves the line standing for correction; this test is done with it.
+  await page.getByTestId("command-input").press("Escape");
+  await expect(page.getByTestId("command-input")).toHaveValue("");
 
   // 3. A cue is edited in place, one field at a time, and the sheet redraws
   //    from what the daemon answers rather than from what was typed.
@@ -294,8 +300,7 @@ test("a show is written, corrected and fired entirely from the interface", async
   // A store into a second number, and then a renumber that **moves the cue up
   // the list** — the sort is the daemon's (`Cue::compare_numbers`) and this
   // interface never sorts anything.
-  await page.getByTestId("store-number").fill("2");
-  await page.getByTestId("store-cue").click();
+  await command(page, "Store Cue 2");
   await expect(page.getByTestId("cue-row-2")).toBeVisible();
   await page.getByTestId("cue-number-2").click();
   await page.getByTestId("cue-number-2-input").fill("0.5");
@@ -338,22 +343,22 @@ test("a show is written, corrected and fired entirely from the interface", async
   await expect(page.getByTestId("sequences")).toHaveText("1");
 });
 
-test("**the operator chooses the mode, and the daemon says what it will cost first**", async ({
+test("**the operator chooses the mode in the line, and Update puts a loaded cue back**", async ({
   page,
 }) => {
-  // **S39, in a browser.** S28 shipped a Store button that said *Merge* because
-  // that was the only mode the daemon had, and left two tests written to go red
-  // the day the other two landed. This is the gesture those tests were about:
-  // the operator picks, the question carries the pick, and the sentence on the
-  // button is the daemon's answer about **that** pick.
+  // **S39, in a browser.** The operator picks, and the question carries the
+  // pick. Until B62 the pick was a chooser beside a previewing Store button in
+  // the Cue Viewer; a cue is stored from the command line now, and the choice
+  // is the line's own question.
   await desk(page, PORT);
   await openWindow(page, "SequenceSheet");
   await page.getByTestId("new-sequence").click();
   await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
-  // The store bar is the Cue Viewer's since S43 — the Sequence Sheet is the
-  // pool. Which cue list it edits is `Session::selectedSequence`, and a new one
-  // is put in force by the store that made it.
+  // Which cue list the Cue Viewer edits is `Session::selectedSequence`, and a
+  // new one is put in force by the store that made it.
   await openWindow(page, "CueViewer");
+  // The Update key lives on the keypad since B62.
+  await openWindow(page, "CommandKeys");
   // And no executor was selected to get here, which is the other half of S39's
   // decision: a cue list is written before anybody decides which fader it is on.
   await expect(page.getByTestId("looks-executor-name")).toHaveText("No executor selected");
@@ -361,53 +366,40 @@ test("**the operator chooses the mode, and the daemon says what it will cost fir
   // A look of five values, stored into cue 1.
   await command(page, "1 thru 3 red at 100");
   await command(page, "1 thru 2 green at 60");
-  await page.getByTestId("store-cue").click();
+  await command(page, "Store Cue 1");
   await expect(page.getByTestId("cue-viewer-count")).toContainText("5 values");
 
-  // A different, smaller look: one fixture, one attribute.
+  // A different, smaller look — one fixture, one attribute — **merged**: the
+  // five stay and one is added.
   await clearProgrammer(page);
   await command(page, "1 blue at 100");
-  await page.getByTestId("store-number").fill("1");
+  await store(page, "Store Cue 1", "Merge");
+  await expect(page.getByTestId("cue-viewer-count")).toContainText("6 values");
 
-  // Merge is the default and it says so: one value added, nothing lost.
-  await expect(page.getByTestId("store-cue")).toContainText("Merge into cue 1");
-  await expect(page.getByTestId("store-cue")).toContainText("1 added");
-  await expect(page.getByTestId("store-cue")).not.toContainText("removed");
-
-  // **Choosing Override asks the daemon again**, and the answer is a different
-  // sentence about the same gesture: five values would go.
-  await page.getByTestId("cue-store-mode").selectOption("Override");
-  await expect(page.getByTestId("store-cue")).toContainText("Override into cue 1");
-  await expect(page.getByTestId("store-cue")).toContainText("5 removed");
-
-  // And a Remove writes nothing at all — refused here, because the blue is not
-  // in the cue, and the refusal is the daemon's own words on the button.
-  await page.getByTestId("cue-store-mode").selectOption("Remove");
-  await expect(page.getByTestId("store-cue")).toContainText("nothing to remove");
-  await expect(page.getByTestId("store-cue")).toBeDisabled();
-
-  // Back to Override, and press it: the cue afterwards is what was promised.
-  await page.getByTestId("cue-store-mode").selectOption("Override");
-  await page.getByTestId("store-cue").click();
+  // **Override** replaces what the cue holds with what the programmer holds.
+  await store(page, "Store Cue 1", "Override");
   await expect(page.getByTestId("cue-viewer-count")).toContainText("1 values");
 
   // **And a cue is loaded back and put down again.** S39's `EditCue` and
   // `Update`: the values come back into the programmer, one is changed, and the
   // Update key puts the change into the cue without a number being typed.
+  const update = page.getByTestId("key-update");
+  await expect(update).not.toHaveClass(/update-key/);
   await expect(page.getByTestId("cue-edit-1")).toBeVisible();
   await page.getByTestId("cue-edit-1").click();
-  await expect(page.getByTestId("update-cue")).toHaveText("Update cue 1");
-  await expect(page.getByTestId("update-cue")).not.toHaveClass(/update-blinking/);
+  await expect(update).toHaveClass(/update-key/);
+  await expect(update).toHaveAttribute("title", /cue 1/);
+  await expect(update).not.toHaveClass(/update-blinking/);
   await command(page, "1 white at 100");
-  await expect(page.getByTestId("update-cue")).toHaveClass(/update-blinking/);
-  await page.getByTestId("update-cue").click();
+  await expect(update).toHaveClass(/update-blinking/);
+  await update.click();
   await expect(page.getByTestId("cue-viewer-count")).toContainText("2 values");
-  await expect(page.getByTestId("update-cue")).not.toHaveClass(/update-blinking/);
+  await expect(update).not.toHaveClass(/update-blinking/);
 
   // Clearing the programmer ends the edit, which is one of the three rules
   // `prism_core` asserts and the one an operator meets by accident.
   await clearProgrammer(page);
-  await expect(page.getByTestId("update-cue")).toHaveCount(0);
+  await expect(update).not.toHaveClass(/update-key/);
 
   // Nothing of this is held here either.
   await page.reload();
@@ -468,14 +460,17 @@ test("a preset link is alive: editing the preset changes the light a cue puts ou
 
   await openWindow(page, "SequenceSheet");
   await openWindow(page, "Executors");
-  // The store bar and the cue rows are the Cue Viewer's since B29.
+  // The cue rows are the Cue Viewer's since B29.
   await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
   await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   // The fader is its own line since S40 — see the note in the first test.
   await command(page, "Assign Sequence 1 Executor 3");
-  await page.getByTestId("store-cue").click();
+  // **New** made the list with the programmer in it, so cue 1 is already there
+  // and the line asks. The store bar used to answer *Merge* without saying so;
+  // the line says so.
+  await store(page, "Store Cue 1", "Merge");
   await expect(page.getByTestId("cue-row-1")).toBeVisible();
   await closeWindows(page);
 
@@ -564,15 +559,14 @@ test("a cue sheet of four hundred rows scrolls inside its own window", async ({ 
   await desk(page, PORT + 2);
   await openWindow(page, "SequenceSheet");
   await openWindow(page, "Executors");
-  // The store bar and the rows are the Cue Viewer's since B29.
+  // The rows are the Cue Viewer's since B29.
   await openWindow(page, "CueViewer");
   await page.getByTestId("select-3").click();
   await page.getByTestId("new-sequence").click();
   await expect(page.getByTestId("sequence-count")).toHaveText("1 sequences");
   await command(page, "1 thru 3 red at 100");
   for (let number = 1; number <= 30; number += 1) {
-    await page.getByTestId("store-number").fill(String(number));
-    await page.getByTestId("store-cue").click();
+    await command(page, `Store Cue ${String(number)}`);
   }
   await expect(page.getByTestId("cue-row-30")).toBeVisible();
 
@@ -623,14 +617,12 @@ test("a cue sheet says what a cue asserts and what it inherits from the cues abo
   // Cue 1 sets red on three PARs. Cue 2 sets **green** and says nothing at all
   // about red — which is the shape the whole session is about.
   await command(page, "1 thru 3 red at 100");
-  await page.getByTestId("store-number").fill("1");
-  await page.getByTestId("store-cue").click();
+  await command(page, "Store Cue 1");
   await expect(page.getByTestId("cue-row-1")).toBeVisible();
 
   await clearProgrammer(page);
   await command(page, "1 thru 3 green at 50");
-  await page.getByTestId("store-number").fill("2");
-  await page.getByTestId("store-cue").click();
+  await command(page, "Store Cue 2");
   await expect(page.getByTestId("cue-row-2")).toBeVisible();
 
   // **The reading the session exists for.** Cue 2 does not set red, and the

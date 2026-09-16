@@ -25,7 +25,6 @@ import {
   cueEditInForce,
   executorInForce,
   executorsPlaying,
-  nextCueNumber,
   nextFreeNumber,
   poolRows,
   presetRows,
@@ -333,12 +332,7 @@ describe("the looks, read out of the show document", () => {
     expect(seen.size).toBeGreaterThanOrEqual(2);
   });
 
-  it("offers the next cue number without deciding whether it is free", () => {
-    expect(nextCueNumber([])).toBe("1");
-    expect(nextCueNumber(cuesNumbered(["1", "1.5", "2"]))).toBe("3");
-    // A number that is not a number sorts nowhere and counts for nothing: the
-    // daemon accepts one and this is only the box's starting text.
-    expect(nextCueNumber(cuesNumbered(["1", "opening"]))).toBe("2");
+  it("offers the next free number without deciding whether it is wanted", () => {
     expect(nextFreeNumber([{ id: 1 }, { id: 3 }])).toBe(2);
   });
 

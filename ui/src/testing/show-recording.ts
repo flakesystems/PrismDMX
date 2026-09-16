@@ -13,7 +13,7 @@
 
 import { decode } from "@msgpack/msgpack";
 
-import type { Answer, Delta, JsonValue, RgbColor } from "../bindings";
+import type { Delta, JsonValue, RgbColor } from "../bindings";
 import { readServerMessage } from "../ipc/protocol";
 import type { Snapshot } from "../ipc/protocol";
 
@@ -142,19 +142,6 @@ export function deltaOf(encoded: string): Delta {
 /** The deltas of the step about something, in order. */
 export function deltasAbout(about: string): Delta[] {
   return stepAbout(about).deltas.map(deltaOf);
-}
-
-/** The daemon's answer at the step about something. */
-export function answerAbout(about: string): Answer {
-  const encoded = stepAbout(about).answer;
-  if (encoded === null) {
-    throw new Error(`the step about ${JSON.stringify(about)} carries no answer`);
-  }
-  const message = readServerMessage(decode(payloadOf(encoded)));
-  if (message.t !== "Answer") {
-    throw new Error("that payload is not an answer");
-  }
-  return message.answer;
 }
 
 /** The show document the recording starts from. */

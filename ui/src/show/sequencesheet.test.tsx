@@ -39,7 +39,7 @@ import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
 import { ranLines, settleReadings } from "../testing/console";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
-import { answerAbout, deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
+import { deltasAbout, showRecording, snapshotOf } from "../testing/show-recording";
 import { TelemetryProvider } from "../telemetry/panel";
 import { ConsoleContext, unread } from "../desk/consoleshell";
 import type { CommandLineReading, ConsoleShell } from "../desk/consoleshell";
@@ -58,13 +58,22 @@ function recordedSnapshot(
   window: WindowType,
   selectedExecutor: number | null,
   selectedSequence: number | null,
+  alongside: readonly WindowType[] = [],
 ): Snapshot {
   return {
     ...snapshotOf(showRecording.initialSnapshot),
     session: {
       session: {
         activeViewId: 1,
-        openWindows: [{ instanceId: 1, type: window, x: 0, y: 0, w: 1920, h: 1080, params: {} }],
+        openWindows: [window, ...alongside].map((type, index) => ({
+          instanceId: index + 1,
+          type,
+          x: 0,
+          y: index * 540,
+          w: 1920,
+          h: 540,
+          params: {},
+        })),
         focusedWindow: 1,
         executorPage: 0,
         selectedExecutor,
@@ -90,6 +99,7 @@ async function desk(
   window: WindowType = "CueViewer",
   selectedExecutor: number | null = 0,
   selectedSequence: number | null = 1,
+  alongside: readonly WindowType[] = [],
 ) {
   const network = new FakeNetwork();
   const clock = new ManualTimer();
@@ -119,7 +129,7 @@ async function desk(
     network.last.deliver(
       serverMessage({
         t: "Snapshot",
-        snapshot: recordedSnapshot(window, selectedExecutor, selectedSequence),
+        snapshot: recordedSnapshot(window, selectedExecutor, selectedSequence, alongside),
       }),
     );
     await Promise.resolve();
@@ -542,9 +552,8 @@ describe("the cue viewer", () => {
     const { applyStep } = await desk();
     await applyStep("make a cue list to store into", "put it on an executor");
     expect(screen.getByTestId("no-cues").textContent).toContain("no cues");
-    // And the store bar is there all the same, because storing is how it stops
-    // having none.
-    expect(screen.getByTestId("cue-store")).toBeTruthy();
+    // And it says how a cue gets there: from the command line (B62).
+    expect(screen.getByTestId("no-cues").textContent).toContain("Store Cue 1");
   });
 
   it("drops an open editor when the cue it names stops existing", async () => {
@@ -584,180 +593,63 @@ describe("the cue viewer", () => {
   });
 });
 
-describe("the store bar", () => {
-  /**
-   * **The question is asked when the answer can have changed, and not per
-   * frame.**
-   *
-   * S28 left the warning and named S34 as the session that would test it:
-   * `Query::StorePreview` is asked once per delta, which is fine at the rate a
-   * cue sheet changes and is *not* fine at playback rates — and S34's readback
-   * is what makes the show document move while a playback runs. Firing the list
-   * and stepping it produce two `ExecutorState` deltas and no new question; a
-   * chase of instantaneous cues would otherwise ask forty-four times a second.
-   */
-  it("does not ask again when a playback advances a cue", async () => {
+/**
+ * **There is no store bar — B62 (GitHub #30).** A cue is stored from the command
+ * line; the bar with a number, a mode and a previewing Store button went, and
+ * with it the question it asked the daemon on every change.
+ */
+describe("storing a cue", () => {
+  it("has no bar of its own, and never asks what a store would cost", async () => {
     const { queries, applyStep } = await desk();
-    await applyStep(...A_CUE_LIST);
-    const before = queries().filter((query) => query.t === "StorePreview").length;
-    expect(before).toBeGreaterThan(0);
-
-    await applyStep("fire the list", "step it again");
-    expect(screen.getByTestId("looks-executor-cue").textContent).toBe("cue 2");
-    expect(queries().filter((query) => query.t === "StorePreview").length).toBe(before);
+    await applyStep(...A_CUE_LIST, "fire the list", "step it again");
+    expect(screen.queryByTestId("cue-store")).toBeNull();
+    expect(screen.queryByTestId("store-cue")).toBeNull();
+    expect(screen.queryByTestId("cue-store-mode")).toBeNull();
+    expect(queries().filter((query) => query.t === "StorePreview")).toEqual([]);
   });
 
-
-  it("asks the daemon what the store would do, and puts the answer on the button", async () => {
-    const { queries, answerQuery, applyStep } = await desk();
-    await applyStep(...A_CUE_LIST);
-    expect(queries().some((query) => query.t === "StorePreview")).toBe(true);
-    await answerQuery("StorePreview", answerAbout("this is the overwrite an operator"));
-    const button = screen.getByTestId("store-cue");
-    // The daemon's own words and the daemon's own mode: two added, three
-    // replaced, nothing kept.
-    expect(button.textContent).toContain("Merge");
-    expect(button.textContent).toContain("2 added");
-    expect(button.textContent).toContain("3 replaced");
-  });
-
-  it("stores into the number in the box, and offers the next one after that", async () => {
-    const { ran, commands, applyStep, settle } = await desk();
-    await applyStep(...A_CUE_LIST);
-    // Two cues, so the box offers 3.
-    expect(numberIn("store-number")).toBe("3");
-    type("store-number", "1");
-    fireEvent.submit(screen.getByTestId("cue-store"));
-    await settle();
-    expect(ran()).toEqual(["Store Sequence 1 Cue 1"]);
-    // **The mode travels with the line** since S39, and it is the chooser's
-    // default rather than the daemon's assumption: the bar has already been
-    // answered, so the line carries the word and raises no question.
-    expect(commands().at(-1)).toEqual({
-      t: "CommandLineInput",
-      text: "Store Sequence 1 Cue 1",
-      run: true,
-      mode: "Merge",
-    });
-    // **Dropped, not kept**: the box goes back to offering the next number of
-    // whatever the daemon ends up holding.
-    expect(numberIn("store-number")).toBe("3");
-  });
-
-  it("asks again in the mode the operator chose, and sends that mode", async () => {
-    // **S39, and the two halves have to move together.** Choosing a mode is not
-    // a label change: it asks `Query::StorePreview` again with that mode on it,
-    // because the counts beside the word are what *that* mode would cost. A bar
-    // that changed the word without re-asking would put "Override" over a
-    // Merge's numbers, which is worse than the hard-coded "Merge" S28 refused.
-    const { commands, queries, applyStep, settle } = await desk();
-    await applyStep(...A_CUE_LIST);
-    const before = queries().filter((query) => query.t === "StorePreview").length;
-
-    const chooser = screen.getByTestId("cue-store-mode");
-    if (!(chooser instanceof HTMLSelectElement)) {
-      throw new Error("the mode chooser is not a select");
-    }
-    // The three the daemon has, drawn from the generated table rather than from
-    // a list this file keeps.
-    expect([...chooser.options].map((option) => option.value)).toEqual([
-      "Merge",
-      "Override",
-      "Remove",
-    ]);
-    expect(chooser.value).toBe("Merge");
-
-    fireEvent.change(chooser, { target: { value: "Override" } });
-    expect(queries().filter((query) => query.t === "StorePreview").length).toBe(before + 1);
-
-    fireEvent.submit(screen.getByTestId("cue-store"));
-    await settle();
-    expect(commands().at(-1)).toEqual({
-      t: "CommandLineInput",
-      text: "Store Sequence 1 Cue 3",
-      run: true,
-      mode: "Override",
-    });
-  });
-
-  it("puts the daemon's word on the button and never one of its own", async () => {
-    // The mode on the button is `preview.mode` — the mode the *answer* carried,
-    // not the one the chooser reads now. Answering an Override question while
-    // the chooser says Override is the ordinary case; this asserts the wiring
-    // by answering with a mode the chooser is *not* on, which is the state a
-    // client is in for one round trip after every change.
-    const { answerQuery, applyStep } = await desk();
-    await applyStep(...A_CUE_LIST);
-    await answerQuery("StorePreview", answerAbout("one an operator has to be warned about"));
-    const button = screen.getByTestId("store-cue");
-    expect(button.textContent).toContain("Override");
-    expect(button.textContent).toContain("4 removed");
-    const chooser = screen.getByTestId("cue-store-mode");
-    if (!(chooser instanceof HTMLSelectElement)) {
-      throw new Error("the mode chooser is not a select");
-    }
-    expect(chooser.value).toBe("Merge");
-  });
-
-  it("loads a cue with a command and puts it back with one that carries nothing", async () => {
+  it("loads a cue with a command, and the keypad's Update puts it back", async () => {
     // **S39's `EditCue` and `Update`.** Neither of them is a gesture this
     // window resolves: `EditCue` names the cue and the *daemon* fills the
     // programmer, and `Update` names nothing at all because which cue and which
-    // mode are both the desk's.
-    const { ran, applyStep, settle } = await desk();
+    // mode are both the desk's. The key that blinks is the `CommandKeys`
+    // window's since B62.
+    const { ran, applyStep, settle } = await desk("CueViewer", 0, 1, ["CommandKeys"]);
     await applyStep(...A_CUE_LIST);
-    // No cue is loaded, so there is no key to press.
-    expect(screen.queryByTestId("update-cue")).toBeNull();
+    const key = (): HTMLElement => screen.getByTestId("key-update");
+    // No cue is loaded, so the key is an ordinary key.
+    expect(key().className).not.toContain("update-key");
 
     fireEvent.click(screen.getByTestId("cue-edit-1"));
     await settle();
     expect(ran().at(-1)).toBe("Edit Sequence 1 Cue 1");
-    // **And the key still is not there**, because nothing about the update
-    // state is held here: it arrives as a `SessionPatch`.
-    expect(screen.queryByTestId("update-cue")).toBeNull();
+    // **And the key still is not lit**, because nothing about the update state
+    // is held here: it arrives as a `SessionPatch`.
+    expect(key().className).not.toContain("update-key");
 
     await applyStep("load cue 3 back into the programmer");
-    const key = screen.getByTestId("update-cue");
-    expect(key.textContent).toBe("Update cue 3");
-    expect(key.getAttribute("data-modified")).toBe("no");
-    expect(key.className).not.toContain("update-blinking");
+    expect(key().title).toContain("cue 3");
+    expect(key().dataset["modified"]).toBe("no");
+    expect(key().className).toContain("update-key");
+    expect(key().className).not.toContain("update-blinking");
 
     // The blink is the daemon's state and not a timer this window keeps.
     await applyStep("now change something while the cue is loaded");
-    expect(screen.getByTestId("update-cue").getAttribute("data-modified")).toBe("yes");
-    expect(screen.getByTestId("update-cue").className).toContain("update-blinking");
+    expect(key().dataset["modified"]).toBe("yes");
+    expect(key().className).toContain("update-blinking");
 
-    fireEvent.click(screen.getByTestId("update-cue"));
-    await settle();
+    fireEvent.click(key());
+    await settle({ Update: { kind: "Commands", commands: 1, reading: "update", verb: true } });
     expect(ran().at(-1)).toBe("Update");
 
     // **Dropping the selection does not end the edit** — S51, B37: no value
-    // moved, so the key stays and can still be pressed.
+    // moved, so the key stays lit and can still be pressed.
     await applyStep("clear the selection while a cue is loaded");
-    expect(screen.getByTestId("update-cue")).not.toBeNull();
+    expect(key().className).toContain("update-key");
 
-    // The press that takes the **values** is the one that ends it, so the key
-    // goes.
+    // The press that takes the **values** is the one that ends it.
     await applyStep("an Update after the *values* have been cleared");
-    expect(screen.queryByTestId("update-cue")).toBeNull();
-  });
-
-  it("goes dead when the daemon says the store would be refused", async () => {
-    const { answerQuery, applyStep } = await desk();
-    await applyStep(...A_CUE_LIST);
-    await answerQuery("StorePreview", answerAbout("nothing to store"));
-    const button = screen.getByTestId("store-cue");
-    expect(button.hasAttribute("disabled")).toBe(true);
-    // And it says why, in the daemon's words rather than in this file's.
-    expect(button.textContent).toContain("nothing to store");
-  });
-
-  it("asks again when the cue number is typed over", async () => {
-    const { queries, applyStep } = await desk();
-    await applyStep(...A_CUE_LIST);
-    const before = queries().filter((query) => query.t === "StorePreview").length;
-    type("store-number", "9");
-    expect(queries().filter((query) => query.t === "StorePreview")).toHaveLength(before + 1);
+    expect(key().className).not.toContain("update-key");
   });
 });
 
@@ -787,17 +679,6 @@ interface Inherited {
   readonly fixture: number;
   readonly attribute: AttributeType;
   readonly value: number;
-}
-
-
-
-/** What is in a text box. */
-function numberIn(testId: string): string {
-  const field = screen.getByTestId(testId);
-  if (!(field instanceof HTMLInputElement)) {
-    throw new Error(`${testId} is not an input`);
-  }
-  return field.value;
 }
 
 describe("what a cue inherits", () => {
@@ -1053,9 +934,7 @@ describe("the cue grid", () => {
     const { applyStep } = await desk("CueViewer");
     await applyStep("make a cue list to store into", "put it on an executor");
     expect(screen.getByTestId("no-cues").textContent).toContain("no cues");
-    // And the store bar is there all the same, because storing is how it stops
-    // having none.
-    expect(screen.getByTestId("cue-store")).toBeTruthy();
+    expect(screen.queryByTestId("cue-store")).toBeNull();
   });
 });
 
@@ -1104,7 +983,7 @@ function renderViewer(show: JsonValue) {
   return render(
     <DeskProvider store={new DeskStore()}>
       <ConsoleContext.Provider value={NO_CONSOLE}>
-        <CueViewer show={show} session={SELECTED} programmer={null} />
+        <CueViewer show={show} session={SELECTED} />
       </ConsoleContext.Provider>
     </DeskProvider>,
   );
@@ -1132,7 +1011,7 @@ async function renderViewerTracking(show: JsonValue, rows: Answer) {
   const view = render(
     <DeskProvider store={store}>
       <ConsoleContext.Provider value={NO_CONSOLE}>
-        <CueViewer show={show} session={SELECTED} programmer={null} />
+        <CueViewer show={show} session={SELECTED} />
       </ConsoleContext.Provider>
     </DeskProvider>,
   );
@@ -1153,7 +1032,6 @@ const NO_CONSOLE: ConsoleShell = {
   write: () => undefined,
   append: () => undefined,
   run: () => undefined,
-  runWithMode: () => undefined,
   oops: () => undefined,
   submit: () => undefined,
   answer: () => undefined,

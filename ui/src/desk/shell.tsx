@@ -295,14 +295,6 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
     [execute],
   );
 
-  const runWithMode = useCallback(
-    (text: string, mode: CommandLineMode) => {
-      setTyped(text);
-      dispatch(text, mode);
-    },
-    [dispatch],
-  );
-
   /**
    * **B58.** The key writes nothing and decides nothing: which of *a word* and
    * *an edit* Oops takes is the daemon's, because the X-Touch's Undo key has to
@@ -398,14 +390,13 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
       write,
       append,
       run,
-      runWithMode,
       oops,
       submit,
       answer,
       recall,
       pick,
     }),
-    [typed, reading, prompt, write, append, run, runWithMode, oops, submit, answer, recall, pick],
+    [typed, reading, prompt, write, append, run, oops, submit, answer, recall, pick],
   );
 
   return <ConsoleContext.Provider value={shell}>{children}</ConsoleContext.Provider>;

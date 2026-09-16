@@ -2195,27 +2195,6 @@
     color: var(--accent);
 }
 
-/*
- * The store bar. The button carries a sentence rather than a word, so it is
- * allowed to be as wide as the sentence: an operator reads it before pressing
- * it, and a truncated *3 replaced* is worse than no preview at all.
- */
-.store-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    border-top: 1px solid var(--edge);
-    padding-top: 0.3rem;
-}
-
-.store-bar label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
 /* Edit and × share one cell, so the cue sheet keeps the seven columns it had
    before S39 — an eighth pushed the rows under the sticky header on a narrow
    viewport, which is a click an operator cannot make. */
@@ -2226,9 +2205,9 @@
     white-space: nowrap;
 }
 
-/* The Update key (S39): it is on the store bar because it is a store, and it
-   blinks on `Session::editingCue.modified` — the daemon's state, so two screens
-   blink together. `prefers-reduced-motion` gets the colour and not the flash;
+/* The Update key (S39): in the CommandKeys window since B62, and it blinks on
+   `Session::editingCue.modified` — the daemon's state, so two screens blink
+   together. `prefers-reduced-motion` gets the colour and not the flash;
    a lamp that cannot be turned off is worse than one that does not move. */
 .update-key {
     border-color: var(--accent);

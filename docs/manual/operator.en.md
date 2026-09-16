@@ -218,7 +218,8 @@ the window names the missing columns itself rather than showing them empty.
 
 What an executor's running cue actually sets, fixture by fixture, and where a
 value comes from a preset. A window for looking at: you edit with `Edit Cue 3`,
-which loads the cue into the programmer.
+which loads the cue into the programmer. Storing happens on the command line —
+`Store Cue 5` — not in this window.
 
 ### Preset Pool · `PresetPool`
 
@@ -429,7 +430,7 @@ Storing into a list that already exists does not change the selection: what you
 are editing is what `Sequence 4` says.
 
 **`Update`** stores the programmer back into the cue it was loaded from, in
-override mode. The key **blinks** when there is something to write back — and
+override mode. The key in the *CommandKeys* window **blinks** when there is something to write back — and
 because that is session state, it blinks on every screen at once.
 
 **`Oops`** takes back the last change. Two hundred steps deep. **The Oops key**

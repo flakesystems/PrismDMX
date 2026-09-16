@@ -491,25 +491,6 @@ export function nextFreeNumber(taken: readonly { readonly id: number }[]): numbe
 }
 
 /**
- * The number a *new* cue would sensibly take: one past the highest whole one.
- *
- * The same kind of convenience, and the same rule — an operator types over it,
- * and `1.5` between `1` and `2` is exactly what they type. Deliberately not
- * "the next gap": a cue list is read top to bottom and a new cue belongs at the
- * end unless somebody says otherwise.
- */
-export function nextCueNumber(cues: readonly CueRow[]): string {
-  let highest = 0;
-  for (const cue of cues) {
-    const value = Number(cue.number.trim());
-    if (Number.isFinite(value) && value > highest) {
-      highest = value;
-    }
-  }
-  return String(Math.floor(highest) + 1);
-}
-
-/**
  * A time, as a cue sheet shows it.
  *
  * One decimal place, because that is the resolution an operator types and

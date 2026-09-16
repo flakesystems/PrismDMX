@@ -81,15 +81,6 @@ export interface ConsoleShell {
   /** Writes a line and submits it — a whole command, or an item picked in a list. */
   run: (text: string) => void;
   /**
-   * Writes a line and submits it with a mode **already chosen**.
-   *
-   * The store bar in the Cue Viewer has a chooser beside the button (S39), so
-   * the question the line carries has been answered before it is sent and there
-   * is nothing to prompt about. It is the same line and the same command; what
-   * differs is only where the answer came from.
-   */
-  runWithMode: (text: string, mode: CommandLineMode) => void;
-  /**
    * The Oops key — B58. Brings the daemon's line up to date and sends `Oops`;
    * the daemon takes the line's last word if one stands and an edit back if
    * not, and the shorter line comes back like any other screen's.

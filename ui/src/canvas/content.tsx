@@ -115,7 +115,7 @@ export function WindowContent({
     case "SequenceSheet":
       return <SequenceSheet show={show} session={session} />;
     case "CueViewer":
-      return <CueViewer show={show} session={session} programmer={programmer} />;
+      return <CueViewer show={show} session={session} />;
     case "PresetPool":
       return <PresetPool show={show} />;
     case "Settings":
@@ -123,7 +123,7 @@ export function WindowContent({
     case "Executors":
       return <ExecutorWindow show={show} session={session} />;
     case "CommandKeys":
-      return <Keypad />;
+      return <Keypad session={session} />;
     case "Status":
       return <StatusWindow show={show} session={session} programmer={programmer} />;
     case "ClockViewer":

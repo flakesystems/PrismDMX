@@ -59,9 +59,18 @@
  * The Sequence Sheet is the *pool* and this is the *list*. The rebuild moved the
  * editing: *alle Cue Editierungen sollen im Cue Viewer gemacht werden*. So this
  * window carries the cue's own properties — number, name, times and trigger,
- * the six columns before the attributes — the executor transport, and the store
- * bar, all three of which used to be stacked under the sequence pool in the
- * other window.
+ * the six columns before the attributes — and the executor transport, both of
+ * which used to be stacked under the sequence pool in the other window.
+ *
+ * # There is no store bar — B62
+ *
+ * There was one, from S28 to the beta: a number, a mode chooser and a Store
+ * button that asked `Query::StorePreview` what it would cost, and beside it the
+ * blinking Update key. The owner's answer was that **a cue is stored from the
+ * command line and nowhere else** — `Store Cue 5` asks *merge, override or
+ * remove* in the line itself when the cue is there — so the bar went. The
+ * Update key did not go with it: it blinks in the `CommandKeys` window now
+ * (`desk/keypad.tsx`), which is where a console has it.
  *
  * What a cue **sets** is still not editable here, and that is the same rule
  * `Command::PatchFixture` follows in carrying no channels: values come from the
@@ -96,7 +105,7 @@
  * `e2e/desk.spec.ts` checks it in a browser at 1280x720 and at 4K.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
   AttributeType,
@@ -105,9 +114,6 @@ import type {
   CueTrackingRow,
   CueTrigger,
   JsonValue,
-  ProgrammerState,
-  StoreMode,
-  StorePreview,
   TrackedValue,
 } from "../bindings";
 import {
@@ -118,19 +124,15 @@ import {
 import { objectLine, pick, useConsole } from "../desk/consoleshell";
 import { percentOfLevel } from "../desk/level";
 import { useAsk, useSend } from "../store/hooks";
-import type { CueEditInForce, CuePartRow, CueRow, PresetRow, SequenceRow } from "./looks";
+import type { CuePartRow, CueRow, PresetRow, SequenceRow } from "./looks";
 import {
-  cueEditInForce,
   executorInForce,
-  nextCueNumber,
   presetRows,
   secondsText,
   sequenceInForce,
   sequenceRow,
   cuesDocument,
 } from "./looks";
-import { StoreRequester, isStorable, storeText } from "./store";
-import { StoreModeChooser } from "./storemode";
 
 /** Which cell of which cue is being typed into. Local, and dropped on commit. */
 interface CellDraft {
@@ -146,27 +148,14 @@ interface CellDraft {
 export function CueViewer({
   show,
   session,
-  programmer,
 }: {
   readonly show: JsonValue;
   readonly session: JsonValue;
-  /**
-   * What the programmer is holding.
-   *
-   * Not drawn — this window is about the cue list — but the **store preview**
-   * depends on it: what a store would add and replace changes the instant an
-   * encoder moves, and the programmer is a document of its own
-   * (`Delta::ProgrammerChanged`), so a bar watching only the show would go on
-   * offering the answer to a question about a programmer that had since
-   * emptied.
-   */
-  readonly programmer: ProgrammerState | null;
 }) {
   const ask = useAsk();
   const { run } = useConsole();
   const inForce = useMemo(() => executorInForce(session, show), [session, show]);
   const chosen = useMemo(() => sequenceInForce(session), [session]);
-  const editing = useMemo(() => cueEditInForce(session), [session]);
   const sequence = useMemo(() => sequenceRow(show, chosen), [show, chosen]);
   // The transport line names the executor's **own** cue list, which since S39
   // need not be the one being edited.
@@ -237,7 +226,8 @@ export function CueViewer({
       {transport}
       {sequence.cues.length === 0 ? (
         <p className="window-note" data-testid="no-cues">
-          {sequence.name} has no cues. Put a look in the programmer and store one below.
+          {sequence.name} has no cues. Put a look in the programmer and store one from the
+          command line — <code>Store Cue 1</code>.
         </p>
       ) : (
         <div className="sheet-scroll" data-testid="cue-viewer-scroll">
@@ -258,13 +248,6 @@ export function CueViewer({
           />
         </div>
       )}
-      <StoreBar
-        sequence={sequence}
-        cuesDoc={cuesDoc}
-        programmer={programmer}
-        editing={editing}
-        ask={ask}
-      />
     </div>
   );
 }
@@ -372,122 +355,6 @@ function ExecutorLine({
         </button>
       </div>
     </div>
-  );
-}
-
-/** The Store button, which says what it will do before it is pressed. */
-function StoreBar({
-  sequence,
-  cuesDoc,
-  programmer,
-  editing,
-  ask,
-}: {
-  readonly sequence: SequenceRow;
-  /**
-   * This list's `cues` node, as the dependency of the question below.
-   *
-   * Not `sequence`, which is a fresh object every render, and **not the whole
-   * `/sequences` subtree** since S45: a playback's state lives on the cue list
-   * now, so a chase advancing a cue rewrites that subtree and an effect keyed on
-   * it would ask the daemon what a store would do once per cue. This node's
-   * identity only changes when the *cues* really do — see
-   * `looks.ts::cuesDocument`.
-   */
-  readonly cuesDoc: JsonValue | null;
-  readonly programmer: ProgrammerState | null;
-  /**
-   * The cue the programmer is editing, or `null` — S39's update state.
-   *
-   * The daemon's, not this window's: `Session::editingCue` is what every client
-   * blinks the Update key on, so a second screen agrees without being told.
-   */
-  readonly editing: CueEditInForce | null;
-  readonly ask: ReturnType<typeof useAsk>;
-}) {
-  const [number, setNumber] = useState<string | null>(null);
-  const [mode, setMode] = useState<StoreMode>("Merge");
-  const [preview, setPreview] = useState<StorePreview | null>(null);
-  const wanted = number ?? nextCueNumber(sequence.cues);
-  const { run, runWithMode } = useConsole();
-
-  const requester = useRef<StoreRequester | null>(null);
-  useEffect(() => {
-    const live = new StoreRequester(ask, setPreview);
-    requester.current = live;
-    return () => {
-      live.stop();
-      requester.current = null;
-    };
-  }, [ask]);
-  // Asked again whenever the cue number, this list's **cues** or the programmer
-  // move, which is exactly when the answer can have changed: a store into cue 3
-  // means something different once somebody has stored cue 3, and something
-  // different again once they have touched another encoder. **Not** whenever
-  // the show moves, and since S45 not whenever the list *advances* either — see
-  // `cuesDocument`.
-  useEffect(() => {
-    requester.current?.request({ t: "Cue", sequenceId: sequence.id, cueNumber: wanted }, mode);
-    // `sequence` is deliberately absent: `sequence.id` and `cuesDoc` between
-    // them say everything a preview depends on, and the row object is rebuilt
-    // on every render. `mode` is here because S39 made it part of the question —
-    // the counts on the button are what *that* mode would cost.
-  }, [cuesDoc, mode, programmer, sequence.id, wanted]);
-
-  return (
-    <form
-      className="store-bar"
-      data-testid="cue-store"
-      onSubmit={(event) => {
-        event.preventDefault();
-        // **The store is a line too**, and the mode goes with it: the chooser
-        // beside the button is where an operator picks one *before* pressing,
-        // and the console's own prompt is what they get when they type the line
-        // instead. Both end in a `StoreCue` carrying the mode.
-        runWithMode(`Store Sequence ${String(sequence.id)} Cue ${wanted}`, mode);
-        // Dropped, not kept: what the cue list is comes back as a `ShowPatch`,
-        // and the box goes back to offering the next number of whatever the
-        // daemon ends up holding.
-        setNumber(null);
-      }}
-    >
-      <label>
-        Cue
-        <input
-          className="cell-input cell-input-narrow"
-          data-testid="store-number"
-          value={wanted}
-          onChange={(event) => {
-            setNumber(event.target.value);
-          }}
-        />
-      </label>
-      <StoreModeChooser mode={mode} onChoose={setMode} testId="cue-store-mode" />
-      <button type="submit" data-testid="store-cue" disabled={!isStorable(preview)}>
-        {storeText(preview, `cue ${wanted}`)}
-      </button>
-      {editing === null ? null : (
-        <button
-          type="button"
-          // **The blink is the daemon's state and not a timer this window
-          // keeps** — `Session::editingCue.modified`. Two screens looking at one
-          // desk therefore blink together, and a client that had counted its
-          // own keystrokes would drift the moment a console touched an encoder.
-          className={`update-key${editing.modified ? " update-blinking" : ""}`}
-          data-testid="update-cue"
-          data-modified={editing.modified ? "yes" : "no"}
-          title="Store the programmer back into the cue it came from"
-          onClick={() => {
-            // It carries nothing: which cue, and that the mode is Override, are
-            // both the desk's — see `Command::Update`. A whole command with no
-            // argument, so it runs at once (§4.5).
-            run("Update");
-          }}
-        >
-          Update cue {editing.cueNumber}
-        </button>
-      )}
-    </form>
   );
 }
 
