@@ -90,7 +90,8 @@ stays the old build until it is restarted.
 | | Where (Windows) |
 |---|---|
 | The program, `PrismDMX.exe` with `prismd.exe` beside it | `%LOCALAPPDATA%\PrismDMX` |
-| Shows, `machine.json`, your own fixture profiles, key bindings, the log | `%APPDATA%\PrismDMX` |
+| Shows, `machine.json`, key bindings, the log | `%APPDATA%\PrismDMX` |
+| Your own fixture profiles — made on the first start | `%APPDATA%\PrismDMX\fixtures` |
 | The bundled fixture library | beside the program, `profiles\fixtures` |
 
 `%APPDATA%\PrismDMX` is the **data directory**. It is the one setting that is read

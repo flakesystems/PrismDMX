@@ -40,7 +40,9 @@ entry **B43**, and this paragraph is the half of it that is documentation.
 
 A venue's own profiles go in **`fixtures/` inside the daemon's data directory**
 (`%APPDATA%\PrismDMX\fixtures` on Windows, `prismd::paths::fixtures_dir`
-everywhere). Nothing an installer does touches it. Two shapes work there:
+everywhere). Nothing an installer does touches it, and the daemon makes it on
+its first start with a `README.txt` inside (punch-list **B54**). Two shapes work
+there:
 
 - a loose `.json` at the top, filed under `custom/<file stem>` — a light nobody
   has a profile for;

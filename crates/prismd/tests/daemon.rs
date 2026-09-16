@@ -119,6 +119,31 @@ async fn a_daemon_loads_a_show_and_drives_dmx_with_no_client_connected() {
     daemon.shutdown().await;
 }
 
+/// **Punch-list B54** (GitHub #9): the first start of a fresh installation makes
+/// the folder the manuals send a venue's own profiles to, and says what it is
+/// for inside it.
+#[tokio::test]
+async fn a_first_start_makes_the_folder_for_the_venues_own_profiles() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    let own = prismd::paths::fixtures_dir(dir.path());
+    assert!(!own.exists(), "the test needs a data directory without one");
+
+    let daemon = Daemon::start(&options(dir.path())).await.unwrap();
+    assert!(own.is_dir(), "{} was not made", own.display());
+    assert_eq!(
+        std::fs::read_to_string(own.join("README.txt")).unwrap(),
+        prismd::paths::FIXTURES_README
+    );
+    daemon.shutdown().await;
+
+    // And a second start leaves what the venue has done to it alone.
+    std::fs::remove_file(own.join("README.txt")).unwrap();
+    let daemon = Daemon::start(&options(dir.path())).await.unwrap();
+    assert!(!own.join("README.txt").exists(), "the note came back");
+    daemon.shutdown().await;
+}
+
 /// **The exit criterion.** A second instance detects the first and refuses.
 #[tokio::test]
 async fn a_second_daemon_refuses_to_start_and_says_where_the_first_one_is() {

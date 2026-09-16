@@ -293,7 +293,9 @@ am Patch.
 Eine Lampe, die die Open Fixture Library nicht kennt, ist ein Profil, das Sie
 selbst schreiben können. Es gehört in **`fixtures/` im Datenverzeichnis des
 Pults** — unter Windows `%APPDATA%\PrismDMX\fixtures` —, im JSON-Format der Open
-Fixture Library, und wird beim Start gelesen.
+Fixture Library, und wird beim Start gelesen. Das Pult legt das Verzeichnis beim
+ersten Start selbst an, mit einer `README.txt` darin, die das Folgende kurz
+wiederholt.
 
 Dieses Verzeichnis und **nicht** `profiles/fixtures/`: das zweite ist ein
 **Download**, den `tools/fetch-fixtures` bei jedem Lauf leert. Das

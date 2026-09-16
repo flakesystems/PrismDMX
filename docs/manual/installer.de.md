@@ -94,7 +94,8 @@ Build, bis es neu gestartet wurde.
 | | Wo (Windows) |
 |---|---|
 | Das Programm, `PrismDMX.exe` und `prismd.exe` daneben | `%LOCALAPPDATA%\PrismDMX` |
-| Shows, `machine.json`, eigene Fixture-Profile, Tastenbelegung, Protokoll | `%APPDATA%\PrismDMX` |
+| Shows, `machine.json`, Tastenbelegung, Protokoll | `%APPDATA%\PrismDMX` |
+| Eigene Fixture-Profile — beim ersten Start angelegt | `%APPDATA%\PrismDMX\fixtures` |
 | Die mitgelieferte Fixture-Bibliothek | neben dem Programm, `profiles\fixtures` |
 
 `%APPDATA%\PrismDMX` ist das **Datenverzeichnis**. Es ist die einzige

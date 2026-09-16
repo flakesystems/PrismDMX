@@ -286,7 +286,8 @@ look. If nothing happens there, it is the outputs and not the patch.
 A lamp the Open Fixture Library does not know is a profile you can write
 yourself. It goes in **`fixtures/` in the desk's data directory** — on Windows
 `%APPDATA%\PrismDMX\fixtures` — in the Open Fixture Library's JSON format, and is
-read at start-up.
+read at start-up. The desk makes the directory itself on its first start, with a
+`README.txt` inside that repeats what follows in short.
 
 That directory and **not** `profiles/fixtures/`: the second is a **download**
 that `tools/fetch-fixtures` empties on every run. No installer touches the data

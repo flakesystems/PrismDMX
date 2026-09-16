@@ -646,7 +646,7 @@ angezeigt wird.*
 - **Was passiert:** `fixtures/` existiert nach einer Neuinstallation nicht. Wer ein eigenes Profil ablegen möchte, muss das Verzeichnis von Hand anlegen — ohne Hinweis darauf, dass es fehlt
 - **Was passieren soll:** Der Daemon legt `fixtures/` beim ersten Start an, wenn es noch nicht existiert
 - **So sieht man es:** PrismDMX neu installieren, Datenverzeichnis öffnen — `fixtures/` fehlt
-- **Ergebnis:** ☐ offen
+- **Ergebnis:** ✅ **behoben** — der Daemon legt `fixtures/` beim Start an, wenn es fehlt, direkt nach dem Lock und bevor der Bibliotheks-Thread es liest, und schreibt eine kurze `README.txt` hinein, die die zwei Formen (lose Datei, Herstellerordner) erklärt — die Bibliothek liest nur `.json`, die Notiz ist also nie ein Profil. Ein vorhandener Ordner bleibt **genau so**, wie er ist: die Notiz kommt nur in einen Ordner, den dieser Aufruf gemacht hat, also bekommt niemand eine gelöschte zurück. Ein Fehler beim Anlegen ist eine Warnung im Protokoll, kein Abbruch. Installations- und Bedienerhandbuch (beide Sprachen) und `profiles/fixtures/SOURCE.md` sagen es. Tests: `a_first_start_makes_the_folder_for_the_venues_own_profiles` (`crates/prismd/tests/daemon.rs`, gegen einen echten Daemon in einem leeren Datenverzeichnis, samt zweitem Start) und drei in `prismd::paths` — frischer Ordner mit Notiz, vorhandener Ordner unberührt, ein Ordner, der nicht angelegt werden kann, ist ein Fehler und keine Panik.
 
 
 ### B60 — Patch-Fenster: mehrere Fehler und Verbesserungen (GitHub #28)
@@ -717,7 +717,7 @@ angezeigt wird.*
 - **Was passiert:** Bindet man eine neue Taste im Controls-Menü, trennt sich der Client und verbindet sich neu — zurückgesprungen auf das Output-Menü. Dieser Absturz tritt danach bei jedem Öffnen des Controls-Menüs erneut auf, auch nach einem Daemon-Neustart. Der Fehler lässt sich nur durch manuelles Entfernen des gebundenen Controls aus `machine.json` beheben
 - **Was passieren soll:** Das Binden einer Taste soll stabil funktionieren und den Client nicht trennen
 - **So sieht man es:** Settings öffnen → Controls → eine neue Taste binden
-- **Ergebnis:** ☐ offen
+- **Ergebnis:** ✅ **behoben** — kein Absturz des Daemons, sondern ein **Decoder**, der zwei Aktionen nicht kannte. `ui/src/ipc/protocol.ts::readSurfaceAction` ist Arm für Arm geschrieben, und S43 hatte dem Vokabular `OpenWindowPicker` und `WriteCommandLine` gegeben, ohne dass der Decoder sie lernte. Wer eine Taste auf eine der beiden legte, schrieb sie in die Tabelle in `machine.json`; die nächste Antwort `SurfaceBindings` trug sie, der Decoder warf, und ein Client, der eine Nachricht nicht lesen kann, trennt die Verbindung — **bei jedem Öffnen** des Controls-Menüs, auch nach einem Neustart, weil die Tabelle die der Maschine ist. Die Tests des Editors fuhren gegen einen Fake-Daemon, der Objekte statt Bytes liefert, und sahen den Decoder nie. Beide Arme sind jetzt da, und der Test ist so gebaut, dass die **nächste** vergessene Variante rot wird: `crates/prismd/tests/ui_surface_actions.rs` schreibt eine echte `Answer::SurfaceBindings` mit **jeder** Variante nach `ui/tests/fixtures/surface-actions.json` — die Liste ist ein `match` ohne Wildcard, eine neue Variante kompiliert also nicht, bevor sie dort steht — und `ui/src/ipc/surfaceactions.test.ts` liest sie durch das echte `decodeServerMessage` (vor dem Fix rot mit genau der gemeldeten Meldung). Nebenbei geprüft: alle 13 `Delta`- und 11 `Answer`-Varianten haben einen Arm.
 
 ## Sonstiges
 

@@ -125,6 +125,54 @@ pub fn fixtures_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("fixtures")
 }
 
+/// The note written into a freshly made [`fixtures_dir`].
+///
+/// Plain text rather than Markdown because the person who opens this folder is
+/// using Explorer, not a repository browser. The library reads `.json` only,
+/// so the note is never mistaken for a profile.
+pub const FIXTURES_README: &str = "\
+PrismDMX - your own fixture profiles
+
+Put fixture profiles here, in the Open Fixture Library's JSON format.
+Nothing that installs or updates PrismDMX touches this folder.
+
+  my-light.json                 a light the library has no profile for.
+                                It appears under 'Custom' in the Patch window.
+
+  <manufacturer>/<fixture>.json a correction to a profile the library ships.
+                                Same folder and file name as the library,
+                                and yours replaces it.
+
+Restart the desk to read new files. A show embeds the profiles it uses,
+so a patched rig does not depend on this folder afterwards.
+";
+
+/// Makes [`fixtures_dir`] if it is not there yet — punch-list **B54**.
+///
+/// S51 made the folder the place a venue's own profiles go, and the manuals say
+/// so; a fresh installation then did not have it, and somebody following the
+/// manual found nothing to put the file into. So the daemon makes it at start,
+/// with a note inside that says what it is for.
+///
+/// Returns whether it was made. An existing folder is left exactly as it is —
+/// the note is only written into a folder this call created, so an operator who
+/// deleted it is not given it back. A failure is the caller's to *report*, not
+/// to stop on: a desk that would not start over a folder it only offers is a
+/// worse answer than one that says so.
+///
+/// # Errors
+///
+/// Whatever the file system says about creating the folder or the note.
+pub fn ensure_fixtures_dir(data_dir: &Path) -> std::io::Result<bool> {
+    let directory = fixtures_dir(data_dir);
+    if directory.is_dir() {
+        return Ok(false);
+    }
+    std::fs::create_dir_all(&directory)?;
+    std::fs::write(directory.join("README.txt"), FIXTURES_README)?;
+    Ok(true)
+}
+
 /// Where the installer put the Open Fixture Library, if it can be found.
 ///
 /// Looked for beside the executable first — which is where an installed desk
@@ -156,8 +204,9 @@ pub fn installed_library_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DATA_DIR_VARIABLE, NoDataDirectory, data_dir, default_show_path, guard_path, lock_path,
-        machine_config_path, system_data_dir,
+        DATA_DIR_VARIABLE, FIXTURES_README, NoDataDirectory, data_dir, default_show_path,
+        ensure_fixtures_dir, fixtures_dir, guard_path, lock_path, machine_config_path,
+        system_data_dir,
     };
     use std::path::{Path, PathBuf};
 
@@ -254,5 +303,41 @@ mod tests {
         // Not an assertion about which one: a Windows runner answers APPDATA
         // and a Linux one answers HOME, and the point is that both answer.
         assert!(system_data_dir().is_ok());
+    }
+
+    #[test]
+    fn a_fresh_data_directory_is_given_a_fixtures_folder_with_a_note_in_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("PrismDMX");
+        assert!(
+            ensure_fixtures_dir(&data).unwrap(),
+            "the folder was not made"
+        );
+        let note = std::fs::read_to_string(fixtures_dir(&data).join("README.txt")).unwrap();
+        assert_eq!(note, FIXTURES_README);
+        // And it says the two things a venue needs to know.
+        assert!(note.contains("my-light.json"));
+        assert!(note.contains("<manufacturer>/<fixture>.json"));
+    }
+
+    #[test]
+    fn a_fixtures_folder_that_exists_is_left_exactly_as_it_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let own = fixtures_dir(dir.path());
+        std::fs::create_dir_all(&own).unwrap();
+        std::fs::write(own.join("mine.json"), "{}").unwrap();
+        assert!(!ensure_fixtures_dir(dir.path()).unwrap());
+        // No note written into somebody's own folder, and nothing taken out.
+        assert!(!own.join("README.txt").exists());
+        assert!(own.join("mine.json").is_file());
+    }
+
+    #[test]
+    fn a_fixtures_folder_that_cannot_be_made_is_an_error_and_not_a_panic() {
+        let dir = tempfile::tempdir().unwrap();
+        // A *file* where the data directory should be.
+        let blocked = dir.path().join("blocked");
+        std::fs::write(&blocked, "").unwrap();
+        assert!(ensure_fixtures_dir(&blocked).is_err());
     }
 }

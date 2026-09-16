@@ -905,6 +905,19 @@ function readSurfaceAction(value: unknown, path: string): SurfaceAction {
         t: "OpenWindow",
         window: asVariant(field(record, "window"), `${path}.window`, WINDOW_TYPE_VARIANTS),
       };
+    // S43's two, missing until B55: a table carrying either one could not be
+    // read, and a client that cannot read a message drops the connection — on
+    // every visit to the Controls panel, because the table is `machine.json`'s.
+    // `crates/prismd/tests/ui_surface_actions.rs` now binds every variant.
+    case "OpenWindowPicker":
+      return { t: "OpenWindowPicker" };
+    case "WriteCommandLine":
+      return {
+        t: "WriteCommandLine",
+        line: asString(field(record, "line"), `${path}.line`),
+        // `#[serde(default)]` in Rust: a profile written before S43 has none.
+        submit: asBoolean(field(record, "submit") ?? false, `${path}.submit`),
+      };
     default:
       throw new ProtocolFault(`${path}.t`, `an action this build knows, not ${JSON.stringify(tag)}`);
   }

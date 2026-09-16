@@ -205,6 +205,28 @@ impl Daemon {
             ),
         );
 
+        // The folder a venue's own profiles go into — punch-list B54. Made
+        // here, before the library thread reads it, so the first start of a
+        // fresh installation already has the place the manuals point at. A
+        // failure is said and not stopped on.
+        match paths::ensure_fixtures_dir(&data_dir) {
+            Ok(true) => log::info(
+                "library",
+                &format!(
+                    "made {} for this desk's own fixture profiles",
+                    paths::fixtures_dir(&data_dir).display()
+                ),
+            ),
+            Ok(false) => {}
+            Err(why) => log::warn(
+                "library",
+                &format!(
+                    "could not make {}: {why}",
+                    paths::fixtures_dir(&data_dir).display()
+                ),
+            ),
+        }
+
         // 2. The desk identity, before any output exists.
         let (machine, created) =
             crate::machine::load_or_create(&paths::machine_config_path(&data_dir))?;
