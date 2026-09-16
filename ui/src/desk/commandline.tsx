@@ -110,13 +110,29 @@ export function CommandLine({ daemonLine }: CommandLineProps) {
           Enter
         </button>
       </form>
-      {prompt === null ? null : <PromptBar />}
-      <p className={`command-reading command-${reading.kind.toLowerCase()}`} id="command-reading">
-        <output data-testid="command-reading">{reading.text === line ? reading.reading : ""}</output>
-      </p>
-      <p className="daemon-line">
-        Engine: <output data-testid="command-line">{daemonLine}</output>
-      </p>
+      {/*
+        **One row of a fixed height, whatever is in it** — B61. The reading was a
+        paragraph that took no room while empty, a line with a sentence in it and
+        two with a long one, and the question was a row of its own: every
+        keystroke that changed them moved the canvas. Now the question takes the
+        reading's place while it stands, a long sentence is cut off rather than
+        wrapped (the whole of it is on the title), and the row is the same height
+        empty or full. `ui/e2e/console.spec.ts` measures it.
+      */}
+      <div className="command-status" data-testid="command-status">
+        {prompt === null ? null : <PromptBar />}
+        <p
+          className={`command-reading command-${reading.kind.toLowerCase()}`}
+          id="command-reading"
+          hidden={prompt !== null}
+          title={reading.text === line ? reading.reading : undefined}
+        >
+          <output data-testid="command-reading">{reading.text === line ? reading.reading : ""}</output>
+        </p>
+        <p className="daemon-line">
+          Engine: <output data-testid="command-line">{daemonLine}</output>
+        </p>
+      </div>
     </div>
   );
 }

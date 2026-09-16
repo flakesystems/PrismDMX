@@ -155,7 +155,7 @@ schließen, anordnen, Ansichten, Seiten, was zu groß oder zu klein ist.*
 - **Was passiert:** Wenn man etwas in die Kommandozeile tippt, erscheint ein Befehlsfeedback, das Teile des UI verschiebt
 - **Was passieren soll:** Das Befehlsfeedback soll entweder entfernt oder so eingebettet werden, dass es keine anderen UI-Elemente verschiebt
 - **So sieht man es:** Etwas in die Kommandozeile tippen und beobachten, wie das UI springt
-- **Ergebnis:** ☐ offen
+- **Ergebnis:** ✅ **behoben** — die Rückmeldung bleibt, weil sie Syntaxfehler **vor** Enter zeigt (§4.5), aber sie bewegt nichts mehr. Sie war ein Absatz ohne eigene Höhe: leer null, mit einem Satz eine Zeile, mit einem langen zwei, und die Frage *Merge / Override / Cancel* kam als weitere Zeile dazu — jede Änderung verschob die Leinwand (gemessen: 444 → 425 px beim Tippen von `de`). Jetzt ist es **eine Zeile fester Höhe** (`.command-status`): links die Rückmeldung, abgeschnitten statt umbrochen und vollständig im Tooltip, oder an ihrer Stelle die Frage, solange sie steht; rechts die Engine-Zeile. Test: *what the line would do never moves the canvas* (`ui/e2e/console.spec.ts`) misst die Leinwand in Chromium vor dem Tippen, nach einer Fehlermeldung, nach einer Meldung, die viel breiter als der Bildschirm ist, mit stehender Frage und nach Escape — vor dem Fix rot, danach grün; ein Browser-Test, weil `jsdom` kein Layout rechnet.
 
 ## Kommandozeile
 

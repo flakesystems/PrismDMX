@@ -343,6 +343,53 @@ test.describe("the console shell", () => {
   });
 
   /**
+   * **Punch-list B61 (GitHub #29): what the line says never moves the screen.**
+   *
+   * The reading under the box was a paragraph with no height of its own: empty
+   * it took none, with a sentence in it one line, with a long one two, and the
+   * question took a row more. Every keystroke that changed it moved the canvas.
+   * Layout is a browser's to answer — `jsdom` computes none — so the canvas is
+   * measured here, before anything is typed and after each of the three things
+   * that used to grow the footer.
+   */
+  test("what the line would do never moves the canvas", async ({ page }) => {
+    await desk(page);
+    const canvas = page.getByTestId("canvas");
+    const reading = page.getByTestId("command-reading");
+    const height = async (): Promise<number> => {
+      const box = await canvas.boundingBox();
+      if (box === null) {
+        throw new Error("the canvas is not on the screen");
+      }
+      return box.height;
+    };
+    const resting = await height();
+
+    // A refusal, the reading every half-typed word produces.
+    await input(page).fill("de");
+    await expect(reading).not.toHaveText("");
+    expect(await height()).toBe(resting);
+
+    // A refusal far longer than the screen is wide.
+    await input(page).fill(`${"nonsense ".repeat(60)}`);
+    await expect(reading).not.toHaveText("");
+    expect(await height()).toBe(resting);
+
+    // A line that is a command, and then the question a line can hold.
+    await command(page, "1 thru 3");
+    await command(page, "red at 100");
+    await command(page, 'Store Sequence 1 "Act 1"');
+    await command(page, "Sequence 1");
+    await command(page, "Store Cue 1");
+    await command(page, "Store Cue 1");
+    await expect(page.getByTestId("command-prompt")).toBeVisible();
+    expect(await height()).toBe(resting);
+    await input(page).press("Escape");
+    await expect(page.getByTestId("command-prompt")).toHaveCount(0);
+    expect(await height()).toBe(resting);
+  });
+
+  /**
    * **A cue list on no fader plays** — the hole S40 found and filled.
    *
    * `On Sequence 1` for a sequence nobody has assigned, and the proof is the

@@ -1744,14 +1744,46 @@
  */
 .command-prompt {
     display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
     gap: 0.4rem;
     margin: 0;
-    padding: 0.2rem 0.4rem;
+    padding: 0 0.4rem;
     border: 1px solid var(--warn, var(--edge-lit));
     border-radius: 3px;
     background: var(--ground);
+}
+
+.command-prompt button {
+    padding: 0 0.5rem;
+    line-height: 1.3;
+}
+
+/*
+ * The row under the input — B61. **A fixed height**, because anything in it
+ * that could grow would move the canvas every time the operator typed: the
+ * reading is cut off rather than wrapped, and the question takes the reading's
+ * place rather than a row of its own. The engine's line keeps to the right.
+ */
+.command-status {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    height: 1.6rem;
+    flex: 0 0 auto;
+    overflow: hidden;
+}
+
+.command-reading {
+    margin: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /*
@@ -1821,7 +1853,8 @@
 
 .daemon-line {
     margin: 0;
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    max-width: 40%;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
