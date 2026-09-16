@@ -55,7 +55,7 @@ selbst gehalten — ein Wort, das hier steht, gibt es dort also auch.
 | `new` | Legt einen leeren View an und schaltet darauf: `New View 3 "Fahren"` |
 | `off` | Hält eine Wiedergabe an. `off 3` ist ein Executor |
 | `on` | Startet eine Wiedergabe, ohne eine Cue weiterzuschalten |
-| `oops` | Nimmt die letzte Änderung zurück |
+| `oops` | Nimmt die letzte Änderung zurück. Die Oops-Taste nimmt zuerst das letzte Wort der Zeile weg |
 | `page` | Blättert die Fader-Bank: `Page 2` |
 | `preset` | Das Hauptwort für ein Preset. Allein — `Preset 4` — wendet es auf die Auswahl an |
 | `sequence` | Das Hauptwort für eine Cue-Liste. Allein — `Sequence 2` — wählt sie aus |

@@ -1154,6 +1154,7 @@ const NO_CONSOLE: ConsoleShell = {
   append: () => undefined,
   run: () => undefined,
   runWithMode: () => undefined,
+  oops: () => undefined,
   submit: () => undefined,
   answer: () => undefined,
   recall: () => undefined,

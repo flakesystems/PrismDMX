@@ -281,7 +281,8 @@ Three shapes, and every control on the screen is one of them:
 
 | Shape | Example | What pressing it does |
 |---|---|---|
-| **A whole command with no argument** | `Clear`, `Oops`, `Update`, `Full` | writes the word and **executes it at once** |
+| **A whole command with no argument** | `Clear`, `Update`, `Full` | writes the word and **executes it at once** |
+| **The Oops key** *(B58)* | `Oops` | writes **nothing**: while a line stands it takes the line's last word, and only an empty line lets it undo. `ShowFile::apply` makes that choice for every key that sends `Command::Oops` — the X-Touch's Undo as well — and a *typed* `Oops`, run from the line, is always an undo |
 | **A command that needs arguments** | `Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Color`, `Assign` | writes the word and **waits** — the operator types the rest and presses Enter, which is also a key on the surface |
 | **An argument keyword** | `Fixture`, `Group`, `Sequence`, `Cue`, `Preset`, `View`, `Executor` | **appends** the word to the line as it stands |
 

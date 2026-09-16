@@ -12,8 +12,13 @@
  * to the line as it stands. What a line *means* is the line's, never a key's.
  */
 
-/** Which of `ARCHITECTURE_SPEC.md` §4.5's three shapes a key is. */
-export type KeyShape = "run" | "write" | "append";
+/**
+ * Which of `ARCHITECTURE_SPEC.md` §4.5's three shapes a key is — or `oops`, the
+ * one key that writes nothing (B58): it takes the line's last word while a line
+ * stands and an edit back only on an empty one, and the daemon decides which,
+ * because the X-Touch's Undo key has to do the same with no screen attached.
+ */
+export type KeyShape = "run" | "write" | "append" | "oops";
 
 /** A key of the keypad: the word it writes, and which shape it is. */
 export interface ConsoleKey {
@@ -36,7 +41,11 @@ export const CONSOLE_KEYS: readonly ConsoleKey[] = [
   { word: "Clear", shape: "run", title: "Clear the programmer" },
   { word: "Full", shape: "run", title: "The selection to full" },
   { word: "Update", shape: "run", title: "Store back into the cue being edited" },
-  { word: "Oops", shape: "run", title: "Take the last edit back" },
+  {
+    word: "Oops",
+    shape: "oops",
+    title: "Take the last word off the line — or, on an empty line, the last edit",
+  },
   { word: "Store", shape: "write", title: "Store into…" },
   { word: "Edit", shape: "write", title: "Load a cue into the programmer" },
   { word: "Goto", shape: "write", title: "Jump a playback to a cue" },

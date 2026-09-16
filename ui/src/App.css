@@ -1779,7 +1779,8 @@
     cursor: pointer;
 }
 
-.command-key-run {
+.command-key-run,
+.command-key-oops {
     border-color: var(--ink-dim);
     font-weight: 600;
 }

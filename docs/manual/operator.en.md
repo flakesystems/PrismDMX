@@ -432,7 +432,11 @@ are editing is what `Sequence 4` says.
 override mode. The key **blinks** when there is something to write back — and
 because that is session state, it blinks on every screen at once.
 
-**`Oops`** takes back the last change. Two hundred steps deep.
+**`Oops`** takes back the last change. Two hundred steps deep. **The Oops key**
+— on the screen, and the Undo key on the X-Touch — is a backspace first: while
+there is anything in the command line it takes the **last word** off, and only on
+an empty line does it take a change back. A name in quotes is one word. Typing
+`Oops` and pressing Enter always undoes.
 
 ---
 
@@ -598,7 +602,7 @@ the same table the completion reads from.
 | `new` | Makes an empty view and switches to it: `New View 3 "Running"` |
 | `off` | Stops a playback. `off 3` is an executor |
 | `on` | Starts a playback without advancing a cue |
-| `oops` | Takes back the last change |
+| `oops` | Takes back the last change. The Oops key takes the line's last word first |
 | `page` | Turns the fader bank: `Page 2` |
 | `preset` | The noun for a preset. On its own — `Preset 4` — it applies it to the selection |
 | `sequence` | The noun for a cue list. On its own — `Sequence 5` — it makes it the one that is stored into |

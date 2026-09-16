@@ -245,7 +245,7 @@ type Command =
   | { t: "UnpatchFixture"; id: FixtureId }
   | { t: "RenumberFixture"; id: FixtureId; to: FixtureId }
   | { t: "EmbedFixtureType"; typeId: string }
-  | { t: "Oops" } | { t: "Redo" }
+  | { t: "Oops" } | { t: "Redo" }   // Oops: the line's last word while one stands (B58)
   // ---- The show file (S37) — only the first of the five existed before ----
   | { t: "SaveShow" }
   | { t: "SaveShowAs"; path: string }

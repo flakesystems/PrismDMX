@@ -303,6 +303,24 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
     [dispatch],
   );
 
+  /**
+   * **B58.** The key writes nothing and decides nothing: which of *a word* and
+   * *an edit* Oops takes is the daemon's, because the X-Touch's Undo key has to
+   * make the same choice with no screen attached. What this client owes it is
+   * the line the operator is looking at — a keystroke may still be waiting for
+   * the pacing — so that goes first, on the same connection and therefore in
+   * order.
+   */
+  const oops = useCallback(() => {
+    mirror.now(typed);
+    if (typed.trim() !== "") {
+      // The question was about the line as it stood, and it is about to lose
+      // a word.
+      setPrompt(null);
+    }
+    send({ t: "Oops" });
+  }, [mirror, send, typed]);
+
   const answer = useCallback(
     (mode: CommandLineMode | null) => {
       const held_ = prompt;
@@ -381,12 +399,13 @@ export function ConsoleProvider({ session, children }: ConsoleProviderProps) {
       append,
       run,
       runWithMode,
+      oops,
       submit,
       answer,
       recall,
       pick,
     }),
-    [typed, reading, prompt, write, append, run, runWithMode, submit, answer, recall, pick],
+    [typed, reading, prompt, write, append, run, runWithMode, oops, submit, answer, recall, pick],
   );
 
   return <ConsoleContext.Provider value={shell}>{children}</ConsoleContext.Provider>;
@@ -440,6 +459,15 @@ function useMirror(send: (command: Command) => void): {
       if (timer.current !== null) {
         clearTimeout(timer.current);
         timer.current = null;
+      }
+      if (sent.current === text) {
+        // Already the daemon's. Sending it again would change nothing, so no
+        // echo would come back — and an echo queued that never arrives deafens
+        // this client to the next real change (see `ran`). B58's Oops is the
+        // caller that meets this: it brings the line up to date before asking
+        // the daemon to shorten it, and usually it already is.
+        owed.current = null;
+        return;
       }
       flush(text);
     };

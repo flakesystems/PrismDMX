@@ -24,7 +24,7 @@
 
 use prism_core::console::{
     CLEARING_VERBS, CONSOLE_WORDS, MAX_RANGE, VERB_WORDS, apply_mode, completions,
-    is_clearing_line, is_verb_line, parse_command_line, reading_text,
+    is_clearing_line, is_verb_line, parse_command_line, reading_text, without_last_word,
 };
 use prism_core::{ConsoleReading, ModeQuestionKind};
 use prism_domain::{
@@ -1334,5 +1334,28 @@ fn each_mode_word_reaches_only_the_commands_that_have_it() {
         ("move cue 2 cue 8", CommandLineMode::Append),
     ] {
         assert_eq!(apply_mode(commands(line), word), commands(line), "{line}");
+    }
+}
+
+/// **B58's word**: what the Oops key takes off a standing line. The same walk the
+/// tokeniser makes, so a word here is a word to the parser.
+#[test]
+fn a_word_taken_back_is_the_word_the_parser_reads() {
+    let cases = [
+        ("Fixture 1 thru 4", "Fixture 1 thru "),
+        ("Fixture 1 thru 4   ", "Fixture 1 thru "),
+        ("Store ", ""),
+        ("Store", ""),
+        ("", ""),
+        ("    ", ""),
+        ("1thru4 at 50", "1thru4 at "),
+        ("Label Group 1 \"Front of house\"", "Label Group 1 "),
+        // A name still being typed runs to the end of the line, spaces and all.
+        ("Label Group 1 \"Front of ", "Label Group 1 "),
+        ("Label Group 1 \"Bühne vorn\" ", "Label Group 1 "),
+        ("  Fixture   2", "  Fixture   "),
+    ];
+    for (line, left) in cases {
+        assert_eq!(without_last_word(line), left, "{line:?}");
     }
 }

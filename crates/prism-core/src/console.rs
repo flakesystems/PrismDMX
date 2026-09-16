@@ -409,6 +409,30 @@ fn too_much(keyword: &str, words: &[Token]) -> ConsoleReading {
     refused(format!("\"{said}\" says more than {keyword} takes."))
 }
 
+/// The line with its last word taken off — punch-list **B58**.
+///
+/// What the Oops key does to a line that is standing (`ShowFile::apply`): a
+/// backspace for a desk with no keyboard, one word at a time. A **word** is what
+/// [`chunks`] reads as one, so a quoted name goes whole — `Label Group 1 "Front
+/// of house"` loses the name, not `house"` — and `1thru4` goes as it was typed.
+///
+/// The separator before the word is kept, which is how every key writes a line
+/// (`ui/src/desk/consoleshell.ts::appended`): the next thing pressed is a word,
+/// not a correction. A line with nothing but spaces left is empty.
+#[must_use]
+pub fn without_last_word(line: &str) -> String {
+    let characters: Vec<char> = line.chars().collect();
+    let Some((start, _)) = chunk_spans(&characters).pop() else {
+        return String::new();
+    };
+    let kept: String = characters[..start].iter().collect();
+    if kept.trim().is_empty() {
+        String::new()
+    } else {
+        kept
+    }
+}
+
 /// A token as the operator typed it.
 ///
 /// `go-` becomes the token `goback` in [`tokenise`] so that the `+` and `-` of
@@ -1594,6 +1618,15 @@ fn tokenise(line: &str) -> Vec<Token> {
 /// end of the line, so a name being typed reads as a name.
 fn chunks(line: &str) -> Vec<String> {
     let characters: Vec<char> = line.chars().collect();
+    chunk_spans(&characters)
+        .into_iter()
+        .map(|(start, end)| characters[start..end].iter().collect())
+        .collect()
+}
+
+/// Where [`chunks`] falls, as character ranges — one walk for both it and
+/// [`without_last_word`], so the two cannot disagree about where a word starts.
+fn chunk_spans(characters: &[char]) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let mut index = 0usize;
     while index < characters.len() {
@@ -1615,7 +1648,7 @@ fn chunks(line: &str) -> Vec<String> {
                 index += 1;
             }
         }
-        out.push(characters[start..index].iter().collect());
+        out.push((start, index));
     }
     out
 }

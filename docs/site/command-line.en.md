@@ -54,7 +54,7 @@ test — so a word that exists here exists there.
 | `new` | Makes an empty view and switches to it: `New View 3 "Running"` |
 | `off` | Stops a playback. `off 3` is an executor |
 | `on` | Starts a playback without advancing a cue |
-| `oops` | Takes back the last change |
+| `oops` | Takes back the last change. The Oops key takes the line's last word first |
 | `page` | Turns the fader bank: `Page 2` |
 | `preset` | The noun for a preset. On its own — `Preset 4` — it applies it to the selection |
 | `sequence` | The noun for a cue list. On its own — `Sequence 2` — it selects it |

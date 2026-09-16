@@ -241,11 +241,43 @@ describe("a key writes a word into the line", () => {
     fireEvent.click(screen.getByTestId("key-store"));
     expect(input().value).toBe("Store ");
     expect(acted()).toEqual([]);
+  });
+});
+
+/**
+ * **Punch-list B58 (GitHub #26).** Oops is a backspace while a line stands, and
+ * an undo only on an empty one — and **the daemon decides which**, because the
+ * X-Touch's Undo key has to do the same thing with no screen attached. So the
+ * key writes nothing: it brings the line up to date and sends `Oops`.
+ */
+describe("the Oops key", () => {
+  it("sends the line it is standing on, then Oops, and runs no line", async () => {
+    const { sent, acted } = shell();
+    fireEvent.change(input(), { target: { value: "Fixture 1 thru 4" } });
     fireEvent.click(screen.getByTestId("key-oops"));
     await waitFor(() => {
-      expect(acted()).toEqual(["Oops"]);
+      expect(sent.at(-1)).toEqual({ t: "Oops" });
     });
-    expect(input().value).toBe("");
+    // The daemon has the line the operator sees before it is asked to shorten
+    // it, however recently the last key was pressed.
+    const line = sent.findLastIndex(
+      (command) => command.t === "CommandLineInput" && command.text === "Fixture 1 thru 4",
+    );
+    expect(line).toBeGreaterThanOrEqual(0);
+    expect(line).toBeLessThan(sent.length - 1);
+    // Nothing was written over the box and nothing was run: the shorter line
+    // arrives from the daemon, like every other screen's.
+    expect(input().value).toBe("Fixture 1 thru 4");
+    expect(acted()).toEqual([]);
+  });
+
+  it("is still an Oops on an empty line", async () => {
+    const { sent, acted } = shell();
+    fireEvent.click(screen.getByTestId("key-oops"));
+    await waitFor(() => {
+      expect(sent).toEqual([{ t: "Oops" }]);
+    });
+    expect(acted()).toEqual([]);
   });
 });
 

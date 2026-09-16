@@ -49,6 +49,9 @@ const CHANNEL_RIGHT: u8 = 49;
 /// F1, note 54 (§2.1, "Function" row: F1–F8 = 54–61).
 const F1: u8 = 54;
 
+/// Undo, note 81 (§2.1, "Utility" row). §4.1 makes it `Oops`.
+const UNDO: u8 = 81;
+
 /// SMPTE/Beats, note 53 — the button that must never be bound (§4.3).
 const SMPTE_BEATS: u8 = 53;
 
@@ -75,6 +78,11 @@ fn options(dir: &Path) -> Options {
 /// **two** stored views, because `Channel ▶` means *the next one* and a desk
 /// with one view has no next one.
 fn write_console_show(path: &Path) {
+    write_console_show_with_line(path, "");
+}
+
+/// [`write_console_show`], with a line standing in the console.
+fn write_console_show_with_line(path: &Path, line: &str) {
     let mut file = common::show_file();
     file.show
         .store_executor(Executor {
@@ -88,6 +96,7 @@ fn write_console_show(path: &Path) {
     let mut session = SessionState::new();
     session.store_view(ViewId::new(2), "Programming").unwrap();
     session.select_executor(Some(ExecutorId::new(0))).unwrap();
+    session.set_command_line(line).unwrap();
     file.session = session;
     let mut store = ShowStore::open(path).unwrap();
     store.save(&mut file).unwrap();
@@ -391,6 +400,40 @@ async fn a_press_the_show_refuses_changes_nothing_and_the_desk_carries_on() {
         .run(Some(Duration::from_millis(100)), std::future::pending())
         .await;
     assert!(output.frames_sent() > frames, "and the rig is still driven");
+
+    daemon.shutdown().await;
+}
+
+/// **Punch-list B58 (GitHub #26), on the desk it was asked for.** A console
+/// with no keyboard has one way to take back a word: the Undo key. With a line
+/// standing it takes the line's last word and leaves the show alone; only on an
+/// empty line is it an undo. No client is attached, because the point is a desk
+/// that has none.
+#[tokio::test]
+async fn the_undo_key_takes_back_a_word_before_it_takes_back_an_edit() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("aula.prism");
+    write_console_show_with_line(&path, "Fixture 1 thru 4");
+
+    let mut daemon = Daemon::start(&options(dir.path())).await.unwrap();
+    let (port, surface) = MockSurfacePort::new();
+    daemon.attach_surface(Box::new(port));
+    let desk = daemon.desk().clone();
+    let line = || desk.core().file.session.session().command_line.clone();
+    assert_eq!(line(), "Fixture 1 thru 4");
+
+    surface.press(NOTE_ON, UNDO);
+    run_until(&mut daemon, "the last word to go", || {
+        line() == "Fixture 1 thru "
+    })
+    .await;
+    surface.press(NOTE_ON, UNDO);
+    run_until(&mut daemon, "the next word to go", || {
+        line() == "Fixture 1 "
+    })
+    .await;
+    assert_eq!(daemon.server().client_count().await, 0);
 
     daemon.shutdown().await;
 }

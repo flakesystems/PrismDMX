@@ -89,6 +89,12 @@ export interface ConsoleShell {
    * differs is only where the answer came from.
    */
   runWithMode: (text: string, mode: CommandLineMode) => void;
+  /**
+   * The Oops key — B58. Brings the daemon's line up to date and sends `Oops`;
+   * the daemon takes the line's last word if one stands and an edit back if
+   * not, and the shorter line comes back like any other screen's.
+   */
+  oops: () => void;
   /** Submits whatever is in the line. The Enter key, wherever it is. */
   submit: () => void;
   /** Answers a prompt: a mode, or `null` for cancel. */

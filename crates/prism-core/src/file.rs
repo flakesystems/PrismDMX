@@ -409,6 +409,28 @@ impl ShowFile {
         {
             return self.run_command_line(text, *mode);
         }
+        // **The Oops key is a backspace while a line is standing** — B58. A desk
+        // with no keyboard has no other way to take a word back, and an Oops
+        // that undid an edit while the operator was half way through a line
+        // would take back something they were not thinking about. So a line
+        // with anything in it loses its last word, and only an empty line lets
+        // Oops reach the journal. Here, at the one entry every key reaches —
+        // the X-Touch's Undo and the screen's Oops alike — and **not** in
+        // `apply_one`: a typed `Oops` run from the line is an undo, because the
+        // word it is removing is the command itself.
+        if matches!(command, Command::Oops) {
+            let standing = &self.session.session().command_line;
+            if !standing.trim().is_empty() {
+                let shorter = console::without_last_word(standing);
+                return self.apply_one(&written(&shorter));
+            }
+        }
+        self.apply_one(command)
+    }
+
+    /// [`Self::apply`] for one command that is not a line to run — the part
+    /// [`Self::run_command_line`] calls for each command a line means.
+    fn apply_one(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
         // **Everything the session has to fill in, filled in first** (S40). A
         // line that names no cue list means the selected one and a playback
         // target of `Selected` means the same cue list; both are session state,
@@ -505,8 +527,10 @@ impl ShowFile {
     ///
     /// # It cannot recurse
     ///
-    /// Nothing `crate::console` produces is a `CommandLineInput`, so the two
-    /// calls to [`Self::apply`] below are one level deep by construction.
+    /// Nothing `crate::console` produces is a `CommandLineInput`, and every
+    /// command below goes through [`Self::apply_one`], which does not look for
+    /// one — so a line is one level deep by construction. That is also what
+    /// keeps a typed `Oops` an undo (B58).
     ///
     /// # Errors
     ///
@@ -520,7 +544,7 @@ impl ShowFile {
         let commands = match console::parse_command_line(text) {
             ConsoleReading::Commands { commands, .. } => commands,
             // Not a command: the line is written and left for the operator.
-            ConsoleReading::Refused(_) => return self.apply(&written(text)),
+            ConsoleReading::Refused(_) => return self.apply_one(&written(text)),
             // **An empty line does nothing at all, not even to the line.**
             // Enter on an empty console is a key an operator pressed by habit,
             // and a desk that answered it by writing whitespace into a field
@@ -533,7 +557,7 @@ impl ShowFile {
         };
         let mut applied = Applied::default();
         for command in &commands {
-            match self.apply(command) {
+            match self.apply_one(command) {
                 Ok(more) => {
                     applied.deltas.extend(more.deltas);
                     applied.effects.extend(more.effects);
@@ -548,7 +572,7 @@ impl ShowFile {
             }
         }
         // The line has been run, so the console line is cleared.
-        let cleared = self.apply(&written(""))?;
+        let cleared = self.apply_one(&written(""))?;
         applied.deltas.extend(cleared.deltas);
         Ok(applied)
     }

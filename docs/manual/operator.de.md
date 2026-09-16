@@ -444,7 +444,11 @@ wurde, im Override-Modus. Die Taste **blinkt**, wenn es etwas zurückzuschreiben
 gibt — und weil das Sitzungszustand ist, blinkt sie auf jedem Bildschirm
 gleichzeitig.
 
-**`Oops`** nimmt die letzte Änderung zurück. Zweihundert Schritte weit.
+**`Oops`** nimmt die letzte Änderung zurück. Zweihundert Schritte weit. **Die
+Oops-Taste** — auf dem Bildschirm und die Undo-Taste am X-Touch — ist zuerst eine
+Rücktaste: solange etwas in der Kommandozeile steht, nimmt sie das **letzte Wort**
+weg, und erst auf einer leeren Zeile eine Änderung. Ein Name in Anführungszeichen
+ist ein Wort. Wer `Oops` tippt und Enter drückt, macht immer rückgängig.
 
 ---
 
@@ -616,7 +620,7 @@ derselben Tabelle, aus der die Vervollständigung liest.
 | `new` | Legt einen leeren View an und schaltet darauf: `New View 3 "Fahren"` |
 | `off` | Hält eine Wiedergabe an. `off 3` ist ein Executor |
 | `on` | Startet eine Wiedergabe, ohne eine Cue weiterzuschalten |
-| `oops` | Nimmt die letzte Änderung zurück |
+| `oops` | Nimmt die letzte Änderung zurück. Die Oops-Taste nimmt zuerst das letzte Wort der Zeile weg |
 | `page` | Blättert die Fader-Bank: `Page 2` |
 | `preset` | Das Hauptwort für ein Preset. Allein — `Preset 4` — wendet es auf die Auswahl an |
 | `sequence` | Das Hauptwort für eine Cue-Liste. Allein — `Sequence 5` — macht sie zu der, in die gespeichert wird |

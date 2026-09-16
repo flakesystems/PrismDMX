@@ -376,3 +376,97 @@ fn a_command_that_is_not_a_line_is_untouched() {
     });
     assert!(matches!(refused, Err(ShowFileError::Show(_))));
 }
+
+/// Types a line the way a keyboard does: written, not run.
+fn typed(file: &mut ShowFile, text: &str) {
+    file.apply(&Command::CommandLineInput {
+        text: text.to_owned(),
+        run: false,
+        mode: None,
+    })
+    .expect("a keystroke");
+}
+
+/// **Punch-list B58 (GitHub #26).** While a line is standing, the Oops key takes
+/// its last word — a backspace for a desk with no keyboard — and only an empty
+/// line lets it take an edit back.
+#[test]
+fn oops_takes_the_last_word_of_a_standing_line_before_any_edit() {
+    let mut file = file();
+    file.apply(&run("label group 1 \"Front wash\""))
+        .expect("a good line");
+    typed(&mut file, "Fixture 1 thru 4");
+
+    let applied = file.apply(&Command::Oops).expect("a word to take");
+    assert_eq!(line(&file), "Fixture 1 thru ");
+    // Said on the wire, so the X-Touch's display and a second screen follow.
+    assert!(
+        session_paths(&applied).contains(&"/session/commandLine".to_owned()),
+        "{applied:?}"
+    );
+    // And the edit is still there: nothing was undone.
+    assert_eq!(
+        file.show
+            .group(prism_domain::GroupId::new(1))
+            .expect("group 1")
+            .name,
+        "Front wash"
+    );
+
+    for left in ["Fixture 1 ", "Fixture ", ""] {
+        file.apply(&Command::Oops).expect("a word to take");
+        assert_eq!(line(&file), left);
+    }
+    assert_eq!(
+        file.show
+            .group(prism_domain::GroupId::new(1))
+            .expect("group 1")
+            .name,
+        "Front wash",
+        "the last word going is not an undo"
+    );
+
+    // Now the line is empty, and Oops is Oops.
+    file.apply(&Command::Oops).expect("something to undo");
+    assert_ne!(
+        file.show
+            .group(prism_domain::GroupId::new(1))
+            .expect("group 1")
+            .name,
+        "Front wash"
+    );
+}
+
+/// A word is what the parser reads as one: a quoted name goes whole, and a line
+/// of nothing but spaces is an empty line.
+#[test]
+fn a_quoted_name_is_one_word_and_blank_is_empty() {
+    let mut file = file();
+    typed(&mut file, "Label Group 1 \"Front of house\"");
+    file.apply(&Command::Oops).expect("a word to take");
+    assert_eq!(line(&file), "Label Group 1 ");
+
+    typed(&mut file, "   ");
+    // Nothing to undo either: the line counts as empty, so this is a real Oops
+    // and it is refused rather than eating the spaces.
+    assert!(file.apply(&Command::Oops).is_err());
+}
+
+/// **Typing `Oops` and pressing Enter is still an undo**, even though the line
+/// held a word when it was run: the word *is* the command.
+#[test]
+fn a_typed_oops_is_an_undo_and_not_a_backspace() {
+    let mut file = file();
+    file.apply(&run("label group 1 \"Front wash\""))
+        .expect("a good line");
+    typed(&mut file, "Oops");
+    file.apply(&run("Oops")).expect("something to undo");
+    assert_ne!(
+        file.show
+            .group(prism_domain::GroupId::new(1))
+            .expect("group 1")
+            .name,
+        "Front wash"
+    );
+    assert_eq!(line(&file), "");
+}

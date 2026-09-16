@@ -32,7 +32,8 @@ Three shapes, and every control on the screen is one of them:
 
 | Shape | Words | What pressing it does |
 |---|---|---|
-| a whole command with no argument | `Clear` `Full` `Oops` `Update` | writes the word and runs it at once |
+| a whole command with no argument | `Clear` `Full` `Update` | writes the word and runs it at once |
+| the **Oops** key | `Oops` | writes nothing: while a line stands it takes the line's **last word**, and only on an empty line does it take the last edit back (B58). The daemon decides which, so the X-Touch's Undo key does the same with no screen attached |
 | a command that needs arguments | `Store` `Edit` `Goto` `Move` `Copy` `Delete` `Label` `Assign` | writes the word and **waits** for you to finish the line |
 | an argument keyword | `Fixture` `Group` `Sequence` `Cue` `Preset` `View` `Executor` | appends the word to the line as it stands |
 | a **chooser** in a window | the `Executors` window's fader, encoder and key rows | writes the whole line and sends it, because the pointer has supplied every argument (S45) |
@@ -162,7 +163,7 @@ has not said they want to move there.
 | `Assign Executor 1 Encoder Speed` | the same for its encoder — `Empty`, `Master`, `Speed` |
 | `Assign Executor 1 Button 2 Go+` | the same for one of its four keys, **numbered from one** |
 | `Assign Executor 1 Button 4 Command "Go+ Sequence 3"` | the custom row: that key sends this line |
-| `Oops` | takes the last edit back |
+| `Oops` | takes the last edit back. **Typed** and run it is always an undo; the **key** is a backspace first (§1) |
 
 **Update blinks** when there is an edit to put back. That is
 `Session::editingCue`, which is session state — so every screen blinks together.

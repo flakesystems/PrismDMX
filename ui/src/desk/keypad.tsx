@@ -35,7 +35,7 @@ import { CONSOLE_KEYS } from "./keys";
 
 /** The keypad. */
 export function Keypad() {
-  const { write, append, run } = useConsole();
+  const { write, append, run, oops } = useConsole();
   return (
     <div className="command-keys" data-testid="command-keys">
       {CONSOLE_KEYS.map((key) => (
@@ -54,6 +54,8 @@ export function Keypad() {
           onClick={() => {
             if (key.shape === "run") {
               run(key.word);
+            } else if (key.shape === "oops") {
+              oops();
             } else if (key.shape === "write") {
               write(`${key.word} `);
             } else {

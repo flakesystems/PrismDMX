@@ -530,7 +530,7 @@ The "Acts on" column is the practical consequence of **D11**: some controls reac
 | Encoder Assign section | switch encoder bank — Dimmer / Position / Color / Beam / Focus | **Session** | yes |
 | **F1–F8 (XKeys)** | free: open window, jump to view, macro, executor | **Session** or Engine | yes |
 | Save | save show file; **LED lit while unsaved changes exist** | Core | — |
-| Undo | `Oops` | Core | — |
+| Undo | `Oops` — **a backspace while a line stands** (B58): the line's last word goes, and only an empty line lets it undo. `prism_core::ShowFile::apply` decides, so a desk with no keyboard and no client has one | Core | — |
 
 #### The strip display's lower line says what the strip does — S45
 
