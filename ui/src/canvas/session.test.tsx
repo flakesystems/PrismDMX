@@ -188,11 +188,16 @@ function playThrough(answer: (deltas: readonly Delta[]) => void, what: string): 
   }
 }
 
-/** The numbers of the windows on the canvas, in the order they are drawn. */
+/** The windows on the canvas, back to front — the order the daemon stacks them. */
 function drawn(): string[] {
-  return [...screen.getByTestId("canvas").querySelectorAll("[data-window-type]")].map(
-    (element) => element.getAttribute("data-testid") ?? "",
-  );
+  return [...screen.getByTestId("canvas").querySelectorAll<HTMLElement>("[data-window-type]")]
+    .sort((a, b) => Number(a.style.zIndex) - Number(b.style.zIndex))
+    .map((element) => element.getAttribute("data-testid") ?? "");
+}
+
+/** The windows on the canvas in document order, which B57 keeps still. */
+function inDocument(): Element[] {
+  return [...screen.getByTestId("canvas").querySelectorAll("[data-window-type]")];
 }
 
 beforeEach(() => {
@@ -265,9 +270,15 @@ describe("opening and closing a window", () => {
     fireEvent.pointerDown(screen.getByTestId("window-1"), { button: 0, pointerId: 1 });
     expect(acted()).toEqual([{ t: "FocusWindow", instanceId: 1 }]);
     expect(drawn()).toEqual(["window-1", "window-2"]);
+    const before = inDocument();
 
     answer(recordedDeltas(stepAbout("focus the fixture sheet")));
     expect(drawn()).toEqual(["window-2", "window-1"]);
+    // **B57**: brought to the front without moving in the document — the same
+    // two elements, in the same places. A moved element loses the click that
+    // focused it.
+    expect(inDocument()).toEqual(before);
+    expect(inDocument()[0]).toBe(before[0]);
   });
 
   it("sends a drag as a PlaceWindow and leaves the window where the daemon has it", () => {

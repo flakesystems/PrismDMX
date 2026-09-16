@@ -185,18 +185,22 @@ describe("what the canvas draws", () => {
     expect(screen.getByTestId("window-2").dataset["windowType"]).toBe("DmxSheet");
   });
 
-  it("stacks them in the order the daemon holds them, which is document order", () => {
-    // After `FocusWindow(1)` the daemon's list is [2, 1]. There is no z-index
-    // in the stylesheet, so the later element is the one in front — and that
-    // is only right if the elements are in the daemon's order.
+  it("stacks them in the order the daemon holds them, and keeps the elements where they are", () => {
+    // After `FocusWindow(1)` the daemon's list is [2, 1], so window 1 is in
+    // front. **B57**: that order is a `z-index`, and the elements stay in the
+    // order of their numbers — moving one in the document between a press and
+    // its release costs the click in a real browser.
     canvas(documentsThrough("focus the fixture sheet"));
     const drawn = screen
       .getByTestId("canvas")
       .querySelectorAll("[data-window-type]");
     expect([...drawn].map((element) => element.getAttribute("data-testid"))).toEqual([
-      "window-2",
       "window-1",
+      "window-2",
     ]);
+    expect(Number(screen.getByTestId("window-1").style.zIndex)).toBeGreaterThan(
+      Number(screen.getByTestId("window-2").style.zIndex),
+    );
     expect(screen.getByTestId("window-1").dataset["focused"]).toBe("yes");
     expect(screen.getByTestId("window-2").dataset["focused"]).toBe("no");
   });

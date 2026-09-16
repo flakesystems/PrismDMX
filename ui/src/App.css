@@ -296,6 +296,9 @@
 
 .canvas {
     position: relative;
+    /* The windows' `z-index` (B57) stays inside the canvas: a window can never
+       be stacked over the header, a menu or the window chooser. */
+    isolation: isolate;
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
@@ -328,9 +331,10 @@
  * layout stored on one screen open sensibly on another — and what keeps a
  * resized screen from being a command.
  *
- * There is no `z-index` anywhere here on purpose: the stacking order is the
- * order of `openWindows`, which the daemon decides, so document order is the
- * only thing that may express it.
+ * There is no `z-index` here on purpose: the stacking order is the order of
+ * `openWindows`, which the daemon decides, and the canvas writes it onto each
+ * element's style (B57 — the elements themselves stay in number order, so that
+ * bringing one to the front never moves it between a press and a release).
  */
 .window {
     position: absolute;

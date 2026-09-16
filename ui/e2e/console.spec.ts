@@ -390,6 +390,35 @@ test.describe("the console shell", () => {
   });
 
   /**
+   * **Punch-list B57 (GitHub #25): one click selects, in whichever window.**
+   *
+   * Focusing a window moves it to the end of `openWindows` — that is the
+   * stacking order — and the canvas used to draw in that order, so React moved
+   * the window's element between the press and the release. Chromium does not
+   * fire a `click` on an element that left the document in between, so the
+   * first click into an unfocused window focused it and did nothing else. Only a
+   * browser can say this: `jsdom` dispatches a click whatever happened to the
+   * node.
+   */
+  test("one click selects a fixture in a window that was not focused", async ({ page }) => {
+    await desk(page);
+    await openWindow(page, "FixtureSheet");
+    // Focus another window first, by pressing inside it.
+    const status = page.locator('[data-window-type="Status"]');
+    await status.locator(".window-body").click({ position: { x: 5, y: 5 } });
+    await expect(status).toHaveAttribute("data-focused", "yes");
+    const sheet = page.locator('[data-window-type="FixtureSheet"]');
+    await expect(sheet).toHaveAttribute("data-focused", "no");
+
+    // One click, and the fixture is selected — held for as long as a hand
+    // holds one, because the fault needs the daemon's answer to arrive between
+    // the press and the release, and a click with no delay is over first.
+    await page.getByTestId("sheet-row-1").click({ delay: 250 });
+    await expect(sheet).toHaveAttribute("data-focused", "yes");
+    await expect(page.getByTestId("sheet-row-1")).toHaveAttribute("data-selected", "yes");
+  });
+
+  /**
    * **A cue list on no fader plays** — the hole S40 found and filled.
    *
    * `On Sequence 1` for a sequence nobody has assigned, and the proof is the

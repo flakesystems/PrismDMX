@@ -32,6 +32,12 @@ export interface WindowFrameProps {
   readonly window: CanvasWindow;
   /** Whether it is the focused one. */
   readonly focused: boolean;
+  /**
+   * Where it is in the session's stacking order, from 1 at the back — its
+   * `z-index`. The element's place in the document is its number's, so that
+   * bringing it to the front never moves it (B57).
+   */
+  readonly stack: number;
   /** The canvas element's box, for turning pixels into canvas units. */
   readonly box: () => { readonly width: number; readonly height: number };
   /**
@@ -57,6 +63,7 @@ export interface WindowFrameProps {
 export function WindowFrame({
   window: instance,
   focused,
+  stack,
   box,
   neighbours,
   onPlace,
@@ -119,7 +126,7 @@ export function WindowFrame({
   return (
     <section
       className={`window${focused ? " window-focused" : ""}${drag === null ? "" : " window-dragging"}`}
-      style={asStyle(shown ?? instance)}
+      style={{ ...asStyle(shown ?? instance), zIndex: stack }}
       data-testid={`window-${String(instance.instanceId)}`}
       data-window-type={instance.type}
       data-focused={focused ? "yes" : "no"}

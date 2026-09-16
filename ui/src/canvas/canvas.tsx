@@ -13,10 +13,22 @@
  * to persist something.
  *
  * The stacking order is the array order, so a window is brought to the front by
- * `FocusWindow` moving it to the end of `openWindows` in the daemon. There is
- * deliberately no `z-index` in the stylesheet: document order is the stacking
- * order, and letting CSS have an opinion about it would be a second source of
- * truth for something the session already decides.
+ * `FocusWindow` moving it to the end of `openWindows` in the daemon.
+ *
+ * # The elements do not move — B57
+ *
+ * Until the beta that array order was also the **document** order, on the
+ * argument that a `z-index` would be a second source of truth. It cost a click:
+ * focusing a window reordered the array, React moved that window's element to
+ * the end of the canvas while the button was still down, and Chromium fires no
+ * `click` on an element that left the document between press and release. So
+ * the first click into an unfocused window focused it and selected nothing.
+ *
+ * Now the elements are drawn in the order of their **numbers**, which never
+ * changes while a window is open, and the session's order is each element's
+ * `z-index` — computed from that one list on every render, so it is a
+ * rendering of the daemon's decision rather than a second opinion about it. The
+ * stylesheet still sets none.
  *
  * # The canvas fills what it is given
  *
@@ -67,6 +79,9 @@ export function Canvas({
   const surface = useRef<HTMLDivElement>(null);
   const windows = openWindows(session);
   const focused = focusedWindow(session);
+  // By number, so an element never moves in the document while it is open —
+  // see the module documentation (B57).
+  const byNumber = [...windows].sort((a, b) => a.instanceId - b.instanceId);
 
   /**
    * The canvas element's box in CSS pixels, asked for at the moment a drag
@@ -102,10 +117,11 @@ export function Canvas({
       }}
     >
       {windows.length === 0 ? <EmptyCanvas /> : null}
-      {windows.map((instance: CanvasWindow) => (
+      {byNumber.map((instance: CanvasWindow) => (
         <WindowFrame
           key={instance.instanceId}
           window={instance}
+          stack={windows.indexOf(instance) + 1}
           focused={instance.instanceId === focused}
           box={box}
           // Every window but this one, so a drag stops against them the way it
