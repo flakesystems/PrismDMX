@@ -8,7 +8,7 @@ fixed is in the [changelog](/en/changelog/), and the full register — every ent
 ever filed, with what was done about it and which test now holds it — lives in
 the repository, because it is a working document rather than a public one.
 
-At the time of writing there is **one** open fault out of fifty-one filed.
+At the time of writing there are **eleven** open faults out of sixty-one filed.
 
 ## B52 — the desk does not follow a switching channel while the show runs
 
@@ -36,6 +36,124 @@ data model does not have a concept for — and the key a cue stores a value unde
 must not change while that cue is running, or the cue would mean something
 different on playback than it did when it was stored. So the fix is a question
 about the model rather than an afternoon's work, and it is being treated as one.
+
+## B53 — required input fields do not allow being fully cleared during editing
+
+**Where:** UI, required input fields.
+**Severity:** annoying.
+
+**What happens.** Fields marked as required do not allow their contents to be
+fully cleared while typing — this prevents changing the first digit of a number
+or the first letter of a word.
+
+**What you will see.** Select a required field (e.g. an address or name field)
+and try to clear the whole value — the field rejects the empty state.
+
+## B54 — the `fixtures/` directory is not created on installation
+
+**Where:** installation, daemon data directory.
+**Severity:** annoying.
+
+**What happens.** `fixtures/` does not exist after a fresh installation. Anyone
+wanting to place a custom fixture profile must create the directory by hand,
+with no indication that it is missing.
+
+**What you will see.** Install PrismDMX fresh, open the data directory —
+`fixtures/` is absent.
+
+## B55 — the Controls menu crashes when a new key is bound
+
+**Where:** Settings, Controls menu.
+**Severity:** blocker.
+
+**What happens.** Binding a new key in the Controls menu disconnects and
+reconnects the client, jumping back to the Outputs menu. The crash recurs on
+every subsequent opening of the Controls menu, even after a daemon restart.
+
+**Workaround.** Remove the bound control from `machine.json` by hand and restart
+the daemon.
+
+**What you will see.** Open Settings → Controls → bind a new key.
+
+## B56 — switching the view clears the command line
+
+**Where:** canvas / views, command line.
+**Severity:** annoying.
+
+**What happens.** Switching the active view while a command is being typed clears
+the command line, because view changes are dispatched as commands internally.
+
+**What you will see.** Type something into the command line, then switch the
+view — the line is empty.
+
+## B57 — window focus prevents selection on the first click
+
+**Where:** canvas, all windows.
+**Severity:** annoying.
+
+**What happens.** When a different window has focus, the first click on an
+element in another window only focuses that window — the actual selection
+happens only on the second click.
+
+**What you will see.** Focus a different window, then click a fixture in the
+Fixture Sheet — the first click focuses only, the second selects.
+
+## B58 — oops does not delete command line words
+
+**Where:** command line, Oops key.
+**Severity:** annoying.
+
+**What happens.** When the command line is not empty, Oops acts immediately as
+undo without first deleting the typed input. On a console without a keyboard
+there is no way to correct a mistyped command.
+
+**What you will see.** Type something into the command line and press Oops — the
+input stays, but an action is undone.
+
+## B59 — crossfade fader position is not synchronised between clients
+
+**Where:** executor strip, crossfade.
+**Severity:** annoying.
+
+**What happens.** The progress of a crossfade executor is not synchronised
+between a web client and a MIDI client. The output is correct, but the fader
+snaps back to the web client's position when the MIDI fader is released.
+
+**What you will see.** Set up a crossfade executor, move it with the X-Touch
+fader while a web client is connected.
+
+## B60 — patch window: several bugs and missing features
+
+**Where:** patch window, fixture library.
+**Severity:** annoying.
+
+**What happens.** Several known problems in the patch window: fixtures of the
+same type with different modes appear as separate entries instead of one fixture
+with a mode selector; only the first column of a library row is clickable;
+the list does not load more fixtures when scrolling to the bottom; the add
+fixture button does not open the library directly; the overlap error message
+does not state the next free address; new fixtures do not start at the next free
+address; unnamed fixtures do not get their type as a name automatically; it is
+not possible to patch several fixtures of the same type at once.
+
+## B61 — command feedback shifts the layout
+
+**Where:** command line, command feedback.
+**Severity:** annoying.
+
+**What happens.** Typing in the command line causes a feedback element to
+appear that shifts parts of the UI.
+
+**What you will see.** Type something in the command line and watch the UI jump.
+
+## B62 — store bar in the cue viewer
+
+**Where:** cue viewer.
+**Severity:** cosmetic.
+
+**What happens.** The cue viewer has a section at the bottom for storing the
+programmer into a cue or creating a new cue. This is redundant — cues are stored
+via the command line.
 
 ## Something else is wrong
 

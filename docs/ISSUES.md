@@ -137,6 +137,26 @@ schließen, anordnen, Ansichten, Seiten, was zu groß oder zu klein ist.*
 - **So sieht man es:** Von einem View mit Fenstern aus einen neuen View erstellen
 - **Ergebnis:** ✅ **behoben** — *Neu* und *Speichern* sind zwei Befehle geworden. `Command::NewView` legt eine leere Ansicht an, wählt sie aus und leert den Canvas; vorher schickte der Knopf `StoreView`, weshalb die neue Ansicht die Fenster der alten mitbrachte. Auch über die Zeile erreichbar: `New View 3 "Front"`. Tests: `makes an empty view rather than storing the canvas as one` (`ui/src/canvas/viewbar.test.tsx`) und `every_session_command_applies_and_emits_a_session_patch`.
 
+
+### B57 — Der Fensterfokus verhindert die Auswahl beim ersten Klick (GitHub #25)
+
+- **Wo:** Canvas, alle Fenster (Fixture Sheet, Sequence Sheet etc.)
+- **Schwere:** ärgerlich
+- **Was passiert:** Wenn ein anderes Fenster den Fokus hat, fokussiert der erste Klick auf ein Element in einem anderen Fenster nur das Fenster — die eigentliche Auswahl findet erst beim zweiten Klick statt
+- **Was passieren soll:** Ein Klick auf ein auswählbares Element in einem unfokussierten Fenster soll das Element direkt auswählen
+- **So sieht man es:** Ein anderes Fenster fokussieren, dann auf ein Fixture im Fixture Sheet klicken — erster Klick fokussiert nur, zweiter wählt aus
+- **Ergebnis:** ☐ offen
+
+
+### B61 — Das Befehlsfeedback verschiebt das Layout (GitHub #29)
+
+- **Wo:** Kommandozeile, Befehlsfeedback
+- **Schwere:** ärgerlich
+- **Was passiert:** Wenn man etwas in die Kommandozeile tippt, erscheint ein Befehlsfeedback, das Teile des UI verschiebt
+- **Was passieren soll:** Das Befehlsfeedback soll entweder entfernt oder so eingebettet werden, dass es keine anderen UI-Elemente verschiebt
+- **So sieht man es:** Etwas in die Kommandozeile tippen und beobachten, wie das UI springt
+- **Ergebnis:** ☐ offen
+
 ## Kommandozeile
 
 *Die Zeile selbst, ihre Rückmeldungen, ihre Fehlermeldungen, die Historie, und
@@ -181,6 +201,26 @@ alles, was sie annehmen oder ablehnen sollte und nicht tut.*
 - **Ergebnis:** ✅ **behoben in S51** — beide Tasten schalten um, in beide Richtungen. Die Entscheidung war, **welcher** der zwei Mechanismen es tut: in der Shell das **Fenster** (`prism_app::shell::set_fullscreen`, Tauris eigene API), weil das die Titelleiste mitnimmt und `CLAUDE.md`s *wie ein Geräte-Bildschirm* genau daran hängt; im Browser die Fullscreen-API des Dokuments, weil ein Browser nichts anderes hat. Beides, damit **keiner der beiden Builds eine tote Taste bekommt** — das Web Remote (S31) ist ein Browser und die e2e-Suite ist einer, also ist der zweite Weg keine Höflichkeit, sondern der, auf dem das geprüft wird. Gezeichnet wird der Zustand, den der Wirt *erreicht* hat, nie der, der verlangt wurde; `fullscreenchange` ist die andere Hälfte derselben Regel, weil jeder Browser Escape als *Vollbild verlassen* nimmt, ohne die Seite zu fragen. Der Listener **kapert** das Tastenereignis, sonst wäre `Alt` + `Enter` zugleich ein Enter in der Kommandozeile. Tests: die zwölf in `ui/src/shell/fullscreen.test.ts` (welche Tastendrücke zählen, und welcher Wirt es tut) und *F11 and Alt+Enter put the desk full screen, and take it out again* in `ui/e2e/desk.spec.ts` — im Browser, beide Tasten, beide Richtungen, und gegen `document.fullscreenElement` statt gegen das Attribut, das die Seite selbst setzt. Dass ein *Fenster* seine Titelleiste verliert, kann kein Browser-Test sehen; das ist die Handprobe in `PROGRESS.md` §2.47.
 
 
+### B56 — Ein Ansichtswechsel löscht die Kommandozeile (GitHub #24)
+
+- **Wo:** Canvas/Views, Kommandozeile
+- **Schwere:** ärgerlich
+- **Was passiert:** Wenn man während einer laufenden Eingabe die Ansicht wechselt, wird die Kommandozeile geleert — da Ansichtswechsel intern als Kommando ausgeführt werden
+- **Was passieren soll:** Die Kommandozeile soll beim Wechsel zwischen Views erhalten bleiben
+- **So sieht man es:** Etwas in die Kommandozeile tippen, dann die Ansicht wechseln
+- **Ergebnis:** ☐ offen
+
+
+### B58 — Oops soll Wörter aus der Kommandozeile löschen, bevor er Aktionen rückgängig macht (GitHub #26)
+
+- **Wo:** Kommandozeile, Oops-Taste
+- **Schwere:** ärgerlich
+- **Was passiert:** Wenn etwas in der Kommandozeile steht, wirkt Oops sofort als Undo, ohne zuerst die Eingabe zu löschen
+- **Was passieren soll:** Solange die Kommandozeile nicht leer ist, soll Oops das zuletzt getippte Wort löschen — erst wenn die Zeile leer ist, als Undo wirken. Das ist auch ein Backspace-Ersatz an Pulten ohne Tastatur
+- **So sieht man es:** Etwas in die Kommandozeile tippen und Oops drücken
+- **Ergebnis:** ☐ offen
+
+
 ## Executors und Wiedergabe
 
 *Der Strip, die Fader, Go / Pause / Off, die Sequenzen, was während des Laufens
@@ -222,6 +262,26 @@ angezeigt wird.*
   **Bewegt wird der Fader von nichts.** `prismd::surface::fader_reading` gab für einen Crossfade **null** zurück und jedes Neuzeichnen schrieb diese Null an den Motor — das ist der Eintrag, in einer Funktion. Sie gibt jetzt `None`, `Strips::paint` schreibt dann gar nichts, und die Regel steht an einer Stelle: `ExecutorFaderFunction::desk_may_move_it`. Auf dem Bildschirm ist es dieselbe Regel von der anderen Seite: `faderLevel` ist `null`, und `executorbar.tsx` behält die Position der Hand — client-lokaler Zustand nach §4.2s eigener Definition, denn eine Hand ist legitim pro Schirm verschieden.
 
   Geprüft **an Frames**, nicht an Zustandsfeldern: `a_recorded_fader_walk_produces_the_same_frames_twice` und `a_walk_stopped_half_way_holds_the_mixture_on_the_wire` (`crates/prismd/tests/crossfade.rs`, beide Modi, byteweise), und `no_crossfade_fader_is_ever_written_back_to_the_desk` — gegen die MIDI, die den Daemon verlässt, mit einem `Master` auf demselben Strip als Gegenprobe, damit eine leere Liste eine Regel ist und kein stummes Interface. Dazu im Player: `a_crossfade_fader_walks_the_list_up_and_down_without_being_moved`, `a_fade_fader_takes_the_cue_out_going_up_and_the_next_one_in_coming_down`, `the_same_fader_walk_produces_the_same_values_twice` und `a_stroke_stopped_half_way_holds_the_mixture_indefinitely` (`crates/prism-engine/src/player.rs`). Der Tick misst weiter null Allokationen auf allen neun Pfaden, und `tick_allocations.rs` schickt jetzt beide Modi hindurch.
+
+
+### B59 — Crossfade-Fortschritt wird nicht zwischen Clients synchronisiert (GitHub #27)
+
+- **Wo:** Executor Strip, Crossfade
+- **Schwere:** ärgerlich
+- **Was passiert:** Der Fortschritt eines Crossfade-Executors wird nicht zwischen Web-Client und MIDI-Client synchronisiert. Die Ausgabe ist korrekt, aber der Fader springt auf die Position des Web-Clients zurück, sobald man den MIDI-Fader loslässt
+- **Was passieren soll:** Die Faderposition soll zwischen allen Clients synchronisiert werden
+- **So sieht man es:** Einen Crossfade-Executor anlegen, mit dem X-Touch-Fader bewegen, während ein Web-Client verbunden ist
+- **Ergebnis:** ☐ offen
+
+
+### B62 — Store-Leiste im Cue Viewer entfernen (GitHub #30)
+
+- **Wo:** Cue Viewer
+- **Schwere:** Schönheitsfehler
+- **Was passiert:** Am unteren Rand des Cue Viewer gibt es eine Sektion, über die der aktuelle Programmer-Inhalt in einen Cue gespeichert oder ein neuer Cue erstellt werden kann
+- **Was passieren soll:** Diese Sektion entfernen — Cues werden ausschließlich über die Kommandozeile gespeichert
+- **So sieht man es:** Cue Viewer öffnen
+- **Ergebnis:** ☐ offen
 
 
 ## Programmer, Presets, Groups
@@ -579,6 +639,26 @@ angezeigt wird.*
   Tests: `a_venues_own_profiles_survive_a_library_re_download` (`crates/prismd/tests/fixture_install.rs`) — das **echte Installationsskript** läuft, samt Löschschritt, gegen ein Archiv, das der Test baut; dafür haben beide Skripte ein `PRISMDMX_OFL_ARCHIVE` bekommen, das ein Saal ohne Netz ohnehin braucht. Dazu `the_venues_own_directory_takes_a_loose_file_and_a_manufacturer_directory`, `a_venues_profile_replaces_the_vendored_one_it_names` und `an_entry_says_whether_it_is_the_venues_own` (`crates/prism-core/src/library/mod.rs`) und *marks a profile as the venue's own, beside one that came with the desk* (`ui/src/patch/patchwindow.test.tsx`).
 
 
+### B54 — Das `fixtures/`-Verzeichnis wird bei der Installation nicht angelegt (GitHub #9)
+
+- **Wo:** Installation, Datenverzeichnis des Daemons
+- **Schwere:** ärgerlich
+- **Was passiert:** `fixtures/` existiert nach einer Neuinstallation nicht. Wer ein eigenes Profil ablegen möchte, muss das Verzeichnis von Hand anlegen — ohne Hinweis darauf, dass es fehlt
+- **Was passieren soll:** Der Daemon legt `fixtures/` beim ersten Start an, wenn es noch nicht existiert
+- **So sieht man es:** PrismDMX neu installieren, Datenverzeichnis öffnen — `fixtures/` fehlt
+- **Ergebnis:** ☐ offen
+
+
+### B60 — Patch-Fenster: mehrere Fehler und Verbesserungen (GitHub #28)
+
+- **Wo:** Patch-Fenster, Fixture-Bibliothek
+- **Schwere:** ärgerlich
+- **Was passiert:** Mehrere Probleme: Fixtures desselben Typs mit verschiedenen Modi erscheinen als separate Einträge statt als ein Fixture mit Moduswahl; nur die erste Spalte einer Bibliothekszeile ist klickbar; beim Scrollen werden keine weiteren Fixtures nachgeladen; der „Fixture hinzufügen"-Knopf öffnet nicht direkt die Bibliothek; die Fehlermeldung bei überlappenden Adressen nennt nicht die nächste freie Adresse; neue Fixtures starten nicht mit der nächsten freien Adresse; Fixtures ohne Namen bekommen nicht automatisch ihren Typ als Namen; mehrere Fixtures desselben Typs lassen sich nicht gleichzeitig patchen
+- **Was passieren soll:** Die oben genannten Punkte beheben
+- **So sieht man es:** Patch-Fenster öffnen und Fixtures patchen
+- **Ergebnis:** ☐ offen
+
+
 ## Einstellungen und Pult
 
 *Das Einstellungs-Fenster, die fünf Panels, der Control-Editor, das X-Touch.*
@@ -628,6 +708,16 @@ angezeigt wird.*
 - **Was passieren soll:** Export und Import
 - **So sieht man es:** Controls einrichten, Daemon neu aufsetzen
 - **Ergebnis:** ✅ **behoben** — und was reist, ist eine **Profildatei**: dasselbe Dokument, das `prism_surface::Bindings::parse` liest und in dem `profiles/surface/xtouch.json` geschrieben ist. Ein Export ist damit mehr als eine Sicherung; er lässt sich einem Daemon mit `--surface-profile` geben oder in *Devices* benennen. Der `device`-Schlüssel und die `profileVersion` kommen aus der **Antwort des Daemons** (`Answer::SurfaceBindings`), nicht aus einer zweiten Kopie zweier Konstanten im Client — ein Export gegen eine veraltete Kopie ist eine Datei, die der Daemon danach ablehnt. Beide Richtungen laufen über den **Dateidialog des Browsers** und nicht über einen Pfad, den der Daemon auflöst: eine Tastenbelegung gehört zu der Maschine, an der der Operator sitzt, nicht zu der, die die Show fährt. Ein Import schickt **eine `SurfaceBinding` pro Control** — die Regel des Protokolls, eines nach dem anderen — und zwar für *jedes* Control der Oberfläche, gebunden oder nicht, damit das Ergebnis die Tabelle der Datei ist und nicht die Datei über das, was vorher da war. Tests: `ui/src/settings/controlfile.test.ts` (Rundlauf, und für jede abgelehnte Datei ein Satz statt Schweigen) und `reads a profile back as one binding per control` (`ui/src/settings/controls.test.tsx`).
+
+
+### B55 — Das Controls-Menü bricht zusammen, wenn eine neue Taste gebunden wird (GitHub #23)
+
+- **Wo:** Settings, Controls-Menü
+- **Schwere:** blocker
+- **Was passiert:** Bindet man eine neue Taste im Controls-Menü, trennt sich der Client und verbindet sich neu — zurückgesprungen auf das Output-Menü. Dieser Absturz tritt danach bei jedem Öffnen des Controls-Menüs erneut auf, auch nach einem Daemon-Neustart. Der Fehler lässt sich nur durch manuelles Entfernen des gebundenen Controls aus `machine.json` beheben
+- **Was passieren soll:** Das Binden einer Taste soll stabil funktionieren und den Client nicht trennen
+- **So sieht man es:** Settings öffnen → Controls → eine neue Taste binden
+- **Ergebnis:** ☐ offen
 
 ## Sonstiges
 
@@ -791,3 +881,13 @@ Meldungen, Tastatur, Leerzustände, Verhalten beim Start, Verbindungsabbrüche.*
   **Der Preis, und er ist der richtige:** ein RGBW-PAR macht von Farbe allein kein Licht mehr. `1 red at 100` färbt, `1 at 100` macht hell — genau wie bei einem Fixture mit echtem Dimmer. Drei e2e-Tests führten den Dimmer nicht hoch und sind mitgezogen worden.
 
   Tests: `the_desk_supplies_an_intensity_only_where_the_profile_has_none` und `a_fixture_read_without_the_field_gets_the_supplied_intensity` (`prism-domain`), `a_supplied_intensity_is_a_slot_that_rests_at_nought` und `a_fixture_that_was_not_given_one_has_the_slots_it_always_had` (`prism-engine::plan`), `the_supplied_intensity_scales_the_colour_and_nothing_else`, `a_fixture_with_the_switch_off_is_written_straight_through` und `scaling_is_exact_at_both_ends` (`prism-engine::encode`), `a_colour_only_fixture_has_an_intensity_the_programmer_can_reach` und `a_fixture_with_the_supplied_intensity_switched_off_has_none` (`prism-core`), `supplies an intensity for a fixture whose profile has none` und `supplies nothing where the operator switched it off, or where there is one already` (`ui/src/desk/programmer.test.ts`), `offers the desk's dimmer only to a fixture whose profile has none` (`ui/src/patch/patchwindow.test.tsx`). Spezifikation: `docs/DMX_MERGE.md` §5.1.
+
+
+### B53 — Pflichtfelder lassen das vollständige Leeren während der Eingabe nicht zu (GitHub #21)
+
+- **Wo:** UI, Pflichtfelder (Required Inputs)
+- **Schwere:** ärgerlich
+- **Was passiert:** Felder, die als Pflichtfelder markiert sind, lassen das vollständige Leeren während der Eingabe nicht zu — das verhindert, die erste Stelle einer Zahl oder den ersten Buchstaben eines Worts zu ändern
+- **Was passieren soll:** Die Leer-Prüfung soll nur beim Anwenden (Apply) greifen, nicht während der Eingabe
+- **So sieht man es:** Ein Pflichtfeld (z.B. Adress- oder Namensfeld) auswählen, Inhalt komplett löschen versuchen
+- **Ergebnis:** ☐ offen

@@ -9,7 +9,7 @@ Diese Seite zeigt **nur noch offene Fehler**. Was behoben ist, steht in den
 gemeldete Eintrag, was daraus wurde und welcher Test ihn heute festhält — liegt
 im Repository, weil es ein Arbeitsdokument ist und kein öffentliches.
 
-Zum Zeitpunkt dieser Fassung ist **ein** Fehler offen, von einundfünfzig
+Zum Zeitpunkt dieser Fassung sind **elf** Fehler offen, von einundsechzig
 gemeldeten.
 
 ## B52 — Das Pult folgt einem Switching Channel nicht, während die Show läuft
@@ -40,6 +40,129 @@ einen Wert ablegt, darf sich nicht ändern, während diese Cue läuft, sonst
 bedeutete die Cue beim Abfahren etwas anderes als beim Speichern. Die Behebung
 ist also eine Frage an das Modell und nicht die Arbeit eines Nachmittags, und sie
 wird auch so behandelt.
+
+## B53 — Pflichtfelder lassen das vollständige Leeren während der Eingabe nicht zu
+
+**Wo:** UI, Pflichtfelder (Required Inputs).
+**Schwere:** ärgerlich.
+
+**Was passiert.** Felder, die als Pflichtfelder markiert sind, lassen das
+vollständige Leeren während der Eingabe nicht zu — das verhindert, die erste
+Stelle einer Zahl oder den ersten Buchstaben eines Worts zu ändern.
+
+**So sehen Sie es.** Ein Pflichtfeld (z.B. Adress- oder Namensfeld) auswählen,
+Inhalt komplett löschen versuchen — das Feld lehnt ab.
+
+## B54 — Das `fixtures/`-Verzeichnis wird bei der Installation nicht angelegt
+
+**Wo:** Installation, Datenverzeichnis des Daemons.
+**Schwere:** ärgerlich.
+
+**Was passiert.** `fixtures/` existiert nach einer Neuinstallation nicht. Wer
+ein eigenes Profil ablegen möchte, muss das Verzeichnis von Hand anlegen — ohne
+Hinweis darauf, dass es fehlt.
+
+**So sehen Sie es.** PrismDMX neu installieren, Datenverzeichnis öffnen —
+`fixtures/` fehlt.
+
+## B55 — Das Controls-Menü bricht zusammen, wenn eine neue Taste gebunden wird
+
+**Wo:** Settings, Controls-Menü.
+**Schwere:** blocker.
+
+**Was passiert.** Bindet man eine neue Taste im Controls-Menü, trennt sich der
+Client und verbindet sich neu — zurückgesprungen auf das Output-Menü. Dieser
+Absturz tritt danach bei jedem Öffnen des Controls-Menüs erneut auf, auch nach
+einem Daemon-Neustart.
+
+**Abhilfe.** Den gebundenen Control manuell aus `machine.json` entfernen und den
+Daemon neu starten.
+
+**So sehen Sie es.** Settings öffnen → Controls → eine neue Taste binden.
+
+## B56 — Ein Ansichtswechsel löscht die Kommandozeile
+
+**Wo:** Canvas/Views, Kommandozeile.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Wenn man während einer laufenden Eingabe die Ansicht wechselt,
+wird die Kommandozeile geleert — da Ansichtswechsel intern als Kommando
+ausgeführt werden.
+
+**So sehen Sie es.** Etwas in die Kommandozeile tippen, dann die Ansicht
+wechseln — die Zeile ist leer.
+
+## B57 — Der Fensterfokus verhindert die Auswahl beim ersten Klick
+
+**Wo:** Canvas, alle Fenster.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Wenn ein anderes Fenster den Fokus hat, fokussiert der erste
+Klick auf ein Element in einem anderen Fenster nur das Fenster — die eigentliche
+Auswahl findet erst beim zweiten Klick statt.
+
+**So sehen Sie es.** Ein anderes Fenster fokussieren, dann auf ein Fixture im
+Fixture Sheet klicken — erster Klick fokussiert nur, zweiter wählt aus.
+
+## B58 — Oops löscht keine Wörter aus der Kommandozeile
+
+**Wo:** Kommandozeile, Oops-Taste.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Wenn etwas in der Kommandozeile steht, wirkt Oops sofort als
+Undo, ohne zuerst die Eingabe zu löschen. An Pulten ohne Tastatur gibt es so
+keinen Weg, Tippfehler in der Zeile zu korrigieren.
+
+**So sehen Sie es.** Etwas in die Kommandozeile tippen und Oops drücken — die
+Eingabe bleibt, eine Aktion wird rückgängig gemacht.
+
+## B59 — Crossfade-Fortschritt wird nicht zwischen Clients synchronisiert
+
+**Wo:** Executor Strip, Crossfade.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Der Fortschritt eines Crossfade-Executors wird nicht zwischen
+Web-Client und MIDI-Client synchronisiert. Die Ausgabe ist korrekt, aber der
+Fader springt auf die Position des Web-Clients zurück, sobald man den
+MIDI-Fader loslässt.
+
+**So sehen Sie es.** Einen Crossfade-Executor anlegen, mit dem X-Touch-Fader
+bewegen, während ein Web-Client verbunden ist.
+
+## B60 — Patch-Fenster: mehrere Fehler und Verbesserungen
+
+**Wo:** Patch-Fenster, Fixture-Bibliothek.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Mehrere bekannte Probleme im Patch-Fenster: Fixtures desselben
+Typs mit verschiedenen Modi erscheinen als separate Einträge; nur die erste Spalte
+einer Bibliothekszeile ist klickbar; beim Scrollen werden keine weiteren Fixtures
+nachgeladen; der „Fixture hinzufügen"-Knopf öffnet nicht direkt die Bibliothek;
+die Fehlermeldung bei überlappenden Adressen nennt nicht die nächste freie
+Adresse; neue Fixtures starten nicht mit der nächsten freien Adresse; Fixtures
+ohne Namen bekommen nicht automatisch ihren Typ als Namen; mehrere Fixtures
+desselben Typs lassen sich nicht gleichzeitig patchen.
+
+## B61 — Das Befehlsfeedback verschiebt das Layout
+
+**Wo:** Kommandozeile, Befehlsfeedback.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Wenn man etwas in die Kommandozeile tippt, erscheint ein
+Befehlsfeedback, das Teile des UI verschiebt.
+
+**So sehen Sie es.** Etwas in die Kommandozeile tippen und beobachten, wie das
+UI springt.
+
+## B62 — Store-Leiste im Cue Viewer
+
+**Wo:** Cue Viewer.
+**Schwere:** kosmetisch.
+
+**Was passiert.** Am unteren Rand des Cue Viewer gibt es eine Sektion, über die
+der aktuelle Programmer-Inhalt in einen Cue gespeichert oder ein neuer Cue
+erstellt werden kann. Diese Sektion ist überflüssig — Cues werden über die
+Kommandozeile gespeichert.
 
 ## Etwas anderes stimmt nicht
 
