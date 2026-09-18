@@ -692,6 +692,16 @@ fn notice_for(health: SurfaceHealth) -> Option<Delta> {
 /// controller keeps for that fader is left as it is until the fader is given a
 /// job that has a number in it.
 ///
+/// # And since B59 a crossfade has a number: where the last hand left it
+///
+/// `None` fixed the fault and left a second one: with nothing to resynchronise
+/// to, a motor let go of went back to whatever its shadow last held, and a
+/// crossfade moved in a browser never reached the desk at all. The answer is
+/// `Sequence::crossfade_position`, which is the position a hand put there —
+/// on this surface or on another client — and never a reading the desk made
+/// up. A touched fader is still written nothing (`docs/MCU_MAPPING.md` §5.1),
+/// and on release it is resynchronised to where the hand already left it.
+///
 /// `ExecutorFaderFunction::desk_may_move_it` is where the rule lives, so the
 /// screen (`ui/src/desk/session.ts`) and the desk cannot disagree about it.
 fn fader_reading(
@@ -707,9 +717,14 @@ fn fader_reading(
     match executor.fader_function {
         prism_domain::ExecutorFaderFunction::Master => Some(sequence.master_level),
         prism_domain::ExecutorFaderFunction::Speed => Some(sequence.speed),
-        // Answered above by `desk_may_move_it`; a slot with no job on its fader
-        // has no number either.
-        _ => None,
+        // **Where the last hand left it** — B59. The same number a second
+        // screen draws, so a crossfade moved in a browser moves the motor, and a
+        // motor let go of is resynchronised to where it already is.
+        prism_domain::ExecutorFaderFunction::Fade | prism_domain::ExecutorFaderFunction::XFade => {
+            Some(sequence.crossfade_position)
+        }
+        // Answered above by `desk_may_move_it`.
+        prism_domain::ExecutorFaderFunction::Empty => None,
     }
 }
 

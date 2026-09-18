@@ -124,6 +124,7 @@ pub fn show_file() -> ShowFile {
         speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
+        crossfade_position: 0,
     })
     .unwrap();
     show.store_executor(Executor {

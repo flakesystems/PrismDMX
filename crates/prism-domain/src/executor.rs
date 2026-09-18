@@ -235,16 +235,23 @@ impl ExecutorFaderFunction {
     /// keinem Fall soll der Fader nach einer Bewegung irgendwie zurück bewegt
     /// werden.* A `Master` fader shows a number the show holds, so a motor may
     /// be driven to it and a second handle on the same list follows the first
-    /// (B18). A **crossfade** fader shows nothing: where it stands is the
-    /// operator's hand, and a desk that wrote a position back would be undoing
-    /// a gesture that is still happening.
+    /// (B18).
     ///
-    /// So this is asked before any position is written, on the surface and on
-    /// the screen, and it is `false` for both crossfades — never for `Empty`
-    /// either, which has no number to show at all.
+    /// **A crossfade does too, since B59.** S51 answered B36 by writing nothing
+    /// to a crossfade fader, because the number it had been writing — nought —
+    /// was one no hand had put there. That left every handle on its own: a web
+    /// client and an X-Touch each showed their own fader, and the X-Touch's
+    /// motor went back to a stale position when the hand came off. The fix to
+    /// B36 was never *no number*; it was *no number a hand did not put there*.
+    /// So a crossfade shows `Sequence::crossfade_position` — where the last
+    /// hand, on any client, left it — and a touched motor is still never
+    /// written (`docs/MCU_MAPPING.md` §5.1).
+    ///
+    /// Asked before any position is written, on the surface and on the screen.
+    /// `false` only for `Empty`, which has no number to show at all.
     #[must_use]
     pub const fn desk_may_move_it(self) -> bool {
-        matches!(self, Self::Master | Self::Speed)
+        !matches!(self, Self::Empty)
     }
 }
 
@@ -717,22 +724,23 @@ mod crossfade_modes {
     /// **The desk moves a fader that shows a number, and only that** — B36's
     /// second half, stated once so every layer can ask it.
     ///
-    /// A crossfade fader's position is the operator's hand. `prismd::surface`
-    /// and `ui/src/desk/session.ts` both read this, which is what stops the
-    /// screen and the desk disagreeing about it.
+    /// Since B59 a crossfade shows one too: where the last hand left it
+    /// (`Sequence::crossfade_position`). `prismd::surface` and
+    /// `ui/src/desk/session.ts` both read this, which is what stops the screen
+    /// and the desk disagreeing about it.
     #[test]
-    fn the_desk_never_moves_a_crossfade_fader() {
+    fn the_desk_moves_every_fader_that_has_a_job() {
         for function in ExecutorFaderFunction::ALL {
             assert_eq!(
                 function.desk_may_move_it(),
-                function.crossfade_mode().is_none() && function != ExecutorFaderFunction::Empty,
+                function != ExecutorFaderFunction::Empty,
                 "{function:?}"
             );
         }
         assert!(ExecutorFaderFunction::Master.desk_may_move_it());
         assert!(ExecutorFaderFunction::Speed.desk_may_move_it());
-        assert!(!ExecutorFaderFunction::Fade.desk_may_move_it());
-        assert!(!ExecutorFaderFunction::XFade.desk_may_move_it());
+        assert!(ExecutorFaderFunction::Fade.desk_may_move_it());
+        assert!(ExecutorFaderFunction::XFade.desk_may_move_it());
         assert!(!ExecutorFaderFunction::Empty.desk_may_move_it());
     }
 }

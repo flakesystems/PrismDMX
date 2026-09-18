@@ -530,6 +530,7 @@ fn stress_sequence(fixture_type: &FixtureType, fixtures: u32, seed: u16) -> Sequ
         speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
+        crossfade_position: 0,
     }
 }
 

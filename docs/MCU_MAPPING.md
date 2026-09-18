@@ -566,9 +566,11 @@ to be visible there without an operator going to look for it — which is the ha
 of B15 the desk owes.
 
 **The motor fader follows the function too.** It stands at whatever the strip's
-own `faderFunction` names — the list's master, the list's rate, or nought for a
-crossfade, whose position is a gesture in progress rather than show state
-(`docs/DMX_MERGE.md` §4.1.1). And because that number is the *cue list's* since
+own `faderFunction` names — the list's master, the list's rate, or for a
+crossfade **where the last hand left it** (`Sequence::crossfade_position`,
+punch-list B59; it was nought until S51 and nothing at all until B59, and both
+were faults — the first drove a pushed fader back down, the second left the
+motor to fall back to a stale position when it was let go of). And because that number is the *cue list's* since
 S45, a level moved from one executor moves the other's motor fader: two handles,
 one number, one place for the shadow model to diff.
 

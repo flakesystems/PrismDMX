@@ -10,10 +10,13 @@
 //! - **A recorded fader walk produces a byte-identical frame sequence twice.**
 //!   A frame is a `prismd` output's, built by the tick out of the merge and the
 //!   encoder; a claim about *values* is not a claim about bytes.
-//! - **No path in either mode ever writes a fader position back to the
-//!   surface.** That is a claim about MIDI leaving the daemon, and it is the
-//!   half the entry is actually about: *In keinem Fall soll der Fader nach einer
-//!   Bewegung irgendwie zurück bewegt werden.*
+//! - **No path in either mode ever drives a fader anywhere a hand did not put
+//!   it.** That is a claim about MIDI leaving the daemon, and it is the half
+//!   the entry is actually about: *In keinem Fall soll der Fader nach einer
+//!   Bewegung irgendwie zurück bewegt werden.* S51 kept it by writing nothing
+//!   at all; **B59** found the cost of that — two clients on one crossfade
+//!   each drew their own fader — so the desk now writes where the last hand
+//!   left it, and these tests say exactly that.
 //!
 //! # Nothing here touches a device
 //!
@@ -107,6 +110,7 @@ fn show_with(fader: ExecutorFaderFunction) -> prism_core::ShowFile {
             speed: SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
         })
         .unwrap();
     file.show
@@ -372,26 +376,33 @@ async fn a_walk_stopped_half_way_holds_the_mixture_on_the_wire() {
     }
 }
 
-/// **The desk never moves a crossfade fader** — B36's other half, asserted
-/// against the MIDI the daemon sends.
+/// The 14-bit position `docs/MCU_MAPPING.md` §2.7 says a level is written as,
+/// give or take the four the surface reports in: the top of travel is 16380.
+fn near(written: u16, level: u16) -> bool {
+    let expected = u32::from(level) * 16_380 / 65_535;
+    u32::from(written).abs_diff(expected) <= 8
+}
+
+/// **The desk writes a crossfade fader only where a hand put it** — B36's other
+/// half, and B59's, asserted against the MIDI the daemon sends.
 ///
-/// This is the fault the entry reports: every repaint used to write the
-/// crossfade's *reading* — nought — to the motor, so a fader an operator had
-/// pushed up was driven back down a fraction of a second later. Pitch bend is
-/// the only message that moves a fader (`docs/MCU_MAPPING.md` §2.2), so the
-/// claim is that none is sent for that fader's channel, however much the show
-/// around it changes.
+/// B36 was a desk that wrote the crossfade's *reading* — nought — to the motor,
+/// so a fader an operator had pushed up was driven back down. S51 answered by
+/// writing nothing; B59 found that a crossfade moved on a second client then
+/// never reached the motor. So the claim is now the precise one: every
+/// position the desk writes to that fader is a position a client sent, the
+/// last one is the last one sent, and a repaint for some other reason writes
+/// nothing new. Pitch bend is the only message that moves a fader
+/// (`docs/MCU_MAPPING.md` §2.2).
 ///
-/// The control test is the one that makes it mean something: a `Master` on the
-/// same strip **is** written, so an empty list here is a rule rather than a
-/// silent surface.
+/// A `Master` is the control: the same rule, and the one it has always had.
 #[tokio::test]
-async fn no_crossfade_fader_is_ever_written_back_to_the_desk() {
+async fn a_crossfade_fader_is_only_ever_written_where_a_hand_put_it() {
     let _turn = common::one_daemon_at_a_time();
-    for (mode, written) in [
-        (ExecutorFaderFunction::XFade, false),
-        (ExecutorFaderFunction::Fade, false),
-        (ExecutorFaderFunction::Master, true),
+    for mode in [
+        ExecutorFaderFunction::XFade,
+        ExecutorFaderFunction::Fade,
+        ExecutorFaderFunction::Master,
     ] {
         let dir = tempfile::tempdir().unwrap();
         let mut file = show_with(mode);
@@ -405,25 +416,20 @@ async fn no_crossfade_fader_is_ever_written_back_to_the_desk() {
         daemon.attach_surface(Box::new(port));
         let desk = daemon.desk().clone();
         desk.command(Command::SetExecutorPage { page: 0 });
-        // **Selected**, so the main fader follows this executor too. With
-        // nothing selected the desk parks the main fader at nought — which is
-        // right, and would make this test pass for the wrong reason.
+        // **Selected**, so the main fader follows this executor too.
         desk.command(Command::SelectExecutor {
             executor_id: ExecutorId::new(0),
         });
-        // The first picture, which every strip gets whatever is on it.
         run_until(&mut daemon, "the desk to be painted", || {
             !surface.received().is_empty()
         })
         .await;
-
         // Everything the first picture had queued, drained: the outbound path
         // is **paced** (`prism_surface`'s controller), so a message decided
         // before the clear can leave after it.
         for _ in 0..20 {
             settle(&mut daemon).await;
         }
-        // From here on, only what the daemon sends *because of the fader*.
         surface.clear_received();
         desk.command(Command::ExecutorButton {
             executor_id: ExecutorId::new(0),
@@ -431,13 +437,16 @@ async fn no_crossfade_fader_is_ever_written_back_to_the_desk() {
             pressed: true,
         });
         settle(&mut daemon).await;
-        for level in [0_u16, 20_000, 45_000, 65_535, 30_000, 0] {
+        // Another client's hand — a browser's — walking the fader.
+        let walked = [0_u16, 20_000, 45_000, 65_535, 30_000, 0];
+        for level in walked {
             desk.command(Command::SetExecutorMaster {
                 executor_id: ExecutorId::new(0),
                 level,
             });
             settle(&mut daemon).await;
         }
+        let before_label = fader_writes(&surface).len();
         // And a repaint provoked by something else entirely: a show change is
         // what used to write the fader back even when nobody had touched it.
         desk.command(Command::Label {
@@ -449,23 +458,105 @@ async fn no_crossfade_fader_is_ever_written_back_to_the_desk() {
         settle(&mut daemon).await;
 
         // Strip 0's pitch-bend channel is 0 (`prism_surface::profile`), and the
-        // main fader's is 8 — the selected executor is this one too, so both
-        // have to stay silent.
+        // main fader's is 8 — the selected executor is this one too.
         let moved: Vec<(u8, u16)> = fader_writes(&surface)
             .into_iter()
             .filter(|(channel, _)| *channel == 0 || *channel == 8)
             .collect();
-        if written {
+        assert!(
+            !moved.is_empty(),
+            "{mode:?}: another client's crossfade never reached the motor"
+        );
+        for (channel, written) in &moved {
             assert!(
-                !moved.is_empty(),
-                "a Master was never written, so this test proves nothing about the other two"
-            );
-        } else {
-            assert!(
-                moved.is_empty(),
-                "{mode:?}: the desk moved the operator's fader — {moved:?}"
+                walked.iter().any(|level| near(*written, *level)),
+                "{mode:?}: channel {channel} was driven to {written}, which no hand put there"
             );
         }
+        for channel in [0_u8, 8] {
+            let last = moved
+                .iter()
+                .rev()
+                .find(|(written_to, _)| *written_to == channel)
+                .map(|(_, written)| *written);
+            assert!(
+                last.is_some_and(|written| near(written, 0)),
+                "{mode:?}: channel {channel} ended at {last:?}, not where the hand left it"
+            );
+        }
+        assert_eq!(
+            fader_writes(&surface).len(),
+            before_label,
+            "{mode:?}: a relabel moved a fader"
+        );
+        daemon.shutdown().await;
+    }
+}
+
+/// **A crossfade moved on the desk stays where the hand left it** — B59, the
+/// fault as the beta reported it: the fader went somewhere else once it was
+/// let go of.
+///
+/// While the fader is touched the desk writes nothing to it (§5.1); 150 ms
+/// after the hand comes off it resynchronises the motor to the authoritative
+/// value. With no value that was a stale one. Now it is the position the hand
+/// left, so the motor stays put.
+#[tokio::test]
+async fn a_crossfade_let_go_of_on_the_desk_is_not_driven_anywhere_else() {
+    let _turn = common::one_daemon_at_a_time();
+    for mode in [ExecutorFaderFunction::XFade, ExecutorFaderFunction::Fade] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut file = show_with(mode);
+        ShowStore::open(dir.path().join("walk.prism"))
+            .unwrap()
+            .save(&mut file)
+            .unwrap();
+
+        let mut daemon = Daemon::start(&options(dir.path())).await.unwrap();
+        let (port, surface) = MockSurfacePort::new();
+        daemon.attach_surface(Box::new(port));
+        let desk = daemon.desk().clone();
+        desk.command(Command::SetExecutorPage { page: 0 });
+        run_until(&mut daemon, "the desk to be painted", || {
+            !surface.received().is_empty()
+        })
+        .await;
+        for _ in 0..20 {
+            settle(&mut daemon).await;
+        }
+        surface.clear_received();
+
+        // Strip 1's touch is note 104 (§2.1), its fader pitch bend on channel 0,
+        // and `E0 7C 7F` is the top of travel S20 recorded. Written by hand.
+        surface.send(&[0x90, 104, 0x7F]);
+        surface.send(&[PITCH_BEND, 0x00, 0x40]);
+        surface.send(&[PITCH_BEND, 0x7C, 0x7F]);
+        surface.send(&[0x90, 104, 0x00]);
+        run_until(&mut daemon, "the desk to hear the hand", || {
+            desk.core()
+                .file
+                .show
+                .sequence(SequenceId::new(1))
+                .is_some_and(|sequence| sequence.crossfade_position == u16::MAX)
+        })
+        .await;
+        // Past the 150 ms hold, and the pacing after it.
+        daemon
+            .run(Some(Duration::from_millis(400)), std::future::pending())
+            .await;
+        for _ in 0..10 {
+            settle(&mut daemon).await;
+        }
+
+        let strip: Vec<u16> = fader_writes(&surface)
+            .into_iter()
+            .filter(|(channel, _)| *channel == 0)
+            .map(|(_, written)| written)
+            .collect();
+        assert!(
+            strip.iter().all(|written| near(*written, u16::MAX)),
+            "{mode:?}: the fader was driven away from the top after it was let go: {strip:?}"
+        );
         daemon.shutdown().await;
     }
 }

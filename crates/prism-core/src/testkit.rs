@@ -110,6 +110,7 @@ pub(crate) fn sequence(id: u32, cues: Vec<Cue>) -> Sequence {
         speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
+        crossfade_position: 0,
     }
 }
 

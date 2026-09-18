@@ -514,6 +514,7 @@ impl Show {
             // Playback state has one author and it is the tick (S34).
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
         })
     }
 

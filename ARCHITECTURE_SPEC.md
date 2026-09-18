@@ -211,6 +211,8 @@ Monitor assignment of a window, scroll position, hover and drag state, 3D viewer
 > The consequence is the entry. `prismd::surface::fader_reading` used to answer **nought** for a crossfade on the argument that there is no number to show, and every repaint wrote that nought to the motor — so a fader an operator had pushed up was driven back down a fraction of a second later. It answers `None` now and nothing is written at all; `ExecutorFaderFunction::desk_may_move_it` is the one place the rule lives, and both the surface and `ui/src/desk/session.ts` ask it, so the desk and the screen cannot disagree. On the screen the position is the browser's own, kept across the gesture rather than dropped on pointer-up, which is the one exception to `valuedrag.ts`'s rule and the reason for it.
 >
 > What is **not** client-local is where the *playback* has got to. That is `prism_engine::CuePlayer`'s, it is a function of the fader position it was last told about, and it is what makes two screens driving one crossfade agree about the light even while their two faders sit in different places.
+>
+> **Superseded by punch-list B59** *(beta, 2026-09-16)*. The beta ran exactly the case the last paragraph accepts — a browser and an X-Touch on one crossfade — and it was not acceptable: each drew its own fader, and the X-Touch's motor, told nothing, went back to a stale position 150 ms after the hand came off (§5.1 of `docs/MCU_MAPPING.md` resynchronises to *the authoritative value*, and there was none). B36's fault was never *a number*; it was **a number no hand had put there**. So the desk now holds one: `Sequence::crossfadePosition`, where the last hand on any client left the crossfade, written by `Show::apply` for every crossfade move and sent to every client as a `ShowPatch`. It is operating state — it does not light the Save lamp and an Oops does not take it back — and `desk_may_move_it` is `true` for both crossfades. A touched motor is still written nothing, and one let go of is resynchronised to where the hand already is. The position is therefore **not** client-local any more; what is, is only the drag in progress.
 
 ### 4.3 Latency budget, fader to light
 
@@ -592,6 +594,8 @@ interface Sequence {
                                // (S34; docs/DMX_MERGE.md §4.1)
   isActive: boolean;           // written only by the tick's readback (S34)
   currentCueIndex: number | null;   // the same
+  crossfadePosition: number;   // 0..65535, where the last hand left a crossfade
+                               // fader on this list — operating state (B59)
 }
 
 type ExecutorButtonFunction =

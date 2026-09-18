@@ -660,6 +660,27 @@ pub struct Sequence {
     /// tick thread.
     #[serde(default)]
     pub current_cue_index: Option<u32>,
+    /// Where this list's **crossfade fader** was last put, `0..=65535` —
+    /// punch-list **B59**.
+    ///
+    /// A crossfade fader is a hand, and S51 (B36) kept its position on the
+    /// screen that moved it on the argument that a hand is different per
+    /// screen. The beta found the cost: a web client and an X-Touch driving one
+    /// crossfade each showed their own fader, and the X-Touch's motor, told
+    /// nothing, went back to a stale position when the hand came off. So the
+    /// desk now holds the one number every handle draws — the position the last
+    /// hand left, on any client — exactly as it holds [`Self::master_level`] for
+    /// a `Master` fader. What B36 was about still holds: nothing is ever written
+    /// to a fader **except where a hand put it**, and a touched motor is never
+    /// written at all (`docs/MCU_MAPPING.md` §5.1).
+    ///
+    /// Operating state, like [`Self::is_active`]: moving it does not make the
+    /// show unsaved, and an Oops does not take it back. `#[serde(default)]`, so
+    /// a file written before it opens with the fader at the bottom — which is
+    /// where the engine takes it from anyway: the first movement it hears only
+    /// engages the fader and arms nothing (`prism_engine::CuePlayer::set_crossfade`).
+    #[serde(default)]
+    pub crossfade_position: u16,
 }
 
 impl Sequence {
@@ -816,6 +837,7 @@ mod tests {
             speed: crate::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
         };
         let json = serde_json::to_value(&sequence).unwrap();
         assert_eq!(json["loop"], true);
@@ -1106,6 +1128,7 @@ mod tests {
             speed: crate::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
         };
         let states = sequence.tracking();
         assert_eq!(states.len(), 3);
@@ -1149,6 +1172,7 @@ mod tests {
             speed: crate::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
         };
         let numbers: Vec<&str> = sequence
             .ordered_cues()

@@ -386,11 +386,13 @@ describe("a document that is not one", () => {
    * **B18, as the strip reads it.** Two executors on one cue list read the same
    * level, because there is one number and both of them point at it; a strip
    * whose fader is a `Speed` reads the list's rate instead, and a crossfade
-   * reads nought because where it stands is a gesture rather than show state.
+   * reads where the last hand left it (B59).
    */
   it("reads the number the strip's own fader function names, off the cue list", () => {
     const show = {
-      sequences: { "1": { name: "Act 1", masterLevel: 20000, speed: 2048 } },
+      sequences: {
+        "1": { name: "Act 1", masterLevel: 20000, speed: 2048, crossfadePosition: 7000 },
+      },
       executors: {
         "0": { sequenceId: 1, faderFunction: "Master" },
         "1": { sequenceId: 1, faderFunction: "Master" },
@@ -404,10 +406,10 @@ describe("a document that is not one", () => {
     expect(strips[0]?.faderLevel).toBe(20000);
     expect(strips[1]?.faderLevel).toBe(20000);
     expect(strips[2]?.faderLevel).toBe(2048);
-    // **`null` and not nought, since S51** (B36). A crossfade fader has no
-    // number the desk may write: where it stands is the operator's hand, and a
-    // nought here is what put it back at the bottom after every movement.
-    expect(strips[3]?.faderLevel).toBeNull();
+    // **Where the last hand left it, since B59.** S51 read `null` here so that
+    // nothing wrote a nought over a hand (B36); the desk now holds the hand's
+    // own position, so every screen draws the same fader.
+    expect(strips[3]?.faderLevel).toBe(7000);
     expect(strips[5]?.faderLevel).toBeNull();
     expect(strips[4]?.faderLevel).toBeNull();
     // A slot with no cue list on it has no number to read at all.
@@ -415,26 +417,31 @@ describe("a document that is not one", () => {
   });
 
   /**
-   * **Both crossfade modes read as *the hand's*** — S51, B36.
+   * **Both crossfade modes read where the last hand left them** — B59.
    *
    * The two are one rule (`ExecutorFaderFunction::desk_may_move_it`) and the
-   * screen asks it the same way the desk does, so a mode added later has to
-   * decide which side of the line it is on rather than defaulting to *the desk
-   * may move it*.
+   * screen asks it the same way the desk does. A list written before the field
+   * existed has none, and reads the bottom — where the engine takes a fader it
+   * has heard nothing about.
    */
-  it("gives neither crossfade a number the desk could write back", () => {
+  it("gives both crossfades the position the desk holds for them", () => {
     const show = {
-      sequences: { "1": { name: "Act 1", masterLevel: 20000, speed: 2048 } },
+      sequences: {
+        "1": { name: "Act 1", masterLevel: 20000, speed: 2048, crossfadePosition: 41000 },
+        "2": { name: "Older", masterLevel: 20000 },
+      },
       executors: {
         "0": { sequenceId: 1, faderFunction: "XFade" },
         "1": { sequenceId: 1, faderFunction: "Fade" },
         "2": { sequenceId: 1, faderFunction: "Master" },
+        "3": { sequenceId: 2, faderFunction: "XFade" },
       },
     };
     const strips = pageStrips({ session: { executorPage: 0 } }, show);
-    expect(strips[0]?.faderLevel).toBeNull();
-    expect(strips[1]?.faderLevel).toBeNull();
+    expect(strips[0]?.faderLevel).toBe(41000);
+    expect(strips[1]?.faderLevel).toBe(41000);
     expect(strips[2]?.faderLevel).toBe(20000);
+    expect(strips[3]?.faderLevel).toBe(0);
   });
 
   it("falls back to the first bank when the session names one it does not know", () => {

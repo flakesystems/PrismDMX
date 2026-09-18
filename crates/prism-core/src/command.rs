@@ -833,8 +833,8 @@ impl Show {
     /// One command for all four functions, because a surface and a screen both
     /// move *the fader* and which of the four it is belongs to the show
     /// (`docs/MCU_MAPPING.md` §4.1's main-fader row, and `ARCHITECTURE_SPEC.md`
-    /// §6). `Master` and `Speed` are show state and travel as a patch; `XFade`
-    /// is a gesture in progress and carries none.
+    /// §6). `Master` and `Speed` are show state and travel as a patch; a
+    /// crossfade's position travels as one too since B59, as operating state.
     fn apply_executor_fader(&mut self, id: ExecutorId, level: u16) -> Result<Applied, ShowError> {
         let Some(executor) = self.executor(id) else {
             return Err(ShowError::UnknownExecutor(id));
@@ -874,16 +874,26 @@ impl Show {
             }
             // **Both crossfades, one arm** — S51, B36. Which of the two it is
             // is the fader's own setting and travels with the movement, because
-            // the tick holds no show and cannot look it up.
+            // the tick holds no show and cannot look it up. **And where the hand
+            // left it is said to every client** — B59 — so a second screen and
+            // the X-Touch's motor draw the same fader.
             ExecutorFaderFunction::Fade | ExecutorFaderFunction::XFade => {
                 let mode = function
                     .crossfade_mode()
                     .unwrap_or(prism_domain::CrossfadeMode::XFade);
-                Ok(Applied::effect(Effect::ExecutorCrossfade {
-                    executor: playback,
-                    mode,
-                    position: level,
-                }))
+                let ops = self.record_crossfade_position(playback.sequence(), level)?;
+                Ok(Applied {
+                    deltas: if ops.is_empty() {
+                        Vec::new()
+                    } else {
+                        vec![Delta::ShowPatch { ops }]
+                    },
+                    effects: vec![Effect::ExecutorCrossfade {
+                        executor: playback,
+                        mode,
+                        position: level,
+                    }],
+                })
             }
             // Answered above, before the cue list was asked for.
             ExecutorFaderFunction::Empty => Ok(Applied::default()),
@@ -1057,8 +1067,8 @@ mod tests {
     use prism_domain::{
         AttributeType, Command, Delta, ExecutorButtonFunction, ExecutorButtonRef, ExecutorChange,
         ExecutorEncoderFunction, ExecutorFaderFunction, ExecutorId, FixtureId, GoDirection,
-        JsonPatchOp, NoticeLevel, PlaybackId, PlaybackTarget, PresetId, SelectionMode, SequenceId,
-        StoreMode, UniverseId,
+        JsonPatchOp, JsonValue, NoticeLevel, PlaybackId, PlaybackTarget, PresetId, SelectionMode,
+        SequenceId, StoreMode, UniverseId,
     };
 
     fn show() -> Show {
@@ -1261,9 +1271,10 @@ mod tests {
             40_000
         );
 
-        // Make executor 2 a crossfade instead. It now writes nothing into the
-        // show at all — a crossfade is a gesture in progress — so the master
-        // executor 0 set is untouched, which is the other half of the entry.
+        // Make executor 2 a crossfade instead. It writes **its own** number —
+        // where the hand left the crossfade (B59) — and not the master, so the
+        // master executor 0 set is untouched, which is the other half of the
+        // entry.
         show.apply(&Command::ConfigureExecutor {
             executor_id: ExecutorId::new(2),
             change: ExecutorChange::Fader {
@@ -1289,6 +1300,60 @@ mod tests {
             show.sequence(SequenceId::new(1)).unwrap().master_level,
             40_000
         );
+        assert_eq!(
+            show.sequence(SequenceId::new(1))
+                .unwrap()
+                .crossfade_position,
+            65_535
+        );
+    }
+
+    /// **Punch-list B59.** A crossfade's position is a number the desk holds, so
+    /// every handle on the list draws the same fader — and it is operating
+    /// state, so it neither lights the Save lamp nor needs one.
+    #[test]
+    fn a_crossfade_move_is_said_to_every_client_and_leaves_the_show_saved() {
+        let mut show = show();
+        show.apply(&Command::ConfigureExecutor {
+            executor_id: ExecutorId::new(0),
+            change: ExecutorChange::Fader {
+                function: ExecutorFaderFunction::Fade,
+            },
+        })
+        .unwrap();
+        show.mark_saved();
+        let applied = show
+            .apply(&Command::SetExecutorMaster {
+                executor_id: ExecutorId::new(0),
+                level: 12_000,
+            })
+            .unwrap();
+        assert_eq!(
+            applied.deltas,
+            vec![Delta::ShowPatch {
+                ops: vec![JsonPatchOp::Replace {
+                    path: "/sequences/1/crossfadePosition".to_owned(),
+                    value: JsonValue::Int(12_000),
+                }],
+            }]
+        );
+        assert_eq!(
+            applied.effects,
+            vec![Effect::ExecutorCrossfade {
+                executor: PlaybackId::of_sequence(SequenceId::new(1)),
+                mode: prism_domain::CrossfadeMode::Fade,
+                position: 12_000,
+            }]
+        );
+        assert!(!show.is_dirty(), "a hand on a fader is not an unsaved edit");
+        // The same position again says nothing: nothing moved.
+        let again = show
+            .apply(&Command::SetExecutorMaster {
+                executor_id: ExecutorId::new(0),
+                level: 12_000,
+            })
+            .unwrap();
+        assert!(again.deltas.is_empty(), "{again:?}");
     }
 
     /// **B15**, and the three things `ExecutorChange` has to get right.

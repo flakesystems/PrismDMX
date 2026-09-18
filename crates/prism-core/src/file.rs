@@ -876,6 +876,7 @@ impl ShowFile {
                 looping: false,
                 is_active: false,
                 current_cue_index: None,
+                crossfade_position: 0,
             });
             let stored = match self.programmer.sequence(&self.show, &base, *mode) {
                 Ok(sequence) => sequence,
@@ -1566,7 +1567,18 @@ impl ShowFile {
                 }
                 Image::Sequence(id, sequence) => {
                     let ops = match sequence {
-                        Some(sequence) => self.show.store_sequence(sequence.clone())?,
+                        Some(sequence) => {
+                            // **Where a hand left the crossfade is not taken
+                            // back** — B59. It is operating state, like a running
+                            // playback: an Oops that moved a fader under the
+                            // operator's hand would be doing to the motor what
+                            // B36 was filed about.
+                            let mut sequence = sequence.clone();
+                            if let Some(live) = self.show.sequence(*id) {
+                                sequence.crossfade_position = live.crossfade_position;
+                            }
+                            self.show.store_sequence(sequence)?
+                        }
                         None => self.show.remove_sequence(*id)?,
                     };
                     applied.deltas.push(Delta::ShowPatch { ops });
@@ -1790,6 +1802,58 @@ mod tests {
             file.show.fixture_type("generic.rgb.par"),
             file.library.profile("generic.rgb.par")
         );
+    }
+
+    /// **B59.** A crossfade's position is where a hand is, and an Oops takes
+    /// back an edit — so taking back a cue list's name must not take the fader
+    /// back to where it stood when the name was typed, on the screen or on the
+    /// motor.
+    #[test]
+    fn an_oops_leaves_a_crossfade_where_the_hand_is() {
+        let mut file = file();
+        file.show
+            .store_sequence(crate::testkit::sequence(1, Vec::new()))
+            .unwrap();
+        file.show
+            .store_executor(crate::testkit::executor(0, Some(1)))
+            .unwrap();
+        file.apply(&Command::ConfigureExecutor {
+            executor_id: prism_domain::ExecutorId::new(0),
+            change: prism_domain::ExecutorChange::Fader {
+                function: prism_domain::ExecutorFaderFunction::XFade,
+            },
+        })
+        .unwrap();
+        let fader = |level| Command::SetExecutorMaster {
+            executor_id: prism_domain::ExecutorId::new(0),
+            level,
+        };
+        let position = |file: &ShowFile| {
+            file.show
+                .sequence(prism_domain::SequenceId::new(1))
+                .unwrap()
+                .crossfade_position
+        };
+        file.apply(&fader(30_000)).unwrap();
+        file.apply(&Command::Label {
+            target: prism_domain::ObjectRef::Sequence {
+                sequence_id: prism_domain::SequenceId::new(1),
+            },
+            name: "Act 1".to_owned(),
+        })
+        .unwrap();
+        file.apply(&fader(50_000)).unwrap();
+
+        let applied = file.apply(&Command::Oops).unwrap();
+        let sequence = file
+            .show
+            .sequence(prism_domain::SequenceId::new(1))
+            .unwrap();
+        assert_ne!(sequence.name, "Act 1", "the name was taken back");
+        assert_eq!(position(&file), 50_000, "and the fader was not");
+        // Nor does the patch the Oops sends say otherwise to a client.
+        let said = format!("{:?}", applied.deltas);
+        assert!(!said.contains("30000"), "{said}");
     }
 
     fn file() -> ShowFile {

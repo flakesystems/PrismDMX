@@ -242,6 +242,7 @@ fn desk_show() -> ShowFile {
             speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
         })
         .expect("a sequence with one cue");
     }
@@ -337,10 +338,9 @@ struct RecordedStrip {
     ///
     /// It was the executor's master until S45; a playback is the cue list's now,
     /// so `Master` reads the list's level and `Speed` reads its rate. A
-    /// crossfade or an empty fader reads **`null`** since S51 (B36): a number
-    /// here means *draw the fader at this position*, and a nought written back
-    /// after every movement is the desk taking an operator's hand off the
-    /// crossfade. `ExecutorFaderFunction::desk_may_move_it` is the rule, and
+    /// crossfade reads where the last hand left it since B59, and an empty
+    /// fader reads **`null`**: a number here means *draw the fader at this
+    /// position*. `ExecutorFaderFunction::desk_may_move_it` is the rule, and
     /// `ui/src/desk/session.ts` is the other side of this recording.
     fader_level: Option<u16>,
     /// Whether the cue list on it is running.
@@ -1253,8 +1253,9 @@ fn strips_of(show: &JsonValue, session: &JsonValue) -> Vec<RecordedStrip> {
                     let member = match fader_function.as_str() {
                         "Master" => "masterLevel",
                         "Speed" => "speed",
-                        // A crossfade in progress is a gesture rather than show
-                        // state, and an empty fader has no number at all — B36.
+                        // Where the last hand left a crossfade — B59.
+                        "XFade" | "Fade" => "crossfadePosition",
+                        // An empty fader has no number at all.
                         _ => return None,
                     };
                     Some(u16::try_from(int_at(value, member)).unwrap_or(0))

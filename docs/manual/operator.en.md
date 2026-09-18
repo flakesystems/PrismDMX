@@ -507,8 +507,11 @@ In both cases you run a cue list by **moving one fader up and down without
 lifting your hand**. Stopping half way holds the mixture half way — which is
 exactly what a crossfade on a fader is for.
 
-**The desk never moves a crossfade fader itself.** There is no snap-back, on no
-screen and on no motor fader.
+**The desk never moves a crossfade fader anywhere a hand did not put it.** There
+is no snap-back, on no screen and on no motor fader. And every handle on one
+crossfade shows **the same position**: push it in a browser and the X-Touch's
+motor fader follows, and the other way round. While you are touching the motor
+fader, the desk writes nothing to it.
 
 ---
 

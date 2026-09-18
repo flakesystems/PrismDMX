@@ -479,6 +479,7 @@ mod tests {
                 speed: prism_domain::SPEED_UNITY,
                 is_active: false,
                 current_cue_index: None,
+                crossfade_position: 0,
             }),
         );
         assert_eq!(image.scope(), UndoScope::Sequence(SequenceId::new(3)));
@@ -511,6 +512,7 @@ mod tests {
                     speed: prism_domain::SPEED_UNITY,
                     is_active: false,
                     current_cue_index: None,
+                    crossfade_position: 0,
                 }),
             )],
         );

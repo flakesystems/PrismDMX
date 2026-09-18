@@ -222,19 +222,18 @@ function Strip({
             </div>
             <span className="strip-percent" data-testid={`percent-${String(strip.slot)}`}>
                 {/*
-                  A crossfade fader shows no figure: where it stands is a
-                  gesture in progress rather than show state, so there is
-                  nothing for the desk to have told this strip (S45) — and
-                  since S51 (B36) there are two of them, which the two letters
-                  tell apart. The *bar* still draws where the hand left it; it
-                  is the **number** that would be a claim about the show.
+                  A crossfade fader is labelled with its **mode** rather than a
+                  figure — since S51 (B36) there are two of them, which the two
+                  letters tell apart. The *bar* draws where the last hand left
+                  it, the same on every screen since B59; a percentage would
+                  read as a level the cue list is played at, which it is not.
                 */}
                 {strip.assigned && strip.faderFunction !== null && strip.faderFunction !== "Empty"
-                    ? strip.faderLevel === null
-                        ? strip.faderFunction === "Fade"
-                            ? "FD"
-                            : "XF"
-                        : `${String(percent)}%`
+                    ? strip.faderFunction === "Fade"
+                        ? "FD"
+                        : strip.faderFunction === "XFade"
+                          ? "XF"
+                          : `${String(percent)}%`
                     : "·"}
             </span>
             <div className="strip-buttons">
@@ -325,21 +324,16 @@ function FunctionButton({
  * the local value is **dropped** on pointer-up, so a fader pulled against a
  * daemon that refuses it springs back. See `./valuedrag.ts`.
  *
- * # Except for a crossfade, and that exception is punch-list B36
+ * # A crossfade too, since B59
  *
- * `strip.faderLevel` is `null` for a crossfade fader: the daemon has no number
- * for it, because **where a crossfade fader stands is the operator's hand**
- * rather than anything the show holds. So dropping the local value on
- * pointer-up would put such a fader back at nought after every movement, which
- * is exactly the fault the entry reports — *danach fährt er zurück auf 0 für
- * den nächsten Fade*.
- *
- * So a fader with no number of its own **keeps** where it was put. That is
- * client-local state by `ARCHITECTURE_SPEC.md` §4.2's own rule — it is
- * legitimately different per screen, because it is a hand — and it is the only
- * position in this bar that is. Two screens showing the same crossfade
- * executor therefore show their own fader in their own place and both drive the
- * same playback, which is the same answer §4.2 gives a scroll position.
+ * S51 (B36) kept a crossfade's position on this screen, because the daemon had
+ * no number for it and dropping the local value put the fader back at nought
+ * after every movement. The beta found the cost: two clients on one crossfade
+ * each drew their own fader. The daemon holds the number now —
+ * `Sequence::crossfadePosition`, where the last hand on any client left it —
+ * so a crossfade is dropped on pointer-up like every other fader, and what it
+ * shows afterwards is the position this screen just sent, or the one another
+ * screen or the X-Touch sent since.
  */
 function useFader(
     strip: ExecutorStrip,
@@ -347,8 +341,6 @@ function useFader(
 ): { readonly level: number; readonly begin: (event: ReactPointerEvent) => void } {
     const [drag, setDrag] = useState<ValueDrag | null>(null);
     const [shown, setShown] = useState<number | null>(null);
-    /** Whether this fader's position is the hand's rather than the show's. */
-    const ours = strip.faderLevel === null;
 
     useEffect(() => {
         if (drag === null) {
@@ -359,14 +351,11 @@ function useFader(
         };
         const finish = (): void => {
             drag.end(Date.now());
-            // Dropped, not reconciled: what the fader shows from this moment is what
-            // the session says the master is — **unless there is nothing for it
-            // to say**, which is a crossfade (B36). Then the hand's position is
-            // the only one there is, and it stays.
+            // Dropped, not reconciled: what the fader shows from this moment is
+            // what the daemon says — a master, a rate, or where the last hand left
+            // a crossfade (B59).
             setDrag(null);
-            if (!ours) {
-                setShown(null);
-            }
+            setShown(null);
         };
         globalThis.addEventListener("pointermove", move);
         globalThis.addEventListener("pointerup", finish);
@@ -376,7 +365,7 @@ function useFader(
             globalThis.removeEventListener("pointerup", finish);
             globalThis.removeEventListener("pointercancel", finish);
         };
-    }, [drag, ours]);
+    }, [drag]);
 
     const begin = (event: ReactPointerEvent): void => {
         // A slot with no cue list on it has no number to move, and
@@ -395,9 +384,7 @@ function useFader(
         event.preventDefault();
         const box = event.currentTarget.getBoundingClientRect();
         const started = new ValueDrag({
-            // A crossfade starts from where this screen last left it, because
-            // there is nowhere else to start from.
-            origin: shown ?? strip.faderLevel ?? 0,
+            origin: strip.faderLevel ?? 0,
             from: event.clientY,
             travel: box.height,
             inverted: true,

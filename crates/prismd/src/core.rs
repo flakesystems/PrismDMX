@@ -1940,7 +1940,15 @@ mod tests {
 
         // One command back. The red value goes and the dimmer stays, which is
         // the case that produces a per-slot clear rather than a whole-programmer
-        // one — and there is no way to reach it except through the journal.
+        // one — and there is no way to reach it except through the journal. The
+        // session this desk starts with carries a line, and since B58 an Oops
+        // on a standing line takes a word, so the line is emptied first.
+        core.apply(&Command::CommandLineInput {
+            text: String::new(),
+            run: false,
+            mode: None,
+        })
+        .unwrap();
         core.apply(&Command::Oops).unwrap();
         until("the red value to be taken back", || {
             channel(&frames, 10) == Some(0) && channel(&frames, 1) == Some(0)
@@ -2916,8 +2924,10 @@ mod tests {
             driver.stop();
         }
 
-        // `XFade`: no show state at all — a crossfade in progress is a gesture,
-        // and a show file that remembered one would reload holding half a cue.
+        // `XFade`: the stroke is a gesture and stays in the engine — a show
+        // file that remembered one would reload holding half a cue. Where the
+        // hand left the fader is the one field it writes (B59), without
+        // lighting the Save lamp.
         {
             let dir = tempfile::tempdir().unwrap();
             let (mut core, _frames, driver) = desk_for_buttons(
@@ -2932,8 +2942,26 @@ mod tests {
                     level: 30_000,
                 })
                 .unwrap();
-            assert!(deltas.is_empty(), "{deltas:?}");
-            assert_eq!(core.file.show.sequence(SequenceId::new(7)), Some(&before));
+            assert_eq!(
+                deltas,
+                vec![Delta::ShowPatch {
+                    ops: vec![prism_domain::JsonPatchOp::Replace {
+                        path: "/sequences/7/crossfadePosition".to_owned(),
+                        value: prism_domain::JsonValue::Int(30_000),
+                    }],
+                }]
+            );
+            let after = core.file.show.sequence(SequenceId::new(7)).unwrap();
+            assert_eq!(after.crossfade_position, 30_000);
+            assert_eq!(
+                &prism_domain::Sequence {
+                    crossfade_position: before.crossfade_position,
+                    ..after.clone()
+                },
+                &before,
+                "and nothing else of the list moved"
+            );
+            assert!(!core.file.is_dirty());
             driver.stop();
         }
 

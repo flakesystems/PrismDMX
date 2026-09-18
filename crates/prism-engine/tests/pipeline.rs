@@ -122,6 +122,7 @@ fn sequence(fade: f64) -> Sequence {
         speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
+        crossfade_position: 0,
     }
 }
 

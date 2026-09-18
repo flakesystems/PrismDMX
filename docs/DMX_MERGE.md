@@ -231,8 +231,8 @@ through the cue list standing on the slot:
 |---|---|---|
 | `Master` | the list's master level | `Sequence::masterLevel`, show state |
 | `Speed` | the list's rate | `Sequence::speed`, show state |
-| `XFade` | the transition's clock (§4.2) | nowhere — a gesture in progress |
-| `Fade` | the same clock, the other mode (§4.2) | nowhere — a gesture in progress |
+| `XFade` | the transition's clock (§4.2) | the engine; where the hand left it is `Sequence::crossfadePosition`, operating state (B59) |
+| `Fade` | the same clock, the other mode (§4.2) | the same |
 | `Empty` | nothing | — |
 
 An executor with **no** cue list on it is refused rather than silently ignored:
@@ -258,7 +258,7 @@ So `XFade` advances the list by one cue per half of the travel and the stage nev
 - **A finished stroke holds at its end**, and the *next* movement — which can only go back the other way — arms the next one. There is no Go in between and nothing to re-base, which is what the old single mode needed and what made the desk drive the fader back to nought.
 - **A stroke stopped half way is a state.** Every entry sits at `interpolate(from, to, progress)`, the clock is not consulted, and the next tick computes the same numbers — so the frames are byte-identical tick after tick, and a walk replayed twice produces the same sequence twice. It is asserted that way (`crates/prismd/tests/crossfade.rs`) rather than on a state field.
 
-A **Go** takes the transition back on to the clock and abandons any stroke, leaving the fader exactly where the operator's hand left it. Nothing anywhere writes a crossfade fader's position — `ARCHITECTURE_SPEC.md` §4.2 has why, and `ExecutorFaderFunction::desk_may_move_it` is where the rule lives.
+A **Go** takes the transition back on to the clock and abandons any stroke, leaving the fader exactly where the operator's hand left it. Nothing anywhere writes a crossfade fader to a position **no hand put it at** — and since B59 every handle on the list is written the position the last hand left it at, so a browser and an X-Touch draw one fader. `ARCHITECTURE_SPEC.md` §4.2 has why, and `ExecutorFaderFunction::desk_may_move_it` is where the rule lives.
 
 ---
 

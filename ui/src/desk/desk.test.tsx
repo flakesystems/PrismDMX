@@ -27,6 +27,7 @@ import { nullSink, setLogSink } from "../log/logger";
 import { DeskProvider } from "../store/context";
 import { DeskStore, deskEvents } from "../store/desk";
 import { ranLines, settleReadings } from "../testing/console";
+import { numberAt } from "../mirror/select";
 import { FakeNetwork, ManualTimer, serverMessage } from "../testing/fake-daemon";
 import { TelemetryProvider } from "../telemetry/panel";
 import { ENCODERS_PER_PAGE } from "./programmer";
@@ -451,6 +452,53 @@ it("sends which button was pressed, and never what it means", () => {
         expect(acted()).toEqual([{ t: "SetExecutorMaster", executorId: 0, level: 65435 }]);
         // And with no delta, the fader is back at the daemon's level.
         expect(screen.getByTestId("fader-0").dataset["level"]).toBe("65535");
+    });
+
+    /**
+     * **Punch-list B59 (GitHub #27).** A crossfade fader is one fader on every
+     * client: this screen sends where the hand put it and then draws what the
+     * daemon holds — which is where it was put, or where another client or the
+     * X-Touch has put it since. S51 kept it here instead, and two clients on one
+     * crossfade each drew their own.
+     */
+    it("draws a crossfade where the last hand on any client left it", () => {
+        const { acted, store, network } = desk();
+        const fader = screen.getByTestId("fader-2");
+        expect(fader.dataset["function"]).toBe("XFade");
+        const sequenceId = numberAt(
+            store.getState().documents?.show ?? null,
+            "/executors/2/sequenceId",
+        );
+        expect(sequenceId).not.toBeNull();
+
+        fireEvent.pointerDown(fader, { button: 0, clientY: 100, pointerId: 1 });
+        fireEvent.pointerMove(window, { clientY: 50, pointerId: 1 });
+        fireEvent.pointerUp(window, { pointerId: 1 });
+        expect(acted().at(-1)).toEqual({ t: "SetExecutorMaster", executorId: 2, level: 50 });
+        // Not kept: the daemon has not answered yet, so this is its number.
+        expect(screen.getByTestId("fader-2").dataset["level"]).toBe("0");
+
+        // Another client — or the X-Touch — puts it somewhere else.
+        act(() => {
+            network.last.deliver(
+                serverMessage({
+                    t: "Delta",
+                    delta: {
+                        t: "ShowPatch",
+                        ops: [
+                            {
+                                op: "replace",
+                                path: `/sequences/${String(sequenceId)}/crossfadePosition`,
+                                value: 30000,
+                            },
+                        ],
+                    },
+                }),
+            );
+        });
+        expect(screen.getByTestId("fader-2").dataset["level"]).toBe("30000");
+        // The strip still says which crossfade it is rather than a percentage.
+        expect(screen.getByTestId("percent-2").textContent).toBe("XF");
     });
 
     it("ignores a right-click on a fader", () => {

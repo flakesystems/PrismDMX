@@ -295,8 +295,13 @@ function faderReading(
       return numberAt(show, `${sequence}/masterLevel`) ?? 0;
     case "Speed":
       return numberAt(show, `${sequence}/speed`) ?? 0;
-    // **B36.** A crossfade has no number the desk may write, and neither has an
-    // unassigned fader.
+    // **B59.** Where the last hand — on any client — left the crossfade, so
+    // every screen and the X-Touch's motor draw one fader. B36's rule is kept
+    // by what this number is: a position a hand put there, never a reading.
+    case "XFade":
+    case "Fade":
+      return numberAt(show, `${sequence}/crossfadePosition`) ?? 0;
+    // An unassigned fader has no number to draw.
     default:
       return null;
   }

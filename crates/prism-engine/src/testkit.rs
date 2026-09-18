@@ -126,6 +126,7 @@ pub(crate) fn sequence(cues: Vec<Cue>, looping: bool) -> Sequence {
         speed: prism_domain::SPEED_UNITY,
         is_active: false,
         current_cue_index: None,
+        crossfade_position: 0,
     }
 }
 

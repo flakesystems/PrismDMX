@@ -522,8 +522,11 @@ runter bewegen, ohne die Hand zu heben**. Auf halbem Weg stehen zu bleiben, häl
 die Mischung auf halbem Weg — genau dafür hat man einen Crossfade auf einem
 Fader.
 
-**Das Pult bewegt einen Crossfade-Fader nie selbst.** Es gibt keinen
-Rücksprung, auf keinem Bildschirm und an keinem Motorfader.
+**Das Pult bewegt einen Crossfade-Fader nie woandershin, als eine Hand ihn
+gestellt hat.** Es gibt keinen Rücksprung, auf keinem Bildschirm und an keinem
+Motorfader. Und alle Griffe auf denselben Crossfade zeigen **dieselbe Stellung**:
+schieben Sie ihn im Browser, fährt der Motorfader am X-Touch mit, und umgekehrt.
+Solange Sie den Motorfader anfassen, schreibt das Pult ihm nichts.
 
 ---
 

@@ -413,7 +413,7 @@ fn too_much(keyword: &str, words: &[Token]) -> ConsoleReading {
 ///
 /// What the Oops key does to a line that is standing (`ShowFile::apply`): a
 /// backspace for a desk with no keyboard, one word at a time. A **word** is what
-/// [`chunks`] reads as one, so a quoted name goes whole — `Label Group 1 "Front
+/// the tokeniser reads as one chunk, so a quoted name goes whole — `Label Group 1 "Front
 /// of house"` loses the name, not `house"` — and `1thru4` goes as it was typed.
 ///
 /// The separator before the word is kept, which is how every key writes a line

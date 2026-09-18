@@ -1170,6 +1170,7 @@ impl Show {
             speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
         })
     }
 
@@ -1510,6 +1511,35 @@ impl Show {
         Ok(vec![JsonPatchOp::Replace {
             path: format!("{}/masterLevel", pointer(SEQUENCES, &id.to_string())),
             value: JsonValue::Int(i64::from(level)),
+        }])
+    }
+
+    /// Records where a cue list's crossfade fader was put — punch-list **B59**.
+    ///
+    /// The number every handle on the list draws, and the one a motor fader is
+    /// driven to (`Sequence::crossfade_position`). **Not marked dirty**, for
+    /// [`Self::record_playback_state`]'s reason: a hand on a fader is operating
+    /// the desk, not editing the show. A position the list already holds
+    /// produces no operation at all, so a fader held still says nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownSequence`] if there is no such cue list.
+    pub fn record_crossfade_position(
+        &mut self,
+        id: SequenceId,
+        position: u16,
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        let Some(sequence) = self.sequences.get_mut(&id) else {
+            return Err(ShowError::UnknownSequence(id));
+        };
+        if sequence.crossfade_position == position {
+            return Ok(Vec::new());
+        }
+        sequence.crossfade_position = position;
+        Ok(vec![JsonPatchOp::Replace {
+            path: format!("{}/crossfadePosition", pointer(SEQUENCES, &id.to_string())),
+            value: JsonValue::Int(i64::from(position)),
         }])
     }
 

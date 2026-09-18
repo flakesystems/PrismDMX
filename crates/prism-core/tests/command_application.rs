@@ -675,9 +675,10 @@ fn what_a_fader_does_is_the_executors_own_setting() {
         "the master moved"
     );
 
-    // A crossfade in progress is a gesture rather than show state — a show file
-    // that remembered one would reload holding half a cue — so it produces an
-    // effect and no patch at all.
+    // A crossfade's **stroke** is a gesture rather than show state — a show
+    // file that remembered one would reload holding half a cue — so the engine
+    // keeps it. Where the hand left the fader is said to every client since
+    // B59, as one patch on that one field and nothing else.
     let mut crossfade = desk_with(Vec::new(), Fader::XFade);
     let before = snapshot(&crossfade);
     let applied = crossfade
@@ -694,8 +695,26 @@ fn what_a_fader_does_is_the_executors_own_setting() {
             position: 30_000
         }]
     );
-    assert!(applied.deltas.is_empty(), "{applied:?}");
-    assert_eq!(snapshot(&crossfade), before);
+    assert_eq!(
+        applied.deltas,
+        vec![Delta::ShowPatch {
+            ops: vec![prism_domain::JsonPatchOp::Replace {
+                path: "/sequences/1/crossfadePosition".to_owned(),
+                value: prism_domain::JsonValue::Int(30_000),
+            }],
+        }]
+    );
+    assert_eq!(
+        crossfade
+            .sequence(SequenceId::new(1))
+            .unwrap()
+            .crossfade_position,
+        30_000
+    );
+    crossfade
+        .record_crossfade_position(SequenceId::new(1), 0)
+        .unwrap();
+    assert_eq!(snapshot(&crossfade), before, "and nothing else moved");
 
     // A fader with nothing on it: accepted, and it does nothing. Refusing would
     // put a message on a screen for a fader the operator can see is dead.
