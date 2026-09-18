@@ -231,6 +231,14 @@ async fn choosing_a_port_is_broadcast_and_is_not_undoable() {
         }
         .is_undoable()
     );
+    // The show this daemon opens carries a line, and since B58 an Oops on a
+    // standing line takes a word rather than asking the journal — so the line
+    // is emptied first, and the Oops below is the journal's.
+    daemon.desk().command(Command::CommandLineInput {
+        text: String::new(),
+        run: false,
+        mode: None,
+    });
     let CommandOutcome::Refused { message } = daemon.desk().command(Command::Oops) else {
         panic!("there is nothing to undo, so an Oops has to be refused");
     };

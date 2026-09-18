@@ -414,6 +414,15 @@ fn a_session_command_is_never_taken_back() {
     for command in common::session_commands() {
         let _ = file.apply(&command);
     }
+    // **With the line emptied**, because since B58 an Oops on a standing line
+    // takes its last word — which is a session edit on purpose, and not the
+    // journal reaching into the session, which is what this test is about.
+    file.apply(&Command::CommandLineInput {
+        text: String::new(),
+        run: false,
+        mode: None,
+    })
+    .unwrap();
     let session_after = rmp_serde::to_vec_named(&file.session).unwrap();
     assert_eq!(file.journal.len(), 1, "a session command was journaled");
 

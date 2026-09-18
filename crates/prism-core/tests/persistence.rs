@@ -171,6 +171,7 @@ fn saveable_file() -> ShowFile {
             speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
             cues: vec![
                 Cue {
                     number: "1".to_owned(),
@@ -325,6 +326,7 @@ fn second_file() -> ShowFile {
             speed: prism_domain::SPEED_UNITY,
             is_active: false,
             current_cue_index: None,
+            crossfade_position: 0,
             cues: (1..=40)
                 .map(|id| Cue {
                     number: id.to_string(),
@@ -489,6 +491,14 @@ fn a_reopened_show_is_clean_and_has_nothing_to_undo() {
         !file.is_dirty(),
         "a file that has just been read is not an unsaved change"
     );
+    // The reopened session may carry a line, and since B58 an Oops on a
+    // standing line takes a word rather than asking the journal.
+    file.apply(&Command::CommandLineInput {
+        text: String::new(),
+        run: false,
+        mode: None,
+    })
+    .unwrap();
     assert!(file.apply(&Command::Oops).is_err());
 }
 
@@ -580,6 +590,13 @@ fn an_undo_back_to_the_saved_state_still_leaves_the_lamp_lit() {
     store.save(&mut file).unwrap();
 
     file.apply(&common::patch_command(9, 3, 1)).unwrap();
+    // An empty line, so the Oops is an undo and not a backspace (B58).
+    file.apply(&Command::CommandLineInput {
+        text: String::new(),
+        run: false,
+        mode: None,
+    })
+    .unwrap();
     file.apply(&Command::Oops).unwrap();
     assert!(file.is_dirty());
     assert!(file.show.fixture(FixtureId::new(9)).is_none());
