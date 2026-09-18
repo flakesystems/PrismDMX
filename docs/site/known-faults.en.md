@@ -8,7 +8,9 @@ fixed is in the [changelog](/en/changelog/), and the full register — every ent
 ever filed, with what was done about it and which test now holds it — lives in
 the repository, because it is a working document rather than a public one.
 
-At the time of writing there are **eleven** open faults out of sixty-one filed.
+At the time of writing **eleven** faults are open in 0.9.2 out of sixty-one
+filed — **nine** of them are already fixed for the next release and marked so
+here.
 
 ## B52 — the desk does not follow a switching channel while the show runs
 
@@ -39,6 +41,8 @@ about the model rather than an afternoon's work, and it is being treated as one.
 
 ## B53 — required input fields do not allow being fully cleared during editing
 
+**Fixed for the next release.** A number field can be emptied while typing; it is checked when applied.
+
 **Where:** UI, required input fields.
 **Severity:** annoying.
 
@@ -51,6 +55,8 @@ and try to clear the whole value — the field rejects the empty state.
 
 ## B54 — the `fixtures/` directory is not created on installation
 
+**Fixed for the next release.** The desk makes `fixtures/` on its first start, with a `README.txt` inside.
+
 **Where:** installation, daemon data directory.
 **Severity:** annoying.
 
@@ -62,6 +68,8 @@ with no indication that it is missing.
 `fixtures/` is absent.
 
 ## B55 — the Controls menu crashes when a new key is bound
+
+**Fixed for the next release.** Binding a key no longer disconnects the client, whatever the action.
 
 **Where:** Settings, Controls menu.
 **Severity:** blocker.
@@ -77,6 +85,8 @@ the daemon.
 
 ## B56 — switching the view clears the command line
 
+**Fixed for the next release.** Changing view leaves a half-typed line where it is.
+
 **Where:** canvas / views, command line.
 **Severity:** annoying.
 
@@ -87,6 +97,8 @@ the command line, because view changes are dispatched as commands internally.
 view — the line is empty.
 
 ## B57 — window focus prevents selection on the first click
+
+**Fixed for the next release.** One click selects, also in a window that was not focused.
 
 **Where:** canvas, all windows.
 **Severity:** annoying.
@@ -100,6 +112,8 @@ Fixture Sheet — the first click focuses only, the second selects.
 
 ## B58 — oops does not delete command line words
 
+**Fixed for the next release.** Oops takes the line's last word first, on the X-Touch as well.
+
 **Where:** command line, Oops key.
 **Severity:** annoying.
 
@@ -112,6 +126,8 @@ input stays, but an action is undone.
 
 ## B59 — crossfade fader position is not synchronised between clients
 
+**Fixed for the next release.** Every handle on a crossfade shows the same position, the motor fader included.
+
 **Where:** executor strip, crossfade.
 **Severity:** annoying.
 
@@ -123,6 +139,8 @@ snaps back to the web client's position when the MIDI fader is released.
 fader while a web client is connected.
 
 ## B60 — patch window: several bugs and missing features
+
+**Being rebuilt as a session of its own (S57)**, because the eight points depend on each other. Until then the number fields can at least be emptied and retyped.
 
 **Where:** patch window, fixture library.
 **Severity:** annoying.
@@ -138,6 +156,8 @@ not possible to patch several fixtures of the same type at once.
 
 ## B61 — command feedback shifts the layout
 
+**Fixed for the next release.** The command line's feedback sits in one row of fixed height.
+
 **Where:** command line, command feedback.
 **Severity:** annoying.
 
@@ -147,6 +167,8 @@ appear that shifts parts of the UI.
 **What you will see.** Type something in the command line and watch the UI jump.
 
 ## B62 — store bar in the cue viewer
+
+**Fixed for the next release.** The store bar is gone; the Update key blinks in the *CommandKeys* window.
 
 **Where:** cue viewer.
 **Severity:** cosmetic.

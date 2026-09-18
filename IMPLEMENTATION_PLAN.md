@@ -1321,6 +1321,52 @@ Asked for on 2026-09-07, with three things stated as requirements rather than le
 - `the_raw_channel_is_the_exception_and_not_the_rule`: the floor did not swallow the model — 619 raw of 38 233 attributes, every one named
 - No migration: `Raw` is an appended row, and a show embedded before S54 reads back exactly as it was written
 
+## S56 · `prism-core` + `prism-domain` + `prismd` + `ui` — what the open beta sent back
+**Size:** L · **Depends on:** S51, S41, S42
+
+**Goal:** close the entries the first two weeks of the **open** beta filed — ten GitHub issues, #21 and #23–#30, triaged into `docs/ISSUES.md` as B53–B62. Chosen over Phase 12 on 2026-09-16 because §8's own rule said so: *if the reports have arrived, they choose* — and one of them was a **blocker**. Like S51, none of them is a new subsystem, which is what makes most of them one session; the one that is a subsystem is promoted rather than done badly.
+
+**Deliverables**
+
+- **B55 (blocker)** — binding a key in the Controls panel no longer disconnects the client
+- **B54** — `fixtures/` exists after the first start
+- **B53** — a number field can be emptied while it is typed into; it is checked at Apply
+- **B56** — changing view leaves a line being typed where it is
+- **B57** — one click selects in a window that was not focused
+- **B58** — Oops takes the line's last word before it takes an edit back, on the screen and on the X-Touch
+- **B59** — one crossfade position on every client and on the motor
+- **B61** — the command line's feedback never moves the layout
+- **B62** — no store bar in the Cue Viewer; cues are stored from the command line
+- **B60** promoted to **S57**, and **B52** left open with the reason it already carries
+
+**Exit criteria**
+- Every entry of B53–B62 reads ✅ or ➡️ with a session number, and **none is closed by deleting it**
+- Every fix is held by a test that was **red before it** — and where the fault only shows in a real browser or at a real daemon, the test is there: a layout measured in Chromium, a click held as long as a hand holds one, a motor fader released on a mock X-Touch
+- The protocol decoders are held to **every** variant of the vocabulary they read, not to the ones somebody remembered (B55's shape)
+- The tick makes no allocator call on any path this session adds, and every gate is green
+
+## S57 · `ui` + `prism-core` — the patch window, rebuilt around the library
+**Size:** L · **Depends on:** S56, S44, S27
+
+**Goal:** punch-list **B60** (GitHub #28), the owner's eight points about patching, as one piece of work — they are one window and they touch each other: which fixture is picked decides the footprint, the footprint decides the next free address, and the next free address is what patching several at once needs.
+
+**Deliverables**
+- **One entry per fixture, not per mode.** The library lists a fixture once and the **mode** is chosen beside it; the profile key a show embeds stays per mode, so nothing about a stored show changes
+- **The whole row picks**, not only the first column
+- **The library loads as it is scrolled**, so the whole corpus is reachable without typing a search first — and without drawing 2 871 rows at once
+- **Add fixture opens the library** straight away, and the fixture's settings are part of it rather than a second form
+- **The overlap message names the next free address** that fits the whole footprint — the daemon's answer (`Query::PatchPreview` or a sibling), not arithmetic in the browser
+- **A new fixture starts at the next free address** that fits its footprint, in the universe last patched into
+- **A fixture with no name is named after its type**
+- **Several of one fixture at once**: a count, numbered and addressed one after the other so each fits, sent as one gesture that one Oops takes back
+
+**Exit criteria**
+- Every one of the eight is driven in the end-to-end suite against a real daemon with the installed library
+- *Next free address* is asserted in Rust over gaps, universe ends and footprints that do not fit, and the browser only draws it
+- Patching ten of one fixture is **one** undo step and ten fixtures that do not overlap
+- A show patched before S57 opens unchanged
+- No scrolling outside the canvas at 1280 × 720 with the library open
+
 # Phase 12 — Extended features, once the doors are open
 
 *Everything in Phase 9 that has not run: **S30** 3D viewer, **S31** Web Remote, **S32** PSN / OSC, **S47** timecode, **S50** macros. They are not renumbered — the numbers are identity — and they are not reordered among themselves. What moved is the schedule: the open beta comes first, and what an open beta asks for should choose between these five better than this document can.*
@@ -1365,6 +1411,8 @@ flowchart LR
     S29 & S44 & S45 --> S51
     S37 & S40 & S51 --> S41 --> S42 --> S55
     S51 --> S52 --> S53 --> S54
+    S51 & S41 & S42 --> S56 --> S57
+    S44 & S27 --> S57
 ```
 
 **Critical path to a usable console:** S0 → S1 → S2 → S3 → S4 → S7 → S11 → S12 → S16 → S17 → S19 → S21 → S22 → S23 → S25 → S26. *Reached at S26.*
@@ -1406,4 +1454,6 @@ is, is the order the work was planned to make sense in.
 | 21 | **S53** core/domain/`ui` — every capability the format distinguishes | **Done 2026-09-06**, straight out of S52 and out of a question the owner asked about it: could the parameter names not be taken **dynamically out of the fixture file**? Reading the Open Fixture Library's own `capability-types.md` and `fixture-format.md` properly gave a better answer than the question suggested — the format is a **closed set of 43 capability types** with **discriminators** beside them, and S51's table read the type and threw the discriminators away. That is lossy in a way no counter shows: `channels_unmapped` was nought while **115 wheel channels** sat on the wrong encoder bank. So the *key* stays closed (forty attributes) and the *label* comes out of the file. See `PROGRESS.md` §2.49 and `docs/ISSUES.md` B50 |
 | 22 | **S54** core/domain — no slot of a patched fixture is out of reach | **Done 2026-09-06**, out of one sentence the owner wrote after reading S53: under the current principle, some channels of some fixtures cannot be driven at all. Measured, it was **707 DMX slots in 337 of the 2 871 profiles** — and **no counter could see it**, because every counter the reader had asks what it failed to understand and none asked whether every slot has a knob. The answer is a floor rather than four fixes: `AttributeType::Raw`, the 41st, so that a capability type a later format grows arrives as a named knob instead of as silence. **B49 closed** in the same pass, with its own question corrected — a switching alias never moves the footprint. See `PROGRESS.md` §2.50 and `docs/ISSUES.md` B51 |
 | 23 | **S55** `site` + `deploy` — prismdmx.de and its container | Asked for on 2026-09-07, and it is S42's other half: that session's first deliverable named a presentation site beside the documentation site and shipped the documentation site. A manual index is the right front page for somebody who already knows what this is. Immediately after S41/S42 because it is the same subject and because an **open** beta is a release strangers install — and a stranger arrives at a front page, not at a table of contents |
-| 24 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |
+| 24 | **S56** core/domain/`prismd`/`ui` — what the open beta sent back | **Done 2026-09-18** — see `PROGRESS.md` §2.53. Chosen on 2026-09-16 over Phase 12, by §8's own rule: the open beta had filed ten issues in two weeks, one of them a blocker. Nine closed; B60 became S57 |
+| 25 | **S57** `ui`/core — the patch window, rebuilt around the library | Born out of S56 from B60, the owner's eight points about patching. Next, because it is the window a stranger meets second, right after the front page |
+| 26 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |

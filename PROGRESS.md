@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-09-07 (bilingual site merged with S55, CI green on run **34146103931**, all nine jobs)
-**Current phase:** Phase 10 — Documentation and release
-**Current session:** none — the next one is **chosen** rather than scheduled, and §8 is the prompt that chooses it
-**Last completed:** S41 + S42 — the manuals, and prismdmx.de ✅ — **everything a person who did not write this needs.** Three manuals: the operator's and the installer's in German because the building they were written for speaks it, the developer's in English because the code does, and the reason for each in `docs/manual/README.md`. A `README.md` in every one of the **ten** workspace members, saying which side of §10.1's rules its crate is on in a sentence with a link rather than a copy of the rule — checked by a test over the members. `cargo doc --workspace --no-deps` is warning-free for the first time and is a gate now: it had **31**, and four of them were prose naming items that had been renamed out from under it, which nothing could go red about. The manual's list of window types and its list of console words are **generated from the code** by a test that keeps the prose, inserts `TODO` for a new row, rewrites the file and fails — so a manual cannot quietly fall behind. And **prismdmx.de is generated out of this repository** by a workspace member that holds no content of its own: no JavaScript on any page, every page saying which version it documents, every anchor asserted to resolve, and a download-page checksum computed from the installer a release just built rather than typed by anybody. CI has a seventh job because a site that only builds on one machine is the same problem as an installer that does. Before that: S54 — no slot of a patched fixture is out of reach ✅. Before that: S46 — `prism-protocols` + `prismd` + `ui`, Art-Net node discovery ✅ (CI green on run **33272829395**) — **an Art-Net output knows whether anything is listening.** Punch-list B6: `Health::Ok` meant *the socket took the datagram* and UDP always takes it, so a configured node read *OK* over an empty rack. `prism-protocols` has a **receive path** for the first time — `ArtPoll` out, `ArtPollReply` parsed field by field out of §6 of the specification, on a seam of its own so no driver thread can be handed a call that blocks. A node is *answering*, *never answered* or *stopped* with the age of its last reply beside it, and the daemon folds that into the health every client is told, so an output whose nodes are silent reads **Degraded** in the snapshot, in the delta and in the answer. Nothing broadcasts: the poll goes only where this desk already sends, and what that costs is written down rather than hidden. A reply is an input from outside — the parser allocates **nothing**, the table is bounded, and a quarter of a million random bytes produce no panic and no allocation. Before that: S45 — `prism-core` + `prism-engine` + `ui`, the executor window and one sequence one playback ✅ (CI green on run **33261331368**, all five jobs on the first attempt) — **an executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list B18: a playback belongs to the *list*, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — asserted on the frames a mock output received, which is the only place the difference is real. Punch-list B15: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote; the editor writes that line rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason — a `Command`, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building. Before that: S33 — the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
+**Last updated:** 2026-09-18 (S56 — the open beta's first ten reports; nine closed, B60 became S57)
+**Current phase:** Phase 11 — what the beta sends back (the open beta, since S56)
+**Current session:** none — the next is **S57**, the patch window; §8 is its prompt
+**Last completed:** S56 — what the open beta sent back ✅ — **ten GitHub issues in two weeks, one a blocker, and they chose the session over Phase 12.** The blocker was a hand-written decoder with no arm for two surface actions, which dropped the client on every visit to the Controls panel; it is now held to every variant by a fixture Rust writes from a `match` with no wildcard. The Oops key is a backspace while a line stands — decided in the daemon, so the X-Touch does it with no screen attached. A crossfade has **one** position on every client and on the motor, which reverses S51's *client-local* rule on purpose: the motor had been falling back to a stale position 150 ms after the hand let go. A view is chosen without touching the line, the first click into an unfocused window selects, the line's feedback is one row of fixed height, number fields can be emptied while typing, `fixtures/` exists after the first start, and the Cue Viewer has no store bar. B60 — the patch window — is **S57**. See §2.53. Before that: S41 + S42 — the manuals, and prismdmx.de ✅ — **everything a person who did not write this needs.** Three manuals: the operator's and the installer's in German because the building they were written for speaks it, the developer's in English because the code does, and the reason for each in `docs/manual/README.md`. A `README.md` in every one of the **ten** workspace members, saying which side of §10.1's rules its crate is on in a sentence with a link rather than a copy of the rule — checked by a test over the members. `cargo doc --workspace --no-deps` is warning-free for the first time and is a gate now: it had **31**, and four of them were prose naming items that had been renamed out from under it, which nothing could go red about. The manual's list of window types and its list of console words are **generated from the code** by a test that keeps the prose, inserts `TODO` for a new row, rewrites the file and fails — so a manual cannot quietly fall behind. And **prismdmx.de is generated out of this repository** by a workspace member that holds no content of its own: no JavaScript on any page, every page saying which version it documents, every anchor asserted to resolve, and a download-page checksum computed from the installer a release just built rather than typed by anybody. CI has a seventh job because a site that only builds on one machine is the same problem as an installer that does. Before that: S54 — no slot of a patched fixture is out of reach ✅. Before that: S46 — `prism-protocols` + `prismd` + `ui`, Art-Net node discovery ✅ (CI green on run **33272829395**) — **an Art-Net output knows whether anything is listening.** Punch-list B6: `Health::Ok` meant *the socket took the datagram* and UDP always takes it, so a configured node read *OK* over an empty rack. `prism-protocols` has a **receive path** for the first time — `ArtPoll` out, `ArtPollReply` parsed field by field out of §6 of the specification, on a seam of its own so no driver thread can be handed a call that blocks. A node is *answering*, *never answered* or *stopped* with the age of its last reply beside it, and the daemon folds that into the health every client is told, so an output whose nodes are silent reads **Degraded** in the snapshot, in the delta and in the answer. Nothing broadcasts: the poll goes only where this desk already sends, and what that costs is written down rather than hidden. A reply is an input from outside — the parser allocates **nothing**, the table is bounded, and a quarter of a million random bytes produce no panic and no allocation. Before that: S45 — `prism-core` + `prism-engine` + `ui`, the executor window and one sequence one playback ✅ (CI green on run **33261331368**, all five jobs on the first attempt) — **an executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list B18: a playback belongs to the *list*, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — asserted on the frames a mock output received, which is the only place the difference is real. Punch-list B15: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote; the editor writes that line rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason — a `Command`, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building. Before that: S33 — the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
 
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
@@ -141,8 +141,10 @@
 | S52 | A fixture may have two of a parameter | ✅ | 2026-09-06 | All exit criteria verified — see §2.48. **The second session driven by the owner's own list**, and it is one subject with four holes in it: what a fixture profile becomes when it is patched. `AttributeType` alone stopped being the key every value in a show is filed under — it is `AttributeKey`, plus a nought-based **occurrence** — so `channels_duplicate` is **nought** over the installed corpus where it was **2 679**, and a head with two colour wheels keeps both. `Warm White` and `Cold White` are their own attributes, which is the owner's own lamp: folded into `White`, the second of the two was dropped and half the fixture did not answer. The encoder banks show **only the parameters the selection has**, numbered where a fixture has repeats and stepped by parts where it has more than fit; the **steps of a wheel come off a right-click** and carry the manufacturer's own names out of the profile's `wheels` block, where **3 440 of 4 497** read *Slot 3* before. And the 90 profiles with a matrix insert can be patched at all: the library yields **2 871 profiles** where it yielded 2 157. **No migration** — an absent occurrence *is* the first, so a `v0.9.1` show opens with every value where it was. Three things nobody asked for came with them and each is in §2.48: the show model's own duplicate check was asking the old question, `SessionState::commit` is a hand-written diff a new field does not reach, and the interface's `bankParameters` stopped being a table one test was asserting through |
 | S53 | Every capability the format distinguishes | ✅ | 2026-09-06 | All exit criteria verified — see §2.49. The owner asked whether the parameter names could simply be taken **dynamically out of the fixture file**, and then asked for the Open Fixture Library's own two documents to be read before an answer was given. Reading them gave a better answer than the question suggested: the format is a **closed set of 43 capability types** with **discriminators** beside them, and the previous table read the type and threw the discriminators away — lossily, in a way **no counter could show**, because `channels_unmapped` stayed at nought while channels arrived under the wrong knob. So the key stays a closed enum, which is what lets one command line reach a rig from three manufacturers, and what comes out of the file dynamically is the **label**. `AttributeType` is **40**: a colour wheel's rotation, a hazer, one framing blade turning and the whole frame turning. **What a wheel is comes from its slots** — and from *most* of them, because ten wheels of the corpus mix kinds and on six the first slot is not what the wheel is: **115 wheel channels leave the gobo bank**, 110 of them colour. A framing blade is numbered by the **`blade` the file states**, so *Blade 3* is blade three and not the third blade channel. And **37 526 channels carry the name their manufacturer gave them** onto the encoder — *Rotating Gobo*, not *Gobo 2* — out of the show's own embedded profile, so a library update cannot rename a patched rig. Two things worth having in the record: `ColorWheelRotation` is reached by **nothing** in the corpus and the test asserts that as **nought** rather than wishing otherwise, because a colour wheel's scroll is a range on the select channel and that is one knob; and a figure I had given the owner twice was **wrong**, caught by the test, because it was measured with a rule the reader does not use |
 | S54 | No slot of a patched fixture is out of reach | ✅ | 2026-09-06 | All exit criteria verified — see §2.50. The owner read S53 and said the thing S53 had not: *"Es kann nach dem aktuellen Prinzip passieren, dass manche Channels mancher Fixtures nicht ansteuerbar sind."* Measured rather than argued about, it was **707 DMX slots in 337 of the 2 871 profiles** — including **34 of the 35** channels of a `glp/knv-cube` and **9 of the 10** of a `jb-systems/twin-effect-laser`, both of them effectively unusable while every counter in the reader read nought. The counters could not see it because they only ever asked *did this channel reach an attribute*, never *does this slot have a knob*. The answer is a **floor and not four fixes**: `AttributeType::Raw`, the 41st and the only row that is not a kind of parameter, so that every slot of a patched fixture has exactly one `AttributeDef` — and the corpus asserts **that**, over 40 953 slots, rather than asserting the four causes away one at a time. A fifth cause is the reason it is a floor: a capability type a later version of the format adds. In the same pass **B49 is closed**, and the question turned out to be wrong: a switching alias never moves the footprint, so *resolve or refuse* was a false choice — where the file's own positions agree about what the slot is, it is that (**97 channels**), and where they disagree it is a raw knob under the alias's own name, because a knob labelled *Colour Wheel* that is a gobo half the time is worse than one labelled *Channel 2*. `B1`'s own test caught the one real defect on the way: a switched red rested shut |
+| S56 | What the open beta sent back | ✅ | 2026-09-18 | All exit criteria verified — see §2.53. Ten GitHub issues (#21, #23–#30) triaged as B53–B62; **nine closed, B60 promoted to S57, none deleted**. Every fix held by a test that was red before it, three of them only reachable in a real browser or at a real daemon: a canvas measured in Chromium (B61, 444 → 425 px), a click held as long as a hand holds one (B57), and a motor fader let go of on a mock X-Touch (B59, driven to `[0]`) |
+| S57 | The patch window, rebuilt around the library | ☐ | — | Born out of S56 from B60. Next — §8 |
 
-**Done:** 36 / 47 · **In progress:** 0 · **Blocked:** 0
+**Done:** 37 / 49 · **In progress:** 0 · **Blocked:** 0
 
 **Eleven sessions were added on 2026-08-14** — S33–S43 — for the output patch,
 the real MIDI port, the settings window, the control editor, the desk-layout
@@ -4382,6 +4384,45 @@ who does not.
 | **What CI gained** | ✅ two jobs, for the reason the seventh exists: *a site that only builds on one person's machine is the same problem as an installer that does*, and an image that only builds on the machine it is deployed to is the third shape of it |
 | **What is deliberately still open** | ◐ **S42's last criterion, and this session does not close it.** *A stranger gets from the front page to a running desk* was left open because nobody in that session could be the stranger, and that is still true. What changed is that the front page now answers the first question a stranger actually asks — *what is this* — instead of the second. Whether it is enough is theirs to say, and §5 keeps the recipe |
 
+### 2.53 S56 verification record
+
+Measured on 2026-09-16 to 2026-09-18. **The first session driven by the open
+beta.** On 2026-09-07 §8 found nothing to choose by; on 2026-09-16 there were ten
+GitHub issues (#21, #23–#30), triaged into `docs/ISSUES.md` as B53–B62, and one
+of them was a **blocker**. §8's own rule — *if the reports have arrived, they
+choose* — put Phase 12 behind them. Nine are closed, one is **S57**, and B52 stays
+what it already was: a question about the model, stated in both manuals.
+
+| Entry | Outcome | What held it |
+|---|---|---|
+| **B55** blocker — binding a key crashed the Controls panel (#23) | ✅ | Not the daemon: `ui/src/ipc/protocol.ts::readSurfaceAction` had no arm for S43's `OpenWindowPicker` and `WriteCommandLine`, so a table carrying either could not be read and the client dropped the connection — on **every** visit, because the table is `machine.json`'s. `crates/prismd/tests/ui_surface_actions.rs` writes a real `Answer::SurfaceBindings` binding **every** variant (a `match` with no wildcard lists them) to `ui/tests/fixtures/surface-actions.json`; `ui/src/ipc/surfaceactions.test.ts` decodes it through the real codec, red before the fix with the reported fault. All 13 `Delta` and 11 `Answer` variants were checked for an arm at the same time |
+| **B54** — `fixtures/` missing on a fresh install (#9) | ✅ | `prismd::paths::ensure_fixtures_dir`, called after the lock and before the library thread, with a `README.txt` that says what goes there; an existing folder untouched, a failure a warning. `a_first_start_makes_the_folder_for_the_venues_own_profiles` against a real daemon, three in `paths` |
+| **B53** — a required number could not be emptied while typing (#21) | ✅ | Two forms: the patch window (Number, Universe, Address) and the output form (Number, Hop limit). Both drafts hold the **typed text** and read it where a number is needed — the preview and Apply. The old test *ignores a number typed as something that is not one* asserted the reported behaviour and was replaced |
+| **B56** — changing view cleared the command line (#24) | ✅ | The View Selector Bar sends `SelectView` instead of running `View 2` — the command `Channel ◀▶` always sent. A deliberate exception to §4.5, written into `ARCHITECTURE_SPEC.md` §4.5 and `docs/COMMAND_LINE.md` §1 |
+| **B57** — the first click into an unfocused window only focused it (#25) | ✅ | `FocusWindow` reorders `openWindows`, the canvas drew in that order, and React moved the element **between press and release**, which costs the click in Chromium. Elements now stay in number order and the stacking is a `z-index`; the canvas isolates its stacking context. The browser test only goes red with a click **held as long as a hand holds one** (`delay: 250`) — without it the click is over before the daemon answers |
+| **B58** — Oops should take words before edits (#26) | ✅ | In the daemon, because the case is a desk with no keyboard: `ShowFile::apply` takes the last word of a standing line (`console::without_last_word`, on the tokeniser's own chunk boundaries) and undoes only on an empty one; a typed `Oops` is still an undo. The screen's key brings its line up to date and sends `Oops`. Asserted on a real daemon with a mock X-Touch and **no client**, Undo pressed as note 81 by hand |
+| **B59** — crossfade position not synchronised between clients (#27) | ✅ | Reverses S51's §4.2 rule on purpose. `Sequence::crossfade_position` is where the last hand on any client left the fader — operating state, not dirty, kept across an Oops. Reproduced at a mock X-Touch first: **let go at the top, the motor was driven to `[0]`** 150 ms later, because touch suppression resynchronises to *the authoritative value* and a crossfade had none. `desk-recording.json` re-recorded, because every cue list now carries the field |
+| **B60** — the patch window, eight points (#28) | ➡️ **S57** | Eight points that depend on each other, two of them more than an afternoon. Deliverables and exit criteria in `IMPLEMENTATION_PLAN.md` |
+| **B61** — command feedback moved the layout (#29) | ✅ | One row of fixed height for the reading, the question and the engine's line. Measured in Chromium: **444 → 425 px** of canvas on typing `de` before, unchanged across all four states after |
+| **B62** — remove the Cue Viewer's store bar (#30) | ✅ | Gone, with what it alone used: `show/store.ts`, `storemode.tsx`, `ConsoleShell.runWithMode`, `looks.nextCueNumber`. The Update key blinks in `CommandKeys` now. `looks.spec.ts` stores through the line — and found that the bar had been **merging silently** into a cue that *New* had already made |
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **2 337 passed, 0 failed**, 20 ignored (the recorders and the ten-minute gates) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean |
+| `cargo fmt --all --check` | clean |
+| `cargo doc --workspace --no-deps`, warnings denied | clean — after one fix: a public doc comment linked a private function |
+| `ui`: `tsc -b --force`, `npm run lint`, `npm run build` | clean (lint: no errors; the pre-existing escape warnings in two settings tests are unchanged) |
+| `ui`: `npm run test` | **833 passed** in 56 files (829 before this session's last three entries, and store.test.ts removed with the store bar) |
+| `ui`: Playwright | **49 passed** against a real daemon — three of them new this session (B61's measured canvas, B57's held click, and the looks suite storing through the line) |
+| Tick allocations | **0 on all ten paths** — nothing this session touched the tick; `crossfade_position` is written on the core thread by `Show::apply` |
+
+**Two things this session did wrong and caught**, and both are in §7: the B58
+commit went in after only the new tests and one crate had been run, and four
+older tests that send `Oops` over a standing line went red a day later in the
+full run; and a hand-rolled wait loop let two `cargo test --workspace` runs
+overlap, which ends in `LNK1104` on a test binary rather than in a result.
+
 ---
 
 ## 3. Coverage tracking
@@ -5818,15 +5859,7 @@ the machine *has* beside what was asked for, because a switch that displays a li
 is worse than no switch. **`v0.9.0` is published**, as a pre-release, with an
 installer CI built rather than this machine.
 
-**Next: whichever of Phase 12's five the open beta asks for** (see §8 for the
-prompt). This is the first time since S43 that the next session is a **choice**
-rather than a queue, and it is a choice the plan deliberately declines to make:
-S30 the 3D viewer, S31 the Web Remote, S32 PSN/OSC, S47 timecode and S50 macros
-are all reachable, none blocks another, and *what an open beta asks for should
-choose between them better than a document written before it opened*. What has
-to happen before the choice is made is not a session: it is somebody outside this
-repository walking §5's 🚪 row, and the owner enabling Pages and the domain so
-that they can.
+**Next: S57, the patch window** (see §8). Phase 12's five stay behind what the open beta reports — which is what the paragraph that stood here said, and the beta took it at its word within nine days.
 
 **S51 and S41/S42 are done and the sequence they made is worth naming.** The
 closed beta's list came first because a manual written over a build whose
@@ -5835,6 +5868,46 @@ because the owner reported a rig the desk could not drive, and that is not a
 question an open beta has to be asked; and the manuals ran last, which is what
 let them say *every channel of a patched fixture has a knob* as a promise rather
 than as a caveat.
+
+**S56 is done: the open beta's first ten reports.** Nine closed and one — the
+patch window — promoted to **S57**, which is next. See §2.53.
+
+Carried out of S56:
+- **A hand-written decoder has to be held to the vocabulary, not to the
+  variants somebody remembered.** B55 was the third shape of one fault: a field
+  (`occurrence`, S52), and now a **variant** the decoder had no arm for. A
+  `switch` with a throwing `default` is exhaustive to the compiler and useless to
+  an operator. The answer is a fixture written by Rust from a `match` with no
+  wildcard and read by the real decoder — `ui_surface_actions.rs` — so the next
+  variant cannot reach a release without reaching a test.
+- **A fake that hands over objects cannot find a decoder fault.** The control
+  editor's tests were thorough and never saw B55, because their daemon gives the
+  panel parsed objects. Somewhere, every message shape has to arrive as bytes.
+- **A click is two events, and a test that makes them one hides a class of
+  fault.** B57 only goes red with `click({ delay: 250 })`: Playwright's press and
+  release are over before a round trip, a hand's are not. Anything that re-renders
+  on pointer-down deserves a held click in its test.
+- **A rule that answered a fault with *nothing* has to be re-read when the
+  nothing becomes the fault.** B36 said *write no number to a crossfade*,
+  because the number it had been writing was not the hand's. B59 was the cost of
+  that absence: touch suppression resynchronises a released motor to *the
+  authoritative value*, and there was none. The rule that survives is narrower
+  and truer — *write no number a hand did not put there*.
+- **Keep the element, move the stacking.** Reordering DOM children to express
+  z-order moves an element under a pointer that is still down. A number-ordered
+  list and a computed `z-index` say the same thing without the move.
+- **A new meaning for a command breaks every test that relied on the old one,
+  and only the full run finds them.** B58's Oops is a backspace on a standing
+  line; four older tests sent `Oops` over the line their fixture sessions carry on
+  purpose. They were found a day later. Run the crate's whole suite before
+  committing a change of meaning, not the tests that were written for it.
+- **Never let two `cargo test --workspace` runs overlap.** The second one fails
+  with `LNK1104` on a test binary the first has open, which reads like a build
+  fault and is not one. Wait for the process, not for a line in its log.
+- **Removing a feature is a search for everything only it used.** B62 took
+  `store.ts`, `storemode.tsx`, `runWithMode`, `nextCueNumber` and a test helper
+  with it; `Query::StorePreview` stayed because the daemon still answers it and
+  the command line's question is where its counts belong next.
 
 Carried out of S41/S42:
 - **Decide the language per document, and write down who that excludes.** Two
@@ -7666,85 +7739,34 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**The next session is a choice, and for the first time it is a choice with data
-behind it.** Five sessions are reachable and none blocks another — **S30** the 3D
-viewer, **S31** the Web Remote, **S32** PSN/OSC, **S47** timecode, **S50** macros
-— and `IMPLEMENTATION_PLAN.md`'s Phase 12 declines to order them on purpose:
-*what an open beta asks for should choose between them better than a document
-written before it opened.*
+**The next session is S57, the patch window.** The open beta's first ten reports
+chose S56 over Phase 12, and S56 closed nine of them. The tenth, B60, is the
+owner's eight points about patching — one window whose parts depend on each
+other — and it was promoted to a session rather than done in eight halves. It
+goes first because the patch window is what a stranger meets second, after the
+front page. **Read `gh issue list --state open` first all the same**: if a new
+blocker has arrived, it goes before S57, exactly as B55 went before Phase 12.
 
-**So the first thing the next session does is read what the beta has said.**
-`gh issue list --state open`, and `docs/ISSUES.md` for anything already
-triaged. As of 2026-09-07 the answer is **nothing**: no open GitHub issue, and
-one open entry (`B52`) that both manuals already state as a limitation. That is
-not evidence that nothing is wrong — it is evidence that the beta has been
-**closed** and few people were in it. S41 and S42 are what change that, and the
-two `☐` rows in §5 are what has to happen before the reports start: somebody
-outside this repository walking the front page to a running desk, and the owner
-enabling GitHub Pages and pointing `prismdmx.de` at it.
-
-**If the reports have arrived, they choose.** If they have not, the honest
-default is **S31, the Web Remote**, and the reason is in this project's own
-history rather than in a preference: it is the only one of the five that makes
-the desk usable by somebody who is not standing at it, `prism-ipc` already
-carries a WebSocket for exactly that reason, and the daemon has answered a
-browser since S23 — so it is the feature with the most already built underneath
-it. **Say which you chose and why**, either way.
-
-**What the previous session left.** S41, S42 and two rounds of follow-up wrote
-everything a person who did not write this needs, **in English and German** — three manuals (`docs/manual/`), a `README.md` in every
-one of the ten workspace members, `cargo doc` warning-free and gated, and
-`docs.prismdmx.de` generated out of this repository by `web/` — **eight pages,
-each in both languages**, with a switcher that lands on the same page rather than
-on a front page. Two chapters of the operator's manual are **generated from the
-code** by `crates/prism-core/tests/documentation.rs`, which keeps the prose,
-inserts `TODO` for a new row, rewrites the file and fails — **in both languages
-now**: a session that adds a `WindowType` or a console word will find *two*
-manuals rewritten under it, and that is what is supposed to happen.
-
-**Three things about the site are load-bearing and easy to break.** Every URL it
-writes is **relative**, because it has to work under a path prefix as well as at
-a domain root — one `href="/…"` breaks every link on every page while the site
-still renders perfectly, which is exactly how the first deployment shipped. Every
-page exists in **both** languages and a test asserts the waiting list is empty.
-And the layout is pinned in a **workflow** as well as in the code, so a change to
-the page set means editing `.github/workflows/ci.yml` too — that is how the
-bilingual commit went red. `PROGRESS.md` §2.51 has the whole record.
-
-**And two things any of the five will meet.** The version is `0.9.2` and
-`tauri.conf.json` deliberately carries none (`crates/prism-app/tests/version.rs`).
-The tick makes **zero allocator calls on all ten paths**
-(`crates/prism-engine/tests/tick_allocations.rs`), and a session that adds a path
-through it adds a row there or the claim stops being true silently.
+**What S56 left that S57 will meet.** The patch form's number fields hold the
+**typed text** since B53 and are read by `patch.ts::wholeNumber` where a number
+is needed — keep that shape when the form moves into the library. `Sequence`
+carries `crossfadePosition` since B59, so any new show fixture or recording has
+it. The View Selector Bar sends `SelectView` directly (B56), and the Oops key is
+a backspace while a line stands (B58) — a test that sends `Oops` must empty the
+line first if it means *undo*.
 
 ---
 ```
-PrismDMX — die nächste Session: eine der fünf aus Phase 12, und die Wahl gehört
-begründet
+PrismDMX — S57: das Patch-Fenster, um die Bibliothek herum neu gebaut
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
-Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2, S18); das Pult
-bedient ihn ohne Oberfläche (D11, S22); die Oberfläche ist ein vollständiges
-Pult; seit **S29** ist das Ganze ein Programm mit Installationsprogramm,
-Tray-Ikone und Veröffentlichung; seit **S51** ist die Fehlerliste der Closed Beta
-abgearbeitet; seit **S52–S54** hat **jeder DMX-Kanal jedes gepatchten Fixtures
-einen Knopf**; und seit **S41/S42** gibt es Handbücher, ein README in jedem
-Crate und eine Website, die beides aus diesem Repository erzeugt.
-
-**Was jetzt fehlt, ist eine Entscheidung.** Fünf Sessions sind erreichbar, keine
-blockiert eine andere, und der Plan ordnet sie ausdrücklich **nicht**:
-
-- **S30 — 3D-Viewer.** Die Bühne als Bild. Das Fenster `Viewer3D` existiert und
-  sagt heute, dass es nicht gebaut ist.
-- **S31 — Web Remote.** Ein Telefon oder Tablet fährt das Pult. `prism-ipc`
-  trägt den WebSocket seit S16 genau dafür, und ein Browser spricht seit S23 mit
-  dem Daemon.
-- **S32 — PSN / OSC.** Positionsdaten von außen (openfollow.app).
-- **S47 — Timecode.** Eine Cue mit einer Uhrzeit darauf, und das
-  Zurückspulen, das eine funktionierende Implementierung von einer Vorführung
-  unterscheidet.
-- **S50 — Makros.**
+Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2); das Pult
+bedient ihn ohne Oberfläche (D11); seit S29 ist das Ganze ein Programm mit
+Installationsprogramm; seit S41/S42 gibt es Handbücher und eine Website; und
+seit **S56** sind neun der zehn Meldungen der offenen Beta behoben. Die zehnte
+ist diese Session: **B60 (GitHub #28)**, die acht Punkte des Eigentümers zum
+Patch-Fenster.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 
@@ -7753,79 +7775,49 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                     brauchen, keiner ein Fenster; der Tick
                                     alloziert nichts
 2.  Die offenen Meldungen         — `gh issue list --state open` **und**
-                                    `docs/ISSUES.md`. **Das ist der erste
-                                    Arbeitsschritt und nicht eine
-                                    Vorbereitung:** die Wahl zwischen den fünf
-                                    hängt daran, was die offene Beta gemeldet
-                                    hat. Am 2026-09-07 war das nichts — kein
-                                    offener GitHub-Issue, ein offener Eintrag
-                                    (`B52`), den beide Handbücher als Grenze
-                                    benennen
-3.  PROGRESS.md §5                — die offenen Verifikationen, und zwei davon
-                                    sind der Grund, warum §2 heute leer sein
-                                    kann: **niemand von außen ist bisher von der
-                                    Startseite zu einem laufenden Pult
-                                    gekommen**, und **prismdmx.de antwortet noch
-                                    nicht** (GitHub Pages einschalten, Domain
-                                    zeigen lassen — beides gehört dem
-                                    Eigentümer, beides ist keine Codeänderung)
-4.  IMPLEMENTATION_PLAN.md        — Phase 12 und die Laufreihenfolge am Ende.
-                                    Die Deliverables und Exit-Kriterien der
-                                    Session, die du wählst, sind die
-                                    Anforderung, wortwörtlich
-5.  PROGRESS.md §2.51             — was S41/S42 gebaut haben, und §7 mit allen
-                                    „Carried out of"-Listen: die Regeln, die aus
-                                    Fehlern entstanden sind
-6.  docs/manual/developer.en.md      — **das kürzeste, was es über dieses Projekt
-                                    gibt**: die Architektur, wie sie geworden
-                                    ist, die destillierten Regeln, und vier
-                                    Rezepte — ein Kommando, ein Fenstertyp, ein
-                                    Fixture-Typ, eine Ausgabeart hinzufügen
-7.  ARCHITECTURE_SPEC.md          — §1 (D1–D11), §4 (Zustand und Oberfläche),
-                                    §2.1 und §10 (Netz, Token, Plattformen),
-                                    §14 (was von Hand geprüft wird)
-8.  docs/                         — `IPC_PROTOCOL.md`, `DMX_MERGE.md`,
-                                    `MCU_MAPPING.md`, `COMMAND_LINE.md`
+                                    `docs/ISSUES.md`. Ist seit dem 2026-09-18
+                                    ein **Blocker** dazugekommen, geht er vor
+                                    S57, so wie B55 vor Phase 12 ging
+3.  IMPLEMENTATION_PLAN.md        — **S57**: Deliverables und Exit-Kriterien
+                                    sind die Anforderung, wortwörtlich. Dazu
+                                    S27 und S44, die das Fenster und die
+                                    Bibliothek gebaut haben
+4.  PROGRESS.md §2.53             — was S56 gebaut hat, und §7 mit allen
+                                    „Carried out of"-Listen
+5.  docs/manual/developer.en.md   — die Architektur, wie sie geworden ist, und
+                                    die Regeln, die aus Fehlern entstanden sind
+6.  ARCHITECTURE_SPEC.md          — §1 (D1–D11), §4 (Zustand und Oberfläche,
+                                    §4.5 die Kommandozeile), §7.0
+7.  docs/                         — `IPC_PROTOCOL.md` (§5, `PatchFixture`,
+                                    `Query::PatchPreview`), `COMMAND_LINE.md`
+8.  ui/src/patch/                 — `patchwindow.tsx`, `patch.ts`, `preview.ts`,
+                                    und `crates/prism-core/src/library/` für die
+                                    Einträge der Bibliothek
 
-Aufgabe: **eine** der fünf umsetzen — die, die die Meldungen der offenen Beta
-verlangen. Melden sie nichts, dann **S31 (Web Remote)**, und schreibe die
-Begründung hin: es ist die einzige der fünf, die das Pult für jemanden benutzbar
-macht, der nicht davorsteht, und es ist die mit dem meisten schon Gebauten
-darunter.
-
-**Die Deliverables und Exit-Kriterien in `IMPLEMENTATION_PLAN.md` sind die
-Anforderung, vollständig und ohne Ausnahme.**
+Aufgabe: **S57** vollständig. Die acht Punkte sind: ein Eintrag pro Fixture mit
+Moduswahl statt einer pro Modus; die ganze Zeile wählt; die Bibliothek lädt
+beim Scrollen nach; *Fixture hinzufügen* öffnet direkt die Bibliothek; die
+Überlappungsmeldung nennt die nächste freie Adresse; ein neues Fixture beginnt
+dort; ein Fixture ohne Namen heißt wie sein Typ; mehrere desselben Typs auf
+einmal, jedes mit einer passenden Adresse.
 
 ## Randbedingungen
 
-- **Der Tick bleibt unberührt**: die **zehn** allokationsfreien Pfade messen
-  weiter null (`crates/prism-engine/tests/tick_allocations.rs`). Kommt ein Pfad
-  dazu, kommt dort eine Zeile dazu — sonst hört die Behauptung still auf, wahr
-  zu sein.
-- **Ein neuer `WindowType` oder ein neues Konsolenwort schreibt das Handbuch
-  um.** `crates/prism-core/tests/documentation.rs` erzeugt zwei Kapitel von
-  `docs/manual/operator.de.md` aus dem Code: es behält die vorhandene Prosa, setzt
-  `TODO` für eine neue Zeile, **schreibt die Datei** und geht rot. Das ist
-  Absicht — die Prosa für die neue Zeile schreiben und committen.
-- **Jedes Workspace-Mitglied braucht ein `README.md`** mit den drei Abschnitten,
-  die der Test prüft. Ein neuer Crate ohne eines geht rot.
-- **Eine Zahl in einem Handbuch ist eine Behauptung.** 634 Fixtures, 2 871
-  Profile, 41 Attribute, 64 Universen, 44 Hz — jede steht an mindestens einer
-  Stelle im Code oder in einem Test. Schreibe keine ab, die du nicht gemessen
-  oder verlinkt hast.
-- **Die `data-testid`s sind ein Vertrag** zwischen Oberfläche und den
-  Playwright-Tests (heute **47**).
-- **CI hat sieben Jobs**, einer baut das Installationsprogramm und einer die
-  Website. Kommt etwas dazu, das nur auf einem Rechner baut, ist das dasselbe
-  Problem wie ein Installationsprogramm, das nur auf einem Rechner entsteht.
+- **Die nächste freie Adresse ist eine Antwort des Daemons**, nicht Arithmetik
+  im Browser (D3, und §4.5: der Client rechnet nichts aus, was der Daemon weiß).
+- **Mehrere Fixtures auf einmal sind ein Oops-Schritt.**
+- **Der Profilschlüssel einer Show bleibt pro Modus** — eine vor S57 gepatchte
+  Show öffnet unverändert.
+- **Die Nummernfelder halten getippten Text** (B53) — beim Umbau nicht verlieren.
+- **Der Tick bleibt unberührt**: die zehn allokationsfreien Pfade messen null.
+- **Ein neues Konsolenwort oder ein neuer `WindowType` schreibt das Handbuch
+  um** (`crates/prism-core/tests/documentation.rs`).
+- **Die `data-testid`s sind ein Vertrag** mit den Playwright-Tests.
+- **Beide Sprachen** der Handbücher und der Website ziehen mit.
 - **Eine Coverage-Messung ohne `cargo llvm-cov clean --workspace` davor ist keine
-  Messung**, und zwischen zwei Crates ebenso.
-- **Die Version ist `0.9.2`** und wird nicht angefasst, es sei denn, es entsteht
-  ein Release. `tauri.conf.json` trägt bewusst **keine** Version; das ist geprüft
-  (`crates/prism-app/tests/version.rs`).
-- **Die Fixture-Bibliothek wird installiert, nicht committet**
-  (`tools/fetch-fixtures/`). Ohne sie überspringen sich die Korpus-Tests und
-  sagen das; die CI holt sie in jedem Job, der sie braucht.
+  Messung.**
+- **Die Version ist `0.9.2`**, bis ein Release entsteht; `CHANGELOG.md` und
+  `docs/CHANGELOG.en.md` haben einen Abschnitt *Noch nicht veröffentlicht*.
 
 ## Zum Schluss
 
@@ -7833,17 +7825,11 @@ Anforderung, vollständig und ohne Ausnahme.**
   --all-targets -- -D warnings`, `cargo fmt --all --check`,
   `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`, und in `ui/`:
   `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build`, sowie
-  die Playwright-Tests. Rust- und Browser-Suite **einzeln** laufen lassen.
-- Die Zahlen aus den vorigen Sessions müssen weiter stimmen: null Allokationen im
-  Tick (**zehn** Pfade), null React-Commits, das Telemetrie-Frame-Budget.
-- **Wenn die Handbücher etwas behaupten, das deine Session ändert, zieh sie im
-  selben Durchgang nach** — nicht in einem Folge-Commit. Der Eigentümer hat das
-  am 2026-08-28 ausdrücklich verlangt, und seit S41 gilt es auch für
-  `docs/manual/`, `CHANGELOG.md` und `README.md`.
-- PROGRESS.md aktualisieren: Status der gewählten Session, ein
-  §2.52-Verifikationsprotokoll mit **jeder gemessenen Zahl**, die Tabellen in §3,
-  und in §7 eine neue „Carried out of"-Liste.
-- PROGRESS.md §8 mit einem neuen, kontextfreien Folge-Prompt überschreiben.
-- Mit einer Conventional-Commit-Nachricht committen, pushen, CI beobachten und
-  das Ergebnis in PROGRESS.md festhalten.
+  die Playwright-Tests. Rust- und Browser-Suite **einzeln**, nie überlappend.
+- **Die ganze Suite eines Crates laufen lassen, bevor ein Commit die Bedeutung
+  eines Befehls ändert** — nicht nur die neuen Tests (S56 §7).
+- Handbücher, Website und `docs/ISSUES.md` (B60 → ✅) im selben Durchgang.
+- PROGRESS.md: Status, §2.54-Protokoll mit jeder gemessenen Zahl, §7
+  „Carried out of S57", §8 neu.
+- Conventional Commits, pushen, CI bis grün beobachten und festhalten.
 ```

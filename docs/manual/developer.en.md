@@ -247,6 +247,16 @@ a seventh entry: **the hand decoder**. And a decoder should *normalise* the
 default rather than pass the hole on — `readOccurrence` answers `0`, so no
 reader has to remember `?? 0`, and the second reader is the one that forgets.
 
+**And a variant is the same fault without the field** (B55, S56). S43 gave
+`SurfaceAction` two variants and `readSurfaceAction` never learned them; a
+`switch` with a throwing `default` is exhaustive to the compiler, so binding
+either key dropped the client on every visit to the Controls panel. The guard is
+a fixture Rust writes from a `match` with **no wildcard** —
+`crates/prismd/tests/ui_surface_actions.rs` — and the real decoder reads it, so
+the next variant cannot reach a release without reaching a test. A test against
+a fake daemon that hands over objects cannot find any of this: somewhere, every
+shape has to arrive as bytes.
+
 ### An absent field is a better migration than a migration
 
 `occurrence` had to reach seven types — the key every value in a show is filed

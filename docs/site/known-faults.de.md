@@ -9,8 +9,9 @@ Diese Seite zeigt **nur noch offene Fehler**. Was behoben ist, steht in den
 gemeldete Eintrag, was daraus wurde und welcher Test ihn heute festhält — liegt
 im Repository, weil es ein Arbeitsdokument ist und kein öffentliches.
 
-Zum Zeitpunkt dieser Fassung sind **elf** Fehler offen, von einundsechzig
-gemeldeten.
+Zum Zeitpunkt dieser Fassung sind in 0.9.2 **elf** Fehler offen, von
+einundsechzig gemeldeten — **neun** davon sind für die nächste Version schon
+behoben und hier so markiert.
 
 ## B52 — Das Pult folgt einem Switching Channel nicht, während die Show läuft
 
@@ -43,6 +44,8 @@ wird auch so behandelt.
 
 ## B53 — Pflichtfelder lassen das vollständige Leeren während der Eingabe nicht zu
 
+**Behoben für die nächste Version.** Ein Zahlenfeld lässt sich beim Tippen leeren; geprüft wird erst beim Anwenden.
+
 **Wo:** UI, Pflichtfelder (Required Inputs).
 **Schwere:** ärgerlich.
 
@@ -55,6 +58,8 @@ Inhalt komplett löschen versuchen — das Feld lehnt ab.
 
 ## B54 — Das `fixtures/`-Verzeichnis wird bei der Installation nicht angelegt
 
+**Behoben für die nächste Version.** Das Pult legt `fixtures/` beim ersten Start an, mit einer `README.txt` darin.
+
 **Wo:** Installation, Datenverzeichnis des Daemons.
 **Schwere:** ärgerlich.
 
@@ -66,6 +71,8 @@ Hinweis darauf, dass es fehlt.
 `fixtures/` fehlt.
 
 ## B55 — Das Controls-Menü bricht zusammen, wenn eine neue Taste gebunden wird
+
+**Behoben für die nächste Version.** Eine Taste zu binden trennt den Client nicht mehr — gleich welche Aktion.
 
 **Wo:** Settings, Controls-Menü.
 **Schwere:** blocker.
@@ -82,6 +89,8 @@ Daemon neu starten.
 
 ## B56 — Ein Ansichtswechsel löscht die Kommandozeile
 
+**Behoben für die nächste Version.** Ein View-Wechsel lässt eine halb getippte Zeile stehen.
+
 **Wo:** Canvas/Views, Kommandozeile.
 **Schwere:** ärgerlich.
 
@@ -93,6 +102,8 @@ ausgeführt werden.
 wechseln — die Zeile ist leer.
 
 ## B57 — Der Fensterfokus verhindert die Auswahl beim ersten Klick
+
+**Behoben für die nächste Version.** Ein Klick wählt aus, auch in einem Fenster, das nicht fokussiert war.
 
 **Wo:** Canvas, alle Fenster.
 **Schwere:** ärgerlich.
@@ -106,6 +117,8 @@ Fixture Sheet klicken — erster Klick fokussiert nur, zweiter wählt aus.
 
 ## B58 — Oops löscht keine Wörter aus der Kommandozeile
 
+**Behoben für die nächste Version.** Oops nimmt zuerst das letzte Wort der Zeile weg, auch am X-Touch.
+
 **Wo:** Kommandozeile, Oops-Taste.
 **Schwere:** ärgerlich.
 
@@ -117,6 +130,8 @@ keinen Weg, Tippfehler in der Zeile zu korrigieren.
 Eingabe bleibt, eine Aktion wird rückgängig gemacht.
 
 ## B59 — Crossfade-Fortschritt wird nicht zwischen Clients synchronisiert
+
+**Behoben für die nächste Version.** Alle Griffe auf einen Crossfade zeigen dieselbe Stellung, der Motorfader eingeschlossen.
 
 **Wo:** Executor Strip, Crossfade.
 **Schwere:** ärgerlich.
@@ -130,6 +145,8 @@ MIDI-Fader loslässt.
 bewegen, während ein Web-Client verbunden ist.
 
 ## B60 — Patch-Fenster: mehrere Fehler und Verbesserungen
+
+**Wird als eigene Session umgebaut (S57)**, weil die acht Punkte aneinanderhängen. Bis dahin lassen sich die Zahlenfelder immerhin leeren und neu tippen.
 
 **Wo:** Patch-Fenster, Fixture-Bibliothek.
 **Schwere:** ärgerlich.
@@ -145,6 +162,8 @@ desselben Typs lassen sich nicht gleichzeitig patchen.
 
 ## B61 — Das Befehlsfeedback verschiebt das Layout
 
+**Behoben für die nächste Version.** Die Rückmeldung der Kommandozeile steht in einer Zeile fester Höhe.
+
 **Wo:** Kommandozeile, Befehlsfeedback.
 **Schwere:** ärgerlich.
 
@@ -155,6 +174,8 @@ Befehlsfeedback, das Teile des UI verschiebt.
 UI springt.
 
 ## B62 — Store-Leiste im Cue Viewer
+
+**Behoben für die nächste Version.** Die Store-Leiste ist weg; die Update-Taste blinkt im Fenster *CommandKeys*.
 
 **Wo:** Cue Viewer.
 **Schwere:** kosmetisch.

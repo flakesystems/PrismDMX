@@ -20,6 +20,29 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ---
 
+## Noch nicht veröffentlicht
+
+Was die offene Beta in den ersten zwei Wochen gemeldet hat — zehn Meldungen,
+neun davon behoben (S56):
+
+- **Controls:** eine Taste auf *Fenster wählen* oder *Befehl schreiben* zu
+  binden trennte den Client bei jedem Öffnen des Menüs. Behoben (B55).
+- **`fixtures/`** wird beim ersten Start angelegt (B54).
+- **Zahlenfelder** im Patch- und im Output-Formular lassen sich beim Tippen
+  leeren; geprüft wird beim Anwenden (B53).
+- **Kommandozeile:** ein View-Wechsel lässt die Zeile stehen (B56); Oops nimmt
+  zuerst das letzte Wort weg, auch am X-Touch (B58); die Rückmeldung verschiebt
+  nichts mehr (B61).
+- **Fenster:** ein Klick in ein nicht fokussiertes Fenster wählt sofort aus
+  (B57).
+- **Crossfade:** alle Griffe zeigen dieselbe Stellung, und der Motorfader fährt
+  nach dem Loslassen nicht mehr zurück (B59).
+- **Cue Viewer:** keine Store-Leiste mehr — Cues werden auf der Kommandozeile
+  gespeichert; die Update-Taste blinkt im Fenster *CommandKeys* (B62).
+- Das **Patch-Fenster** wird als eigene Session umgebaut (B60, S57).
+
+---
+
 ## 0.9.2 — die Fixture-Bibliothek, vollständig
 
 *6. September 2026 ·

@@ -22,6 +22,28 @@ Every version so far is a **pre-release**.
 
 ---
 
+## Not yet released
+
+What the open beta reported in its first two weeks — ten reports, nine of
+them fixed (S56):
+
+- **Controls:** binding a key to *choose a window* or *write a command*
+  disconnected the client every time the menu was opened. Fixed (B55).
+- **`fixtures/`** is made on the first start (B54).
+- **Number fields** in the patch and output forms can be emptied while typing;
+  they are checked when applied (B53).
+- **Command line:** changing view leaves the line where it is (B56); Oops takes
+  the last word first, on the X-Touch too (B58); the feedback no longer moves
+  anything (B61).
+- **Windows:** a click into a window that was not focused selects at once (B57).
+- **Crossfade:** every handle shows the same position, and the motor fader no
+  longer goes back when it is let go of (B59).
+- **Cue Viewer:** no store bar — cues are stored from the command line; the
+  Update key blinks in the *CommandKeys* window (B62).
+- The **patch window** is being rebuilt as a session of its own (B60, S57).
+
+---
+
 ## 0.9.2 — the fixture library, completely
 
 *6 September 2026 ·

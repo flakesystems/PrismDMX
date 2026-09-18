@@ -263,6 +263,16 @@ soll den Vorgabewert *normalisieren*, statt das Loch weiterzureichen —
 `readOccurrence` antwortet `0`, sodass kein Leser sich `?? 0` merken muss, und
 der zweite Leser ist der, der es vergisst.
 
+**Und eine Variante ist derselbe Fehler ohne das Feld** (B55, S56). S43 gab
+`SurfaceAction` zwei Varianten, und `readSurfaceAction` lernte sie nie; ein
+`switch` mit werfendem `default` ist für den Compiler vollständig, also trennte
+jede so belegte Taste den Client bei jedem Öffnen des Controls-Menüs. Der Schutz
+ist eine Fixture, die Rust aus einem `match` **ohne Wildcard** schreibt —
+`crates/prismd/tests/ui_surface_actions.rs` — und die der echte Decoder liest;
+die nächste Variante erreicht also kein Release, ohne einen Test zu erreichen.
+Ein Test gegen einen Fake-Daemon, der Objekte statt Bytes liefert, kann nichts
+davon finden: irgendwo muss jede Form als Bytes ankommen.
+
 ### Ein fehlendes Feld ist die bessere Migration als eine Migration
 
 `occurrence` musste sieben Typen erreichen — der Schlüssel, unter dem jeder Wert
