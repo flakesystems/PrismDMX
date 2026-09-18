@@ -4472,6 +4472,14 @@ patching several needs. Done on its own branch, `fix/b60-patch-window`, off S56'
 | `ui`: Playwright | **50 passed** against a real daemon |
 | Tick allocations | **0 on all ten paths** — nothing this session touched the tick; a patch is applied on the core thread and reaches the engine as the `Repatch` it always did |
 
+**CI:** run
+[35384737864](https://github.com/flakesystems/PrismDMX/actions/runs/35384737864)
+on `7865a58`, **all seven Linux jobs green** in 5 m 9 s — gates and platform-neutral
+crates 5 m 8 s, UI end-to-end 3 m 24 s, UI typecheck/lint/test/build 1 m 30 s,
+deployment container 50 s, ARM64 31 s, the front page 33 s, the documentation
+site 24 s. No Windows minute; the Windows half ran locally in full, as
+`CLAUDE.md` asks.
+
 **What the recording says now.** `ui/tests/fixtures/patch-recording.json` was
 re-recorded with seven more steps (a page of the library, the next page, a
 mode's fixture, the overlap with its next free address, three placements, the
