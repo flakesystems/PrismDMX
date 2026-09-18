@@ -1,10 +1,20 @@
-# CI matrix per ARCHITECTURE_SPEC.md section 10.1.
+# CI on every push - **Linux only, since 2026-09-18.**
 #
-# Windows is the release target and gets the full treatment. Linux runs the
-# platform-neutral crates and a cross-compile check so the Raspberry Pi path
-# cannot rot unnoticed - a portability break should fail on the commit that
-# caused it, not a year later. macOS is deliberately absent until it becomes
-# a priority (decision D10).
+# The owner's decision, and the reason is money: the two Windows jobs ran about
+# twenty minutes on every push, and a Windows runner minute is billed at twice a
+# Linux one. So a push runs what Linux can answer - format, clippy and the
+# documentation gate over every crate but the shell, the platform-neutral
+# crates' tests, the ARM64 cross-check, the interface and its end-to-end suite,
+# and the three web jobs - and the **complete** pass, Windows included, runs in
+# `release.yml`: on a release tag, and by hand (`workflow_dispatch`) whenever a
+# change wants it before one. That workflow calls this one first, so a release
+# is gated on everything here as well.
+#
+# **Locally nothing changes**: every gate runs in full on the developer's
+# Windows machine before a push (`docs/manual/developer.en.md` section 8). What
+# moved is only where a *second* machine repeats them.
+#
+# macOS is deliberately absent until it becomes a priority (decision D10).
 
 name: CI
 
@@ -12,33 +22,24 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  # So `release.yml` can require it before it builds anything.
+  workflow_call:
+
+# A newer push to the same branch makes the older run pointless; cancelling it
+# is the cheapest minute there is.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  windows:
-    name: Windows - full build and test
-    runs-on: windows-latest
-    # A hung test costs a whole job otherwise. S16 pushed one that blocked on a
-    # message a two-core runner never delivered, and the run sat there until it
-    # was cancelled by hand; the fix was in the test, and this is so the next
-    # one of those fails inside the hour instead of after six.
-    #
-    # Raised from 20 in S29, and for a reason rather than because it was tight:
-    # `--workspace` now includes `prism-app`, so a cold cache compiles the whole
-    # Tauri dependency tree before a single test runs.
-    timeout-minutes: 45
-    env:
-      # RUSTFLAGS from the environment replaces .cargo/config.toml's rustflags
-      # rather than adding to them, so the static C runtime has to be asked for
-      # again here. Everything on Windows is linked against it since S29, so
-      # that FTDI's statically linked D2XX library, WebView2's static loader and
-      # the rest of the build all agree - and so that nothing has to be
-      # installed alongside the desk. The reasoning is written out in
-      # .cargo/config.toml.
-      RUSTFLAGS: "-D warnings -Ctarget-feature=+crt-static"
+  linux-neutral:
+    name: Linux - gates and platform-neutral crates
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -46,48 +47,22 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
 
+      # The three static gates, moved here from the Windows job on 2026-09-18.
+      # Everything but `prism-app`, which needs a webview toolkit this job has
+      # no business installing; the shell is linted and documented in the full
+      # pass (`release.yml`) and on the developer's machine.
       - name: Format
         run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --exclude prism-app --all-targets -- -D warnings
 
-      # S41. The crate documentation is a large part of what this project knows,
-      # and until this session nothing had ever rendered it - a broken
-      # intra-doc link is a paragraph nobody will read, and there were thirty of
-      # them. `RUSTDOCFLAGS` rather than `RUSTFLAGS`, because rustdoc reads its
-      # own variable and the job's `-D warnings` never reached it.
-      #
-      # Here rather than in the Linux job because this is the one that builds
-      # `prism-app`: the shell needs a webview toolkit the neutral jobs have no
-      # business installing, and `--workspace` is the whole claim.
+      # S41: a broken intra-doc link is a paragraph nobody will read.
+      # `RUSTDOCFLAGS` rather than `RUSTFLAGS`, because rustdoc reads its own.
       - name: Document
         env:
           RUSTDOCFLAGS: "-D warnings"
-        run: cargo doc --workspace --no-deps
-
-      # The Open Fixture Library, which is **downloaded at install time and not
-      # committed** (S44, profiles/fixtures/SOURCE.md). Fetched here so the
-      # corpus tests run against the real thing rather than skipping themselves:
-      # 634 fixtures is the input no hand-written JSON can stand in for.
-      - name: Install the fixture library
-        shell: pwsh
-        run: tools/fetch-fixtures/fetch-fixtures.ps1
-
-      - name: Build
-        run: cargo build --workspace
-
-      - name: Test
-        run: cargo test --workspace
-
-  linux-neutral:
-    name: Linux - platform-neutral crates
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+        run: cargo doc --workspace --exclude prism-app --no-deps
 
       # These crates must never contain #[cfg(target_os = ...)]. Running their
       # tests on a second platform is what proves it.
@@ -97,7 +72,7 @@ jobs:
       # otherwise have needed some (the user data directory, the tick thread's
       # priority, the IPC endpoint) are resolved from the environment, from a
       # dependency, and from prism-ipc respectively. Its tests here run against
-      # a Unix domain socket where the Windows job runs them against a named
+      # a Unix domain socket where the Windows pass (release.yml) runs them against a named
       # pipe, which is what keeps that claim honest.
       #
       # prism-protocols is the exception that has to be here anyway: section
@@ -188,96 +163,6 @@ jobs:
       # checked here, which is the claim that matters.
       - name: Check
         run: cargo check --workspace --exclude prism-app --target aarch64-unknown-linux-gnu
-
-  shell:
-    name: Windows - the desktop shell and its installer
-    runs-on: windows-latest
-    # A release build of the daemon plus a webview bundle, both with LTO and one
-    # codegen unit. It is a job of its own so the fast checks are not held up
-    # behind it, and it is here at all because an installer that only ever
-    # builds on one person's machine is a file rather than a release (S29).
-    timeout-minutes: 60
-    env:
-      # As in the Windows job above, and for the reason .cargo/config.toml
-      # gives: RUSTFLAGS from the environment replaces its rustflags rather
-      # than adding to them.
-      RUSTFLAGS: "-D warnings -Ctarget-feature=+crt-static"
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-      - uses: Swatinem/rust-cache@v2
-
-      # The bundle carries the library as a resource, so it has to be here
-      # before the bundler looks for it (S44, profiles/fixtures/SOURCE.md).
-      - name: Install the fixture library
-        shell: pwsh
-        run: tools/fetch-fixtures/fetch-fixtures.ps1
-
-      # ui/src/bindings is generated from Rust rather than committed, and
-      # `tauri build` runs `npm run build` for the interface — which will not
-      # typecheck without it. The UI job has the same step for the same reason.
-      - name: Generate TypeScript bindings
-        run: cargo test -p prism-domain
-
-      - name: Install the interface's dependencies
-        working-directory: ui
-        run: npm ci
-
-      # `prismd.exe` in release, because the bundle carries it beside the shell:
-      # `prism_app::spawn::daemon_beside` looks there, and so does
-      # `prismd::paths::installed_library_dir` for the profiles.
-      - name: Build the engine
-        run: cargo build --release -p prismd
-
-      # This also builds the interface - `beforeBuildCommand` in
-      # crates/prism-app/tauri.conf.json - and then the shell, and then the
-      # NSIS installer.
-      # `shell: bash` on purpose. The default on a Windows runner is PowerShell,
-      # which will not execute the extensionless shell script npm puts in
-      # `node_modules/.bin`; bash is present on every Windows runner and is the
-      # same invocation the README gives a developer.
-      - name: Build the installer
-        working-directory: crates/prism-app
-        shell: bash
-        run: ../../ui/node_modules/.bin/tauri build --config tauri.bundle.conf.json
-
-      # Not "did it exit zero" but "does the installer carry what an installed
-      # desk needs". A bundler given a configuration without the payload in it
-      # exits zero perfectly happily and produces an installer that installs a
-      # program which cannot find its own engine — which is exactly the failure
-      # splitting the configuration in two made possible, so it is exactly the
-      # one that gets checked.
-      - name: What the installer contains
-        shell: pwsh
-        run: |
-          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe |
-            Select-Object -First 1
-          if (-not $setup) { Write-Error "no installer was produced"; exit 1 }
-          Write-Output "$($setup.Name)  $([math]::Round($setup.Length / 1MB, 1)) MB"
-          $files = & "$env:ProgramFiles\7-Zip\7z.exe" l $setup.FullName
-          foreach ($needed in @(
-            "PrismDMX.exe",
-            "prismd.exe",
-            "profiles\surface\xtouch.json",
-            "profiles\fixtures\manufacturers.json"
-          )) {
-            if (-not ($files -match [regex]::Escape($needed))) {
-              Write-Error "the installer does not carry $needed"
-              exit 1
-            }
-            Write-Output "carries $needed"
-          }
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: prismdmx-installer-ci
-          path: target/release/bundle/nsis/*-setup.exe
-          retention-days: 7
 
   ui:
     name: UI - typecheck, lint, test, build

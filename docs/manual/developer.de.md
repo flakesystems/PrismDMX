@@ -460,8 +460,10 @@ gewählt, dass die **Tests** sie implementieren können.
 
 ## 8. Die Gates, und wofür jedes da ist
 
-Alle davon sind auf jedem Commit grün, und ein Pull Request ist nicht fertig,
-bevor sie es sind. **Lassen Sie die Rust- und die Oberflächen-Suite nacheinander
+Alle davon sind **auf Ihrem Rechner** vor jedem Push grün, und ein Pull Request
+ist nicht fertig, bevor sie es sind — lokal, vollständig, jedes Mal. Die CI
+wiederholt nur einen Teil davon (unten); geprüft wird eine Änderung also lokal.
+**Lassen Sie die Rust- und die Oberflächen-Suite nacheinander
 laufen** — beide gleichzeitig lässt Browser-Tests an Timeouts scheitern, die
 allein durchgehen.
 
@@ -487,20 +489,35 @@ cd ui && npx tsc -b --force
 Dateien, `--noEmit` darauf prüft also überhaupt nichts. `--force`, weil eine
 zwischengespeicherte Build-Info einen alten Fehler durchlassen würde.
 
-Die CI fährt neun Jobs, und jeder ist aus einem Grund da, den man kennen
-sollte:
+**Wo die CI was fährt — seit dem 2026-09-18, der Kosten wegen.** Windows-Minuten
+kosten doppelt so viel wie Linux-Minuten, und die beiden Windows-Jobs liefen bei
+jedem Push rund zwanzig Minuten. Deshalb fährt jeder Push und jeder Pull Request
+**nur Linux** (`ci.yml`), und der **vollständige** Durchlauf — die Windows-Hälfte
+und der Installer — läuft in `release.yml`: bei einem `v*`-Tag, und von Hand per
+`workflow_dispatch` (das baut und veröffentlicht nichts), wenn eine Änderung die
+Windows-Hälfte vor einem Release braucht. `release.yml` ruft zuerst `ci.yml` auf,
+ein Release hängt also an beiden Hälften. Kein Windows- oder schwerer Job in
+`ci.yml`: eine Prüfung gehört nach Linux, wenn Linux sie beantworten kann, und in
+den Release-Durchlauf, wenn nur Windows es kann.
+
+Bei jedem Push:
 
 | Job | Wofür er da ist |
 |---|---|
-| **Windows — voller Build und Test** | Das Zielsystem. Alles, inklusive Corpus |
-| **Windows — Shell und Installer** | Ein Installer, der nur auf dem Rechner eines Einzelnen baut, ist eine Datei und kein Release. Der Job *untersucht* die erzeugte `.exe` außerdem, weil ein Bundler, dem man eine Konfiguration ohne Nutzlast gibt, fröhlich mit null endet |
-| **Linux — plattformneutrale Crates** | Die Crates, die kein `#[cfg(target_os)]` enthalten dürfen, laufen auf einer zweiten Plattform. Das ist es, was die Behauptung belegt |
+| **Linux — Gates und plattformneutrale Crates** | Format, Clippy und `cargo doc` über jedes Crate außer `prism-app` (das ein Webview-Toolkit braucht), und die Tests der Crates, die kein `#[cfg(target_os)]` enthalten dürfen, auf einer zweiten Plattform — das ist es, was diese Behauptung belegt |
 | **Linux ARM64 — Cross-Compile-Prüfung** | Fängt Plattformcode, der in ein neutrales Crate sickert, sodass ein Portabilitätsbruch an dem Commit scheitert, der ihn verursacht hat, und nicht ein Jahr später |
 | **UI — Typecheck, Lint, Test, Build** | Mit den aus Rust neu erzeugten Bindings zuerst, damit eine veraltete Bindung nicht durchgehen kann |
 | **UI — End-to-End gegen einen Daemon** | Ein echter `prismd`, ein echtes Chromium, und ein Daemon, den die Spezifikation unter dem Browser *tötet* |
 | **Web — die Dokumentationsseite** | Eine Seite, die nur auf einem Rechner baut, ist dasselbe Problem wie ein Installer, der das tut |
 | **Web — die Startseite** | Dasselbe Argument für `site/`. Ein eigener Job und kein Schritt im vorigen, weil die beiden Crates Entgegengesetztes versprechen: von der Dokumentationsseite ist zugesichert, dass sie **kein** Skript trägt, die Startseite trägt eines mit Absicht |
 | **Web — der Auslieferungs-Container** | `deploy/` ist der selbstgehostete Weg, und ein Image, das nur auf der Maschine baut, auf der es ausgeliefert wird, ist die dritte Gestalt desselben Problems. Er stellt außerdem die eine Frage, für die es die beiden vhosts gibt: unterscheidet derselbe Port `prismdmx.de` und `docs.prismdmx.de`, und bekommt ein unbekannter Host keines von beiden |
+
+Nur im Release-Durchlauf (`release.yml`):
+
+| Job | Wofür er da ist |
+|---|---|
+| **Linux-Gates** | Jeder Job oben, aus `ci.yml` aufgerufen, damit kein Release von einem Commit entsteht, dessen Linux-Hälfte rot ist |
+| **Windows — voller Durchlauf und Installer** | Das Zielsystem: Format, Clippy und `cargo doc` über den **ganzen** Workspace samt Shell, jeder Test inklusive Corpus auf einem Windows-Checkout, die Tests der Oberfläche, und dann der Installer — den er auch *untersucht*, weil ein Bundler, dem man eine Konfiguration ohne Nutzlast gibt, fröhlich mit null endet. Ein Installer, der nur auf dem Rechner eines Einzelnen baut, ist eine Datei und kein Release |
 
 Das Doc-Gate ist eine Anmerkung wert: `cargo doc` läuft mit verbotenen Warnungen,
 ein kaputter Intra-Doc-Link lässt den Build also scheitern. Die

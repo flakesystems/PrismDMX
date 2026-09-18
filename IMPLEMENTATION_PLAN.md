@@ -17,6 +17,7 @@ Work proceeds in numbered **sessions**. A session is a coherent unit of work wit
 4. **Close** — update `PROGRESS.md`: status, coverage figures actually measured, anything learned that changes a later session. Then **rewrite the follow-up prompt** in `PROGRESS.md` §8 so the next session can be started from scratch. Commit with a Conventional Commit message.
 5. **Never** mark a session done with failing tests. Record the blocker in `PROGRESS.md` instead and leave the session `blocked`.
 6.  After a session is complete and all tests have passed, always push you code and watch the ci run. If it passes, track it in `PROGRESS.md` and push again (this time you dont need to wait for CI as you only edited `PROGRESS.md`)
+7. **Test locally in full; keep GitHub Actions minimal** *(the owner, 2026-09-18 — the Windows runners were too expensive)*. Every gate — the whole workspace on Windows, the interface, Playwright — runs **locally** before the push, and that is the verification. The CI run of step 6 is **Linux only** (`ci.yml`). The **complete** pass, Windows and the installer included, runs **only for a release** (`release.yml` on a `v*` tag); start it by hand with `workflow_dispatch` only when a change needs the Windows half before one. Never add a Windows or heavy job to `ci.yml`. `CLAUDE.md` and `docs/manual/developer.en.md` §8 have the whole rule
 
 ### The follow-up prompt
 

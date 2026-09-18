@@ -426,8 +426,10 @@ that the **tests** can implement it.
 
 ## 8. The gates, and what each one is for
 
-All of these are green on every commit, and a pull request is not finished until
-they are. **Run the Rust and the interface suites one at a time** — running both
+All of these are green **on your machine** before every push, and a pull request
+is not finished until they are — locally, in full, every time. CI repeats only
+part of it (below), so the local run is where a change is actually verified.
+**Run the Rust and the interface suites one at a time** — running both
 at once makes browser tests fail on timeouts that pass on their own.
 
 ```bash
@@ -452,19 +454,34 @@ cd ui && npx tsc -b --force
 own, so `--noEmit` on it checks nothing at all. `--force` because a cached build
 info file would let a stale error through.
 
-CI runs nine jobs, and each is there for a reason worth knowing:
+**Where CI runs what — since 2026-09-18, for cost.** Windows runner minutes cost
+twice as much as Linux ones, and the two Windows jobs ran about twenty minutes on
+every push. So every push and pull request runs **Linux only** (`ci.yml`), and the
+**complete** pass — the Windows half and the installer — runs in `release.yml`: on
+a `v*` tag, and by hand with `workflow_dispatch` (which builds and publishes
+nothing) when a change needs the Windows half before a release. `release.yml`
+calls `ci.yml` first, so a release is gated on both halves. Do not add a Windows
+or a heavy job to `ci.yml`: a check belongs on Linux if Linux can answer it, and
+in the release pass if only Windows can.
+
+On every push:
 
 | Job | What it is for |
 |---|---|
-| **Windows — full build and test** | The release target. Everything, including the corpus |
-| **Windows — the shell and its installer** | An installer that only ever builds on one person's machine is a file, not a release. It also *inspects* the produced `.exe`, because a bundler given a configuration with no payload exits zero happily |
-| **Linux — platform-neutral crates** | The crates that may contain no `#[cfg(target_os)]`, run on a second platform. That is what proves the claim |
+| **Linux — gates and platform-neutral crates** | Format, clippy and `cargo doc` over every crate but `prism-app` (which needs a webview toolkit), and the tests of the crates that may contain no `#[cfg(target_os)]`, run on a second platform — which is what proves that claim |
 | **Linux ARM64 — cross-compile check** | Catches platform code leaking into a crate that is supposed to be neutral, so a portability break fails on the commit that caused it rather than a year later |
 | **UI — typecheck, lint, test, build** | With the bindings regenerated from Rust first, so a stale binding cannot pass |
 | **UI — end-to-end against a daemon** | A real `prismd`, a real Chromium, and a daemon the spec *kills* under the browser |
 | **Web — the documentation site** | A site that only builds on one machine is the same problem as an installer that does |
 | **Web — the front page** | The same argument for `site/`. It is a job of its own rather than a step in the one above because the two crates promise opposite things — the documentation site is asserted to carry **no** script, and the front page carries one on purpose |
 | **Web — the deployment container** | `deploy/` is the self-hosted path, and an image that only ever builds on the machine it is deployed to is the third shape of the same problem. It also asks the one question the two vhosts exist for: does the same port tell `prismdmx.de` and `docs.prismdmx.de` apart, and does an unknown host get neither |
+
+Only in the release pass (`release.yml`):
+
+| Job | What it is for |
+|---|---|
+| **Linux gates** | Every job above, called from `ci.yml`, so a release cannot be cut from a commit whose Linux half is red |
+| **Windows — full pass and installer** | The release target: format, clippy and `cargo doc` over the **whole** workspace including the shell, every test including the corpus on a Windows checkout, the interface's tests, and then the installer — which it also *inspects*, because a bundler given a configuration with no payload exits zero happily. An installer that only ever builds on one person's machine is a file, not a release |
 
 The doc gate is worth a note: `cargo doc` is run with warnings denied, so a
 broken intra-doc link fails the build. The crate documentation is a large part

@@ -15,6 +15,17 @@
 # it and refuses otherwise, because a tag and a manifest that disagree produce
 # an installer whose file name is a lie.
 #
+# **It is the complete pass, and since 2026-09-18 the only one.** `ci.yml` runs
+# on Linux alone on every push, because Windows runner minutes cost twice as
+# much and the two Windows jobs ran twenty minutes a push. Everything Windows
+# answers - the whole workspace's tests including `prism-app`, the corpus on a
+# Windows checkout, clippy and the docs over the shell, the installer and what
+# is inside it - is asked here, and `ci.yml` is called first so a release is
+# gated on the Linux half as well. `workflow_dispatch` runs the whole of it
+# without publishing anything, which is the answer when a change wants the
+# Windows half before a release: a platform-specific crate, the installer, the
+# shell.
+#
 # **It runs the gates again.** Trusting the commit's own CI run would be enough
 # almost every time and wrong the once: a tag can be put on a commit whose run
 # never finished, on a commit from a branch that was never merged, or on one
@@ -51,8 +62,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The Linux half of the complete pass: exactly what every push runs.
+  linux:
+    name: Linux gates
+    uses: ./.github/workflows/ci.yml
+
   build:
-    name: Windows - installer
+    name: Windows - full pass and installer
+    needs: linux
     runs-on: windows-latest
     # Every gate again, then a release build of the daemon, then the shell with
     # LTO and one codegen unit, on a cache this job has never warmed. Ninety
@@ -110,6 +127,13 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The whole workspace, `prism-app` included - the one place outside the
+      # developer's machine that documents the shell (ci.yml excludes it).
+      - name: Document
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --workspace --no-deps
 
       - name: Test
         run: cargo test --workspace

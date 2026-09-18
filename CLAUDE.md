@@ -11,7 +11,36 @@ PrismDMX is a high-reliability, real-time DMX control software designed for miss
 
 ## Development & Test Commands
 
-> *Note: Exact commands will be finalized after tech stack selection in the Planning Phase.*
+The full list, and what each gate is for, is `docs/manual/developer.en.md` §8.
+Run the Rust and the interface suites one at a time, never overlapping.
+
+```bash
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all --check
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+cd ui && npx tsc -b --force && npm run lint && npm run test && npm run build && npm run e2e
+```
+
+## CI Policy — local in full, GitHub Actions minimal (since 2026-09-18)
+
+GitHub Actions minutes cost money and **Windows minutes cost twice as much as
+Linux ones**; the Windows jobs ran about twenty minutes on every push. So:
+
+-   **Locally, every gate runs in full, every time**, before a commit is pushed —
+    the whole workspace on Windows, the interface, and the Playwright suite. This
+    is where a change is verified; CI repeats, it does not replace.
+-   **On every push and pull request, CI runs Linux only** (`ci.yml`): format,
+    clippy and `cargo doc` over every crate but `prism-app`, the platform-neutral
+    crates' tests, the ARM64 cross-check, the interface and its end-to-end
+    suite, and the web jobs. Watch that run to green.
+-   **The complete pass — Windows included, the installer included — runs only
+    for a release** (`release.yml`, on a `v*` tag). It can be started by hand
+    with `workflow_dispatch` (it builds and publishes nothing then) when a change
+    needs the Windows half before a release: the shell, the installer, a
+    platform-specific crate. Do that deliberately, not by habit.
+-   Do not add a Windows job, or a heavy job, to `ci.yml`. A new check belongs on
+    Linux if Linux can answer it, and in `release.yml` if only Windows can.
 
 ## Code Style & Architecture Guidelines
 

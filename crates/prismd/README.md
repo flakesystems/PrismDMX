@@ -32,7 +32,7 @@ not one of them, which is not an accident but a constraint that was met four
 times over: the user data directory comes from a dependency, the tick thread's
 priority from another, the IPC endpoint from `prism-ipc`, and the MIDI port from
 `prism-midi`. Its tests run on the Linux CI job over a Unix domain socket and on
-the Windows job over a named pipe — which is what keeps the claim honest.
+the Windows pass over a named pipe (`release.yml`, and every local run) — which is what keeps the claim honest.
 
 ## Testing it
 
