@@ -9,7 +9,7 @@ ever filed, with what was done about it and which test now holds it — lives in
 the repository, because it is a working document rather than a public one.
 
 At the time of writing **eleven** faults are open in 0.9.2 out of sixty-one
-filed — **nine** of them are already fixed for the next release and marked so
+filed — **ten** of them are already fixed for the next release and marked so
 here.
 
 ## B52 — the desk does not follow a switching channel while the show runs
@@ -140,7 +140,7 @@ fader while a web client is connected.
 
 ## B60 — patch window: several bugs and missing features
 
-**Being rebuilt as a session of its own (S57)**, because the eight points depend on each other. Until then the number fields can at least be emptied and retyped.
+**Fixed for the next release.** *Add fixture* opens the library, one fixture per row with a mode chooser, loading more as it is scrolled; a new fixture starts at the next free address, is named after its type when left unnamed, and several of one type are one step and one Oops.
 
 **Where:** patch window, fixture library.
 **Severity:** annoying.

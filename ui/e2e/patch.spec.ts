@@ -1,5 +1,6 @@
 /**
- * **S27's three exit criteria, in a browser, against a real daemon.**
+ * **S27's three exit criteria and S57's eight points, in a browser, against a
+ * real daemon.**
  *
  * The unit tests make the same claims in jsdom against a fake socket and they
  * are the ones that run on every commit. This is the one that removes the
@@ -9,10 +10,14 @@
  * 1. **A rig is patched, addressed and edited entirely from the interface** —
  *    starting from a show that has *nothing* in it, not even a profile.
  * 2. **An address conflict is shown before it is committed**, in the daemon's
- *    own words, with the command not yet sent.
+ *    own words, with the command not yet sent — and since S57 with the next
+ *    free address beside it.
  * 3. **The fixture sheet shows live values** — what the programmer holds and
  *    what is on the cable, which are two different things and are drawn two
  *    different ways.
+ *
+ * And S57, punch-list **B60**: every one of the owner's eight points is driven
+ * here, against the library the machine installed.
  *
  * # Nothing here touches a device
  *
@@ -49,23 +54,17 @@ async function desk(page: Page, port: number): Promise<string> {
 }
 
 /**
- * Searches the desk's library and sets the **open row** to one profile out of
- * it, embedding it in the show on the way.
+ * Picks a fixture out of the library panel that is open, by what is typed and
+ * the key of its first mode.
  *
- * The library is **downloaded at install time** (S44), so what is typed here is
- * matched against whatever this machine installed — the four built-in generic
- * profiles are the ones that are always there, whatever else is.
- *
- * **It needs a row open, which is S43's change of order.** The search was in
- * the toolbar and embedded a profile on its own; B19 folded it into the Type
- * field and B23 made that field a panel, so a rig is now built by opening a row
- * and choosing what it is, rather than by embedding something first and only
- * then being allowed to open a row.
+ * **Since S57 the panel is what *Add fixture* opens** (B60's fourth point), and
+ * a click anywhere on the row picks it (the second). Picking embeds nothing:
+ * the profile is embedded with the fixtures, in the same step.
  */
-async function chooseProfile(page: Page, search: string, key: string): Promise<void> {
-  await page.getByTestId("library-open").click();
+async function pick(page: Page, search: string, key: string): Promise<void> {
   await page.getByTestId("library-search").fill(search);
-  await page.getByTestId(`library-${key}`).click();
+  // The **name** cell, not the first one: the whole row picks.
+  await page.getByTestId(`library-row-${key}`).locator("td").nth(1).click();
 }
 
 /** Types a whole number into one of the patch form's fields. */
@@ -74,61 +73,73 @@ async function typeNumber(page: Page, testId: string, value: string): Promise<vo
   await field.fill(value);
 }
 
+/** Whether this machine installed the Open Fixture Library, asked of the open panel. */
+async function libraryInstalled(page: Page): Promise<boolean> {
+  // **The count is the daemon's answer**, and it is waited for rather than
+  // read: `textContent()` does not wait, and a count read before the first
+  // page arrived would say *nothing installed* on a machine that has two
+  // thousand fixtures. Four is the built-in generics, and nothing else.
+  const count = page.getByTestId("library-count");
+  await expect(count).toHaveText(/of \d+ fixtures/);
+  const total = /of (\d+) fixtures/.exec((await count.textContent()) ?? "");
+  return total !== null && Number(total[1]) > 4;
+}
+
 test("a rig is built, addressed and edited entirely from the interface", async ({ page }) => {
   const dataDir = await desk(page, PORT);
   await openWindow(page, "Patch");
   await expect(page.getByTestId("patch")).toBeVisible();
 
   // 1. A brand-new show carries **no profiles at all**, and the count says so.
-  //    The window used to say it a second time in a sentence of its own; that
-  //    note went with the toolbar's library search in B19, because there is no
-  //    longer an empty menu for it to warn about — the row opens either way
-  //    and the profile is searched for inside it.
   await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 0 profiles");
 
-  // 2. Patch a fixture. Number, name, type, universe and address — the five
-  //    fields of `PatchFixture`, all of them typed here. The row opens on
-  //    **nothing chosen**, which is an ordinary state now rather than a window
-  //    that cannot be used.
+  // 2. Patch a fixture. *Add fixture* **is** the library (S57): the search is
+  //    there at once, beside the fixture's settings.
   await page.getByRole("button", { name: "Add fixture" }).click();
-  await expect(page.getByTestId("draft-type")).toHaveText("No profile chosen");
-
-  // The type comes out of the desk's library — which is **searched**, because
-  // an installed desk knows two thousand profiles (S44). What comes back is a
-  // `ShowPatch`: the show owns its copy of that profile from now on.
-  await chooseProfile(page, "generic rgbw", "generic.rgbw.par");
-  await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 1 profiles");
+  await expect(page.getByTestId("library-search")).toBeVisible();
+  await expect(page.getByTestId("draft-type")).toContainText("Choose a fixture");
+  await pick(page, "generic rgbw", "generic.rgbw.par");
+  await expect(page.getByTestId("draft-type")).toHaveText("Generic RGBW PAR");
+  // **Picking embedded nothing** — the show is as it was.
+  await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 0 profiles");
 
   await typeNumber(page, "draft-name", "Front left");
-  await typeNumber(page, "draft-address", "1");
   await expect(page.getByTestId("patch-preview")).toContainText("Free");
   await page.getByTestId("draft-apply").click();
   await expect(page.getByTestId("patch-row-1")).toContainText("Front left");
+  // The profile came with the fixture, in the same step.
+  await expect(page.getByTestId("patch-count")).toHaveText("1 fixtures · 1 profiles");
   // The count is a `Status` reading, which S43 moved off the bottom bar and
   // into a window of its own.
   await openWindow(page, "Status");
   await expect(page.getByTestId("fixtures")).toHaveText("1");
 
-  // And a second one, clear of the first.
+  // And a second one. **It starts at the next free address** (S57): the PAR
+  // is 1-4, so it is 5, and nobody typed it.
   await page.getByRole("button", { name: "Add fixture" }).click();
-  await typeNumber(page, "draft-name", "Front right");
-  await typeNumber(page, "draft-address", "10");
+  await pick(page, "generic rgbw", "generic.rgbw.par");
+  await expect(page.getByTestId("draft-address")).toHaveValue("5");
+  // **A fixture with no name is named after its type** (S57): the field says
+  // so, and the daemon does it.
+  await expect(page.getByTestId("draft-name")).toHaveAttribute("placeholder", "RGBW PAR");
   await page.getByTestId("draft-apply").click();
-  await expect(page.getByTestId("patch-row-2")).toContainText("Front right");
+  await expect(page.getByTestId("patch-row-2")).toContainText("RGBW PAR");
+  await expect(page.getByTestId("patch-row-2")).toContainText("5");
 
   // 3. **The conflict, before it is committed.** Fixture 2 is moved onto
-  //    fixture 1's channels — and the daemon says so while the form is still
-  //    open and nothing has been sent. The sentence is the daemon's own
-  //    arithmetic: which channels are shared, and which fixture wins them.
+  //    fixture 1's channels — and the daemon says so while the panel is still
+  //    open and nothing has been sent, **with where it would fit** (S57).
   await page.getByTestId("patch-row-2").click();
   await typeNumber(page, "draft-address", "3");
   const preview = page.getByTestId("patch-preview");
   await expect(preview).toContainText("Overlaps 3–4 with fixture 1");
   await expect(preview).toContainText("higher fixture number wins");
+  await expect(preview).toContainText("Next free: 1.5.");
+  await expect(page.getByTestId("draft-next-free")).toHaveText("Move to 1.5");
   // The row has **not** moved: this is a question, not a command.
-  await expect(page.getByTestId("patch-row-2")).toContainText("10");
+  await expect(page.getByTestId("patch-row-2")).toContainText("5");
 
-  // An address that would be refused says so, and Apply goes dead — again
+  // An address that would be refused says so, and Patch goes dead — again
   // before anything is sent.
   await typeNumber(page, "draft-address", "510");
   await expect(preview).toContainText("510");
@@ -140,20 +151,20 @@ test("a rig is built, addressed and edited entirely from the interface", async (
   await expect(page.getByTestId("draft-apply")).toBeEnabled();
   await page.getByTestId("draft-apply").click();
   await expect(page.getByTestId("patch-row-2")).toContainText("3");
-  // And now both rows are painted as sharing channels, which is the same
-  // answer asked of the show as it stands.
   await expect(page.getByTestId("patch-row-1")).toHaveClass(/row-conflict/);
   await expect(page.getByTestId("patch-row-2")).toHaveClass(/row-conflict/);
 
-  // 4. Editing: a name, then a **number**, which is its own command because
-  //    the number is the key the patch is filed under.
+  // 4. Editing: a name, and the next free address on one key.
   await page.getByTestId("patch-row-2").click();
   await typeNumber(page, "draft-name", "Front right (moved)");
-  await typeNumber(page, "draft-address", "20");
+  await page.getByTestId("draft-next-free").click();
+  await expect(page.getByTestId("draft-address")).toHaveValue("5");
   await page.getByTestId("draft-apply").click();
   await expect(page.getByTestId("patch-row-2")).toContainText("Front right (moved)");
   await expect(page.getByTestId("patch-row-1")).not.toHaveClass(/row-conflict/);
 
+  // Then a **number**, which is its own command because the number is the key
+  // the patch is filed under.
   await page.getByTestId("patch-row-2").click();
   await typeNumber(page, "draft-id", "20");
   await page.getByTestId("draft-apply").click();
@@ -185,12 +196,11 @@ test("the fixture sheet shows the programmer and the cable, and they can differ"
   // A rig, built through the patch window as above but without the detours.
   await openWindow(page, "Patch");
   await page.getByRole("button", { name: "Add fixture" }).click();
-  await chooseProfile(page, "generic rgbw", "generic.rgbw.par");
+  await pick(page, "generic rgbw", "generic.rgbw.par");
   await typeNumber(page, "draft-name", "Wash 1");
-  await typeNumber(page, "draft-address", "1");
+  await expect(page.getByTestId("patch-preview")).toContainText("Free");
   await page.getByTestId("draft-apply").click();
   await expect(page.getByTestId("patch-row-1")).toBeVisible();
-
   // The sheet, on the Colour bank, which is where an RGBW PAR's parameters are.
   await openWindow(page, "FixtureSheet");
   await expect(page.getByTestId("fixture-sheet")).toBeVisible();
@@ -242,29 +252,17 @@ test("a sheet with more rows than it has room for scrolls inside its window", as
   // `CLAUDE.md` forbids scrolling *outside* the canvas and a window is exactly
   // where a long list belongs. So: forty fixtures, both sheets open, and the
   // document, the canvas and both bars still measuring zero.
+  //
+  // **Forty in one gesture since S57** (B60's eighth point): a count, placed
+  // by the daemon one after the other. It used to be a loop of forty panels,
+  // each with its number typed over the form's suggestion.
   const dataDir = await desk(page, PORT + 2);
   await openWindow(page, "Patch");
-  // One row is opened only to put the dimmer into the show and is then thrown
-  // away: picking a profile embeds it, and every row opened after this one
-  // starts on it, so the loop below never has to touch the library.
   await page.getByRole("button", { name: "Add fixture" }).click();
-  await chooseProfile(page, "generic dimmer", "generic.dimmer");
-  await page.getByTestId("draft-cancel").click();
-  for (let id = 1; id <= 40; id += 1) {
-    await page.getByRole("button", { name: "Add fixture" }).click();
-    // **The number is typed rather than taken from the form's suggestion**, and
-    // that is what makes this loop deterministic. `nextFreeFixtureId` proposes
-    // the lowest number *the client currently holds no fixture for*, and the
-    // client holds what the daemon has sent it — so on a machine where the
-    // round trip is slower than the next click, two drafts get the same number
-    // and the second patch is a **repatch** of the first. Thirty-nine fixtures,
-    // then, and a test that failed for a reason that has nothing to do with
-    // scrolling. The suggestion is a convenience an operator types over, and
-    // this is a test typing over it.
-    await typeNumber(page, "draft-id", String(id));
-    await typeNumber(page, "draft-address", String(id));
-    await page.getByTestId("draft-apply").click();
-  }
+  await pick(page, "generic dimmer", "generic.dimmer");
+  await typeNumber(page, "draft-count", "40");
+  await expect(page.getByTestId("patch-preview")).toContainText("40 fixtures, 1 to 40, at 1.1 to 1.40");
+  await page.getByTestId("draft-apply").click();
   await openWindow(page, "Status");
   await expect(page.getByTestId("fixtures")).toHaveText("40");
   await openWindow(page, "FixtureSheet");
@@ -285,9 +283,7 @@ test("a sheet with more rows than it has room for scrolls inside its window", as
       canvas: box('[data-testid="canvas"]'),
       // **The one band left** — S43 took the executor strip and the readings
       // off the screen and made them windows, so what is outside the canvas is
-      // the header, the command line and the programmer band. The two probes
-      // that named the old bars were measuring elements that no longer exist,
-      // which is a check that passes for the wrong reason.
+      // the header, the command line and the programmer band.
       band: box('[data-testid="programmer-band"]'),
       // The one place that *is* allowed to scroll, and has to: forty rows do
       // not fit in a window.
@@ -349,57 +345,128 @@ async function litColumns(page: Page): Promise<number> {
   });
 }
 
-test("a real fixture out of the Open Fixture Library is searched, embedded and patched", async ({
+test("a real fixture is one row with its modes, patched three at a time and taken back in one", async ({
   page,
 }) => {
-  // **The whole point of S44**, end to end: an operator types the name printed
-  // on the light and gets the manufacturer's channel order.
+  // **S44's point and S57's eight, end to end**: an operator types the name
+  // printed on the light, gets the manufacturer's channel order, chooses the
+  // mode beside it, and patches three of them in one gesture.
   //
   // The library is downloaded at install time, so this test says why it is
   // skipping rather than failing on a machine that has not installed it — CI
   // installs it, so it runs there on every commit.
   const dataDir = await desk(page, PORT + 3);
   await openWindow(page, "Patch");
-
-  // A row has to be opened first: the library is chosen **in the form**, for
-  // the fixture being patched (B19), and it is a panel of its own (B23).
-  await page.getByText("Add fixture").click();
-  await page.getByTestId("library-open").click();
-  await page.getByTestId("library-search").fill("stage wash 7x10");
-  const match = page.getByTestId("library-stage-right/stage-wash-7x10w-led-moving-head/9ch");
-
-  // **Whether a library is installed is the daemon's answer, not the search's.**
-  // The search is a `Query` round trip and `locator.count()` does *not* wait, so
-  // counting the matches asks "has the answer arrived yet" and reads the answer
-  // *no* as "there is no library". On 2026-08-19 that skipped this test on CI
-  // with 634 fixtures installed, and a skip is silent. The **count beside the
-  // search** carries the number the snapshot brought, which is a fact by the
-  // time the panel is open; the match itself is then waited for like anything
-  // else.
-  const shown = (await page.getByTestId("library-count").textContent()) ?? "";
-  const installed = /of (\d+) profiles/.exec(shown);
-  if (installed === null || installed[1] === "0") {
+  await page.getByRole("button", { name: "Add fixture" }).click();
+  if (!(await libraryInstalled(page))) {
     test.skip(true, "no fixture library is installed - run tools/fetch-fixtures");
     return;
   }
-  await expect(match).toBeVisible();
-  await match.click();
-  await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 1 profiles");
 
-  await page.getByRole("button", { name: "Add fixture" }).click();
-  await typeNumber(page, "draft-name", "Head 1");
-  await typeNumber(page, "draft-address", "1");
-  // Nine channels, which is what that mode is — and the daemon says so before
-  // the patch, out of a profile it read from a JSON file this repository does
-  // not contain.
+  // 1. **One row per fixture**, its two modes listed in it — it used to be two
+  //    rows, one per mode.
+  await page.getByTestId("library-search").fill("stage wash 7x10");
+  const key = "stage-right/stage-wash-7x10w-led-moving-head/9ch";
+  const row = page.getByTestId(`library-row-${key}`);
+  await expect(row).toBeVisible();
+  await expect(row.locator("td").nth(2)).toHaveText("9ch · 14ch");
+  await expect(page.getByTestId("library-row-stage-right/stage-wash-7x10w-led-moving-head/14ch")).toHaveCount(0);
+
+  // 2. **The whole row picks** — the modes cell, the one that used to do
+  //    nothing.
+  await row.locator("td").nth(2).click();
+  await expect(page.getByTestId("draft-type")).toContainText("Stage Wash 7x10W");
+  // Nine channels, out of a profile read from a JSON file this repository
+  // does not contain — and nothing embedded yet.
   await expect(page.getByTestId("patch-preview")).toContainText("9 channels");
-  await expect(page.getByTestId("patch-preview")).toContainText("ending at 9");
-  await page.getByTestId("draft-apply").click();
+  await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 0 profiles");
 
-  const row = page.getByTestId("patch-row-1");
-  await expect(row).toContainText("Head 1");
-  await expect(row).toContainText("Stage Wash");
-  await expect(row).toContainText("9");
+  // The mode, chosen beside it.
+  await page
+    .getByTestId("draft-mode")
+    .selectOption("stage-right/stage-wash-7x10w-led-moving-head/14ch");
+  await expect(page.getByTestId("patch-preview")).toContainText("14 channels, ending at 14");
+
+  // 8. **Three at once**, placed one after the other by the daemon.
+  await typeNumber(page, "draft-count", "3");
+  await expect(page.getByTestId("patch-preview")).toContainText("3 fixtures, 1 to 3, at 1.1 to 1.29");
+  await page.getByTestId("draft-apply").click();
+  for (const [id, address, index] of [
+    [1, "1", "1"],
+    [2, "15", "2"],
+    [3, "29", "3"],
+  ] as const) {
+    const patched = page.getByTestId(`patch-row-${String(id)}`);
+    // 7. **Named after their type**, and told apart by their place.
+    await expect(patched).toContainText(`Stage Wash 7x10W LED Moving Head ${index}`);
+    await expect(patched.locator("td").nth(4)).toHaveText(address);
+    await expect(patched.locator("td").nth(5)).toHaveText("14");
+  }
+  // None of them shares a channel with another.
+  await expect(page.getByTestId("patch-row-2")).not.toHaveClass(/row-conflict/);
+  await expect(page.getByTestId("patch-count")).toHaveText("3 fixtures · 1 profiles");
+
+  // **One Oops takes all three back**, and the profile they came with. Typed
+  // and run, which is an undo whatever stands on the line (B58).
+  await page.getByTestId("command-input").fill("Oops");
+  await page.getByTestId("command-input").press("Enter");
+  await expect(page.getByTestId("patch-count")).toHaveText("0 fixtures · 0 profiles");
+
+  await daemon?.kill();
+  daemon = null;
+  forget(dataDir);
+});
+
+test("the library loads as it is scrolled, and nothing scrolls outside the canvas", async ({
+  page,
+}) => {
+  // 3. **The whole library is reachable without typing a search first** —
+  //    a page at a time, asked for when the list reaches its end. And the
+  //    panel, open at 1280 × 720, scrolls inside itself and nowhere else.
+  const dataDir = await desk(page, PORT + 4);
+  await openWindow(page, "Patch");
+  await page.getByRole("button", { name: "Add fixture" }).click();
+  if (!(await libraryInstalled(page))) {
+    test.skip(true, "no fixture library is installed - run tools/fetch-fixtures");
+    return;
+  }
+  const rows = page.getByTestId(/^library-row-/);
+  // A page is sixty — and a page that does not fill the list is followed by
+  // the next at once, so what is drawn is at least one page.
+  await expect.poll(async () => rows.count()).toBeGreaterThanOrEqual(60);
+  const before = await rows.count();
+
+  // Scrolled to the end: the next page arrives.
+  await page.getByTestId("library-scroll").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect.poll(async () => rows.count()).toBeGreaterThan(before);
+
+  const viewport = page.viewportSize();
+  expect(viewport).toEqual({ width: 1280, height: 720 });
+  const overflow = await page.evaluate(() => {
+    const box = (selector: string): [number, number] => {
+      const element = document.querySelector(selector);
+      return element === null
+        ? [-1, -1]
+        : [element.scrollWidth - element.clientWidth, element.scrollHeight - element.clientHeight];
+    };
+    return {
+      page: [
+        document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        document.documentElement.scrollHeight - document.documentElement.clientHeight,
+      ] as [number, number],
+      canvas: box('[data-testid="canvas"]'),
+      list: box('[data-testid="library-scroll"]'),
+    };
+  });
+  expect(overflow.page).toEqual([0, 0]);
+  expect(overflow.canvas).toEqual([0, 0]);
+  // The list is the one thing that scrolls, and it does.
+  expect(overflow.list[1]).toBeGreaterThan(0);
+  // And the form beside it is all on the screen: its Patch key can be reached.
+  await expect(page.getByTestId("draft-apply")).toBeInViewport();
 
   await daemon?.kill();
   daemon = null;

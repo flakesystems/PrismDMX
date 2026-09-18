@@ -139,6 +139,12 @@ pub enum ShowError {
     /// cannot share one, and replacing the other would delete a light nobody
     /// asked to delete.
     FixtureNumberInUse(prism_domain::FixtureId),
+    /// A `Command::PatchFixtures` with no fixture in it — S57. Refused rather
+    /// than applied as nothing, because a gesture that did nothing would still
+    /// be a step for Oops to take back.
+    NothingToPatch,
+    /// More fixtures at once than `prism_domain::MAX_PATCH_AT_ONCE` — S57.
+    TooManyAtOnce(usize),
     /// A profile key this desk does not carry. `Command::EmbedFixtureType`
     /// names one of `crate::library`'s, because a client sends a key rather
     /// than a profile (S27).
@@ -310,6 +316,12 @@ impl fmt::Display for ShowError {
                 write!(f, "attribute value {value} is outside 0..=65535")
             }
             Self::NotAShowCommand => write!(f, "this is a session command, not a show command"),
+            Self::NothingToPatch => write!(f, "there is no fixture to patch"),
+            Self::TooManyAtOnce(count) => write!(
+                f,
+                "{count} fixtures at once is more than {} — patch them in parts",
+                prism_domain::MAX_PATCH_AT_ONCE
+            ),
             Self::MismatchedObjects { from, to } => {
                 write!(f, "{from} and {to} are not the same kind of thing")
             }
@@ -695,36 +707,69 @@ impl Show {
         universe: UniverseId,
         address: u16,
     ) -> prism_domain::PatchPreview {
-        crate::conflict::preview(self, id, type_id, universe, address)
+        self.preview_patch_with(
+            self.fixture_type(type_id),
+            type_id,
+            prism_domain::PatchPlacement {
+                id,
+                universe,
+                address,
+            },
+            0,
+        )
     }
 
-    /// Whether [`Self::patch_fixture`] would accept these five fields.
+    /// [`Self::preview_patch`] with the profile handed in, and for `adding` new
+    /// fixtures — S57.
     ///
-    /// Writes nothing. The validation is the same code path the edit runs, so a
+    /// The profile is the caller's because since S57 it is usually the
+    /// **library's** copy, which the show has not embedded yet: see
+    /// `crate::ShowFile::preview_patch`. `adding` of 0 is the repatch S27 asked
+    /// about; one or more is `Command::PatchFixtures`' question.
+    #[must_use]
+    pub fn preview_patch_with(
+        &self,
+        fixture_type: Option<&FixtureType>,
+        type_id: &str,
+        request: prism_domain::PatchPlacement,
+        adding: u16,
+    ) -> prism_domain::PatchPreview {
+        crate::conflict::preview(self, fixture_type, type_id, request, adding)
+    }
+
+    /// Whether a fixture of `fixture_type` fits at this place.
+    ///
+    /// Writes nothing. [`Self::check_fixture`] runs it on every patch, so a
     /// preview and the patch that follows it cannot disagree.
     ///
     /// # Errors
     ///
-    /// Whatever [`Self::patch_fixture`] would answer with.
-    pub(crate) fn check_patch(
-        &self,
-        id: prism_domain::FixtureId,
-        type_id: &str,
-        universe: UniverseId,
-        address: u16,
+    /// The universe or the address a patch would be refused for.
+    pub(crate) fn check_placement(
+        placement: prism_domain::PatchPlacement,
+        fixture_type: &FixtureType,
     ) -> Result<(), ShowError> {
-        self.check_fixture(&Fixture {
-            software_dimmer: true,
-            id,
-            name: String::new(),
-            type_id: type_id.to_owned(),
-            universe,
-            address,
-            position: prism_domain::Vec3::ZERO,
-            rotation: prism_domain::Vec3::ZERO,
-            invert_pan: false,
-            invert_tilt: false,
-        })
+        if !placement.universe.is_in_range() {
+            return Err(ShowError::UniverseOutOfRange {
+                fixture: placement.id,
+                universe: placement.universe,
+            });
+        }
+        let fits = placement.address > 0
+            && placement
+                .address
+                .checked_add(fixture_type.footprint.saturating_sub(1))
+                .is_some_and(|last| {
+                    fixture_type.footprint > 0 && last <= prism_domain::CHANNELS_PER_UNIVERSE
+                });
+        if !fits {
+            return Err(ShowError::AddressOutOfRange {
+                fixture: placement.id,
+                address: placement.address,
+                footprint: fixture_type.footprint,
+            });
+        }
+        Ok(())
     }
 
     // -- edits ------------------------------------------------------------
@@ -1734,20 +1779,14 @@ impl Show {
         let Some(fixture_type) = self.fixture_types.get(&fixture.type_id) else {
             return Err(ShowError::UnknownFixtureType(fixture.type_id.clone()));
         };
-        if !fixture.universe.is_in_range() {
-            return Err(ShowError::UniverseOutOfRange {
-                fixture: fixture.id,
+        Self::check_placement(
+            prism_domain::PatchPlacement {
+                id: fixture.id,
                 universe: fixture.universe,
-            });
-        }
-        if fixture.last_address(fixture_type.footprint).is_none() {
-            return Err(ShowError::AddressOutOfRange {
-                fixture: fixture.id,
                 address: fixture.address,
-                footprint: fixture_type.footprint,
-            });
-        }
-        Ok(())
+            },
+            fixture_type,
+        )
     }
 
     /// Rejects a reference to a fixture that is not patched.

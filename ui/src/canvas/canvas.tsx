@@ -39,9 +39,10 @@
  * happens, because the size of a screen is client-local (§4.2).
  */
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { JsonValue, ProgrammerState } from "../bindings";
+import { ModalLayer } from "../chrome/modal";
 import { WindowContent } from "./content";
 import type { Rect } from "./geometry";
 import { WindowFrame } from "./window";
@@ -77,6 +78,13 @@ export function Canvas({
   onPicker,
 }: CanvasProps) {
   const surface = useRef<HTMLDivElement>(null);
+  // The canvas, for a modal opened inside one of its windows (S57): see
+  // `ModalLayer`. State rather than the ref, so the windows are drawn again
+  // once there is an element to portal into.
+  const [layer, setLayer] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setLayer(surface.current);
+  }, []);
   const windows = openWindows(session);
   const focused = focusedWindow(session);
   // By number, so an element never moves in the document while it is open —
@@ -117,30 +125,34 @@ export function Canvas({
       }}
     >
       {windows.length === 0 ? <EmptyCanvas /> : null}
-      {byNumber.map((instance: CanvasWindow) => (
-        <WindowFrame
-          key={instance.instanceId}
-          window={instance}
-          stack={windows.indexOf(instance) + 1}
-          focused={instance.instanceId === focused}
-          box={box}
-          // Every window but this one, so a drag stops against them the way it
-          // stops against the canvas edges (S43, B10). It is the session's own
-          // list, which is what makes it a prediction of the daemon's rule
-          // rather than a second opinion about the layout.
-          neighbours={windows.filter((other) => other.instanceId !== instance.instanceId)}
-          onPlace={onPlace}
-          onFocus={onFocus}
-          onClose={onClose}
-        >
-          <WindowContent
+      <ModalLayer.Provider value={layer}>
+        {byNumber.map((instance: CanvasWindow) => (
+          <WindowFrame
+            key={instance.instanceId}
             window={instance}
-            show={show}
-            session={session}
-            programmer={programmer}
-          />
-        </WindowFrame>
-      ))}
+            stack={windows.indexOf(instance) + 1}
+            focused={instance.instanceId === focused}
+            box={box}
+            // Every window but this one, so a drag stops against them the way it
+            // stops against the canvas edges (S43, B10). It is the session's own
+            // list, which is what makes it a prediction of the daemon's rule
+            // rather than a second opinion about the layout.
+            neighbours={windows.filter(
+              (other) => other.instanceId !== instance.instanceId,
+            )}
+            onPlace={onPlace}
+            onFocus={onFocus}
+            onClose={onClose}
+          >
+            <WindowContent
+              window={instance}
+              show={show}
+              session={session}
+              programmer={programmer}
+            />
+          </WindowFrame>
+        ))}
+      </ModalLayer.Provider>
     </div>
   );
 }
@@ -154,8 +166,8 @@ export function Canvas({
 function EmptyCanvas() {
   return (
     <p className="canvas-empty" data-testid="canvas-empty">
-      No windows are open in this view. Right-click here, press Insert, or use an F-key on the
-      console.
+      No windows are open in this view. Right-click here, press Insert, or use
+      an F-key on the console.
     </p>
   );
 }

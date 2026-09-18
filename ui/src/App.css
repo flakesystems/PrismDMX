@@ -657,24 +657,21 @@
 
 .library-table th:nth-child(2),
 .library-table td:nth-child(2) {
-    width: 30%;
+    width: 36%;
 }
 
+/*
+ * The modes — one fixture per row since S57 (B60), so a fixture's modes are a
+ * cell rather than rows. It takes what the other three leave.
+ */
 .library-table th:nth-child(3),
 .library-table td:nth-child(3) {
-    width: 16%;
-}
-
-.library-table th:nth-child(4),
-.library-table td:nth-child(4) {
-    width: 4rem;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
+    width: auto;
 }
 
 /* Whose it is — B43. Narrow: it holds one of two words. */
-.library-table th:nth-child(5),
-.library-table td:nth-child(5) {
+.library-table th:nth-child(4),
+.library-table td:nth-child(4) {
     width: 5rem;
 }
 
@@ -688,11 +685,6 @@
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-/* Marked, not hidden — and picking it re-reads it, which the cell says. */
-.library-held {
-    color: var(--ink-dim);
 }
 
 /*
@@ -3020,4 +3012,107 @@
 
 .settings-none {
     color: var(--ink-dim);
+}
+
+/*
+ * ---- the patch editor: the library and the fixture, side by side (S57) ------
+ *
+ * Punch-list B60. *Add fixture* opens the library straight away, and the
+ * fixture's settings are the right half of the same panel rather than a second
+ * form under the table. The panel is as tall as the canvas and **the list
+ * scrolls inside it**, a page at a time; nothing scrolls outside the canvas at
+ * 1280 × 720 (`e2e/patch.spec.ts` measures it).
+ */
+.modal-full {
+    height: 100%;
+}
+
+.modal-full .modal-body {
+    display: flex;
+    overflow: hidden;
+}
+
+.patch-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    gap: 1rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+}
+
+.library-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+.library-scroll {
+    flex: 1 1 auto;
+    min-height: 3rem;
+    overflow: auto;
+}
+
+/* The whole row picks — B60's second point — and says so under the pointer. */
+.library-row {
+    cursor: pointer;
+}
+
+.library-row:hover td {
+    background: var(--edge-lit, rgba(255, 255, 255, 0.08));
+}
+
+.library-more {
+    display: block;
+    margin: 0.4rem auto;
+}
+
+.patch-editor .patch-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 0;
+    overflow: auto;
+    border-top: 0;
+    border-left: 1px solid var(--edge);
+    padding: 0 0 0 1rem;
+}
+
+.patch-editor .patch-type {
+    margin: 0;
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.patch-fields {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.35rem 0.6rem;
+    align-items: center;
+}
+
+.patch-fields label {
+    display: contents;
+}
+
+.patch-editor .patch-form input,
+.patch-editor .patch-form select {
+    width: 100%;
+    min-width: 0;
+}
+
+.patch-editor .patch-form input[data-testid="draft-id"],
+.patch-editor .patch-form input[data-testid="draft-count"],
+.patch-editor .patch-form input[data-testid="draft-universe"],
+.patch-editor .patch-form input[data-testid="draft-address"] {
+    width: 6rem;
+}
+
+.patch-editor .patch-check input {
+    width: auto;
+}
+
+.patch-next-free {
+    align-self: start;
 }

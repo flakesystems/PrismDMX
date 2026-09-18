@@ -10,7 +10,7 @@ gemeldete Eintrag, was daraus wurde und welcher Test ihn heute festhält — lie
 im Repository, weil es ein Arbeitsdokument ist und kein öffentliches.
 
 Zum Zeitpunkt dieser Fassung sind in 0.9.2 **elf** Fehler offen, von
-einundsechzig gemeldeten — **neun** davon sind für die nächste Version schon
+einundsechzig gemeldeten — **zehn** davon sind für die nächste Version schon
 behoben und hier so markiert.
 
 ## B52 — Das Pult folgt einem Switching Channel nicht, während die Show läuft
@@ -146,7 +146,7 @@ bewegen, während ein Web-Client verbunden ist.
 
 ## B60 — Patch-Fenster: mehrere Fehler und Verbesserungen
 
-**Wird als eigene Session umgebaut (S57)**, weil die acht Punkte aneinanderhängen. Bis dahin lassen sich die Zahlenfelder immerhin leeren und neu tippen.
+**Behoben für die nächste Version.** *Add fixture* öffnet die Bibliothek, ein Fixture pro Zeile mit Moduswahl, die beim Scrollen nachlädt; ein neues Fixture beginnt an der nächsten freien Adresse, heißt ohne Namen wie sein Typ, und mehrere desselben Typs sind ein Schritt und ein Oops.
 
 **Wo:** Patch-Fenster, Fixture-Bibliothek.
 **Schwere:** ärgerlich.

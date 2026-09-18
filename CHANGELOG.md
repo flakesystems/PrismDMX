@@ -23,7 +23,7 @@ Alle Versionen bisher sind **Vorabversionen**.
 ## Noch nicht veröffentlicht
 
 Was die offene Beta in den ersten zwei Wochen gemeldet hat — zehn Meldungen,
-neun davon behoben (S56):
+alle zehn behoben (S56 und S57):
 
 - **Controls:** eine Taste auf *Fenster wählen* oder *Befehl schreiben* zu
   binden trennte den Client bei jedem Öffnen des Menüs. Behoben (B55).
@@ -39,7 +39,13 @@ neun davon behoben (S56):
   nach dem Loslassen nicht mehr zurück (B59).
 - **Cue Viewer:** keine Store-Leiste mehr — Cues werden auf der Kommandozeile
   gespeichert; die Update-Taste blinkt im Fenster *CommandKeys* (B62).
-- Das **Patch-Fenster** wird als eigene Session umgebaut (B60, S57).
+- **Patch-Fenster**, neu gebaut um die Bibliothek (B60, S57): *Add fixture*
+  öffnet die Bibliothek und die Einstellungen nebeneinander; jedes Fixture ist
+  **eine** Zeile, der Modus wird daneben gewählt, und die ganze Zeile wählt; die
+  Liste lädt beim Scrollen nach; ein neues Fixture beginnt an der **nächsten
+  freien Adresse**, die eine Überlappung auch nennt; ein Fixture ohne Namen heißt
+  wie sein Typ; und **mehrere desselben Typs** werden in einem Schritt gepatcht,
+  den ein Oops ganz zurücknimmt.
 
 ---
 

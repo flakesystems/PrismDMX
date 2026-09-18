@@ -21,7 +21,7 @@
  * nothing by construction.
  */
 
-import type { Answer, PatchPreview, Query } from "../bindings";
+import type { Answer, PatchAddress, PatchPreview, Query } from "../bindings";
 
 /** How a question reaches the daemon. `DeskStore.ask`, in one word. */
 export type Ask = (query: Query) => Promise<Answer | null>;
@@ -35,11 +35,17 @@ export type Ask = (query: Query) => Promise<Answer | null>;
  */
 export class PreviewRequester {
   readonly #ask: Ask;
-  readonly #onAnswer: (preview: PatchPreview | null) => void;
+  readonly #onAnswer: (preview: PatchPreview | null, query: Query) => void;
   #generation = 0;
   #stopped = false;
 
-  constructor(ask: Ask, onAnswer: (preview: PatchPreview | null) => void) {
+  /**
+   * `onAnswer` is told which question an answer is to, so a caller can tell
+   * the answer to *this* draft from one to the draft before it — S57, where
+   * the placements of several fixtures are sent back verbatim and an answer
+   * to the previous address would put them in the wrong place.
+   */
+  constructor(ask: Ask, onAnswer: (preview: PatchPreview | null, query: Query) => void) {
     this.#ask = ask;
     this.#onAnswer = onAnswer;
   }
@@ -59,7 +65,7 @@ export class PreviewRequester {
       if (this.#stopped || generation !== this.#generation) {
         return;
       }
-      this.#onAnswer(previewOf(answer));
+      this.#onAnswer(previewOf(answer), query);
     });
   }
 
@@ -115,7 +121,7 @@ export function conflictedFixtures(
  * about — and the middle one is legal: patching a second fixture onto the first
  * is how a fixture is cloned (`prism_core::conflict`).
  */
-export function previewText(preview: PatchPreview | null, id: number): string {
+export function previewText(preview: PatchPreview | null, id: number, adding = 0): string {
   if (preview === null) {
     return "";
   }
@@ -126,8 +132,9 @@ export function previewText(preview: PatchPreview | null, id: number): string {
     preview.lastAddress === null
       ? `${String(preview.footprint)} channels`
       : `${String(preview.footprint)} channels, ending at ${String(preview.lastAddress)}`;
+  const several = adding > 1 ? severalText(preview, adding) : "";
   if (preview.conflicts.length === 0) {
-    return `Free — ${span}.`;
+    return several === "" ? `Free — ${span}.` : `Free — ${span}. ${several}`;
   }
   const overlaps = preview.conflicts
     .map((conflict) => {
@@ -138,7 +145,36 @@ export function previewText(preview: PatchPreview | null, id: number): string {
   // Said as a warning and not as a refusal, because it is not one: the higher
   // fixture number wins the shared channels and the engine makes that
   // deterministic (S4). An operator cloning a fixture is doing this on purpose.
-  return `${span}. Overlaps ${overlaps} — the higher fixture number wins.`;
+  //
+  // **And where it would fit** — S57, the owner's fifth point. The daemon's
+  // answer, for the whole footprint; nothing here works it out.
+  const free =
+    preview.nextFree === null
+      ? " Nothing is free for it before universe 64 ends."
+      : ` Next free: ${placeText(preview.nextFree)}.`;
+  const tail = several === "" ? "" : ` ${several}`;
+  return `${span}. Overlaps ${overlaps} — the higher fixture number wins.${free}${tail}`;
+}
+
+/**
+ * Where several new fixtures would go, in one sentence — S57.
+ *
+ * The first and the last are enough to read the gesture by; the numbers may
+ * skip ones that are patched, so the sentence names both ends rather than a
+ * count that would imply they run on without a gap.
+ */
+function severalText(preview: PatchPreview, adding: number): string {
+  const first = preview.placements[0];
+  const last = preview.placements.at(-1);
+  if (first === undefined || last === undefined || preview.placements.length !== adding) {
+    return `${String(adding)} of them do not all fit before universe 64 ends.`;
+  }
+  return `${String(adding)} fixtures, ${String(first.id)} to ${String(last.id)}, at ${placeText(first)} to ${placeText(last)}.`;
+}
+
+/** A place as a console writes it: `2.14`, universe and address. */
+export function placeText(place: PatchAddress): string {
+  return `${String(place.universe)}.${String(place.address)}`;
 }
 
 /** Whether a preview says the daemon would take this patch. */

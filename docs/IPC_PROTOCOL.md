@@ -241,7 +241,9 @@ type Command =
   | { t: "ExecutorOff"; target: PlaybackTarget }
   | { t: "ExecutorButton"; executorId: ExecutorId; button: ExecutorButtonRef; pressed: boolean }
   | { t: "SetExecutorMaster"; executorId: ExecutorId; level: number }
-  | { t: "PatchFixture"; /* … */ }
+  | { t: "PatchFixture"; /* … */ }     // an empty name is the profile's (S57)
+  | { t: "PatchFixtures"; typeId: string; name: string; softwareDimmer: boolean;
+      placements: PatchPlacement[] }   // S57: several new ones, embedded, one Oops
   | { t: "UnpatchFixture"; id: FixtureId }
   | { t: "RenumberFixture"; id: FixtureId; to: FixtureId }
   | { t: "EmbedFixtureType"; typeId: string }
@@ -864,6 +866,8 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 
 > **Three commands the patch needed** *(S27)*. `PatchFixture` alone can only ever *add* to a rig, so a patch nobody could correct was the state the interface was in until S27. `UnpatchFixture` takes one out, and does **not** cascade into groups, presets or cues — a show outlives the rig it was written on (S11), and `Show::issues` reports what now dangles rather than deleting an operator's stored looks. `RenumberFixture` is one command and not an unpatch plus a patch, because the number is the key the patch is filed under: doing it in two steps leaves the rig without that fixture in between, and leaves it deleted if the second step is refused. `EmbedFixtureType` carries **a key and nothing else**, resolved by the daemon against `prism_core::library` — the same rule `PatchFixture` follows in carrying no channels, since a client that sent a whole `FixtureType` would be authoring show content for the daemon to validate. Without it a brand-new show, which carries no profiles at all, could not be patched from an interface.
 
+> **`PatchFixtures` — several of one fixture in one gesture** *(S57, punch-list B60)*. Ten spots patched as ten `PatchFixture`s would be ten Oops steps, so they travel as one command and are filed as **one** step. It **embeds** as well: the profile is the library's copy when the desk has one, taken in the same step, so browsing the library embeds nothing and one Oops takes back the profile with the fixtures (the journal restores fixtures out, then profiles, then fixtures in, so the same step undoes and redoes). The placements are **the daemon's**: the client sends back verbatim what `Query::PatchPreview` with `adding` answered, and the daemon checks every one again — each must fit, each number must be **free** (a new fixture that replaced a patched one would delete a light nobody asked to delete), no two may share one, and at most `MAX_PATCH_AT_ONCE` (512). The whole list is checked before the first write, so a refusal writes nothing. An empty `name` is the profile's name, and with more than one fixture each gets its place after it — *Spot 1*, *Spot 2*. The same empty-name rule applies to `PatchFixture` since S57, in the one applier every patch reaches, so a line and a script get it too.
+
 > **Five commands a show needed** *(S28)*. Before them the protocol could store a cue and apply a preset, and nothing else about a show could be written from an interface: there was no way to make a sequence to store into, no way to put one on an executor so it could be fired, no way to correct a cue that had been stored, and no way to make a preset for `ApplyPreset` to apply. So a show could only ever be written by hand, in a file, somewhere else.
 >
 > *(`CreateSequence` was absorbed into `StoreSequence` in **S40** — see the S40 note above. What it did:)* it makes an **empty** cue list and is refused when the number is taken — a *create* that replaced a running cue list would empty a playback that is on stage. It is deliberately not S39's `StoreSequence`, which is a different act with a mode on it: that one stores the *programmer* into a sequence.
@@ -967,8 +971,11 @@ reported afterwards beside a patch that has already moved.
 ```typescript
 type Query =
   | { t: "PatchConflicts" }
-  | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number }
+  | { t: "PatchPreview"; id: FixtureId; typeId: string; universe: UniverseId; address: number;
+      adding: number }                 // S57: 0 = repatch `id`; n = n new ones
   | { t: "SearchLibrary"; text: string; limit: number }
+  | { t: "BrowseLibrary"; text: string; offset: number; limit: number }  // S57
+  | { t: "FixtureOfMode"; typeId: string }                              // S57
   | { t: "StorePreview"; target: StoreTarget; mode: StoreMode }
   | { t: "MidiPorts" }
   | { t: "DarkUniverses" }
@@ -986,6 +993,8 @@ type Answer =
   | { t: "PatchConflicts"; conflicts: PatchConflict[] }
   | { t: "PatchPreview"; preview: PatchPreview }
   | { t: "LibraryMatches"; matches: LibraryEntry[]; total: number }
+  | { t: "LibraryFixtures"; fixtures: LibraryFixture[]; matched: number; total: number }
+  | { t: "FixtureOfMode"; fixture: LibraryFixture | null }
   | { t: "StorePreview"; preview: StorePreview }
   | { t: "MidiPorts"; ports: MidiPortInfo[]; configured: string | null;
       open: string | null; status: SurfaceStatus | null }
@@ -1100,6 +1109,10 @@ interface StorePreview {
 ```
 
 > **`SearchLibrary` is the variant that made the mechanism necessary** *(S44)*. `PatchPreview` could conceivably have been a client's own arithmetic, wrongly; the fixture library could not be sent at all. The desk knows some two thousand profiles, an answer has to fit in a frame, and a `LibraryEntry` is deliberately not a `FixtureType` — a key, a manufacturer, a name, a mode, a footprint and, since S51, **whose profile it is**, which is what a menu row shows. The profile itself never leaves the daemon: `Command::EmbedFixtureType` names the one that was chosen by its key, and the daemon copies it into the show. The `limit` a client asks for is **clamped by the daemon**, because a client that asked for two thousand would otherwise get an answer no frame can carry.
+>
+> **`BrowseLibrary` lists the library a fixture at a time and a page at a time** *(S57, punch-list B60)*. The owner's first and third points: a fixture with four modes was four rows, and the list stopped at sixty, so a fixture past them could only be reached by typing its name. A `LibraryFixture` is a manufacturer, a name, whose it is, and its **modes** — each a `LibraryMode` with the profile key, the mode's name, the footprint and whether the profile has an intensity of its own (which decides whether the patch form offers the desk's dimmer). A fixture matches when any of its modes does, by `SearchLibrary`'s rule; an empty `text` lists the library in the order it was read. `offset` is how many matching fixtures to skip, `limit` is clamped like a search's, and `matched` says whether there is another page. **The key a show embeds is still per mode**, so nothing about a stored show changed. `FixtureOfMode` answers the fixture one key belongs to, so a patched fixture's panel opens on its modes without a search. `SearchLibrary` stays, answered and tested; no window asks it since S57.
+>
+> **`PatchPreview` answers two more things since S57**, both `#[serde(default)]` so a daemon from before S57 reads as having nothing to offer. **`nextFree`** is the first place at or after the one asked about where the **whole** footprint fits without sharing a channel — the same universe first, then the ones after it up to 64 — and is the place asked about when that is already free; the fixture being repatched is not in its own way. **`placements`** is where each of `adding` new fixtures would go: the first as asked, each later one at the next free number and the next free place after the one before it — empty for a repatch, and empty when they do not all fit. And since S57 the preview measures **the profile the patch would use**: for new fixtures the library's copy first (the one `PatchFixtures` embeds), for a repatch the show's first. A key neither carries is refused with a footprint of 0.
 >
 > **`own` is a field and not something a client works out** *(S51, punch-list B43)*. A venue's own profile may deliberately carry an Open Fixture Library key — that is what *correcting* a profile means — so the key cannot answer *is this one mine*, and a picker that guessed from the `custom/` prefix would mark exactly the profiles that are **not** corrections. It is `#[serde(default)]`, so a recording made before S51 reads as a library of profiles that all came with the desk, which is what it was.
 

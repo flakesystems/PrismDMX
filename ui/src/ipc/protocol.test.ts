@@ -419,9 +419,32 @@ describe("an answer", () => {
         footprint: 4,
         lastAddress: 33,
         conflicts: [{ universe: 1, from: 32, to: 33, first: 6, second: 7 }],
+        // S57's two.
+        nextFree: { universe: 1, address: 34 },
+        placements: [{ id: 7, universe: 1, address: 32 }],
       },
     };
     expect(readAnswer(preview, "a")).toEqual(preview);
+  });
+
+  /** S57's two library answers: a page of fixtures, and the fixture of a mode. */
+  it("reads the library a fixture at a time", () => {
+    const wash = {
+      manufacturer: "Robe",
+      name: "Wash 7Q5",
+      own: false,
+      modes: [{ id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true }],
+    };
+    const page = { t: "LibraryFixtures", fixtures: [wash], matched: 2, total: 6 };
+    expect(readAnswer(page, "a")).toEqual(page);
+    const found = { t: "FixtureOfMode", fixture: wash };
+    expect(readAnswer(found, "a")).toEqual(found);
+    const none = { t: "FixtureOfMode", fixture: null };
+    expect(readAnswer(none, "a")).toEqual(none);
+    // A mode with no word for its intensity is a fault, not a guess.
+    expect(() =>
+      readAnswer({ ...page, fixtures: [{ ...wash, modes: [{ id: "x", mode: "", footprint: 1 }] }] }, "a"),
+    ).toThrow("hasIntensity");
   });
 
   /**

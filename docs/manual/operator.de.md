@@ -278,14 +278,33 @@ In der Reihenfolge, in der es üblicherweise gemacht wird:
 Arbeit des Installateurs und steht in dessen [Handbuch](installer.de.md); wenn Sie
 in einem eingerichteten Haus sind, ist es schon da.
 
-**2. Sagen, was daran hängt.** Das Fenster *Patch*. Die Fixture-Bibliothek wird
-nach Namen durchsucht; jedes Fixture bekommt eine **Nummer** (die, die Sie auf
-der Kommandozeile tippen) und eine **Adresse** (Universe und Startkanal).
+**2. Sagen, was daran hängt.** Das Fenster *Patch*. **Add fixture** öffnet die
+Bibliothek und die Einstellungen des Fixtures nebeneinander:
+
+- **Die Bibliothek, links**, führt jedes Fixture **einmal**, seine Modi in einer
+  Spalte. Hersteller, Modell oder Modus tippen grenzt sie ein; beim Scrollen lädt
+  sie nach, sobald Sie das Ende erreichen — man muss keinen Namen kennen, um ein
+  Fixture zu finden. Ein Klick **irgendwo auf die Zeile** wählt es.
+- **Die Einstellungen, rechts**: der **Modus** (ein Menü, denn die Modi einer
+  Lampe sind eine Lampe), eine **Anzahl**, die erste **Nummer** (die, die Sie auf
+  der Kommandozeile tippen), ein **Name**, und **Universe** und **Adresse**.
+
+Ein neues Fixture **beginnt an der nächsten freien Adresse**, an der alle seine
+Kanäle Platz haben, in dem Universe, in das zuletzt gepatcht wurde; es folgt ihr,
+wenn Sie den Modus wechseln, bis Sie selbst eine Adresse tippen. **Ein leer
+gelassener Name ist der Typ des Fixtures** — *Stage Wash 7x10W LED Moving Head*.
+Eine **Anzahl** über eins patcht so viele auf einmal, nacheinander nummeriert und
+adressiert, sodass keines etwas überlappt; die Zeile unter dem Formular sagt, wo
+das erste und das letzte landen würden. **Ein Oops nimmt alle zurück.**
 
 Das Pult sagt Ihnen **vor** dem Absenden, ob eine Adresse mit einer anderen
 kollidiert. Eine Überlappung ist erlaubt — zwei Fixtures auf einer Adresse ist
 manchmal genau das, was man will —, aber sie wird benannt, statt später
-aufzufallen.
+aufzufallen, zusammen mit **der nächsten freien Adresse**, an die es passen
+würde, und einer Taste, die es dorthin setzt.
+
+Ein Klick auf eine Zeile des Patches öffnet dasselbe Fenster für dieses Fixture:
+Modus, Nummer, Name oder Adresse ändern, oder es mit **Unpatch** entfernen.
 
 **3. Nachsehen, ob es ankommt.** *DMX Sheet* öffnen, das Fixture auf voll
 ziehen, hinsehen. Wenn dort nichts passiert, liegt es an den Ausgängen und nicht

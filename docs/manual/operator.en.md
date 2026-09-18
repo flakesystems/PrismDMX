@@ -273,13 +273,32 @@ In the order it is usually done:
 installer's work and is in [their manual](installer.en.md); if you are in a
 building that has been set up, it is already there.
 
-**2. Say what is hanging on it.** The *Patch* window. The fixture library is
-searched by name; every fixture gets a **number** (the one you type on the
-command line) and an **address** (universe and start channel).
+**2. Say what is hanging on it.** The *Patch* window. **Add fixture** opens the
+library and the fixture's settings side by side:
+
+- **The library, on the left**, lists every fixture **once**, with its modes in
+  one column. Type a make, a model or a mode to narrow it; scroll, and it loads
+  more as you reach the end — you do not have to know a name to find a fixture.
+  Click **anywhere on a row** to take it.
+- **The settings, on the right**: the **mode** (a menu, because a lamp's modes
+  are one lamp), a **count**, the first **number** (the one you type on the
+  command line), a **name**, and the **universe** and **address**.
+
+A new fixture **starts at the next free address** that has room for all its
+channels, in the universe you last patched into; it follows along when you
+change the mode, until you type an address yourself. **A name left empty is the
+fixture's type** — *Stage Wash 7x10W LED Moving Head*. A **count** of more than
+one patches that many in one go, numbered and addressed one after the other so
+none of them overlaps anything; the line under the form says where the first and
+the last would go. **One Oops takes all of them back.**
 
 The desk tells you **before** you send whether an address collides with another.
 An overlap is allowed — two fixtures on one address is sometimes exactly what you
-want — but it is named rather than discovered later.
+want — but it is named rather than discovered later, together with **the next
+free address** it would fit at, and a key that moves it there.
+
+Clicking a row of the patch opens the same panel on that fixture: change its
+mode, number, name or address, or **Unpatch** it.
 
 **3. Check that it arrives.** Open the *DMX Sheet*, pull the fixture to full,
 look. If nothing happens there, it is the outputs and not the patch.

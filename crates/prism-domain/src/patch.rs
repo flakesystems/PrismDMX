@@ -166,6 +166,44 @@ impl Fixture {
     }
 }
 
+/// How many fixtures one `Command::PatchFixtures` may patch — S57.
+///
+/// A rig row of five hundred and twelve dimmers is a real gesture; anything
+/// past it is a typing mistake, and an answer listing where each of sixty
+/// thousand would go is a frame nobody should be sent.
+pub const MAX_PATCH_AT_ONCE: u16 = 512;
+
+/// Where a fixture starts: a universe and an address in it — S57.
+///
+/// The answer to *where is the next free address*, which is the daemon's
+/// arithmetic over the patch it holds and never a client's (**D3**).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct PatchAddress {
+    /// The universe.
+    pub universe: UniverseId,
+    /// The start address, `1..=512`.
+    pub address: u16,
+}
+
+/// One fixture of several patched in one gesture — S57, punch-list **B60**.
+///
+/// A number and a place and nothing else: the profile, the name and the dimmer
+/// switch are the same for all of them and travel once, on
+/// [`crate::Command::PatchFixtures`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct PatchPlacement {
+    /// The fixture number.
+    pub id: FixtureId,
+    /// The universe.
+    pub universe: UniverseId,
+    /// The start address, `1..=512`.
+    pub address: u16,
+}
+
 /// A named set of fixtures, in selection order.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]

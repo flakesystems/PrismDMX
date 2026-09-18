@@ -188,6 +188,14 @@ async function desk(show?: JsonValue) {
     });
   };
 
+  /** Answers the question sent with `seq`, whichever it was — S57. */
+  const answerSeq = async (seq: number, answer: Answer): Promise<void> => {
+    await act(async () => {
+      network.last.deliver(serverMessage({ t: "Answer", seq, answer }));
+      await Promise.resolve();
+    });
+  };
+
   /** The daemon answers with the deltas of the step about something. */
   const applyStep = async (about: string): Promise<void> => {
     await act(async () => {
@@ -198,7 +206,21 @@ async function desk(show?: JsonValue) {
     });
   };
 
-  return { view, sent, commands, queries, answerQuery, applyStep };
+  return { view, sent, commands, queries, answerQuery, answerSeq, applyStep };
+}
+
+/** The questions of one kind the interface asked, in order. */
+function asked(
+  messages: readonly Sent[],
+  kind: string,
+): { readonly seq: number; readonly query: { readonly t: string } }[] {
+  const found: { readonly seq: number; readonly query: { readonly t: string } }[] = [];
+  for (const message of messages) {
+    if (message.t === "Query" && message.query.t === kind) {
+      found.push(message);
+    }
+  }
+  return found;
 }
 
 /** The fixture numbers the table is showing, in order. */
@@ -415,23 +437,178 @@ describe("the patch window", () => {
     expect(screen.queryByTestId("patch-form")).toBeNull();
   });
 
-  it("adds a fixture at the first free number, with a profile the show carries", async () => {
-    const { commands } = await desk();
+  /**
+   * **S57, punch-list B60 (GitHub #28) — the owner's eight points**, each as an
+   * operator meets it. The library answers are the daemon's own, out of the
+   * recording, wherever the recording has one.
+   */
+  it("opens the library and the fixture's settings together, from Add fixture", async () => {
+    // The fourth point: *Add fixture* is the library, not a form with a key
+    // that opens the library. And nothing is sent for opening it (§4.2).
+    const { commands, queries } = await desk();
+    const before = commands().length;
     fireEvent.click(screen.getByText("Add fixture"));
-    // 1, 2 and 5 are patched, so 3 is the first gap — a convenience, and the
-    // daemon still decides whether the number is free.
+    expect(screen.getByTestId("patch-editor")).not.toBeNull();
+    expect(screen.getByTestId("library-search")).not.toBeNull();
+    expect(screen.getByTestId("patch-form")).not.toBeNull();
+    expect(queries().some((query) => query.t === "BrowseLibrary")).toBe(true);
+    expect(screen.getByTestId("draft-type").textContent).toContain("Choose a fixture");
+    // 1, 2 and 5 are patched, so 3 is the first gap.
     expect((screen.getByTestId("draft-id") as HTMLInputElement).value).toBe("3");
-    type("draft-name", "New one");
-    fireEvent.click(screen.getByTestId("draft-apply"));
-    expect(commands().at(-1)).toEqual({
-      t: "PatchFixture",
+    expect(screen.getByTestId("draft-apply").hasAttribute("disabled")).toBe(true);
+    expect(commands()).toHaveLength(before);
+  });
+
+  it("lists a fixture once, with its modes, and the whole row picks it", async () => {
+    // The first and second points. The recorded page is the Robe wash, whose
+    // two modes used to be two rows.
+    const { commands, queries, sent, answerQuery } = await desk();
+    const before = commands().length;
+    fireEvent.click(screen.getByText("Add fixture"));
+    await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
+    const row = screen.getByTestId("library-row-robe/wash-7q5/4ch");
+    const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
+    expect(cells).toEqual(["Robe", "Wash 7Q5", "4ch · 2ch", "library"]);
+    expect(screen.queryByTestId("library-row-robe/wash-7q5/2ch")).toBeNull();
+
+    // **Not the first cell** — the modes cell, which used to do nothing.
+    const modes = row.querySelectorAll("td")[2];
+    if (modes === undefined) {
+      throw new Error("the row has no modes cell");
+    }
+    fireEvent.click(modes);
+    expect(screen.getByTestId("draft-type").textContent).toBe("Robe Wash 7Q5");
+    const mode = screen.getByTestId("draft-mode") as HTMLSelectElement;
+    expect([...mode.options].map((option) => option.textContent)).toEqual(["4ch", "2ch"]);
+    expect(mode.value).toBe("robe/wash-7q5/4ch");
+    // **Picking embeds nothing** — S57. It is a question now, asked of the
+    // library's copy.
+    expect(commands()).toHaveLength(before);
+    expect(asked(sent(), "PatchPreview").at(-1)?.query).toEqual({
+      t: "PatchPreview",
       id: 3,
-      name: "New one",
-      typeId: "generic.dimmer",
+      typeId: "robe/wash-7q5/4ch",
       universe: 1,
       address: 1,
-      softwareDimmer: true,
+      adding: 1,
     });
+    expect(row.className).toContain("row-selected");
+
+    // The mode is chosen beside it, and the question follows.
+    fireEvent.change(mode, { target: { value: "robe/wash-7q5/2ch" } });
+    expect(queries().filter((query) => query.t === "PatchPreview").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("asks for the next page when the list is scrolled to its end, and not before", async () => {
+    // The third point. The recorded first page is one fixture of two.
+    const { sent, answerQuery } = await desk();
+    fireEvent.click(screen.getByText("Add fixture"));
+    await answerQuery("BrowseLibrary", recordedAnswer("the first page of one"));
+    expect(screen.getByTestId("library-count").textContent).toBe("2 of 6 fixtures");
+    const browsed = () => asked(sent(), "BrowseLibrary").map((message) => message.query);
+
+    const list = screen.getByTestId("library-scroll");
+    Object.defineProperty(list, "clientHeight", { value: 200, configurable: true });
+    Object.defineProperty(list, "scrollHeight", { value: 1000, configurable: true });
+    // Half way down: nothing more is asked.
+    list.scrollTop = 300;
+    fireEvent.scroll(list);
+    expect(browsed()).toHaveLength(1);
+    // At the end: the next page, from where the list stops.
+    list.scrollTop = 800;
+    fireEvent.scroll(list);
+    expect(browsed().at(-1)).toMatchObject({ t: "BrowseLibrary", text: "", offset: 1 });
+    // Scrolling on while it is on its way asks nothing twice.
+    fireEvent.scroll(list);
+    expect(browsed()).toHaveLength(2);
+    await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
+    expect(screen.getAllByTestId(/^library-row-/)).toHaveLength(2);
+    // Everything is here: there is nothing left to ask for.
+    expect(screen.queryByTestId("library-more")).toBeNull();
+  });
+
+  it("starts a new fixture at the next free address, and follows it until one is typed", async () => {
+    // The sixth point. The daemon's answer for a wash at 2.1 says the moving
+    // head is in the way and the whole wash fits at 2.14.
+    const { answerQuery, queries } = await desk();
+    fireEvent.click(screen.getByText("Add fixture"));
+    type("draft-universe", "2");
+    await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
+    fireEvent.click(screen.getByTestId("library-row-robe/wash-7q5/4ch"));
+    await answerQuery("PatchPreview", recordedAnswer("on the moving head's channels"));
+    expect((screen.getByTestId("draft-universe") as HTMLInputElement).value).toBe("2");
+    expect((screen.getByTestId("draft-address") as HTMLInputElement).value).toBe("14");
+
+    // Typed, the address is the operator's: an answer naming somewhere else
+    // does not move it.
+    type("draft-address", "1");
+    const asked = queries().filter((query) => query.t === "PatchPreview").length;
+    await answerQuery("PatchPreview", recordedAnswer("on the moving head's channels"));
+    expect((screen.getByTestId("draft-address") as HTMLInputElement).value).toBe("1");
+    expect(queries().filter((query) => query.t === "PatchPreview").length).toBe(asked);
+  });
+
+  it("names the next free address in an overlap, and moves there on one key", async () => {
+    // The fifth point, on a fixture that is already patched.
+    const { answerQuery, commands } = await desk();
+    fireEvent.click(screen.getByTestId("patch-row-5"));
+    type("draft-address", "32");
+    await answerQuery("PatchPreview", recordedAnswer("would a second PAR at 32 clash"));
+    expect(screen.getByTestId("patch-preview").textContent).toContain("Next free: 1.34.");
+    fireEvent.click(screen.getByTestId("draft-next-free"));
+    expect((screen.getByTestId("draft-address") as HTMLInputElement).value).toBe("34");
+    fireEvent.click(screen.getByTestId("draft-apply"));
+    expect(commands().at(-1)).toMatchObject({ t: "PatchFixture", id: 5, address: 34 });
+  });
+
+  it("patches several of one fixture as one command, where the daemon placed them", async () => {
+    // The eighth point: one gesture, one command, one Oops — and the profile
+    // comes with it, so nothing was embedded on the way.
+    const { answerQuery, commands } = await desk();
+    const before = commands().length;
+    fireEvent.click(screen.getByText("Add fixture"));
+    await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
+    fireEvent.click(screen.getByTestId("library-row-robe/wash-7q5/4ch"));
+    fireEvent.change(screen.getByTestId("draft-mode"), { target: { value: "robe/wash-7q5/2ch" } });
+    type("draft-count", "3");
+    // **Not before the daemon has placed them**: three places are its answer.
+    expect(screen.getByTestId("draft-apply").hasAttribute("disabled")).toBe(true);
+    await answerQuery("PatchPreview", recordedAnswer("three new washes"));
+    // The answer named 2.14 as the next free place, so the new row moved
+    // there and asked again — and this is the daemon's answer to *that*.
+    expect((screen.getByTestId("draft-address") as HTMLInputElement).value).toBe("14");
+    await answerQuery("PatchPreview", recordedAnswer("three new washes"));
+    expect(screen.getByTestId("patch-preview").textContent).toContain("3 fixtures, 20 to 22, at 2.14 to 2.18");
+    // The seventh point, where the operator sees it: an empty name is the type's.
+    expect((screen.getByTestId("draft-name") as HTMLInputElement).placeholder).toBe("Wash 7Q5");
+
+    fireEvent.click(screen.getByTestId("draft-apply"));
+    expect(commands().slice(before)).toEqual([
+      {
+        t: "PatchFixtures",
+        typeId: "robe/wash-7q5/2ch",
+        name: "",
+        softwareDimmer: true,
+        placements: [
+          { id: 20, universe: 2, address: 14 },
+          { id: 21, universe: 2, address: 16 },
+          { id: 22, universe: 2, address: 18 },
+        ],
+      },
+    ]);
+    expect(screen.queryByTestId("patch-editor")).toBeNull();
+  });
+
+  it("will not send a count that is not a number, and says which field it is", async () => {
+    const { answerQuery } = await desk();
+    fireEvent.click(screen.getByText("Add fixture"));
+    await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
+    fireEvent.click(screen.getByTestId("library-row-robe/wash-7q5/4ch"));
+    for (const rubbish of ["", "0", "two"]) {
+      type("draft-count", rubbish);
+      expect(screen.getByTestId("patch-preview").textContent).toContain("Count");
+      expect(screen.getByTestId("draft-apply").hasAttribute("disabled")).toBe(true);
+    }
   });
 
   it("cancels without sending anything and without changing the table", async () => {
@@ -440,238 +617,114 @@ describe("the patch window", () => {
     fireEvent.click(screen.getByTestId("patch-row-1"));
     type("draft-name", "never mind");
     type("draft-address", "300");
-    fireEvent.click(screen.getByTestId("draft-cancel"));
+    fireEvent.click(screen.getByTestId("patch-editor-cancel"));
     expect(commands()).toHaveLength(before);
     expect(screen.queryByTestId("patch-form")).toBeNull();
     expect(tableIds()).toEqual([1, 2, 5]);
   });
 
-  it("patches straight out of the desk's library, from the row being patched", async () => {
-    // **A search and not a menu** — S44. The desk's library is the Open Fixture
-    // Library, and neither a frame nor an operator can take two thousand
-    // entries: what is typed goes to the daemon and what comes back is drawn.
-    //
-    // **S43, B19 moved it into the form.** It used to sit in the toolbar and do
-    // one thing — embed — which an operator then had to follow with a second
-    // gesture in a second place to actually use. One field does both now, and
-    // the assertion is the pair: the show gets its copy *and* the row is set to
-    // it, from one click.
-    const { commands, queries, answerQuery } = await desk();
-    fireEvent.click(screen.getByTestId("patch-row-1"));
-    // **The library is a panel since B23**, so it is opened rather than focused:
-    // a table with columns needs room, and the room is a modal over the canvas.
-    fireEvent.click(screen.getByTestId("library-open"));
-    const search = screen.getByTestId("library-search");
-    fireEvent.change(search, { target: { value: "robe wash" } });
-    expect(queries().some((query) => query.t === "SearchLibrary")).toBe(true);
-
-    // The daemon's own answer to that very search, out of the recording.
-    await answerQuery("SearchLibrary", recordedAnswer("search the desk's library"));
-    // **Read off the row, column by column** — the make, the model, the mode
-    // and the width are four cells now rather than one run-together line, which
-    // is the whole of B23. Two modes of the one fixture come back and they are
-    // told apart by the two columns an operator actually uses to tell them
-    // apart.
-    const row = screen.getByTestId("library-row-robe/wash-7q5/4ch");
-    const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
-    // Five since S51 (B43): the fifth says whose profile it is, and this one
-    // came out of the recording, so it is the desk's.
-    expect(cells.slice(0, 5)).toEqual(["Robe", "Wash 7Q5", "4ch", "4", "library"]);
-    expect(screen.getByTestId("library-row-robe/wash-7q5/2ch")).not.toBeNull();
-
-    fireEvent.click(screen.getByTestId("library-robe/wash-7q5/4ch"));
-    expect(commands().at(-1)).toEqual({
-      t: "EmbedFixtureType",
-      typeId: "robe/wash-7q5/4ch",
-    });
-    // The row is on it, and the preview has been asked about it: the profile is
-    // in the show by the time the question arrives, because both went out on one
-    // ordered channel.
-    // The **key**, not the pretty label: what the field draws comes from the
-    // show's own profiles, and the show has not answered yet. It reads as the
-    // manufacturer and mode one delta later. A row that showed the label it had
-    // just been clicked would be this client holding an opinion about the show
-    // for the length of a round trip — the fault §4.2 names.
-    expect(screen.getByTestId("draft-type").textContent).toContain("robe/wash-7q5/4ch");
-    // And the panel closes on the pick rather than being dismissed afterwards:
-    // the question it was asking has been answered, and a chooser left standing
-    // over the form is a chooser an operator has to put away by hand.
-    expect(screen.queryByTestId("library-modal")).toBeNull();
-  });
-
   /**
-   * **The picker says whose a profile is** — punch-list entry **B43**.
-   *
-   * A venue's own profile may deliberately carry a library key, because that is
-   * what *correcting* a profile means, so the key cannot answer the question
-   * and the row has to. Asserted on two rows at once, since what an operator
-   * does with this column is scan down it.
+   * **The picker says whose a fixture is** — punch-list entry **B43**, and a
+   * column still, because what an operator does with it is scan down it.
    */
-  it("marks a profile as the venue's own, beside one that came with the desk", async () => {
+  it("marks a fixture as the venue's own, beside one that came with the desk", async () => {
     const { answerQuery } = await desk();
-    fireEvent.click(screen.getByTestId("patch-row-1"));
-    fireEvent.click(screen.getByTestId("library-open"));
-    await answerQuery("SearchLibrary", {
-      t: "LibraryMatches",
-      matches: [
+    fireEvent.click(screen.getByText("Add fixture"));
+    await answerQuery("BrowseLibrary", {
+      t: "LibraryFixtures",
+      fixtures: [
         {
-          id: "robe/wash-7q5/4ch",
           manufacturer: "Robe",
           name: "Wash 7Q5",
-          mode: "4ch",
-          footprint: 4,
           own: true,
+          modes: [{ id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true }],
         },
         {
-          id: "robe/wash-7q5/2ch",
           manufacturer: "Robe",
-          name: "Wash 7Q5",
-          mode: "2ch",
-          footprint: 2,
+          name: "LEDBeam 150",
           own: false,
+          modes: [{ id: "robe/ledbeam/1ch", mode: "1ch", footprint: 1, hasIntensity: true }],
         },
       ],
+      matched: 2,
       total: 2,
     });
-
     const source = (id: string) => screen.getByTestId(`library-source-${id}`);
     expect(source("robe/wash-7q5/4ch").getAttribute("data-own")).toBe("yes");
     expect(source("robe/wash-7q5/4ch").textContent).toBe("yours");
-    expect(source("robe/wash-7q5/2ch").getAttribute("data-own")).toBe("no");
-    expect(source("robe/wash-7q5/2ch").textContent).toBe("library");
+    expect(source("robe/ledbeam/1ch").getAttribute("data-own")).toBe("no");
+    expect(source("robe/ledbeam/1ch").textContent).toBe("library");
   });
 
   it("says so when the library has nothing matching, rather than showing everything", async () => {
-    // The failure a search that ignored an unmatched word would produce, and
-    // which an operator would read as *the library is broken*.
     const { answerQuery } = await desk();
-    fireEvent.click(screen.getByTestId("patch-row-1"));
-    fireEvent.click(screen.getByTestId("library-open"));
-    await answerQuery("SearchLibrary", recordedAnswer("a search that matches nothing"));
-    // The note replaces the table rather than sitting under an empty one: a
-    // header row with nothing beneath it reads as *still loading*.
+    fireEvent.click(screen.getByText("Add fixture"));
+    fireEvent.change(screen.getByTestId("library-search"), { target: { value: "no such light" } });
+    await answerQuery("BrowseLibrary", { t: "LibraryFixtures", fixtures: [], matched: 0, total: 6 });
     expect(screen.getByTestId("library-empty").textContent).toContain("Nothing in the library");
     expect(screen.queryByTestId("library-matches")).toBeNull();
   });
 
-  /**
-   * **The assertion at the bottom of this test was itself the fault**, and the
-   * owner found it — second attempt at B1.
-   *
-   * It used to say the embedding must not happen twice. That sounded like thrift
-   * and was a trap: a show that embedded a profile before a library fix kept the
-   * **stale copy for ever**, because picking that profile again sent nothing and
-   * no other gesture in this interface could replace it. So after B1 gave colour
-   * channels a home value of full, an existing rig went on reading its colours
-   * at nought and re-patching changed nothing at all — which is exactly what was
-   * reported, twice.
-   *
-   * Picking a profile out of the library means *use the library's copy of it*,
-   * every time. The daemon refuses the replacement when it would break a patch
-   * already standing on it (`ShowError::TypeChangeBreaksPatch`), and that is the
-   * guard that makes it safe to do.
-   */
-  it("re-reads a profile the show already carries, rather than keeping the old copy", async () => {
-    // Marked rather than hidden: an operator who had just added one would look
-    // for it elsewhere. And not disabled — the second lamp of a rig is the
-    // commonest patch there is.
-    const { commands, answerQuery } = await desk();
-    fireEvent.click(screen.getByTestId("patch-row-1"));
-    const before = commands().length;
-    fireEvent.click(screen.getByTestId("library-open"));
-    await answerQuery("SearchLibrary", {
-      t: "LibraryMatches",
-      matches: [
-        {
-          id: "generic.dimmer",
-          manufacturer: "Generic",
-          name: "Dimmer",
-          mode: "1ch",
-          footprint: 1,
-          own: false,
-        },
-      ],
-      total: 4,
-    });
-    // The sentence is on the **row** now that the panel has columns — the
-    // *In this show* one — rather than trailing off the end of the key.
-    const row = screen.getByTestId("library-row-generic.dimmer");
-    expect(row.textContent).toContain("picking re-reads it");
-    const already = screen.getByTestId("library-generic.dimmer");
-    expect(already.hasAttribute("disabled")).toBe(false);
-
-    fireEvent.click(already);
-    expect(screen.getByTestId("draft-type").textContent).toContain("Dimmer");
-    // **The embed goes anyway**, and that is the whole of the fix: it is what
-    // replaces a copy the show has been carrying since before a library change.
-    expect(commands().slice(before)).toContainEqual({
-      t: "EmbedFixtureType",
-      typeId: "generic.dimmer",
-    });
+  it("drops the answer to a search that has been typed over", async () => {
+    const { answerSeq, sent } = await desk();
+    fireEvent.click(screen.getByText("Add fixture"));
+    fireEvent.change(screen.getByTestId("library-search"), { target: { value: "robe" } });
+    const searches = asked(sent(), "BrowseLibrary").map((message) => message.seq);
+    expect(searches).toHaveLength(2);
+    // The answer to the **first** search, the empty one, arrives last.
+    await answerSeq(searches[1] ?? 0, recordedAnswer("the page after it"));
+    await answerSeq(searches[0] ?? 0, recordedAnswer("the first page of one"));
+    expect(screen.getAllByTestId(/^library-row-/).map((row) => row.getAttribute("data-testid"))).toEqual([
+      "library-row-robe/wash-7q5/4ch",
+    ]);
   });
 
-  it("opens a row on a show with no profiles at all, because the field is the library", async () => {
-    // **The claim this test used to make was the fault** — S43, B19. It said a
-    // show with no profiles offers nothing to patch, and asserted the Add button
-    // disabled and the form refusing to open: correct while the Type field was a
-    // menu of what had been embedded, and a dead end for the one show that is
-    // guaranteed to be in this state — a new one.
-    //
-    // The field is a search over the desk's whole library now, so an empty show
-    // is an ordinary starting point: open a row, type, pick.
+  it("changes a patched fixture's profile, embedding it before the repatch stands on it", async () => {
+    // A fixture that is already patched opens on its own fixture — asked of
+    // the daemon, so its modes are there without a search — and a different
+    // one picked out of the list is embedded first, because `PatchFixture`
+    // patches from the show's copy.
+    const { commands, queries, answerQuery } = await desk();
+    fireEvent.click(screen.getByTestId("patch-row-1"));
+    expect(queries().some((query) => query.t === "FixtureOfMode")).toBe(true);
+    await answerQuery("FixtureOfMode", {
+      t: "FixtureOfMode",
+      fixture: {
+        manufacturer: "Generic",
+        name: "Dimmer",
+        own: false,
+        modes: [{ id: "generic.dimmer", mode: "", footprint: 1, hasIntensity: true }],
+      },
+    });
+    expect(screen.getByTestId("draft-type").textContent).toBe("Generic Dimmer");
+    const before = commands().length;
+    await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
+    fireEvent.click(screen.getByTestId("library-row-robe/wash-7q5/4ch"));
+    type("draft-universe", "2");
+    fireEvent.click(screen.getByTestId("draft-apply"));
+    expect(commands().slice(before)).toEqual([
+      { t: "EmbedFixtureType", typeId: "robe/wash-7q5/4ch" },
+      {
+        t: "PatchFixture",
+        id: 1,
+        name: "Fixture 1",
+        typeId: "robe/wash-7q5/4ch",
+        universe: 2,
+        address: 1,
+        softwareDimmer: true,
+      },
+    ]);
+  });
+
+  it("opens on a show with no profiles at all, because the panel is the library", async () => {
     const { commands, queries } = await desk({ fixtures: {}, fixtureTypes: {} });
     const add = screen.getByText("Add fixture");
     expect(add.hasAttribute("disabled")).toBe(false);
     fireEvent.click(add);
     expect(screen.queryByTestId("patch-form")).not.toBeNull();
-    expect(screen.getByTestId("draft-type").textContent).toContain("No profile chosen");
-
-    fireEvent.click(screen.getByTestId("library-open"));
-    expect(queries().some((query) => query.t === "SearchLibrary")).toBe(true);
-    // Nothing has been sent: opening a row is local until Apply (§4.2).
+    expect(queries().some((query) => query.t === "BrowseLibrary")).toBe(true);
+    // Nothing has been sent: opening a row is local until Patch (§4.2).
     expect(commands()).toHaveLength(0);
-  });
-
-  it("changes a fixture's profile and universe from the form", async () => {
-    // The two fields a table of five columns is otherwise short of, and the
-    // pair a preview has to be asked about again: a different profile is a
-    // different footprint, and a different universe is a different set of
-    // neighbours.
-    const { commands, queries, answerQuery } = await desk();
-    fireEvent.click(screen.getByTestId("patch-row-1"));
-    const asked = queries().filter((query) => query.t === "PatchPreview").length;
-
-    // The type is a search now rather than a menu (B19), so the profile is
-    // chosen the way an operator chooses it: open the library and pick a row.
-    fireEvent.click(screen.getByTestId("library-open"));
-    await answerQuery("SearchLibrary", {
-      t: "LibraryMatches",
-      matches: [
-        {
-          id: "generic.rgbw.par",
-          manufacturer: "Generic",
-          name: "RGBW PAR",
-          mode: "4ch",
-          footprint: 4,
-          own: false,
-        },
-      ],
-      total: 4,
-    });
-    fireEvent.click(screen.getByTestId("library-generic.rgbw.par"));
-    type("draft-universe", "2");
-    expect(queries().filter((query) => query.t === "PatchPreview").length).toBeGreaterThan(asked);
-
-    fireEvent.click(screen.getByTestId("draft-apply"));
-    expect(commands().at(-1)).toEqual({
-      t: "PatchFixture",
-      id: 1,
-      name: "Fixture 1",
-      typeId: "generic.rgbw.par",
-      universe: 2,
-      address: 1,
-      softwareDimmer: true,
-    });
   });
 
   /**

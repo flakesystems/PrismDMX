@@ -563,10 +563,14 @@ impl Core {
                     });
                 }
                 // Carried out by `ShowFile::apply` and never handed on (S13,
-                // S14, and S44's `EmbedProfile`, which needs the desk's
-                // library and gets it there). Named rather than caught by a
+                // S14, S44's `EmbedProfile` and S57's `PatchFixtures`, both of which
+                // need the desk's library and get it there). Named rather than caught by a
                 // wildcard, so an effect added later is a compile error here.
-                Effect::Programmer | Effect::Undo | Effect::Redo | Effect::EmbedProfile => {}
+                Effect::Programmer
+                | Effect::Undo
+                | Effect::Redo
+                | Effect::EmbedProfile
+                | Effect::PatchFixtures => {}
                 // S33: the rig changed, so the driver threads have to catch up
                 // and the machine configuration has to be written down.
                 Effect::Outputs => deltas.extend(self.carry_out_outputs()),

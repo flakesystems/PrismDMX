@@ -60,7 +60,7 @@
       "own": false
     }
   ],
-  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4KuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysGdlbmVyaWMucmdidy5wYXKGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQCrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlV2hpdGWsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksGdlbmVyaWMucmdidy5wYXKsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM0Y2ikbmFtZahSR0JXIFBBUqhmaXh0dXJlc4OhMYqnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiqdhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UBoTWKp2FkZHJlc3MUomlkBalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA1qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo6sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKx3aW5kb3dQaWNrZXLCpXZpZXdzgaExg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5CqcHJvZ3JhbW1lcoapc2VsZWN0aW9ukK5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50AKlsYXN0RXJyb3LArmxhc3RFcnJvckFnb01zwKZoZWFsdGiEr3Byb3RvY29sVmVyc2lvbgGmdGlja0h6y0CAcYt5y0cUq21pc3NlZFRpY2tzAK51bnNhdmVkQ2hhbmdlc8KuZml4dHVyZUxpYnJhcnkHp21hY2hpbmWNpmRlc2tJZNkkMDJlYjMyMDctNzczNi00ZjQxLTkzOGYtMDdmMWUyMDFjOWVlp2RhdGFEaXKvL3RtcC8udG1wSEJ2eHhmpWxvY2Fsw6l3ZWJzb2NrZXSuMTI3LjAuMC4xOjczNzOtd2Vic29ja2V0T3BlbsCldG9rZW7AqGxvZ0xldmVspEluZm+pdW5pdmVyc2VzQKpleGl0QWN0aW9upEhvbGSpYXV0b3N0YXJ0wq5maXh0dXJlTGlicmFyecCuc3VyZmFjZVByb2ZpbGXAqW92ZXJyaWRlc5anT3V0cHV0c6VMb2NhbKlXZWJzb2NrZXSpVW5pdmVyc2VzqExvZ0xldmVsrkZpeHR1cmVMaWJyYXJ5qHNob3dGaWxlhaRwYXRouy90bXAvLnRtcEhCdnh4Zi9wYXRjaC5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2VzwqhyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg==",
+  "initialSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4KuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysGdlbmVyaWMucmdidy5wYXKGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQCrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlV2hpdGWsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksGdlbmVyaWMucmdidy5wYXKsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaM0Y2ikbmFtZahSR0JXIFBBUqhmaXh0dXJlc4OhMYqnYWRkcmVzcwGiaWQBqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAaEyiqdhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UBoTWKp2FkZHJlc3MUomlkBalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA1qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo+sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5C0cHJvZ3JhbW1lck9jY3VycmVuY2UArnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZcCsd2luZG93UGlja2VywqV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKGqXNlbGVjdGlvbpCuc2VsZWN0ZWRHcm91cHOQr21hbnVhbFNlbGVjdGlvbpCyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UAp291dHB1dHORh6JpZAGkbmFtZatNb2NrIG91dHB1dKZoZWFsdGiiT2umb3V0cHV0haJpZAGkbmFtZatNb2NrIG91dHB1dKRraW5kgaF0pE1vY2updW5pdmVyc2VzkQGnZW5hYmxlZMOqZnJhbWVzU2VudACpbGFzdEVycm9ywK5sYXN0RXJyb3JBZ29Nc8CmaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestAZMyMPoxsWattaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPCrmZpeHR1cmVMaWJyYXJ5B6dtYWNoaW5ljaZkZXNrSWTZJDA4NThiMTE1LTAxNmMtNDVkYy1iMTAyLWRmM2Y3ZWVhOGJjZKdkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcHVXcjBxSaVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOWp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbK5GaXh0dXJlTGlicmFyeahzaG93RmlsZYWkcGF0aNk4QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXB1V3IwcUlccGF0Y2gucHJpc22mcmVjZW50kK51bnNhdmVkQ2hhbmdlc8KocmVjb3ZlcnnCr2F1dG9zYXZlU2Vjb25kcx4=",
   "steps": [
     {
       "what": "what overlaps in the rig as it stands: nothing",
@@ -122,10 +122,10 @@
     },
     {
       "what": "would a PAR fit at address 30? free, and the daemon says where it ends",
-      "client": "g6F0pVF1ZXJ5o3NlcQKlcXVlcnmFoXSsUGF0Y2hQcmV2aWV3omlkBqZ0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcx4=",
+      "client": "g6F0pVF1ZXJ5o3NlcQKlcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkBqZ0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcx6mYWRkaW5nAA==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXECpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4WoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludASrbGFzdEFkZHJlc3MhqWNvbmZsaWN0c5A=",
+      "answer": "g6F0pkFuc3dlcqNzZXECpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludASrbGFzdEFkZHJlc3MhqWNvbmZsaWN0c5CobmV4dEZyZWWCqHVuaXZlcnNlAadhZGRyZXNzHqpwbGFjZW1lbnRzkA==",
       "refused": false,
       "rows": [
         {
@@ -251,10 +251,10 @@
     },
     {
       "what": "would a second PAR at 32 clash? **yes, and it is still allowed** — this is the answer the operator is shown before they commit",
-      "client": "g6F0pVF1ZXJ5o3NlcQSlcXVlcnmFoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcyA=",
+      "client": "g6F0pVF1ZXJ5o3NlcQSlcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzcyCmYWRkaW5nAA==",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEEpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4WoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludASrbGFzdEFkZHJlc3MjqWNvbmZsaWN0c5GFqHVuaXZlcnNlAaRmcm9tIKJ0byGlZmlyc3QGpnNlY29uZAc=",
+      "answer": "g6F0pkFuc3dlcqNzZXEEpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludASrbGFzdEFkZHJlc3MjqWNvbmZsaWN0c5GFqHVuaXZlcnNlAaRmcm9tIKJ0byGlZmlyc3QGpnNlY29uZAeobmV4dEZyZWWCqHVuaXZlcnNlAadhZGRyZXNzIqpwbGFjZW1lbnRzkA==",
       "refused": false,
       "rows": [
         {
@@ -478,10 +478,10 @@
     },
     {
       "what": "would it fit at 510? no — four channels from 510 runs past the end",
-      "client": "g6F0pVF1ZXJ5o3NlcQelcXVlcnmFoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzc80B/g==",
+      "client": "g6F0pVF1ZXJ5o3NlcQelcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQGnYWRkcmVzc80B/qZhZGRpbmcA",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEHpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4WoYWNjZXB0ZWTCp3JlZnVzYWzZM2ZpeHR1cmUgNyBkb2VzIG5vdCBmaXQ6IDQgY2hhbm5lbHMgZnJvbSBhZGRyZXNzIDUxMKlmb290cHJpbnQEq2xhc3RBZGRyZXNzwKljb25mbGljdHOQ",
+      "answer": "g6F0pkFuc3dlcqNzZXEHpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTCp3JlZnVzYWzZM2ZpeHR1cmUgNyBkb2VzIG5vdCBmaXQ6IDQgY2hhbm5lbHMgZnJvbSBhZGRyZXNzIDUxMKlmb290cHJpbnQEq2xhc3RBZGRyZXNzwKljb25mbGljdHOQqG5leHRGcmVlgqh1bml2ZXJzZQKnYWRkcmVzcwGqcGxhY2VtZW50c5A=",
       "refused": false,
       "rows": [
         {
@@ -555,11 +555,89 @@
       ]
     },
     {
-      "what": "and a profile the show has not got is refused before it is sent",
-      "client": "g6F0pVF1ZXJ5o3NlcQilcXVlcnmFoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAadhZGRyZXNzZA==",
+      "what": "and a profile nobody has got is refused before it is sent",
+      "client": "g6F0pVF1ZXJ5o3NlcQilcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSubm90aGluZy5hdC5hbGyodW5pdmVyc2UBp2FkZHJlc3NkpmFkZGluZwA=",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEIpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4WoYWNjZXB0ZWTCp3JlZnVzYWzZMW5vIGZpeHR1cmUgdHlwZSAiZ2VuZXJpYy5tb3ZpbmdoZWFkIiBpbiB0aGlzIHNob3epZm9vdHByaW50AKtsYXN0QWRkcmVzc8CpY29uZmxpY3RzkA==",
+      "answer": "g6F0pkFuc3dlcqNzZXEIpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTCp3JlZnVzYWzZLW5vIGZpeHR1cmUgdHlwZSAibm90aGluZy5hdC5hbGwiIGluIHRoaXMgc2hvd6lmb290cHJpbnQAq2xhc3RBZGRyZXNzwKljb25mbGljdHOQqG5leHRGcmVlwKpwbGFjZW1lbnRzkA==",
+      "refused": false,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 1,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 2,
+          "name": "Fixture 2",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 2,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 7,
+          "name": "PAR 7",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 32,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        }
+      ]
+    },
+    {
+      "what": "a profile the show has not got is answered out of the desk's library — S57",
+      "client": "g6F0pVF1ZXJ5o3NlcQmlcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAadhZGRyZXNzZKZhZGRpbmcA",
+      "isQuery": true,
+      "deltas": [],
+      "answer": "g6F0pkFuc3dlcqNzZXEJpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludA2rbGFzdEFkZHJlc3NwqWNvbmZsaWN0c5CobmV4dEZyZWWCqHVuaXZlcnNlAadhZGRyZXNzZKpwbGFjZW1lbnRzkA==",
       "refused": false,
       "rows": [
         {
@@ -634,10 +712,10 @@
     },
     {
       "what": "search the desk's library, which is where a real fixture comes from",
-      "client": "g6F0pVF1ZXJ5o3NlcQmlcXVlcnmDoXStU2VhcmNoTGlicmFyeaR0ZXh0qXJvYmUgd2FzaKVsaW1pdAo=",
+      "client": "g6F0pVF1ZXJ5o3NlcQqlcXVlcnmDoXStU2VhcmNoTGlicmFyeaR0ZXh0qXJvYmUgd2FzaKVsaW1pdAo=",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEJpmFuc3dlcoOhdK5MaWJyYXJ5TWF0Y2hlc6dtYXRjaGVzkoaiaWSxcm9iZS93YXNoLTdxNS8yY2isbWFudWZhY3R1cmVypFJvYmWkbmFtZahXYXNoIDdRNaRtb2RlozJjaKlmb290cHJpbnQCo293bsKGomlksXJvYmUvd2FzaC03cTUvNGNorG1hbnVmYWN0dXJlcqRSb2JlpG5hbWWoV2FzaCA3UTWkbW9kZaM0Y2ipZm9vdHByaW50BKNvd27CpXRvdGFsBw==",
+      "answer": "g6F0pkFuc3dlcqNzZXEKpmFuc3dlcoOhdK5MaWJyYXJ5TWF0Y2hlc6dtYXRjaGVzkoaiaWSxcm9iZS93YXNoLTdxNS8yY2isbWFudWZhY3R1cmVypFJvYmWkbmFtZahXYXNoIDdRNaRtb2RlozJjaKlmb290cHJpbnQCo293bsKGomlksXJvYmUvd2FzaC03cTUvNGNorG1hbnVmYWN0dXJlcqRSb2JlpG5hbWWoV2FzaCA3UTWkbW9kZaM0Y2ipZm9vdHByaW50BKNvd27CpXRvdGFsBw==",
       "refused": false,
       "rows": [
         {
@@ -712,10 +790,10 @@
     },
     {
       "what": "a search that matches nothing answers with nothing, not with everything",
-      "client": "g6F0pVF1ZXJ5o3NlcQqlcXVlcnmDoXStU2VhcmNoTGlicmFyeaR0ZXh0rW5vIHN1Y2ggbGlnaHSlbGltaXQK",
+      "client": "g6F0pVF1ZXJ5o3NlcQulcXVlcnmDoXStU2VhcmNoTGlicmFyeaR0ZXh0rW5vIHN1Y2ggbGlnaHSlbGltaXQK",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEKpmFuc3dlcoOhdK5MaWJyYXJ5TWF0Y2hlc6dtYXRjaGVzkKV0b3RhbAc=",
+      "answer": "g6F0pkFuc3dlcqNzZXELpmFuc3dlcoOhdK5MaWJyYXJ5TWF0Y2hlc6dtYXRjaGVzkKV0b3RhbAc=",
       "refused": false,
       "rows": [
         {
@@ -790,10 +868,10 @@
     },
     {
       "what": "and an empty search is *show me something*: the whole library, clamped",
-      "client": "g6F0pVF1ZXJ5o3NlcQulcXVlcnmDoXStU2VhcmNoTGlicmFyeaR0ZXh0oKVsaW1pdAM=",
+      "client": "g6F0pVF1ZXJ5o3NlcQylcXVlcnmDoXStU2VhcmNoTGlicmFyeaR0ZXh0oKVsaW1pdAM=",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXELpmFuc3dlcoOhdK5MaWJyYXJ5TWF0Y2hlc6dtYXRjaGVzk4aiaWSwcm9iZS9sZWRiZWFtLzFjaKxtYW51ZmFjdHVyZXKkUm9iZaRuYW1lq0xFREJlYW0gMTUwpG1vZGWjMWNoqWZvb3RwcmludAGjb3duwoaiaWSuZ2VuZXJpYy5kaW1tZXKsbWFudWZhY3R1cmVyp0dlbmVyaWOkbmFtZaZEaW1tZXKkbW9kZaMxY2ipZm9vdHByaW50AaNvd27ChqJpZLFyb2JlL3dhc2gtN3E1LzJjaKxtYW51ZmFjdHVyZXKkUm9iZaRuYW1lqFdhc2ggN1E1pG1vZGWjMmNoqWZvb3RwcmludAKjb3duwqV0b3RhbAc=",
+      "answer": "g6F0pkFuc3dlcqNzZXEMpmFuc3dlcoOhdK5MaWJyYXJ5TWF0Y2hlc6dtYXRjaGVzk4aiaWSwcm9iZS9sZWRiZWFtLzFjaKxtYW51ZmFjdHVyZXKkUm9iZaRuYW1lq0xFREJlYW0gMTUwpG1vZGWjMWNoqWZvb3RwcmludAGjb3duwoaiaWSuZ2VuZXJpYy5kaW1tZXKsbWFudWZhY3R1cmVyp0dlbmVyaWOkbmFtZaZEaW1tZXKkbW9kZaMxY2ipZm9vdHByaW50AaNvd27ChqJpZLFyb2JlL3dhc2gtN3E1LzJjaKxtYW51ZmFjdHVyZXKkUm9iZaRuYW1lqFdhc2ggN1E1pG1vZGWjMmNoqWZvb3RwcmludAKjb3duwqV0b3RhbAc=",
       "refused": false,
       "rows": [
         {
@@ -868,10 +946,10 @@
     },
     {
       "what": "embed a real fixture, by the key the search answered with",
-      "client": "g6F0p0NvbW1hbmSjc2VxDKdjb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlksXJvYmUvd2FzaC03cTUvNGNo",
+      "client": "g6F0p0NvbW1hbmSjc2VxDadjb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlksXJvYmUvd2FzaC03cTUvNGNo",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aNkhL2ZpeHR1cmVUeXBlcy9yb2JlfjF3YXNoLTdxNX4xNGNopXZhbHVlhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAcOAAAAAAAKpwaHlzaWNhbFRvy0Bw4AAAAAAAialhdHRyaWJ1dGWkVGlsdKxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAVoAAAAAAAKpwaHlzaWNhbFRvy0BWgAAAAAAAialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQDrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludASiaWSxcm9iZS93YXNoLTdxNS80Y2isbWFudWZhY3R1cmVypFJvYmWkbW9kZaM0Y2ikbmFtZahXYXNoIDdRNQ=="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aNkhL2ZpeHR1cmVUeXBlcy9yb2JlfjF3YXNoLTdxNX4xNGNopXZhbHVlhqphdHRyaWJ1dGVzlIqpYXR0cmlidXRlo1Bhbqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqVsYWJlbKNQYW6pbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwHDgAAAAAACqcGh5c2ljYWxUb8tAcOAAAAAAAIqpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AaxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXTApmludmVydMKlbGFiZWykVGlsdKltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAVoAAAAAAAKpwaHlzaWNhbFRvy0BWgAAAAAAAiqlhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKlbGFiZWymRGltbWVyqW1lcmdlTW9kZaNIVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACKqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0A6xkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKlbGFiZWyjUmVkqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLFyb2JlL3dhc2gtN3E1LzRjaKxtYW51ZmFjdHVyZXKkUm9iZaRtb2RlozRjaKRuYW1lqFdhc2ggN1E1"
       ],
       "answer": null,
       "refused": false,
@@ -956,7 +1034,7 @@
     },
     {
       "what": "patch it: the channels are the manufacturer's, not this desk's",
-      "client": "g6F0p0NvbW1hbmSjc2VxDadjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAukbmFtZadXYXNoIDExpnR5cGVJZLFyb2JlL3dhc2gtN3E1LzRjaKh1bml2ZXJzZQKnYWRkcmVzc2Suc29mdHdhcmVEaW1tZXLD",
+      "client": "g6F0p0NvbW1hbmSjc2VxDqdjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAukbmFtZadXYXNoIDExpnR5cGVJZLFyb2JlL3dhc2gtN3E1LzRjaKh1bml2ZXJzZQKnYWRkcmVzc2Suc29mdHdhcmVEaW1tZXLD",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKwvZml4dHVyZXMvMTGldmFsdWWKp2FkZHJlc3NkomlkC6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWnV2FzaCAxMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSxcm9iZS93YXNoLTdxNS80Y2iodW5pdmVyc2UC"
@@ -1054,7 +1132,7 @@
     },
     {
       "what": "so embed the profile the desk has and the show has not",
-      "client": "g6F0p0NvbW1hbmSjc2VxDqdjb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZA==",
+      "client": "g6F0p0NvbW1hbmSjc2VxD6djb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZA==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aNkgL2ZpeHR1cmVUeXBlcy9nZW5lcmljLm1vdmluZ2hlYWSldmFsdWWGqmF0dHJpYnV0ZXObialhdHRyaWJ1dGWjUGFurGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0AaZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bw4AAAAAAAqnBoeXNpY2FsVG/LQHDgAAAAAACJqWF0dHJpYnV0ZaRUaWx0rGNvYXJzZU9mZnNldAKsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0A6ZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bg4AAAAAAAqnBoeXNpY2FsVG/LQGDgAAAAAACJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0BKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWnU2h1dHRlcqxjb2Fyc2VPZmZzZXQFrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpEJlYW2qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldAasZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVHcmVlbqxjb2Fyc2VPZmZzZXQHrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkQmx1Zaxjb2Fyc2VPZmZzZXQIrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWkWm9vbaxjb2Fyc2VPZmZzZXQJrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpEJlYW2qZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlRm9jdXOsY29hcnNlT2Zmc2V0CqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKVGb2N1c6pmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRHb2JvrGNvYXJzZU9mZnNldAusZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkR29ib6pmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZadDb250cm9srGNvYXJzZU9mZnNldAysZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCnQ29udHJvbKpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50DaJpZLJnZW5lcmljLm1vdmluZ2hlYWSsbWFudWZhY3R1cmVyp0dlbmVyaWOkbW9kZaQxM2NopG5hbWWrTW92aW5nIEhlYWQ="
@@ -1160,10 +1238,10 @@
     },
     {
       "what": "the same question again, now that the show carries it: eleven channels",
-      "client": "g6F0pVF1ZXJ5o3NlcQ+lcXVlcnmFoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAadhZGRyZXNzZA==",
+      "client": "g6F0pVF1ZXJ5o3NlcRClcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkB6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAadhZGRyZXNzZKZhZGRpbmcA",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXEPpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4WoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludA2rbGFzdEFkZHJlc3NwqWNvbmZsaWN0c5A=",
+      "answer": "g6F0pkFuc3dlcqNzZXEQpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludA2rbGFzdEFkZHJlc3NwqWNvbmZsaWN0c5CobmV4dEZyZWWCqHVuaXZlcnNlAadhZGRyZXNzZKpwbGFjZW1lbnRzkA==",
       "refused": false,
       "rows": [
         {
@@ -1264,7 +1342,7 @@
     },
     {
       "what": "patch a moving head",
-      "client": "g6F0p0NvbW1hbmSjc2VxEKdjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAikbmFtZaZIZWFkIDimdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQKnYWRkcmVzcwGuc29mdHdhcmVEaW1tZXLD",
+      "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAikbmFtZaZIZWFkIDimdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQKnYWRkcmVzcwGuc29mdHdhcmVEaW1tZXLD",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvOKV2YWx1ZYqnYWRkcmVzcwGiaWQIqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZaZIZWFkIDiocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksmdlbmVyaWMubW92aW5naGVhZKh1bml2ZXJzZQI="
@@ -1380,7 +1458,7 @@
     },
     {
       "what": "correct a name and an address in one go: a repatch, not a new fixture",
-      "client": "g6F0p0NvbW1hbmSjc2VxEadjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAekbmFtZa1QQVIgNyAobW92ZWQppnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAadhZGRyZXNzKK5zb2Z0d2FyZURpbW1lcsM=",
+      "client": "g6F0p0NvbW1hbmSjc2VxEqdjb21tYW5kh6F0rFBhdGNoRml4dHVyZaJpZAekbmFtZa1QQVIgNyAobW92ZWQppnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAadhZGRyZXNzKK5zb2Z0d2FyZURpbW1lcsM=",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKdyZXBsYWNlpHBhdGirL2ZpeHR1cmVzLzeldmFsdWWKp2FkZHJlc3MoomlkB6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWtUEFSIDcgKG1vdmVkKahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSwZ2VuZXJpYy5yZ2J3LnBhcqh1bml2ZXJzZQE="
@@ -1496,10 +1574,10 @@
     },
     {
       "what": "which takes the overlap away again",
-      "client": "g6F0pVF1ZXJ5o3NlcRKlcXVlcnmBoXSuUGF0Y2hDb25mbGljdHM=",
+      "client": "g6F0pVF1ZXJ5o3NlcROlcXVlcnmBoXSuUGF0Y2hDb25mbGljdHM=",
       "isQuery": true,
       "deltas": [],
-      "answer": "g6F0pkFuc3dlcqNzZXESpmFuc3dlcoKhdK5QYXRjaENvbmZsaWN0c6ljb25mbGljdHOQ",
+      "answer": "g6F0pkFuc3dlcqNzZXETpmFuc3dlcoKhdK5QYXRjaENvbmZsaWN0c6ljb25mbGljdHOQ",
       "refused": false,
       "rows": [
         {
@@ -1610,7 +1688,7 @@
     },
     {
       "what": "renumber 7 to 70: one command, because the number is the key",
-      "client": "g6F0p0NvbW1hbmSjc2VxE6djb21tYW5kg6F0r1JlbnVtYmVyRml4dHVyZaJpZAeidG9G",
+      "client": "g6F0p0NvbW1hbmSjc2VxFKdjb21tYW5kg6F0r1JlbnVtYmVyRml4dHVyZaJpZAeidG9G",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHOSgqJvcKZyZW1vdmWkcGF0aKsvZml4dHVyZXMvN4Oib3CjYWRkpHBhdGisL2ZpeHR1cmVzLzcwpXZhbHVliqdhZGRyZXNzKKJpZEapaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lrVBBUiA3IChtb3ZlZCmocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksGdlbmVyaWMucmdidy5wYXKodW5pdmVyc2UB"
@@ -1726,7 +1804,7 @@
     },
     {
       "what": "renumber onto a number that is taken: refused, and nothing moves",
-      "client": "g6F0p0NvbW1hbmSjc2VxFKdjb21tYW5kg6F0r1JlbnVtYmVyRml4dHVyZaJpZEaidG8B",
+      "client": "g6F0p0NvbW1hbmSjc2VxFadjb21tYW5kg6F0r1JlbnVtYmVyRml4dHVyZaJpZEaidG8B",
       "isQuery": false,
       "deltas": [],
       "answer": null,
@@ -1840,7 +1918,7 @@
     },
     {
       "what": "unpatch a fixture",
-      "client": "g6F0p0NvbW1hbmSjc2VxFadjb21tYW5kgqF0rlVucGF0Y2hGaXh0dXJlomlkAg==",
+      "client": "g6F0p0NvbW1hbmSjc2VxFqdjb21tYW5kgqF0rlVucGF0Y2hGaXh0dXJlomlkAg==",
       "isQuery": false,
       "deltas": [
         "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORgqJvcKZyZW1vdmWkcGF0aKsvZml4dHVyZXMvMg=="
@@ -1946,7 +2024,7 @@
     },
     {
       "what": "unpatch one that is not there: refused, and nothing moves",
-      "client": "g6F0p0NvbW1hbmSjc2VxFqdjb21tYW5kgqF0rlVucGF0Y2hGaXh0dXJlomlkYw==",
+      "client": "g6F0p0NvbW1hbmSjc2VxF6djb21tYW5kgqF0rlVucGF0Y2hGaXh0dXJlomlkYw==",
       "isQuery": false,
       "deltas": [],
       "answer": null,
@@ -2049,12 +2127,12 @@
       ]
     },
     {
-      "what": "a profile the desk does not carry: refused",
-      "client": "g6F0p0NvbW1hbmSjc2VxF6djb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlkrm5vdGhpbmcuYXQuYWxs",
-      "isQuery": false,
+      "what": "browse the library a fixture at a time: the first page of one",
+      "client": "g6F0pVF1ZXJ5o3NlcRilcXVlcnmEoXStQnJvd3NlTGlicmFyeaR0ZXh0pHJvYmWmb2Zmc2V0AKVsaW1pdAE=",
+      "isQuery": true,
       "deltas": [],
-      "answer": null,
-      "refused": true,
+      "answer": "g6F0pkFuc3dlcqNzZXEYpmFuc3dlcoShdK9MaWJyYXJ5Rml4dHVyZXOoZml4dHVyZXORhKxtYW51ZmFjdHVyZXKkUm9iZaRuYW1lq0xFREJlYW0gMTUwo293bsKlbW9kZXORhKJpZLByb2JlL2xlZGJlYW0vMWNopG1vZGWjMWNoqWZvb3RwcmludAGsaGFzSW50ZW5zaXR5w6dtYXRjaGVkAqV0b3RhbAY=",
+      "refused": false,
       "rows": [
         {
           "id": 1,
@@ -2153,11 +2231,427 @@
       ]
     },
     {
-      "what": "and take the whole edit back",
-      "client": "g6F0p0NvbW1hbmSjc2VxGKdjb21tYW5kgaF0pE9vcHM=",
+      "what": "and the page after it, which is what a list scrolled to its end asks",
+      "client": "g6F0pVF1ZXJ5o3NlcRmlcXVlcnmEoXStQnJvd3NlTGlicmFyeaR0ZXh0pHJvYmWmb2Zmc2V0AaVsaW1pdAE=",
+      "isQuery": true,
+      "deltas": [],
+      "answer": "g6F0pkFuc3dlcqNzZXEZpmFuc3dlcoShdK9MaWJyYXJ5Rml4dHVyZXOoZml4dHVyZXORhKxtYW51ZmFjdHVyZXKkUm9iZaRuYW1lqFdhc2ggN1E1o293bsKlbW9kZXOShKJpZLFyb2JlL3dhc2gtN3E1LzRjaKRtb2RlozRjaKlmb290cHJpbnQErGhhc0ludGVuc2l0ecOEomlksXJvYmUvd2FzaC03cTUvMmNopG1vZGWjMmNoqWZvb3RwcmludAKsaGFzSW50ZW5zaXR5w6dtYXRjaGVkAqV0b3RhbAY=",
+      "refused": false,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 1,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 8,
+          "name": "Head 8",
+          "typeId": "generic.movinghead",
+          "typeName": "Moving Head",
+          "universe": 2,
+          "address": 1,
+          "footprint": 13,
+          "softwareDimmer": true
+        },
+        {
+          "id": 11,
+          "name": "Wash 11",
+          "typeId": "robe/wash-7q5/4ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 100,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 70,
+          "name": "PAR 7 (moved)",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 40,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.movinghead",
+          "manufacturer": "Generic",
+          "name": "Moving Head",
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        },
+        {
+          "id": "robe/wash-7q5/4ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": true
+        }
+      ]
+    },
+    {
+      "what": "which fixture is this mode of, with every mode it has",
+      "client": "g6F0pVF1ZXJ5o3NlcRqlcXVlcnmCoXStRml4dHVyZU9mTW9kZaZ0eXBlSWSxcm9iZS93YXNoLTdxNS8yY2g=",
+      "isQuery": true,
+      "deltas": [],
+      "answer": "g6F0pkFuc3dlcqNzZXEapmFuc3dlcoKhdK1GaXh0dXJlT2ZNb2Rlp2ZpeHR1cmWErG1hbnVmYWN0dXJlcqRSb2JlpG5hbWWoV2FzaCA3UTWjb3duwqVtb2Rlc5KEomlksXJvYmUvd2FzaC03cTUvNGNopG1vZGWjNGNoqWZvb3RwcmludASsaGFzSW50ZW5zaXR5w4SiaWSxcm9iZS93YXNoLTdxNS8yY2ikbW9kZaMyY2ipZm9vdHByaW50AqxoYXNJbnRlbnNpdHnD",
+      "refused": false,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 1,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 8,
+          "name": "Head 8",
+          "typeId": "generic.movinghead",
+          "typeName": "Moving Head",
+          "universe": 2,
+          "address": 1,
+          "footprint": 13,
+          "softwareDimmer": true
+        },
+        {
+          "id": 11,
+          "name": "Wash 11",
+          "typeId": "robe/wash-7q5/4ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 100,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 70,
+          "name": "PAR 7 (moved)",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 40,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.movinghead",
+          "manufacturer": "Generic",
+          "name": "Moving Head",
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        },
+        {
+          "id": "robe/wash-7q5/4ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": true
+        }
+      ]
+    },
+    {
+      "what": "a new wash on the moving head's channels: the overlap, and the next free address",
+      "client": "g6F0pVF1ZXJ5o3NlcRulcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkFKZ0eXBlSWSxcm9iZS93YXNoLTdxNS8yY2iodW5pdmVyc2UCp2FkZHJlc3MBpmFkZGluZwE=",
+      "isQuery": true,
+      "deltas": [],
+      "answer": "g6F0pkFuc3dlcqNzZXEbpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludAKrbGFzdEFkZHJlc3MCqWNvbmZsaWN0c5GFqHVuaXZlcnNlAqRmcm9tAaJ0bwKlZmlyc3QIpnNlY29uZBSobmV4dEZyZWWCqHVuaXZlcnNlAqdhZGRyZXNzDqpwbGFjZW1lbnRzkYOiaWQUqHVuaXZlcnNlAqdhZGRyZXNzAQ==",
+      "refused": false,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 1,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 8,
+          "name": "Head 8",
+          "typeId": "generic.movinghead",
+          "typeName": "Moving Head",
+          "universe": 2,
+          "address": 1,
+          "footprint": 13,
+          "softwareDimmer": true
+        },
+        {
+          "id": 11,
+          "name": "Wash 11",
+          "typeId": "robe/wash-7q5/4ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 100,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 70,
+          "name": "PAR 7 (moved)",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 40,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.movinghead",
+          "manufacturer": "Generic",
+          "name": "Moving Head",
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        },
+        {
+          "id": "robe/wash-7q5/4ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": true
+        }
+      ]
+    },
+    {
+      "what": "three new washes from there: where each of them would go",
+      "client": "g6F0pVF1ZXJ5o3NlcRylcXVlcnmGoXSsUGF0Y2hQcmV2aWV3omlkFKZ0eXBlSWSxcm9iZS93YXNoLTdxNS8yY2iodW5pdmVyc2UCp2FkZHJlc3MOpmFkZGluZwM=",
+      "isQuery": true,
+      "deltas": [],
+      "answer": "g6F0pkFuc3dlcqNzZXEcpmFuc3dlcoKhdKxQYXRjaFByZXZpZXencHJldmlld4eoYWNjZXB0ZWTDp3JlZnVzYWzAqWZvb3RwcmludAKrbGFzdEFkZHJlc3MPqWNvbmZsaWN0c5CobmV4dEZyZWWCqHVuaXZlcnNlAqdhZGRyZXNzDqpwbGFjZW1lbnRzk4OiaWQUqHVuaXZlcnNlAqdhZGRyZXNzDoOiaWQVqHVuaXZlcnNlAqdhZGRyZXNzEIOiaWQWqHVuaXZlcnNlAqdhZGRyZXNzEg==",
+      "refused": false,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 1,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 8,
+          "name": "Head 8",
+          "typeId": "generic.movinghead",
+          "typeName": "Moving Head",
+          "universe": 2,
+          "address": 1,
+          "footprint": 13,
+          "softwareDimmer": true
+        },
+        {
+          "id": 11,
+          "name": "Wash 11",
+          "typeId": "robe/wash-7q5/4ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 100,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 70,
+          "name": "PAR 7 (moved)",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 40,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.movinghead",
+          "manufacturer": "Generic",
+          "name": "Moving Head",
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        },
+        {
+          "id": "robe/wash-7q5/4ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": true
+        }
+      ]
+    },
+    {
+      "what": "patch the three in one gesture, named after their type",
+      "client": "g6F0p0NvbW1hbmSjc2VxHadjb21tYW5khaF0rVBhdGNoRml4dHVyZXOmdHlwZUlksXJvYmUvd2FzaC03cTUvMmNopG5hbWWgrnNvZnR3YXJlRGltbWVyw6pwbGFjZW1lbnRzk4OiaWQUqHVuaXZlcnNlAqdhZGRyZXNzDoOiaWQVqHVuaXZlcnNlAqdhZGRyZXNzEIOiaWQWqHVuaXZlcnNlAqdhZGRyZXNzEg==",
       "isQuery": false,
       "deltas": [
-        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORg6JvcKNhZGSkcGF0aKsvZml4dHVyZXMvMqV2YWx1ZYqnYWRkcmVzcwKiaWQCqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZalGaXh0dXJlIDKocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlkrmdlbmVyaWMuZGltbWVyqHVuaXZlcnNlAQ=="
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHOUg6JvcKNhZGSkcGF0aNkhL2ZpeHR1cmVUeXBlcy9yb2JlfjF3YXNoLTdxNX4xMmNopXZhbHVlhqphdHRyaWJ1dGVzkoqpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpkRpbW1lcqpmaW5lT2Zmc2V0wKZpbnZlcnTCpWxhYmVspkRpbW1lcqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAiqlhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldAGsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCpWxhYmVso1JlZKltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAqWZvb3RwcmludAKiaWSxcm9iZS93YXNoLTdxNS8yY2isbWFudWZhY3R1cmVypFJvYmWkbW9kZaMyY2ikbmFtZahXYXNoIDdRNYOib3CjYWRkpHBhdGisL2ZpeHR1cmVzLzIwpXZhbHVliqdhZGRyZXNzDqJpZBSpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqldhc2ggN1E1IDGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksXJvYmUvd2FzaC03cTUvMmNoqHVuaXZlcnNlAoOib3CjYWRkpHBhdGisL2ZpeHR1cmVzLzIxpXZhbHVliqdhZGRyZXNzEKJpZBWpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqldhc2ggN1E1IDKocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksXJvYmUvd2FzaC03cTUvMmNoqHVuaXZlcnNlAoOib3CjYWRkpHBhdGisL2ZpeHR1cmVzLzIypXZhbHVliqdhZGRyZXNzEqJpZBapaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqldhc2ggN1E1IDOocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksXJvYmUvd2FzaC03cTUvMmNoqHVuaXZlcnNlAg=="
       ],
       "answer": null,
       "refused": false,
@@ -2173,12 +2667,433 @@
           "softwareDimmer": true
         },
         {
-          "id": 2,
-          "name": "Fixture 2",
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 8,
+          "name": "Head 8",
+          "typeId": "generic.movinghead",
+          "typeName": "Moving Head",
+          "universe": 2,
+          "address": 1,
+          "footprint": 13,
+          "softwareDimmer": true
+        },
+        {
+          "id": 11,
+          "name": "Wash 11",
+          "typeId": "robe/wash-7q5/4ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 100,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 20,
+          "name": "Wash 7Q5 1",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 14,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 21,
+          "name": "Wash 7Q5 2",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 16,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 22,
+          "name": "Wash 7Q5 3",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 18,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 70,
+          "name": "PAR 7 (moved)",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 40,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.movinghead",
+          "manufacturer": "Generic",
+          "name": "Moving Head",
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        },
+        {
+          "id": "robe/wash-7q5/2ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "2ch",
+          "footprint": 2,
+          "hasIntensity": true
+        },
+        {
+          "id": "robe/wash-7q5/4ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": true
+        }
+      ]
+    },
+    {
+      "what": "a new fixture on a number that is patched: refused, and nothing moves",
+      "client": "g6F0p0NvbW1hbmSjc2VxHqdjb21tYW5khaF0rVBhdGNoRml4dHVyZXOmdHlwZUlksXJvYmUvd2FzaC03cTUvMmNopG5hbWWkVHdpbq5zb2Z0d2FyZURpbW1lcsOqcGxhY2VtZW50c5GDomlkFKh1bml2ZXJzZQGnYWRkcmVzc8zI",
+      "isQuery": false,
+      "deltas": [],
+      "answer": null,
+      "refused": true,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
           "typeId": "generic.dimmer",
           "typeName": "Dimmer",
           "universe": 1,
-          "address": 2,
+          "address": 1,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 8,
+          "name": "Head 8",
+          "typeId": "generic.movinghead",
+          "typeName": "Moving Head",
+          "universe": 2,
+          "address": 1,
+          "footprint": 13,
+          "softwareDimmer": true
+        },
+        {
+          "id": 11,
+          "name": "Wash 11",
+          "typeId": "robe/wash-7q5/4ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 100,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 20,
+          "name": "Wash 7Q5 1",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 14,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 21,
+          "name": "Wash 7Q5 2",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 16,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 22,
+          "name": "Wash 7Q5 3",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 18,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 70,
+          "name": "PAR 7 (moved)",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 40,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.movinghead",
+          "manufacturer": "Generic",
+          "name": "Moving Head",
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        },
+        {
+          "id": "robe/wash-7q5/2ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "2ch",
+          "footprint": 2,
+          "hasIntensity": true
+        },
+        {
+          "id": "robe/wash-7q5/4ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": true
+        }
+      ]
+    },
+    {
+      "what": "a profile the desk does not carry: refused",
+      "client": "g6F0p0NvbW1hbmSjc2VxH6djb21tYW5kgqF0sEVtYmVkRml4dHVyZVR5cGWmdHlwZUlkrm5vdGhpbmcuYXQuYWxs",
+      "isQuery": false,
+      "deltas": [],
+      "answer": null,
+      "refused": true,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 1,
+          "footprint": 1,
+          "softwareDimmer": true
+        },
+        {
+          "id": 5,
+          "name": "Fixture 5",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 20,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 6,
+          "name": "PAR 6",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 30,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 8,
+          "name": "Head 8",
+          "typeId": "generic.movinghead",
+          "typeName": "Moving Head",
+          "universe": 2,
+          "address": 1,
+          "footprint": 13,
+          "softwareDimmer": true
+        },
+        {
+          "id": 11,
+          "name": "Wash 11",
+          "typeId": "robe/wash-7q5/4ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 100,
+          "footprint": 4,
+          "softwareDimmer": true
+        },
+        {
+          "id": 20,
+          "name": "Wash 7Q5 1",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 14,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 21,
+          "name": "Wash 7Q5 2",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 16,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 22,
+          "name": "Wash 7Q5 3",
+          "typeId": "robe/wash-7q5/2ch",
+          "typeName": "Wash 7Q5",
+          "universe": 2,
+          "address": 18,
+          "footprint": 2,
+          "softwareDimmer": true
+        },
+        {
+          "id": 70,
+          "name": "PAR 7 (moved)",
+          "typeId": "generic.rgbw.par",
+          "typeName": "RGBW PAR",
+          "universe": 1,
+          "address": 40,
+          "footprint": 4,
+          "softwareDimmer": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "generic.dimmer",
+          "manufacturer": "Generic",
+          "name": "Dimmer",
+          "mode": "1ch",
+          "footprint": 1,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.movinghead",
+          "manufacturer": "Generic",
+          "name": "Moving Head",
+          "mode": "13ch",
+          "footprint": 13,
+          "hasIntensity": true
+        },
+        {
+          "id": "generic.rgbw.par",
+          "manufacturer": "Generic",
+          "name": "RGBW PAR",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": false
+        },
+        {
+          "id": "robe/wash-7q5/2ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "2ch",
+          "footprint": 2,
+          "hasIntensity": true
+        },
+        {
+          "id": "robe/wash-7q5/4ch",
+          "manufacturer": "Robe",
+          "name": "Wash 7Q5",
+          "mode": "4ch",
+          "footprint": 4,
+          "hasIntensity": true
+        }
+      ]
+    },
+    {
+      "what": "and take the whole edit back: all three washes and their profile",
+      "client": "g6F0p0NvbW1hbmSjc2VxIKdjb21tYW5kgaF0pE9vcHM=",
+      "isQuery": false,
+      "deltas": [
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORgqJvcKZyZW1vdmWkcGF0aKwvZml4dHVyZXMvMjA=",
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORgqJvcKZyZW1vdmWkcGF0aKwvZml4dHVyZXMvMjE=",
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORgqJvcKZyZW1vdmWkcGF0aKwvZml4dHVyZXMvMjI=",
+        "gqF0pURlbHRhpWRlbHRhgqF0qVNob3dQYXRjaKNvcHORgqJvcKZyZW1vdmWkcGF0aNkhL2ZpeHR1cmVUeXBlcy9yb2JlfjF3YXNoLTdxNX4xMmNo"
+      ],
+      "answer": null,
+      "refused": false,
+      "rows": [
+        {
+          "id": 1,
+          "name": "Fixture 1",
+          "typeId": "generic.dimmer",
+          "typeName": "Dimmer",
+          "universe": 1,
+          "address": 1,
           "footprint": 1,
           "softwareDimmer": true
         },
@@ -2269,5 +3184,5 @@
       ]
     }
   ],
-  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4SuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysmdlbmVyaWMubW92aW5naGVhZIaqYXR0cmlidXRlc5uJqWF0dHJpYnV0ZaNQYW6sY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQBpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwHDgAAAAAACqcGh5c2ljYWxUb8tAcOAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQDpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwGDgAAAAAACqcGh5c2ljYWxUb8tAYOAAAAAAAImpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpkRpbW1lcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNIVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZadTaHV0dGVyrGNvYXJzZU9mZnNldAWsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0BqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpUdyZWVurGNvYXJzZU9mZnNldAesZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRCbHVlrGNvYXJzZU9mZnNldAisZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAmsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVGb2N1c6xjb2Fyc2VPZmZzZXQKrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUZvY3VzqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEdvYm+sY29hcnNlT2Zmc2V0C6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKRHb2JvqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlp0NvbnRyb2ysY29hcnNlT2Zmc2V0DKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKdDb250cm9sqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQNomlksmdlbmVyaWMubW92aW5naGVhZKxtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlpDEzY2ikbmFtZatNb3ZpbmcgSGVhZLBnZW5lcmljLnJnYncucGFyhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlR3JlZW6sY29hcnNlT2Zmc2V0AaxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpVdoaXRlrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLBnZW5lcmljLnJnYncucGFyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjNGNopG5hbWWoUkdCVyBQQVKxcm9iZS93YXNoLTdxNS80Y2iGqmF0dHJpYnV0ZXOUialhdHRyaWJ1dGWjUGFurGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8Bw4AAAAAAAqnBoeXNpY2FsVG/LQHDgAAAAAACJqWF0dHJpYnV0ZaRUaWx0rGNvYXJzZU9mZnNldAGsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8BWgAAAAAAAqnBoeXNpY2FsVG/LQFaAAAAAAACJqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjSFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWjUmVkrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLFyb2JlL3dhc2gtN3E1LzRjaKxtYW51ZmFjdHVyZXKkUm9iZaRtb2RlozRjaKRuYW1lqFdhc2ggN1E1qGZpeHR1cmVzh6ExiqdhZGRyZXNzAaJpZAGpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UBojExiqdhZGRyZXNzZKJpZAupaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lp1dhc2ggMTGocG9zaXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAAqHJvdGF0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAK5zb2Z0d2FyZURpbW1lcsOmdHlwZUlksXJvYmUvd2FzaC03cTUvNGNoqHVuaXZlcnNlAqEyiqdhZGRyZXNzAqJpZAKpaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lqUZpeHR1cmUgMqhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSuZ2VuZXJpYy5kaW1tZXKodW5pdmVyc2UBoTWKp2FkZHJlc3MUomlkBalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA1qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaE2iqdhZGRyZXNzHqJpZAapaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpVBBUiA2qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaI3MIqnYWRkcmVzcyiiaWRGqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZa1QQVIgNyAobW92ZWQpqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaE4iqdhZGRyZXNzAaJpZAipaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpkhlYWQgOKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo6sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5CucHJvZ3JhbW1lclBhZ2UAtHByb2dyYW1tZXJQYXJhbUluZGV4ALBzZWxlY3RlZEV4ZWN1dG9ywLBzZWxlY3RlZFNlcXVlbmNlwKx3aW5kb3dQaWNrZXLCpXZpZXdzgaExg6JpZAGkbmFtZaZWaWV3IDGnd2luZG93c5CqcHJvZ3JhbW1lcoapc2VsZWN0aW9ukK5zZWxlY3RlZEdyb3Vwc5CvbWFudWFsU2VsZWN0aW9ukLJhY3RpdmVGZWF0dXJlR3JvdXCmRGltbWVypnZhbHVlc5CqY2xlYXJTdGFnZQCnb3V0cHV0c5GHomlkAaRuYW1lq01vY2sgb3V0cHV0pmhlYWx0aKJPa6ZvdXRwdXSFomlkAaRuYW1lq01vY2sgb3V0cHV0pGtpbmSBoXSkTW9ja6l1bml2ZXJzZXORAadlbmFibGVkw6pmcmFtZXNTZW50BalsYXN0RXJyb3LArmxhc3RFcnJvckFnb01zwKZoZWFsdGiEr3Byb3RvY29sVmVyc2lvbgGmdGlja0h6y0BGAZNQE+XWq21pc3NlZFRpY2tzAK51bnNhdmVkQ2hhbmdlc8OuZml4dHVyZUxpYnJhcnkHp21hY2hpbmWNpmRlc2tJZNkkMDJlYjMyMDctNzczNi00ZjQxLTkzOGYtMDdmMWUyMDFjOWVlp2RhdGFEaXKvL3RtcC8udG1wSEJ2eHhmpWxvY2Fsw6l3ZWJzb2NrZXSuMTI3LjAuMC4xOjczNzOtd2Vic29ja2V0T3BlbsCldG9rZW7AqGxvZ0xldmVspEluZm+pdW5pdmVyc2VzQKpleGl0QWN0aW9upEhvbGSpYXV0b3N0YXJ0wq5maXh0dXJlTGlicmFyecCuc3VyZmFjZVByb2ZpbGXAqW92ZXJyaWRlc5anT3V0cHV0c6VMb2NhbKlXZWJzb2NrZXSpVW5pdmVyc2VzqExvZ0xldmVsrkZpeHR1cmVMaWJyYXJ5qHNob3dGaWxlhaRwYXRouy90bXAvLnRtcEhCdnh4Zi9wYXRjaC5wcmlzbaZyZWNlbnSQrnVuc2F2ZWRDaGFuZ2Vzw6hyZWNvdmVyecKvYXV0b3NhdmVTZWNvbmRzHg=="
+  "finalSnapshot": "gqF0qFNuYXBzaG90qHNuYXBzaG90iKRzaG93hqlleGVjdXRvcnOArGZpeHR1cmVUeXBlc4SuZ2VuZXJpYy5kaW1tZXKGqmF0dHJpYnV0ZXORialhdHRyaWJ1dGWmRGltbWVyrGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCmRGltbWVyqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQBomlkrmdlbmVyaWMuZGltbWVyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjMWNopG5hbWWmRGltbWVysmdlbmVyaWMubW92aW5naGVhZIaqYXR0cmlidXRlc5uJqWF0dHJpYnV0ZaNQYW6sY29hcnNlT2Zmc2V0AKxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQBpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwHDgAAAAAACqcGh5c2ljYWxUb8tAcOAAAAAAAImpYXR0cmlidXRlpFRpbHSsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXNgACsZmVhdHVyZUdyb3VwqFBvc2l0aW9uqmZpbmVPZmZzZXQDpmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LwGDgAAAAAACqcGh5c2ljYWxUb8tAYOAAAAAAAImpYXR0cmlidXRlpkRpbW1lcqxjb2Fyc2VPZmZzZXQErGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpkRpbW1lcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNIVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZadTaHV0dGVyrGNvYXJzZU9mZnNldAWsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaNSZWSsY29hcnNlT2Zmc2V0BqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpUdyZWVurGNvYXJzZU9mZnNldAesZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRCbHVlrGNvYXJzZU9mZnNldAisZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaRab29trGNvYXJzZU9mZnNldAmsZGVmYXVsdFZhbHVlAKxmZWF0dXJlR3JvdXCkQmVhbapmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACJqWF0dHJpYnV0ZaVGb2N1c6xjb2Fyc2VPZmZzZXQKrGRlZmF1bHRWYWx1ZQCsZmVhdHVyZUdyb3VwpUZvY3VzqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEdvYm+sY29hcnNlT2Zmc2V0C6xkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKRHb2JvqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlp0NvbnRyb2ysY29hcnNlT2Zmc2V0DKxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKdDb250cm9sqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQNomlksmdlbmVyaWMubW92aW5naGVhZKxtYW51ZmFjdHVyZXKnR2VuZXJpY6Rtb2RlpDEzY2ikbmFtZatNb3ZpbmcgSGVhZLBnZW5lcmljLnJnYncucGFyhqphdHRyaWJ1dGVzlImpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQArGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcsAAAAAAAAAAKpwaHlzaWNhbFRvy0BZAAAAAAAAialhdHRyaWJ1dGWlR3JlZW6sY29hcnNlT2Zmc2V0AaxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpEJsdWWsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWXN//+sZmVhdHVyZUdyb3VwpUNvbG9yqmZpbmVPZmZzZXTApmludmVydMKpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAImpYXR0cmlidXRlpVdoaXRlrGNvYXJzZU9mZnNldAOsZGVmYXVsdFZhbHVlzf//rGZlYXR1cmVHcm91cKVDb2xvcqpmaW5lT2Zmc2V0wKZpbnZlcnTCqW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9tywAAAAAAAAAAqnBoeXNpY2FsVG/LQFkAAAAAAACpZm9vdHByaW50BKJpZLBnZW5lcmljLnJnYncucGFyrG1hbnVmYWN0dXJlcqdHZW5lcmljpG1vZGWjNGNopG5hbWWoUkdCVyBQQVKxcm9iZS93YXNoLTdxNS80Y2iGqmF0dHJpYnV0ZXOUiqlhdHRyaWJ1dGWjUGFurGNvYXJzZU9mZnNldACsZGVmYXVsdFZhbHVlzYAArGZlYXR1cmVHcm91cKhQb3NpdGlvbqpmaW5lT2Zmc2V0wKZpbnZlcnTCpWxhYmVso1BhbqltZXJnZU1vZGWjTFRQrHBoeXNpY2FsRnJvbcvAcOAAAAAAAKpwaHlzaWNhbFRvy0Bw4AAAAAAAiqlhdHRyaWJ1dGWkVGlsdKxjb2Fyc2VPZmZzZXQBrGRlZmF1bHRWYWx1Zc2AAKxmZWF0dXJlR3JvdXCoUG9zaXRpb26qZmluZU9mZnNldMCmaW52ZXJ0wqVsYWJlbKRUaWx0qW1lcmdlTW9kZaNMVFCscGh5c2ljYWxGcm9ty8BWgAAAAAAAqnBoeXNpY2FsVG/LQFaAAAAAAACKqWF0dHJpYnV0ZaZEaW1tZXKsY29hcnNlT2Zmc2V0AqxkZWZhdWx0VmFsdWUArGZlYXR1cmVHcm91cKZEaW1tZXKqZmluZU9mZnNldMCmaW52ZXJ0wqVsYWJlbKZEaW1tZXKpbWVyZ2VNb2Rlo0hUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAIqpYXR0cmlidXRlo1JlZKxjb2Fyc2VPZmZzZXQDrGRlZmF1bHRWYWx1Zc3//6xmZWF0dXJlR3JvdXClQ29sb3KqZmluZU9mZnNldMCmaW52ZXJ0wqVsYWJlbKNSZWSpbWVyZ2VNb2Rlo0xUUKxwaHlzaWNhbEZyb23LAAAAAAAAAACqcGh5c2ljYWxUb8tAWQAAAAAAAKlmb290cHJpbnQEomlksXJvYmUvd2FzaC03cTUvNGNorG1hbnVmYWN0dXJlcqRSb2JlpG1vZGWjNGNopG5hbWWoV2FzaCA3UTWoZml4dHVyZXOGoTGKp2FkZHJlc3MBomlkAalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSAxqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZK5nZW5lcmljLmRpbW1lcqh1bml2ZXJzZQGiMTGKp2FkZHJlc3NkomlkC6lpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWnV2FzaCAxMahwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSxcm9iZS93YXNoLTdxNS80Y2iodW5pdmVyc2UCoTWKp2FkZHJlc3MUomlkBalpbnZlcnRQYW7CqmludmVydFRpbHTCpG5hbWWpRml4dHVyZSA1qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaE2iqdhZGRyZXNzHqJpZAapaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpVBBUiA2qHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaI3MIqnYWRkcmVzcyiiaWRGqWludmVydFBhbsKqaW52ZXJ0VGlsdMKkbmFtZa1QQVIgNyAobW92ZWQpqHBvc2l0aW9ug6F4ywAAAAAAAAAAoXnLAAAAAAAAAAChessAAAAAAAAAAKhyb3RhdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACuc29mdHdhcmVEaW1tZXLDpnR5cGVJZLBnZW5lcmljLnJnYncucGFyqHVuaXZlcnNlAaE4iqdhZGRyZXNzAaJpZAipaW52ZXJ0UGFuwqppbnZlcnRUaWx0wqRuYW1lpkhlYWQgOKhwb3NpdGlvboOheMsAAAAAAAAAAKF5ywAAAAAAAAAAoXrLAAAAAAAAAACocm90YXRpb26DoXjLAAAAAAAAAAChecsAAAAAAAAAAKF6ywAAAAAAAAAArnNvZnR3YXJlRGltbWVyw6Z0eXBlSWSyZ2VuZXJpYy5tb3ZpbmdoZWFkqHVuaXZlcnNlAqZncm91cHOAp3ByZXNldHOAqXNlcXVlbmNlc4Cnc2Vzc2lvboKnc2Vzc2lvbo+sYWN0aXZlVmlld0lkAatjb21tYW5kTGluZaCqZWRpdGluZ0N1ZcCrZW5jb2RlckJhbmumRGltbWVyrGV4ZWN1dG9yUGFnZQCtZm9jdXNlZFdpbmRvd8CiaWQBpG5hbWWkTWFpbqtvcGVuV2luZG93c5C0cHJvZ3JhbW1lck9jY3VycmVuY2UArnByb2dyYW1tZXJQYWdlALRwcm9ncmFtbWVyUGFyYW1JbmRleACwc2VsZWN0ZWRFeGVjdXRvcsCwc2VsZWN0ZWRTZXF1ZW5jZcCsd2luZG93UGlja2VywqV2aWV3c4GhMYOiaWQBpG5hbWWmVmlldyAxp3dpbmRvd3OQqnByb2dyYW1tZXKGqXNlbGVjdGlvbpCuc2VsZWN0ZWRHcm91cHOQr21hbnVhbFNlbGVjdGlvbpCyYWN0aXZlRmVhdHVyZUdyb3VwpkRpbW1lcqZ2YWx1ZXOQqmNsZWFyU3RhZ2UAp291dHB1dHORh6JpZAGkbmFtZatNb2NrIG91dHB1dKZoZWFsdGiiT2umb3V0cHV0haJpZAGkbmFtZatNb2NrIG91dHB1dKRraW5kgaF0pE1vY2updW5pdmVyc2VzkQGnZW5hYmxlZMOqZnJhbWVzU2VudAqpbGFzdEVycm9ywK5sYXN0RXJyb3JBZ29Nc8CmaGVhbHRohK9wcm90b2NvbFZlcnNpb24BpnRpY2tIestAR0J8Q1Gr9qttaXNzZWRUaWNrcwCudW5zYXZlZENoYW5nZXPDrmZpeHR1cmVMaWJyYXJ5B6dtYWNoaW5ljaZkZXNrSWTZJDA4NThiMTE1LTAxNmMtNDVkYy1iMTAyLWRmM2Y3ZWVhOGJjZKdkYXRhRGly2SxDOlxVc2Vyc1xNaWxhblxBcHBEYXRhXExvY2FsXFRlbXBcLnRtcHVXcjBxSaVsb2NhbMOpd2Vic29ja2V0rjEyNy4wLjAuMTo3MzczrXdlYnNvY2tldE9wZW7ApXRva2VuwKhsb2dMZXZlbKRJbmZvqXVuaXZlcnNlc0CqZXhpdEFjdGlvbqRIb2xkqWF1dG9zdGFydMKuZml4dHVyZUxpYnJhcnnArnN1cmZhY2VQcm9maWxlwKlvdmVycmlkZXOWp091dHB1dHOlTG9jYWypV2Vic29ja2V0qVVuaXZlcnNlc6hMb2dMZXZlbK5GaXh0dXJlTGlicmFyeahzaG93RmlsZYWkcGF0aNk4QzpcVXNlcnNcTWlsYW5cQXBwRGF0YVxMb2NhbFxUZW1wXC50bXB1V3IwcUlccGF0Y2gucHJpc22mcmVjZW50kK51bnNhdmVkQ2hhbmdlc8OocmVjb3ZlcnnCr2F1dG9zYXZlU2Vjb25kcx4="
 }

@@ -273,6 +273,26 @@ die nächste Variante erreicht also kein Release, ohne einen Test zu erreichen.
 Ein Test gegen einen Fake-Daemon, der Objekte statt Bytes liefert, kann nichts
 davon finden: irgendwo muss jede Form als Bytes ankommen.
 
+**Ein Modal liegt über dem Canvas, wo immer es geöffnet wird** (S57).
+`chrome/modal.tsx` richtet seinen Hintergrund am nächsten positionierten Vorfahren
+aus — für ein Modal, das der Canvas zeichnet, ist das der Canvas, für eines aus
+einem Fenster war es das **Fenster**: das Patch-Fenster kam in der Größe eines
+Patch-Fensters hoch, und jede Zeile seiner Liste war unsichtbar. Der Canvas stellt
+sich jetzt als `ModalLayer` bereit, und ein Modal darin wird dorthin portiert;
+React-Ereignisse laufen weiter den Komponentenbaum entlang, das Fenster drumherum
+nimmt also bei einem Klick weiter den Fokus. Ein neues Modal braucht dafür nichts
+— nur das Wissen, dass *wo es deklariert ist* nicht mehr *wo es gezeichnet wird*
+ist.
+
+**Neue Fixtures werden mit einem Befehl gepatcht, und der Daemon platziert sie**
+(S57). `Command::PatchFixtures` trägt die Platzierungen, mit denen
+`Query::PatchPreview` mit `adding` geantwortet hat, unverändert zurück, bettet das
+Profil der Bibliothek im selben Schritt ein und ist ein Oops. Nichts in `ui/`
+rechnet eine Adresse aus: die nächste freie ist `PatchPreview::nextFree`. Ein
+späterer Befehl, der Abbilder voneinander abhängiger Dinge ablegt, muss in die
+Reihenfolge von `ShowFile::restore` (*Fixtures raus, Profile, Fixtures rein*)
+eingeordnet werden, nicht nur in `image`.
+
 ### Ein fehlendes Feld ist die bessere Migration als eine Migration
 
 `occurrence` musste sieben Typen erreichen — der Schlüssel, unter dem jeder Wert

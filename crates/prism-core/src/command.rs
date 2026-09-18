@@ -202,6 +202,13 @@ pub enum Effect {
     /// model cannot know whether a key names a profile, only that a profile is
     /// wanted.
     EmbedProfile,
+    /// Several new fixtures of one profile, embedded and patched in one step —
+    /// S57's `Command::PatchFixtures`.
+    ///
+    /// [`Self::EmbedProfile`]'s reason: the profile comes out of the desk's
+    /// library, which the show model does not hold, so
+    /// [`ShowFile::apply`](crate::ShowFile::apply) carries it out.
+    PatchFixtures,
     /// [`crate::Programmer`] owns the rest of this command. The show model has
     /// already checked everything it can see.
     ///
@@ -610,6 +617,9 @@ impl Show {
             // show can see it — which is not far: a key is a key. See
             // [`Effect::EmbedProfile`].
             Command::EmbedFixtureType { .. } => Ok(Applied::effect(Effect::EmbedProfile)),
+            // S57's, and the same reason one command along: the profile may be
+            // the library's. See [`Effect::PatchFixtures`].
+            Command::PatchFixtures { .. } => Ok(Applied::effect(Effect::PatchFixtures)),
             Command::Oops => Ok(Applied::effect(Effect::Undo)),
             Command::Redo => Ok(Applied::effect(Effect::Redo)),
             Command::SaveShow => Ok(Applied::effect(Effect::Save)),
@@ -700,10 +710,16 @@ impl Show {
                         existing.invert_tilt,
                     )
                 });
+        // **A fixture with no name is named after its type** — S57, punch-list
+        // B60. A sheet of dashes is a rig nobody can read at a glance, and the
+        // type is the name an operator would have typed anyway. Here, in the
+        // one applier every patch reaches, so a line, a script and every client
+        // get it alike. A profile the show does not carry is refused below.
+        let name = fixture_name(name, self.fixture_type(type_id));
         let ops = self.patch_fixture(Fixture {
             software_dimmer,
             id,
-            name: name.to_owned(),
+            name,
             type_id: type_id.to_owned(),
             universe,
             address,
@@ -1057,6 +1073,18 @@ pub fn show_patch_ops(deltas: &[Delta]) -> Vec<JsonPatchOp> {
         })
         .flatten()
         .collect()
+}
+
+/// The name a patched fixture gets: what was typed, or its profile's name when
+/// nothing was — S57, punch-list **B60**.
+pub(crate) fn fixture_name(
+    typed: &str,
+    fixture_type: Option<&prism_domain::FixtureType>,
+) -> String {
+    match fixture_type {
+        Some(profile) if typed.trim().is_empty() => profile.name.clone(),
+        _ => typed.to_owned(),
+    }
 }
 
 #[cfg(test)]

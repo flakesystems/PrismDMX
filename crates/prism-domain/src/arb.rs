@@ -464,6 +464,20 @@ fn command_group_3() -> BoxedStrategy<crate::Command> {
                 universe,
                 address
             }),
+        (
+            any::<String>(),
+            any::<String>(),
+            any::<bool>(),
+            small_vec::<crate::PatchPlacement>(3)
+        )
+            .prop_map(
+                |(type_id, name, software_dimmer, placements)| C::PatchFixtures {
+                    type_id,
+                    name,
+                    software_dimmer,
+                    placements,
+                }
+            ),
         any::<FixtureId>().prop_map(|id| C::UnpatchFixture { id }),
         (any::<FixtureId>(), any::<FixtureId>()).prop_map(|(id, to)| C::RenumberFixture { id, to }),
         any::<String>().prop_map(|type_id| C::EmbedFixtureType { type_id }),

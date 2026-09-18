@@ -535,6 +535,7 @@ mod tests {
                     type_id: "generic.dimmer".to_owned(),
                     universe: UniverseId::new(2),
                     address: 5,
+                    adding: 2,
                 },
             },
         ];
@@ -568,6 +569,8 @@ mod tests {
                         refusal: None,
                         footprint: 4,
                         last_address: Some(8),
+                        next_free: None,
+                        placements: Vec::new(),
                         conflicts: vec![PatchConflict {
                             universe: UniverseId::new(1),
                             from: 5,

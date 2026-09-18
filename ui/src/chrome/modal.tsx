@@ -27,7 +27,29 @@
  * backdrop is `position: absolute` in a positioned ancestor rather than fixed.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+} from "react";
+import { createPortal } from "react-dom";
+
+/**
+ * The element a modal opened **inside a window** is drawn into — the canvas
+ * (S57).
+ *
+ * A modal's backdrop is `position: absolute` in its nearest positioned
+ * ancestor, which is what keeps it over the canvas and off the command line.
+ * Opened from a component the canvas draws directly — the window chooser — that
+ * ancestor *is* the canvas. Opened from inside a window, it was the **window**:
+ * the patch editor came up the size of a Patch window and its list had no room
+ * to be seen. So the canvas provides itself here, and a modal inside it is
+ * portalled up to it. React events still travel the component tree, so the
+ * window around it still hears a click and takes the focus.
+ */
+export const ModalLayer = createContext<HTMLElement | null>(null);
 
 /** What a modal needs. */
 export interface ModalProps {
@@ -40,10 +62,12 @@ export interface ModalProps {
   /**
    * How much room it takes.
    *
-   * `wide` is for a panel with columns in it — the library, and the window
-   * chooser now that its keys are a grid rather than a list.
+   * `wide` is for a panel with columns in it — the window chooser now that
+   * its keys are a grid rather than a list. `full` is wide **and** as tall as
+   * the canvas, for a panel whose list scrolls inside it: the patch window's
+   * library and form since S57.
    */
-  readonly size?: "normal" | "wide";
+  readonly size?: "normal" | "wide" | "full";
   /** What is under the heading. */
   readonly children: React.ReactNode;
   /** What is along the bottom, beside the Cancel key. */
@@ -51,8 +75,16 @@ export interface ModalProps {
 }
 
 /** The panel. */
-export function Modal({ title, testId, onClose, size = "normal", children, footer }: ModalProps) {
+export function Modal({
+  title,
+  testId,
+  onClose,
+  size = "normal",
+  children,
+  footer,
+}: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
+  const layer = useContext(ModalLayer);
 
   // Escape closes it, wherever the focus is. The listener is on the document
   // because the panel may not have the focus yet on the frame it appears.
@@ -73,7 +105,9 @@ export function Modal({ title, testId, onClose, size = "normal", children, foote
   // keyboard alone — S43's *a full pass with the keyboard reaches every
   // control*, and what makes a keyboard shortcut for opening it worth having.
   useEffect(() => {
-    const first = panel.current?.querySelector<HTMLElement>("input, button, select, textarea");
+    const first = panel.current?.querySelector<HTMLElement>(
+      "input, button, select, textarea",
+    );
     first?.focus();
   }, []);
 
@@ -86,7 +120,7 @@ export function Modal({ title, testId, onClose, size = "normal", children, foote
     [onClose],
   );
 
-  return (
+  const drawn = (
     <div
       className="modal-backdrop"
       data-testid={testId}
@@ -97,7 +131,13 @@ export function Modal({ title, testId, onClose, size = "normal", children, foote
       }}
     >
       <div
-        className={size === "wide" ? "modal modal-wide" : "modal"}
+        className={
+          size === "normal"
+            ? "modal"
+            : size === "wide"
+              ? "modal modal-wide"
+              : "modal modal-wide modal-full"
+        }
         ref={panel}
         role="dialog"
         aria-label={title}
@@ -118,4 +158,5 @@ export function Modal({ title, testId, onClose, size = "normal", children, foote
       </div>
     </div>
   );
+  return layer === null ? drawn : createPortal(drawn, layer);
 }

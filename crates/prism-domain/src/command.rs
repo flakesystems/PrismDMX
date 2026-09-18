@@ -17,8 +17,8 @@ use ts_rs::TS;
 use crate::{
     AttributeKey, AttributeType, CueProperty, CueTrackingMode, ExecutorButtonRef, ExecutorChange,
     ExecutorId, FeatureGroup, FixtureId, GroupId, JsonValue, MachineChange, OutputId,
-    OutputInstance, OutputKind, PlaybackTarget, PresetId, PresetPool, RgbColor, SequenceId,
-    StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
+    OutputInstance, OutputKind, PatchPlacement, PlaybackTarget, PresetId, PresetPool, RgbColor,
+    SequenceId, StoreMode, UniverseId, ViewId, WindowInstanceId, WindowType,
 };
 
 /// How a selection command combines with the existing selection.
@@ -1077,6 +1077,47 @@ pub enum Command {
         /// colour-only fixture without it comes up lit.
         #[serde(default = "crate::patch::supplied")]
         software_dimmer: bool,
+    },
+    /// Patch one or more **new** fixtures of one profile in one gesture — S57,
+    /// punch-list **B60**.
+    ///
+    /// # One command, and so one Oops
+    ///
+    /// Ten spots patched as ten `PatchFixture`s would be ten steps, and an
+    /// operator who counted wrong would press Oops ten times. So they travel
+    /// together and are filed together.
+    ///
+    /// # It embeds as well
+    ///
+    /// The profile is taken **out of the desk's library** when the library has
+    /// it — the same copy `EmbedFixtureType` would take, and taken in the same
+    /// step, so browsing the library embeds nothing and one Oops takes back
+    /// both the profile and the fixtures. A key only the show carries (a show
+    /// from another desk) is patched from the show's copy.
+    ///
+    /// # Where the placements come from
+    ///
+    /// From `Query::PatchPreview` with `adding`: the daemon's answer, carried
+    /// back verbatim. The client works none of it out (**D3**); the daemon
+    /// checks every one again, and every number must be free — a new fixture
+    /// that silently replaced a patched one would delete a light nobody asked
+    /// to delete.
+    ///
+    /// # The name
+    ///
+    /// An empty name is the profile's name, and with more than one fixture each
+    /// gets its place in the gesture after it — *Spot 1*, *Spot 2* — so ten
+    /// new rows are told apart by more than their numbers.
+    PatchFixtures {
+        /// Key of the fixture type to instantiate.
+        type_id: String,
+        /// Operator-facing name, shared as described above.
+        name: String,
+        /// Whether the desk supplies the intensity when the profile has none.
+        #[serde(default = "crate::patch::supplied")]
+        software_dimmer: bool,
+        /// Each fixture's number and place.
+        placements: Vec<PatchPlacement>,
     },
     /// Take a fixture out of the patch.
     ///
@@ -2578,6 +2619,13 @@ mod tests {
             },
             Command::EmbedFixtureType {
                 type_id: "generic.dimmer".to_owned(),
+            },
+            // S57's, which is one step however many fixtures it carries.
+            Command::PatchFixtures {
+                type_id: "generic.dimmer".to_owned(),
+                name: String::new(),
+                software_dimmer: true,
+                placements: Vec::new(),
             },
         ] {
             assert!(command.is_undoable(), "{command:?}");

@@ -1347,7 +1347,7 @@ Asked for on 2026-09-07, with three things stated as requirements rather than le
 - The tick makes no allocator call on any path this session adds, and every gate is green
 
 ## S57 · `ui` + `prism-core` — the patch window, rebuilt around the library
-**Size:** L · **Depends on:** S56, S44, S27
+**Size:** L · **Depends on:** S56, S44, S27 · **Done 2026-09-18** (`PROGRESS.md` §2.54)
 
 **Goal:** punch-list **B60** (GitHub #28), the owner's eight points about patching, as one piece of work — they are one window and they touch each other: which fixture is picked decides the footprint, the footprint decides the next free address, and the next free address is what patching several at once needs.
 
@@ -1456,5 +1456,5 @@ is, is the order the work was planned to make sense in.
 | 22 | **S54** core/domain — no slot of a patched fixture is out of reach | **Done 2026-09-06**, out of one sentence the owner wrote after reading S53: under the current principle, some channels of some fixtures cannot be driven at all. Measured, it was **707 DMX slots in 337 of the 2 871 profiles** — and **no counter could see it**, because every counter the reader had asks what it failed to understand and none asked whether every slot has a knob. The answer is a floor rather than four fixes: `AttributeType::Raw`, the 41st, so that a capability type a later format grows arrives as a named knob instead of as silence. **B49 closed** in the same pass, with its own question corrected — a switching alias never moves the footprint. See `PROGRESS.md` §2.50 and `docs/ISSUES.md` B51 |
 | 23 | **S55** `site` + `deploy` — prismdmx.de and its container | Asked for on 2026-09-07, and it is S42's other half: that session's first deliverable named a presentation site beside the documentation site and shipped the documentation site. A manual index is the right front page for somebody who already knows what this is. Immediately after S41/S42 because it is the same subject and because an **open** beta is a release strangers install — and a stranger arrives at a front page, not at a table of contents |
 | 24 | **S56** core/domain/`prismd`/`ui` — what the open beta sent back | **Done 2026-09-18** — see `PROGRESS.md` §2.53. Chosen on 2026-09-16 over Phase 12, by §8's own rule: the open beta had filed ten issues in two weeks, one of them a blocker. Nine closed; B60 became S57 |
-| 25 | **S57** `ui`/core — the patch window, rebuilt around the library | Born out of S56 from B60, the owner's eight points about patching. Next, because it is the window a stranger meets second, right after the front page |
+| 25 | **S57** `ui`/core — the patch window, rebuilt around the library | **Done 2026-09-18** — see `PROGRESS.md` §2.54. Born out of S56 from B60, the owner's eight points about patching, and done as one rebuild because they lean on each other. All ten of the open beta's first reports are now closed |
 | 26 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |

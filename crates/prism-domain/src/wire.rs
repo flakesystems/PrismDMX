@@ -163,6 +163,10 @@ round_trip! {
     delta => crate::Delta,
 
     library_entry => crate::LibraryEntry,
+    library_fixture => crate::LibraryFixture,
+    library_mode => crate::LibraryMode,
+    patch_address => crate::PatchAddress,
+    patch_placement => crate::PatchPlacement,
     patch_conflict => crate::PatchConflict,
     patch_preview => crate::PatchPreview,
     store_target => crate::StoreTarget,

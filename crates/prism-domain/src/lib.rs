@@ -76,7 +76,10 @@ pub use output::{
     ArtNetCounters, ArtNetNodeInfo, ArtNetPort, NodeHealth, NodeReach, OutputHealth,
     OutputInstance, OutputKind, OutputStatusInfo, SacnPort,
 };
-pub use patch::{CHANNELS_PER_UNIVERSE, Fixture, Group, RgbColor, Vec3};
+pub use patch::{
+    CHANNELS_PER_UNIVERSE, Fixture, Group, MAX_PATCH_AT_ONCE, PatchAddress, PatchPlacement,
+    RgbColor, Vec3,
+};
 pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetPool, PresetValue};
 pub use programmer::{
@@ -85,7 +88,8 @@ pub use programmer::{
 };
 pub use query::{
     Answer, CommandLineQuestion, CommandLineReadingKind, CueTrackingRow, LibraryEntry,
-    PatchConflict, PatchPreview, Query, StoreMode, StorePreview, StoreTarget, TrackedValue,
+    LibraryFixture, LibraryMode, PatchConflict, PatchPreview, Query, StoreMode, StorePreview,
+    StoreTarget, TrackedValue,
 };
 pub use sequence::{
     Cue, CueChange, CueEdit, CueKey, CuePart, CueProperty, CueTrack, CueTracking, CueTrackingMode,

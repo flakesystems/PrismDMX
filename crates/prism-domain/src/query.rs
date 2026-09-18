@@ -34,8 +34,8 @@ use ts_rs::TS;
 
 use crate::{
     ArtNetCounters, ArtNetNodeInfo, AttributeKey, AttributeType, CommandLineMode, FixtureId,
-    MidiPortInfo, OutputStatusInfo, PresetId, PresetPool, SequenceId, SurfaceControl,
-    SurfaceStatus, UniverseId,
+    MidiPortInfo, OutputStatusInfo, PatchAddress, PatchPlacement, PresetId, PresetPool, SequenceId,
+    SurfaceControl, SurfaceStatus, UniverseId,
 };
 
 /// Two fixtures sharing DMX channels.
@@ -107,6 +107,30 @@ pub struct PatchPreview {
         proptest(strategy = "crate::arb::small_vec(3)")
     )]
     pub conflicts: Vec<PatchConflict>,
+    /// The first place at or after the one asked about where the **whole**
+    /// footprint fits without sharing a channel — S57, punch-list **B60**.
+    ///
+    /// The same universe first, then the ones after it; `None` when nothing up
+    /// to universe 64 has room, or when the footprint is not known. It is the
+    /// place asked about when that place is already free, so a client can tell
+    /// *free* from *moved* by comparing. The fixture being repatched does not
+    /// count as in the way of itself, for the reason `conflicts` gives.
+    #[serde(default)]
+    pub next_free: Option<PatchAddress>,
+    /// Where each of the fixtures a `Query::PatchPreview` with `adding` would
+    /// patch, in order — S57, and what `Command::PatchFixtures` is then sent.
+    ///
+    /// Empty for a repatch (`adding` of 0). Otherwise the first is the number
+    /// and the place asked about, as typed, and every later one is the next
+    /// free number above it and the next free place after the one before it,
+    /// so none of them shares a channel with anything, the others included.
+    /// Empty too when they do not all fit before universe 64 ends.
+    #[serde(default)]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub placements: Vec<PatchPlacement>,
 }
 
 /// One profile in the desk's library, as a menu shows it.
@@ -147,6 +171,50 @@ pub struct LibraryEntry {
     /// profiles that all came with the desk, which is what it was.
     #[serde(default)]
     pub own: bool,
+}
+
+/// One mode of a fixture in the desk's library — S57, punch-list **B60**.
+///
+/// A mode **is** a profile: the key a show embeds is per mode, and stays so, so
+/// a show patched before S57 opens unchanged. What changed is only how the
+/// library is *listed*: once per fixture, with its modes under it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryMode {
+    /// The profile key, which is what `Command::PatchFixtures` names.
+    pub id: String,
+    /// The mode's name, empty for a fixture with one unnamed mode.
+    pub mode: String,
+    /// How many channels one of them occupies.
+    pub footprint: u16,
+    /// Whether the profile has an intensity of its own, which decides whether
+    /// the patch form offers the desk's dimmer at all (S43).
+    pub has_intensity: bool,
+}
+
+/// One fixture of the desk's library with every mode it has — S57, **B60**.
+///
+/// The owner's first point: a fixture listed once per mode was the same lamp
+/// four times, and choosing the lamp and then its mode is the order an operator
+/// thinks in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryFixture {
+    /// Who makes it.
+    pub manufacturer: String,
+    /// What it is called.
+    pub name: String,
+    /// Whether it is the venue's own (B43) rather than one that came with the
+    /// desk.
+    pub own: bool,
+    /// Its modes, in the order its file lists them — never empty.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub modes: Vec<LibraryMode>,
 }
 
 /// What a store would be filed under — the cue or the preset it would land in.
@@ -414,6 +482,34 @@ pub enum Query {
         universe: UniverseId,
         /// The start address it would take.
         address: u16,
+        /// How many **new** fixtures this is — S57. `0`, the default and what
+        /// every client before S57 sends, is a repatch of `id` as S27 asked it.
+        /// One or more is `Command::PatchFixtures`: every number must be free,
+        /// and the answer carries the placements.
+        #[serde(default)]
+        adding: u16,
+    },
+    /// Fixtures in the desk's library matching what has been typed, **one per
+    /// fixture** with its modes, a page at a time — S57, punch-list **B60**.
+    ///
+    /// The page is what lets a list be scrolled through the whole library
+    /// without anybody typing a search first, and without any client being sent
+    /// two thousand rows at once.
+    BrowseLibrary {
+        /// What the operator typed, matched as [`Self::SearchLibrary`] matches.
+        text: String,
+        /// How many matching fixtures to skip.
+        offset: u32,
+        /// How many to answer with, clamped by the daemon.
+        limit: u32,
+    },
+    /// The library fixture one profile key is a mode of — S57.
+    ///
+    /// What the patch form asks when it opens on a fixture that is already
+    /// patched, so its mode can be changed without searching for it.
+    FixtureOfMode {
+        /// The profile key.
+        type_id: String,
     },
     /// Profiles in the desk's library matching what has been typed.
     ///
@@ -622,6 +718,26 @@ pub enum Answer {
         /// How many profiles the library holds in total, so a client can say
         /// *50 of 2 084* rather than implying the list is all there is.
         total: u32,
+    },
+    /// One page of matching fixtures, best first — S57.
+    LibraryFixtures {
+        /// At most the number asked for.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        fixtures: Vec<LibraryFixture>,
+        /// How many fixtures match in all, so a client knows whether there is
+        /// another page to ask for.
+        matched: u32,
+        /// How many fixtures the library holds.
+        total: u32,
+    },
+    /// The fixture that mode belongs to, or `None` when the library has no
+    /// profile of that key.
+    FixtureOfMode {
+        /// The fixture with all its modes.
+        fixture: Option<LibraryFixture>,
     },
     /// What that store would do.
     StorePreview {
@@ -912,9 +1028,24 @@ mod tests {
                 type_id: "generic.dimmer".to_owned(),
                 universe: UniverseId::new(2),
                 address: 11,
+                adding: 0,
             })
             .unwrap(),
-            r#"{"t":"PatchPreview","id":7,"typeId":"generic.dimmer","universe":2,"address":11}"#
+            r#"{"t":"PatchPreview","id":7,"typeId":"generic.dimmer","universe":2,"address":11,"adding":0}"#
+        );
+        // A client from before S57 asks without `adding`, and that is a repatch.
+        assert_eq!(
+            serde_json::from_str::<Query>(
+                r#"{"t":"PatchPreview","id":7,"typeId":"generic.dimmer","universe":2,"address":11}"#
+            )
+            .unwrap(),
+            Query::PatchPreview {
+                id: FixtureId::new(7),
+                type_id: "generic.dimmer".to_owned(),
+                universe: UniverseId::new(2),
+                address: 11,
+                adding: 0,
+            }
         );
         assert_eq!(
             serde_json::to_string(&Answer::PatchConflicts {
@@ -934,6 +1065,11 @@ mod tests {
             footprint: 4,
             last_address: Some(6),
             conflicts: vec![conflict()],
+            next_free: Some(crate::PatchAddress {
+                universe: UniverseId::new(1),
+                address: 7,
+            }),
+            placements: Vec::new(),
         };
         let json = serde_json::to_string(&preview).unwrap();
         assert!(json.contains(r#""accepted":true"#), "{json}");
@@ -953,6 +1089,15 @@ mod tests {
                 type_id: String::new(),
                 universe: UniverseId::new(64),
                 address: 512,
+                adding: 3,
+            },
+            Query::BrowseLibrary {
+                text: "robe".to_owned(),
+                offset: 60,
+                limit: 60,
+            },
+            Query::FixtureOfMode {
+                type_id: "robe/mmx/16ch".to_owned(),
             },
         ];
         for query in queries {
@@ -973,8 +1118,30 @@ mod tests {
                     footprint: 0,
                     last_address: None,
                     conflicts: vec![conflict()],
+                    next_free: None,
+                    placements: vec![crate::PatchPlacement {
+                        id: FixtureId::new(4),
+                        universe: UniverseId::new(2),
+                        address: 17,
+                    }],
                 },
             },
+            Answer::LibraryFixtures {
+                fixtures: vec![crate::LibraryFixture {
+                    manufacturer: "Robe".to_owned(),
+                    name: "MMX Spot".to_owned(),
+                    own: false,
+                    modes: vec![crate::LibraryMode {
+                        id: "robe/mmx/16ch".to_owned(),
+                        mode: "16ch".to_owned(),
+                        footprint: 16,
+                        has_intensity: true,
+                    }],
+                }],
+                matched: 1,
+                total: 900,
+            },
+            Answer::FixtureOfMode { fixture: None },
         ];
         for answer in answers {
             let json = serde_json::to_string(&answer).unwrap();

@@ -257,6 +257,24 @@ the next variant cannot reach a release without reaching a test. A test against
 a fake daemon that hands over objects cannot find any of this: somewhere, every
 shape has to arrive as bytes.
 
+**A modal is drawn over the canvas, wherever it is opened** (S57). `chrome/modal.tsx`
+positions its backdrop against the nearest positioned ancestor, which is the
+canvas for a modal the canvas draws — and was the **window** for one opened
+inside a window: the patch panel came up the size of a Patch window and every
+row of its list was invisible. The canvas now provides itself as `ModalLayer`
+and a modal inside it is portalled there; React events still travel the
+component tree, so the window around it still takes the focus on a click. A new
+modal needs nothing for this — only the knowledge that *where it is declared* is
+no longer *where it is drawn*.
+
+**New fixtures are patched with one command, and the daemon places them** (S57).
+`Command::PatchFixtures` carries the placements `Query::PatchPreview` answered
+with `adding`, verbatim, embeds the library's profile in the same step, and is
+one Oops. Nothing in `ui/` works out an address: the next free one is
+`PatchPreview::nextFree`. A later command that files images of things that depend
+on each other must be placed in `ShowFile::restore`'s ordering (*fixtures out,
+profiles, fixtures in*), not only in `image`.
+
 ### An absent field is a better migration than a migration
 
 `occurrence` had to reach seven types — the key every value in a show is filed

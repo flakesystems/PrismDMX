@@ -336,11 +336,17 @@ impl Desk {
                 type_id,
                 universe,
                 address,
+                adding,
             } => Answer::PatchPreview {
-                preview: core
-                    .file
-                    .show
-                    .preview_patch(*id, type_id, *universe, *address),
+                preview: core.file.preview_patch(
+                    type_id,
+                    prism_domain::PatchPlacement {
+                        id: *id,
+                        universe: *universe,
+                        address: *address,
+                    },
+                    *adding,
+                ),
             },
             // The library never changes while the daemon runs, so this is a
             // search over a table rather than anything that touches the show —
@@ -587,6 +593,28 @@ impl Desk {
                         _ => None,
                     })
                     .collect(),
+            },
+            // S57's two: the library a fixture at a time and a page at a time,
+            // and the fixture one key belongs to. The same table, the same
+            // clamp, and nothing about the show.
+            Query::BrowseLibrary {
+                text,
+                offset,
+                limit,
+            } => {
+                let page = core.file.library.browse(
+                    text,
+                    usize::try_from(*offset).unwrap_or(usize::MAX),
+                    usize::try_from(*limit).unwrap_or(usize::MAX),
+                );
+                Answer::LibraryFixtures {
+                    fixtures: page.fixtures,
+                    matched: u32::try_from(page.matched).unwrap_or(u32::MAX),
+                    total: u32::try_from(page.total).unwrap_or(u32::MAX),
+                }
+            }
+            Query::FixtureOfMode { type_id } => Answer::FixtureOfMode {
+                fixture: core.file.library.fixture_of(type_id),
             },
             Query::SearchLibrary { text, limit } => Answer::LibraryMatches {
                 matches: core
@@ -896,6 +924,7 @@ mod tests {
             type_id: "generic.rgbw.par".to_owned(),
             universe: prism_domain::UniverseId::new(1),
             address: 8,
+            adding: 0,
         }) else {
             panic!("that is not a preview");
         };
@@ -912,6 +941,7 @@ mod tests {
             type_id: "nothing.at.all".to_owned(),
             universe: prism_domain::UniverseId::new(1),
             address: 1,
+            adding: 0,
         }) else {
             panic!("that is not a preview");
         };

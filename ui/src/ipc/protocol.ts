@@ -32,6 +32,8 @@ import type {
   ExecutorButtonRef,
   ExecutorTarget,
   LibraryEntry,
+  LibraryFixture,
+  LibraryMode,
   MachineOverride,
   MidiPortInfo,
   MachineSettings,
@@ -41,7 +43,9 @@ import type {
   OutputInstance,
   OutputKind,
   OutputStatusInfo,
+  PatchAddress,
   PatchConflict,
+  PatchPlacement,
   PatchPreview,
   ExecutorButtonFunction,
   ProgrammerState,
@@ -547,6 +551,39 @@ function readPatchPreview(value: unknown, path: string): PatchPreview {
     footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
     lastAddress: asNullable(field(record, "lastAddress"), `${path}.lastAddress`, asInteger),
     conflicts: readPatchConflicts(field(record, "conflicts"), `${path}.conflicts`),
+    // **S57's two, read as absent-means-nothing.** A daemon from before S57
+    // answers without them, and the form then simply has no next free address
+    // to offer — which is the truth about that daemon, not a fault in the
+    // answer. Present, they are read as strictly as everything else.
+    nextFree:
+      field(record, "nextFree") === undefined
+        ? null
+        : asNullable(field(record, "nextFree"), `${path}.nextFree`, readPatchAddress),
+    placements:
+      field(record, "placements") === undefined
+        ? []
+        : asArray(field(record, "placements"), `${path}.placements`).map((entry, index) =>
+            readPatchPlacement(entry, `${path}.placements[${index}]`),
+          ),
+  };
+}
+
+/** A universe and an address in it — S57. */
+function readPatchAddress(value: unknown, path: string): PatchAddress {
+  const record = asRecord(value, path);
+  return {
+    universe: asInteger(field(record, "universe"), `${path}.universe`),
+    address: asInteger(field(record, "address"), `${path}.address`),
+  };
+}
+
+/** Where one of several new fixtures would go — S57. */
+function readPatchPlacement(value: unknown, path: string): PatchPlacement {
+  const record = asRecord(value, path);
+  return {
+    id: asInteger(field(record, "id"), `${path}.id`),
+    universe: asInteger(field(record, "universe"), `${path}.universe`),
+    address: asInteger(field(record, "address"), `${path}.address`),
   };
 }
 
@@ -613,6 +650,21 @@ export function readAnswer(value: unknown, path: string): Answer {
           readLibraryEntry(entry, `${path}.matches[${index}]`),
         ),
         total: asInteger(field(record, "total"), `${path}.total`),
+      };
+    // S57's two: the library a fixture at a time, and the fixture of one mode.
+    case "LibraryFixtures":
+      return {
+        t: "LibraryFixtures",
+        fixtures: asArray(field(record, "fixtures"), `${path}.fixtures`).map((entry, index) =>
+          readLibraryFixture(entry, `${path}.fixtures[${index}]`),
+        ),
+        matched: asInteger(field(record, "matched"), `${path}.matched`),
+        total: asInteger(field(record, "total"), `${path}.total`),
+      };
+    case "FixtureOfMode":
+      return {
+        t: "FixtureOfMode",
+        fixture: asNullable(field(record, "fixture"), `${path}.fixture`, readLibraryFixture),
       };
     // **S36's and S37's, and the first was missing too.** `Query::MidiPorts`
     // has existed since S36 and nothing in this interface had asked one until
@@ -1128,6 +1180,30 @@ function readLibraryEntry(value: unknown, path: string): LibraryEntry {
     // file exists: an entry is a mirror of a document, and a missing field must
     // draw an unmarked row rather than fault the whole answer.
     own: field(record, "own") === true,
+  };
+}
+
+/** One fixture of the desk's library with every mode it has — S57. */
+function readLibraryFixture(value: unknown, path: string): LibraryFixture {
+  const record = asRecord(value, path);
+  return {
+    manufacturer: asString(field(record, "manufacturer"), `${path}.manufacturer`),
+    name: asString(field(record, "name"), `${path}.name`),
+    own: asBoolean(field(record, "own"), `${path}.own`),
+    modes: asArray(field(record, "modes"), `${path}.modes`).map((entry, index) =>
+      readLibraryMode(entry, `${path}.modes[${index}]`),
+    ),
+  };
+}
+
+/** One mode of a library fixture — S57. */
+function readLibraryMode(value: unknown, path: string): LibraryMode {
+  const record = asRecord(value, path);
+  return {
+    id: asString(field(record, "id"), `${path}.id`),
+    mode: asString(field(record, "mode"), `${path}.mode`),
+    footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
+    hasIntensity: asBoolean(field(record, "hasIntensity"), `${path}.hasIntensity`),
   };
 }
 

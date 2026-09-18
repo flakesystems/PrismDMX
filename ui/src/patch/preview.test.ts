@@ -15,7 +15,7 @@ import { decode } from "@msgpack/msgpack";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { Answer, PatchPreview, Query } from "../bindings";
-import { readServerMessage } from "../ipc/protocol";
+import { readAnswer, readServerMessage } from "../ipc/protocol";
 import { nullSink, setLogSink } from "../log/logger";
 import {
   PreviewRequester,
@@ -122,11 +122,15 @@ describe("what the operator is told before they commit", () => {
     expect(previewText(preview, 7)).toBe(preview.refusal);
   });
 
-  it("says a profile the show has not got is a refusal, until it has it", () => {
-    // Steps 7 and 9 are the same question with an `EmbedFixtureType` between
-    // them, which is the pair that makes the desk's library worth having.
-    expect(previewAt("a profile the show has not got").accepted).toBe(false);
-    expect(previewAt("a profile the show has not got").footprint).toBe(0);
+  it("refuses a profile nobody has, and measures one only the library has", () => {
+    // A key neither the show nor the desk carries: refused, nothing to measure.
+    expect(previewAt("a profile nobody has got").accepted).toBe(false);
+    expect(previewAt("a profile nobody has got").footprint).toBe(0);
+    // **S57**: a profile only the desk's library has is answered out of it,
+    // because browsing the library embeds nothing any more and the preview
+    // cannot wait for an embed. It used to be a refusal until embedded.
+    expect(previewAt("answered out of the desk's library").accepted).toBe(true);
+    expect(previewAt("answered out of the desk's library").footprint).toBe(13);
     expect(previewAt("the same question again").accepted).toBe(true);
     // Thirteen, not the eleven this line used to say: **B1** gave the moving
     // head a gobo wheel and a control channel on its way to giving every colour
@@ -147,7 +151,15 @@ describe("what the operator is told before they commit", () => {
     // And a refusal with no words in it still says something.
     expect(
       previewText(
-        { accepted: false, refusal: null, footprint: 0, lastAddress: null, conflicts: [] },
+        {
+          accepted: false,
+          refusal: null,
+          footprint: 0,
+          lastAddress: null,
+          conflicts: [],
+          nextFree: null,
+          placements: [],
+        },
         1,
       ),
     ).toContain("refuse");
@@ -155,7 +167,15 @@ describe("what the operator is told before they commit", () => {
     // accepted the patch, and would otherwise print `null`.
     expect(
       previewText(
-        { accepted: true, refusal: null, footprint: 3, lastAddress: null, conflicts: [] },
+        {
+          accepted: true,
+          refusal: null,
+          footprint: 3,
+          lastAddress: null,
+          conflicts: [],
+          nextFree: null,
+          placements: [],
+        },
         1,
       ),
     ).toContain("3 channels");
@@ -172,9 +192,86 @@ describe("what the operator is told before they commit", () => {
       footprint: 4,
       lastAddress: 8,
       conflicts,
+      nextFree: { universe: 1, address: 9 },
+      placements: [],
     };
     expect(previewText(preview, 9)).toContain("with fixture 3");
     expect(previewText(preview, 3)).toContain("with fixture 9");
+  });
+
+  /**
+   * **S57, punch-list B60 — the owner's fifth point.** An overlap names where
+   * the whole fixture would fit, and that place is the daemon's answer: the
+   * recording asks about a wash on the moving head's channels, and the head is
+   * 1–13.
+   */
+  it("names the next free address when there is an overlap, as the daemon gave it", () => {
+    const preview = previewOf(answerAt("on the moving head's channels"));
+    expect(preview?.nextFree).toEqual({ universe: 2, address: 14 });
+    expect(previewText(preview, 20, 1)).toContain("Next free: 2.14.");
+    // And says so when there is nowhere at all.
+    expect(
+      previewText(
+        {
+          accepted: true,
+          refusal: null,
+          footprint: 13,
+          lastAddress: 512,
+          conflicts: [{ universe: 64, from: 500, to: 512, first: 1, second: 2 }],
+          nextFree: null,
+          placements: [],
+        },
+        2,
+      ),
+    ).toContain("Nothing is free");
+  });
+
+  it("says where several would go, first and last, in the daemon's words", () => {
+    const preview = previewOf(answerAt("three new washes"));
+    expect(preview?.placements).toHaveLength(3);
+    expect(previewText(preview, 20, 3)).toBe(
+      "Free — 2 channels, ending at 15. 3 fixtures, 20 to 22, at 2.14 to 2.18.",
+    );
+    // Asked for three and placed none: they do not all fit, and it says so.
+    expect(
+      previewText(
+        {
+          accepted: true,
+          refusal: null,
+          footprint: 13,
+          lastAddress: 502,
+          conflicts: [],
+          nextFree: { universe: 64, address: 490 },
+          placements: [],
+        },
+        1,
+        3,
+      ),
+    ).toContain("do not all fit");
+  });
+
+  it("reads a daemon from before S57 as having no next free address to offer", () => {
+    // The two fields are absent from an older daemon's answer, and that is not
+    // a fault: the form then has nothing to offer, which is the truth.
+    const message = readAnswer(
+      {
+        t: "PatchPreview",
+        preview: { accepted: true, refusal: null, footprint: 4, lastAddress: 8, conflicts: [] },
+      },
+      "answer",
+    );
+    expect(message).toEqual({
+      t: "PatchPreview",
+      preview: {
+        accepted: true,
+        refusal: null,
+        footprint: 4,
+        lastAddress: 8,
+        conflicts: [],
+        nextFree: null,
+        placements: [],
+      },
+    });
   });
 });
 
@@ -228,6 +325,7 @@ describe("a question asked while the last one is still in flight", () => {
     typeId: "generic.rgbw.par",
     universe: 1,
     address,
+    adding: 0,
   });
 
   it("draws the newest answer and drops the older one, whenever it arrives", async () => {

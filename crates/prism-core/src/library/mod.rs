@@ -58,7 +58,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use prism_domain::{
-    AttributeDef, AttributeType, FeatureGroup, FixtureType, LibraryEntry, MergeMode,
+    AttributeDef, AttributeType, FeatureGroup, FixtureType, LibraryEntry, LibraryFixture,
+    LibraryMode, MergeMode,
 };
 
 /// An 8-bit attribute at an offset, filed under its own feature group.
@@ -240,8 +241,15 @@ pub struct FixtureLibrary {
     /// the operator's own folder can override a vendored profile by using its
     /// key.
     profiles: BTreeMap<String, FixtureType>,
-    /// The searchable form of each, in the same order as `profiles`.
+    /// The searchable form of each, in the order they were added.
     entries: Vec<LibraryEntry>,
+    /// The entries **by fixture** — S57, punch-list B60 — as indices into
+    /// `entries`, each fixture in the order it was first met and its modes in
+    /// the order its file lists them.
+    fixtures: Vec<Vec<usize>>,
+    /// Which of `fixtures` a fixture key is, so a mode added later joins the
+    /// fixture it belongs to. See [`fixture_key`].
+    fixture_index: BTreeMap<(String, bool), usize>,
     /// What reading the directories cost and what it could not use.
     conversion: ofl::Conversion,
     /// The fixture keys — `manufacturer/fixture`, without the mode — the venue
@@ -537,7 +545,101 @@ impl FixtureLibrary {
             return;
         }
         self.profiles.insert(profile.id.clone(), profile);
+        let key = (fixture_key(&entry.id).to_owned(), entry.own);
+        let index = self.entries.len();
         self.entries.push(entry);
+        let next = self.fixtures.len();
+        let fixture = *self.fixture_index.entry(key).or_insert(next);
+        match self.fixtures.get_mut(fixture) {
+            Some(modes) => modes.push(index),
+            None => self.fixtures.push(vec![index]),
+        }
+    }
+
+    /// How many fixtures there are, counting each fixture once however many
+    /// modes it has — S57.
+    #[must_use]
+    pub fn fixture_count(&self) -> usize {
+        self.fixtures.len()
+    }
+
+    /// One page of the fixtures matching `text`, **one per fixture** with all
+    /// of its modes, best first — S57, punch-list **B60**.
+    ///
+    /// A fixture matches when any of its modes does, by [`Self::search`]'s
+    /// rule, and ranks by its best mode; an empty `text` lists the library in
+    /// the order it was read, which is by manufacturer and then by fixture
+    /// rather than smallest footprint first. The page is `offset` fixtures in
+    /// and at most `limit` long, `limit` clamped as a search's is, so a list
+    /// scrolled to its end has asked for every fixture there is without any
+    /// one answer carrying two thousand of them.
+    #[must_use]
+    pub fn browse(&self, text: &str, offset: usize, limit: usize) -> LibraryPage {
+        let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
+        let words = words_of(text);
+        let mut scored: Vec<(u32, usize)> = Vec::new();
+        for (index, modes) in self.fixtures.iter().enumerate() {
+            let best = modes
+                .iter()
+                .filter_map(|mode| self.entries.get(*mode))
+                .filter_map(|entry| score(entry, &words))
+                .min();
+            if let Some(rank) = best {
+                // No words: the order the library was read in, not the
+                // footprint every mode ties on.
+                scored.push((if words.is_empty() { 0 } else { rank }, index));
+            }
+        }
+        scored.sort_unstable();
+        let fixtures = scored
+            .iter()
+            .skip(offset)
+            .take(limit)
+            .filter_map(|(_, index)| self.fixture_at(*index))
+            .collect();
+        LibraryPage {
+            fixtures,
+            matched: scored.len(),
+            total: self.fixtures.len(),
+        }
+    }
+
+    /// The fixture one profile key is a mode of, with all its modes — S57.
+    #[must_use]
+    pub fn fixture_of(&self, type_id: &str) -> Option<LibraryFixture> {
+        let own = self
+            .entries
+            .iter()
+            .find(|entry| entry.id == type_id)
+            .map(|entry| entry.own)?;
+        let index = self
+            .fixture_index
+            .get(&(fixture_key(type_id).to_owned(), own))?;
+        self.fixture_at(*index)
+    }
+
+    /// One fixture of `fixtures`, as a client is sent it.
+    fn fixture_at(&self, index: usize) -> Option<LibraryFixture> {
+        let modes = self.fixtures.get(index)?;
+        let first = self.entries.get(*modes.first()?)?;
+        Some(LibraryFixture {
+            manufacturer: first.manufacturer.clone(),
+            name: first.name.clone(),
+            own: first.own,
+            modes: modes
+                .iter()
+                .filter_map(|mode| self.entries.get(*mode))
+                .map(|entry| LibraryMode {
+                    id: entry.id.clone(),
+                    mode: entry.mode.clone(),
+                    footprint: entry.footprint,
+                    has_intensity: self
+                        .profiles
+                        .get(&entry.id)
+                        .is_some_and(FixtureType::has_dimmer),
+                })
+                .collect(),
+        })
     }
 
     /// How many profiles there are.
@@ -588,11 +690,7 @@ impl FixtureLibrary {
     #[must_use]
     pub fn search(&self, text: &str, limit: usize) -> Vec<LibraryEntry> {
         let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
-        let words: Vec<String> = text
-            .split_whitespace()
-            .map(str::to_lowercase)
-            .filter(|word| !word.is_empty())
-            .collect();
+        let words = words_of(text);
 
         let mut scored: Vec<(u32, usize, &LibraryEntry)> = Vec::new();
         for (index, entry) in self.entries.iter().enumerate() {
@@ -610,6 +708,38 @@ impl FixtureLibrary {
             .map(|(_, _, entry)| entry.clone())
             .collect()
     }
+}
+
+/// One page of [`FixtureLibrary::browse`] — S57.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryPage {
+    /// The fixtures on this page, best first.
+    pub fixtures: Vec<LibraryFixture>,
+    /// How many fixtures matched in all.
+    pub matched: usize,
+    /// How many fixtures the library holds.
+    pub total: usize,
+}
+
+/// Which fixture a profile key is a mode of — S57.
+///
+/// An Open Fixture Library key is `manufacturer/fixture/mode`, so the fixture
+/// is everything before the last slash; the venue's own folder uses the same
+/// layout. A key with fewer than two slashes — the four built-in generics are
+/// `generic.dimmer` and the like — is a fixture of its own with one mode.
+fn fixture_key(id: &str) -> &str {
+    match id.rsplit_once('/') {
+        Some((fixture, _)) if fixture.contains('/') => fixture,
+        _ => id,
+    }
+}
+
+/// What was typed, as the lower-case words a search matches.
+fn words_of(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .map(str::to_lowercase)
+        .filter(|word| !word.is_empty())
+        .collect()
 }
 
 /// How well one entry matches every word, or `None` when it does not match all
@@ -666,10 +796,89 @@ fn manufacturer_names(root: &Path) -> BTreeMap<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT_SEARCH_LIMIT, FixtureLibrary, MAX_SEARCH_LIMIT, generic_profiles};
+    use super::{
+        DEFAULT_SEARCH_LIMIT, FixtureLibrary, MAX_SEARCH_LIMIT, fixture_key, generic_profiles,
+    };
     use crate::Show;
-    use prism_domain::{AttributeType, FeatureGroup, LibraryEntry};
+    use prism_domain::{AttributeType, FeatureGroup, FixtureType, LibraryEntry};
     use std::collections::BTreeSet;
+
+    /// A profile with a key and a footprint and nothing else to say.
+    fn mode_of(id: &str, name: &str, mode: &str, footprint: u16) -> FixtureType {
+        FixtureType {
+            id: id.to_owned(),
+            manufacturer: "Maker".to_owned(),
+            name: name.to_owned(),
+            mode: mode.to_owned(),
+            footprint,
+            attributes: Vec::new(),
+        }
+    }
+
+    /// **A fixture is listed once, with its modes** — S57, punch-list B60.
+    #[test]
+    fn the_library_is_browsed_one_fixture_at_a_time_and_a_page_at_a_time() {
+        let mut library = FixtureLibrary::default();
+        library.insert_profile(mode_of("maker/spot/16ch", "Spot", "16ch", 16));
+        library.insert_profile(mode_of("maker/spot/8ch", "Spot", "8ch", 8));
+        library.insert_profile(mode_of("maker/wash/4ch", "Wash", "4ch", 4));
+        // A mode met later still joins its fixture.
+        library.insert_profile(mode_of("maker/spot/24ch", "Spot", "24ch", 24));
+        assert_eq!(library.len(), 4, "four profiles");
+        assert_eq!(library.fixture_count(), 2, "two fixtures");
+
+        let all = library.browse("", 0, 10);
+        assert_eq!((all.matched, all.total), (2, 2));
+        assert_eq!(all.fixtures[0].name, "Spot", "the order it was read in");
+        assert_eq!(
+            all.fixtures[0]
+                .modes
+                .iter()
+                .map(|mode| mode.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["maker/spot/16ch", "maker/spot/8ch", "maker/spot/24ch"]
+        );
+
+        // One mode matching is the fixture matching, and it brings all of them.
+        let found = library.browse("8ch", 0, 10);
+        assert_eq!(found.matched, 1);
+        assert_eq!(found.fixtures[0].modes.len(), 3);
+        // Nothing matching is nothing, not everything.
+        assert_eq!(library.browse("no such light", 0, 10).matched, 0);
+
+        // A page at a time: one, then the other, then nothing past the end.
+        assert_eq!(library.browse("", 0, 1).fixtures[0].name, "Spot");
+        assert_eq!(library.browse("", 1, 1).fixtures[0].name, "Wash");
+        assert!(library.browse("", 2, 1).fixtures.is_empty());
+        assert_eq!(library.browse("", 2, 1).matched, 2);
+
+        // And a mode finds its fixture.
+        let spot = library.fixture_of("maker/spot/8ch").unwrap();
+        assert_eq!(spot.modes.len(), 3);
+        assert_eq!(library.fixture_of("maker/spot/9ch"), None);
+    }
+
+    #[test]
+    fn a_key_without_a_fixture_in_it_is_a_fixture_of_its_own() {
+        assert_eq!(fixture_key("robe/mmx-spot/16ch"), "robe/mmx-spot");
+        assert_eq!(fixture_key("generic.dimmer"), "generic.dimmer");
+        assert_eq!(fixture_key("venue/one"), "venue/one");
+        // The generics are four fixtures of one mode each.
+        let generics = FixtureLibrary::generic();
+        assert_eq!(generics.fixture_count(), generic_profiles().len());
+        assert!(
+            generics
+                .browse("", 0, 10)
+                .fixtures
+                .iter()
+                .all(|fixture| fixture.modes.len() == 1)
+        );
+        // And whether a mode has an intensity is the profile's answer.
+        let dimmer = generics.fixture_of("generic.dimmer").unwrap();
+        assert!(dimmer.modes[0].has_intensity);
+        let par = generics.fixture_of("generic.rgbw.par").unwrap();
+        assert!(!par.modes[0].has_intensity);
+    }
 
     /// One OFL fixture with two modes, written out rather than downloaded: this
     /// crate's tests must pass on a machine that has never run the installer.
@@ -1082,7 +1291,7 @@ mod tests {
                     footprint,
                     own: false,
                 },
-                prism_domain::FixtureType {
+                FixtureType {
                     id: id.to_owned(),
                     manufacturer: manufacturer.to_owned(),
                     name: name.to_owned(),

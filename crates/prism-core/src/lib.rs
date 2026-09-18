@@ -123,7 +123,9 @@ pub use desk::{
 };
 pub use file::{ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
-pub use library::{DEFAULT_SEARCH_LIMIT, FixtureLibrary, MAX_SEARCH_LIMIT, generic_profiles};
+pub use library::{
+    DEFAULT_SEARCH_LIMIT, FixtureLibrary, LibraryPage, MAX_SEARCH_LIMIT, generic_profiles,
+};
 pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
 pub use outputs::{MachineError, validate as validate_output};
 /// Re-exported from `prism-domain`, where S27 moved it so that it could travel

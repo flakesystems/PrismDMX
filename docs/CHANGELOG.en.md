@@ -24,8 +24,8 @@ Every version so far is a **pre-release**.
 
 ## Not yet released
 
-What the open beta reported in its first two weeks — ten reports, nine of
-them fixed (S56):
+What the open beta reported in its first two weeks — ten reports, all ten
+fixed (S56 and S57):
 
 - **Controls:** binding a key to *choose a window* or *write a command*
   disconnected the client every time the menu was opened. Fixed (B55).
@@ -40,7 +40,12 @@ them fixed (S56):
   longer goes back when it is let go of (B59).
 - **Cue Viewer:** no store bar — cues are stored from the command line; the
   Update key blinks in the *CommandKeys* window (B62).
-- The **patch window** is being rebuilt as a session of its own (B60, S57).
+- **Patch window**, rebuilt around the library (B60, S57): *Add fixture* opens
+  the library and the settings side by side; every fixture is **one** row, its
+  mode chosen beside it, and the whole row picks; the list loads more as it is
+  scrolled; a new fixture starts at the **next free address**, which an overlap
+  names too; a fixture with no name is named after its type; and **several of
+  one type** are patched in one step that one Oops takes back.
 
 ---
 

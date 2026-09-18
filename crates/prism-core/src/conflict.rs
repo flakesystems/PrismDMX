@@ -22,7 +22,8 @@
 use core::fmt;
 
 use prism_domain::{
-    ExecutorId, FixtureId, GroupId, PatchConflict, PatchPreview, PresetId, SequenceId, UniverseId,
+    CHANNELS_PER_UNIVERSE, ExecutorId, FixtureId, FixtureType, GroupId, PatchAddress,
+    PatchConflict, PatchPlacement, PatchPreview, PresetId, SequenceId, UniverseId,
 };
 
 use crate::show::Show;
@@ -33,7 +34,7 @@ use crate::show::Show;
 /// a list of them puts a universe's fixtures together and in address order —
 /// which is what lets the search below stop at the first fixture that starts
 /// past the end of the one being examined.
-type Span = (UniverseId, u16, u16, FixtureId);
+pub(crate) type Span = (UniverseId, u16, u16, FixtureId);
 
 /// Something a patch sheet should show in red.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,7 +151,7 @@ impl fmt::Display for ShowIssue {
 }
 
 /// Every fixture's address span, sorted.
-fn spans(show: &Show) -> Vec<Span> {
+pub(crate) fn spans(show: &Show) -> Vec<Span> {
     let mut spans: Vec<Span> = show
         .patched()
         .filter_map(|(fixture, fixture_type)| {
@@ -197,31 +198,58 @@ pub(crate) fn conflicts(show: &Show) -> Vec<PatchConflict> {
 /// fixture 3 onto the channels fixture 3 already has is not a conflict — it is
 /// the same fixture, in the same place, and reporting it would put a red line
 /// under every row an operator opened and did not change.
+///
+/// # S57: the profile is handed in, and so is how many
+///
+/// `fixture_type` is the profile the patch **would** use, which since S57 is
+/// the library's copy when the desk has one: `Command::PatchFixtures` embeds it
+/// in the same step, so browsing the library embeds nothing and the preview
+/// cannot wait for an embed that has not happened. `None` is a key neither the
+/// library nor the show carries.
+///
+/// `adding` of one or more is that command's question: new fixtures only, so
+/// every number must be free, and the answer carries where each of them would
+/// go (`placements`).
 pub(crate) fn preview(
     show: &Show,
-    id: FixtureId,
+    fixture_type: Option<&FixtureType>,
     type_id: &str,
-    universe: UniverseId,
-    address: u16,
+    request: PatchPlacement,
+    adding: u16,
 ) -> PatchPreview {
+    let PatchPlacement {
+        id,
+        universe,
+        address,
+    } = request;
     // The refusal is the show model's own, taken by asking it: a second copy of
     // the validation here would be the duplication this whole preview exists to
-    // avoid. `check_patch` writes nothing.
-    let refusal = show
-        .check_patch(id, type_id, universe, address)
-        .err()
-        .map(|error| error.to_string());
-    let footprint = show
-        .fixture_type(type_id)
-        .map_or(0, |fixture_type| fixture_type.footprint);
+    // avoid. Nothing here writes.
+    let refusal = match fixture_type {
+        None => Some(crate::ShowError::UnknownFixtureType(type_id.to_owned())),
+        Some(profile) => Show::check_placement(request, profile).err(),
+    }
+    .or_else(|| {
+        (adding > prism_domain::MAX_PATCH_AT_ONCE)
+            .then_some(crate::ShowError::TooManyAtOnce(usize::from(adding)))
+    })
+    .or_else(|| {
+        // A new fixture may not take a number that is patched: that would be a
+        // repatch of a light nobody opened, which is `PatchFixtures`' refusal.
+        (adding > 0 && show.fixture(id).is_some())
+            .then_some(crate::ShowError::FixtureNumberInUse(id))
+    })
+    .map(|error| error.to_string());
+    let footprint = fixture_type.map_or(0, |profile| profile.footprint);
     let last_address = (footprint > 0 && address > 0)
         .then(|| address.checked_add(footprint - 1))
         .flatten()
-        .filter(|last| *last <= prism_domain::CHANNELS_PER_UNIVERSE);
+        .filter(|last| *last <= CHANNELS_PER_UNIVERSE);
 
+    let taken = spans(show);
     let mut conflicts = Vec::new();
     if let Some(end) = last_address {
-        for (other_universe, other_start, other_end, other_id) in spans(show) {
+        for &(other_universe, other_start, other_end, other_id) in &taken {
             if other_universe != universe
                 || other_id == id
                 || other_start > end
@@ -240,13 +268,147 @@ pub(crate) fn preview(
         conflicts.sort_unstable();
     }
 
+    let next_free = next_free(
+        &taken,
+        PatchAddress {
+            universe,
+            address: address.max(1),
+        },
+        footprint,
+        Some(id),
+    );
+    let placements = if adding == 0 || refusal.is_some() {
+        Vec::new()
+    } else {
+        placements(show, &taken, request, footprint, adding)
+    };
+
     PatchPreview {
         accepted: refusal.is_none(),
         refusal,
         footprint,
         last_address,
         conflicts,
+        next_free,
+        placements,
     }
+}
+
+/// The first place at or after `from` where `footprint` channels fit without
+/// sharing one with any span in `taken` — S57, punch-list **B60**.
+///
+/// `from`'s universe first, from `from`'s address on; then every universe after
+/// it from address 1, up to [`UniverseId::MAX`]. `exclude` is a fixture whose
+/// own span does not count — the one being repatched. `None` when nothing fits,
+/// or when the footprint is 0 or wider than a universe.
+///
+/// **The whole footprint, not the first channel**, which is the point of the
+/// owner's request: one free channel in front of a fixture is not somewhere a
+/// sixteen-channel head can go.
+pub(crate) fn next_free(
+    taken: &[Span],
+    from: PatchAddress,
+    footprint: u16,
+    exclude: Option<FixtureId>,
+) -> Option<PatchAddress> {
+    if footprint == 0 || footprint > CHANNELS_PER_UNIVERSE || !from.universe.is_in_range() {
+        return None;
+    }
+    for universe in from.universe.get()..=UniverseId::MAX.get() {
+        let universe = UniverseId::new(universe);
+        let mut start = if universe == from.universe {
+            u32::from(from.address.max(1))
+        } else {
+            1
+        };
+        // Moves `start` past whatever it lands on until it lands on nothing.
+        // Every pass moves it forward, so this ends: at a fit, or past the
+        // universe's last channel.
+        loop {
+            let end = start + u32::from(footprint) - 1;
+            if end > u32::from(CHANNELS_PER_UNIVERSE) {
+                break;
+            }
+            let blocking = taken
+                .iter()
+                .filter(|&&(other_universe, other_start, other_end, other_id)| {
+                    other_universe == universe
+                        && Some(other_id) != exclude
+                        && u32::from(other_start) <= end
+                        && u32::from(other_end) >= start
+                })
+                .map(|&(_, _, other_end, _)| other_end)
+                .max();
+            match blocking {
+                // `start` is at most 512 here, because `end` is.
+                None => {
+                    return u16::try_from(start)
+                        .ok()
+                        .map(|address| PatchAddress { universe, address });
+                }
+                Some(other_end) => start = u32::from(other_end) + 1,
+            }
+        }
+    }
+    None
+}
+
+/// Where `adding` new fixtures would go: the first as asked, and each later one
+/// at the next free number and the next free place after the one before it.
+///
+/// Empty when they do not all fit before the last universe ends: a gesture that
+/// patched seven of the ten asked for would be a rig nobody asked for either.
+fn placements(
+    show: &Show,
+    taken: &[Span],
+    first: PatchPlacement,
+    footprint: u16,
+    adding: u16,
+) -> Vec<PatchPlacement> {
+    let Some(first_end) = (footprint > 0)
+        .then(|| first.address.checked_add(footprint - 1))
+        .flatten()
+        .filter(|end| *end <= CHANNELS_PER_UNIVERSE)
+    else {
+        return Vec::new();
+    };
+    let mut taken = taken.to_vec();
+    taken.push((first.universe, first.address, first_end, first.id));
+    let mut found = Vec::with_capacity(usize::from(adding));
+    found.push(first);
+    let mut cursor = PatchAddress {
+        universe: first.universe,
+        address: first_end + 1,
+    };
+    let mut number = first.id.get();
+    for _ in 1..adding {
+        // The next number nothing is patched at. Numbers only ever go up in
+        // here, so a number this gesture has already given out is never met.
+        let id = loop {
+            let Some(next) = number.checked_add(1) else {
+                return Vec::new();
+            };
+            number = next;
+            if show.fixture(FixtureId::new(number)).is_none() {
+                break FixtureId::new(number);
+            }
+        };
+        let Some(at) = next_free(&taken, cursor, footprint, None) else {
+            return Vec::new();
+        };
+        let end = at.address + footprint - 1;
+        taken.push((at.universe, at.address, end, id));
+        found.push(PatchPlacement {
+            id,
+            universe: at.universe,
+            address: at.address,
+        });
+        cursor = PatchAddress {
+            universe: at.universe,
+            address: end + 1,
+        };
+    }
+    found
 }
 
 /// Everything wrong with the show, conflicts included.

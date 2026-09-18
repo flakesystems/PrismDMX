@@ -18,90 +18,72 @@
  *
  * # Nothing here is state this interface holds
  *
- * The table is `patchRows(show)`. The profile menu is `embeddedProfiles(show)`
- * and the desk's own library out of the snapshot. What is local is exactly one
- * thing — **the row being typed into** — and that is `ARCHITECTURE_SPEC.md`
- * §4.2's own category: a half-finished form is not something a second operator's
- * screen should be following. The moment Apply is pressed it goes to the daemon
- * and what comes back is a `ShowPatch`; the draft is dropped, not merged.
+ * The table is `patchRows(show)`. What is local is exactly one thing — **the
+ * row being typed into** — and that is `ARCHITECTURE_SPEC.md` §4.2's own
+ * category: a half-finished form is not something a second operator's screen
+ * should be following. The moment Patch is pressed it goes to the daemon and
+ * what comes back is a `ShowPatch`; the draft is dropped, not merged.
  *
  * That is the same resolution `canvas/drag.ts` wrote down for a pointer and
  * `desk/valuedrag.ts` for a fader: **ownership daemon, cadence local, and the
  * local value dropped when the gesture ends.**
  *
- * # One list of profiles, not two — S43, punch-list B19
+ * # One panel: the library and the fixture — S57, punch-list B60
  *
- * There used to be two: a search over the desk's library, which *embedded* a
- * profile into the show, and a menu of what had been embedded, which was the
- * only thing the Type field would offer. So patching a lamp was two gestures in
- * two places, and the first one had no visible effect except to unlock the
- * second. The owner's entry says it in one line: a fixture should be patchable
- * straight out of the library.
+ * The owner's eight points, and the reason they are one rebuild rather than
+ * eight corrections: they are one window, and they lean on each other.
  *
- * It is now **one field**, and it is in the form, where the profile is actually
- * being chosen. It searches the whole library; what the show already carries is
- * marked rather than hidden, because a profile an operator has just used is the
- * one they are most likely to want again.
+ * 1. **A fixture is one row, and its mode is chosen beside it.** The library
+ *    is listed a fixture at a time (`Query::BrowseLibrary`); the mode is a menu
+ *    in the form. The key a show embeds is still per mode.
+ * 2. **The whole row picks**, not the first cell.
+ * 3. **The list loads as it is scrolled** — `library.ts`, a page at a time.
+ * 4. **Add fixture opens the library**, and the settings are part of the same
+ *    panel rather than a second form under the table. Opening a patched row
+ *    opens the same panel, on that fixture.
+ * 5. **An overlap names the next free address** — the daemon's
+ *    `PatchPreview::nextFree`, and a key that moves the fixture there.
+ * 6. **A new fixture starts at the next free address** in the universe last
+ *    patched into, and follows it while the mode changes, until an address is
+ *    typed.
+ * 7. **A fixture with no name is named after its type** — the daemon does
+ *    that; the field says so in its placeholder.
+ * 8. **Several at once**: a count, placed by the daemon
+ *    (`PatchPreview::placements`) and sent as one `PatchFixtures`, which is one
+ *    Oops.
  *
- * **Choosing embeds — every time, not only the first time.** `EmbedFixtureType`
- * goes the moment a profile is picked, not when Apply is pressed, and it goes
- * even when the show already carries that key.
+ * # Choosing embeds nothing any more
  *
- * Going at all is a decision rather than a shortcut: the line under the form is
- * `Query::PatchPreview`, the daemon's own answer about the *show*, and a profile
- * the show does not carry previews as a refusal with a footprint of zero.
- * Waiting until Apply would mean either showing that refusal for a patch that is
- * going to work, or having this client decide the refusal does not count — which
- * is **D3** exactly.
- *
- * Going *every* time is the correction to the first attempt, and the owner found
- * it: after B1 gave colour channels a home value of full, a show patched before
- * that fix went on showing its colours at nought, and re-patching did nothing at
- * all. The reason was here — the pick skipped the embed when the key was already
- * present, so the show's **stale copy of the profile stayed for ever** and no
- * gesture in this interface could replace it. A show embeds its profiles (S11)
- * so that it opens the same on a desk with a different library; what it must not
- * do is make the copy unreachable.
- *
- * So picking a profile out of the library means *use the library's copy of it*,
- * which is what the words say and what an operator expects. The daemon refuses
- * the replacement if it would break a patch that is already standing on it
- * (`ShowError::TypeChangeBreaksPatch`), which is the guard that makes it safe.
- *
- * What it costs is an orphan: cancel the form after picking a profile and the
- * show keeps a profile nothing is patched to. That is one Oops away, it is
- * invisible everywhere except the count, and it weighs nothing in a file — a
- * fair price for a preview that is the daemon's and not a guess.
+ * S43 embedded a profile the moment it was picked, every time (B1), because the
+ * preview could only measure a profile the show carried. Browsing a library of
+ * two thousand that way would leave a profile behind in the show for every row
+ * clicked. So since S57 the daemon previews **the library's copy**, and
+ * `PatchFixtures` embeds it in the same step as the fixtures — which is still
+ * *use the library's copy*, B1's rule, taken at the moment it is used. Changing
+ * the profile of a fixture that is already patched still embeds before it
+ * repatches, because `PatchFixture` patches from the show's copy.
  *
  * # The conflict is shown before it is committed, and the daemon computes it
  *
  * Every change to the draft asks `Query::PatchPreview`, and the line under the
  * form is the answer: whether the daemon would take this patch, how wide the
- * fixture is, where it would end, and what it would overlap. None of that is
- * worked out here — see `patch.ts` for why not.
+ * fixture is, where it would end, what it would overlap, where it would fit, and
+ * — for several — where each would go. None of that is worked out here.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { JsonValue, LibraryEntry, PatchPreview } from "../bindings";
+import type { JsonValue, LibraryFixture, LibraryMode, PatchPlacement, PatchPreview, Query } from "../bindings";
 import { Modal } from "../chrome/modal";
-import { useAsk, useDesk, useSend } from "../store/hooks";
-import type { DeskState } from "../store/desk";
+import { useAsk, useSend } from "../store/hooks";
 import type { PatchRow, ProfileRow } from "./patch";
 import { embeddedProfiles, nextFreeFixtureId, patchRows, profileLabel, wholeNumber } from "./patch";
-import { PreviewRequester, conflictedFixtures, conflictsOf, isAcceptable, previewText } from "./preview";
+import type { LibraryView } from "./library";
+import { EMPTY_VIEW, LibraryPager, fixtureLabel, modeLabel, modesSummary } from "./library";
+import { PreviewRequester, conflictedFixtures, conflictsOf, placeText, previewText } from "./preview";
 
-const selectLibrarySize = (state: DeskState): number | null => state.fixtureLibrary;
-
-/**
- * How many library matches to ask for.
- *
- * **Sixty since the library became a panel** — S43, B23. It was twenty-five,
- * which is what a dropdown four rows high can be scrolled through; a table with
- * room shows twenty at a time and the point of the number is to keep a search
- * that matches half the library from being a dump.
- */
-const SEARCH_LIMIT = 60;
+/** How close to the end of the list, in pixels, the next page is asked for. */
+const LOAD_MARGIN = 96;
 
 /** The row being typed into. Local, and dropped when it is submitted. */
 interface Draft {
@@ -109,35 +91,57 @@ interface Draft {
      * The fixture number **as typed**, which is the key everything uses once it
      * is one.
      *
-     * The three number fields are text since B53: a box that only ever took a
-     * valid number could never be empty, so the first digit of a number could
-     * not be changed. {@link numbersOf} reads them where a number is needed.
+     * The number fields are text since B53: a box that only ever took a valid
+     * number could never be empty, so the first digit of a number could not be
+     * changed. {@link numbersOf} reads them where a number is needed.
      */
     readonly id: string;
-    /** The number this row started at, so a change of number is a renumber. */
+    /** The number this row started at, so a change of number is a renumber. `null` for new ones. */
     readonly wasId: number | null;
-    /** The name. */
+    /** The profile it started on, so a change of profile embeds first. */
+    readonly wasTypeId: string | null;
+    /** The name. Empty is *named after its type*, which the daemon does. */
     readonly name: string;
-    /** The profile key. */
+    /** The profile key — one mode of {@link fixture}. */
     readonly typeId: string;
+    /** The library fixture the key is a mode of, when the library knows it. */
+    readonly fixture: LibraryFixture | null;
+    /** How many new fixtures, as typed. Only a new row has one. */
+    readonly count: string;
     /** The universe, as typed. */
     readonly universe: string;
     /** The start address, as typed. */
     readonly address: string;
+    /**
+     * Whether the place follows the daemon's next free address — S57.
+     *
+     * A new row starts so, and follows it while the mode changes, because a
+     * different footprint fits somewhere else. Typing an address is the
+     * operator taking the place over, and from then on it is theirs.
+     */
+    readonly followFree: boolean;
     /** Whether the desk supplies this fixture's intensity — S43. */
     readonly softwareDimmer: boolean;
 }
 
-/** The three numbers of a draft, or the name of the first field that is not one. */
+/** The numbers of a draft, or the name of the first field that is not one. */
 type DraftNumbers =
-    | { readonly id: number; readonly universe: number; readonly address: number }
+    | { readonly id: number; readonly universe: number; readonly address: number; readonly count: number }
     | { readonly missing: string };
 
-/** Reads a draft's number fields — B53. Asked for the preview and at Apply, never per keystroke. */
+/** Reads a draft's number fields — B53. Asked for the preview and at Patch, never per keystroke. */
 function numbersOf(draft: Draft): DraftNumbers {
     const id = wholeNumber(draft.id);
     if (id === null) {
         return { missing: "Number" };
+    }
+    let count = 1;
+    if (draft.wasId === null) {
+        const typed = wholeNumber(draft.count);
+        if (typed === null || typed < 1) {
+            return { missing: "Count" };
+        }
+        count = typed;
     }
     const universe = wholeNumber(draft.universe);
     if (universe === null) {
@@ -147,19 +151,47 @@ function numbersOf(draft: Draft): DraftNumbers {
     if (address === null) {
         return { missing: "Address" };
     }
-    return { id, universe, address };
+    return { id, universe, address, count };
+}
+
+/** The question a draft asks, or `null` while a field is not a number yet. */
+function queryOf(draft: Draft): Query | null {
+    const numbers = numbersOf(draft);
+    if ("missing" in numbers || draft.typeId === "") {
+        return null;
+    }
+    return {
+        t: "PatchPreview",
+        id: numbers.id,
+        typeId: draft.typeId,
+        universe: numbers.universe,
+        address: numbers.address,
+        adding: draft.wasId === null ? numbers.count : 0,
+    };
+}
+
+/** Two questions are the same question. */
+function sameQuery(left: Query | null, right: Query | null): boolean {
+    return left !== null && right !== null && JSON.stringify(left) === JSON.stringify(right);
+}
+
+/** The mode of the draft's fixture it is set to, if the library knows it. */
+function modeOf(draft: Draft): LibraryMode | undefined {
+    return draft.fixture?.modes.find((mode) => mode.id === draft.typeId);
 }
 
 /** The whole window. */
 export function PatchWindow({ show }: { readonly show: JsonValue }) {
     const send = useSend();
     const ask = useAsk();
-    const librarySize = useDesk(selectLibrarySize);
     const rows = useMemo(() => patchRows(show), [show]);
     const profiles = useMemo(() => embeddedProfiles(show), [show]);
     const [draft, setDraft] = useState<Draft | null>(null);
-    const [preview, setPreview] = useState<PatchPreview | null>(null);
     const [conflicted, setConflicted] = useState<ReadonlySet<number>>(new Set());
+    // **The universe last patched into** — S57, the owner's sixth point. What
+    // this window last sent, and before that the universe of the highest
+    // numbered fixture, which is the nearest thing a show says about it.
+    const [lastUniverse, setLastUniverse] = useState<number | null>(null);
 
     // The overlaps in the show **as it stands**, which is the daemon's answer and
     // not a second opinion. Asked again whenever the show document moves, which
@@ -176,114 +208,56 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
         };
     }, [ask, show]);
 
-    // And what the row being typed into *would* do, asked per keystroke. The
-    // requester drops answers to drafts that have been typed over.
-    const requester = useRef<PreviewRequester | null>(null);
-    useEffect(() => {
-        const live = new PreviewRequester(ask, setPreview);
-        requester.current = live;
-        return () => {
-            live.stop();
-            requester.current = null;
-        };
-    }, [ask]);
-    useEffect(() => {
-        if (draft === null) {
-            setPreview(null);
-            return;
-        }
-        const numbers = numbersOf(draft);
-        if ("missing" in numbers) {
-            // Nothing to ask about: the line says which field it is waiting for.
-            setPreview(null);
-            return;
-        }
-        requester.current?.request({
-            t: "PatchPreview",
-            id: numbers.id,
-            typeId: draft.typeId,
-            universe: numbers.universe,
-            address: numbers.address,
-        });
-    }, [draft]);
-
     const edit = useCallback((row: PatchRow) => {
         setDraft({
             id: String(row.id),
             wasId: row.id,
+            wasTypeId: row.typeId,
             name: row.name,
             typeId: row.typeId,
+            fixture: null,
+            count: "1",
             universe: String(row.universe),
             address: String(row.address),
+            followFree: false,
             softwareDimmer: row.softwareDimmer,
         });
     }, []);
 
-    // The profile the show used last is the one the new row starts on, and an
-    // empty show starts on none: the field is a search, so *nothing chosen yet*
-    // is an ordinary state now rather than a window that cannot be used.
     const add = useCallback(() => {
-        const first = profiles[0];
+        const newest = rows.at(-1);
         setDraft({
             id: String(nextFreeFixtureId(rows)),
             wasId: null,
+            wasTypeId: null,
             name: "",
-            typeId: first?.id ?? "",
-            universe: "1",
+            typeId: "",
+            fixture: null,
+            count: "1",
+            universe: String(lastUniverse ?? newest?.universe ?? 1),
             address: "1",
+            followFree: true,
             // On, which is what makes a colour-only fixture dark at home — S43.
             // An operator whose PAR is on a dimmer pack switches it off; nobody
             // should have to switch it on to stop the rig lighting itself.
             softwareDimmer: true,
         });
-    }, [profiles, rows]);
+    }, [lastUniverse, rows]);
 
-    const apply = useCallback(() => {
-        if (draft === null) {
-            return;
-        }
-        // **This is where a field that is not a number is refused** — B53, and
-        // only here: the key is disabled for it too, but Enter in a field
-        // submits the form whatever the key says.
-        const numbers = numbersOf(draft);
-        if ("missing" in numbers) {
-            return;
-        }
-        // A change of number is its own command, and it goes first: the number is
-        // the key the patch is filed under, so an unpatch-and-patch pair would
-        // leave the rig without that fixture in between — which is why
-        // `RenumberFixture` exists at all. Both travel on one ordered channel.
-        if (draft.wasId !== null && draft.wasId !== numbers.id) {
-            send({ t: "RenumberFixture", id: draft.wasId, to: numbers.id });
-        }
-        send({
-            t: "PatchFixture",
-            id: numbers.id,
-            name: draft.name,
-            typeId: draft.typeId,
-            universe: numbers.universe,
-            address: numbers.address,
-            softwareDimmer: draft.softwareDimmer,
-        });
-        // **Dropped, not kept.** What the fixture is comes back as a `ShowPatch`;
-        // a draft held here until the delta arrived would be this interface having
-        // an opinion about the show for as long as the round trip took.
+    const close = useCallback(() => {
         setDraft(null);
-    }, [draft, send]);
+    }, []);
 
-    const remove = useCallback(
-        (id: number) => {
-            send({ t: "UnpatchFixture", id });
+    const patched = useCallback(
+        (universe: number) => {
+            setLastUniverse(universe);
+            // **Dropped, not kept.** What the fixture is comes back as a
+            // `ShowPatch`; a draft held here until the delta arrived would be
+            // this interface having an opinion about the show for as long as
+            // the round trip took.
             setDraft(null);
         },
-        [send],
-    );
-
-    const embed = useCallback(
-        (typeId: string) => {
-            send({ t: "EmbedFixtureType", typeId });
-        },
-        [send],
+        [],
     );
 
     return (
@@ -291,33 +265,23 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
             <PatchToolbar rows={rows} profiles={profiles} onAdd={add} />
             <PatchTable rows={rows} conflicted={conflicted} editing={draft?.wasId ?? null} onEdit={edit} />
             {draft === null ? null : (
-                <PatchForm
+                <PatchEditor
                     draft={draft}
                     profiles={profiles}
-                    librarySize={librarySize}
-                    preview={preview}
                     onChange={setDraft}
-                    onEmbed={embed}
-                    onApply={apply}
-                    onRemove={remove}
-                    onCancel={() => {
+                    onPatched={patched}
+                    onRemove={(id) => {
+                        send({ t: "UnpatchFixture", id });
                         setDraft(null);
                     }}
+                    onClose={close}
                 />
             )}
         </div>
     );
 }
 
-/**
- * What there is, and the one way to add to it.
- *
- * **The library search left this bar in S43** (B19) for the form, where the
- * profile is chosen. What is left is the count and the button, and the button is
- * no longer disabled on a show with no profiles: a rig now starts by opening a
- * row and searching, rather than by embedding something first and only then
- * being allowed to open one.
- */
+/** What there is, and the one way to add to it. */
 function PatchToolbar({
     rows,
     profiles,
@@ -332,223 +296,10 @@ function PatchToolbar({
             <span className="patch-count" data-testid="patch-count">
                 {rows.length} fixtures · {profiles.length} profiles
             </span>
-            <button type="button" onClick={onAdd}>
+            <button type="button" data-testid="patch-add" onClick={onAdd}>
                 Add fixture
             </button>
         </div>
-    );
-}
-
-/**
- * The Type field: what the row is set to, and the key that opens the library.
- *
- * **S43, B19 and then B23.** This was `LibrarySearch` in the toolbar, and it
- * *embedded* a profile; beside it, in the form, a `<select>` offered what had
- * been embedded. B19 made it one field. B23 is the owner's next reading of that
- * field: *das Fixture Auswahl Feld im Patch ist sehr unübersichtlich* — and it
- * was. What B19 left was a text box with a dropdown under it, four rows of
- * `Manufacturer · Name · Mode · n ch` run together on one line each, floating
- * over the patch table it was covering.
- *
- * A library of two thousand profiles is a **table**, and a table needs room. So
- * the field is now a reading and a key, and the key opens
- * {@link LibraryPicker} — a panel with columns, which is the whole of the
- * owner's request.
- */
-function TypeField({
-    typeId,
-    profiles,
-    librarySize,
-    onPick,
-}: {
-    readonly typeId: string;
-    readonly profiles: readonly ProfileRow[];
-    readonly librarySize: number | null;
-    readonly onPick: (entry: { readonly id: string }) => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const chosen = profiles.find((profile) => profile.id === typeId);
-    return (
-        <div className="patch-type">
-            <span className="patch-type-label">Type</span>
-            {/* What is chosen, in words. Full ink against the dimmed label
-                beside it, because it is an answer and not a prompt. */}
-            <p className="patch-type-chosen" data-testid="draft-type">
-                {chosen === undefined ? (typeId === "" ? "No profile chosen" : typeId) : profileLabel(chosen)}
-            </p>
-            <button
-                type="button"
-                data-testid="library-open"
-                onClick={() => {
-                    setOpen(true);
-                }}
-            >
-                {typeId === "" ? "Choose a profile…" : "Change…"}
-            </button>
-            {open ? (
-                <LibraryPicker
-                    profiles={profiles}
-                    librarySize={librarySize}
-                    chosen={typeId}
-                    onClose={() => {
-                        setOpen(false);
-                    }}
-                    onPick={(entry) => {
-                        onPick(entry);
-                        setOpen(false);
-                    }}
-                />
-            ) : null}
-        </div>
-    );
-}
-
-/**
- * The library, as a table with columns — S43, B23.
- *
- * # What is local, and what is the daemon's
- *
- * The text in the box is local; **what matches is the daemon's answer**, asked
- * for again on every keystroke, because the library is two thousand profiles and
- * no client holds it (`LibraryEntry` says so in its own documentation). A
- * profile already in the show is marked rather than hidden — being in the show
- * is the normal case for the second lamp of a rig, not a reason to grey the row
- * out — and picking it **re-reads it from the library**, which is how a show
- * patched before a library fix is brought up to date. The last column says so,
- * because *already in this show* on its own read as *nothing will happen*, and
- * that was true and was the fault B1 finally turned out to be.
- *
- * # Why the columns are what they are
- *
- * Manufacturer, fixture, mode and channel count, in that order, because that is
- * the order an operator narrows: they know the make, then the model, then which
- * of its modes the lamp is switched to — and the channel count is how they
- * check they picked the right one, since a 8-channel and a 15-channel mode of
- * the same fixture look identical in a run-together line and are not
- * interchangeable in a rig.
- *
- * The rows are `<tr>` with a `<button>` in the first cell rather than a clickable
- * row: a row that is only clickable is a row the keyboard cannot reach, and S43
- * asks that a full pass with the keyboard reaches every control.
- */
-function LibraryPicker({
-    profiles,
-    librarySize,
-    chosen,
-    onPick,
-    onClose,
-}: {
-    readonly profiles: readonly ProfileRow[];
-    readonly librarySize: number | null;
-    /** What the row is set to now, marked in the list. */
-    readonly chosen: string;
-    readonly onPick: (entry: { readonly id: string }) => void;
-    readonly onClose: () => void;
-}) {
-    const ask = useAsk();
-    const [text, setText] = useState("");
-    const [matches, setMatches] = useState<readonly LibraryEntry[]>([]);
-    const [asked, setAsked] = useState(false);
-    const embedded = useMemo(() => new Set(profiles.map((profile) => profile.id)), [profiles]);
-
-    useEffect(() => {
-        let current = true;
-        void ask({ t: "SearchLibrary", text, limit: SEARCH_LIMIT }).then((answer) => {
-            if (current && answer !== null && answer.t === "LibraryMatches") {
-                setMatches(answer.matches);
-                setAsked(true);
-            }
-        });
-        return () => {
-            // An answer to a search that has been typed over is dropped, exactly
-            // as a preview's is: drawn, it would be a list of the *previous*
-            // word.
-            current = false;
-        };
-    }, [ask, text]);
-
-    return (
-        <Modal title="Fixture library" testId="library-modal" size="wide" onClose={onClose}>
-            <div className="library-bar">
-                <label className="library-search-label">
-                    Search
-                    <input
-                        data-testid="library-search"
-                        value={text}
-                        placeholder="manufacturer, name or mode"
-                        onChange={(event) => {
-                            setText(event.target.value);
-                        }}
-                    />
-                </label>
-                <span className="library-count" data-testid="library-count">
-                    {matches.length} shown
-                    {librarySize === null ? "" : ` of ${String(librarySize)} profiles`}
-                </span>
-            </div>
-            {asked && matches.length === 0 ? (
-                <p className="window-note" data-testid="library-empty">
-                    Nothing in the library matches that.
-                </p>
-            ) : (
-                <table className="sheet library-table" data-testid="library-matches">
-                    <thead>
-                        <tr>
-                            <th scope="col">Manufacturer</th>
-                            <th scope="col">Fixture</th>
-                            <th scope="col">Mode</th>
-                            <th scope="col">Ch</th>
-                            <th scope="col">Source</th>
-                            <th scope="col">In this show</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {matches.map((entry) => (
-                            <tr
-                                key={entry.id}
-                                data-testid={`library-row-${entry.id}`}
-                                className={entry.id === chosen ? "row-selected" : undefined}
-                            >
-                                <td>
-                                    <button
-                                        type="button"
-                                        className="linkish"
-                                        data-testid={`library-${entry.id}`}
-                                        onClick={() => {
-                                            onPick(entry);
-                                        }}
-                                    >
-                                        {entry.manufacturer === "" ? "—" : entry.manufacturer}
-                                    </button>
-                                </td>
-                                <td>{entry.name === "" ? entry.id : entry.name}</td>
-                                <td>{entry.mode === "" ? "—" : entry.mode}</td>
-                                <td>{entry.footprint}</td>
-                                {/*
-                                  **B43.** Whose profile this is. A venue's own
-                                  may deliberately carry a library key in order
-                                  to *correct* one, so the key cannot answer it
-                                  and the daemon says so on the entry instead.
-                                  It is a column rather than a mark on the name,
-                                  because *which of these two Mac 700s is mine*
-                                  is read by scanning down rather than across.
-                                */}
-                                <td
-                                    className="library-source"
-                                    data-testid={`library-source-${entry.id}`}
-                                    data-own={entry.own ? "yes" : "no"}
-                                >
-                                    {entry.own ? "yours" : "library"}
-                                </td>
-                                <td className="library-held">
-                                    {embedded.has(entry.id) ? "yes — picking re-reads it" : ""}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
-        </Modal>
     );
 }
 
@@ -613,43 +364,466 @@ function rowClass(clashes: boolean, editing: boolean): string {
     return [clashes ? "row-conflict" : "", editing ? "row-editing" : ""].filter(Boolean).join(" ");
 }
 
-/** The row being typed into, and what the daemon says it would do. */
-function PatchForm({
+/**
+ * The library and the fixture being patched, in one panel — S57.
+ *
+ * The left half is the library, the right half is what is being patched. A new
+ * row opens here from *Add fixture*; a patched row opens here from the table,
+ * on the fixture it is.
+ */
+function PatchEditor({
     draft,
     profiles,
-    librarySize,
-    preview,
     onChange,
-    onEmbed,
-    onApply,
+    onPatched,
     onRemove,
-    onCancel,
+    onClose,
 }: {
     readonly draft: Draft;
     readonly profiles: readonly ProfileRow[];
-    readonly librarySize: number | null;
+    readonly onChange: React.Dispatch<React.SetStateAction<Draft | null>>;
+    readonly onPatched: (universe: number) => void;
+    readonly onRemove: (id: number) => void;
+    readonly onClose: () => void;
+}) {
+    const send = useSend();
+    const ask = useAsk();
+    const [answered, setAnswered] = useState<{ readonly query: Query; readonly preview: PatchPreview | null } | null>(
+        null,
+    );
+
+    // What the draft *would* do, asked per keystroke. The requester drops
+    // answers to drafts that have been typed over, and says which question each
+    // answer is to — so the placements sent back below are this draft's.
+    const requester = useRef<PreviewRequester | null>(null);
+    useEffect(() => {
+        const live = new PreviewRequester(ask, (preview, query) => {
+            setAnswered({ query, preview });
+        });
+        requester.current = live;
+        return () => {
+            live.stop();
+            requester.current = null;
+        };
+    }, [ask]);
+    const query = useMemo(() => queryOf(draft), [draft]);
+    useEffect(() => {
+        if (query !== null) {
+            requester.current?.request(query);
+        }
+    }, [query]);
+    const current = answered !== null && sameQuery(answered.query, query) ? answered.preview : null;
+    // What the line says: the answer to this draft, or — while that is on its
+    // way — the last one, so the line does not blink on every keystroke.
+    const shown = query === null ? null : (current ?? answered?.preview ?? null);
+
+    // **A new fixture follows the next free address** — S57. When the answer to
+    // this very draft says the place is somewhere else, the place moves there;
+    // the next answer then says it is free, and nothing moves again.
+    useEffect(() => {
+        if (current === null || current.nextFree === null) {
+            return;
+        }
+        const free = current.nextFree;
+        const universe = String(free.universe);
+        const address = String(free.address);
+        onChange((latest) =>
+            latest !== null && latest.followFree && (latest.universe !== universe || latest.address !== address)
+                ? { ...latest, universe, address }
+                : latest,
+        );
+    }, [current, onChange]);
+
+    // The fixture a patched row is, so its mode can be changed without a search.
+    // Asked once per profile key, and put on the draft only if the draft is
+    // still on that key when the answer comes.
+    const lookUp = draft.fixture === null ? draft.typeId : "";
+    useEffect(() => {
+        if (lookUp === "") {
+            return;
+        }
+        let live = true;
+        void ask({ t: "FixtureOfMode", typeId: lookUp }).then((answer) => {
+            if (!live || answer === null || answer.t !== "FixtureOfMode" || answer.fixture === null) {
+                return;
+            }
+            const fixture = answer.fixture;
+            onChange((latest) =>
+                latest !== null && latest.fixture === null && latest.typeId === lookUp ? { ...latest, fixture } : latest,
+            );
+        });
+        return () => {
+            live = false;
+        };
+    }, [ask, lookUp, onChange]);
+
+    const pick = useCallback(
+        (fixture: LibraryFixture) => {
+            const same = fixture.modes.some((mode) => mode.id === draft.typeId);
+            const first = fixture.modes[0];
+            if (first === undefined) {
+                return;
+            }
+            onChange({
+                ...draft,
+                fixture,
+                typeId: same ? draft.typeId : first.id,
+                // A new footprint fits somewhere else: look again from the
+                // start of the universe.
+                address: draft.followFree ? "1" : draft.address,
+            });
+        },
+        [draft, onChange],
+    );
+
+    const numbers = numbersOf(draft);
+    const placements = placementsToSend(draft, numbers, current);
+    // Refused by **this** draft's answer: a refusal of the address typed a
+    // moment ago says nothing about the one typed since.
+    const refused = current !== null && !current.accepted;
+    const ready = draft.typeId !== "" && !("missing" in numbers) && placements !== null && !refused;
+
+    const apply = useCallback(() => {
+        if (!ready || "missing" in numbers || placements === null) {
+            return;
+        }
+        if (draft.wasId === null) {
+            // One gesture, one command, one Oops — and the profile comes with
+            // it, out of the library, in the same step.
+            send({
+                t: "PatchFixtures",
+                typeId: draft.typeId,
+                name: draft.name,
+                softwareDimmer: draft.softwareDimmer,
+                placements: [...placements],
+            });
+        } else {
+            // A change of number is its own command, and it goes first: the
+            // number is the key the patch is filed under (S27). A change of
+            // profile embeds the library's copy before the repatch stands on it.
+            if (draft.wasId !== numbers.id) {
+                send({ t: "RenumberFixture", id: draft.wasId, to: numbers.id });
+            }
+            if (draft.typeId !== draft.wasTypeId) {
+                send({ t: "EmbedFixtureType", typeId: draft.typeId });
+            }
+            send({
+                t: "PatchFixture",
+                id: numbers.id,
+                name: draft.name,
+                typeId: draft.typeId,
+                universe: numbers.universe,
+                address: numbers.address,
+                softwareDimmer: draft.softwareDimmer,
+            });
+        }
+        onPatched(numbers.universe);
+    }, [draft, numbers, onPatched, placements, ready, send]);
+
+    const title = draft.wasId === null ? "Add fixtures" : `Fixture ${String(draft.wasId)}`;
+    return (
+        <Modal
+            title={title}
+            testId="patch-editor"
+            size="full"
+            onClose={onClose}
+            footer={
+                <>
+                    <button type="submit" form="patch-form" disabled={!ready} data-testid="draft-apply">
+                        {draft.wasId === null ? "Patch" : "Apply"}
+                    </button>
+                    {draft.wasId === null ? null : (
+                        <button
+                            type="button"
+                            data-testid="draft-remove"
+                            onClick={() => {
+                                if (draft.wasId !== null) {
+                                    onRemove(draft.wasId);
+                                }
+                            }}
+                        >
+                            Unpatch
+                        </button>
+                    )}
+                </>
+            }
+        >
+            <div className="patch-editor">
+                <LibraryBrowser chosen={draft.fixture} typeId={draft.typeId} onPick={pick} />
+                <PatchForm
+                    draft={draft}
+                    profiles={profiles}
+                    numbers={numbers}
+                    preview={shown}
+                    onChange={onChange}
+                    onApply={apply}
+                />
+            </div>
+        </Modal>
+    );
+}
+
+/**
+ * The placements a Patch would send, or `null` while they are not known.
+ *
+ * One new fixture is the place typed, which is no arithmetic at all — and a form
+ * that waited on the daemon for it would be a form a slow answer locks. Several
+ * are **the daemon's**, and only its answer to this very draft will do: the
+ * answer to the previous address would put them somewhere else.
+ */
+function placementsToSend(
+    draft: Draft,
+    numbers: DraftNumbers,
+    current: PatchPreview | null,
+): readonly PatchPlacement[] | null {
+    if ("missing" in numbers) {
+        return null;
+    }
+    if (draft.wasId !== null || numbers.count === 1) {
+        return [{ id: numbers.id, universe: numbers.universe, address: numbers.address }];
+    }
+    if (current === null || current.placements.length !== numbers.count) {
+        return null;
+    }
+    return current.placements;
+}
+
+/**
+ * The library, one row per fixture, loaded as it is scrolled — S57.
+ *
+ * # What is local, and what is the daemon's
+ *
+ * The text in the box is local; **what matches is the daemon's answer**, a page
+ * at a time, because the library is two thousand profiles and no client holds
+ * it. See `library.ts`.
+ *
+ * # The whole row picks
+ *
+ * The owner's second point. The row is clickable end to end, and the first cell
+ * still holds a `<button>`, because a row that is only clickable is a row the
+ * keyboard cannot reach (S43). Its click is the row's click — it bubbles — so
+ * nothing is handled twice.
+ */
+function LibraryBrowser({
+    chosen,
+    typeId,
+    onPick,
+}: {
+    readonly chosen: LibraryFixture | null;
+    readonly typeId: string;
+    readonly onPick: (fixture: LibraryFixture) => void;
+}) {
+    const ask = useAsk();
+    const [text, setText] = useState("");
+    const [view, setView] = useState<LibraryView>(EMPTY_VIEW);
+    const pager = useRef<LibraryPager | null>(null);
+    const scroller = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        const live = new LibraryPager(ask, setView);
+        pager.current = live;
+        return () => {
+            live.stop();
+            pager.current = null;
+        };
+    }, [ask]);
+    useEffect(() => {
+        pager.current?.search(text);
+    }, [text]);
+
+    // A page that does not fill the list cannot be scrolled to its end, so the
+    // next one is asked for straight away. Only where there is a size to
+    // measure: a list with no height is not one anybody is looking at.
+    useEffect(() => {
+        const element = scroller.current;
+        if (element === null || element.clientHeight === 0 || view.loading) {
+            return;
+        }
+        if (element.scrollHeight <= element.clientHeight + LOAD_MARGIN) {
+            pager.current?.more();
+        }
+    }, [view]);
+
+    const onScroll = useCallback(() => {
+        const element = scroller.current;
+        if (element !== null && element.scrollTop + element.clientHeight >= element.scrollHeight - LOAD_MARGIN) {
+            pager.current?.more();
+        }
+    }, []);
+
+    const more = view.matched === null || view.fixtures.length < view.matched;
+    return (
+        <section className="library-pane" aria-label="Fixture library">
+            <div className="library-bar">
+                <label className="library-search-label">
+                    Search
+                    <input
+                        data-testid="library-search"
+                        value={text}
+                        placeholder="manufacturer, fixture or mode"
+                        onChange={(event) => {
+                            setText(event.target.value);
+                        }}
+                    />
+                </label>
+                <span className="library-count" data-testid="library-count">
+                    {view.matched === null ? "…" : `${String(view.matched)} of ${String(view.total ?? 0)} fixtures`}
+                </span>
+            </div>
+            {view.matched === 0 ? (
+                <p className="window-note" data-testid="library-empty">
+                    Nothing in the library matches that.
+                </p>
+            ) : (
+                <div className="library-scroll" data-testid="library-scroll" ref={scroller} onScroll={onScroll}>
+                    <table className="sheet library-table" data-testid="library-matches">
+                        <thead>
+                            <tr>
+                                <th scope="col">Manufacturer</th>
+                                <th scope="col">Fixture</th>
+                                <th scope="col">Modes</th>
+                                <th scope="col">Source</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {view.fixtures.map((fixture) => {
+                                const key = fixture.modes[0]?.id ?? fixtureLabel(fixture);
+                                const selected =
+                                    chosen === null
+                                        ? fixture.modes.some((mode) => mode.id === typeId)
+                                        : fixtureLabel(chosen) === fixtureLabel(fixture) && chosen.own === fixture.own;
+                                return (
+                                    <tr
+                                        key={key}
+                                        data-testid={`library-row-${key}`}
+                                        className={selected ? "library-row row-selected" : "library-row"}
+                                        onClick={() => {
+                                            onPick(fixture);
+                                        }}
+                                    >
+                                        <td>
+                                            <button type="button" className="linkish" data-testid={`library-${key}`}>
+                                                {fixture.manufacturer === "" ? "—" : fixture.manufacturer}
+                                            </button>
+                                        </td>
+                                        <td>{fixture.name}</td>
+                                        <td title={modesSummary(fixture)}>{modesSummary(fixture)}</td>
+                                        {/*
+                                          **B43.** Whose profile this is. A venue's own
+                                          may deliberately carry a library key in order
+                                          to *correct* one, so the key cannot answer it
+                                          and the daemon says so on the fixture instead.
+                                        */}
+                                        <td
+                                            className="library-source"
+                                            data-testid={`library-source-${key}`}
+                                            data-own={fixture.own ? "yes" : "no"}
+                                        >
+                                            {fixture.own ? "yours" : "library"}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    {more ? (
+                        <button
+                            type="button"
+                            className="library-more"
+                            data-testid="library-more"
+                            disabled={view.loading}
+                            onClick={() => {
+                                pager.current?.more();
+                            }}
+                        >
+                            {view.loading ? "Loading…" : "More"}
+                        </button>
+                    ) : null}
+                </div>
+            )}
+        </section>
+    );
+}
+
+/** The fixture being patched, and what the daemon says it would do. */
+function PatchForm({
+    draft,
+    profiles,
+    numbers,
+    preview,
+    onChange,
+    onApply,
+}: {
+    readonly draft: Draft;
+    readonly profiles: readonly ProfileRow[];
+    readonly numbers: DraftNumbers;
     readonly preview: PatchPreview | null;
     readonly onChange: (draft: Draft) => void;
-    readonly onEmbed: (typeId: string) => void;
     readonly onApply: () => void;
-    readonly onRemove: (id: number) => void;
-    readonly onCancel: () => void;
 }) {
+    const embedded = profiles.find((profile) => profile.id === draft.typeId);
+    const mode = modeOf(draft);
+    const typeName = draft.fixture?.name ?? embedded?.name ?? "";
+    const hasIntensity = mode?.hasIntensity ?? embedded?.hasIntensity;
     const clashes = preview !== null && preview.accepted && preview.conflicts.length > 0;
-    const numbers = numbersOf(draft);
+    const adding = draft.wasId === null && !("missing" in numbers) ? numbers.count : 0;
+    const free = preview?.nextFree ?? null;
+    const moved =
+        free !== null && (String(free.universe) !== draft.universe || String(free.address) !== draft.address);
     return (
         <form
             className="patch-form"
+            id="patch-form"
             data-testid="patch-form"
             onSubmit={(event) => {
                 event.preventDefault();
                 onApply();
             }}
         >
-            <fieldset>
-                <legend>{draft.wasId === null ? "New fixture" : `Fixture ${String(draft.wasId)}`}</legend>
+            <p className="patch-type" data-testid="draft-type">
+                {draft.fixture !== null
+                    ? fixtureLabel(draft.fixture)
+                    : embedded !== undefined
+                      ? profileLabel(embedded)
+                      : draft.typeId === ""
+                        ? "Choose a fixture from the library"
+                        : draft.typeId}
+            </p>
+            <div className="patch-fields">
+                {draft.fixture === null ? null : (
+                    <label>
+                        Mode
+                        <select
+                            data-testid="draft-mode"
+                            value={draft.typeId}
+                            onChange={(event) => {
+                                onChange({
+                                    ...draft,
+                                    typeId: event.target.value,
+                                    address: draft.followFree ? "1" : draft.address,
+                                });
+                            }}
+                        >
+                            {draft.fixture.modes.map((option) => (
+                                <option key={option.id} value={option.id}>
+                                    {modeLabel(option)}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+                {draft.wasId === null ? (
+                    <NumberField
+                        label="Count"
+                        testId="draft-count"
+                        value={draft.count}
+                        onChange={(count) => {
+                            onChange({ ...draft, count });
+                        }}
+                    />
+                ) : null}
                 <NumberField
-                    label="Number"
+                    label={draft.wasId === null && draft.count.trim() !== "1" ? "First number" : "Number"}
                     testId="draft-id"
                     value={draft.id}
                     onChange={(id) => {
@@ -661,32 +835,22 @@ function PatchForm({
                     <input
                         data-testid="draft-name"
                         value={draft.name}
+                        // **Named after its type** when left empty — B60's
+                        // seventh point, and the daemon does the naming.
+                        placeholder={typeName}
                         onChange={(event) => {
                             onChange({ ...draft, name: event.target.value });
                         }}
                     />
                 </label>
-                <TypeField
-                    typeId={draft.typeId}
-                    profiles={profiles}
-                    librarySize={librarySize}
-                    onPick={(entry) => {
-                        // The show takes the library's copy at the moment the
-                        // profile is chosen — **every time**, so a copy embedded
-                        // before a library fix is replaced rather than kept for
-                        // ever. See the module documentation. Both commands go on
-                        // one ordered channel, so the preview that follows is
-                        // asked of a show that already carries it.
-                        onEmbed(entry.id);
-                        onChange({ ...draft, typeId: entry.id });
-                    }}
-                />
                 <NumberField
                     label="Universe"
                     testId="draft-universe"
                     value={draft.universe}
                     onChange={(universe) => {
-                        onChange({ ...draft, universe });
+                        // Still following the next free address, now in this
+                        // universe: from its start.
+                        onChange({ ...draft, universe, address: draft.followFree ? "1" : draft.address });
                     }}
                 />
                 <NumberField
@@ -694,17 +858,18 @@ function PatchForm({
                     testId="draft-address"
                     value={draft.address}
                     onChange={(address) => {
-                        onChange({ ...draft, address });
+                        // Typed, so the place is the operator's from now on.
+                        onChange({ ...draft, address, followFree: false });
                     }}
                 />
-                <DimmerField
-                    profile={profiles.find((profile) => profile.id === draft.typeId)}
-                    on={draft.softwareDimmer}
-                    onChange={(softwareDimmer) => {
-                        onChange({ ...draft, softwareDimmer });
-                    }}
-                />
-            </fieldset>
+            </div>
+            <DimmerField
+                hasIntensity={hasIntensity}
+                on={draft.softwareDimmer}
+                onChange={(softwareDimmer) => {
+                    onChange({ ...draft, softwareDimmer });
+                }}
+            />
             <p
                 className={`patch-preview ${"missing" in numbers ? "preview-refused" : previewClass(preview, clashes)}`}
                 data-testid="patch-preview"
@@ -712,33 +877,27 @@ function PatchForm({
             >
                 {"missing" in numbers
                     ? `${numbers.missing} has to be a whole number.`
-                    : previewText(preview, numbers.id)}
+                    : draft.typeId === ""
+                      ? "Pick a fixture in the list."
+                      : previewText(preview, numbers.id, adding)}
             </p>
-            <div className="patch-actions">
+            {moved && free !== null && preview?.accepted === true ? (
                 <button
-                    type="submit"
-                    disabled={"missing" in numbers || !isAcceptable(preview)}
-                    data-testid="draft-apply"
+                    type="button"
+                    className="patch-next-free"
+                    data-testid="draft-next-free"
+                    onClick={() => {
+                        onChange({
+                            ...draft,
+                            universe: String(free.universe),
+                            address: String(free.address),
+                            followFree: false,
+                        });
+                    }}
                 >
-                    {draft.wasId === null ? "Patch" : "Apply"}
+                    Move to {placeText(free)}
                 </button>
-                {draft.wasId === null ? null : (
-                    <button
-                        type="button"
-                        data-testid="draft-remove"
-                        onClick={() => {
-                            if (draft.wasId !== null) {
-                                onRemove(draft.wasId);
-                            }
-                        }}
-                    >
-                        Unpatch
-                    </button>
-                )}
-                <button type="button" onClick={onCancel} data-testid="draft-cancel">
-                    Cancel
-                </button>
-            </div>
+            ) : null}
         </form>
     );
 }
@@ -747,35 +906,24 @@ function PatchForm({
  * The desk-supplied intensity, and the one row that decides whether it is drawn
  * — S43.
  *
- * # Why the switch exists, and why it is here
- *
- * Punch-list B1 gave colour channels a home value of **full**, because a colour
- * starts open on every desk the owner has used and the dimmer decides whether
- * any of it is seen. A fixture with no dimmer has no such decision to make: an
- * RGBW PAR is four colour channels and nothing else, so *colour open* and *lamp
- * at full* are the same eight bits, and a rig of them came up white the moment
- * the daemon started.
- *
- * So the desk supplies the missing channel: an intensity that exists in the
- * merge and on the encoders, rests at nought, and scales the fixture's colour on
- * the way out. And the operator can switch it off, because a PAR on a dimmer
- * pack wants its channels written through untouched and the desk cannot know
- * which one this is.
- *
- * **Nothing is drawn for a fixture whose profile has an intensity of its own.**
- * A checkbox that did nothing would be worse than no checkbox — and worse than
- * that, it would read as an offer to take the fixture's real dimmer away.
+ * Punch-list B1 gave colour channels a home value of **full**, so a fixture with
+ * no dimmer — an RGBW PAR is four colour channels and nothing else — came up
+ * white the moment the daemon started. The desk supplies the missing channel,
+ * resting at nought, and the operator can switch it off for a PAR on a dimmer
+ * pack. **Nothing is drawn for a profile with an intensity of its own**, or for
+ * one this form cannot see yet: a checkbox that did nothing would be worse than
+ * no checkbox.
  */
 function DimmerField({
-    profile,
+    hasIntensity,
     on,
     onChange,
 }: {
-    readonly profile: ProfileRow | undefined;
+    readonly hasIntensity: boolean | undefined;
     readonly on: boolean;
     readonly onChange: (on: boolean) => void;
 }) {
-    if (profile === undefined || profile.hasIntensity) {
+    if (hasIntensity !== false) {
         return null;
     }
     return (
@@ -814,11 +962,9 @@ function previewClass(preview: PatchPreview | null, clashes: boolean): string {
 /**
  * A whole number, typed.
  *
- * **Held as text, whatever is typed** — B53. It used to take only what was
- * already a valid number, so the box could never be emptied and the first digit
- * of a number could not be changed. What the text means is asked where a number
- * is needed — {@link numbersOf} — and a box that is not a number yet is *no
- * answer yet*, which the preview line says and the Apply key refuses.
+ * **Held as text, whatever is typed** — B53. What the text means is asked where
+ * a number is needed — {@link numbersOf} — and a box that is not a number yet
+ * is *no answer yet*, which the preview line says and the Patch key refuses.
  */
 function NumberField({
     label,

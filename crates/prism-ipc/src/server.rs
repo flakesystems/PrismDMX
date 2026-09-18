@@ -127,6 +127,13 @@ pub trait ServerHandler: Send + Sync + 'static {
                 matches: Vec::new(),
                 total: 0,
             },
+            // And no library at all, a fixture at a time (S57).
+            Query::BrowseLibrary { .. } => Answer::LibraryFixtures {
+                fixtures: Vec::new(),
+                matched: 0,
+                total: 0,
+            },
+            Query::FixtureOfMode { .. } => Answer::FixtureOfMode { fixture: None },
             // A handler with no machine behind it has no ports and has chosen
             // none — which is the same answer a laptop with nothing plugged in
             // gives, so there is nothing here for a client to special-case.

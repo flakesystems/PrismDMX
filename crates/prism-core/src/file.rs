@@ -297,7 +297,7 @@ impl ShowFile {
     /// And it takes its refusal from the **same** builders the store runs
     /// ([`crate::Programmer::cue`] and [`crate::Programmer::preset`]), so a
     /// preview and the store after it cannot disagree — exactly as
-    /// `Show::preview_patch` shares `check_patch` with the patch (S27).
+    /// `Show::preview_patch` shares `check_placement` with the patch (S27).
     ///
     /// Writes nothing.
     #[must_use]
@@ -456,6 +456,13 @@ impl ShowFile {
             // *before* the record is filed, so an Oops takes it back.
             let embedded = self.finish_embed(command)?;
             applied.absorb(Effect::EmbedProfile, embedded);
+        }
+        if applied.effects.contains(&Effect::PatchFixtures) {
+            // The same, for S57's several at once. Everything is checked before
+            // the first write, and the first write is the only one that can
+            // still be refused, so a refusal here has written nothing.
+            let patched = self.finish_patch_fixtures(command)?;
+            applied.absorb(Effect::PatchFixtures, patched);
         }
         if applied.effects.contains(&Effect::Programmer) {
             // The show has decided its half and named who finishes the job.
@@ -763,6 +770,37 @@ impl ShowFile {
         })
     }
 
+    /// The answer to `Query::PatchPreview` — S27's question, asked since S57
+    /// with **the profile the patch would use**.
+    ///
+    /// Here rather than on [`Show`] because that profile is often the
+    /// library's: `Command::PatchFixtures` embeds the library's copy in the
+    /// same step, so a fixture being browsed has not been embedded and the show
+    /// alone would call it unknown. New fixtures (`adding` of one or more) take
+    /// the library's copy first, as that command does; a repatch takes the
+    /// show's first, as `PatchFixture` does, and the library's only for a
+    /// profile the show does not carry yet — the edit form embeds that one
+    /// before it patches.
+    ///
+    /// Writes nothing.
+    #[must_use]
+    pub fn preview_patch(
+        &self,
+        type_id: &str,
+        request: prism_domain::PatchPlacement,
+        adding: u16,
+    ) -> prism_domain::PatchPreview {
+        let library = self.library.profile(type_id);
+        let show = self.show.fixture_type(type_id);
+        let profile = if adding > 0 {
+            library.or(show)
+        } else {
+            show.or(library)
+        };
+        self.show
+            .preview_patch_with(profile, type_id, request, adding)
+    }
+
     /// The half of `EmbedFixtureType` the show could not finish.
     ///
     /// # Errors
@@ -783,6 +821,103 @@ impl ShowFile {
         let ops = self.show.embed_fixture_type(profile)?;
         Ok(Applied {
             deltas: vec![Delta::ShowPatch { ops }],
+            effects: vec![Effect::Repatch],
+        })
+    }
+
+    /// The half of `PatchFixtures` the show could not finish — S57, **B60**.
+    ///
+    /// # One step, and it embeds
+    ///
+    /// The profile is the **library's** copy when the desk has one, embedded in
+    /// the same step as the fixtures, so one Oops takes back both and browsing
+    /// the library leaves nothing behind in the show. A key only the show
+    /// carries is patched from the show's copy.
+    ///
+    /// # Checked whole, then written
+    ///
+    /// Every placement is checked — that it fits, that its number is free, and
+    /// that no two share one — before the first write, so a refusal leaves the
+    /// show as it was.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::NothingToPatch`], [`ShowError::TooManyAtOnce`],
+    /// [`ShowError::UnknownFixtureType`],
+    /// [`ShowError::FixtureNumberInUse`], and what a placement would be refused
+    /// for.
+    fn finish_patch_fixtures(&mut self, command: &Command) -> Result<Applied, ShowFileError> {
+        let Command::PatchFixtures {
+            type_id,
+            name,
+            software_dimmer,
+            placements,
+        } = command
+        else {
+            return Ok(Applied::default());
+        };
+        if placements.is_empty() {
+            return Err(ShowFileError::Show(ShowError::NothingToPatch));
+        }
+        if placements.len() > usize::from(prism_domain::MAX_PATCH_AT_ONCE) {
+            return Err(ShowFileError::Show(ShowError::TooManyAtOnce(
+                placements.len(),
+            )));
+        }
+        let from_library = self.library.profile(type_id).cloned();
+        let Some(profile) = from_library
+            .clone()
+            .or_else(|| self.show.fixture_type(type_id).cloned())
+        else {
+            return Err(ShowFileError::Show(ShowError::UnknownFixtureType(
+                type_id.clone(),
+            )));
+        };
+        for (index, placement) in placements.iter().enumerate() {
+            Show::check_placement(*placement, &profile)?;
+            let repeated = placements[..index]
+                .iter()
+                .any(|earlier| earlier.id == placement.id);
+            if repeated || self.show.fixture(placement.id).is_some() {
+                return Err(ShowFileError::Show(ShowError::FixtureNumberInUse(
+                    placement.id,
+                )));
+            }
+        }
+
+        let mut ops = match from_library {
+            Some(profile) => self.show.embed_fixture_type(profile)?,
+            None => Vec::new(),
+        };
+        let mut notices = Vec::new();
+        let base = crate::command::fixture_name(name, Some(&profile));
+        for (index, placement) in placements.iter().enumerate() {
+            // *Spot 1*, *Spot 2* — ten new rows are told apart by more than
+            // their numbers. One fixture keeps the name as it is.
+            let fixture_name = if placements.len() > 1 {
+                format!("{base} {}", index + 1)
+            } else {
+                base.clone()
+            };
+            let step = self.show.apply(&Command::PatchFixture {
+                id: placement.id,
+                name: fixture_name,
+                type_id: type_id.clone(),
+                universe: placement.universe,
+                address: placement.address,
+                software_dimmer: *software_dimmer,
+            })?;
+            for delta in step.deltas {
+                match delta {
+                    Delta::ShowPatch { ops: more } => ops.extend(more),
+                    other => notices.push(other),
+                }
+            }
+        }
+        let mut deltas = vec![Delta::ShowPatch { ops }];
+        deltas.extend(notices);
+        Ok(Applied {
+            deltas,
             effects: vec![Effect::Repatch],
         })
     }
@@ -1175,6 +1310,23 @@ impl ShowFile {
                 type_id.clone(),
                 self.show.fixture_type(type_id).cloned(),
             )],
+            // Every fixture it adds and the profile it embeds: one step. The
+            // restore orders them (fixtures out, profile, fixtures in), so the
+            // same list serves the undo and the redo.
+            Command::PatchFixtures {
+                type_id,
+                placements,
+                ..
+            } => placements
+                .iter()
+                .map(|placement| {
+                    Image::Fixture(placement.id, self.show.fixture(placement.id).cloned())
+                })
+                .chain(core::iter::once(Image::FixtureType(
+                    type_id.clone(),
+                    self.show.fixture_type(type_id).cloned(),
+                )))
+                .collect(),
             Command::SelectFixtures { .. }
             | Command::SelectGroup { .. }
             | Command::SetAttribute { .. }
@@ -1543,7 +1695,19 @@ impl ShowFile {
     /// other two, or light the Save LED over a show it did not touch.
     fn restore(&mut self, images: &[Image]) -> Result<Applied, ShowFileError> {
         let mut applied = Applied::default();
-        for image in images {
+        // **Fixtures out, then profiles, then fixtures in** — S57. One step can
+        // now hold a profile and the fixtures standing on it
+        // (`PatchFixtures`), and neither order of the two is right both ways: an
+        // undo has to take the fixtures off before the profile can go, and a
+        // redo has to put the profile in before the fixtures can stand on it.
+        // Stable, so every other image keeps the order it was taken in.
+        let mut ordered: Vec<&Image> = images.iter().collect();
+        ordered.sort_by_key(|image| match image {
+            Image::Fixture(_, None) => 0,
+            Image::Fixture(_, Some(_)) => 2,
+            _ => 1,
+        });
+        for image in ordered {
             match image {
                 Image::Fixture(id, fixture) => {
                     let ops = match fixture {

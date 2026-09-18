@@ -932,6 +932,7 @@ impl Programmer {
             | Command::ExecutorButton { .. }
             | Command::SetExecutorMaster { .. }
             | Command::PatchFixture { .. }
+            | Command::PatchFixtures { .. }
             | Command::UnpatchFixture { .. }
             | Command::RenumberFixture { .. }
             | Command::EmbedFixtureType { .. }

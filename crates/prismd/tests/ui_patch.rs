@@ -275,6 +275,7 @@ fn preview_at(id: u32, universe: u32, address: u16) -> Query {
         type_id: "generic.rgbw.par".to_owned(),
         universe: UniverseId::new(universe),
         address,
+        adding: 0,
     }
 }
 
@@ -329,12 +330,23 @@ fn script() -> Vec<Scripted> {
             preview_at(7, 1, 510),
         ),
         Scripted::Ask(
-            "and a profile the show has not got is refused before it is sent",
+            "and a profile nobody has got is refused before it is sent",
+            Query::PatchPreview {
+                id: FixtureId::new(7),
+                type_id: "nothing.at.all".to_owned(),
+                universe: UniverseId::new(1),
+                address: 100,
+                adding: 0,
+            },
+        ),
+        Scripted::Ask(
+            "a profile the show has not got is answered out of the desk's library — S57",
             Query::PatchPreview {
                 id: FixtureId::new(7),
                 type_id: "generic.movinghead".to_owned(),
                 universe: UniverseId::new(1),
                 address: 100,
+                adding: 0,
             },
         ),
         Scripted::Ask(
@@ -388,6 +400,7 @@ fn script() -> Vec<Scripted> {
                 type_id: "generic.movinghead".to_owned(),
                 universe: UniverseId::new(1),
                 address: 100,
+                adding: 0,
             },
         ),
         Scripted::Do(
@@ -439,14 +452,88 @@ fn script() -> Vec<Scripted> {
                 id: FixtureId::new(99),
             },
         ),
+        // S57, punch-list B60: the library a fixture at a time, the next free
+        // address, and several of one fixture in one gesture.
+        Scripted::Ask(
+            "browse the library a fixture at a time: the first page of one",
+            Query::BrowseLibrary {
+                text: "robe".to_owned(),
+                offset: 0,
+                limit: 1,
+            },
+        ),
+        Scripted::Ask(
+            "and the page after it, which is what a list scrolled to its end asks",
+            Query::BrowseLibrary {
+                text: "robe".to_owned(),
+                offset: 1,
+                limit: 1,
+            },
+        ),
+        Scripted::Ask(
+            "which fixture is this mode of, with every mode it has",
+            Query::FixtureOfMode {
+                type_id: "robe/wash-7q5/2ch".to_owned(),
+            },
+        ),
+        Scripted::Ask(
+            "a new wash on the moving head's channels: the overlap, and the next free address",
+            Query::PatchPreview {
+                id: FixtureId::new(20),
+                type_id: "robe/wash-7q5/2ch".to_owned(),
+                universe: UniverseId::new(2),
+                address: 1,
+                adding: 1,
+            },
+        ),
+        Scripted::Ask(
+            "three new washes from there: where each of them would go",
+            Query::PatchPreview {
+                id: FixtureId::new(20),
+                type_id: "robe/wash-7q5/2ch".to_owned(),
+                universe: UniverseId::new(2),
+                address: 14,
+                adding: 3,
+            },
+        ),
+        Scripted::Do(
+            "patch the three in one gesture, named after their type",
+            Command::PatchFixtures {
+                type_id: "robe/wash-7q5/2ch".to_owned(),
+                name: String::new(),
+                software_dimmer: true,
+                placements: vec![placed(20, 2, 14), placed(21, 2, 16), placed(22, 2, 18)],
+            },
+        ),
+        Scripted::Do(
+            "a new fixture on a number that is patched: refused, and nothing moves",
+            Command::PatchFixtures {
+                type_id: "robe/wash-7q5/2ch".to_owned(),
+                name: "Twin".to_owned(),
+                software_dimmer: true,
+                placements: vec![placed(20, 1, 200)],
+            },
+        ),
         Scripted::Do(
             "a profile the desk does not carry: refused",
             Command::EmbedFixtureType {
                 type_id: "nothing.at.all".to_owned(),
             },
         ),
-        Scripted::Do("and take the whole edit back", Command::Oops),
+        Scripted::Do(
+            "and take the whole edit back: all three washes and their profile",
+            Command::Oops,
+        ),
     ]
+}
+
+/// One fixture of a `PatchFixtures`.
+fn placed(id: u32, universe: u32, address: u16) -> prism_domain::PatchPlacement {
+    prism_domain::PatchPlacement {
+        id: FixtureId::new(id),
+        universe: UniverseId::new(universe),
+        address,
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -992,11 +1079,18 @@ fn a_preview_says_what_the_patch_that_follows_it_does() {
         past_the_end.refusal
     );
 
-    // A profile the show has not got — and the same question again after
-    // `EmbedFixtureType`, which is the pair that makes the library worth having.
-    let missing = preview("a profile the show has not got");
+    // A profile nobody has got is refused, with nothing to measure it by.
+    let missing = preview("a profile nobody has got");
     assert!(!missing.accepted);
     assert_eq!(missing.footprint, 0);
+    assert_eq!(missing.next_free, None);
+    // **A profile only the desk's library has is answered out of it** — S57.
+    // Browsing the library embeds nothing any more, so the preview cannot wait
+    // for an embed; it measures the library's copy, which is the copy the
+    // patch will embed.
+    let from_library = preview("answered out of the desk's library");
+    assert!(from_library.accepted, "{from_library:?}");
+    assert_eq!(from_library.footprint, 13);
     let embedded = preview("the same question again");
     assert!(embedded.accepted);
     // The generic moving head, which **S43 grew from eleven channels to
@@ -1005,6 +1099,140 @@ fn a_preview_says_what_the_patch_that_follows_it_does() {
     // `prism_core::library::moving_head`.
     assert_eq!(embedded.footprint, 13);
     assert_eq!(embedded.last_address, Some(112));
+}
+
+/// **The next free address and the placements are the daemon's, and the patch
+/// that follows them is exactly what they said** — S57, punch-list **B60**.
+#[test]
+fn several_of_one_fixture_go_where_the_preview_said_and_one_oops_takes_them_back() {
+    let recording = recording();
+    let step = |about: &str| {
+        recording
+            .steps
+            .iter()
+            .find(|step| step.what.contains(about))
+            .unwrap_or_else(|| panic!("no step is about {about:?}"))
+    };
+    let preview = |about: &str| match answer_of(step(about).answer.as_deref().expect("answered")) {
+        Answer::PatchPreview { preview } => preview,
+        other => panic!("the step about {about:?} is not a preview: {other:?}"),
+    };
+
+    // On the moving head: an overlap, and where the whole wash would fit.
+    let clashing = preview("on the moving head's channels");
+    assert!(clashing.accepted);
+    assert_eq!(clashing.conflicts.len(), 1, "{clashing:?}");
+    assert_eq!(
+        clashing.next_free,
+        Some(prism_domain::PatchAddress {
+            universe: UniverseId::new(2),
+            address: 14,
+        }),
+        "the head is 1-13, so a two-channel wash fits at 14"
+    );
+    assert_eq!(clashing.placements, vec![placed(20, 2, 1)]);
+
+    // Three, one after the other.
+    let three = preview("three new washes");
+    assert_eq!(
+        three.placements,
+        vec![placed(20, 2, 14), placed(21, 2, 16), placed(22, 2, 18)]
+    );
+    // The command sent is those placements, and the rows are exactly them.
+    let patched = &step("patch the three in one gesture").rows;
+    for placement in &three.placements {
+        let row = patched
+            .iter()
+            .find(|row| row.id == placement.id.get())
+            .unwrap_or_else(|| panic!("fixture {} was not patched", placement.id));
+        assert_eq!((row.universe, row.address), (2, placement.address));
+        assert_eq!(row.type_id, "robe/wash-7q5/2ch");
+    }
+    // Named after their type, told apart by their place in the gesture.
+    let names: Vec<&str> = patched
+        .iter()
+        .filter(|row| (20..=22).contains(&row.id))
+        .map(|row| row.name.as_str())
+        .collect();
+    assert_eq!(names, vec!["Wash 7Q5 1", "Wash 7Q5 2", "Wash 7Q5 3"]);
+    // And the profile came with them, in the same step.
+    assert!(
+        step("patch the three in one gesture")
+            .profiles
+            .iter()
+            .any(|profile| profile.id == "robe/wash-7q5/2ch")
+    );
+    assert!(!step("patch the three in one gesture").deltas.is_empty());
+    assert!(step("on a number that is patched").refused);
+
+    // **One Oops takes all three back, and the profile with them.**
+    let last = recording.steps.last().expect("there are steps");
+    assert!(
+        last.rows.iter().all(|row| !(20..=22).contains(&row.id)),
+        "{:?}",
+        last.rows
+    );
+    assert!(
+        last.profiles
+            .iter()
+            .all(|profile| profile.id != "robe/wash-7q5/2ch"),
+        "the profile the gesture embedded is still there"
+    );
+}
+
+/// **The library is listed a fixture at a time, a page at a time** — S57.
+#[test]
+fn the_library_is_browsed_a_fixture_at_a_time() {
+    let recording = recording();
+    let page = |about: &str| {
+        let step = recording
+            .steps
+            .iter()
+            .find(|step| step.what.contains(about))
+            .unwrap_or_else(|| panic!("no step is about {about:?}"));
+        match answer_of(step.answer.as_deref().expect("answered")) {
+            Answer::LibraryFixtures {
+                fixtures,
+                matched,
+                total,
+            } => (fixtures, matched, total),
+            other => panic!("the step about {about:?} is not a page: {other:?}"),
+        }
+    };
+    let (first, matched, total) = page("the first page of one");
+    let (second, _, _) = page("the page after it");
+    // Two Robe fixtures, three Robe modes: **two** matches.
+    assert_eq!(matched, 2);
+    assert_eq!(first.len(), 1);
+    assert_eq!(second.len(), 1);
+    assert_ne!(first[0].name, second[0].name);
+    // The four generics and the two Robes.
+    assert_eq!(total, 6);
+    let wash = first
+        .iter()
+        .chain(&second)
+        .find(|fixture| fixture.name == "Wash 7Q5")
+        .expect("the wash is one of them");
+    assert_eq!(
+        wash.modes
+            .iter()
+            .map(|mode| (mode.mode.as_str(), mode.footprint))
+            .collect::<Vec<_>>(),
+        vec![("4ch", 4), ("2ch", 2)],
+        "both modes, in the order the file lists them"
+    );
+    assert!(wash.modes.iter().all(|mode| mode.has_intensity));
+
+    let step = recording
+        .steps
+        .iter()
+        .find(|step| step.what.contains("which fixture is this mode of"))
+        .expect("the script asks");
+    let Answer::FixtureOfMode { fixture } = answer_of(step.answer.as_deref().expect("answered"))
+    else {
+        panic!("that is not a fixture answer");
+    };
+    assert_eq!(fixture.as_ref(), Some(wash));
 }
 
 /// **A search is answered out of the desk's library, and the answer is small.**
