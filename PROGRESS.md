@@ -4462,6 +4462,14 @@ for), and the position is read **off the cable**, not out of the programmer.
 | `ui`: Playwright | **51 passed** against a real daemon |
 | Tick allocations | **0 on all ten paths** — the cable is read on the daemon's own loop, never on the tick |
 
+**CI:** run
+[35447481821](https://github.com/flakesystems/PrismDMX/actions/runs/35447481821)
+on `714b96d`, **all seven Linux jobs green** in 4 m 50 s. No Windows minute; the
+Windows half ran locally in full, and the installer was built and inspected
+locally (`PrismDMX_0.9.2_x64-setup.exe`, 5.46 MB, SHA-256
+`979552ED91B44DB742473FD459EF918E1B237E62993BF81BF34F1CF84260A62B`, carrying
+both executables, the X-Touch profile and 636 fixture files).
+
 **For the release:** `docs/RELEASE_TEST.md` is the owner's acceptance test on the
 test rig — every fix of S56, S57 and S58 with where it is and what has to happen —
 and the installer was built locally the way `release.yml` builds it.
