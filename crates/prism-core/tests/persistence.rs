@@ -52,6 +52,7 @@ fn head_type() -> FixtureType {
         footprint: 6,
         attributes: vec![
             prism_domain::AttributeDef {
+                switched: None,
                 attribute: AttributeType::Pan,
                 label: None,
                 occurrence: 0,

@@ -254,6 +254,7 @@ impl Desk {
             prism_domain::JsonValue::Null
         });
         Snapshot {
+            switch_positions: core.switch_positions(),
             show,
             session,
             programmer: core.file.programmer.state().clone(),

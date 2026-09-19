@@ -86,6 +86,7 @@ fn attribute(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
 /// channel order: the lower-addressed red is the first.
 fn cell(attribute: AttributeType, occurrence: u8, coarse_offset: u16) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence,

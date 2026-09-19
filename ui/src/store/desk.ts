@@ -40,6 +40,7 @@ import type {
   ProgrammerState,
   Query,
   ShowFileInfo,
+  SwitchState,
 } from "../bindings";
 import type { ConnectionStatus, ConnectionEvents } from "../ipc/connection";
 import type { DaemonHealth, OutputSnapshot, RejectReason, Snapshot } from "../ipc/protocol";
@@ -151,6 +152,13 @@ export interface DeskState {
   readonly unsavedChanges: boolean;
   /** Messages for the operator, newest last. */
   readonly notices: readonly Notice[];
+  /**
+   * Which position every switched slot of the rig is in — punch-list **B52**.
+   *
+   * The daemon's reading of the cable, told whole whenever it moves; the
+   * encoder band names a switched knob after the row it says is live.
+   */
+  readonly switchPositions: readonly SwitchState[];
 }
 
 /** The state of a client that has never seen a daemon. */
@@ -168,6 +176,7 @@ export const INITIAL_STATE: DeskState = {
   showFile: null,
   unsavedChanges: false,
   notices: [],
+  switchPositions: [],
 };
 
 /** Something that wants to know when the state changed. */
@@ -298,6 +307,7 @@ export class DeskStore {
       machine: snapshot.machine,
       showFile: snapshot.showFile,
       unsavedChanges: snapshot.health.unsavedChanges,
+      switchPositions: snapshot.switchPositions,
     });
   }
 
@@ -333,6 +343,7 @@ export class DeskStore {
       machine: null,
       showFile: null,
       unsavedChanges: false,
+      switchPositions: [],
     });
   }
 
@@ -489,6 +500,8 @@ export class DeskStore {
         };
       case "Notice":
         return this.#withNotice(state, delta.level, delta.message);
+      case "SwitchPositions":
+        return { ...state, switchPositions: delta.positions };
       case "ShowPatch":
       case "SessionPatch":
       case "ProgrammerChanged":

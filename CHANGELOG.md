@@ -46,6 +46,10 @@ alle zehn behoben (S56 und S57):
   freien Adresse**, die eine Überlappung auch nennt; ein Fixture ohne Namen heißt
   wie sein Typ; und **mehrere desselben Typs** werden in einem Schritt gepatcht,
   den ein Oops ganz zurücknimmt.
+- **Moduskanäle** (B52): ein Knopf, dessen Kanal ein anderer umschaltet — der
+  Nachbar von *Mode Select* an einer ADJ Flat Par QA12 —, heißt jetzt, was er
+  gerade ist (*Strobe*, *Program Speed*, *Sound Sensitivity*), und bietet dessen
+  Stufen an. Es zählt, was am Kabel anliegt, also folgt er auch einer Cue.
 
 ---
 

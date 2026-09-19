@@ -694,6 +694,7 @@ mod tests {
     impl ServerHandler for std::sync::Arc<Recording> {
         fn snapshot(&self, _client: ClientId, _hello: &Hello) -> Snapshot {
             Snapshot {
+                switch_positions: Vec::new(),
                 show: JsonValue::String("the show".to_owned()),
                 session: JsonValue::String("the session".to_owned()),
                 programmer: ProgrammerState::default(),

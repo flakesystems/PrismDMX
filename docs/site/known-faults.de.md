@@ -10,10 +10,12 @@ gemeldete Eintrag, was daraus wurde und welcher Test ihn heute festhält — lie
 im Repository, weil es ein Arbeitsdokument ist und kein öffentliches.
 
 Zum Zeitpunkt dieser Fassung sind in 0.9.2 **elf** Fehler offen, von
-einundsechzig gemeldeten — **zehn** davon sind für die nächste Version schon
+einundsechzig gemeldeten — **alle elf** sind für die nächste Version schon
 behoben und hier so markiert.
 
 ## B52 — Das Pult folgt einem Switching Channel nicht, während die Show läuft
+
+**Behoben für die nächste Version.** Ein umgeschalteter Knopf heißt, was sein Moduskanal am Kabel gerade aus ihm macht, und bietet dessen Stufen an.
 
 **Wo:** Fixture-Bibliothek und Encoder-Band im Programmer.
 **Schwere:** kosmetisch.

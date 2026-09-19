@@ -384,6 +384,7 @@ pub struct Show {
 /// Nought is the answer that matters: it is what makes a rig of colour-only
 /// fixtures dark at home now that colour rests open (punch-list B1).
 static SOFTWARE_DIMMER: prism_domain::AttributeDef = prism_domain::AttributeDef {
+    switched: None,
     attribute: prism_domain::AttributeType::Dimmer,
     // The desk's own channel, so there is no manufacturer's word for it — S53.
     label: None,

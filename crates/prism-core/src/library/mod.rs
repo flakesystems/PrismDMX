@@ -91,6 +91,7 @@ fn colour(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
 
 fn eight_bit(attribute: AttributeType, coarse_offset: u16, default_value: u16) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         // A generic profile stands in for a light nobody has told the desk
         // about, so there is no manufacturer's word to carry — S53.
@@ -120,6 +121,7 @@ fn sixteen_bit(
     physical_to: f64,
 ) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence: 0,

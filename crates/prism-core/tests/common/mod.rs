@@ -19,6 +19,7 @@ use prism_domain::{
 /// An 8-bit attribute at a given offset, with everything else neutral.
 pub fn attribute(attribute: AttributeType, coarse_offset: u16, home: u16) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence: 0,

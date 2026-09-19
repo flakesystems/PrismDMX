@@ -124,6 +124,9 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
     case "OutputHealth":
     case "DirtyFlag":
     case "Notice":
+    // B52: which row a switched knob reads is a reading of the cable, held
+    // by the store beside the documents rather than written into the show.
+    case "SwitchPositions":
       return documents;
   }
 }

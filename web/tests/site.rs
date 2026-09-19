@@ -750,6 +750,7 @@ fn the_known_faults_page_lists_the_faults_that_are_open() {
     // A real entry carries a number; the two `Bxx` in the file are templates,
     // and the file itself says so — they were counted as entries once already.
     let mut open: Vec<String> = Vec::new();
+    let mut entries = 0_usize;
     let mut rest = register.as_str();
     while let Some(at) = rest.find("\n### B") {
         let from = at + 5;
@@ -760,18 +761,23 @@ fn the_known_faults_page_lists_the_faults_that_are_open() {
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric())
             .collect();
-        if id.len() > 1
-            && id[1..].chars().all(|c| c.is_ascii_digit())
-            && block.contains("\u{2610} offen")
-        {
-            open.push(id);
+        if id.len() > 1 && id[1..].chars().all(|c| c.is_ascii_digit()) {
+            entries += 1;
+            if block.contains("\u{2610} offen") {
+                open.push(id);
+            }
         }
         rest = &tail[end.max(1)..];
     }
+    // **The guard is on the parser, not on the program** — B52. It used to
+    // demand at least one open fault, on the reasoning that none at all was
+    // more likely a parsing fault than a perfect program; on 2026-09-19 every
+    // entry was closed and the guard went red for the truth. What it was
+    // protecting against is a parser that finds nothing, so that is what it
+    // asks: the register has sixty-odd entries, and they all have to be seen.
     assert!(
-        !open.is_empty(),
-        "the register lists no open fault at all, which is more likely a parsing fault here than a \\
-         perfect program"
+        entries >= 60,
+        "only {entries} entries were read out of docs/ISSUES.md, which is a parsing fault here"
     );
     let scratch = built("faults");
     for language in &LANGUAGES {

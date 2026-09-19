@@ -281,6 +281,7 @@ export function snapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     fixtureLibrary: fixtureLibrary().length,
     machine: machine(),
     showFile: showFile(),
+    switchPositions: [],
     ...overrides,
   };
 }

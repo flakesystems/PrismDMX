@@ -25,6 +25,7 @@ pub(crate) fn attribute_at(
     fine_offset: Option<u16>,
 ) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence: 0,

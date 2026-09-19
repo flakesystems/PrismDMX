@@ -276,6 +276,7 @@ mod tests {
 
     fn snapshot() -> Snapshot {
         Snapshot {
+            switch_positions: Vec::new(),
             show: JsonValue::String("show".to_owned()),
             session: JsonValue::String("session".to_owned()),
             programmer: ProgrammerState::default(),

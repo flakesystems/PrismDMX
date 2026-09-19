@@ -440,6 +440,7 @@ fn stress_fixture_type() -> FixtureType {
         .take(6)
         .enumerate()
         .map(|(index, attribute)| AttributeDef {
+            switched: None,
             attribute: *attribute,
             label: None,
             occurrence: 0,

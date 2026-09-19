@@ -46,6 +46,7 @@ struct Handler(Arc<Desk>);
 impl ServerHandler for Handler {
     fn snapshot(&self, _client: ClientId, _hello: &Hello) -> Snapshot {
         Snapshot {
+            switch_positions: Vec::new(),
             show: prism_domain::JsonValue::String("show".to_owned()),
             session: prism_domain::JsonValue::String("session".to_owned()),
             programmer: ProgrammerState::default(),

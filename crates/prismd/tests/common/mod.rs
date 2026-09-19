@@ -37,6 +37,7 @@ pub fn one_daemon_at_a_time() -> MutexGuard<'static, ()> {
 /// An 8-bit attribute at a given offset.
 fn attribute(attribute: AttributeType, coarse_offset: u16, home: u16) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence: 0,

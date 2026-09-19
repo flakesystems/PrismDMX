@@ -284,6 +284,7 @@ fn fixture_type(attributes: usize, sixteen_bit: bool) -> FixtureType {
         .take(attributes)
         .enumerate()
         .map(|(index, attribute)| AttributeDef {
+            switched: None,
             attribute: *attribute,
             label: None,
             occurrence: 0,
@@ -323,6 +324,7 @@ fn fixture_type(attributes: usize, sixteen_bit: bool) -> FixtureType {
 fn repeated_fixture_type(repeats: u8) -> FixtureType {
     let attributes = (0..repeats)
         .map(|occurrence| AttributeDef {
+            switched: None,
             attribute: AttributeType::Red,
             label: None,
             occurrence,

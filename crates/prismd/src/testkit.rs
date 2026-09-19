@@ -23,6 +23,7 @@ use prism_domain::{
 #[must_use]
 pub fn attribute(attribute: AttributeType, coarse_offset: u16, home: u16) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence: 0,

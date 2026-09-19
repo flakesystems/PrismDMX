@@ -31,6 +31,7 @@ import type {
   JsonValue,
   ProgrammerState,
   ProgrammerValueSource,
+  SwitchState,
 } from "../bindings";
 import {
   FEATURE_GROUP_ATTRIBUTES,
@@ -346,10 +347,46 @@ export function bankReadings(
   show: JsonValue | null,
   bank: FeatureGroup,
   part: number,
+  switches: SwitchRows | null = null,
 ): readonly ParameterReading[] {
   return bankParameters(programmer, show, bank, part).map((key, index) =>
-    readingOf(programmer, show, key, index),
+    readingOf(programmer, show, key, index, switches),
   );
+}
+
+/**
+ * Which row of its table each switched slot is reading — punch-list **B52**.
+ *
+ * Keyed `fixture:offset`, and the daemon's answer (`Delta::SwitchPositions`):
+ * which position a *Mode Select* is in is what the cable carries after the
+ * merge, and only the daemon sees the cable. `null` is a slot whose deciding
+ * channel stands where the file names no position.
+ */
+export type SwitchRows = ReadonlyMap<string, number | null>;
+
+/** The daemon's list, as the lookup the readers below take. */
+export function switchRows(states: readonly SwitchState[]): SwitchRows {
+  return new Map(states.map((state) => [`${String(state.fixture)}:${String(state.offset)}`, state.position]));
+}
+
+/**
+ * The live row of a switched definition, or `null` for one that is not
+ * switched, or whose position the daemon has not said — B52.
+ *
+ * The row is read out of the **embedded profile**, like every other name here;
+ * only *which* row is the daemon's.
+ */
+function liveRow(entry: JsonValue, fixture: number, switches: SwitchRows | null): JsonValue | null {
+  if (switches === null) {
+    return null;
+  }
+  const positions = valueAt(entry, "/switched/positions");
+  const offset = numberAt(entry, "/coarseOffset");
+  if (!isArray(positions) || offset === null) {
+    return null;
+  }
+  const row = switches.get(`${String(fixture)}:${String(offset)}`);
+  return row === undefined || row === null ? null : (positions[row] ?? null);
 }
 
 /** One encoder's reading. */
@@ -358,6 +395,7 @@ function readingOf(
   show: JsonValue | null,
   key: ParameterKey,
   index: number,
+  switches: SwitchRows | null,
 ): ParameterReading {
   const selection = programmer?.selection ?? [];
   let available = 0;
@@ -384,7 +422,7 @@ function readingOf(
       // **B38.** The same *only when they agree* rule the resting value
       // follows: two heads with different wheels in them have different lists,
       // and one of the two would name the wrong slot on half the selection.
-      const own = rangesOf(show, fixture, key);
+      const own = rangesOf(show, fixture, key, switches);
       if (ranges === null && !mixedRanges) {
         ranges = own;
       } else if (!sameRanges(ranges ?? [], own)) {
@@ -393,7 +431,7 @@ function readingOf(
       // **S53.** The manufacturer's word for the channel, under the same *only
       // when they agree* rule: two heads whose gobo wheels are called different
       // things fall back to the desk's own word.
-      const called = nameOf(show, fixture, key);
+      const called = nameOf(show, fixture, key, switches);
       if (name === null && !mixedName) {
         name = called;
       } else if (called !== name) {
@@ -475,12 +513,14 @@ export function rangesOf(
   show: JsonValue | null,
   fixture: number,
   key: ParameterKey,
+  switches: SwitchRows | null = null,
 ): readonly AttributeRange[] {
   for (const entry of attributeDefs(show, fixture)) {
     if (!isKey(entry, key)) {
       continue;
     }
-    const ranges = valueAt(entry, "/ranges");
+    // **B52**: a switched slot's steps are those of the position that is live.
+    const ranges = valueAt(liveRow(entry, fixture, switches) ?? entry, "/ranges");
     if (!isArray(ranges)) {
       return [];
     }
@@ -565,10 +605,13 @@ export function nameOf(
   show: JsonValue | null,
   fixture: number,
   key: ParameterKey,
+  switches: SwitchRows | null = null,
 ): string | null {
   for (const entry of attributeDefs(show, fixture)) {
     if (isKey(entry, key)) {
-      return stringAt(entry, "/label");
+      // **B52**: a switched slot is called what the live position calls it.
+      const row = liveRow(entry, fixture, switches);
+      return row === null ? stringAt(entry, "/label") : stringAt(row, "/label");
     }
   }
   return null;

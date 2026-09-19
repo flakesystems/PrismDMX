@@ -400,10 +400,13 @@ such channel of fixture 1 to half.
 Two things that do **not** hold here, and that you should know:
 
 - A knob like that has **no named slots**. There is nothing to read them from.
-- On a channel whose meaning depends on a mode channel, **the desk does not
-  follow the switch while the show is running**. Turn the mode and the
-  neighbouring knob keeps the name it had. This is known and is `B52` in
-  [`../ISSUES.md`](../ISSUES.md).
+- On a channel whose meaning depends on a **mode channel**, the knob is called
+  **what the channel is right now**: turn an ADJ Flat Par QA12's mode channel to
+  *Color Change* and its neighbour reads *Program Speed* instead of *Strobe*,
+  with that channel's steps. What decides is **what is on the cable** — a
+  running cue that sets the mode renames the knob exactly as the programmer
+  does. The value itself is not reinterpreted: the channel is stored and sent as
+  it is.
 
 ### `Clear` lets go before it forgets
 
@@ -730,8 +733,6 @@ Named here rather than discovered by you:
 - **No timecode, no OSC, no PSN.** Planned.
 - **No effect engine** — the *Phaser Editor* window is empty because what goes
   under it is missing.
-- **The desk does not follow a mode channel** while the show is running
-  (chapter 6, `B52`).
 - **Autostart on Windows only.** The setting exists everywhere, the entry is only
   written on Windows.
 - **macOS and Linux are not published.** The engine is portable and is built for

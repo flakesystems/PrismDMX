@@ -42,7 +42,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { JsonValue, ProgrammerState } from "../bindings";
-import { ModalLayer } from "../chrome/modal";
+import { ModalLayer } from "../chrome/modallayer";
 import { WindowContent } from "./content";
 import type { Rect } from "./geometry";
 import { WindowFrame } from "./window";

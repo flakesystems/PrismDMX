@@ -306,6 +306,10 @@ pub struct Snapshot {
     /// state — S37.
     #[serde(default)]
     pub show_file: ShowFileInfo,
+    /// Which position every switched slot of the rig is in, read off the cable
+    /// — punch-list **B52**, and `Delta::SwitchPositions` from then on.
+    #[serde(default)]
+    pub switch_positions: Vec<prism_domain::SwitchState>,
 }
 
 /// One DMX output, as the status panel shows it.
@@ -427,6 +431,7 @@ mod tests {
 
     fn snapshot() -> Snapshot {
         Snapshot {
+            switch_positions: Vec::new(),
             show: JsonValue::Object(
                 [("fixtures".to_owned(), JsonValue::Array(vec![]))]
                     .into_iter()

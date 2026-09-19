@@ -47,7 +47,7 @@
  * command line, which is D3's own illustration and was S23's.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import "./App.css";
 import type { AttributeRange, FeatureGroup, WindowType } from "./bindings";
@@ -58,7 +58,7 @@ import { ViewBar } from "./canvas/viewbar";
 import { CommandLine } from "./desk/commandline";
 import type { ParameterKey, ParameterReading } from "./desk/programmer";
 import { CLEAR_TITLES } from "./desk/keys";
-import { clearStage } from "./desk/programmer";
+import { clearStage, switchRows } from "./desk/programmer";
 import { ProgrammerBand } from "./desk/programmerband";
 import { commandLine, windowPickerOpen } from "./desk/session";
 import { useConsole } from "./desk/consoleshell";
@@ -72,6 +72,7 @@ import type { DeskState, Notice } from "./store/desk";
 const selectStatus = (state: DeskState): ConnectionStatus => state.status;
 const selectDocuments = (state: DeskState) => state.documents;
 const selectNotices = (state: DeskState): readonly Notice[] => state.notices;
+const selectSwitches = (state: DeskState) => state.switchPositions;
 
 /**
  * Full screen, on the two keys B42 names — `F11` and `Alt` + `Enter`.
@@ -335,6 +336,9 @@ function Views() {
 /** The canvas, the command line and the programmer band. */
 function Desk() {
     const documents = useDesk(selectDocuments);
+    // B52: which row every switched knob reads, as the daemon read the cable.
+    const switchPositions = useDesk(selectSwitches);
+    const switches = useMemo(() => switchRows(switchPositions), [switchPositions]);
     const send = useSend();
     const { run } = useConsole();
 
@@ -513,6 +517,7 @@ function Desk() {
                 session={documents.session}
                 show={documents.show}
                 programmer={documents.programmer}
+                switches={switches}
                 onBank={onBank}
                 onParam={onParam}
                 onPage={onProgrammerPage}

@@ -36,6 +36,7 @@ fn dimmer_16() -> FixtureType {
 
 fn attribute(coarse_offset: u16, fine_offset: Option<u16>) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute: AttributeType::Dimmer,
         label: None,
         occurrence: 0,

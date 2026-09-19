@@ -51,6 +51,7 @@ fn dimmer() -> FixtureType {
         mode: "test".to_owned(),
         footprint: 1,
         attributes: vec![AttributeDef {
+            switched: None,
             attribute: AttributeType::Dimmer,
             label: None,
             occurrence: 0,

@@ -63,6 +63,7 @@ fn attribute(
     default_value: u16,
 ) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence: 0,

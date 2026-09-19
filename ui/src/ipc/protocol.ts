@@ -58,6 +58,7 @@ import type {
   CueTrackingRow,
   TrackedValue,
   StorePreview,
+  SwitchState,
 } from "../bindings";
 import {
   ATTRIBUTE_TYPE_VARIANTS,
@@ -252,6 +253,11 @@ export interface Snapshot {
   readonly machine: MachineSettings;
   /** Which show file is open, and what the autosave is doing — S37. */
   readonly showFile: ShowFileInfo;
+  /**
+   * Which position every switched slot of the rig is in, read off the cable by
+   * the daemon — punch-list **B52**. Kept current by `Delta::SwitchPositions`.
+   */
+  readonly switchPositions: readonly SwitchState[];
 }
 
 /** Everything the daemon may send. */
@@ -517,6 +523,11 @@ export function readDelta(value: unknown, path: string): Delta {
         t: "Notice",
         level: asVariant(field(record, "level"), `${path}.level`, NOTICE_LEVEL_VARIANTS),
         message: asString(field(record, "message"), `${path}.message`),
+      };
+    case "SwitchPositions":
+      return {
+        t: "SwitchPositions",
+        positions: readSwitchStates(field(record, "positions"), `${path}.positions`),
       };
     default:
       throw new ProtocolFault(`${path}.t`, `a delta this build knows, not ${JSON.stringify(tag)}`);
@@ -1374,7 +1385,25 @@ export function readSnapshot(value: unknown, path: string): Snapshot {
     // The rule is `OutputSnapshot`'s four S33 fields, one message out.
     machine: readOptionalMachineSettings(field(record, "machine"), `${path}.machine`),
     showFile: readOptionalShowFileInfo(field(record, "showFile"), `${path}.showFile`),
+    // B52's, absent from a daemon before it — which has no positions to give.
+    switchPositions:
+      field(record, "switchPositions") === undefined
+        ? []
+        : readSwitchStates(field(record, "switchPositions"), `${path}.switchPositions`),
   };
+}
+
+/** Which position every switched slot is in — B52. */
+function readSwitchStates(value: unknown, path: string): SwitchState[] {
+  return asArray(value, path).map((entry, index) => {
+    const at = `${path}[${index}]`;
+    const record = asRecord(entry, at);
+    return {
+      fixture: asInteger(field(record, "fixture"), `${at}.fixture`),
+      offset: asInteger(field(record, "offset"), `${at}.offset`),
+      position: asNullable(field(record, "position"), `${at}.position`, asInteger),
+    };
+  });
 }
 
 /**

@@ -51,13 +51,13 @@ mod wire;
 
 pub use attribute::{
     AttributeDef, AttributeKey, AttributeRange, AttributeType, FeatureGroup, FixtureType,
-    INLINE_OCCURRENCES, MergeMode,
+    INLINE_OCCURRENCES, MergeMode, SwitchPosition, SwitchedSlot,
 };
 pub use command::{
     Command, CommandLineMode, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection,
     SelectionMode, SequenceStoreMode,
 };
-pub use delta::{Delta, NoticeLevel};
+pub use delta::{Delta, NoticeLevel, SwitchState};
 pub use executor::{
     CrossfadeMode, EXECUTOR_BUTTONS, EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction,
     ExecutorButtonRef, ExecutorChange, ExecutorEncoderFunction, ExecutorFaderFunction, SPEED_UNITY,

@@ -914,6 +914,15 @@ impl Daemon {
                     // frame and is never cleared: after that the subscriber
                     // holds the last real one, which is what a driver on its
                     // own cadence re-sends rather than going dark.
+                    // **B52**: which position every switched slot is in, read
+                    // off the frame the telemetry already holds — whether or
+                    // not anybody is listening, so a client that connects is
+                    // served the truth in its snapshot.
+                    if self.published()
+                        && let Some(delta) = self.switch_positions()
+                    {
+                        self.server.broadcast(delta).await;
+                    }
                     if self.server.client_count().await > 0 && self.published() {
                         sequence = sequence.wrapping_add(1);
                         self.telemetry_frame(sequence).encode_into(&mut buffer);
@@ -935,6 +944,19 @@ impl Daemon {
             self.telemetry_started = true;
         }
         self.telemetry_started
+    }
+
+    /// Which position every switched slot is in, off the last published frame
+    /// — punch-list **B52**. `Some` only when it moved.
+    fn switch_positions(&mut self) -> Option<Delta> {
+        self.telemetry.refresh();
+        let frame = self.telemetry.frame();
+        let layout = &self.layout;
+        self.desk.core().read_switch_positions(|universe, address| {
+            let position = layout.index_of(universe)?;
+            let levels = frame.universe(position)?;
+            levels.get(usize::from(address).checked_sub(1)?).copied()
+        })
     }
 
     /// The current levels of the universes the show patches.

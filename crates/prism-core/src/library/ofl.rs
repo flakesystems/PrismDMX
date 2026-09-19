@@ -79,6 +79,7 @@
 
 use prism_domain::{
     AttributeDef, AttributeRange, AttributeType, FeatureGroup, FixtureType, MergeMode,
+    SwitchPosition, SwitchedSlot,
 };
 use std::collections::BTreeMap;
 
@@ -358,6 +359,13 @@ struct Channels<'a> {
     /// a knob labelled *Colour Wheel* that is a gobo in half the positions is
     /// worse than one labelled *Channel 2*.
     switches: BTreeMap<String, Vec<String>>,
+    /// **Which channels switch each alias** — punch-list B52.
+    ///
+    /// The channel whose capabilities carry the `switchChannels` map: the
+    /// *Mode Select* whose value decides what the alias is. Usually one; kept
+    /// as a list because the format does not forbid two, and the one a mode
+    /// actually lists is the one that decides.
+    switchers: BTreeMap<String, Vec<String>>,
 }
 
 impl<'a> Channels<'a> {
@@ -375,7 +383,8 @@ impl<'a> Channels<'a> {
         let available = table("availableChannels");
         let templates = table("templateChannels");
         let mut switches: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for (_, definition) in available.iter().chain(templates.iter()) {
+        let mut switchers: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for (channel, definition) in available.iter().chain(templates.iter()) {
             for capability in capabilities_of(definition) {
                 let Some(Value::Object(map)) = capability.get("switchChannels") else {
                     continue;
@@ -388,6 +397,10 @@ impl<'a> Channels<'a> {
                     if !targets.iter().any(|seen| seen == target) {
                         targets.push(target.to_owned());
                     }
+                    let by = switchers.entry(alias.clone()).or_default();
+                    if !by.iter().any(|seen| seen == channel) {
+                        by.push(channel.clone());
+                    }
                 }
             }
         }
@@ -396,6 +409,7 @@ impl<'a> Channels<'a> {
             templates,
             wheels: Wheels::of(fixture),
             switches,
+            switchers,
         }
     }
 
@@ -425,6 +439,71 @@ impl<'a> Channels<'a> {
             }
         }
         agreed
+    }
+
+    /// **What a switched slot is in each position of the channel that decides
+    /// it** — punch-list B52.
+    ///
+    /// `None` for a name that is not an alias, and for an alias whose deciding
+    /// channel this mode does not list — there is then nothing on the cable to
+    /// read, and the slot keeps S54's one name. Every capability of the
+    /// deciding channel that names this alias is a position: its range, in
+    /// this model's 16-bit values as a named range is, and the channel the
+    /// alias is while it is live — its name, and its own named ranges, so a
+    /// knob that is *Program Speed* in one position offers the speeds and not
+    /// the strobe steps of another.
+    fn switched_slot(&self, alias: &str, entries: &[Value]) -> Option<SwitchedSlot> {
+        let deciding = self.switchers.get(alias)?;
+        let (by, channel) = entries.iter().enumerate().find_map(|(offset, entry)| {
+            let name = entry.as_str()?;
+            deciding
+                .iter()
+                .any(|candidate| candidate == name)
+                .then_some((offset, name))
+        })?;
+        let by = u16::try_from(by).ok()?;
+        let definition = self.definition(channel)?;
+        let full = channel_maximum(definition);
+        let mut positions = Vec::new();
+        for capability in capabilities_of(definition) {
+            let Some(target) = capability
+                .get("switchChannels")
+                .and_then(|map| map.get(alias))
+                .and_then(Value::as_str)
+            else {
+                continue;
+            };
+            let Some(Value::Array(bounds)) = capability.get("dmxRange") else {
+                continue;
+            };
+            let (Some(low), Some(high)) = (
+                bounds.first().and_then(Value::as_u64),
+                bounds.get(1).and_then(Value::as_u64),
+            ) else {
+                continue;
+            };
+            let (low, high) = if low <= high {
+                (low, high)
+            } else {
+                (high, low)
+            };
+            positions.push(SwitchPosition {
+                from: scale_to_full(low, full),
+                // The top of the step, as a named range ends — `ranges_of`.
+                to: if high >= full {
+                    u16::MAX
+                } else {
+                    scale_to_full(high.saturating_add(1), full).saturating_sub(1)
+                },
+                label: target.to_owned(),
+                ranges: self
+                    .definition(target)
+                    .map(|live| ranges_of(live, &self.wheels, target))
+                    .unwrap_or_default(),
+            });
+        }
+        positions.sort_by_key(|position| position.from);
+        (!positions.is_empty()).then_some(SwitchedSlot { by, positions })
     }
 
     /// The definition a mode entry names, if the fixture has one.
@@ -593,6 +672,8 @@ impl<'a> Channels<'a> {
                     // the slot has belongs to whichever channel is live, and the
                     // positions disagree about them even where they agree about
                     // the parameter. Nothing is invented.
+                    // B52: and what it is called in each position.
+                    def.switched = self.switched_slot(name, entries);
                     claimed_by.push((name.to_owned(), attributes.len()));
                     attributes.push(def);
                     continue;
@@ -602,6 +683,14 @@ impl<'a> Channels<'a> {
             let Some(definition) = self.definition(name) else {
                 losses.undefined += 1;
                 raw(&mut attributes, offset, None, Some(name));
+                // B52: an alias whose positions disagree is the raw knob just
+                // pushed, and it is named after whichever position is live.
+                if self.switches.contains_key(name)
+                    && let Some(def) = attributes.last_mut()
+                    && def.coarse_offset == offset
+                {
+                    def.switched = self.switched_slot(name, entries);
+                }
                 continue;
             };
             // A channel whose every capability is `NoFunction` **does nothing**,
@@ -695,6 +784,7 @@ fn raw_attribute(
     channel: Option<&str>,
 ) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute: AttributeType::Raw,
         label: channel
             .map(str::to_owned)
@@ -730,6 +820,7 @@ fn definition_to_attribute(
 ) -> AttributeDef {
     let (physical_from, physical_to) = physical_range(attribute, definition);
     AttributeDef {
+        switched: None,
         attribute,
         // **S53.** What the manufacturer calls this channel, shown on the
         // encoder in place of this desk's own word for the attribute. A label
@@ -2187,6 +2278,95 @@ mod tests {
         // **No invented steps.** Which named ranges the slot has depends on
         // which channel is live, so it has none — the owner's rule from S52.
         assert!(def.ranges.is_empty());
+    }
+
+    /// **A switched slot carries what it is in every position** — punch-list
+    /// B52.
+    ///
+    /// The ADJ Flat Par QA12's shape, cut down: *Mode Select* decides whether
+    /// the slot after it is a strobe or a program speed, and each has named
+    /// steps of its own. The key stays S54's raw knob; the table is what lets
+    /// the desk name the knob after whichever position is live.
+    #[test]
+    fn a_switched_slot_carries_its_name_and_steps_in_every_position() {
+        let source = r#"{
+          "name": "A Par",
+          "availableChannels": {
+            "Mode Select": {
+              "capabilities": [
+                {
+                  "dmxRange": [0, 127], "type": "Maintenance", "comment": "Dimmer mode",
+                  "switchChannels": { "Strobe / Speed": "Strobe" }
+                },
+                {
+                  "dmxRange": [128, 255], "type": "Maintenance", "comment": "Program mode",
+                  "switchChannels": { "Strobe / Speed": "Program Speed" }
+                }
+              ]
+            },
+            "Strobe": {
+              "capabilities": [
+                { "dmxRange": [0, 9], "type": "ShutterStrobe", "shutterEffect": "Open" },
+                { "dmxRange": [10, 255], "type": "ShutterStrobe", "shutterEffect": "Strobe", "speedStart": "slow", "speedEnd": "fast" }
+              ]
+            },
+            "Program Speed": {
+              "capabilities": [
+                { "dmxRange": [0, 127], "type": "EffectSpeed", "speedStart": "slow", "speedEnd": "fast", "comment": "Slow half" },
+                { "dmxRange": [128, 255], "type": "EffectSpeed", "speedStart": "fast", "speedEnd": "fast", "comment": "Fast half" }
+              ]
+            }
+          },
+          "modes": [{ "shortName": "2ch", "channels": ["Mode Select", "Strobe / Speed"] }]
+        }"#;
+        let (built, _) = read_fixture("m", "M", "f", source, false);
+        let def = &built[0].1.attributes[1];
+        // The key is unchanged from S54: a raw knob under the alias's name.
+        assert_eq!(def.attribute, AttributeType::Raw);
+        assert_eq!(def.label.as_deref(), Some("Strobe / Speed"));
+        let table = def
+            .switched
+            .as_ref()
+            .expect("a switched slot carries its table");
+        assert_eq!(table.by, 0, "Mode Select is the first channel");
+        assert_eq!(
+            table
+                .positions
+                .iter()
+                .map(|position| (position.from, position.to, position.label.as_str()))
+                .collect::<Vec<_>>(),
+            vec![(0, 32_895, "Strobe"), (32_896, u16::MAX, "Program Speed")]
+        );
+        // Each position brings its own steps.
+        assert_eq!(table.positions[0].ranges.len(), 2);
+        assert_eq!(table.positions[1].ranges[0].name, "Slow half");
+        // And the cable value picks the row.
+        assert_eq!(table.position_at(0), Some(0));
+        assert_eq!(table.position_at(200 * 257), Some(1));
+        // Mode Select itself is not switched.
+        assert!(built[0].1.attributes[0].switched.is_none());
+    }
+
+    /// **A slot whose deciding channel the mode leaves out has no table** —
+    /// B52: there is nothing on the cable to read, so S54's one name stands.
+    #[test]
+    fn a_switched_slot_without_its_deciding_channel_has_no_table() {
+        let source = r#"{
+          "name": "A Par",
+          "availableChannels": {
+            "Mode Select": {
+              "capabilities": [
+                { "dmxRange": [0, 127], "type": "Maintenance", "switchChannels": { "Alias": "Red" } },
+                { "dmxRange": [128, 255], "type": "Maintenance", "switchChannels": { "Alias": "Blue" } }
+              ]
+            },
+            "Red": { "capability": { "type": "ColorIntensity", "color": "Red" } },
+            "Blue": { "capability": { "type": "ColorIntensity", "color": "Blue" } }
+          },
+          "modes": [{ "shortName": "1ch", "channels": ["Alias"] }]
+        }"#;
+        let (built, _) = read_fixture("m", "M", "f", source, false);
+        assert!(built[0].1.attributes[0].switched.is_none());
     }
 
     /// **A slot the mode leaves unused is still a knob** — S54.

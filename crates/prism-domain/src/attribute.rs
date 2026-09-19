@@ -754,6 +754,73 @@ pub struct AttributeDef {
         proptest(strategy = "crate::arb::small_vec(3)")
     )]
     pub ranges: Vec<AttributeRange>,
+    /// What this slot **is in each position of another channel** — punch-list
+    /// **B52**.
+    ///
+    /// A switching channel (OFL's `switchChannels`) makes one slot a different
+    /// channel depending on another channel's value: on an ADJ Flat Par QA12 the
+    /// slot after *Mode Select* is *Strobe* in dimmer mode, *Program Speed* in a
+    /// colour program and *Sound Sensitivity* in sound mode. The **key** a cue
+    /// files a value under cannot follow that — it would change while the cue
+    /// runs — so it stays this definition's; what follows is the **name** and
+    /// the **named ranges** an operator is shown, and this is the table they
+    /// are read from. Which row is live is the daemon's reading of the cable
+    /// (`prism_domain::Delta::SwitchPositions`), never a client's guess.
+    ///
+    /// `None` for every slot that is not switched, and for every profile a show
+    /// embedded before B52 — which opens unchanged and names the slot as it
+    /// always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub switched: Option<SwitchedSlot>,
+}
+
+/// The table a switched slot is read through — punch-list **B52**.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchedSlot {
+    /// The offset in the footprint of the channel whose value decides — the
+    /// *Mode Select* of the example above.
+    pub by: u16,
+    /// What the slot is in each range of that channel, lowest first.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub positions: Vec<SwitchPosition>,
+}
+
+/// One position of a switching channel, and what the switched slot is in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchPosition {
+    /// The lowest value of the deciding channel in this position, `0..=65535`.
+    pub from: u16,
+    /// The highest, `0..=65535`.
+    pub to: u16,
+    /// What the manufacturer calls the slot in this position — *Program
+    /// Speed*.
+    pub label: String,
+    /// The slot's named ranges in this position, lowest first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(3)")
+    )]
+    pub ranges: Vec<AttributeRange>,
+}
+
+impl SwitchedSlot {
+    /// Which position a value of the deciding channel is in, by index into
+    /// [`Self::positions`] — `None` for a value the file names no position for.
+    #[must_use]
+    pub fn position_at(&self, value: u16) -> Option<u8> {
+        self.positions
+            .iter()
+            .position(|position| position.from <= value && value <= position.to)
+            .and_then(|index| u8::try_from(index).ok())
+    }
 }
 
 impl AttributeDef {
@@ -838,6 +905,7 @@ mod tests {
 
     fn tilt() -> AttributeDef {
         AttributeDef {
+            switched: None,
             attribute: AttributeType::Tilt,
             label: None,
             occurrence: 0,
@@ -945,6 +1013,7 @@ mod tests {
     #[test]
     fn an_absent_occurrence_is_the_first_and_the_first_writes_nothing() {
         let first = AttributeDef {
+            switched: None,
             attribute: AttributeType::Gobo,
             label: None,
             occurrence: 0,

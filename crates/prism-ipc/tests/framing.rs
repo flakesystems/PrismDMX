@@ -123,6 +123,7 @@ fn any_snapshot() -> impl Strategy<Value = Snapshot> {
         any_health(),
     )
         .prop_map(|(show, session, programmer, outputs, health)| Snapshot {
+            switch_positions: Vec::new(),
             show,
             session,
             programmer,

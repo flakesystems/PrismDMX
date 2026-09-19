@@ -125,6 +125,9 @@ pub struct Core {
     /// document at playback rate, and every view that watches the show would
     /// re-ask its questions with it.
     reported: BTreeMap<PlaybackId, (bool, Option<u32>)>,
+    /// Which position every switched slot is in, as last read off the cable
+    /// and last told to the clients — punch-list **B52**.
+    switch_positions: Vec<prism_domain::SwitchState>,
     autosave: Autosave,
     /// The patch revision the current plan was built from (S11).
     patch_revision: u64,
@@ -230,6 +233,7 @@ impl Core {
             masters: Masters::default(),
             report,
             reported: BTreeMap::new(),
+            switch_positions: Vec::new(),
             autosave: Autosave::new(),
             patch_revision,
             surface_change: None,
@@ -1285,6 +1289,53 @@ impl Core {
     /// when a level does. S28 left the warning — `Query::StorePreview` is asked
     /// once per delta — and a delta per tick would have turned it into a
     /// question per frame.
+    /// Reads which position every switched slot of the rig is in **off the
+    /// cable**, and says so when it has moved — punch-list **B52**.
+    ///
+    /// `level` answers the output byte at a universe and a 1-based address, out
+    /// of the frame the engine last published: what the fixture is actually
+    /// being sent, after the merge, so a cue that turns *Mode Select* renames
+    /// the knob exactly as the programmer does. `None` from it — a universe
+    /// this desk does not output — leaves that slot in no position.
+    ///
+    /// Run on the daemon's own loop and never on the tick. Silent unless
+    /// something changed, like [`Self::poll_playback`].
+    pub fn read_switch_positions(
+        &mut self,
+        level: impl Fn(UniverseId, u16) -> Option<u8>,
+    ) -> Option<Delta> {
+        let mut positions = Vec::new();
+        for (fixture, fixture_type) in self.file.show.patched() {
+            for def in &fixture_type.attributes {
+                let Some(table) = &def.switched else {
+                    continue;
+                };
+                let position = fixture
+                    .address
+                    .checked_add(table.by)
+                    .and_then(|address| level(fixture.universe, address))
+                    .and_then(|byte| table.position_at(u16::from(byte) * 257));
+                positions.push(prism_domain::SwitchState {
+                    fixture: fixture.id,
+                    offset: def.coarse_offset,
+                    position,
+                });
+            }
+        }
+        positions.sort_unstable();
+        if positions == self.switch_positions {
+            return None;
+        }
+        self.switch_positions.clone_from(&positions);
+        Some(Delta::SwitchPositions { positions })
+    }
+
+    /// Which position every switched slot is in, for a snapshot — B52.
+    #[must_use]
+    pub fn switch_positions(&self) -> Vec<prism_domain::SwitchState> {
+        self.switch_positions.clone()
+    }
+
     pub fn poll_playback(&mut self) -> Vec<Delta> {
         let mut deltas = Vec::new();
         let mut seen: BTreeMap<PlaybackId, (bool, Option<u32>)> = BTreeMap::new();
@@ -1536,6 +1587,111 @@ mod tests {
         frames
             .last_frame()
             .and_then(|(_, data)| data.get(channel - 1).copied())
+    }
+
+    /// **The knob follows what is on the cable** — punch-list B52.
+    ///
+    /// A two-channel fixture whose second slot is switched by its first: the
+    /// programmer turns *Mode* up, the byte reaches the mock output, and only
+    /// then — read off the output the engine published, not off the programmer
+    /// — the slot is in its second position. Asked again with nothing moved,
+    /// nothing is said.
+    #[test]
+    fn a_switched_slot_is_in_the_position_its_deciding_channel_has_on_the_wire() {
+        use prism_domain::{AttributeRange, FixtureType, SwitchPosition, SwitchedSlot};
+
+        let mut mode = crate::testkit::attribute(AttributeType::Raw, 0, 0);
+        mode.label = Some("Mode".to_owned());
+        let mut slot = crate::testkit::attribute(AttributeType::Raw, 1, 0);
+        slot.occurrence = 1;
+        slot.label = Some("Strobe / Speed".to_owned());
+        slot.switched = Some(SwitchedSlot {
+            by: 0,
+            positions: vec![
+                SwitchPosition {
+                    from: 0,
+                    to: 32_895,
+                    label: "Strobe".to_owned(),
+                    ranges: Vec::new(),
+                },
+                SwitchPosition {
+                    from: 32_896,
+                    to: u16::MAX,
+                    label: "Program Speed".to_owned(),
+                    ranges: vec![AttributeRange {
+                        name: "Slow".to_owned(),
+                        from: 0,
+                        to: 100,
+                    }],
+                },
+            ],
+        });
+        let mut file = show_file();
+        file.show
+            .embed_fixture_type(FixtureType {
+                id: "test.switched".to_owned(),
+                manufacturer: "Test".to_owned(),
+                name: "Switched Par".to_owned(),
+                mode: "2ch".to_owned(),
+                footprint: 2,
+                attributes: vec![mode, slot],
+            })
+            .unwrap();
+        file.show
+            .patch_fixture(fixture(9, "test.switched", 1, 100))
+            .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let (mut core, frames, driver) = desk_with(dir.path(), file);
+        let wire = |universe: UniverseId, address: u16| {
+            (universe == UniverseId::new(1))
+                .then(|| channel(&frames, usize::from(address)))
+                .flatten()
+        };
+        until("the rig at home", || channel(&frames, 100) == Some(0));
+
+        // At home: the first position, said once.
+        let first = core.read_switch_positions(wire);
+        let Some(Delta::SwitchPositions { positions }) = first else {
+            panic!("the first reading is news: {first:?}");
+        };
+        assert_eq!(positions.len(), 1);
+        assert_eq!(
+            (
+                positions[0].fixture,
+                positions[0].offset,
+                positions[0].position
+            ),
+            (FixtureId::new(9), 1, Some(0))
+        );
+        assert_eq!(core.read_switch_positions(wire), None, "nothing moved");
+
+        // The programmer turns Mode up; the knob follows once the byte is out.
+        core.apply(&Command::SelectFixtures {
+            ids: vec![FixtureId::new(9)],
+            mode: SelectionMode::Set,
+        })
+        .unwrap();
+        core.apply(&Command::SetAttribute {
+            attribute: AttributeType::Raw,
+            occurrence: 0,
+            value: 200 * 257,
+            relative: false,
+        })
+        .unwrap();
+        until("the mode byte on the wire", || {
+            channel(&frames, 100) == Some(200)
+        });
+        let Some(Delta::SwitchPositions { positions }) = core.read_switch_positions(wire) else {
+            panic!("the slot moved and the clients have to be told");
+        };
+        assert_eq!(positions[0].position, Some(1));
+        assert_eq!(
+            core.switch_positions(),
+            positions,
+            "and a snapshot says the same"
+        );
+
+        driver.stop();
     }
 
     #[test]

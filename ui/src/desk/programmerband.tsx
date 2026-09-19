@@ -76,7 +76,7 @@ import { FEATURE_GROUP_VARIANTS, INLINE_OCCURRENCES } from "../bindings/variants
 import type { SequenceRow } from "../show/looks";
 import { executorInForce, sequenceInForce, sequenceRow } from "../show/looks";
 import { Encoder } from "./encoder";
-import type { ParameterKey, ParameterReading } from "./programmer";
+import type { ParameterKey, ParameterReading, SwitchRows } from "./programmer";
 import { bankReadings, bankRepeats, encoderPage, selectionSize, touchedBanks } from "./programmer";
 import { RangePicker } from "./rangepicker";
 import {
@@ -94,6 +94,12 @@ export interface ProgrammerBandProps {
   readonly show: JsonValue;
   /** The programmer, which is what the encoders read and write. */
   readonly programmer: ProgrammerState | null;
+  /**
+   * Which row every switched knob reads — punch-list **B52**, the daemon's
+   * reading of the cable. Absent is *not known*: a switched knob then keeps
+   * the one name S54 gave it.
+   */
+  readonly switches?: SwitchRows | null;
   /** Sends a `SetEncoderBank`. */
   readonly onBank: (group: FeatureGroup) => void;
   /** Sends a `SelectProgrammerParam`, once per step. */
@@ -143,6 +149,7 @@ export function ProgrammerBand({
   session,
   show,
   programmer,
+  switches = null,
   onBank,
   onParam,
   onPage,
@@ -159,7 +166,7 @@ export function ProgrammerBand({
   const repeats = bankRepeats(programmer, show, bank);
   const part = clampedPart(programmerOccurrence(session), repeats);
   const stepping = repeats > INLINE_OCCURRENCES;
-  const readings = bankReadings(programmer, show, bank, part);
+  const readings = bankReadings(programmer, show, bank, part, switches);
   const selectedIndex = programmerParamIndex(session);
   const touched = touchedBanks(programmer, show);
   const paged = encoderPage(readings, programmerPage(session));
@@ -207,7 +214,7 @@ export function ProgrammerBand({
             onContextMenu={(event) => {
               event.preventDefault();
               onTake(
-                bankReadings(programmer, show, group, part)
+                bankReadings(programmer, show, group, part, switches)
                   .filter((reading) => !reading.overriding)
                   .map((reading) => ({
                     attribute: reading.attribute,

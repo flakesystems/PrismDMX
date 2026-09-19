@@ -254,6 +254,7 @@ mod tests {
             mode: "1ch".to_owned(),
             footprint: 1,
             attributes: vec![crate::AttributeDef {
+                switched: None,
                 attribute: crate::AttributeType::Red,
                 label: None,
                 occurrence: 0,
@@ -270,6 +271,7 @@ mod tests {
         };
         let mut with_intensity = colour_only.clone();
         with_intensity.attributes.push(crate::AttributeDef {
+            switched: None,
             attribute: crate::AttributeType::Dimmer,
             label: None,
             occurrence: 0,

@@ -46,6 +46,11 @@ fixed (S56 and S57):
   scrolled; a new fixture starts at the **next free address**, which an overlap
   names too; a fixture with no name is named after its type; and **several of
   one type** are patched in one step that one Oops takes back.
+- **Mode channels** (B52): a knob whose channel another one switches — the
+  neighbour of *Mode Select* on an ADJ Flat Par QA12 — is now called what it is
+  right now (*Strobe*, *Program Speed*, *Sound Sensitivity*) and offers that
+  channel's steps. What counts is what is on the cable, so it follows a cue as
+  well.
 
 ---
 

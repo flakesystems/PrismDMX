@@ -17,6 +17,7 @@ use prism_domain::{
 /// An 8-bit attribute at a given offset, with everything else neutral.
 pub(crate) fn attribute(attribute: AttributeType, coarse_offset: u16) -> AttributeDef {
     AttributeDef {
+        switched: None,
         attribute,
         label: None,
         occurrence: 0,
@@ -151,6 +152,7 @@ pub(crate) fn migration_fixture() -> crate::ShowFile {
             footprint: 6,
             attributes: vec![
                 AttributeDef {
+                    switched: None,
                     attribute: AttributeType::Pan,
                     label: None,
                     occurrence: 0,

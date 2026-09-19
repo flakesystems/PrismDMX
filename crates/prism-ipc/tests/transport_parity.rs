@@ -75,6 +75,7 @@ impl Desk0 {
 
 fn the_world() -> Snapshot {
     Snapshot {
+        switch_positions: Vec::new(),
         show: JsonValue::Object(
             [
                 (

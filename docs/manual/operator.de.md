@@ -410,10 +410,13 @@ Zwei Dinge, die dabei **nicht** gelten und die Sie wissen sollten:
 
 - So ein Knopf hat **keine benannten Stufen**. Es gibt nichts, woraus sie zu
   lesen wären.
-- Bei einem Kanal, dessen Bedeutung von einem Moduskanal abhängt, **folgt das
-  Pult dem Umschalten nicht, während die Show läuft**. Drehen Sie den Modus,
-  heißt der Nachbarknopf weiter, wie er hieß. Das ist bekannt und steht als
-  `B52` in [`../ISSUES.md`](../ISSUES.md).
+- Bei einem Kanal, dessen Bedeutung von einem **Moduskanal** abhängt, heißt der
+  Knopf, **was der Kanal gerade ist**: dreht der Moduskanal einer ADJ Flat Par
+  QA12 auf *Color Change*, heißt der Nachbar *Program Speed* statt *Strobe* und
+  bietet dessen Stufen an. Maßgeblich ist, **was am Kabel anliegt** — setzt eine
+  laufende Cue den Modus, folgt der Knopf ihr genauso wie dem Programmer. Der
+  Wert selbst wird dabei nicht umgedeutet: gespeichert und gesendet wird der
+  Kanal, wie er ist.
 
 ### `Clear` lässt los, bevor es vergisst
 
@@ -752,8 +755,6 @@ Hier genannt, statt von Ihnen entdeckt zu werden:
 - **Kein Timecode, kein OSC, kein PSN.** Geplant.
 - **Keine Effekt-Engine** — das Fenster *Phaser Editor* ist leer, weil das
   darunter fehlt.
-- **Das Pult folgt einem Moduskanal nicht**, während die Show läuft (Kapitel 6,
-  `B52`).
 - **Autostart nur unter Windows.** Die Einstellung gibt es überall, der Eintrag
   wird nur unter Windows geschrieben.
 - **macOS und Linux werden nicht veröffentlicht.** Die Engine ist portabel und

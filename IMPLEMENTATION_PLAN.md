@@ -1368,6 +1368,21 @@ Asked for on 2026-09-07, with three things stated as requirements rather than le
 - A show patched before S57 opens unchanged
 - No scrolling outside the canvas at 1280 × 720 with the library open
 
+## S58 · `prism-core` + `prismd` + `ui` — a knob follows the channel that switches it
+**Size:** M · **Depends on:** S54, S57 · **Done 2026-09-19** (`PROGRESS.md` §2.55)
+
+**Goal:** punch-list **B52**, the last open entry, answered the way the owner chose on 2026-09-19: **the label follows, the key does not**. A switching channel (OFL's `switchChannels`) makes one slot a different channel depending on another channel's value; the key a cue files a value under stays the slot's (S54), and what follows is the knob's **name and named steps** — read by the position the deciding channel has **on the cable**, not in the programmer, so a running cue renames the knob exactly as the programmer does.
+
+**Deliverables**
+- `AttributeDef::switched` — the table: which channel decides, and per range of it what the slot is called and which steps it has; built by the OFL reader, `#[serde(default)]` so every stored show opens unchanged
+- The daemon reads the deciding channels off the frame the engine publishes and says which row is live (`Delta::SwitchPositions`, `Snapshot::switchPositions`), only when it changes
+- The encoder band names a switched knob, and offers its steps, from the live row
+
+**Exit criteria**
+- The reader's table asserted on a cut-down fixture and on the real ADJ Flat Par QA12 8ch
+- The position asserted at the daemon against the byte that actually reached a mock output
+- The new delta decoded as **bytes** in the browser (B55's rule), and a knob renamed in Chromium against a real daemon: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*
+
 # Phase 12 — Extended features, once the doors are open
 
 *Everything in Phase 9 that has not run: **S30** 3D viewer, **S31** Web Remote, **S32** PSN / OSC, **S47** timecode, **S50** macros. They are not renumbered — the numbers are identity — and they are not reordered among themselves. What moved is the schedule: the open beta comes first, and what an open beta asks for should choose between these five better than this document can.*
@@ -1414,6 +1429,7 @@ flowchart LR
     S51 --> S52 --> S53 --> S54
     S51 & S41 & S42 --> S56 --> S57
     S44 & S27 --> S57
+    S54 & S57 --> S58
 ```
 
 **Critical path to a usable console:** S0 → S1 → S2 → S3 → S4 → S7 → S11 → S12 → S16 → S17 → S19 → S21 → S22 → S23 → S25 → S26. *Reached at S26.*
@@ -1457,4 +1473,5 @@ is, is the order the work was planned to make sense in.
 | 23 | **S55** `site` + `deploy` — prismdmx.de and its container | Asked for on 2026-09-07, and it is S42's other half: that session's first deliverable named a presentation site beside the documentation site and shipped the documentation site. A manual index is the right front page for somebody who already knows what this is. Immediately after S41/S42 because it is the same subject and because an **open** beta is a release strangers install — and a stranger arrives at a front page, not at a table of contents |
 | 24 | **S56** core/domain/`prismd`/`ui` — what the open beta sent back | **Done 2026-09-18** — see `PROGRESS.md` §2.53. Chosen on 2026-09-16 over Phase 12, by §8's own rule: the open beta had filed ten issues in two weeks, one of them a blocker. Nine closed; B60 became S57 |
 | 25 | **S57** `ui`/core — the patch window, rebuilt around the library | **Done 2026-09-18** — see `PROGRESS.md` §2.54. Born out of S56 from B60, the owner's eight points about patching, and done as one rebuild because they lean on each other. All ten of the open beta's first reports are now closed |
+| 25a | **S58** core/`prismd`/`ui` — a knob follows the channel that switches it | **Done 2026-09-19** — see `PROGRESS.md` §2.55. B52, the register's last open entry, asked for by the owner before the next release. **The register has no open entry.** Next: the owner's acceptance test on the test rig (`docs/RELEASE_TEST.md`), then the release |
 | 26 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |

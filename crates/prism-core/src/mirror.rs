@@ -164,7 +164,8 @@ impl ShowMirror {
             | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }
             | Delta::DirtyFlag { .. }
-            | Delta::Notice { .. } => Ok(()),
+            | Delta::Notice { .. }
+            | Delta::SwitchPositions { .. } => Ok(()),
         }
     }
 
@@ -253,7 +254,8 @@ impl SessionMirror {
             | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }
             | Delta::DirtyFlag { .. }
-            | Delta::Notice { .. } => Ok(()),
+            | Delta::Notice { .. }
+            | Delta::SwitchPositions { .. } => Ok(()),
         }
     }
 

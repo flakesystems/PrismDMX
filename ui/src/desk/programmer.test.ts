@@ -23,6 +23,7 @@ import {
   homeOf,
   parameterLabel,
   sourceText,
+  switchRows,
   touchedBanks,
   valueText,
 } from "./programmer";
@@ -744,5 +745,66 @@ describe("the name the manufacturer gave a channel", () => {
       const [gobo] = bankReadings(programmer([1], []), named(broken, broken), "Gobo", 0);
       expect(gobo?.name, JSON.stringify(broken)).toBeNull();
     }
+  });
+});
+
+/**
+ * **A switched knob is named after the position that is live** — punch-list
+ * B52. The ADJ Flat Par QA12's shape: the slot after *Mode Select* is a strobe
+ * in dimmer mode and a program speed in a colour program. Which row is live is
+ * the daemon's reading of the cable; the name and the steps are the profile's.
+ */
+describe("a switched knob", () => {
+  const SWITCHED: JsonValue = {
+    fixtures: { "9": { typeId: "par", softwareDimmer: false } },
+    fixtureTypes: {
+      par: {
+        attributes: [
+          { attribute: "Raw", occurrence: 0, featureGroup: "Control", coarseOffset: 0, defaultValue: 0, label: "Mode Select" },
+          {
+            attribute: "Raw",
+            occurrence: 1,
+            featureGroup: "Control",
+            coarseOffset: 1,
+            defaultValue: 0,
+            label: "Strobe / Speed",
+            switched: {
+              by: 0,
+              positions: [
+                { from: 0, to: 32895, label: "Strobe", ranges: [{ name: "Open", from: 0, to: 2570 }] },
+                { from: 32896, to: 65535, label: "Program Speed", ranges: [{ name: "Slow", from: 0, to: 32767 }] },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  } as JsonValue;
+
+  const knob = (rows: Parameters<typeof switchRows>[0] | null) =>
+    bankReadings(programmer([9]), SWITCHED, "Control", 0, rows === null ? null : switchRows(rows))[1];
+
+  it("keeps the one name it always had while the daemon has said nothing", () => {
+    expect(knob(null)?.name).toBe("Strobe / Speed");
+    expect(knob(null)?.ranges).toEqual([]);
+  });
+
+  it("takes the live position's name and steps from the daemon's reading", () => {
+    const strobe = knob([{ fixture: 9, offset: 1, position: 0 }]);
+    expect(strobe?.name).toBe("Strobe");
+    expect(strobe?.ranges.map((range) => range.name)).toEqual(["Open"]);
+    const speed = knob([{ fixture: 9, offset: 1, position: 1 }]);
+    expect(speed?.name).toBe("Program Speed");
+    expect(speed?.ranges.map((range) => range.name)).toEqual(["Slow"]);
+    // The deciding channel itself is not renamed.
+    expect(
+      bankReadings(programmer([9]), SWITCHED, "Control", 0, switchRows([{ fixture: 9, offset: 1, position: 1 }]))[0]
+        ?.name,
+    ).toBe("Mode Select");
+  });
+
+  it("falls back to its own name where the cable stands in no position, or for another fixture", () => {
+    expect(knob([{ fixture: 9, offset: 1, position: null }])?.name).toBe("Strobe / Speed");
+    expect(knob([{ fixture: 8, offset: 1, position: 1 }])?.name).toBe("Strobe / Speed");
   });
 });

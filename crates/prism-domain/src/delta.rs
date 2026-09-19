@@ -211,6 +211,41 @@ pub enum Delta {
         /// Human-readable text.
         message: String,
     },
+    /// Which position every switched slot of the rig is in, **read off the
+    /// cable** — punch-list **B52**.
+    ///
+    /// A switched slot is named after whatever its deciding channel says right
+    /// now (`crate::SwitchedSlot`), and *right now* is what the output carries
+    /// after the merge — a cue that sets *Mode Select* renames the knob as much
+    /// as the programmer does. Only the daemon sees the output, so it reads the
+    /// deciding channels and says which row is live; a client reads the label
+    /// out of the profile it already has.
+    ///
+    /// Sent **whole and only when it changes**: a handful of entries, and a mode
+    /// channel is turned by hand, not faded thirty times a second.
+    SwitchPositions {
+        /// Every switched slot of every patched fixture, in fixture and offset
+        /// order.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        positions: Vec<SwitchState>,
+    },
+}
+
+/// Which position one switched slot is in — punch-list **B52**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchState {
+    /// The fixture.
+    pub fixture: crate::FixtureId,
+    /// The switched slot's coarse offset in the fixture's footprint.
+    pub offset: u16,
+    /// The index into `SwitchedSlot::positions`, or `None` when the deciding
+    /// channel stands where the file names no position.
+    pub position: Option<u8>,
 }
 
 #[cfg(test)]
