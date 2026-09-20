@@ -1,8 +1,8 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-09-19 (S58 — B52, a knob follows the channel that switches it; the register has no open entry)
+**Last updated:** 2026-09-20 (the owner accepted the build on the test rig; the branches are merged, and the release waits for S59 and S30)
 **Current phase:** Phase 11 — what the beta sends back (the open beta, since S56)
-**Current session:** none — next is the owner's acceptance test on the test rig (`docs/RELEASE_TEST.md`) and then the release; §8 is the prompt
+**Current session:** none — next is **S59**, the Controls panel's question round, then **S30**, the 3D viewer; the release waits for both (owner, 2026-09-20). §8 is the prompt
 **Last completed:** S58 — a knob follows the channel that switches it ✅ — **B52, the last open entry of the register.** A switching channel makes one slot a different channel depending on another's value; the owner chose that the **label** follows and the **key** does not, and that what decides is **what is on the cable**. So a switched slot carries its table (`AttributeDef::switched`: the deciding channel, and per range of it the slot's name and steps), the daemon reads the deciding channels off the frame it already holds for telemetry and says which row is live (`Delta::SwitchPositions`), and the encoder band names the knob from that row. In Chromium, against a real ADJ Flat Par QA12: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*. See §2.55. Before that: S57 — the patch window, rebuilt around the library ✅ — **the owner's eight points about patching, as one rebuild because they lean on each other.** *Add fixture* opens one panel over the canvas: the library on the left, **one row per fixture** with its modes in a column, the whole row picking and a page of sixty loaded each time the list reaches its end; the fixture's settings on the right, the mode a menu beside it. A new fixture starts at the **next free address** for its whole footprint, which an overlap names too — the daemon's answer (`PatchPreview::nextFree`), never the browser's. A fixture with no name is named after its type, in the daemon. And a **count**: the daemon places them (`PatchPreview::placements`) and they go as **one** `Command::PatchFixtures`, which embeds the library's profile in the same step and is **one Oops** — the journal now restores fixtures out, profiles, fixtures in, so one step undoes and redoes. Picking a row embeds nothing any more; the preview measures the library's copy. The profile key a show embeds is still per mode, so every show opens unchanged. See §2.54. Before that: S56 — what the open beta sent back ✅ — **ten GitHub issues in two weeks, one a blocker, and they chose the session over Phase 12.** The blocker was a hand-written decoder with no arm for two surface actions, which dropped the client on every visit to the Controls panel; it is now held to every variant by a fixture Rust writes from a `match` with no wildcard. The Oops key is a backspace while a line stands — decided in the daemon, so the X-Touch does it with no screen attached. A crossfade has **one** position on every client and on the motor, which reverses S51's *client-local* rule on purpose: the motor had been falling back to a stale position 150 ms after the hand let go. A view is chosen without touching the line, the first click into an unfocused window selects, the line's feedback is one row of fixed height, number fields can be emptied while typing, `fixtures/` exists after the first start, and the Cue Viewer has no store bar. B60 — the patch window — is **S57**. See §2.53. Before that: S41 + S42 — the manuals, and prismdmx.de ✅ — **everything a person who did not write this needs.** Three manuals: the operator's and the installer's in German because the building they were written for speaks it, the developer's in English because the code does, and the reason for each in `docs/manual/README.md`. A `README.md` in every one of the **ten** workspace members, saying which side of §10.1's rules its crate is on in a sentence with a link rather than a copy of the rule — checked by a test over the members. `cargo doc --workspace --no-deps` is warning-free for the first time and is a gate now: it had **31**, and four of them were prose naming items that had been renamed out from under it, which nothing could go red about. The manual's list of window types and its list of console words are **generated from the code** by a test that keeps the prose, inserts `TODO` for a new row, rewrites the file and fails — so a manual cannot quietly fall behind. And **prismdmx.de is generated out of this repository** by a workspace member that holds no content of its own: no JavaScript on any page, every page saying which version it documents, every anchor asserted to resolve, and a download-page checksum computed from the installer a release just built rather than typed by anybody. CI has a seventh job because a site that only builds on one machine is the same problem as an installer that does. Before that: S54 — no slot of a patched fixture is out of reach ✅. Before that: S46 — `prism-protocols` + `prismd` + `ui`, Art-Net node discovery ✅ (CI green on run **33272829395**) — **an Art-Net output knows whether anything is listening.** Punch-list B6: `Health::Ok` meant *the socket took the datagram* and UDP always takes it, so a configured node read *OK* over an empty rack. `prism-protocols` has a **receive path** for the first time — `ArtPoll` out, `ArtPollReply` parsed field by field out of §6 of the specification, on a seam of its own so no driver thread can be handed a call that blocks. A node is *answering*, *never answered* or *stopped* with the age of its last reply beside it, and the daemon folds that into the health every client is told, so an output whose nodes are silent reads **Degraded** in the snapshot, in the delta and in the answer. Nothing broadcasts: the poll goes only where this desk already sends, and what that costs is written down rather than hidden. A reply is an input from outside — the parser allocates **nothing**, the table is bounded, and a quarter of a million random bytes produce no panic and no allocation. Before that: S45 — `prism-core` + `prism-engine` + `ui`, the executor window and one sequence one playback ✅ (CI green on run **33261331368**, all five jobs on the first attempt) — **an executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list B18: a playback belongs to the *list*, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — asserted on the frames a mock output received, which is the only place the difference is real. Punch-list B15: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote; the editor writes that line rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason — a `Command`, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building. Before that: S33 — the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
 
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
@@ -142,6 +142,8 @@
 | S53 | Every capability the format distinguishes | ✅ | 2026-09-06 | All exit criteria verified — see §2.49. The owner asked whether the parameter names could simply be taken **dynamically out of the fixture file**, and then asked for the Open Fixture Library's own two documents to be read before an answer was given. Reading them gave a better answer than the question suggested: the format is a **closed set of 43 capability types** with **discriminators** beside them, and the previous table read the type and threw the discriminators away — lossily, in a way **no counter could show**, because `channels_unmapped` stayed at nought while channels arrived under the wrong knob. So the key stays a closed enum, which is what lets one command line reach a rig from three manufacturers, and what comes out of the file dynamically is the **label**. `AttributeType` is **40**: a colour wheel's rotation, a hazer, one framing blade turning and the whole frame turning. **What a wheel is comes from its slots** — and from *most* of them, because ten wheels of the corpus mix kinds and on six the first slot is not what the wheel is: **115 wheel channels leave the gobo bank**, 110 of them colour. A framing blade is numbered by the **`blade` the file states**, so *Blade 3* is blade three and not the third blade channel. And **37 526 channels carry the name their manufacturer gave them** onto the encoder — *Rotating Gobo*, not *Gobo 2* — out of the show's own embedded profile, so a library update cannot rename a patched rig. Two things worth having in the record: `ColorWheelRotation` is reached by **nothing** in the corpus and the test asserts that as **nought** rather than wishing otherwise, because a colour wheel's scroll is a range on the select channel and that is one knob; and a figure I had given the owner twice was **wrong**, caught by the test, because it was measured with a rule the reader does not use |
 | S54 | No slot of a patched fixture is out of reach | ✅ | 2026-09-06 | All exit criteria verified — see §2.50. The owner read S53 and said the thing S53 had not: *"Es kann nach dem aktuellen Prinzip passieren, dass manche Channels mancher Fixtures nicht ansteuerbar sind."* Measured rather than argued about, it was **707 DMX slots in 337 of the 2 871 profiles** — including **34 of the 35** channels of a `glp/knv-cube` and **9 of the 10** of a `jb-systems/twin-effect-laser`, both of them effectively unusable while every counter in the reader read nought. The counters could not see it because they only ever asked *did this channel reach an attribute*, never *does this slot have a knob*. The answer is a **floor and not four fixes**: `AttributeType::Raw`, the 41st and the only row that is not a kind of parameter, so that every slot of a patched fixture has exactly one `AttributeDef` — and the corpus asserts **that**, over 40 953 slots, rather than asserting the four causes away one at a time. A fifth cause is the reason it is a floor: a capability type a later version of the format adds. In the same pass **B49 is closed**, and the question turned out to be wrong: a switching alias never moves the footprint, so *resolve or refuse* was a false choice — where the file's own positions agree about what the slot is, it is that (**97 channels**), and where they disagree it is a raw knob under the alias's own name, because a knob labelled *Colour Wheel* that is a gobo half the time is worse than one labelled *Channel 2*. `B1`'s own test caught the one real defect on the way: a switched red rested shut |
 | S56 | What the open beta sent back | ✅ | 2026-09-18 | All exit criteria verified — see §2.53. Ten GitHub issues (#21, #23–#30) triaged as B53–B62; **nine closed, B60 promoted to S57, none deleted**. Every fix held by a test that was red before it, three of them only reachable in a real browser or at a real daemon: a canvas measured in Chromium (B61, 444 → 425 px), a click held as long as a hand holds one (B57), and a motor fader let go of on a mock X-Touch (B59, driven to `[0]`) |
+| S59 | The Controls panel, the owner's next round | ☐ | — | **Next**, and it starts with a question round — the owner's change requests are not written down yet. The plan carries ten questions this document could see; the owner's own come first |
+| S30 | 3D viewer | ☐ | — | After S59. Pulled ahead of the other extended features on 2026-09-20: the release waits for it |
 | S58 | A knob follows the channel that switches it (B52) | ✅ | 2026-09-19 | All exit criteria verified — see §2.55. The label follows the live position of the deciding channel **on the cable**; the key a cue files under does not move. The register has **no open entry** |
 | S57 | The patch window, rebuilt around the library | ✅ | 2026-09-18 | All exit criteria verified — see §2.54. B60 (#28) closed: every one of the owner's eight points driven in Playwright against a real daemon with the installed library; the next free address asserted in Rust over gaps, universe ends and footprints that do not fit; **ten of one fixture are one undo step and ten fixtures that do not overlap**; a show patched before S57 opens unchanged; no scrolling outside the canvas at 1280 × 720 with the library open |
 
@@ -4474,6 +4476,12 @@ both executables, the X-Touch profile and 636 fixture files).
 test rig — every fix of S56, S57 and S58 with where it is and what has to happen —
 and the installer was built locally the way `release.yml` builds it.
 
+**Accepted on the test rig, 2026-09-20.** The owner installed that build on the
+test rig, worked through the list and ticked every point — the patch window's
+eight, B52's seven, the ten beta reports and the smoke test. The three branches
+were merged into `master` the same day. **The release is deliberately held**:
+the owner wants the Controls round (**S59**) and the 3D viewer (**S30**) in it.
+
 ---
 
 ### 2.54 S57 verification record
@@ -5214,6 +5222,7 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-09-20 | — | **The owner accepted the punch-list build on the test rig and then held the release.** Every point of `docs/RELEASE_TEST.md` is ticked; nothing came back as a new B-number. What the owner wants in the release instead of a quick tag is a **Controls round** — change requests that deliberately did not go into the punch-list patch — and the **3D viewer** | `master` carries S56, S57 and S58 (the three branches merged, fast-forward, no merge commit). **S59** is written into the plan as a session that *starts by asking*, because what the owner wants changed about Controls is not written down and building first would produce the second control editor rather than the wanted one. **S30** is pulled ahead of the other four extended features. The version stays `0.9.2` until the release, and `CHANGELOG.md`'s *Noch nicht veröffentlicht* keeps growing |
 | 2026-09-19 | S58 | **B52 asked whether a key may change while a cue runs, and the owner's answer was: it does not have to.** What an operator misses is the knob's name and its steps; a value filed under a key that moved with the mode would be the model change B52 had been left open for | **The label follows, the key stays.** `AttributeDef::switched` is a table of names and steps per position; the stored value is the channel as it is. And the position is **the cable's** — a cue that sets the mode renames the knob as the programmer does — so the daemon reads it off the frame it already holds, and a client never guesses it |
 | 2026-09-18 | S57 | **Embedding a profile when it is picked (S43, B1) cannot survive a library that is browsed.** The pick embedded every time because the preview could only measure a profile the show carried; clicking through a list of two thousand would leave a profile in the show for every row touched | **The preview measures the library's copy, and the patch embeds it.** `ShowFile::preview_patch` takes the library's profile first for new fixtures and the show's first for a repatch; `Command::PatchFixtures` embeds in the same step as the fixtures. B1's rule — *use the library's copy* — holds, taken at the moment the profile is **used** rather than looked at. Changing a patched fixture's profile still embeds before it repatches, because `PatchFixture` patches from the show's copy |
 | 2026-09-18 | S57 | **One step that holds a profile and the fixtures standing on it has no single right order.** An undo must take the fixtures off before the profile can go; a redo must put the profile in before they can stand on it | `ShowFile::restore` orders the images of one step: **fixtures out, then profiles, then fixtures in**, stable for everything else. The one other multi-image step it reorders, a renumber, is indifferent to the order |
@@ -6021,6 +6030,9 @@ Carried out of S56:
   the command line's question is where its counts belong next.
 
 **S58 is done: B52, and the register has no open entry.** See §2.55.
+
+**And the build was accepted on the rig, 2026-09-20.** The three branches are
+merged into `master`. The release is held for S59 and S30, by the owner.
 
 Carried out of S58:
 - **A guard that asserts a program is imperfect goes red the day it is not.**
@@ -7890,17 +7902,28 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**The next step is the owner's, not a session's.** S56, S57 and S58 closed
-every entry of the register, B52 last. The owner installs the build on the test
-rig and works through `docs/RELEASE_TEST.md`; what fails there comes back as
-new B-numbers and is the next session. If nothing fails, the next session is
-**the release**: merge, version, tag, and the complete pass in `release.yml`.
-**Read `gh issue list --state open` and `docs/ISSUES.md` first** either way.
+**The next session is S59, the Controls panel — and it starts by asking.** The
+owner accepted the punch-list build on the test rig on 2026-09-20 and held the
+release for two things: a round of changes to **Controls**, and the **3D
+viewer** (S30). What the owner wants changed about Controls is **not written
+down yet**: `IMPLEMENTATION_PLAN.md`'s S59 entry has ten questions this document
+could see, and the owner's own answers come first. Nothing is built before the
+answers are in the plan. **Read `gh issue list --state open` and
+`docs/ISSUES.md` first** all the same: the register has no open entry today, and
+a new report goes before S59 exactly as B55 went before Phase 12.
 
-**Two things are waiting on the owner, not on a session**: the branches
-`fix/beta-punch-list-2` (S56), `fix/b60-patch-window` (S57) and
-`fix/b52-switching-channels` (S58, containing both) are pushed and unmerged, and the GitHub issues they fix (#9, #21, #23–#30) are still open.
-Both are outward-facing; ask before doing either.
+**One thing is waiting on the owner, not on a session**: the GitHub issues
+(#9, #21, #23–#30) are still open, though every one of them is fixed and now on
+`master`, and the GitHub issues they fix (#9, #21, #23–#30) are still open.
+Closing them is outward-facing; ask before doing it.
+
+**What S58 left that the next session will meet.** A switched slot's name and
+steps come from `AttributeDef::switched` and the daemon's `Delta::SwitchPositions`;
+the X-Touch's scribble strips show executors, not parameter names, so a Controls
+round does not meet that path. The Controls panel is `ui/src/settings/controls.tsx`
+over `ACTION_GROUPS`/`CUSTOM_KINDS` (`ui/src/settings/actions.ts`), the table in
+force is the machine's (`machine.json`, one `MachineChange::SurfaceBinding` per
+control), and `docs/MCU_MAPPING.md` §4 is its vocabulary.
 
 **What S57 left that the next session will meet.** The patch panel is one
 `Modal` of `size="full"` portalled to the canvas through `ModalLayer`; a modal
@@ -7912,15 +7935,19 @@ of the library; `SearchLibrary` is answered and asked by nothing.
 
 ---
 ```
-PrismDMX — nächste Session: was die offene Beta meldet, sonst Phase 12
+PrismDMX — S59: das Controls-Menü, und die Session beginnt mit Fragen
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2); das Pult
 bedient ihn ohne Oberfläche (D11); seit S29 ist das Ganze ein Programm mit
 Installationsprogramm; seit S41/S42 gibt es Handbücher und eine Website; und
-seit **S56 und S57** sind alle zehn ersten Meldungen der offenen Beta behoben —
-S57 hat das Patch-Fenster um die Bibliothek herum neu gebaut.
+seit **S56, S57 und S58** ist **jeder** Eintrag des Registers behoben — das
+Patch-Fenster ist um die Bibliothek herum neu gebaut (B60), und ein
+umgeschalteter Knopf folgt seinem Moduskanal (B52). Der Eigentümer hat diesen
+Build am 2026-09-20 auf dem Test-Rig abgenommen (`docs/RELEASE_TEST.md`, alle
+Punkte abgehakt) und das Release **bewusst zurückgestellt**: vorher sollen die
+Controls-Änderungen (diese Session) und der 3D-Viewer (S30) hinein.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 
@@ -7935,16 +7962,21 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                     Eigentümer
 3.  IMPLEMENTATION_PLAN.md        — die Reihenfolge (Zeile 26: Phase 12) und die
                                     Session, die es wird
-4.  PROGRESS.md §2.54 und §7      — was S57 gebaut hat, und alle „Carried out
+4.  PROGRESS.md §2.55 und §7      — was S58 gebaut hat, und alle „Carried out
                                     of"-Listen
 5.  docs/manual/developer.en.md   — die Architektur, wie sie geworden ist
 6.  ARCHITECTURE_SPEC.md          — §1 (D1–D11), §4, §7.0, §10, §14
-7.  docs/                         — was die gewählte Session berührt
+7.  docs/MCU_MAPPING.md §4        — das Vokabular der Bindungen, und §4.3
+                                    (reservierte und permanente Controls)
+8.  ui/src/settings/controls.tsx  — das Menü, und `actions.ts` daneben
 
-Aufgabe: **Kommen neue Meldungen, behebe sie** — entscheide selbst, wie viele in
-eine Session passen, und stufe hoch, was größer ist als ein Nachmittag, wie B60
-zu S57 wurde. **Kommen keine, frage den Eigentümer**, welche Session aus Phase 12
-zuerst kommt, statt eine zu wählen.
+Aufgabe: **S59 — das Controls-Menü, und zwar zuerst fragen.** Der Eigentümer hat
+Änderungswünsche, die absichtlich nicht in den Punch-List-Patch gingen; **was sie
+sind, steht nirgends**. `IMPLEMENTATION_PLAN.md` §S59 trägt zehn Fragen, die
+dieses Dokument selbst sehen konnte — stelle sie, **die eigenen Punkte des
+Eigentümers zuerst**, schreibe die Antworten als Deliverables und Exit-Kriterien
+in den Plan, und baue erst danach. Ist seit dem 2026-09-20 eine neue Meldung
+dazugekommen, geht sie vor.
 
 ## Randbedingungen
 
@@ -7953,6 +7985,12 @@ zuerst kommt, statt eine zu wählen.
   eines Fake-Daemons (B55): eine neue `Answer`- oder `Delta`-Variante braucht eine
   Aufnahme, die durch `decodeServerMessage` geht.
 - **Ein Modal aus einem Fenster liegt über dem Canvas** (`ModalLayer`, S57).
+- **Die Bindungstabelle gehört der Maschine** (`machine.json`, ein
+  `MachineChange::SurfaceBinding` pro Control, eine Revision für alle Clients) —
+  wer das ändern will, ändert eine Entscheidung aus S33/S38 und schreibt sie auf.
+- **Das reservierte Control (SMPTE/Beats) und die permanenten bleiben tabu**
+  (`docs/MCU_MAPPING.md` §4.3).
+- **Nach S59 kommt S30, der 3D-Viewer**; das Release wartet auf beide.
 - **Neue Fixtures patcht die Oberfläche mit `PatchFixtures`**, ein Oops pro
   Geste; die Platzierungen sind die Antwort des Daemons.
 - **Ein neues Konsolenwort oder ein neuer `WindowType` schreibt das Handbuch
@@ -7978,7 +8016,7 @@ zuerst kommt, statt eine zu wählen.
 - **Die ganze Suite eines Crates laufen lassen, bevor ein Commit die Bedeutung
   eines Befehls ändert** — nicht nur die neuen Tests (S56 §7).
 - Handbücher, Website und `docs/ISSUES.md` im selben Durchgang.
-- PROGRESS.md: Status, §2.55-Protokoll mit jeder gemessenen Zahl, §7
+- PROGRESS.md: Status, §2.56-Protokoll mit jeder gemessenen Zahl, §7
   „Carried out of", §8 neu.
 - **Alle Gates lokal vollständig**, dann Conventional Commits, pushen, den
   (Linux-)CI-Lauf bis grün beobachten und festhalten.

@@ -1102,7 +1102,7 @@ none that writes one.
 *None of these has run, and on 2026-09-05 they moved **behind** Phase 10 and Phase 11 in the running order — see Phase 12 and the table at the end for why. The sessions themselves are unchanged.*
 
 ## S30 · 3D viewer
-**Size:** L · **Depends on:** S27
+**Size:** L · **Depends on:** S27 · **Pulled ahead on 2026-09-20**: the owner wants it, and the Controls round (S59), in the next release rather than after it
 
 **Exit criteria:** every patched fixture appears with correct position and orientation; beams reflect live output; the viewer never blocks the telemetry canvas or the engine.
 
@@ -1383,6 +1383,83 @@ Asked for on 2026-09-07, with three things stated as requirements rather than le
 - The position asserted at the daemon against the byte that actually reached a mock output
 - The new delta decoded as **bytes** in the browser (B55's rule), and a knob renamed in Chromium against a real daemon: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*
 
+## S59 · `ui` + `prism-surface` + `prismd` — the Controls panel, the owner's next round
+**Size:** unknown until the questions are answered · **Depends on:** S38, S58
+
+**This session starts by asking.** The owner has change requests for the
+Controls panel and said on 2026-09-20 that they do not belong in the punch-list
+patch. What they are is **not written down yet**, and guessing at them would
+produce the second control editor rather than the one that was wanted — S38
+built the first, B3 turned it inside out, B24 gave it its sections, B25 the send
+box and B26 export and import, and every one of those came from a sentence the
+owner wrote rather than from a design here.
+
+So the first deliverable is a **question round**, and nothing is built before
+the answers are in the plan. The questions below are the ones this document can
+already see; the owner will have others, and theirs come first.
+
+**What there is now**, so the questions are about the thing that exists:
+
+- The rows are **actions** (`ACTION_GROUPS`, twenty-four in four groups:
+  executors, programmer, other internal commands, custom), and **Learn sits on
+  the row** — press Learn, press the key (B3).
+- A row is a *kind*: *Open window* is one row with a window field beside it, not
+  fourteen rows.
+- The custom section is the other shape — there the **key** is the row
+  (`CUSTOM_KINDS`: *Type a command*, *Open window*, *Jump to view*), a `+` adds
+  one, and *Type a command* carries the **send box**: write the line, or write
+  and run it (B25). *Execute Macro* is in the chooser and switched off, because
+  there is no macro engine and no `SurfaceAction` for one.
+- The table in force is the **machine's** (`machine.json`), one
+  `MachineChange::SurfaceBinding` per control, one revision for every client
+  (S38). Export and import go through the browser's file dialog and write a
+  **profile file** — the same document `prism_surface::Bindings::parse` reads
+  (B26).
+- `docs/MCU_MAPPING.md` §4.3 keeps the reserved control (SMPTE/Beats) and the
+  permanent set out of the operator's reach.
+
+**The questions to put to the owner** (answers go into this entry, then the
+deliverables and exit criteria are written from them):
+
+1. **What is missing from the vocabulary?** Which action does the owner reach
+   for and not find — pages, a second Clear stage, Blind, a bank by name,
+   *Update*, *Store* with a mode, a view by number?
+2. **One key, more than one meaning?** Should a key do something else while
+   another is held (a shift layer), or in a different view or executor page —
+   and if so, is the layer the *desk's* state or the *show's*?
+3. **Hold or latch?** Is *pressed* enough for every action, or does an action
+   need to know about being held and released (a flash key is the obvious one)?
+4. **Faders, encoders and the jog wheel.** Executor faders are configured per
+   executor today (S45/B15) and the encoders are the programmer's. Should the
+   Controls panel be where those are set as well, so there is one place rather
+   than three?
+5. **What does a key's lamp say?** The LEDs are the surface's own answer today.
+   Should a bound key's lamp follow what it is bound to — lit while its executor
+   runs, while Blind is on, while the line it writes would be accepted?
+6. **What do the scribble strips say** over a bank of custom keys?
+7. **Where does a binding belong?** It is the machine's now — it stays when a
+   show is carried to another hall on a stick. Should a *show* be able to bring
+   its own keys, and what wins when both have something to say?
+8. **Profiles rather than one table?** Named tables in the desk that can be
+   switched (a house table and an operator's), instead of a file exported and
+   imported by hand?
+9. **A second surface.** A second X-Touch, an X-Touch Mini, a MIDI keyboard, a
+   stream-deck-shaped thing, a plain computer keyboard: which of these is real
+   for this venue, and does it need to work **at the same time** as the first?
+10. **The picture.** The panel is a list. Would a drawing of the desk with its
+    keys on it be better, or is the list what an operator actually reads?
+
+**Deliverables** — written once the answers are in, and not before.
+
+**Exit criteria** — the same, plus the two that hold whatever is decided:
+
+- A binding changed in the interface still takes effect **without restarting the
+  daemon**, observed through `--mock-surface` (S38's, unchanged)
+- The shipped profile still **is** the built-in defaults after a round trip
+  through the editor (S22's assertion, unchanged)
+
+---
+
 # Phase 12 — Extended features, once the doors are open
 
 *Everything in Phase 9 that has not run: **S30** 3D viewer, **S31** Web Remote, **S32** PSN / OSC, **S47** timecode, **S50** macros. They are not renumbered — the numbers are identity — and they are not reordered among themselves. What moved is the schedule: the open beta comes first, and what an open beta asks for should choose between these five better than this document can.*
@@ -1430,6 +1507,8 @@ flowchart LR
     S51 & S41 & S42 --> S56 --> S57
     S44 & S27 --> S57
     S54 & S57 --> S58
+    S38 & S58 --> S59
+    S59 --> S30
 ```
 
 **Critical path to a usable console:** S0 → S1 → S2 → S3 → S4 → S7 → S11 → S12 → S16 → S17 → S19 → S21 → S22 → S23 → S25 → S26. *Reached at S26.*
@@ -1473,5 +1552,7 @@ is, is the order the work was planned to make sense in.
 | 23 | **S55** `site` + `deploy` — prismdmx.de and its container | Asked for on 2026-09-07, and it is S42's other half: that session's first deliverable named a presentation site beside the documentation site and shipped the documentation site. A manual index is the right front page for somebody who already knows what this is. Immediately after S41/S42 because it is the same subject and because an **open** beta is a release strangers install — and a stranger arrives at a front page, not at a table of contents |
 | 24 | **S56** core/domain/`prismd`/`ui` — what the open beta sent back | **Done 2026-09-18** — see `PROGRESS.md` §2.53. Chosen on 2026-09-16 over Phase 12, by §8's own rule: the open beta had filed ten issues in two weeks, one of them a blocker. Nine closed; B60 became S57 |
 | 25 | **S57** `ui`/core — the patch window, rebuilt around the library | **Done 2026-09-18** — see `PROGRESS.md` §2.54. Born out of S56 from B60, the owner's eight points about patching, and done as one rebuild because they lean on each other. All ten of the open beta's first reports are now closed |
-| 25a | **S58** core/`prismd`/`ui` — a knob follows the channel that switches it | **Done 2026-09-19** — see `PROGRESS.md` §2.55. B52, the register's last open entry, asked for by the owner before the next release. **The register has no open entry.** Next: the owner's acceptance test on the test rig (`docs/RELEASE_TEST.md`), then the release |
-| 26 | **S30** 3D viewer · **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | Extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author |
+| 25a | **S58** core/`prismd`/`ui` — a knob follows the channel that switches it | **Done 2026-09-19** — see `PROGRESS.md` §2.55. B52, the register's last open entry, asked for by the owner before the next release. **The register has no open entry.** The owner worked through `docs/RELEASE_TEST.md` on the test rig on 2026-09-20 and accepted every point |
+| 25b | **S59** `ui`/`prism-surface`/`prismd` — the Controls panel, the owner's next round | **Next.** Asked for on 2026-09-20, and it **starts with a question round**: the owner has change requests that deliberately did not go into the punch-list patch, and what they are is not written down yet |
+| 25c | **S30** 3D viewer | After S59, by the owner's decision of 2026-09-20: the release waits for the Controls round **and** the viewer. It is Phase 9's entry, unchanged, and the first of the five extended features to run |
+| 26 | **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | The rest of the extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author. **S30 moved ahead of them** (row 25c) |

@@ -110,8 +110,13 @@ ADJ Flat Par QA12 auf **Universe 2** (geht an den Art-Net-Node, dort hängt nich
 - [x] **T-S.5** **Save** (Taste am X-Touch oder `Save`): LED geht aus. Programm schließen (Fenster schließen → läuft im Tray weiter), neu öffnen → alles da. Beenden über das Tray-Symbol.
 - [x] **T-S.6** Nach dem Neustart des Rechners mit angeschlossenem X-Touch: Surface wird gefunden (*Settings* → *Devices*).
 
-## 5. Wenn alles grün ist
+## 5. Ergebnis
 
-Befunde melden, sonst: PR `fix/b52-switching-channels` → `master`, dann Tag
-`v0.9.3` (oder die gewählte Version) — `release.yml` fährt den vollständigen
-Durchlauf mit Windows und Installer.
+**Am 2026-09-20 vom Eigentümer abgenommen** — jeder Punkt abgehakt, kein Befund.
+Die drei Branches sind in `master` gemerged.
+
+**Das Release wartet trotzdem**, auf Wunsch des Eigentümers: vorher kommen die
+Controls-Änderungen (**S59**, beginnt mit einer Fragerunde) und der **3D-Viewer**
+(**S30**). Danach: Version vergeben, Tag setzen — `release.yml` fährt den
+vollständigen Durchlauf mit Windows und Installer. Diese Liste bleibt liegen und
+wird für den nächsten Build um das erweitert, was S59 und S30 bringen.
