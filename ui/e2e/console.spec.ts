@@ -376,11 +376,26 @@ test.describe("the console shell", () => {
     expect(await height()).toBe(resting);
 
     // A line that is a command, and then the question a line can hold.
-    await command(page, "1 thru 3");
-    await command(page, "red at 100");
-    await command(page, 'Store Sequence 1 "Act 1"');
-    await command(page, "Sequence 1");
-    await command(page, "Store Cue 1");
+    //
+    // **Each line is waited for before the next is typed.** A line that ran is
+    // cleared *by the daemon*, so an empty box is the round trip having
+    // happened; typing the next one before that leaves two lines racing, and on
+    // a slow machine the question at the end belonged to the wrong one. This
+    // test measures the canvas, not the console's speed.
+    const ran = async (line: string): Promise<void> => {
+      await command(page, line);
+      await expect(input(page)).toHaveValue("");
+      await expect(page.getByTestId("command-prompt")).toHaveCount(0);
+    };
+    await ran("1 thru 3");
+    await ran("red at 100");
+    // Storing the programmer into a sequence **makes cue 1**, so the store
+    // below meets a cue that is already there and **asks**. The test used to
+    // type a second store into the standing question, which is what made it
+    // flake on a slow machine: the question at the end was not the one the
+    // Escape below was aimed at.
+    await ran('Store Sequence 1 "Act 1"');
+    await ran("Sequence 1");
     await command(page, "Store Cue 1");
     await expect(page.getByTestId("command-prompt")).toBeVisible();
     expect(await height()).toBe(resting);

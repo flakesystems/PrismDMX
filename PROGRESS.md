@@ -7913,6 +7913,15 @@ answers are in the plan. **Read `gh issue list --state open` and
 `docs/ISSUES.md` first** all the same: the register has no open entry today, and
 a new report goes before S59 exactly as B55 went before Phase 12.
 
+**One flake found and fixed, 2026-09-20.** The master run of the closing
+commit went red on `what the line would do never moves the canvas`: the test
+typed a second `Store Cue 1` **into the question the first one had already
+raised** — storing the programmer into a sequence makes cue 1, so the first
+store already asks — and on a slow machine the question the Escape cancelled
+was not the one the assertion then looked for. It now waits for each line to be
+cleared by the daemon before typing the next, and stores once. Four runs in a
+row locally, and the full suite of 51.
+
 **Nothing is waiting on the owner.** The three branches are merged into
 `master`, and the ten GitHub issues (#9, #21, #23–#30) were closed on
 2026-09-20 — each with the commit that fixed it, the session, the tests that
