@@ -87,7 +87,13 @@ Aufgenommen unter **Executors und Wiedergabe**.
 
 ## Aktueller Stand
 
-**11 offene Einträge:** B52, B53, B54, B55, B56, B57, B58, B59, B60, B61, B62.
+**Stand 2026-09-20: keine offenen Einträge.** Die elf, die dieser Lauf zählte —
+B52 bis B62 — sind in S56, S57 und S58 behoben, und die zehn GitHub-Issues
+(#9, #21, #23–#30) sind mit dem Commit, der sie behoben hat, geschlossen. Die
+Korrekturen erscheinen als **0.9.3**.
+
+**Dieser Lauf zählte 11 offene Einträge:** B52, B53, B54, B55, B56, B57, B58,
+B59, B60, B61, B62.
 
 **50 behobene Einträge.** Alle anderen B-Nummern von B1–B51 sowie B53–B62 mit
 Ausnahme der elf oben genannten sind behoben.

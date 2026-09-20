@@ -5222,6 +5222,7 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-09-20 | — | **The next release is `v0.9.3`, and the ten GitHub issues are closed.** The owner named the version when asking for the issues to be closed, each with what fixed it | The heading in both changelogs stays *not yet released* — a version number in it would read as shipped — and the sentence under it names **0.9.3**. Issues #9, #21 and #23–#30 are closed with the commit, the session and the tests that hold each, and with the note that the fix is on `master` and ships in v0.9.3. **No issue is open**, and neither is any entry of `docs/ISSUES.md` |
 | 2026-09-20 | — | **The owner accepted the punch-list build on the test rig and then held the release.** Every point of `docs/RELEASE_TEST.md` is ticked; nothing came back as a new B-number. What the owner wants in the release instead of a quick tag is a **Controls round** — change requests that deliberately did not go into the punch-list patch — and the **3D viewer** | `master` carries S56, S57 and S58 (the three branches merged, fast-forward, no merge commit). **S59** is written into the plan as a session that *starts by asking*, because what the owner wants changed about Controls is not written down and building first would produce the second control editor rather than the wanted one. **S30** is pulled ahead of the other four extended features. The version stays `0.9.2` until the release, and `CHANGELOG.md`'s *Noch nicht veröffentlicht* keeps growing |
 | 2026-09-19 | S58 | **B52 asked whether a key may change while a cue runs, and the owner's answer was: it does not have to.** What an operator misses is the knob's name and its steps; a value filed under a key that moved with the mode would be the model change B52 had been left open for | **The label follows, the key stays.** `AttributeDef::switched` is a table of names and steps per position; the stored value is the channel as it is. And the position is **the cable's** — a cue that sets the mode renames the knob as the programmer does — so the daemon reads it off the frame it already holds, and a client never guesses it |
 | 2026-09-18 | S57 | **Embedding a profile when it is picked (S43, B1) cannot survive a library that is browsed.** The pick embedded every time because the preview could only measure a profile the show carried; clicking through a list of two thousand would leave a profile in the show for every row touched | **The preview measures the library's copy, and the patch embeds it.** `ShowFile::preview_patch` takes the library's profile first for new fixtures and the show's first for a repatch; `Command::PatchFixtures` embeds in the same step as the fixtures. B1's rule — *use the library's copy* — holds, taken at the moment the profile is **used** rather than looked at. Changing a patched fixture's profile still embeds before it repatches, because `PatchFixture` patches from the show's copy |
@@ -7912,10 +7913,12 @@ answers are in the plan. **Read `gh issue list --state open` and
 `docs/ISSUES.md` first** all the same: the register has no open entry today, and
 a new report goes before S59 exactly as B55 went before Phase 12.
 
-**One thing is waiting on the owner, not on a session**: the GitHub issues
-(#9, #21, #23–#30) are still open, though every one of them is fixed and now on
-`master`, and the GitHub issues they fix (#9, #21, #23–#30) are still open.
-Closing them is outward-facing; ask before doing it.
+**Nothing is waiting on the owner.** The three branches are merged into
+`master`, and the ten GitHub issues (#9, #21, #23–#30) were closed on
+2026-09-20 — each with the commit that fixed it, the session, the tests that
+hold it, and the note that it ships in **v0.9.3**, which is not released yet.
+`gh issue list --state open` is empty, and so is the open half of
+`docs/ISSUES.md`. Anything outward-facing still gets asked for first.
 
 **What S58 left that the next session will meet.** A switched slot's name and
 steps come from `AttributeDef::switched` and the daemon's `Delta::SwitchPositions`;
@@ -7997,8 +8000,9 @@ dazugekommen, geht sie vor.
   um** (`crates/prism-core/tests/documentation.rs`).
 - **Die `data-testid`s sind ein Vertrag** mit den Playwright-Tests.
 - **Beide Sprachen** der Handbücher und der Website ziehen mit.
-- **Die Version ist `0.9.2`**, bis ein Release entsteht; `CHANGELOG.md` und
-  `docs/CHANGELOG.en.md` haben einen Abschnitt *Noch nicht veröffentlicht*.
+- **Die Version ist `0.9.2`**, bis ein Release entsteht; was seither dazukam,
+  steht in `CHANGELOG.md` und `docs/CHANGELOG.en.md` unter *Noch nicht
+  veröffentlicht* und **erscheint als `0.9.3`**.
 - **Lokal vollständig testen, GitHub Actions minimal** (`CLAUDE.md`, *CI
   Policy*): jeder Push fährt nur Linux; der vollständige Durchlauf mit Windows
   und Installer nur bei einem Release. Keinen Windows- oder schweren Job in

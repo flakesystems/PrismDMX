@@ -22,8 +22,13 @@ Alle Versionen bisher sind **Vorabversionen**.
 
 ## Noch nicht veröffentlicht
 
+**Diese Änderungen erscheinen als 0.9.3.** Die Version steht noch nicht auf dem
+Programm — der Eigentümer hält das Release zurück, bis die Controls-Änderungen
+(S59) und der 3D-Viewer (S30) mit drin sind.
+
 Was die offene Beta in den ersten zwei Wochen gemeldet hat — zehn Meldungen,
-alle zehn behoben (S56 und S57):
+alle zehn behoben (S56 und S57), dazu der letzte offene Eintrag des Registers
+(B52, S58). **Alle zehn GitHub-Issues sind geschlossen** (#9, #21, #23–#30):
 
 - **Controls:** eine Taste auf *Fenster wählen* oder *Befehl schreiben* zu
   binden trennte den Client bei jedem Öffnen des Menüs. Behoben (B55).

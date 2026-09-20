@@ -24,8 +24,13 @@ Every version so far is a **pre-release**.
 
 ## Not yet released
 
+**These changes ship as 0.9.3.** The version is not on the program yet — the
+owner is holding the release until the Controls round (S59) and the 3D viewer
+(S30) are in it.
+
 What the open beta reported in its first two weeks — ten reports, all ten
-fixed (S56 and S57):
+fixed (S56 and S57), and the register's last open entry with them (B52, S58).
+**All ten GitHub issues are closed** (#9, #21, #23–#30):
 
 - **Controls:** binding a key to *choose a window* or *write a command*
   disconnected the client every time the menu was opened. Fixed (B55).
