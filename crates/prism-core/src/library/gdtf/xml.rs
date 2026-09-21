@@ -38,9 +38,15 @@ pub struct Node {
     pub name: String,
     /// Its attributes, in the order they were written.
     pub attributes: Vec<(String, String)>,
-    /// Its child elements. Text content is not kept: GDTF states everything in
-    /// attributes and this reader has no use for the one exception.
+    /// Its child elements.
     pub children: Vec<Node>,
+    /// Its own text content, trimmed, empty where it has none.
+    ///
+    /// GDTF states everything in attributes and never needs this. **MVR does
+    /// not** — S62: `GDTFSpec`, `GDTFMode`, `FixtureID`, `Address` and `Matrix`
+    /// are all element *text* there, so a reader that threw text away could
+    /// read a plan's shape and none of its content.
+    pub text: String,
 }
 
 impl Node {
@@ -86,6 +92,14 @@ impl Node {
     pub fn children_named<'a>(&'a self, name: &'a str) -> impl Iterator<Item = &'a Self> {
         self.children.iter().filter(move |child| child.name == name)
     }
+
+    /// The trimmed text of the first child called `name`, or `""`.
+    ///
+    /// What reading MVR is mostly made of — S62. See [`Node::text`].
+    #[must_use]
+    pub fn child_text(&self, name: &str) -> &str {
+        self.child(name).map_or("", |child| child.text.trim())
+    }
 }
 
 /// Reads a whole document into one [`Node`], which is its root element.
@@ -125,6 +139,25 @@ pub fn parse(source: &[u8]) -> Option<Node> {
             Ok(Event::End(_)) => {
                 let node = stack.pop()?;
                 close(&mut stack, &mut root, node);
+            }
+            // `trim_text` is on, so an element laid out over several lines
+            // yields nothing here and only real content arrives. Appended
+            // rather than assigned: a text node split by a comment or an
+            // entity arrives in pieces.
+            Ok(Event::Text(text)) => {
+                if let Some(open) = stack.last_mut() {
+                    // Decoded and then unescaped, the same two steps in the
+                    // same order an attribute's value goes through above: a
+                    // fixture file named `Mac&#38;Aura.gdtf` names
+                    // `Mac&Aura.gdtf`.
+                    if let Ok(unescaped) = text.decode().map_err(|_| ()).and_then(|decoded| {
+                        quick_xml::escape::unescape(decoded.as_ref())
+                            .map(std::borrow::Cow::into_owned)
+                            .map_err(|_| ())
+                    }) {
+                        open.text.push_str(&unescaped);
+                    }
+                }
             }
             Ok(Event::Eof) => break,
             Ok(_) => {}
@@ -178,6 +211,7 @@ fn element(tag: &quick_xml::events::BytesStart<'_>) -> Option<Node> {
         name,
         attributes,
         children: Vec::new(),
+        text: String::new(),
     })
 }
 

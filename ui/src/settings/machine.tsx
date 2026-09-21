@@ -57,7 +57,7 @@ import type { ExitAction, LogLevel, MachineChange, MachineSettings } from "../bi
 import type { AutostartReport } from "../shell/bridge";
 import { autostartApply, autostartState, choosePath, inShell } from "../shell/bridge";
 import { useDesk, useSend } from "../store/hooks";
-import type { DeskState } from "../store/desk";
+import type { DeskState, LibraryUpdateState } from "../store/desk";
 import {
   EXIT_ACTIONS,
   LOG_LEVELS,
@@ -65,11 +65,15 @@ import {
   exitText,
   heldNote,
   isHeld,
+  libraryUpdateText,
   isLoopback,
   listenerText,
 } from "./settings";
 
 const selectMachine = (state: DeskState): MachineSettings | null => state.machine;
+
+/** What a running library update has done — S62. */
+const selectLibraryUpdate = (state: DeskState): LibraryUpdateState | null => state.libraryUpdate;
 
 /** The whole panel. */
 /**
@@ -101,7 +105,143 @@ export function MachinePanel() {
       <Identity machine={machine} onChange={change} />
       <Network machine={machine} onChange={change} />
       <Behaviour machine={machine} onChange={change} />
+      <LibraryAccount machine={machine} />
     </div>
+  );
+}
+
+/**
+ * Signing in to GDTF Share, and taking the published library down — **S62**.
+ *
+ * # Why there is a login in a lighting desk at all
+ *
+ * GDTF Share has **no anonymous download**, and this desk may not redistribute
+ * what it holds (decision **D12**, `docs/FIXTURE_LIBRARY.md` §2). So the
+ * operator signs in with *their own* account and the profiles land in *their
+ * own* fixture folder. Nothing downloaded here is ever packed into an
+ * installer.
+ *
+ * # Nobody has to
+ *
+ * The desk ships with the Open Fixture Library corpus and reads `.gdtf` and
+ * `.mvr` from disk, so an operator who will not make an account still has a
+ * library and still gets a venue's own rig plan in. That is why this panel is
+ * a section and not a wall: it is the *extra*, not the door.
+ *
+ * # The password
+ *
+ * It is typed, sent once and not kept — unless *remember me* is ticked, and
+ * then it goes to the machine's own secret store and never to `machine.json`
+ * (`crates/prismd/src/secrets.rs`). What comes back over the wire is the
+ * account **name** only, which is what {@link MachineSettings.libraryAccount}
+ * is; there is no delta anywhere that carries a password.
+ */
+function LibraryAccount({ machine }: { readonly machine: MachineSettings }) {
+  const send = useSend();
+  const update = useDesk(selectLibraryUpdate);
+  const [user, setUser] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
+  const typedUser = user ?? machine.libraryAccount ?? "";
+  const running = update !== null && !update.finished;
+  const usable = typedUser.trim() !== "" && password !== "" && !running;
+
+  return (
+    <section className="settings-group" data-testid="machine-library-account">
+      <h3>GDTF Share</h3>
+      <p className="settings-reading" data-testid="library-account-state">
+        {machine.libraryAccount === null
+          ? "No account is kept on this machine."
+          : `Kept on this machine: ${machine.libraryAccount}`}
+      </p>
+      <form
+        data-testid="library-account-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!usable) {
+            return;
+          }
+          send({
+            t: "UpdateLibrary",
+            user: typedUser.trim(),
+            password,
+            remember,
+          });
+          // Out of the browser's memory the moment it has been sent. The box
+          // is a box, not a store.
+          setPassword("");
+        }}
+      >
+        <label>
+          User name
+          <input
+            data-testid="library-account-user"
+            autoComplete="username"
+            value={typedUser}
+            disabled={running}
+            onChange={(event) => {
+              setUser(event.target.value);
+            }}
+          />
+        </label>
+        <label>
+          Password
+          <input
+            data-testid="library-account-password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            disabled={running}
+            onChange={(event) => {
+              setPassword(event.target.value);
+            }}
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            data-testid="library-account-remember"
+            checked={remember}
+            disabled={running}
+            onChange={(event) => {
+              setRemember(event.target.checked);
+            }}
+          />
+          Keep this account on this machine
+        </label>
+        <button type="submit" data-testid="library-account-update" disabled={!usable}>
+          {running ? "Updating\u2026" : "Update the library"}
+        </button>
+        {machine.libraryAccount === null ? null : (
+          <button
+            type="button"
+            data-testid="library-account-forget"
+            disabled={running}
+            onClick={() => {
+              send({ t: "ForgetLibraryAccount" });
+            }}
+          >
+            Forget this account
+          </button>
+        )}
+      </form>
+      {update === null ? null : (
+        <p className="settings-reading" data-testid="library-update-progress">
+          {libraryUpdateText(update)}
+        </p>
+      )}
+      <p className="settings-hint">
+        The profiles are downloaded with <em>your</em> account and written into this
+        desk&rsquo;s fixture folder. They are not shared any further and never go into an
+        installer. A download of the whole published library takes several minutes; the desk
+        keeps running lights while it does.
+      </p>
+      <p className="settings-hint">
+        You do not need an account. The desk ships with the Open Fixture Library, reads
+        <code>.gdtf</code> files from the fixture folder, and takes a venue&rsquo;s own rig plan
+        from an <code>.mvr</code> in the patch window.
+      </p>
+    </section>
   );
 }
 

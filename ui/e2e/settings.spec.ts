@@ -391,6 +391,55 @@ test("a token is made by the daemon, and a flag greys the row it holds", async (
 });
 
 /**
+ * **S62 — the GDTF Share section, in a browser, against a real daemon.**
+ *
+ * What this can assert and what it deliberately cannot. **It never presses
+ * *Update the library***: that would open a session with a service on the
+ * internet, and `CLAUDE.md` says a test may not need a device — a test that
+ * needs the network is the same promise broken a different way, and this one
+ * would also be hammering somebody else's server. What it does assert is
+ * everything up to that press, which is where the mistakes live: the section is
+ * drawn, the account the daemon reports comes off a **real wire** rather than a
+ * fixture, half an account is refused before a command is sent, and nothing
+ * offers to forget an account that is not there.
+ *
+ * What a real download does is `crates/prismd/src/share/tests.rs`, over a
+ * `Share` that answers from memory. The one piece nothing covers is the three
+ * URLs and the cookie jar — `docs/FIXTURE_LIBRARY.md` §7 carries that as open,
+ * and `docs/RELEASE_TEST_0.9.3.md` is where a person signs in for real.
+ */
+test("the GDTF Share section keeps no account and sends nothing for half a login", async ({
+  page,
+}) => {
+  const dataDir = await desk(page, PORT + 8);
+  await page.getByTestId("settings-tab-this-machine").click();
+
+  // A fresh desk keeps nothing, and there is nothing to take out.
+  await expect(page.getByTestId("library-account-state")).toContainText("No account");
+  await expect(page.getByTestId("library-account-forget")).toHaveCount(0);
+  // Nothing is running, so there is no progress row at all.
+  await expect(page.getByTestId("library-update-progress")).toHaveCount(0);
+
+  // **Half an account is not an account.** The button says so rather than
+  // sending one for the service to refuse a minute later.
+  await expect(page.getByTestId("library-account-update")).toBeDisabled();
+  await page.getByTestId("library-account-user").fill("somebody");
+  await expect(page.getByTestId("library-account-update")).toBeDisabled();
+  await page.getByTestId("library-account-password").fill("a secret");
+  await expect(page.getByTestId("library-account-update")).toBeEnabled();
+
+  // The password box is a password box, which is the one thing about this
+  // form a person looking over a shoulder in a venue cares about.
+  await expect(page.getByTestId("library-account-password")).toHaveAttribute("type", "password");
+
+  // And the desk says out loud that none of this is required.
+  await expect(page.getByTestId("machine-library-account")).toContainText(
+    "You do not need an account",
+  );
+  await done(dataDir);
+});
+
+/**
  * **Punch-list B5, and the reason it needed a browser to see.**
  *
  * The owner reported that some notices cannot be closed, and named the one that

@@ -312,6 +312,18 @@ würde, und einer Taste, die es dorthin setzt.
 Ein Klick auf eine Zeile des Patches öffnet dasselbe Fenster für dieses Fixture:
 Modus, Nummer, Name oder Adresse ändern, oder es mit **Unpatch** entfernen.
 
+**Eine einzelne Datei: *Import profile (GDTF)*.** Die `.gdtf` von der
+Herstellerseite oder vom Stick. Das Pult liest sie, legt sie in Ihren eigenen
+Fixture-Ordner und bietet sie sofort im Auswahlfeld an — gepatcht wird nichts.
+Was keine lesbare Fixture-Datei ist, wird abgelehnt und gar nicht erst abgelegt.
+
+**Ein ganzes Rig auf einmal: *Import rig (MVR)*.** Hat Ihnen Ihr Planer eine
+`.mvr` geschickt, nimmt dieser Knopf sie in die Show: alle Profile daraus und
+jedes geplante Fixture, mit Nummer und Adresse, **in einem Schritt, den ein Oops
+ganz zurücknimmt**. Was schon gepatcht ist, bleibt unberührt — ein geplantes
+Fixture, dessen Nummer Ihre Show schon benutzt, bekommt die nächste freie. Das
+Pult sagt danach, wie viele Fixtures ankamen und was es übersprungen hat.
+
 **3. Nachsehen, ob es ankommt.** *DMX Sheet* öffnen, das Fixture auf voll
 ziehen, hinsehen. Wenn dort nichts passiert, liegt es an den Ausgängen und nicht
 am Patch.
@@ -331,6 +343,7 @@ Das Datenverzeichnis rührt kein Installationsprogramm an.
 | Wohin | Wofür |
 |---|---|
 | `fixtures/irgendwas.gdtf` | Eine `.gdtf`-Datei vom Hersteller oder von [gdtf-share.com](https://gdtf-share.com). **Der Name ist egal**: die Datei sagt, welches Fixture sie ist, und wenn die Bibliothek dieses Fixture schon hat, ersetzt Ihres es |
+| `fixtures/unser-rig.mvr` | Die **Rig-Datei vom Planer**. Eine `.mvr` enthält die Fixture-Profile genau Ihrer Produktion — das Pult nimmt sie alle in die Bibliothek. Kein Konto, kein Internet. Wer damit auch **patchen** will, nimmt den Knopf *Import rig (MVR)* im Patch-Fenster |
 | `fixtures/meine-lampe.json` | Eine Lampe, für die es überhaupt kein Profil gibt, von Hand im JSON-Format der Open Fixture Library geschrieben — weit leichter zu schreiben als eine GDTF. Sie steht unter *Custom* neben allem anderen im Auswahlfeld |
 | `fixtures/<hersteller>/<fixture>.json` | Eine **Korrektur** an einem mitgelieferten JSON-Profil. Gleicher Herstellerordner, gleicher Dateiname wie in der Bibliothek — Ihres ersetzt es |
 
@@ -339,6 +352,35 @@ Spalte *Format* sagt, welche der beiden Arten jedes ist. Und sobald Sie damit
 gepatcht haben, wird das Profil **in die Show kopiert**: eine `.prism`-Datei ist
 in sich vollständig und öffnet auf einem Pult, das Ihr Verzeichnis nie gesehen
 hat, genauso.
+
+### Die GDTF-Bibliothek mit dem eigenen Konto herunterladen
+
+Unter *Settings → This machine → **GDTF Share*** melden Sie sich mit einem
+eigenen Konto bei [gdtf-share.com](https://gdtf-share.com) an und holen die
+ganze veröffentlichte Bibliothek in genau denselben Ordner `fixtures/`. Alles,
+was das Pult lädt, lädt es **als Sie**, zu den Bedingungen, die Sie dort
+akzeptiert haben, und es geht nicht weiter: nichts davon wird weitergegeben und
+nichts davon steckt in irgendeinem Installationsprogramm.
+
+- **Sie brauchen ein eigenes Konto.** GDTF Share hat keinen anonymen Download.
+  Eines anzulegen ist kostenlos.
+- **Setzen Sie den Haken *Keep this account on this machine***, legt das Pult
+  Benutzernamen und Passwort in die **Anmeldeinformationsverwaltung von
+  Windows** — nie in eine Einstellungsdatei. *Forget this account* nimmt beides
+  wieder heraus. Auf Linux und auf dem Raspberry Pi gibt es keinen solchen
+  Speicher; dort sagt das Pult das und fragt stattdessen jedes Mal nach dem
+  Passwort.
+- **Es dauert mehrere Minuten**, es sind Tausende von Fixtures. Eine Zeile unter
+  dem Formular zählt mit, das Pult spielt während des Ladens weiter Licht, und
+  am Ende steht ein Satz, wie viele angekommen sind. Das Fenster zu schließen
+  hält es nicht an.
+- Ein Profil, das sich nicht laden lässt oder das geladen wird und keine lesbare
+  Fixture ist, wird **gezählt und übersprungen** — ein schlechter Eintrag kostet
+  Sie nicht den Rest.
+
+**Nötig ist das alles nicht.** Das Pult bringt die Open Fixture Library mit,
+liest eine `.gdtf`, die Sie selbst in den Ordner legen, und nimmt die `.mvr`
+eines Planers ganz. Das Konto ist die Zugabe, nicht die Tür.
 
 ---
 

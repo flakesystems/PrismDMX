@@ -496,6 +496,16 @@ fn command_group_4() -> BoxedStrategy<crate::Command> {
         any::<String>().prop_map(|path| C::NewShow { path }),
         any::<String>().prop_map(|path| C::ExportShow { path }),
         any::<String>().prop_map(|path| C::ImportShow { path }),
+        any::<String>().prop_map(|path| C::ImportRig { path }),
+        any::<String>().prop_map(|path| C::ImportProfile { path }),
+        (any::<String>(), any::<String>(), any::<bool>()).prop_map(|(user, password, remember)| {
+            C::UpdateLibrary {
+                user,
+                password,
+                remember,
+            }
+        }),
+        Just(C::ForgetLibraryAccount),
         any::<ViewId>().prop_map(|view_id| C::SelectView { view_id }),
         (any::<ViewId>(), any::<String>())
             .prop_map(|(view_id, name)| C::StoreView { view_id, name }),

@@ -442,6 +442,47 @@ dieses Pult kein Wort hat, wird ein `Raw`-Knopf und kein Loch**, und **ein Modus
 ist Break 1** — ein Fixture mit zwei DMX-Starts sind zwei Adressen, und dieses
 Pult patcht eine.
 
+### Vier Wege, auf denen ein Profil hereinkommt, und wo die Nähte sitzen — S62
+
+Ein Format zu lesen ist das eine; **eine Datei auf ein Pult zu bekommen** das
+andere. Seit S62 gibt es dafür vier Wege, jeder mit seinem eigenen Ort im Baum:
+
+| Wie | Was läuft | Wo |
+|---|---|---|
+| Datei in `fixtures/` legen | der Start-Lesevorgang | `prismd::daemon::load_library` |
+| *Import profile (GDTF)* | Datei kopieren, dann die **ganze Bibliothek neu lesen** | `Core::import_profile` |
+| *Import rig (MVR)* | Archiv lesen, einbetten, patchen, **einen** Oops-Schritt ablegen | `ShowFile::import_rig` |
+| *Settings → GDTF Share* | anmelden, auflisten, laden, schreiben, berichten | `prismd::share::update` |
+
+Drei Dinge daran sind Entscheidungen und keine Zufälle.
+
+**Ein Import liest die Bibliothek neu, statt etwas hinzuzufügen.** S62 hatte ein
+handgepflegtes `adopt_gdtf` geschrieben, das eine von drei parallelen Strukturen
+nachführte und danach neu sortierte — es hätte die Gruppierung des Auswahlfelds
+zerstört. Es gibt **einen** Weg in die Bibliothek, und das ist der Startpfad;
+ein gerade kopiertes Profil ist ein Profil, das der nächste Lesevorgang findet.
+Die Bibliothek wird seit S44 *abgefragt* statt gespiegelt, also braucht es auch
+kein Delta.
+
+**Das Netz liegt hinter einem Trait.** `CLAUDE.md` sagt, ein Test darf kein Gerät
+brauchen, und ein Test, der das Internet braucht, ist dieselbe Zusage auf andere
+Weise gebrochen — hier erst recht, denn der Dienst hat keinen anonymen Zugang,
+es gäbe also gar nichts, womit sich ein CI-Job anmelden könnte. Also ist
+`prismd::share::Share` die Naht: `Https` sind drei URLs und ein Cookie-Jar und
+ist der eine Teil, den kein Test abdeckt, und `update` — anmelden, auflisten,
+laden, prüfen, zählen, sagen was war — wird von einem Fake aus dem Speicher
+getrieben. `prismd::secrets::Store` hat dieselbe Form für die
+Anmeldeinformationsverwaltung.
+
+**Ein Passwort erreicht `prismd` und hört dort auf.** Es steht auf
+`Command::UpdateLibrary` und sonst nirgends: `prism-core` sieht nie eines (die
+beiden Bibliothekskonto-Kommandos werden ganz oben in `Core::apply` abgefangen,
+vor jedem Applier), `machine.json` hält nie eines, und
+`MachineSettings::library_account` ist der Konto**name**, damit ein Panel *auf
+diesem Rechner behalten* sagen kann. `docs/FIXTURE_LIBRARY.md` trägt die
+Lizenzlage, an der das alles hängt; Entscheidung **D12** ist die Kurzfassung:
+dieses Pult verteilt kein GDTF weiter.
+
 ### Und dann: ist ein neuer `AttributeType` wirklich die Antwort?
 
 Meistens lautet die Antwort **nicht** „ein neuer `AttributeType`". Lesen Sie in

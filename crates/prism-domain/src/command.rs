@@ -1228,6 +1228,58 @@ pub enum Command {
         /// The file to read.
         path: String,
     },
+    /// Take a venue's rig plan into the show — **S62**.
+    ///
+    /// An `.mvr` carries the profiles of a production *and* the plan: which
+    /// fixture, in which mode, at which address, hanging where. This **adds**
+    /// that rig to the open show, in one step an Oops takes back whole, and
+    /// touches nothing that is already patched.
+    ///
+    /// Unlike [`Self::ImportShow`] it does **not** replace the show: a plan is
+    /// a rig, not a document. A fixture of the plan whose profile the archive
+    /// did not carry, or that the plan left unaddressed, is skipped and
+    /// counted; a fixture number the show is already using is passed over for
+    /// the next free one, because a plan's numbering is its planner's opinion
+    /// and the open show's is the operator's.
+    ImportRig {
+        /// The `.mvr` to read.
+        path: String,
+    },
+    /// Take one fixture profile into this desk's library — **S62**.
+    ///
+    /// A `.gdtf` from a manufacturer's website or a stick. The file is **copied
+    /// into the venue's own fixture folder**, so it is there after a restart
+    /// exactly as a hand-copied one would be, and it wins its keys against the
+    /// installed library (B43).
+    ///
+    /// It changes the **library** and not the show: nothing is patched, and
+    /// there is nothing to undo. A profile only reaches a show when a fixture
+    /// is patched with it.
+    ImportProfile {
+        /// The `.gdtf` to read.
+        path: String,
+    },
+    /// Take the published GDTF library under the operator's own account —
+    /// **S62**.
+    ///
+    /// GDTF Share has no anonymous access, so this is the operator signing in
+    /// as themselves: the files land in **their** fixture folder, under the
+    /// terms they accepted when they made the account. This desk redistributes
+    /// nothing — decision **D12**, and `docs/FIXTURE_LIBRARY.md` §2.
+    ///
+    /// It runs for minutes and reports through [`crate::Delta::LibraryUpdate`].
+    UpdateLibrary {
+        /// The account name.
+        user: String,
+        /// Its password. **Never written to `machine.json`**: with `remember`
+        /// it goes to the operating system's own secret store and nowhere
+        /// else, and without it, nowhere at all.
+        password: String,
+        /// Whether to keep the account for next time.
+        remember: bool,
+    },
+    /// Take the remembered GDTF Share account out of the secret store — S62.
+    ForgetLibraryAccount,
     /// Switch the canvas to a stored view.
     SelectView {
         /// The view to activate.
@@ -1794,6 +1846,10 @@ impl Command {
                 | Self::NewShow { .. }
                 | Self::ExportShow { .. }
                 | Self::ImportShow { .. }
+                | Self::ImportRig { .. }
+                | Self::ImportProfile { .. }
+                | Self::UpdateLibrary { .. }
+                | Self::ForgetLibraryAccount
                 // S29's, and the plainest case on this list: there is nothing
                 // to take back, and there would be nobody left to read the
                 // entry.

@@ -132,8 +132,9 @@ funktioniert schon:** `release.yml` installiert den Corpus nach
 per Tag gebauter Installer trägt also **634 Fixtures ohne Konto und ohne Netz**
 — nur eben ohne Gobo-Bilder, Modelle und Beam-Geometrie.
 
-**Diese Zusage steht.** Wenn der In-App-Login kommt, wird OFL nicht abgelöst: ein
-Pult ohne Konto muss eine brauchbare Bibliothek haben.
+**Diese Zusage steht**, und der In-App-Login aus S62 hat sie nicht abgelöst: ein
+Pult ohne Konto muss eine brauchbare Bibliothek haben, und hat sie. Der Login
+ist ein Abschnitt in den Einstellungen, keine Tür.
 
 ---
 
@@ -142,9 +143,9 @@ Pult ohne Konto muss eine brauchbare Bibliothek haben.
 | | Konto? | Netz? | Status |
 |---|---|---|---|
 | **OFL im Installer** | nein | nein | **da** — `release.yml` + `fetch-ofl` |
-| **Eigene Datei im Datenverzeichnis** | nein | nein | **da** — `.gdtf` oder `.json` in `fixtures\`, gewinnt gegen die installierte (B43) |
-| **MVR-Import** | nein | nein | **geplant, S62** |
-| **In-App-Login zu GDTF Share** | ja | ja | **geplant, S62** |
+| **Eigene Datei im Datenverzeichnis** | nein | nein | **da** — `.gdtf` oder `.json` in `fixtures\`, gewinnt gegen die installierte (B43); oder der Knopf *Import profile (GDTF)*, der die Datei genau dorthin kopiert |
+| **MVR-Import** | nein | nein | **da** — Knopf *Import rig (MVR)* im Patch-Fenster, und eine `.mvr` im eigenen Ordner füllt auch ohne ihn die Bibliothek |
+| **In-App-Login zu GDTF Share** | ja | ja | **da** — *Settings → This machine → GDTF Share*; ungetestet gegen den echten Dienst, siehe §3 |
 
 Dazu der Pfad in *Settings → This machine → Fixture library*, mit dem ein
 Betreiber auf ein Netzlaufwerk oder einen Stick zeigen kann.
@@ -159,6 +160,32 @@ bereits, sie gehört zu seiner Produktion.
 
 Und der Leser dafür steht schon: `prism_core::library::zip` aus S61 liest das
 Containerformat, `library::gdtf` liest, was darin liegt.
+
+**Der erste Teil ist gebaut** (`prism_core::library::mvr`): eine `.mvr` in
+`%APPDATA%\PrismDMX\fixtures\` wird beim Start gelesen wie eine `.gdtf` —
+jedes Profil darin landet in der Bibliothek, unter dem Schlüssel, den das
+**Profil** nennt, und gewinnt als eigenes gegen die installierte Bibliothek
+(B43). Ein Fixture, das zweimal ankommt — einmal im Plan, einmal einzeln —, ist
+**eine** Zeile.
+
+**Und der Patch kommt mit** — die Entscheidung des Eigentümers vom 2026-09-21.
+`Command::ImportRig` nimmt eine `.mvr` in die geöffnete Show: jedes Profil wird
+eingebettet, jedes geplante Fixture gepatcht, **in einem Schritt, den ein Oops
+ganz zurücknimmt** (die Regel aus S57, über eine Datei).
+
+Drei Regeln, die dabei entschieden wurden:
+
+- **Es wird hinzugefügt, nicht ersetzt.** Ein Fixture, das die Show schon hat,
+  behält seine Nummer, seine Adresse und sein Profil. Das geplante Fixture
+  bekommt die nächste freie Nummer und wird als *umnummeriert* gezählt. Die
+  Nummerierung des Planers trifft auf die des Betreibers, und der Betreiber
+  gewinnt.
+- **Unvollständiges wird gezählt, nicht geraten.** Ein geplantes Fixture ohne
+  Profil im Archiv, ohne Adresse, oder das nicht in sein Universe passt, wird
+  übersprungen und gezählt.
+- **Was passiert ist, wird gesagt.** Der Daemon schickt eine Notice, die auch
+  nennt, was *nicht* ging — ein Import, der elf von zwanzig Fixtures gepatcht
+  hat, muss das sagen.
 
 ---
 
@@ -185,15 +212,38 @@ Containerformat, `library::gdtf` liest, was darin liegt.
 
 ---
 
-## 7. Was als Nächstes gebaut wird — S62
+## 7. Was S62 gebaut hat, und was daran offen bleibt
 
-`IMPLEMENTATION_PLAN.md` trägt den Eintrag. In der Reihenfolge des Nutzens:
+`IMPLEMENTATION_PLAN.md` trägt den Eintrag. Alle vier Punkte stehen:
 
-1. **MVR-Import** — die Rig-Datei vom Planer, ohne Konto und ohne Netz.
-2. **`.gdtf`-Import** — die einzelne Datei von der Herstellerseite, über den
-   Dateidialog statt über einen Ordner in `%APPDATA%`.
-3. **In-App-Login** — optional, lädt unter dem eigenen Konto des Betreibers ins
-   Datenverzeichnis.
+1. ~~**MVR-Import**~~ — **fertig.** Der Leser (`library::mvr`), der Import mit
+   Patch (`ShowFile::import_rig`) und der Knopf im Patch-Fenster.
+2. ~~**`.gdtf`-Import**~~ — **fertig.** `Command::ImportProfile` kopiert die
+   einzelne Datei von der Herstellerseite über den Dateidialog nach
+   `fixtures\`, liest sie **vorher** und weigert sich, etwas abzulegen, das
+   keine Fixture ist.
+3. ~~**In-App-Login**~~ — **fertig.** *Settings → This machine → GDTF Share*:
+   Benutzername, Passwort, ein Haken *auf diesem Rechner behalten*, eine
+   Fortschrittszeile. Der Download läuft in einem eigenen Thread, das Pult
+   spielt weiter, und `Delta::LibraryUpdate` sagt, wie weit er ist.
 4. **OFL bleibt** die Grundausstattung im Installer.
 
-Nicht geplant: bündeln. Siehe §2.
+Nicht geplant: bündeln. Siehe §2 und Entscheidung **D12**.
+
+### Die zwei offenen Hälften
+
+- **Der echte Dienst ist ungetestet.** Der Entwicklungscontainer erreicht
+  `gdtf-share.com` nicht, und `CLAUDE.md` sagt, dass ein Test kein Gerät —
+  und damit auch kein Netz — brauchen darf. Was geprüft ist, ist alles, was
+  *entscheidet*: `prismd::share::update` gegen ein `Share` aus dem Speicher,
+  der Antwortleser `parse_list` gegen echten Antworttext, und der ganze Weg
+  Kommando → Thread → Fortschritt → Delta → Browser. Was **nicht** geprüft
+  ist, sind die drei URLs und der Cookie-Jar. Der erste echte Login gehört auf
+  die Liste in `docs/RELEASE_TEST_0.9.3.md`.
+- **Passwörter merken geht nur auf Windows.** `crates/prismd/src/secrets.rs`
+  nutzt den Windows-Anmeldeinformationsmanager. Auf Linux und dem Raspberry Pi
+  hat ein Pult im Rack keine angemeldete Desktop-Sitzung, die einen Keyring
+  aufschließen könnte, und ein stiller Rückfall auf eine Datei wäre genau der
+  Klartext, den dieses Modul vermeiden soll. Dort wird das Merken **in Worten
+  abgelehnt** und der Betreiber tippt sein Passwort beim Aktualisieren — was
+  funktioniert.

@@ -543,6 +543,17 @@ export function readDelta(value: unknown, path: string): Delta {
         t: "SwitchPositions",
         positions: readSwitchStates(field(record, "positions"), `${path}.positions`),
       };
+    // S62. How far an update of the fixture library has got. `total` is nought
+    // until the service has answered with a list, which is what a progress row
+    // draws as *starting*; `message` is empty until it has stopped.
+    case "LibraryUpdate":
+      return {
+        t: "LibraryUpdate",
+        done: asInteger(field(record, "done"), `${path}.done`),
+        total: asInteger(field(record, "total"), `${path}.total`),
+        finished: asBoolean(field(record, "finished"), `${path}.finished`),
+        message: asString(field(record, "message"), `${path}.message`),
+      };
     default:
       throw new ProtocolFault(`${path}.t`, `a delta this build knows, not ${JSON.stringify(tag)}`);
   }
@@ -1360,6 +1371,13 @@ function readMachineSettings(value: unknown, path: string): MachineSettings {
     autostart: asBoolean(field(record, "autostart"), `${path}.autostart`),
     fixtureLibrary: readOptionalString(field(record, "fixtureLibrary"), `${path}.fixtureLibrary`),
     surfaceProfile: readOptionalString(field(record, "surfaceProfile"), `${path}.surfaceProfile`),
+    // **S62, and the name only** — the password lives in the machine's own
+    // secret store and never travels. A daemon before S62 has no such field,
+    // and `null` is the truth about it: nobody is signed in there.
+    libraryAccount:
+      field(record, "libraryAccount") === undefined
+        ? null
+        : readOptionalString(field(record, "libraryAccount"), `${path}.libraryAccount`),
     // **A daemon before S59 has no wheel setting**, and the honest answer for
     // one is the curve unchanged rather than a wheel that does nothing — which
     // is what a missing field read as nought would draw in the box.
@@ -1395,6 +1413,7 @@ const NO_MACHINE: MachineSettings = {
   autostart: false,
   fixtureLibrary: null,
   surfaceProfile: null,
+  libraryAccount: null,
   overrides: [],
 };
 

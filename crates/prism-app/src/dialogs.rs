@@ -56,17 +56,23 @@ pub enum PathKind {
     FixtureLibrary,
     /// A surface binding profile to read.
     SurfaceProfile,
+    /// A venue's rig plan to take into the show — **S62**.
+    ImportRig,
+    /// One fixture profile to take into the library — **S62**.
+    ImportProfile,
 }
 
 impl PathKind {
     /// Every kind, so a test can walk them and the caller can list them.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::OpenShow,
         Self::SaveShowAs,
         Self::NewShow,
         Self::ExportShow,
         Self::ImportShow,
         Self::FixtureLibrary,
+        Self::ImportRig,
+        Self::ImportProfile,
         Self::SurfaceProfile,
     ];
 }
@@ -179,6 +185,39 @@ pub const fn chooser(kind: PathKind) -> Chooser {
             filters: &[],
             suggested: None,
         },
+        // An `.mvr` is what a planner sends, and `Every file` is beside it
+        // because an operator who was sent one under another extension should
+        // not have to rename it to find out this desk would have read it.
+        PathKind::ImportRig => Chooser {
+            title: "Import a rig plan (MVR)",
+            mode: Mode::OpenFile,
+            filters: &[
+                Filter {
+                    name: "Rig plan",
+                    extensions: &["mvr"],
+                },
+                Filter {
+                    name: "Every file",
+                    extensions: &["*"],
+                },
+            ],
+            suggested: None,
+        },
+        PathKind::ImportProfile => Chooser {
+            title: "Import a fixture profile (GDTF)",
+            mode: Mode::OpenFile,
+            filters: &[
+                Filter {
+                    name: "Fixture profile",
+                    extensions: &["gdtf"],
+                },
+                Filter {
+                    name: "Every file",
+                    extensions: &["*"],
+                },
+            ],
+            suggested: None,
+        },
         PathKind::SurfaceProfile => Chooser {
             title: "Open a surface binding profile",
             mode: Mode::OpenFile,
@@ -287,6 +326,8 @@ mod tests {
                 "\"ExportShow\"",
                 "\"ImportShow\"",
                 "\"FixtureLibrary\"",
+                "\"ImportRig\"",
+                "\"ImportProfile\"",
                 "\"SurfaceProfile\"",
             ]
         );

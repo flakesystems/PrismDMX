@@ -62,9 +62,9 @@
 //! table for one either, nor for the programmer or the journal.
 
 use prism_domain::{
-    AttributeKey, ClearStage, Command, CommandLineMode, CueEdit, Delta, FixtureId, JsonPatchOp,
-    NoticeLevel, ObjectRef, PlaybackTarget, PresetId, PresetPool, Sequence, SequenceId, StoreMode,
-    StorePreview, StoreTarget,
+    AttributeKey, ClearStage, Command, CommandLineMode, CueEdit, Delta, FixtureId, FixtureType,
+    JsonPatchOp, NoticeLevel, ObjectRef, PatchPlacement, PlaybackTarget, PresetId, PresetPool,
+    Sequence, SequenceId, StoreMode, StorePreview, StoreTarget, UniverseId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -80,6 +80,12 @@ const SHOW_EXTENSION: &str = ".prism";
 
 /// The extension a JSON export has to have — S37.
 const EXPORT_EXTENSION: &str = ".json";
+
+/// What a rig plan is called — **S62**.
+const RIG_EXTENSION: &str = ".mvr";
+
+/// What one fixture profile is called — **S62**.
+const PROFILE_EXTENSION: &str = ".gdtf";
 
 /// Reads a `.prism` path out of a file command — S37.
 ///
@@ -110,6 +116,24 @@ pub(crate) fn show_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
 /// [`ShowError::NotAShowPath`].
 pub(crate) fn export_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
     checked_path(path, EXPORT_EXTENSION)
+}
+
+/// Reads a `.mvr` path out of a rig import — **S62**.
+///
+/// # Errors
+///
+/// [`ShowError::NotAShowPath`].
+pub(crate) fn rig_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
+    checked_path(path, RIG_EXTENSION)
+}
+
+/// Reads a `.gdtf` path out of a profile import — **S62**.
+///
+/// # Errors
+///
+/// [`ShowError::NotAShowPath`].
+pub(crate) fn profile_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
+    checked_path(path, PROFILE_EXTENSION)
 }
 
 /// The shared half of the two above.
@@ -787,7 +811,7 @@ impl ShowFile {
     pub fn preview_patch(
         &self,
         type_id: &str,
-        request: prism_domain::PatchPlacement,
+        request: PatchPlacement,
         adding: u16,
     ) -> prism_domain::PatchPreview {
         let library = self.library.profile(type_id);
@@ -1474,6 +1498,14 @@ impl ShowFile {
             | Command::NewShow { .. }
             | Command::ExportShow { .. }
             | Command::ImportShow { .. }
+            // S62's rig import is here for a reason of its own: its step is
+            // filed by `import_rig`, which knows what the archive held. A
+            // command whose content is in a file cannot be imaged from the
+            // command.
+            | Command::ImportRig { .. }
+            | Command::ImportProfile { .. }
+            | Command::UpdateLibrary { .. }
+            | Command::ForgetLibraryAccount
             | Command::SelectView { .. }
             | Command::StoreView { .. }
             | Command::NewView { .. }
@@ -1620,6 +1652,178 @@ impl ShowFile {
     /// key acts on.
     fn cue_edit_image(&self) -> Image {
         Image::CueEdit(self.session.session().editing_cue.clone())
+    }
+
+    /// Takes a venue's rig plan into the show — **S62**.
+    ///
+    /// The daemon has the bytes because this crate does no IO; everything else
+    /// happens here, because this is the layer that owns the show, the library
+    /// and the journal at once.
+    ///
+    /// # One step, and what it covers
+    ///
+    /// Every profile embedded and every fixture patched go into **one**
+    /// `UndoRecord`, so one Oops takes the whole rig back. The record is built
+    /// here rather than by this type's own undo-image step, for the reason that
+    /// step cannot serve this command: it is handed the command, and what an
+    /// import changes is in the **file**.
+    ///
+    /// # What it adds, and what it refuses to touch
+    ///
+    /// It **adds**. A fixture the show already has keeps its number, its
+    /// address and its profile; the plan's fixture is patched under the next
+    /// free number instead, and counted as renumbered. That is the operator's
+    /// show and the planner's opinion meeting, and the operator wins.
+    ///
+    /// Three kinds of planned fixture are skipped and counted rather than
+    /// guessed at: one whose profile the archive did not carry, one the plan
+    /// left unaddressed, and one that would not fit the universe its address
+    /// names. Each of those is a plan that is incomplete rather than a desk
+    /// that is broken.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowFileError`] only where the show itself refuses an embed. A plan
+    /// with nothing patchable in it is not an error: it is a report saying
+    /// nought, which is what an operator needs to see.
+    pub fn import_rig(&mut self, archive: &[u8]) -> Result<(Applied, RigReport), ShowFileError> {
+        use crate::library::mvr;
+
+        let mut report = RigReport::default();
+        // The venue's own, always: an archive an operator imported is a file
+        // they hold, so it wins its keys exactly as one in their folder does.
+        let (profiles, _, rig) = mvr::read_archive(archive, true);
+        let by_key: std::collections::BTreeMap<String, FixtureType> = profiles
+            .into_iter()
+            .map(|(entry, profile)| (entry.id, profile))
+            .collect();
+
+        // Worked out in full before anything is written, so a refusal leaves
+        // the show as it was — the same rule `finish_patch_fixtures` follows.
+        let mut taken: std::collections::BTreeSet<FixtureId> =
+            self.show.fixtures().map(|fixture| fixture.id).collect();
+        let mut plan: Vec<(FixtureId, String, String, u16, u16)> = Vec::new();
+        let mut wanted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for fixture in &rig.fixtures {
+            let Some(type_id) = fixture.type_id.clone() else {
+                report.without_profile += 1;
+                continue;
+            };
+            let Some(profile) = by_key.get(&type_id) else {
+                report.without_profile += 1;
+                continue;
+            };
+            let Some((universe, address)) = fixture
+                .addresses
+                .first()
+                .and_then(|address| address.universe_and_address())
+            else {
+                report.without_address += 1;
+                continue;
+            };
+            // The plan's number where it is free, the next free one otherwise.
+            let planned = fixture.fixture_id.filter(|id| *id > 0).map(FixtureId::new);
+            let id = match planned {
+                Some(id) if !taken.contains(&id) => id,
+                _ => {
+                    if planned.is_some() {
+                        report.renumbered += 1;
+                    }
+                    // The first number nothing is using — the plan's own is
+                    // taken, or it stated none at all.
+                    let mut next = 1;
+                    while taken.contains(&FixtureId::new(next)) {
+                        next += 1;
+                    }
+                    FixtureId::new(next)
+                }
+            };
+            let placement = PatchPlacement {
+                id,
+                universe: UniverseId::new(u32::from(universe)),
+                address,
+            };
+            if Show::check_placement(placement, profile).is_err() {
+                report.would_not_fit += 1;
+                continue;
+            }
+            taken.insert(id);
+            wanted.insert(type_id.clone());
+            plan.push((id, type_id, fixture.name.clone(), universe, address));
+        }
+
+        // The images, now that what changes is known: every fixture number the
+        // import takes, and every profile it embeds.
+        let mut before: Vec<Image> = plan
+            .iter()
+            .map(|(id, ..)| Image::Fixture(*id, self.show.fixture(*id).cloned()))
+            .collect();
+        before.extend(
+            wanted
+                .iter()
+                .map(|key| Image::FixtureType(key.clone(), self.show.fixture_type(key).cloned())),
+        );
+        if before.is_empty() {
+            // Nothing to do and nothing to undo. Still a success: the report
+            // is what says the plan held nothing this desk could patch.
+            return Ok((Applied::default(), report));
+        }
+
+        let mut ops = Vec::new();
+        for key in &wanted {
+            let Some(profile) = by_key.get(key) else {
+                continue;
+            };
+            ops.extend(self.show.embed_fixture_type(profile.clone())?);
+            report.profiles += 1;
+        }
+        let mut notices = Vec::new();
+        for (id, type_id, name, universe, address) in &plan {
+            let step = self.show.apply(&Command::PatchFixture {
+                id: *id,
+                name: name.clone(),
+                type_id: type_id.clone(),
+                universe: UniverseId::new(u32::from(*universe)),
+                address: *address,
+                // The same answer the patch window's own form starts from.
+                software_dimmer: true,
+            })?;
+            report.patched += 1;
+            for delta in step.deltas {
+                match delta {
+                    Delta::ShowPatch { ops: more } => ops.extend(more),
+                    other => notices.push(other),
+                }
+            }
+        }
+
+        let after: Vec<Image> =
+            plan.iter()
+                .map(|(id, ..)| Image::Fixture(*id, self.show.fixture(*id).cloned()))
+                .chain(wanted.iter().map(|key| {
+                    Image::FixtureType(key.clone(), self.show.fixture_type(key).cloned())
+                }))
+                .collect();
+        let record = UndoRecord::new(
+            Command::ImportRig {
+                path: String::new(),
+            },
+            before,
+            after,
+        );
+        if record.is_a_step() {
+            self.journal.push(record);
+        }
+
+        let mut deltas = vec![Delta::ShowPatch { ops }];
+        deltas.extend(notices);
+        Ok((
+            Applied {
+                deltas,
+                effects: vec![Effect::Repatch],
+            },
+            report,
+        ))
     }
 
     /// Files the step a command has just taken, if it took one.
@@ -2385,5 +2589,231 @@ mod tests {
         // patch, S28's show edits, S39's three and S40's five — the four
         // generic verbs and the group store.
         assert_eq!(undoable, 19);
+    }
+}
+
+/// What taking a rig plan into the show did — **S62**.
+///
+/// Counted rather than asserted, and handed back to the operator: an import
+/// that quietly patched eleven of twenty fixtures would be worse than one that
+/// says so. Every number here is a fixture the plan named.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RigReport {
+    /// Fixtures patched.
+    pub patched: u32,
+    /// Profiles embedded into the show.
+    pub profiles: u32,
+    /// Skipped because the archive carried no profile for them.
+    pub without_profile: u32,
+    /// Skipped because the plan gave them no address.
+    pub without_address: u32,
+    /// Patched under a different number, because the plan's was already in use.
+    pub renumbered: u32,
+    /// Skipped because they would not fit the universe their address names.
+    pub would_not_fit: u32,
+}
+
+#[cfg(test)]
+mod rig_tests {
+    use super::ShowFile;
+    use crate::library::zip::testkit::Builder;
+    use prism_domain::Command;
+
+    /// A `description.xml` with one mode of `footprint` dimmers.
+    fn gdtf(manufacturer: &str, name: &str, footprint: u16) -> String {
+        let channels: String = (1..=footprint)
+            .map(|offset| {
+                format!(
+                    r#"<DMXChannel Offset="{offset}"><LogicalChannel Attribute="Dimmer">
+                         <ChannelFunction Attribute="Dimmer"/>
+                       </LogicalChannel></DMXChannel>"#
+                )
+            })
+            .collect();
+        format!(
+            r#"<GDTF DataVersion="1.2"><FixtureType Name="{name}" Manufacturer="{manufacturer}"
+                 FixtureTypeID="GUID"><DMXModes><DMXMode Name="Mode 1">
+                 <DMXChannels>{channels}</DMXChannels></DMXMode></DMXModes>
+               </FixtureType></GDTF>"#
+        )
+    }
+
+    /// One `<Fixture>` of a plan.
+    fn planned(name: &str, id: u32, address: u32) -> String {
+        format!(
+            r#"<Fixture uuid="F{id}" name="{name}">
+                 <GDTFSpec>Maker@Head.gdtf</GDTFSpec><GDTFMode>Mode 1</GDTFMode>
+                 <FixtureID>{id}</FixtureID>
+                 <Addresses><Address break="1">{address}</Address></Addresses>
+               </Fixture>"#
+        )
+    }
+
+    /// An `.mvr` around a list of planned fixtures.
+    fn plan(fixtures: &str, footprint: u16) -> Vec<u8> {
+        let document = format!(
+            r#"<GeneralSceneDescription verMajor="1" verMinor="6"><Scene><Layers>
+                 <Layer name="Stage"><ChildList>{fixtures}</ChildList></Layer>
+               </Layers></Scene></GeneralSceneDescription>"#
+        );
+        let inner = Builder::new()
+            .deflated(
+                "description.xml",
+                gdtf("Maker", "Head", footprint).as_bytes(),
+            )
+            .build();
+        Builder::new()
+            .deflated("GeneralSceneDescription.xml", document.as_bytes())
+            .deflated("Maker@Head.gdtf", &inner)
+            .build()
+    }
+
+    /// **The whole point**: the rig arrives patched, and **one Oops takes it
+    /// back** — the rule S57 set for patching several at once, over a file.
+    #[test]
+    fn a_rig_arrives_as_one_step_that_one_oops_takes_back() {
+        let mut file = ShowFile::default();
+        let before = rmp_serde::to_vec_named(&file).expect("it serialises");
+
+        let archive = plan(
+            &format!(
+                "{}{}{}",
+                planned("Front left", 1, 1),
+                planned("Front right", 2, 5),
+                planned("Back", 3, 9),
+            ),
+            4,
+        );
+        let (_, report) = file.import_rig(&archive).expect("the plan is taken");
+        assert_eq!(report.patched, 3);
+        assert_eq!(report.profiles, 1, "one profile for three fixtures");
+        assert_eq!(report.without_profile, 0);
+        assert_eq!(report.without_address, 0);
+
+        // The patch is what the plan said.
+        // A function of the file rather than a closure over it, so the
+        // borrow ends before the Oops below needs a mutable one.
+        fn at(file: &ShowFile, id: u32) -> Option<(String, u32, u16)> {
+            file.show
+                .fixture(prism_domain::FixtureId::new(id))
+                .map(|fixture| {
+                    (
+                        fixture.name.clone(),
+                        fixture.universe.get(),
+                        fixture.address,
+                    )
+                })
+        }
+        assert_eq!(at(&file, 1), Some(("Front left".to_owned(), 1, 1)));
+        assert_eq!(at(&file, 2), Some(("Front right".to_owned(), 1, 5)));
+        assert_eq!(at(&file, 3), Some(("Back".to_owned(), 1, 9)));
+
+        // **One** Oops, not three.
+        file.apply(&Command::Oops).expect("it undoes");
+        assert_eq!(
+            rmp_serde::to_vec_named(&file).expect("it serialises"),
+            before,
+            "an undone import leaves the show byte for byte as it was"
+        );
+
+        // And a Redo puts the whole rig back.
+        file.apply(&Command::Redo).expect("it redoes");
+        assert_eq!(at(&file, 1), Some(("Front left".to_owned(), 1, 1)));
+        assert_eq!(at(&file, 3), Some(("Back".to_owned(), 1, 9)));
+    }
+
+    /// **The operator's show wins over the planner's numbering.**
+    #[test]
+    fn a_fixture_number_already_in_use_is_passed_over() {
+        let mut file = ShowFile::default();
+        // The show already has fixture 1, patched by hand.
+        file.apply(&Command::PatchFixtures {
+            type_id: "generic.dimmer".to_owned(),
+            name: "The one in the roof".to_owned(),
+            software_dimmer: true,
+            placements: vec![prism_domain::PatchPlacement {
+                id: prism_domain::FixtureId::new(1),
+                universe: prism_domain::UniverseId::new(1),
+                address: 100,
+            }],
+        })
+        .expect("it patches");
+
+        let (_, report) = file
+            .import_rig(&plan(&planned("Planned one", 1, 1), 4))
+            .expect("the plan is taken");
+        assert_eq!(report.patched, 1);
+        assert_eq!(
+            report.renumbered, 1,
+            "the plan wanted 1 and could not have it"
+        );
+
+        // Fixture 1 is untouched; the plan's fixture took the next free number.
+        let one = file
+            .show
+            .fixture(prism_domain::FixtureId::new(1))
+            .expect("still there");
+        assert_eq!(one.name, "The one in the roof");
+        assert_eq!(one.address, 100);
+        let two = file
+            .show
+            .fixture(prism_domain::FixtureId::new(2))
+            .expect("the plan's fixture");
+        assert_eq!(two.name, "Planned one");
+    }
+
+    /// A plan naming a profile the archive did not carry patches nothing for
+    /// it, and says so rather than guessing.
+    #[test]
+    fn a_fixture_without_a_profile_is_counted_and_skipped() {
+        let document = r#"<GeneralSceneDescription verMajor="1" verMinor="6"><Scene><Layers>
+              <Layer name="Stage"><ChildList>
+                <Fixture uuid="F1" name="Nothing here">
+                  <GDTFSpec>Absent@Thing.gdtf</GDTFSpec><GDTFMode>Mode 1</GDTFMode>
+                  <FixtureID>1</FixtureID>
+                  <Addresses><Address break="1">1</Address></Addresses>
+                </Fixture>
+              </ChildList></Layer></Layers></Scene></GeneralSceneDescription>"#;
+        let archive = Builder::new()
+            .deflated("GeneralSceneDescription.xml", document.as_bytes())
+            .build();
+
+        let mut file = ShowFile::default();
+        let before = rmp_serde::to_vec_named(&file).expect("it serialises");
+        let (_, report) = file
+            .import_rig(&archive)
+            .expect("an empty plan is not an error");
+        assert_eq!(report.patched, 0);
+        assert_eq!(report.without_profile, 1);
+        assert_eq!(
+            rmp_serde::to_vec_named(&file).expect("it serialises"),
+            before,
+            "nothing was written, so there is nothing to undo either"
+        );
+    }
+
+    /// A planned fixture with no address is a plan that is not finished.
+    #[test]
+    fn a_fixture_without_an_address_is_counted_and_skipped() {
+        let document = r#"<GeneralSceneDescription verMajor="1" verMinor="6"><Scene><Layers>
+              <Layer name="Stage"><ChildList>
+                <Fixture uuid="F1" name="Unaddressed">
+                  <GDTFSpec>Maker@Head.gdtf</GDTFSpec><GDTFMode>Mode 1</GDTFMode>
+                  <FixtureID>1</FixtureID>
+                  <Addresses><Address break="1">0</Address></Addresses>
+                </Fixture>
+              </ChildList></Layer></Layers></Scene></GeneralSceneDescription>"#;
+        let inner = Builder::new()
+            .deflated("description.xml", gdtf("Maker", "Head", 4).as_bytes())
+            .build();
+        let archive = Builder::new()
+            .deflated("GeneralSceneDescription.xml", document.as_bytes())
+            .deflated("Maker@Head.gdtf", &inner)
+            .build();
+
+        let mut file = ShowFile::default();
+        let (_, report) = file.import_rig(&archive).expect("not an error");
+        assert_eq!(report.patched, 0);
+        assert_eq!(report.without_address, 1);
     }
 }
