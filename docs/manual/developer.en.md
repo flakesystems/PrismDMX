@@ -172,6 +172,32 @@ Frames leave through a triple buffer, one subscriber per output driver. Adding
 or removing an output while the show runs costs the outputs that did not change
 **no tick and no frame**.
 
+### The 3D viewer asks the daemon nothing
+
+`ui/src/viewer/` (S30) draws the rig from two things the interface already has:
+the **show document**, for where each fixture hangs and what its profile says
+about its body and beams, and the **telemetry sink**, for what the cable is
+telling it. It decodes the frame in an animation-frame loop outside React —
+`viewer/driver.ts` is `telemetry/driver.ts` with a different picture — and it
+paints only when the payload, the rig, the selection, the camera or the size
+changed. The camera is client-local (§4.2 of the specification).
+
+Two rules to keep:
+
+- **Where a fixture hangs is `prism_domain::placement`**, and nowhere else.
+  Metres, Y up, `z` growing upstage; a rotation is `Ry · Rx · Rz`.
+  `viewer/space.ts` builds the same matrix, and `space.test.ts` holds it to the
+  matrices `crates/prismd/tests/ui_viewer.rs` recorded out of Rust. Anything
+  that turns a planner's matrix into a place — MVR import — goes through
+  `rotation_of`, not through its own Euler order.
+- **`PlaceFixtures` is not a patch.** It writes `position` and `rotation` and
+  nothing else, returns no `Effect::Repatch`, and its Oops image is the place
+  alone. A change that made a placement repatch would put a rebuild of the
+  merge body on a gesture an operator makes by dragging.
+
+It draws on a 2D canvas behind `viewer/surface.ts::ViewSurface`, and the
+reasons are in the specification's §4.7.
+
 ---
 
 ## 3. The rules that came out of mistakes
@@ -375,8 +401,8 @@ A command is the only way anything changes. The path, in order:
    the canvas (`CLAUDE.md`). It reads through `ui/src/mirror/` and holds nothing:
    what it draws must survive being closed and reopened, and must be the same on
    a second screen.
-4. **If it is not built yet, say so in the window.** Two of the fourteen do
-   exactly that, on purpose: an operator who opens one from an X-Touch F-key
+4. **If it is not built yet, say so in the window.** One of the fourteen does
+   exactly that since S30 built the 3D viewer, on purpose: an operator who opens one from an X-Touch F-key
    should find an answer rather than an empty rectangle they will file a bug
    about.
 5. **Write its chapter** in [`operator.md`](operator.de.md) — a section headed with

@@ -69,7 +69,9 @@ no user interface in it at all.
 
 Named here rather than discovered by you:
 
-- **No 3D visualiser** (planned).
+- **The 3D viewer draws boxes, not models** — every fixture where it hangs and
+  every beam the output is making, but not a fixture's own 3D model or its gobo
+  pictures yet.
 - **No Web Remote** — a phone or tablet cannot drive the desk yet (planned).
 - **No timecode, OSC or PSN** (planned).
 - **The desk does not follow a switching channel while the show runs.** The

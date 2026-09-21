@@ -184,6 +184,33 @@ Ausgangstreiber. Einen Ausgang im laufenden Betrieb hinzuzufügen oder zu
 entfernen kostet die Ausgänge, die sich nicht geändert haben, **keinen Tick und
 kein Frame**.
 
+
+### Der 3D-Viewer fragt den Daemon nichts
+
+`ui/src/viewer/` (S30) zeichnet das Rig aus zwei Dingen, die die Oberfläche
+schon hat: dem **Show-Dokument**, für den Ort jedes Fixtures und das, was sein
+Profil über Körper und Strahlen sagt, und der **Telemetrie-Senke**, für das, was
+das Kabel ihm sagt. Der Frame wird in einer Animation-Frame-Schleife außerhalb
+von React gelesen — `viewer/driver.ts` ist `telemetry/driver.ts` mit einem
+anderen Bild —, und gezeichnet wird nur, wenn sich Payload, Rig, Auswahl, Kamera
+oder Größe geändert haben. Die Kamera gehört dem Client (§4.2 der Spezifikation).
+
+Zwei Regeln, die zu halten sind:
+
+- **Wo ein Fixture hängt, sagt `prism_domain::placement`**, und sonst niemand.
+  Meter, Y oben, `z` wächst nach hinten; eine Rotation ist `Ry · Rx · Rz`.
+  `viewer/space.ts` baut dieselbe Matrix, und `space.test.ts` hält sie an die
+  Matrizen, die `crates/prismd/tests/ui_viewer.rs` aus Rust aufgenommen hat. Was
+  eine Matrix eines Planers in einen Ort übersetzt — der MVR-Import —, geht über
+  `rotation_of` und nicht über eine eigene Euler-Reihenfolge.
+- **`PlaceFixtures` ist kein Patch.** Es schreibt `position` und `rotation` und
+  sonst nichts, liefert kein `Effect::Repatch`, und sein Oops-Abbild ist nur der
+  Ort. Eine Änderung, durch die Platzieren repatcht, legte einen Neubau des
+  Merge-Körpers auf eine Geste, die ein Bediener durch Ziehen macht.
+
+Gezeichnet wird auf einem 2D-Canvas hinter `viewer/surface.ts::ViewSurface`;
+die Gründe stehen in §4.7 der Spezifikation.
+
 ---
 
 ## 3. Die Regeln, die aus Fehlern entstanden sind
@@ -402,8 +429,8 @@ nach:
    außerhalb der Leinwand (`CLAUDE.md`). Sie liest über `ui/src/mirror/` und hält
    nichts: was sie zeichnet, muss überleben, geschlossen und wieder geöffnet zu
    werden, und muss auf einem zweiten Bildschirm dasselbe sein.
-4. **Ist es noch nicht gebaut, sagen Sie es im Fenster.** Zwei der vierzehn tun
-   genau das, mit Absicht: wer eines von einer X-Touch-F-Taste öffnet, soll eine
+4. **Ist es noch nicht gebaut, sagen Sie es im Fenster.** Eines der vierzehn tut
+   genau das, seit S30 den 3D-Viewer gebaut hat, mit Absicht: wer eines von einer X-Touch-F-Taste öffnet, soll eine
    Antwort finden und nicht ein leeres Rechteck, über das er einen Fehler
    meldet.
 5. **Sein Kapitel schreiben** in [`operator.de.md`](operator.de.md) — ein

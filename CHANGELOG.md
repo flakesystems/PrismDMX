@@ -23,8 +23,30 @@ Alle Versionen bisher sind **Vorabversionen**.
 ## Noch nicht veröffentlicht
 
 **Diese Änderungen erscheinen als 0.9.3.** Die Version steht noch nicht auf dem
-Programm — der Eigentümer hält das Release zurück, bis die Controls-Änderungen
-(S59) und der 3D-Viewer (S30) mit drin sind.
+Programm — der Eigentümer hielt das Release zurück, bis die Controls-Änderungen
+(S59) und der 3D-Viewer (S30) mit drin sind, und beide sind es jetzt.
+
+### Der 3D-Viewer (S30)
+
+**Das Fenster *Viewer 3D* zeigt das Rig, wie es hängt**, und aus jedem Fixture,
+das leuchtet, einen Strahl in der Farbe, die es gerade ausgibt. Die Strahlen
+kommen **vom Kabel** — dieselben Werte wie im DMX Sheet —, also sieht man, was
+dem Rig tatsächlich gesagt wird: Pan, Tilt, Zoom, Dimmer, Farbe, ein
+geschlossener Shutter.
+
+- **Fixtures platzieren.** Ein Feld neben dem Bild arbeitet mit der Auswahl:
+  *Set* setzt Position und Rotation, *Spread* verteilt die Auswahl quer über die
+  Bühne — eine Traverse mit acht Geräten in einem Zug. Jedes davon ist **ein
+  Oops**, und das Platzieren kostet die DMX-Ausgabe nichts.
+- **Umsehen** mit der Maus, dazu *Front*, *Top*, *Side*, *3D* und *Frame all*.
+  Die Kamera gehört dem Bildschirm; ein zweiter Bildschirm darf das Rig von
+  woanders zeigen.
+- **Ein Klick auf ein Fixture** wählt es aus wie ein Klick im Fixture Sheet.
+- Ein Profil aus einer **GDTF**-Datei wird in seiner Größe gezeichnet, mit dem
+  Strahl dort, wo der Hersteller ihn angibt; jedes andere als kleiner Kasten.
+  Die eigenen 3D-Modelle der Geräte und die Gobo-Bilder kommen später.
+- Gezeichnet wird auf einer gewöhnlichen 2D-Fläche, damit es auf jedem Rechner
+  läuft, auf dem das Pult läuft — auch ohne Grafikkarte.
 
 ### Die Fixture-Bibliothek ist jetzt GDTF (S61)
 

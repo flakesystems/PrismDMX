@@ -159,7 +159,7 @@ nicht veralten, ohne dass ein Test rot wird.
 | `DmxSheet` | *DMX Sheet* — das **Kabel**: Universe für Universe, Kanal für Kanal, ganz ohne Fixtures |
 | `SequenceSheet` | *Sequence Sheet* — die **Cue-Liste**: welche Sequenzen es gibt, welche gerade gilt, und ihre Cues mit Nummer, Name, Zeiten und Trigger |
 | `Groups` | *Groups* — der **Gruppen-Pool**: Listen von Fixtures, nicht Looks. Das ist, was `Group 3` zu einer Auswahl macht |
-| `Viewer3D` | *Viewer 3D* — die 3D-Bühnenansicht. **In diesem Build nicht gebaut**; das Fenster sagt das, statt leer zu bleiben |
+| `Viewer3D` | *Viewer 3D* — das Rig, wie es hängt, mit den Strahlen, die der Ausgang gerade macht; hier werden Fixtures platziert |
 | `PhaserEditor` | *Phaser Editor* — der Effekt-Editor. **In diesem Build nicht gebaut**; es gibt noch keine Effekt-Engine dahinter |
 | `ClockViewer` | *Clock Viewer* — die Uhr, groß genug, um sie von hinten zu lesen, und was gerade läuft. Timecode-Spalten fehlen, weil es keinen Timecode gibt |
 | `CueViewer` | *Cue Viewer* — die **Cue**: was sie setzt, Fixture für Fixture, mit den Preset-Verweisen. Zum Ansehen, nicht zum Bearbeiten |
@@ -204,14 +204,52 @@ Der Gruppen-Pool. Eine Gruppe ist eine **Liste von Fixtures**, kein Look: `Group
 
 ### Viewer 3D · `Viewer3D`
 
-Noch nicht gebaut. Das Fenster öffnet sich und sagt das in einem Satz — und das
-ist Absicht: wer es von einer F-Taste am X-Touch aufmacht, soll eine Antwort
-finden und kein leeres Rechteck, über das man einen Fehlerbericht schreibt.
+Das Rig im Raum: jedes gepatchte Fixture dort, wo es hängt, und aus jedem, das
+leuchtet, ein Strahl in der Farbe, die es gerade ausgibt. Die Strahlen sind **das,
+was auf dem Kabel liegt** — dieselben Werte, die das DMX Sheet zeigt —, Sie sehen
+also, was dem Rig gerade gesagt wird, egal von wem: vom Programmer, von einem Cue,
+von einem Master.
+
+- **Umsehen.** Ziehen dreht um das Rig, **Shift**-Ziehen (oder Ziehen mit der
+  rechten Taste) verschiebt, das Mausrad fährt näher heran. **Front**, **Top**,
+  **Side** und **3D** sind die vier üblichen Ansichten, und **Frame all** tritt
+  so weit zurück, bis jedes Fixture im Bild ist. Die Kamera gehört diesem
+  Bildschirm allein: ein zweiter Bildschirm, der dasselbe Rig von woanders
+  zeigt, ist der Normalfall, und nichts, was Sie an der Ansicht tun, geht ans
+  Pult.
+- **Auswählen.** Ein Klick auf ein Fixture tut, was ein Klick auf eine Zeile im
+  Fixture Sheet tut: Es kommt zur Auswahl dazu oder wieder heraus.
+- **Platzieren.** Das Feld rechts arbeitet mit der **Auswahl**. Es beginnt dort,
+  wo das erste ausgewählte Fixture hängt. **Set** setzt jedes ausgewählte Fixture
+  auf die Zahlen im Formular — ein Feld, das Sie leeren, lässt jedem Fixture
+  seinen eigenen Wert. **Spread** verteilt sie in der Reihenfolge, in der Sie sie
+  ausgewählt haben, quer über die Bühne, mittig um **X** und im Abstand **Gap**
+  (ein Meter, wenn es leer ist): `Fixture 1 Thru 8`, *Spread*, ist eine Traverse
+  mit acht Geräten in einem Zug. Beides ist **ein Oops**.
+- **Was die Zahlen bedeuten.** Meter, gemessen von einem Punkt, den Sie wählen —
+  die Mitte der Bühnenvorderkante auf Bodenhöhe ist ein guter. **X** läuft quer
+  über die Bühne (positiv ist Bühne links, also vom Publikum aus rechts), **Y**
+  ist die Höhe über dem Boden, **Z** läuft nach hinten, vom Publikum weg. Eine
+  Rotation von null hängt ein Fixture mit dem Strahl nach unten. **Rotation X**
+  kippt es: 90 richtet einen hängenden Strahl aufs Publikum, 180 stellt das
+  Fixture auf den Boden. **Rotation Y** dreht es um die Senkrechte, **Rotation
+  Z** rollt es — für ein Fixture an einem Galgen 90.
+- **Die Zeile neben den Knöpfen** sagt, wie viele Fixtures es gibt, wie viele
+  leuchten, wie viele noch **nicht platziert** sind (ein frisch gepatchtes Fixture
+  steht im Ursprung, bis Sie es platzieren) und wie lange ein Bild zum Zeichnen
+  braucht.
+
+Ein Fixture, dessen Profil aus einer **GDTF**-Datei kommt, wird in seiner eigenen
+Größe gezeichnet, und sein Strahl tritt dort aus, wo der Hersteller es angibt;
+jedes andere ist ein kleiner Kasten mit einem Strahl nach unten. Die eigenen
+3D-Modelle der Geräte und die Bilder ihrer Gobos werden noch nicht gezeichnet.
 
 ### Phaser Editor · `PhaserEditor`
 
-Ebenfalls noch nicht gebaut; dahinter fehlt die Effekt-Engine, nicht das
-Fenster.
+Noch nicht gebaut. Das Fenster öffnet sich und sagt das in einem Satz — und das
+ist Absicht: wer es von einer F-Taste am X-Touch aufmacht, soll eine Antwort
+finden und kein leeres Rechteck, über das man einen Fehlerbericht schreibt.
+Dahinter fehlt die Effekt-Engine, nicht das Fenster.
 
 ### Clock Viewer · `ClockViewer`
 
@@ -824,7 +862,9 @@ und eine spätere Installation findet sie wieder.
 
 Hier genannt, statt von Ihnen entdeckt zu werden:
 
-- **Kein 3D-Visualizer.** Geplant.
+- **Der 3D-Viewer zeichnet Kästen, keine Modelle** — das eigene 3D-Modell
+  eines Geräts und seine Gobo-Bilder werden noch nicht gezeichnet, und er
+  zeichnet weder Dunst noch Gobo-Projektionen.
 - **Keine Web-Fernbedienung** — ein Telefon oder Tablet kann das Pult noch nicht
   fahren. Geplant.
 - **Kein Timecode, kein OSC, kein PSN.** Geplant.

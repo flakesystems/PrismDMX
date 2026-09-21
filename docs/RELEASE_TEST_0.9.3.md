@@ -1,8 +1,9 @@
-# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61)
+# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61 + S30)
 
 **Gilt für:** den Build von `master` ab `5dd7112` — enthält **S59** (das
 Controls-Menü, die Tastenwörter, die Lampen, das Jogwheel) und **S61** (die
-Fixture-Bibliothek ist GDTF). Die Version im Installer ist weiterhin **`0.9.2`**:
+Fixture-Bibliothek ist GDTF); Kapitel **2a** gilt ab dem Merge von **S30** (der
+3D-Viewer). Die Version im Installer ist weiterhin **`0.9.2`**:
 0.9.3 ist noch nicht getaggt, und was hineinkommt, steht in `CHANGELOG.md` unter
 *Noch nicht veröffentlicht*.
 
@@ -277,6 +278,51 @@ Move-Item (Join-Path $tmp "x.zip") (Join-Path $dir "irgendwas-ganz-anderes.gdtf"
       umschalten. Die Zeile steht unverändert da.
 - [ ] **T-S59.18 — Export und Import.** *Export* → Datei speichern. *Import* →
       dieselbe Datei → die Tabelle ist danach dieselbe.
+
+---
+
+## 2a. Neu — der 3D-Viewer (S30)
+
+**Wo:** Fenster **Viewer 3D** (Rechtsklick auf eine leere Stelle des Canvas oder
+`Einfg`, dann *Viewer 3D*). Am besten groß ziehen.
+
+- [ ] **T-3D.1 — das Rig ist da.** Alle gepatchten Fixtures erscheinen. Die Zeile
+      neben den Knöpfen sagt *N fixtures · 0 lit · N not placed* — ein Rig, das
+      nie platziert wurde, steht komplett im Ursprung.
+- [ ] **T-3D.2 — platzieren.** `Fixture 1 Thru 4` + Enter (liegt eine Nummer dazwischen nicht im Patch,
+      verweigert die Zeile `Thru` — dann `Fixture 1 + 2 + 5 + 7`).
+      Rechts steht *4 fixtures: …*. **Y** = `6`, **Gap** = `2`, **Spread**. Die
+      vier hängen nebeneinander in sechs Metern; *not placed* verschwindet aus der
+      Zeile.
+- [ ] **T-3D.3 — ein Oops.** `Oops` + Enter. **Alle vier** stehen wieder im
+      Ursprung — die ganze Geste war ein Schritt. Nochmal **Spread**.
+- [ ] **T-3D.4 — die Strahlen kommen vom Kabel.** `Fixture 1 Thru 4 At Full`. Aus
+      allen vier kommt ein Strahl, am Boden ein Lichtfleck; die Zeile sagt *4 lit*.
+      Ein Executor mit einer Cue tut dasselbe: **was im DMX Sheet steht, steht
+      auch hier**.
+- [ ] **T-3D.5 — Pan, Tilt, Farbe.** An einem Moving Head Pan und Tilt drehen:
+      der Strahl folgt, in die richtige Richtung. An einem RGB-Gerät eine Farbe
+      ziehen: der Strahl hat sie. Shutter zu: der Strahl ist weg.
+- [ ] **T-3D.6 — Rotation.** Ein Fixture wählen, **Rotation X** = `90`, **Set**:
+      sein Strahl zeigt waagerecht zum Publikum. `180`: es steht auf dem Boden und
+      strahlt nach oben.
+- [ ] **T-3D.7 — umsehen.** Ziehen dreht, Shift-Ziehen verschiebt, Mausrad zoomt,
+      *Front / Top / Side / 3D / Frame all* tun, was sie sagen. Ein zweiter
+      Client (zweites Fenster, anderer Bildschirm) behält **seine** Ansicht.
+- [ ] **T-3D.8 — klicken wählt.** Ein Klick auf ein Fixture im Bild nimmt es in
+      die Auswahl (gelber Rand, gelbe Nummer); nochmal klicken nimmt es heraus.
+- [ ] **T-3D.9 — der Ausgang merkt nichts.** Während *DMX Sheet* und *Viewer 3D*
+      offen sind und eine Cue läuft: das DMX Sheet zeigt weiter ~30 Hz, die
+      Lampen am Rig flackern nicht, wenn man im Viewer dreht oder platziert.
+- [ ] **T-3D.10 — eine echte GDTF, und die offene Zahl.** Wer eine veröffentlichte
+      `.gdtf` eines Moving Heads hat (eigenes Konto bei gdtf-share.com): Datei
+      umbenennen in `.zip`, `description.xml` öffnen, die `<Beam … Position="…">`
+      suchen und den Wert **hier notieren**. Die GDTF-Spezifikation sagt, die
+      Translation steht **in der vierten Spalte** (`{a,b,c,X}{d,e,f,Y}{g,h,i,Z}`);
+      der Leser liest sie heute aus der vierten **Zeile** und rechnet in
+      Millimetern (`PROGRESS.md` §5). Im Viewer: sitzt der Strahl sichtbar am
+      Kopf, oder schwebt er? **Befund oder nicht — die notierte Zeile ist die
+      Antwort auf die offene Frage.**
 
 ---
 

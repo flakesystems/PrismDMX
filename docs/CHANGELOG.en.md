@@ -25,8 +25,29 @@ Every version so far is a **pre-release**.
 ## Not yet released
 
 **These changes ship as 0.9.3.** The version is not on the program yet — the
-owner is holding the release until the Controls round (S59) and the 3D viewer
-(S30) are in it.
+owner held the release until the Controls round (S59) and the 3D viewer (S30)
+were in it, and both now are.
+
+### The 3D viewer (S30)
+
+**The *Viewer 3D* window shows the rig as it hangs**, and a beam out of every
+fixture that is lit, in the colour it is putting out. The beams come **off the
+cable** — the same levels as the DMX Sheet — so what you see is what the rig is
+actually being told: pan, tilt, zoom, dimmer, colour, a closed shutter.
+
+- **Placing fixtures.** A panel beside the picture works on the selection:
+  *Set* gives them a position and a rotation, *Spread* lays the selection out
+  across the stage — a truss of eight in one go. Each is **one Oops**, and
+  placing costs the DMX output nothing.
+- **Look around** with the mouse, plus *Front*, *Top*, *Side*, *3D* and *Frame
+  all*. The camera is the screen's own; a second screen may show the rig from
+  somewhere else.
+- **A click on a fixture** selects it, as a click in the Fixture Sheet does.
+- A profile from a **GDTF** file is drawn at its size, with its beam where the
+  manufacturer says it leaves the body; any other as a small box. The devices'
+  own 3D models and the gobo pictures come later.
+- It draws on an ordinary 2D surface, so it runs on every machine the desk runs
+  on — graphics card or not.
 
 ### The fixture library is GDTF now (S61)
 
