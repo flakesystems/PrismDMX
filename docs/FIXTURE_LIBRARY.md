@@ -143,7 +143,7 @@ Pult ohne Konto muss eine brauchbare Bibliothek haben.
 |---|---|---|---|
 | **OFL im Installer** | nein | nein | **da** — `release.yml` + `fetch-ofl` |
 | **Eigene Datei im Datenverzeichnis** | nein | nein | **da** — `.gdtf` oder `.json` in `fixtures\`, gewinnt gegen die installierte (B43) |
-| **MVR-Import** | nein | nein | **geplant, S62** |
+| **MVR-Import** | nein | nein | **teilweise da** — eine `.mvr` im eigenen Ordner füllt die Bibliothek; der Knopf im Fenster fehlt noch |
 | **In-App-Login zu GDTF Share** | ja | ja | **geplant, S62** |
 
 Dazu der Pfad in *Settings → This machine → Fixture library*, mit dem ein
@@ -159,6 +159,19 @@ bereits, sie gehört zu seiner Produktion.
 
 Und der Leser dafür steht schon: `prism_core::library::zip` aus S61 liest das
 Containerformat, `library::gdtf` liest, was darin liegt.
+
+**Der erste Teil ist gebaut** (`prism_core::library::mvr`): eine `.mvr` in
+`%APPDATA%\PrismDMX\fixtures\` wird beim Start gelesen wie eine `.gdtf` —
+jedes Profil darin landet in der Bibliothek, unter dem Schlüssel, den das
+**Profil** nennt, und gewinnt als eigenes gegen die installierte Bibliothek
+(B43). Ein Fixture, das zweimal ankommt — einmal im Plan, einmal einzeln —, ist
+**eine** Zeile.
+
+Was der Plan **sagt** — Fixture, Modus, Adresse, Position — wird gelesen und
+liegt in `mvr::Rig` bereit, aber **es wird nichts damit gepatcht**. Das ist mit
+Absicht getrennt: eine Bibliothek zu füllen fügt Profile hinzu, die ein
+Operator ignorieren kann; ein Rig zu patchen **ersetzt die geöffnete Show**.
+Die Entscheidung darüber gehört in S62 und muss begründet werden.
 
 ---
 
@@ -190,6 +203,8 @@ Containerformat, `library::gdtf` liest, was darin liegt.
 `IMPLEMENTATION_PLAN.md` trägt den Eintrag. In der Reihenfolge des Nutzens:
 
 1. **MVR-Import** — die Rig-Datei vom Planer, ohne Konto und ohne Netz.
+   **Der Leser steht** (`library::mvr`, 13 Tests); es fehlen der Knopf im
+   Fenster und die Entscheidung, ob der Patch mitkommt.
 2. **`.gdtf`-Import** — die einzelne Datei von der Herstellerseite, über den
    Dateidialog statt über einen Ordner in `%APPDATA%`.
 3. **In-App-Login** — optional, lädt unter dem eigenen Konto des Betreibers ins

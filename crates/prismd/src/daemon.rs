@@ -1169,6 +1169,22 @@ pub fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::F
             library.gdtf_profiles(),
         ),
     );
+    // **S62.** Only when there is one: a desk with no rig plan in its folder
+    // should not get a line about plans.
+    let plans = library.mvr_conversion();
+    if plans.profiles > 0 {
+        log::info(
+            "library",
+            &format!(
+                "{} profiles out of rig plans ({} fixtures planned, {} of them \
+                 naming a profile the plan did not carry, {} profiles unreadable)",
+                plans.profiles,
+                plans.fixtures,
+                plans.fixtures_without_profile,
+                plans.profiles_rejected,
+            ),
+        );
+    }
     library
 }
 

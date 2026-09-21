@@ -58,6 +58,7 @@
 
 pub mod gdtf;
 mod matrix;
+pub mod mvr;
 pub mod ofl;
 pub mod zip;
 
@@ -270,6 +271,11 @@ pub struct FixtureLibrary {
     /// because the two formats lose different things, and a single total would
     /// say neither.
     gdtf_conversion: gdtf::Conversion,
+    /// And for the rig plans — **S62**. A third for the same reason as the
+    /// second: an `.mvr` loses its own things (a fixture naming a profile the
+    /// archive does not carry), and folding that into the GDTF count would
+    /// make a plan look like a broken profile.
+    mvr_conversion: mvr::Conversion,
     /// The fixture keys — `manufacturer/fixture`, without the mode — the venue
     /// supplied itself, so a vendored file of the same name is skipped whole.
     ///
@@ -321,6 +327,12 @@ const MANUFACTURERS_STEM: &str = "manufacturers";
 
 /// What a GDTF archive is called — **S61**.
 const GDTF_EXTENSION: &str = "gdtf";
+
+/// A venue's rig as its planner exported it — **S62**.
+///
+/// Read wherever a `.gdtf` is read, and for the same reason: it is a file an
+/// operator was sent and put in their own folder. See [`mvr`].
+const MVR_EXTENSION: &str = "mvr";
 
 /// The document at the top of one, packed or unpacked.
 const GDTF_DESCRIPTION: &str = "description.xml";
@@ -491,6 +503,11 @@ impl FixtureLibrary {
                 .is_some_and(|extension| extension.eq_ignore_ascii_case(GDTF_EXTENSION))
             {
                 self.read_gdtf_archive(&path, own);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case(MVR_EXTENSION))
+            {
+                self.read_mvr_archive(&path, own);
             }
         }
     }
@@ -503,6 +520,33 @@ impl FixtureLibrary {
         };
         let (built, counts) = gdtf::read_archive(&bytes, own);
         self.absorb_gdtf(built, counts, own);
+    }
+
+    /// One `.mvr` — **S62**.
+    ///
+    /// Every profile the plan carries, filed exactly as a loose `.gdtf` would
+    /// be, so a fixture that arrives both ways is one row. What the plan *says*
+    /// — the addresses, the positions — is read and **not acted on**; see
+    /// [`mvr`] for why that is a separate decision.
+    fn read_mvr_archive(&mut self, path: &Path, own: bool) {
+        let Ok(bytes) = std::fs::read(path) else {
+            self.mvr_conversion.profiles_rejected += 1;
+            return;
+        };
+        let (built, counts, _) = mvr::read_archive(&bytes, own);
+        self.mvr_conversion.absorb(counts);
+        // Each profile of the archive is filed on its own: they are separate
+        // fixtures that happened to travel together, and B43's rule is per
+        // fixture rather than per file.
+        for (entry, profile) in built {
+            let key = fixture_key(&entry.id).to_owned();
+            if own {
+                self.own_fixtures.insert(key);
+            } else if self.own_fixtures.contains(&key) {
+                continue;
+            }
+            self.insert(entry, profile);
+        }
     }
 
     /// One unpacked GDTF's `description.xml`.
@@ -851,6 +895,12 @@ impl FixtureLibrary {
     #[must_use]
     pub const fn gdtf_conversion(&self) -> gdtf::Conversion {
         self.gdtf_conversion
+    }
+
+    /// What reading the rig plans cost — **S62**.
+    #[must_use]
+    pub const fn mvr_conversion(&self) -> mvr::Conversion {
+        self.mvr_conversion
     }
 
     /// How many of the profiles offered came out of a GDTF file — **S61**.
@@ -1695,6 +1745,94 @@ mod tests {
             .expect("the desk carries one");
         assert_eq!(generic.modes[0].beams, 0, "a generic describes no device");
         assert!(!generic.gdtf);
+    }
+
+    /* -- MVR, S62 ----------------------------------------------------------- */
+
+    /// **A rig plan in the venue's own folder fills the library** — S62.
+    ///
+    /// The whole point of reading MVR: a venue that was sent its own plan was
+    /// sent the profiles it needs, and needs no account and no network to use
+    /// them.
+    #[test]
+    fn an_mvr_in_the_venues_folder_is_read_like_a_gdtf() {
+        use crate::library::zip::testkit::Builder;
+
+        let inner = Builder::new()
+            .deflated(
+                "description.xml",
+                gdtf_source("Robe Lighting", "Robin T1 Profile", 3).as_bytes(),
+            )
+            .build();
+        let plan = r#"<GeneralSceneDescription verMajor="1" verMinor="6">
+              <Scene><Layers><Layer name="Stage"><ChildList>
+                <Fixture uuid="F1" name="Front left">
+                  <GDTFSpec>Robe@T1.gdtf</GDTFSpec>
+                  <GDTFMode>Standard</GDTFMode>
+                  <FixtureID>1</FixtureID>
+                  <Addresses><Address break="1">1</Address></Addresses>
+                </Fixture>
+              </ChildList></Layer></Layers></Scene>
+            </GeneralSceneDescription>"#;
+        let archive = Builder::new()
+            .deflated("GeneralSceneDescription.xml", plan.as_bytes())
+            .deflated("Robe@T1.gdtf", &inner)
+            .build();
+
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        std::fs::write(dir.path().join("unser-rig.mvr"), archive).expect("it writes");
+
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(dir.path());
+
+        assert_eq!(library.len(), 1, "the plan's profile is in the library");
+        let profile = library
+            .profile("robe-lighting/robin-t1-profile/standard")
+            .expect("the key comes out of the profile, not out of the plan");
+        assert_eq!(profile.footprint, 3);
+        assert_eq!(library.mvr_conversion().profiles, 1);
+        assert_eq!(library.mvr_conversion().fixtures, 1);
+        assert_eq!(library.mvr_conversion().fixtures_without_profile, 0);
+        // It is the venue's own, so it wins against the installed library —
+        // B43's rule, reached through a third kind of file.
+        assert!(library.entries()[0].own);
+        assert!(library.entries()[0].gdtf);
+    }
+
+    /// A plan and a loose copy of the same fixture are **one** row.
+    #[test]
+    fn a_fixture_that_arrives_twice_is_one_profile() {
+        use crate::library::zip::testkit::Builder;
+
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let source = gdtf_source("Robe Lighting", "Robin T1 Profile", 3);
+        let inner = Builder::new()
+            .stored("description.xml", source.as_bytes())
+            .build();
+        std::fs::write(
+            dir.path().join("a-plan.mvr"),
+            Builder::new().stored("Robe@T1.gdtf", &inner).build(),
+        )
+        .expect("it writes");
+        write_gdtf(dir.path(), "the-same-light.gdtf", &source);
+
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(dir.path());
+        assert_eq!(library.len(), 1, "one fixture, whichever file it came in");
+    }
+
+    /// Something that is not an archive is counted and left, and the rest of
+    /// the folder still reads.
+    #[test]
+    fn a_broken_mvr_does_not_take_the_folder_with_it() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        std::fs::write(dir.path().join("truncated.mvr"), b"PK and then nothing")
+            .expect("it writes");
+        write_gdtf(dir.path(), "good.gdtf", &gdtf_source("Maker", "Thing", 1));
+
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(dir.path());
+        assert_eq!(library.len(), 1, "the good one still arrives");
     }
 
     /* -- searching ---------------------------------------------------------- */

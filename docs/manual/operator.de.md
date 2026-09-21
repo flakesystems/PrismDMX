@@ -331,6 +331,7 @@ Das Datenverzeichnis rührt kein Installationsprogramm an.
 | Wohin | Wofür |
 |---|---|
 | `fixtures/irgendwas.gdtf` | Eine `.gdtf`-Datei vom Hersteller oder von [gdtf-share.com](https://gdtf-share.com). **Der Name ist egal**: die Datei sagt, welches Fixture sie ist, und wenn die Bibliothek dieses Fixture schon hat, ersetzt Ihres es |
+| `fixtures/unser-rig.mvr` | Die **Rig-Datei vom Planer**. Eine `.mvr` enthält die Fixture-Profile genau Ihrer Produktion — das Pult nimmt sie alle in die Bibliothek. Kein Konto, kein Internet. Was der Plan über Adressen und Positionen sagt, wird **noch nicht** gepatcht |
 | `fixtures/meine-lampe.json` | Eine Lampe, für die es überhaupt kein Profil gibt, von Hand im JSON-Format der Open Fixture Library geschrieben — weit leichter zu schreiben als eine GDTF. Sie steht unter *Custom* neben allem anderen im Auswahlfeld |
 | `fixtures/<hersteller>/<fixture>.json` | Eine **Korrektur** an einem mitgelieferten JSON-Profil. Gleicher Herstellerordner, gleicher Dateiname wie in der Bibliothek — Ihres ersetzt es |
 
