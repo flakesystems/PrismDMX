@@ -3116,3 +3116,87 @@
 .patch-next-free {
     align-self: start;
 }
+
+/* --------------------------------------------------------------------------
+   The drawing of the desk — S59.
+
+   A picture of the surface beside the list, so that *which keys are still free*
+   is a glance rather than a read. It scales to the room it is given and keeps
+   the panel's own proportions, because the boxes come from the device profile
+   and a drawing that stretched them would be a drawing of a different desk.
+   -------------------------------------------------------------------------- */
+
+.desk-drawing {
+  width: 100%;
+  height: auto;
+  max-height: 60vh;
+  display: block;
+}
+
+.desk-panel {
+  fill: var(--ground);
+  stroke: var(--edge);
+}
+
+.desk-control rect,
+.desk-control circle {
+  fill: var(--panel);
+  stroke: var(--edge);
+  stroke-width: 1;
+}
+
+.desk-control text {
+  font-size: 9px;
+  fill: var(--ink-dim);
+  pointer-events: none;
+}
+
+/* Bound is filled in; free is left hollow. The question the picture answers is
+   which keys are still free, so *free* is the state that has to read at a
+   glance rather than the other way round. */
+.desk-bound rect,
+.desk-bound circle {
+  fill: var(--edge-lit);
+}
+
+.desk-bound text {
+  fill: var(--ink);
+}
+
+/* Lit means the desk itself is lighting that key right now. */
+.desk-lit rect,
+.desk-lit circle {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.desk-lit text {
+  fill: var(--ground);
+}
+
+/* The one control that may never be bound — §4.3. */
+.desk-reserved rect,
+.desk-reserved circle {
+  fill: var(--ground);
+  stroke-dasharray: 3 2;
+}
+
+.desk-arming rect,
+.desk-arming circle {
+  stroke: var(--warn);
+  stroke-width: 2;
+}
+
+.desk-control:focus rect,
+.desk-control:focus circle {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.desk-control {
+  cursor: pointer;
+}
+
+.desk-Fader rect {
+  fill: var(--ground);
+}

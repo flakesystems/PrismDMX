@@ -127,6 +127,9 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
     // B52: which row a switched knob reads is a reading of the cable, held
     // by the store beside the documents rather than written into the show.
     case "SwitchPositions":
+    // S59: which keys of the surface are lit. A reading of the desk, held by
+    // the store for the drawing to use — the show has no opinion about lamps.
+    case "SurfaceLampsChanged":
       return documents;
   }
 }

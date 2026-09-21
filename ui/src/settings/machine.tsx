@@ -72,6 +72,16 @@ import {
 const selectMachine = (state: DeskState): MachineSettings | null => state.machine;
 
 /** The whole panel. */
+/**
+ * The narrowest and widest a jog wheel may be made — S59.
+ *
+ * `prism_surface::JOG_SENSITIVITY_MIN` / `MAX`, and the daemon clamps to them
+ * whatever arrives: this pair is what stops the box offering a number that will
+ * come back changed, not what enforces the range.
+ */
+const JOG_MIN = 10;
+const JOG_MAX = 400;
+
 export function MachinePanel() {
   const machine = useDesk(selectMachine);
   const send = useSend();
@@ -250,6 +260,7 @@ function Behaviour({
   readonly onChange: (change: MachineChange) => void;
 }) {
   const [universes, setUniverses] = useState<string | null>(null);
+  const [jog, setJog] = useState<string | null>(null);
   const [library, setLibrary] = useState<string | null>(null);
   const typedUniverses = universes ?? String(machine.universes);
   const count = Number(typedUniverses.trim());
@@ -332,6 +343,38 @@ function Behaviour({
         </button>
         <Held note={heldNote(machine, "Universes")} restart />
       </form>
+      <form
+        data-testid="jog-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const percent = Number((jog ?? String(machine.jogSensitivity)).trim());
+          if (Number.isInteger(percent) && percent >= JOG_MIN && percent <= JOG_MAX) {
+            onChange({ t: "JogSensitivity", percent });
+            setJog(null);
+          }
+        }}
+      >
+        <label>
+          Jog wheel
+          <input
+            data-testid="machine-jog"
+            inputMode="numeric"
+            value={jog ?? String(machine.jogSensitivity)}
+            onChange={(event) => {
+              setJog(event.target.value);
+            }}
+          />
+          %
+        </label>
+        <button type="submit" data-testid="machine-jog-apply">
+          Apply
+        </button>
+      </form>
+      <p className="settings-hint" data-testid="machine-jog-hint">
+        How far one click of the wheel moves a parameter. 100 % is one step of an 8-bit channel
+        for a slow turn and four for a fast one; {JOG_MIN}\u2013{JOG_MAX} % either side of that.
+        It takes effect on the next turn of the wheel.
+      </p>
       <form
         data-testid="library-form"
         onSubmit={(event) => {

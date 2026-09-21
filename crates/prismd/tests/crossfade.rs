@@ -191,6 +191,40 @@ async fn settled_frame(daemon: &mut Daemon, frames: &prism_protocols::MockOutput
     last.expect("the output has had a frame")
 }
 
+/// Runs the daemon until the **motors have stopped being written to**, and
+/// answers how many writes there have been.
+///
+/// [`settled_frame`]'s rule, applied to the other end of the desk — and it is
+/// needed for the same reason and was missing for a bad one: `settle`'s twelve
+/// fixed slices are stable *most* of the time, and a test that counts messages
+/// then fails once in three runs on a loaded machine. Reading a count the daemon
+/// owns before it has stopped moving is S46's rule broken, whatever the number
+/// comes out as.
+///
+/// What this makes exact is the claim after it: *a relabel moved a fader*. With
+/// a fixed wait, one late write from the walk before it lands after the count
+/// is taken and is blamed on the relabel.
+async fn settled_fader_writes(daemon: &mut Daemon, surface: &MockSurfaceHandle) -> usize {
+    let mut last = fader_writes(surface).len();
+    let mut still = 0;
+    for slice in 0..400 {
+        daemon
+            .run(Some(Duration::from_millis(5)), std::future::pending())
+            .await;
+        let now = fader_writes(surface).len();
+        if now == last {
+            still += 1;
+        } else {
+            still = 0;
+            last = now;
+        }
+        if slice >= 20 && still >= 10 {
+            break;
+        }
+    }
+    last
+}
+
 /// Channel 1 of the last frame the mock output was given.
 fn channel_one(frames: &prism_protocols::MockOutputHandle) -> Option<u8> {
     frame(frames).and_then(|data| data.first().copied())
@@ -446,7 +480,7 @@ async fn a_crossfade_fader_is_only_ever_written_where_a_hand_put_it() {
             });
             settle(&mut daemon).await;
         }
-        let before_label = fader_writes(&surface).len();
+        let before_label = settled_fader_writes(&mut daemon, &surface).await;
         // And a repaint provoked by something else entirely: a show change is
         // what used to write the fader back even when nobody had touched it.
         desk.command(Command::Label {

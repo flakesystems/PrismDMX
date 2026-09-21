@@ -819,6 +819,9 @@ mod tests {
             autostart: true,
             fixture_library: Some("D:/fixtures".to_owned()),
             surface_profile: Some("D:/xtouch.json".to_owned()),
+            // Not at its default either, for the reason nothing in this fixture
+            // is: a value carried through cannot be told from one never read.
+            jog_sensitivity: 150,
         };
         let resolved = resolve(&Options::default(), &settings, false, false);
         assert_eq!(

@@ -99,11 +99,14 @@ import type {
   Answer,
   BoundControl,
   FeatureGroup,
+  KeyShape,
+  PanelLayout,
   SurfaceAction,
   SurfaceControl,
   WindowType,
 } from "../bindings";
 import {
+  CONSOLE_KEYS,
   FEATURE_GROUP_VARIANTS,
   WINDOW_TYPE_VARIANTS,
 } from "../bindings";
@@ -112,6 +115,7 @@ import { useAsk, useDesk, useSend } from "../store/hooks";
 import type { DeskState } from "../store/desk";
 import {
   ACTION_GROUPS,
+  ACTION_KINDS,
   CUSTOM_KINDS,
   actionOfKind,
   actionText,
@@ -123,7 +127,9 @@ import {
 } from "./actions";
 import type { ActionKind, Target } from "./actions";
 import { profileDocument, readProfile } from "./controlfile";
+import { DeskDrawing } from "./panel";
 import { heldNote, isHeld } from "./settings";
+import { titleOf } from "../desk/keys";
 import { FIXED_BUTTON_FUNCTIONS } from "../desk/functions";
 import type { FixedButtonFunction } from "../desk/functions";
 
@@ -133,10 +139,13 @@ const selectRevision = (state: DeskState): number => state.surfaceBindings;
 const selectLearning = (state: DeskState): boolean => state.surfaceLearning;
 const selectMachine = (state: DeskState) => state.machine;
 const selectLearned = (state: DeskState): BoundControl | null => state.surfaceLearned;
+const selectLamps = (state: DeskState): readonly string[] => state.surfaceLamps;
 
 /** What the daemon last said the table is. */
 interface Table {
   readonly controls: readonly SurfaceControl[];
+  /** The panel a drawing is drawn on, or `null` for a device nobody has drawn. */
+  readonly panel: PanelLayout | null;
   readonly device: string;
   readonly deviceKey: string;
   readonly profileVersion: number;
@@ -147,6 +156,7 @@ interface Table {
 
 const NOTHING: Table = {
   controls: [],
+  panel: null,
   device: "",
   deviceKey: "",
   profileVersion: 0,
@@ -160,6 +170,7 @@ function tableOf(answer: Answer | null): Table | null {
   return answer !== null && answer.t === "SurfaceBindings"
     ? {
         controls: answer.controls,
+        panel: answer.panel,
         device: answer.device,
         deviceKey: answer.deviceKey,
         profileVersion: answer.profileVersion,
@@ -186,8 +197,25 @@ interface RowState {
 
 const FRESH: RowState = { target: "Selected", detail: "", submit: false };
 
-/** Which row, or which custom draft, has armed learn. */
-type Arming = { readonly t: "kind"; readonly kind: ActionKind } | { readonly t: "new" };
+/** Which row, which keypad word, or which custom draft has armed learn. */
+type Arming =
+  | { readonly t: "kind"; readonly kind: ActionKind }
+  | { readonly t: "word"; readonly word: string }
+  | { readonly t: "new" };
+
+/** Whether two armings are the same row, so that a second press gives up. */
+function sameArming(one: Arming, two: Arming): boolean {
+  if (one.t !== two.t) {
+    return false;
+  }
+  if (one.t === "kind" && two.t === "kind") {
+    return one.kind === two.kind;
+  }
+  if (one.t === "word" && two.t === "word") {
+    return one.word === two.word;
+  }
+  return true;
+}
 
 /** The whole panel. */
 export function ControlsPanel() {
@@ -197,6 +225,8 @@ export function ControlsPanel() {
   const learning = useDesk(selectLearning);
   const machine = useDesk(selectMachine);
   const learned = useDesk(selectLearned);
+  const lamps = useDesk(selectLamps);
+  const [drawing, setDrawing] = useState(false);
   const [table, setTable] = useState<Table>(NOTHING);
   const [rows, setRows] = useState<Readonly<Record<string, RowState>>>({});
   const [arming, setArming] = useState<Arming | null>(null);
@@ -271,15 +301,22 @@ export function ControlsPanel() {
     if (learned === null || arming === null || learned === alreadyNamed.current) {
       return;
     }
-    const state = arming.t === "new" ? draft : (rows[arming.kind] ?? FRESH);
-    const kind = arming.t === "new" ? draft.kind : arming.kind;
-    const action = actionOfKind(
-      kind,
-      state.target,
-      state.detail,
-      slotOfControl(learned),
-      state.submit,
-    );
+    // A keypad row's answer is its word and nothing else — there is no box on
+    // it to fill in, which is what makes it a row rather than a chooser.
+    const action =
+      arming.t === "word"
+        ? actionOfKind("Console key", "Selected", arming.word)
+        : (() => {
+            const state = arming.t === "new" ? draft : (rows[arming.kind] ?? FRESH);
+            const kind = arming.t === "new" ? draft.kind : arming.kind;
+            return actionOfKind(
+              kind,
+              targetOf(learned),
+              state.detail,
+              slotOfControl(learned),
+              state.submit,
+            );
+          })();
     if (action !== null) {
       bind(learned, action);
     }
@@ -300,6 +337,12 @@ export function ControlsPanel() {
         continue;
       }
       const kind = kindOf(control.action);
+      // **The keypad words are indexed by word, not by kind** — S59. They are
+      // one `ActionKind` carrying twenty-three different details, so a single
+      // bucket would collect every bound word into whichever row drew first.
+      if (kind === "Console key") {
+        continue;
+      }
       const held_ = index.get(kind);
       if (held_ === undefined) {
         index.set(kind, [control]);
@@ -309,6 +352,36 @@ export function ControlsPanel() {
     }
     return index;
   }, [table.controls]);
+
+  /** Which keys are bound to each word of the keypad — S59. */
+  const boundToWord = useMemo(() => {
+    const index = new Map<string, SurfaceControl[]>();
+    for (const control of table.controls) {
+      if (control.action === null || control.action.t !== "ConsoleWord") {
+        continue;
+      }
+      const held_ = index.get(control.action.word);
+      if (held_ === undefined) {
+        index.set(control.action.word, [control]);
+      } else {
+        held_.push(control);
+      }
+    }
+    return index;
+  }, [table.controls]);
+
+  /**
+   * The controls the advanced section owns, in the table's own order — S59.
+   *
+   * Read off `table.controls` rather than listed here, so a device whose
+   * profile has no jog wheel simply has no jog row: this panel holds no model
+   * of what a surface is made of, which is §4.3's rule and the reason
+   * `SurfaceControl` carries `permanent` and `reserved` at all.
+   */
+  const advanced = useMemo(
+    () => table.controls.filter((control) => isAdvanced(control.control)),
+    [table.controls],
+  );
 
   /** Every key bound to one of the custom kinds, in the table's own order. */
   const custom = useMemo(
@@ -323,10 +396,7 @@ export function ControlsPanel() {
 
   const arm = useCallback(
     (next: Arming) => {
-      const same =
-        arming !== null &&
-        arming.t === next.t &&
-        (next.t === "new" || (arming.t === "kind" && arming.kind === next.kind));
+      const same = arming !== null && sameArming(arming, next);
       if (same) {
         setArming(null);
         learn(false);
@@ -411,6 +481,50 @@ export function ControlsPanel() {
             : `Press the key you want for ${armingName(arming, draft.kind).toLowerCase()}. It will be named rather than doing what it is bound to.`}
         </p>
       ) : null}
+      <div className="settings-bar">
+        <button
+          type="button"
+          data-testid="controls-view-list"
+          aria-pressed={!drawing}
+          onClick={() => {
+            setDrawing(false);
+          }}
+        >
+          List
+        </button>
+        <button
+          type="button"
+          data-testid="controls-view-drawing"
+          aria-pressed={drawing}
+          onClick={() => {
+            setDrawing(true);
+          }}
+        >
+          The desk
+        </button>
+      </div>
+      {drawing ? (
+        <div className="settings-list" data-testid="controls-drawing">
+          <p className="settings-hint">
+            Every key of the surface, where it is. A key that is filled in is bound; one that
+            glows is lit right now, which is what the desk itself is showing. Click a key to put
+            the list in front of what it does.
+          </p>
+          <DeskDrawing
+            controls={table.controls}
+            panel={table.panel}
+            lamps={lamps}
+            arming={armingControl(arming, table.controls)}
+            onPick={(control) => {
+              // Picking a key in the drawing is *looking it up*, not binding
+              // it: the list is where a binding is made, and a click that had
+              // rebound a key would be a gesture with no Learn in front of it.
+              setDrawing(false);
+              setNote(`${control.name} \u2014 ${actionText(control.action)}.`);
+            }}
+          />
+        </div>
+      ) : (
       <div className="settings-list" data-testid="controls-list">
         {ACTION_GROUPS.map((group) => (
           <section key={group.title} className="control-section">
@@ -437,6 +551,32 @@ export function ControlsPanel() {
             ))}
           </section>
         ))}
+
+        <section className="control-section" data-testid="controls-keypad">
+          <h3>Console keys</h3>
+          <p className="settings-hint">
+            The same keys as the <em>Command keys</em> window. A key writes its word into the
+            command line; the line is finished on screen, by Enter or by clicking the thing it
+            was waiting for. A bound key lights up while pressing it would lead somewhere.
+          </p>
+          <ControlHeadings />
+          {CONSOLE_KEYS.map((key) => (
+            <WordRow
+              key={key.word}
+              word={key.word}
+              shape={key.shape}
+              keys={boundToWord.get(key.word) ?? []}
+              held={held}
+              arming={arming?.t === "word" && arming.word === key.word}
+              onLearn={() => {
+                arm({ t: "word", word: key.word });
+              }}
+              onUnbind={(control) => {
+                bind(control, null);
+              }}
+            />
+          ))}
+        </section>
 
         <section className="control-section" data-testid="controls-custom">
           <h3>Custom commands</h3>
@@ -471,9 +611,61 @@ export function ControlsPanel() {
             }}
           />
         </section>
+
+        <details className="control-section" data-testid="controls-advanced">
+          <summary>Advanced: the strips, the main fader and the jog wheel</summary>
+          <p className="settings-hint">
+            These belong to the executors and to the programmer, and they are set up in the
+            Executors window and on the encoder bar. They are here so that a desk that wants
+            them elsewhere can say so — one row per control, and the executor a strip control
+            acts on is that strip&apos;s.
+          </p>
+          <ControlHeadings />
+          {advanced.map((control) => (
+            <AdvancedRow
+              key={control.name}
+              control={control}
+              state={rows[control.name] ?? FRESH}
+              held={held}
+              onState={(next) => {
+                setRows((was) => ({ ...was, [control.name]: next }));
+              }}
+              onRebind={(action) => {
+                bind(control.control, action);
+              }}
+            />
+          ))}
+        </details>
       </div>
+      )}
     </div>
   );
+}
+
+/**
+ * Which control the drawing should show as armed — S59.
+ *
+ * Learn is armed for a **row**, and a row is an action rather than a key, so
+ * most of the time the answer is *none*: the operator has not pressed anything
+ * yet and there is no key to mark. What the drawing can show is the case where
+ * exactly one key is already bound to that row — which is the common one when
+ * somebody is moving a binding rather than making it.
+ */
+function armingControl(
+  arming: Arming | null,
+  controls: readonly SurfaceControl[],
+): string | null {
+  if (arming === null || arming.t === "new") {
+    return null;
+  }
+  const bound = controls.filter((control) =>
+    control.action === null
+      ? false
+      : arming.t === "word"
+        ? control.action.t === "ConsoleWord" && control.action.word === arming.word
+        : kindOf(control.action) === arming.kind,
+  );
+  return bound.length === 1 ? (bound[0]?.name ?? null) : null;
 }
 
 /**
@@ -521,19 +713,6 @@ function ActionRow({
     <div className={`control-row${arming ? " control-arming" : ""}`} data-testid={`action-${kind}`}>
       <span className="control-name">{kind}</span>
       <span className="control-detail">
-        {NEEDS_TARGET.has(kind) ? (
-          <select
-            data-testid={`action-target-${kind}`}
-            disabled={held}
-            value={state.target}
-            onChange={(event) => {
-              onState({ ...state, target: event.target.value === "Strip" ? "Strip" : "Selected" });
-            }}
-          >
-            <option value="Selected">the selected executor</option>
-            <option value="Strip">the executor under this strip</option>
-          </select>
-        ) : null}
         <Detail
           kind={kind}
           detail={state.detail}
@@ -558,6 +737,150 @@ function ActionRow({
           {arming ? "Press a key…" : "Learn"}
         </button>
       </span>
+    </div>
+  );
+}
+
+/**
+ * One key of the console keypad, and every surface key that writes it — S59.
+ *
+ * A row with no box on it, which is what tells it apart from {@link ActionRow}:
+ * the word **is** the answer, so there is nothing to fill in before Learn can be
+ * pressed. The shape is shown rather than asked, because it is the word's and
+ * not the operator's — `ARCHITECTURE_SPEC.md` §4.5.
+ */
+function WordRow({
+  word,
+  shape,
+  keys,
+  held,
+  arming,
+  onLearn,
+  onUnbind,
+}: {
+  readonly word: string;
+  readonly shape: KeyShape;
+  readonly keys: readonly SurfaceControl[];
+  readonly held: boolean;
+  readonly arming: boolean;
+  readonly onLearn: () => void;
+  readonly onUnbind: (control: BoundControl) => void;
+}) {
+  return (
+    <div
+      className={`control-row${arming ? " control-arming" : ""}`}
+      data-testid={`word-${word.toLowerCase()}`}
+    >
+      <span className="control-name">{word}</span>
+      <span className="control-detail">
+        <span className={`command-key command-key-${shape}`} data-shape={shape}>
+          {SHAPE_WORDS[shape]}
+        </span>
+      </span>
+      <span data-testid={`word-keys-${word.toLowerCase()}`}>
+        <KeyChips keys={keys} held={held} onUnbind={onUnbind} />
+      </span>
+      <span>
+        <button
+          type="button"
+          disabled={held}
+          data-testid={`word-learn-${word.toLowerCase()}`}
+          aria-pressed={arming}
+          title={titleOf(word)}
+          onClick={onLearn}
+        >
+          {arming ? "Press a key\u2026" : "Learn"}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/** What each of §4.5's shapes does, in a word an operator reads on the row. */
+const SHAPE_WORDS: Readonly<Record<KeyShape, string>> = {
+  run: "runs at once",
+  oops: "takes a word back",
+  write: "writes and waits",
+  append: "adds to the line",
+};
+
+/**
+ * One hardware control of the advanced section — S59.
+ *
+ * S38's original panel, kept as the back door it should always have been: the
+ * row is the **control** and the chooser is what it does. It is here rather than
+ * in the list because a strip's fader, encoder and keys belong to the executor
+ * standing under them, and the Executors window is where an operator sets that
+ * up — but a desk that wants them somewhere else has to be able to say so.
+ *
+ * The executor a strip control acts on is not asked: it is that strip's, which
+ * is what {@link targetOf} reads off the control itself.
+ */
+function AdvancedRow({
+  control,
+  state,
+  held,
+  onState,
+  onRebind,
+}: {
+  readonly control: SurfaceControl;
+  readonly state: RowState;
+  readonly held: boolean;
+  readonly onState: (next: RowState) => void;
+  readonly onRebind: (action: SurfaceAction | null) => void;
+}) {
+  const kind = kindOf(control.action);
+  const detail = control.action === null ? state.detail : detailOf(control.action);
+  const rebind = (nextKind: ActionKind, nextDetail: string): void => {
+    onRebind(
+      actionOfKind(
+        nextKind,
+        targetOf(control.control),
+        nextDetail,
+        slotOfControl(control.control),
+        state.submit,
+      ),
+    );
+  };
+  return (
+    <div className="control-row" data-testid={`advanced-${control.name}`}>
+      <span className="control-name">
+        <span className={control.reserved ? "key-chip key-chip-reserved" : "key-chip"}>
+          {control.name}
+        </span>
+      </span>
+      <span className="control-detail">
+        <select
+          data-testid={`advanced-kind-${control.name}`}
+          disabled={held || control.reserved}
+          value={kind}
+          onChange={(event) => {
+            const next = ACTION_KINDS.find((candidate) => candidate === event.target.value);
+            if (next !== undefined) {
+              onState({ ...state, detail: "" });
+              rebind(next, "");
+            }
+          }}
+        >
+          {ACTION_KINDS.map((candidate) => (
+            <option key={candidate} value={candidate}>
+              {candidate}
+            </option>
+          ))}
+        </select>
+        <Detail
+          kind={kind}
+          detail={detail}
+          held={held || control.reserved}
+          testId={`advanced-detail-${control.name}`}
+          onDetail={(next) => {
+            onState({ ...state, detail: next });
+            rebind(kind, next);
+          }}
+        />
+      </span>
+      <span>{actionText(control.action)}</span>
+      <span />
     </div>
   );
 }
@@ -788,6 +1111,9 @@ function NewCustom({
  * who did not arm it nothing about what they are about to change.
  */
 function armingName(arming: Arming, draftKind: ActionKind): string {
+  if (arming.t === "word") {
+    return `the ${arming.word} key`;
+  }
   const kind = arming.t === "new" ? draftKind : arming.kind;
   return CUSTOM_LABELS[kind] ?? kind;
 }
@@ -799,15 +1125,40 @@ const CUSTOM_LABELS: Partial<Record<ActionKind, string>> = {
   "Jump to view": "Jump to view",
 };
 
-/** The kinds that act on an executor and therefore need to be told which. */
-const NEEDS_TARGET: ReadonlySet<ActionKind> = new Set<ActionKind>([
-  "Executor master",
-  "Executor go +",
-  "Executor go −",
-  "Executor off",
-  "Executor button",
-  "Select executor",
-]);
+/**
+ * Which executor a control's action acts on — **S59, and it is no longer asked.**
+ *
+ * The panel had a *Strip / Selected* chooser on every executor row, and it had
+ * to: one list held both *the executor under this strip* and *the selected one*.
+ * The owner's decision of 2026-09-20 split them — the strip controls went to the
+ * advanced section and the functions of the selected executor stayed in the list
+ * — and once they are apart the answer is a property of the **control** rather
+ * than a question for the operator.
+ *
+ * A strip's fader, encoder or key means that strip's executor; anything else
+ * means the selected one. A chooser offering *the executor under this strip* on
+ * a panel key would offer a binding that resolves to nothing
+ * (`Bindings::command` answers `None` for an `ExecutorTarget::Strip` off a
+ * strip), which is a question with a wrong answer in it.
+ */
+function targetOf(control: BoundControl): Target {
+  return control.t === "StripFader" ||
+    control.t === "StripEncoder" ||
+    control.t === "StripButton"
+    ? "Strip"
+    : "Selected";
+}
+
+/** Whether a control is one the advanced section owns — S59. */
+function isAdvanced(control: BoundControl): boolean {
+  return (
+    control.t === "StripFader" ||
+    control.t === "StripEncoder" ||
+    control.t === "StripButton" ||
+    control.t === "MainFader" ||
+    control.t === "Jog"
+  );
+}
 
 /** The one extra answer a kind needs, where it needs one. */
 function Detail({

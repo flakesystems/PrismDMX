@@ -299,6 +299,7 @@ export function machine(overrides: Partial<MachineSettings> = {}): MachineSettin
     deskId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
     dataDir: "C:/ProgramData/PrismDMX",
     local: true,
+    jogSensitivity: 100,
     websocket: "127.0.0.1:7373",
     websocketOpen: "127.0.0.1:7373",
     token: null,

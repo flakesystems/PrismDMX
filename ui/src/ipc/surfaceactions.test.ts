@@ -53,6 +53,8 @@ describe("every action a key can be bound to", () => {
         "ExecutorMaster",
         "ExecutorGo",
         "ExecutorOff",
+        "ExecutorOn",
+        "ConsoleWord",
         "ExecutorButton",
         "SelectExecutor",
         "ClearProgrammer",

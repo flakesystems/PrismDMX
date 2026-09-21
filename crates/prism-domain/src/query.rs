@@ -895,6 +895,16 @@ pub enum Answer {
         /// Whether learn is armed — the next control touched will be named
         /// rather than obeyed (`crate::Command::SetSurfaceLearn`).
         learning: bool,
+        /// The panel a drawing of this surface is drawn on — S59.
+        ///
+        /// `None` for a device whose profile has no layout, which is an
+        /// ordinary state and the one a drawing has to handle: a surface nobody
+        /// has drawn is a list and no picture, which is better than a picture
+        /// of the wrong desk. Carried here rather than asked for separately
+        /// because it is read at the same moment and by the same panel as the
+        /// rows, and the rows' own boxes are meaningless without it.
+        #[serde(default)]
+        panel: Option<crate::PanelLayout>,
     },
     /// What every cue of one list inherits, in playback order — S48.
     CueTracking {

@@ -1384,79 +1384,270 @@ Asked for on 2026-09-07, with three things stated as requirements rather than le
 - The new delta decoded as **bytes** in the browser (B55's rule), and a knob renamed in Chromium against a real daemon: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*
 
 ## S59 · `ui` + `prism-surface` + `prismd` — the Controls panel, the owner's next round
-**Size:** unknown until the questions are answered · **Depends on:** S38, S58
+**Size:** XL · **Depends on:** S38, S58 · **Question round answered 2026-09-20** · **Done 2026-09-21** (`PROGRESS.md` §2.56)
 
-**This session starts by asking.** The owner has change requests for the
-Controls panel and said on 2026-09-20 that they do not belong in the punch-list
-patch. What they are is **not written down yet**, and guessing at them would
-produce the second control editor rather than the one that was wanted — S38
-built the first, B3 turned it inside out, B24 gave it its sections, B25 the send
-box and B26 export and import, and every one of those came from a sentence the
-owner wrote rather than from a design here.
+**Goal:** the surface stops being a handful of hard-wired gestures with a box to
+type lines into. Every word the console knows becomes something a key can be
+given, and **a key's lamp says whether pressing it would lead anywhere** — which
+is the change underneath all the others. Today feedback hangs on the *hardware
+position*: `prismd::surface` lights the Select LED because it is a strip's and
+the Save LED because it is Save's. After this it hangs on **what the key is
+bound to**, which is the only arrangement in which a re-bound key can be honest.
 
-So the first deliverable is a **question round**, and nothing is built before
-the answers are in the plan. The questions below are the ones this document can
-already see; the owner will have others, and theirs come first.
+### What the owner decided, 2026-09-20
 
-**What there is now**, so the questions are about the thing that exists:
+**1 — Word keys, and the line stays the state machine.** A bound *Store* writes
+`store` into the command line, exactly as typing it would. The alternative — a
+key that carries out a whole command by itself — was put and rejected: the
+console already has a grammar, and a second vocabulary resolving to complete
+commands would be a second grammar to keep in step with it.
 
-- The rows are **actions** (`ACTION_GROUPS`, twenty-four in four groups:
-  executors, programmer, other internal commands, custom), and **Learn sits on
-  the row** — press Learn, press the key (B3).
-- A row is a *kind*: *Open window* is one row with a window field beside it, not
-  fourteen rows.
-- The custom section is the other shape — there the **key** is the row
-  (`CUSTOM_KINDS`: *Type a command*, *Open window*, *Jump to view*), a `+` adds
-  one, and *Type a command* carries the **send box**: write the line, or write
-  and run it (B25). *Execute Macro* is in the chooser and switched off, because
-  there is no macro engine and no `SurfaceAction` for one.
-- The table in force is the **machine's** (`machine.json`), one
-  `MachineChange::SurfaceBinding` per control, one revision for every client
-  (S38). Export and import go through the browser's file dialog and write a
-  **profile file** — the same document `prism_surface::Bindings::parse` reads
-  (B26).
-- `docs/MCU_MAPPING.md` §4.3 keeps the reserved control (SMPTE/Beats) and the
-  permanent set out of the operator's reach.
+**2 — No digits and no Enter on the surface.** *Das Pult und die Oberfläche sind
+als sich ergänzende Geräte gedacht. Ein Pult sollte nie ohne Bildschirm betrieben
+werden. Andersrum muss natürlich trotzdem möglich sein, wenn man kein Pult
+besitzt.* So a word key **begins** a line and the screen finishes it, which works
+because a click on a pool already appends its object to a line waiting for one
+(S43): `store` on a key, then Executor 3 clicked in the window, is one gesture
+across two devices. It also settles a question that looked open — **the line
+never has to be read on the surface**. The twelve seven-segment digits, which
+`prism-surface` can drive and `prismd` has never written, stay unused, and
+nothing new goes on the scribble strips that S45 did not already put there.
 
-**The questions to put to the owner** (answers go into this entry, then the
-deliverables and exit criteria are written from them):
+**3 — Which words become keys, and where the list already lives.** Found while
+building, and it changes the shape of the work: **`ARCHITECTURE_SPEC.md` §4.5 has
+been this design since S40** — *a key on the desk writes a word into the command
+line, it does not act* — and `ui/src/desk/keys.ts` has been an implementation of
+it since S43. The `CommandKeys` window is a keypad of these very words, sorted
+into §4.5's **three shapes** plus Oops. What is missing is not the design and not
+the vocabulary. It is that **none of it reaches the desk**.
 
-1. **What is missing from the vocabulary?** Which action does the owner reach
-   for and not find — pages, a second Clear stage, Blind, a bank by name,
-   *Update*, *Store* with a mode, a view by number?
-2. **One key, more than one meaning?** Should a key do something else while
-   another is held (a shift layer), or in a different view or executor page —
-   and if so, is the layer the *desk's* state or the *show's*?
-3. **Hold or latch?** Is *pressed* enough for every action, or does an action
-   need to know about being held and released (a flash key is the obvious one)?
-4. **Faders, encoders and the jog wheel.** Executor faders are configured per
-   executor today (S45/B15) and the encoders are the programmer's. Should the
-   Controls panel be where those are set as well, so there is one place rather
-   than three?
-5. **What does a key's lamp say?** The LEDs are the surface's own answer today.
-   Should a bound key's lamp follow what it is bound to — lit while its executor
-   runs, while Blind is on, while the line it writes would be accepted?
-6. **What do the scribble strips say** over a bank of custom keys?
-7. **Where does a binding belong?** It is the machine's now — it stays when a
-   show is carried to another hall on a stick. Should a *show* be able to bring
-   its own keys, and what wins when both have something to say?
-8. **Profiles rather than one table?** Named tables in the desk that can be
-   switched (a house table and an operator's), instead of a file exported and
-   imported by hand?
-9. **A second surface.** A second X-Touch, an X-Touch Mini, a MIDI keyboard, a
-   stream-deck-shaped thing, a plain computer keyboard: which of these is real
-   for this venue, and does it need to work **at the same time** as the first?
-10. **The picture.** The panel is a list. Would a drawing of the desk with its
-    keys on it be better, or is the list what an operator actually reads?
+So the session does not invent a second vocabulary beside that one. The table
+**moves into Rust** — word and shape together — and is generated into
+`ui/src/bindings/variants.ts` beside `FEATURE_GROUP_ATTRIBUTES`, which is this
+project's own rule about what to generate: *what is generated is the thing that
+would actually drift*. `keys.ts` keeps its titles and reads the words from there.
+One table, two devices, and a word added later cannot arrive on one of them only.
 
-**Deliverables** — written once the answers are in, and not before.
+It gains four entries on the way, on the owner's decision and on both devices:
+**`color`** (which §4.5 already lists and the keypad never had — an existing gap,
+closed here), **`new`**, **`at`** and **`thru`**.
 
-**Exit criteria** — the same, plus the two that hold whatever is decided:
+**4 — What a key does with its word is §4.5's shape, not a new rule.** `clear`,
+`update` and `full` are *a whole command with no argument* and **run at once** —
+which is the owner's *Update und Full sollen auch sofort ausgeführt werden*,
+already written down and already true on screen. `oops` is its own shape and
+keeps B58's *take a word off the line before you undo an edit*, which the daemon
+decides, so the X-Touch's Undo key inherits it for free. The verbs **write and
+wait**; the object words **append**. The playback words act on the selected
+executor as they do now.
 
+The line is then finished on the screen, which is the same paragraph of §4.5:
+an item picked out of a list *writes the command that names it and submits it*.
+`Store` on the desk, Executor 3 clicked in the window, and the line has run —
+**which is why no Enter key is needed on the surface**, and why the owner could
+decline one without leaving a gesture half-built.
+
+§4.5 needs one correction for saying otherwise: its waiting row ends *presses
+Enter, which is also a key on the surface*. There has never been such an action,
+and there will not be one. The sentence becomes what is actually true — the line
+is completed on the screen, by Enter or by a click that supplies the argument and
+submits with it.
+
+**5 — A page change leaves the line alone**, as a view change does since B56
+(GitHub #24). The owner named it as a precaution rather than a sighting, and the
+executor bar already sends `SetExecutorPage` rather than running the line
+`page 2`, so this is a check and a test that holds it, not a hunt.
+
+**6 — The lamp: grammar *and* meaning.** A key is lit when the line would accept
+what it writes **and** pressing it would do something. Nine conditions are
+written by hand and everything else follows the grammar alone:
+
+| Lit while | |
+|---|---|
+| `store` | the programmer holds values |
+| `update` | there is something to update |
+| `full` | something is selected |
+| `clear` | **the Clear stage is not `Nothing`** — the owner's correction, and the better rule: the lamp follows the stage the machine stands on rather than whether the programmer is empty |
+| `oops` / `redo` | the journal has a step that way |
+| `save` | there are unsaved changes — so today already, and it keeps its meaning |
+| `on` / `off` / `go+` / `go-` | the selected executor has a sequence |
+
+An action with no meaningful state — a window, a view, an encoder bank — stays
+**dark**, deliberately: *nur Tasten bei denen die Einstufung sinnvoll ist, andere
+bleiben dauerhaft dunkel*. A lamp that is always lit says nothing, and costs an
+operator a glance to find that out.
+
+**7 — What leaves the Controls list.** The strip controls, because they are the
+Executors window's business: `StripFader`, `StripEncoder`, the five strip
+buttons, and the main fader. As *rows* that is **Executor master** (which is both
+faders), **Select executor** (a strip action only) and the Strip half of
+**Executor button**. The jog wheel leaves with them and is fixed on
+`AdjustParameter`.
+
+**What explicitly does not leave** — the owner's words — are *die Funktionen des
+selektierten Executors*: `Go+`, `Go-`, `Off`, `Executor button` and
+`Executor page` stay in the ordinary list. That is also what `docs/MCU_MAPPING.md`
+§4.3 asks for, since the transport row is the part of the panel that keeps
+reaching PrismDMX while the surface is also driving a sound console. With the
+strip half gone those rows all mean *the selected one*, so the **Strip /
+Selected** column disappears from the list.
+
+Nothing becomes unreachable: everything removed is still bound in a
+**collapsible advanced section at the foot of the same page**, one row per
+hardware control — which is, exactly, S38's original panel kept as the back door
+it should have been all along.
+
+**8 — A drawing of the desk beside the list.** Switchable, not instead of: the
+list stays the way a *function* is found, and the picture is the way a *free key*
+is found. **To scale**, so the X-Touch is recognisably itself rather than a grid
+of boxes — strips, displays, jog wheel and panel in their real proportions.
+
+Two things follow, and both are the owner's decision of 2026-09-20. The layout
+lives **in the device profile**, not in the interface: it is a fact about a
+device, exactly as `permanent` and `reserved` already are (§4.3), and a second
+surface must be able to bring its own picture rather than wait for the browser to
+learn about it. And **the drawing lights up** — the list stays quiet, but a key
+in the picture shows what its lamp is doing, so the owner reworking the table on
+the rig can see at a glance whether a condition is right. That is the one place
+this session needs a **new delta**, and so a byte recording through
+`decodeServerMessage` (B55's rule).
+
+**9 — The jog wheel, in DMX steps.** The owner reports it is still too slow, and
+the arithmetic says why: at today's 20 attribute units a slow detent moves **one
+thirteenth of one DMX step**, so a dozen detents pass before an 8-bit channel
+changes at all. The floor is therefore **one DMX step per detent** (`COARSE`,
+257) and the ceiling **four** (1028), geometrically spaced:
+
+| Interval since the last message | Attribute units per detent | |
+|---|---|---|
+| ≥ 40 ms | 257 | one DMX step |
+| ≥ 20 ms | 408 | |
+| ≥ 10 ms | 648 | |
+| anything faster | 1028 | four DMX steps |
+
+A **sensitivity factor** lives in the machine settings — one factor over the
+whole curve, the desk's rather than the show's, so a heavier hand is a property
+of the console somebody sits at. And one measurement is owed: **how many detents
+a full revolution has is written down nowhere**, which is why every
+percentage-per-turn in `accel.rs` is back-calculated rather than counted. It is
+counted on the rig this session, or the factor is what the owner tunes it with.
+
+**10 — The shipped table is one file, and it wins.** `profiles/surface/xtouch.json`
+becomes the **only** source of the built-in defaults (`include_str!`), so S22's
+round-trip assertion stops guarding two hand-kept copies of one table and starts
+guarding one file against itself. All sixty-four panel keys are bound, so the
+owner has a full table to rework on the rig rather than an empty panel to design
+on. And an update **overwrites** a `machine.json` that already holds a table: the
+beta is small, the vocabulary underneath it has changed, and Export exists for
+anybody who wants their old one back.
+
+### Three more, settled the same day
+
+- **Only `On` is added to the playback actions.** `go` and `goback` are not
+  missing words, they are spellings: `console.rs` resolves `go` to
+  `ExecutorGo { Next }` and `goback` to `ExecutorGo { Prev }`, which is what
+  `go+` and `go-` already are. `Command::ExecutorOn` is the one that exists with
+  no `SurfaceAction` reaching it.
+- **A word key is its own variant**, `SurfaceAction::ConsoleWord`, rather than a
+  `WriteCommandLine` carrying that one word. A bound line and a bound word look
+  the same on the wire and are not the same thing: only the second can be asked
+  *would this be accepted now*, which is half of the lamp. The **custom section
+  is untouched** — free text stays for whole lines, and a free-text key keeps
+  having no lamp, because it cannot have one.
+- **The lamp is computed in the daemon.** It travels as MIDI to the surface, and
+  — because §8 asks the drawing to light up — as one new delta to the browser.
+  The conditions themselves are written once, in the daemon, which holds
+  everything the nine of them read.
+
+**Deliverables**
+
+- The keypad table in Rust — word plus §4.5 shape — generated into
+  `ui/src/bindings/variants.ts`, with `color`, `new`, `at` and `thru` added and
+  `keys.ts` reading the words from it instead of holding its own
+- `SurfaceAction::ConsoleWord { word }`, the words it may carry checked against
+  that one table rather than against a second list, and `On` as the one playback
+  variant that is missing
+- A lamp layer in `prismd::surface` that asks **the action** what its LED should
+  be, replacing the two positional answers that are there now; the nine
+  conditions of §6 as one function over the core's state
+- The Controls panel: the strip rows and the jog out of the list and into a
+  collapsed **Advanced** section; the Strip / Selected column gone; the new words
+  as rows in their sections
+- The desk drawing as a second view, its geometry carried by the **device
+  profile** and drawn to scale, lit from a new delta that says which controls are
+  live — decoded as **bytes** in the browser (B55)
+- `JogAcceleration`'s four rows re-cut to 257 / 408 / 648 / 1028, and
+  `MachineSettings::jogSensitivity` with its `MachineChange`, its box in *This
+  machine*, and its place in both manuals
+- `profiles/surface/xtouch.json` as the single source of the built-in table, all
+  sixty-four panel keys bound, and the overwrite on update
+- `ARCHITECTURE_SPEC.md` §4.5's Enter sentence corrected, and its table given the
+  desk as a second reader
+- Both manuals in both languages, the website, `docs/MCU_MAPPING.md` §4,
+  `docs/COMMAND_LINE.md` §1's exception list, `docs/ISSUES.md`, and
+  `CHANGELOG.md` / `docs/CHANGELOG.en.md` under *Noch nicht veröffentlicht*
+
+**Exit criteria**
+
+- Every new word is bound, pressed through `--mock-surface`, and does on the desk
+  **what the same key does on the screen** — a run word runs, a write word waits,
+  an argument word appends to the line as it stands — asserted against the line's
+  own reading, not against the key press
+- The keypad on screen and the words a key may be bound to are **one table**: a
+  word added to it appears in both, and a test says so rather than a person
+- A key's LED is asserted **against the bytes that reached the surface** for each
+  of the nine conditions, in both directions: `store` dark with an empty
+  programmer and lit with a value in it, `clear` following the Clear stage through
+  Selection → Values → All → Nothing
+- An executor page change leaves a half-typed line exactly where it is, in
+  Chromium and from a bound key
+- The shipped profile still **is** the built-in defaults after a round trip
+  through the editor — S22's assertion, now over one file rather than two
 - A binding changed in the interface still takes effect **without restarting the
   daemon**, observed through `--mock-surface` (S38's, unchanged)
-- The shipped profile still **is** the built-in defaults after a round trip
-  through the editor (S22's assertion, unchanged)
+- The strip rows are reachable in the advanced section and bind exactly what they
+  bound before
+- The drawing is read out of the profile: a profile with no geometry draws no
+  picture and says so, rather than drawing a wrong one
+- No scrolling outside the canvas at 1280 × 720 with the desk drawing shown
+- The tick measures **zero allocations on all ten paths** — nothing here runs on it
+
+---
+
+## S60 · `prism-core` + `prismd` + `ui` — an encoder may hold an executor of its own
+**Size:** M · **Depends on:** S45, S59 · **Asked for on 2026-09-20**, and placed
+**after S30, outside the coming release**, by the owner's decision of the same
+day.
+
+**Goal:** a strip's encoder stops being tied to the executor its fader stands on.
+`Executor::encoder_function` already says *what* the encoder does (`Empty`,
+`Master`, `Speed` — S45); what it cannot say is *whose*. An operator who wants a
+rate wheel for one list while their hand rides another list's crossfade has to
+choose, and the desk has eight of each.
+
+It also carries a fault the owner met on the rig on 2026-09-20 and has **not
+finally verified**, which is why it is written here and not in `docs/ISSUES.md`:
+**with the fader in crossfade mode and the encoders set to Master, the encoders
+did nothing.** The two belong together — whatever decides which executor an
+encoder addresses is the thing that was silently deciding *none* — so the fix is
+this session's rather than a patch of its own.
+
+**Questions to settle before it is built**
+
+- Is the encoder's executor a **number on the executor** (a second reference
+  beside `sequence_id`), or a **page offset** so that a bank of encoders can be
+  moved as one?
+- What do the scribble strips say when a strip's fader and encoder are on
+  different lists — S45's legend has seven characters and now two owners.
+- What does the encoder band in the interface show for it?
+
+**Exit criteria** — written with the deliverables, plus:
+
+- An encoder on another executor's master is asserted **against the byte that
+  reached a mock output**, not against the model
+- The crossfade fault is reproduced in a test **before** it is fixed
+- A show stored before S60 opens unchanged, and every encoder is on its own
+  executor as it was
 
 ---
 
@@ -1508,7 +1699,7 @@ flowchart LR
     S44 & S27 --> S57
     S54 & S57 --> S58
     S38 & S58 --> S59
-    S59 --> S30
+    S59 --> S30 --> S60
 ```
 
 **Critical path to a usable console:** S0 → S1 → S2 → S3 → S4 → S7 → S11 → S12 → S16 → S17 → S19 → S21 → S22 → S23 → S25 → S26. *Reached at S26.*
@@ -1553,6 +1744,7 @@ is, is the order the work was planned to make sense in.
 | 24 | **S56** core/domain/`prismd`/`ui` — what the open beta sent back | **Done 2026-09-18** — see `PROGRESS.md` §2.53. Chosen on 2026-09-16 over Phase 12, by §8's own rule: the open beta had filed ten issues in two weeks, one of them a blocker. Nine closed; B60 became S57 |
 | 25 | **S57** `ui`/core — the patch window, rebuilt around the library | **Done 2026-09-18** — see `PROGRESS.md` §2.54. Born out of S56 from B60, the owner's eight points about patching, and done as one rebuild because they lean on each other. All ten of the open beta's first reports are now closed |
 | 25a | **S58** core/`prismd`/`ui` — a knob follows the channel that switches it | **Done 2026-09-19** — see `PROGRESS.md` §2.55. B52, the register's last open entry, asked for by the owner before the next release. **The register has no open entry.** The owner worked through `docs/RELEASE_TEST.md` on the test rig on 2026-09-20 and accepted every point |
-| 25b | **S59** `ui`/`prism-surface`/`prismd` — the Controls panel, the owner's next round | **Next.** Asked for on 2026-09-20, and it **starts with a question round**: the owner has change requests that deliberately did not go into the punch-list patch, and what they are is not written down yet |
-| 25c | **S30** 3D viewer | After S59, by the owner's decision of 2026-09-20: the release waits for the Controls round **and** the viewer. It is Phase 9's entry, unchanged, and the first of the five extended features to run |
+| 25b | **S59** `ui`/`prism-surface`/`prismd` — the Controls panel, the owner's next round | **Done 2026-09-21** — see `PROGRESS.md` §2.56. The question round was answered on 2026-09-20 and its ten decisions are in the entry above — 2026-09-20, in the entry itself. The desk gains the console's whole vocabulary as bindable words, a key's lamp starts following **what it is bound to** rather than where it sits, the strip controls move to a collapsed advanced section, the jog wheel is recut to one DMX step a detent with a sensitivity factor, and the shipped table becomes one file with all sixty-four keys on it |
+| 25c | **S30** 3D viewer | **Next**, and the last thing the release waits for — the owner's decision of 2026-09-20 held it for the Controls round **and** the viewer, and the first of those is done. It is Phase 9's entry, unchanged, and the first of the five extended features to run |
+| 25d | **S60** core/`prismd`/`ui` — an encoder may hold an executor of its own | After **S30**, and deliberately **outside the coming release** — the owner's decision of 2026-09-20. It carries the encoder-in-crossfade fault of the same day, which is not in `docs/ISSUES.md` because it has not been finally verified |
 | 26 | **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | The rest of the extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author. **S30 moved ahead of them** (row 25c) |

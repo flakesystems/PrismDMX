@@ -23,6 +23,9 @@ function control(name: string, action: SurfaceAction | null): SurfaceControl {
     control: { t: "Global", button: "F1" },
     permanent: false,
     reserved: false,
+    // No box: an export is about what a key *does*, and where it sits on the
+    // panel is not part of a profile file.
+    geometry: null,
   };
 }
 

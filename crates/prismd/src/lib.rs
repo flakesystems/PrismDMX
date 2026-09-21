@@ -68,6 +68,7 @@ pub mod core;
 pub mod daemon;
 pub mod discovery;
 pub mod engine;
+pub mod lamp;
 pub mod lock;
 pub mod log;
 pub mod machine;

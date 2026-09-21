@@ -12,12 +12,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { SurfaceAction } from "../bindings";
+import { CONSOLE_KEYS } from "../bindings";
 import {
   ACTION_GROUPS,
   ACTION_KINDS,
+  ADVANCED_KINDS,
+  CONSOLE_KINDS,
   CUSTOM_KINDS,
   actionOfKind,
   actionText,
+  detailOf,
   isCustom,
   kindOf,
   sameControl,
@@ -29,9 +33,10 @@ import type { ActionKind } from "./actions";
 /**
  * The one extra answer a kind needs, where it needs one.
  *
- * **Five, since S43.** *Type a command* joined them with B4: its detail is the
+ * **Six, since S59.** *Type a command* joined them with B4: its detail is the
  * line itself, which is why it is the one kind whose answer is free text rather
- * than a name out of a generated table.
+ * than a name out of a generated table. *Console key* joined them with S59, and
+ * is the opposite case — a word out of the most generated table there is.
  */
 const DETAIL: Partial<Record<ActionKind, string>> = {
   "Executor button": "Flash",
@@ -39,6 +44,10 @@ const DETAIL: Partial<Record<ActionKind, string>> = {
   "Encoder bank": "Color",
   "Jump to view": "3",
   "Type a command": "Go Executor 1",
+  // **Six, since S59.** *Console key* carries the word, and unlike the four
+  // above it the word is narrowed against the generated table rather than a
+  // local list — so this is one of `CONSOLE_KEYS`' own, not a plausible string.
+  "Console key": "Store",
 };
 
 describe("the vocabulary an operator picks from", () => {
@@ -104,16 +113,25 @@ describe("the panel's own list of rows", () => {
    * notice, because the kinds are still all buildable and still all nameable.
    * This is the test that would.
    */
-  it("carries every kind except Nothing, exactly once, across the four sections", () => {
-    // **Four tables since the rebuild**, not one: the owner asked for an
-    // Executor, a Programmer, an *other internal commands* and a **Custom**
-    // section, and the fourth is a different shape — the key is the row there,
-    // because *open window* is fourteen bindings and *type a command* is as
-    // many as an operator can think of (`CUSTOM_KINDS`). The claim is unchanged
-    // and is what matters: a kind that fell out of **both** tables would be
-    // unreachable from anywhere, and nothing else in the interface would
-    // notice.
-    const listed = [...ACTION_GROUPS.flatMap((group) => group.kinds), ...CUSTOM_KINDS];
+  it("carries every kind except Nothing, exactly once, across the sections", () => {
+    // **Six tables since S59**, and every one of them is a different shape for
+    // a reason. The owner asked for an Executor, a Programmer and an *other
+    // internal commands* section of rows; **Custom** is a different shape
+    // because the key is the row there, since *open window* is fourteen
+    // bindings and *type a command* is as many as an operator can think of;
+    // **Console keys** is one kind with twenty-three rows, the words of
+    // `prism_domain::CONSOLE_KEYS`; and **Advanced** holds the two the strips
+    // took with them when they left the list.
+    //
+    // The claim is unchanged and is what matters: a kind that fell out of
+    // **every** table would be unreachable from anywhere, and nothing else in
+    // the interface would notice.
+    const listed = [
+      ...ACTION_GROUPS.flatMap((group) => group.kinds),
+      ...CUSTOM_KINDS,
+      ...CONSOLE_KINDS,
+      ...ADVANCED_KINDS,
+    ];
     expect([...listed].sort()).toEqual(
       [...ACTION_KINDS].filter((kind) => kind !== "Nothing").sort(),
     );
@@ -130,6 +148,51 @@ describe("the panel's own list of rows", () => {
     for (const kind of fixed) {
       expect(isCustom(kind)).toBe(false);
     }
+  });
+
+  /**
+   * **The strips left the list** — S59, the owner's decision of 2026-09-20.
+   *
+   * *Die Executor Strips … sollten aus den Controls raus.* As rows that is a
+   * master, which is a strip fader or the main fader, and selecting an
+   * executor, which only a strip key can mean. What did **not** leave are the
+   * functions of the selected executor, and that half is asserted too — the
+   * answer to that question came back twice and the second answer was the one
+   * that counts.
+   */
+  it("keeps the strips out of the list and the selected executor in it", () => {
+    const fixed = ACTION_GROUPS.flatMap((group) => group.kinds);
+    for (const kind of ADVANCED_KINDS) {
+      expect(fixed).not.toContain(kind);
+    }
+    for (const kind of ["Executor go +", "Executor go −", "Executor on", "Executor off"]) {
+      expect(fixed).toContain(kind);
+    }
+  });
+
+  /**
+   * **One vocabulary for the screen and the desk** — S59.
+   *
+   * The keypad section is `CONSOLE_KEYS` itself, so this is the assertion that
+   * a word added in Rust reaches the control editor without anybody editing
+   * TypeScript. A separate list here is exactly what the generated table
+   * replaced.
+   */
+  it("offers every word of the keypad as a binding", () => {
+    expect(CONSOLE_KEYS.length).toBeGreaterThan(0);
+    for (const key of CONSOLE_KEYS) {
+      const action = actionOfKind("Console key", "Selected", key.word);
+      expect(action, `${key.word} could not be bound`).not.toBeNull();
+      expect(action).toEqual({ t: "ConsoleWord", word: key.word });
+      expect(kindOf(action)).toBe("Console key");
+      expect(detailOf(action!)).toBe(key.word);
+    }
+  });
+
+  /** A word no key writes is not a binding, however plausible it looks. */
+  it("refuses a word that is not on the keypad", () => {
+    expect(actionOfKind("Console key", "Selected", "Enter")).toBeNull();
+    expect(actionOfKind("Console key", "Selected", "")).toBeNull();
   });
 
   it("does not list Nothing, because unbinding is a key's button and not a row", () => {

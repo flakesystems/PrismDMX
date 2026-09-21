@@ -185,6 +185,16 @@ pub enum MachineChange {
         /// The path.
         path: Option<String>,
     },
+    /// How far the jog wheel moves a parameter — S59.
+    ///
+    /// A percentage of the built-in curve, clamped by the daemon to the range
+    /// `prism_surface` allows. It takes effect on the **next turn of the
+    /// wheel**: the curve is read where a jog message is scaled, so there is
+    /// nothing to restart and nothing to reload.
+    JogSensitivity {
+        /// The new percentage. `100` is the built-in curve exactly.
+        percent: u16,
+    },
     /// Give this desk a new identity, because it is sharing one.
     ///
     /// See the module documentation for why it waits for a restart.
@@ -409,12 +419,38 @@ pub struct MachineSettings {
     pub fixture_library: Option<String>,
     /// Which binding profile is in force, or `None` for the built-in table.
     pub surface_profile: Option<String>,
+    /// How far the jog wheel moves a parameter, as a percentage of the built-in
+    /// curve — S59.
+    ///
+    /// `100` is `prism_surface::JOG_ACCELERATION` exactly. It is **this
+    /// machine's** and not the show's, because how heavy a wheel feels is a
+    /// property of the console somebody sits at rather than of the production
+    /// they are running: a show carried to another hall on a stick must not
+    /// take the last operator's hand with it.
+    ///
+    /// Clamped on the way in — see `prism_surface::JOG_SENSITIVITY_MIN` and
+    /// `JOG_SENSITIVITY_MAX`. This crate holds no curve and does not clamp it
+    /// here; what it holds is the number an operator chose.
+    /// `#[serde(default)]` to **100**, not to nought: a message from a daemon
+    /// that predates this field means *the curve as it ships*, and a wheel that
+    /// moves nothing is the one answer that cannot be right. The interface's
+    /// hand decoder says the same thing in the same words
+    /// (`ui/src/ipc/protocol.ts`), and a recording made before S59 decodes
+    /// because of it.
+    #[serde(default = "unity_percent")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(strategy = "10u16..=400"))]
+    pub jog_sensitivity: u16,
     /// Which settings this run's command line is holding.
     #[cfg_attr(
         any(test, feature = "proptest"),
         proptest(strategy = "crate::arb::small_vec(3)")
     )]
     pub overrides: Vec<MachineOverride>,
+}
+
+/// A jog wheel nobody has adjusted — the shipped curve exactly.
+const fn unity_percent() -> u16 {
+    100
 }
 
 impl MachineSettings {

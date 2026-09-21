@@ -1242,6 +1242,18 @@ fn starting_bindings(
     if let Some(path) = &options.surface_profile {
         return (crate::surface::load_profile(path), false);
     }
+    // **A table a generation behind is passed over** — S59, the owner's
+    // decision of 2026-09-20. It is said out loud rather than done quietly: an
+    // operator whose panel has been rearranged under them deserves the sentence,
+    // and Export was the way to keep the old one.
+    if machine.surface_bindings_are_stale() {
+        log::warn(
+            "surface",
+            "this desk's stored binding table was written against an older set of \
+             built-in bindings and has been replaced by the new ones. The old table \
+             is still in machine.json and can be exported from the Controls panel",
+        );
+    }
     if let Some(rows) = machine.surface_bindings() {
         let (table, problem) = Bindings::from_rows(rows, &prism_surface::X_TOUCH);
         if let Some(error) = problem {
