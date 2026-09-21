@@ -57,6 +57,32 @@ it points. That is what the 3D viewer needs, which is why this comes before it.
 - The desk says at start-up how many profiles it offers and **how many of them
   are GDTF** — and says so separately when the installed library has none yet.
 
+### Four ways to fill the library (S62)
+
+**A GDTF no longer has to be put into a folder by hand.** The Patch window has
+two new keys, and the settings have a section:
+
+- ***Import profile (GDTF)*** takes one `.gdtf` through the file dialogue,
+  reads it, puts it in your own fixture folder and offers it in the picker at
+  once. Anything that is not a readable fixture file never reaches the folder.
+- ***Import rig (MVR)*** takes your planner's rig file **into the show**: every
+  profile in it and every planned fixture with its number and address, **in one
+  step that one Oops takes back**. Nothing already patched is touched — a
+  planned fixture whose number your show is already using gets the next free
+  one. The desk then says how many arrived and what it skipped. An `.mvr` simply
+  left in the fixture folder still fills the library without the key.
+- ***Settings → This machine → GDTF Share*** downloads the whole published
+  library **with your own account** at [gdtf-share.com](https://gdtf-share.com)
+  into your fixture folder. A line counts them, the desk keeps running lights
+  while it works, and there is one sentence at the end. If you ask it to,
+  Windows keeps your credentials in its **credential manager** — never in a
+  settings file; *Forget this account* takes them back out.
+
+**Nobody needs an account.** The Open Fixture Library is still there, your own
+file in the folder still beats the installed one, and an `.mvr` solves the real
+case with no internet at all. Why the desk does not simply ship the GDTF library
+is in `docs/FIXTURE_LIBRARY.md`.
+
 What the open beta reported in its first two weeks — ten reports, all ten
 fixed (S56 and S57), and the register's last open entry with them (B52, S58).
 **All ten GitHub issues are closed** (#9, #21, #23–#30):

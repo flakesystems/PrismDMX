@@ -761,6 +761,101 @@ describe("the This machine panel", () => {
   });
 });
 
+describe("the GDTF Share section of the This machine panel", () => {
+  /**
+   * **S62** — the login is a section, not a wall. What it sends, what it
+   * refuses to send, and what it never keeps.
+   */
+  it("sends the account only when both boxes are filled, and forgets the password after", async () => {
+    const { openPanel, commands } = await desk();
+    openPanel("this-machine");
+
+    // Nothing kept, and nothing to forget.
+    expect(screen.getByTestId("library-account-state").textContent).toContain("No account");
+    expect(screen.queryByTestId("library-account-forget")).toBeNull();
+
+    // An empty pair is not a login, and the button says so rather than
+    // sending one for the service to refuse.
+    const before = commands().length;
+    expect(screen.getByTestId("library-account-update")).toHaveProperty("disabled", true);
+    fireEvent.submit(screen.getByTestId("library-account-form"));
+    expect(commands()).toHaveLength(before);
+
+    fireEvent.change(screen.getByTestId("library-account-user"), {
+      target: { value: " somebody " },
+    });
+    // A user name on its own is still not a login.
+    expect(screen.getByTestId("library-account-update")).toHaveProperty("disabled", true);
+    fireEvent.change(screen.getByTestId("library-account-password"), {
+      target: { value: "a secret" },
+    });
+    fireEvent.click(screen.getByTestId("library-account-remember"));
+    fireEvent.submit(screen.getByTestId("library-account-form"));
+    expect(commands().at(-1)).toEqual({
+      t: "UpdateLibrary",
+      user: "somebody",
+      password: "a secret",
+      remember: true,
+    });
+
+    // **The box is a box, not a store**: the password is gone from the browser
+    // the moment it has been sent.
+    expect(screen.getByTestId("library-account-password")).toHaveProperty("value", "");
+  });
+
+  it("names a kept account and can take it out again", async () => {
+    const { openPanel, commands, deliver } = await desk();
+    openPanel("this-machine");
+    await deliver({
+      t: "MachineChanged",
+      settings: machine({ libraryAccount: "somebody" }),
+    });
+    expect(screen.getByTestId("library-account-state").textContent).toContain("somebody");
+    // And the name is offered back, so an operator types only the password.
+    expect(screen.getByTestId("library-account-user")).toHaveProperty("value", "somebody");
+
+    fireEvent.click(screen.getByTestId("library-account-forget"));
+    expect(commands().at(-1)).toEqual({ t: "ForgetLibraryAccount" });
+  });
+
+  it("draws the progress the daemon reports and stops a second update being started", async () => {
+    const { openPanel, commands, deliver } = await desk();
+    openPanel("this-machine");
+    // Nothing running, nothing drawn.
+    expect(screen.queryByTestId("library-update-progress")).toBeNull();
+
+    await deliver({ t: "LibraryUpdate", done: 0, total: 0, finished: false, message: "" });
+    expect(screen.getByTestId("library-update-progress").textContent).toContain("Signing in");
+
+    await deliver({ t: "LibraryUpdate", done: 412, total: 3000, finished: false, message: "" });
+    expect(screen.getByTestId("library-update-progress").textContent).toBe(
+      "412 of 3000 fixtures\u2026",
+    );
+
+    // **Two downloads into one folder would be two writers on one file name**,
+    // so while one is running the boxes and the button are shut.
+    const before = commands().length;
+    expect(screen.getByTestId("library-account-user")).toHaveProperty("disabled", true);
+    expect(screen.getByTestId("library-account-update")).toHaveProperty("disabled", true);
+    fireEvent.submit(screen.getByTestId("library-account-form"));
+    expect(commands()).toHaveLength(before);
+
+    await deliver({
+      t: "LibraryUpdate",
+      done: 3000,
+      total: 3000,
+      finished: true,
+      message: "Library updated: 2998 fixtures from 3000 published, 2 skipped",
+    });
+    // The sentence stays in the row rather than vanishing with the last frame.
+    expect(screen.getByTestId("library-update-progress").textContent).toContain("2998 fixtures");
+    expect(screen.getByTestId("library-account-update")).toHaveProperty("disabled", true);
+    fireEvent.change(screen.getByTestId("library-account-user"), { target: { value: "again" } });
+    fireEvent.change(screen.getByTestId("library-account-password"), { target: { value: "x" } });
+    expect(screen.getByTestId("library-account-update")).toHaveProperty("disabled", false);
+  });
+});
+
 describe("closing the window and opening it again", () => {
   /**
    * **Every panel is a reader over daemon state** — S37's fourth exit criterion,

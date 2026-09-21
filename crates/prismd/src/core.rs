@@ -106,6 +106,16 @@ pub struct Core {
     /// and never inside a `.prism` file, which is the whole of
     /// `prism_core::outputs`' argument.
     machine: Machine,
+    /// A running update of the fixture library, if there is one — **S62**.
+    ///
+    /// Shared with the thread doing the downloading, which is the only thing
+    /// that writes it; this side reads it from the daemon's housekeeping. An
+    /// `Arc<Mutex<_>>` rather than a channel because there is one reader, one
+    /// writer and one small value: a channel would deliver every step of three
+    /// thousand and this only ever needs the newest.
+    library_update: Option<Arc<std::sync::Mutex<LibraryUpdate>>>,
+    /// What was last reported, so nothing is sent twice.
+    library_update_seen: (u32, u32, bool),
     store: ShowStore,
     engine: EngineThread,
     layout: Arc<FrameLayout>,
@@ -225,6 +235,8 @@ impl Core {
         Ok(Self {
             file,
             machine,
+            library_update: None,
+            library_update_seen: (0, 0, false),
             store,
             engine,
             layout,
@@ -336,6 +348,22 @@ impl Core {
     /// [`CoreError`] if the command was refused, or if it was applied and the
     /// save it asked for failed.
     pub fn apply(&mut self, command: &Command) -> Result<Vec<Delta>, CoreError> {
+        // **S62's two library-account commands come off first**, before any of
+        // the appliers below see them. They are neither the show's nor the
+        // rig's: one opens a network session with the operator's own account
+        // and the other empties a secret store, and both belong to the machine
+        // this desk is running on rather than to anything written down. Taking
+        // them here is also what keeps the password out of `prism-core`, which
+        // has no business holding one.
+        match command {
+            Command::UpdateLibrary {
+                user,
+                password,
+                remember,
+            } => return Ok(self.start_library_update(user, password, *remember)),
+            Command::ForgetLibraryAccount => return Ok(self.forget_library_account()),
+            _ => {}
+        }
         // **Three appliers, routed on two predicates** (S33). The rig belongs to
         // the building rather than to the show, so it is neither
         // `ShowFile::apply`'s nor a second match over the command list here —
@@ -672,6 +700,15 @@ impl Core {
             exit_action: settings.exit_action,
             autostart: settings.autostart,
             fixture_library: settings.fixture_library.clone(),
+            // The **name** of the remembered account, never its password —
+            // see `crate::secrets`. Asked of the store each time rather than
+            // held, so an account taken out of the credential manager by hand
+            // stops being reported without this desk being restarted.
+            library_account: {
+                use crate::secrets::Store as _;
+                crate::secrets::Keychain.recall()
+            }
+            .map(|(user, _)| user),
             surface_profile: settings.surface_profile.clone(),
             jog_sensitivity: settings.jog_sensitivity,
             overrides: self.machine.overrides.clone(),
@@ -1200,6 +1237,167 @@ impl Core {
         }])
     }
 
+    /// Starts an update of the fixture library — **S62**.
+    ///
+    /// The work runs on a **thread of its own**: it takes minutes, it does
+    /// network IO, and nothing about it may touch the tick or hold the desk.
+    /// What it shares with this side is one small piece of state behind a
+    /// mutex, which the daemon's housekeeping reads to send progress — see
+    /// [`Self::library_update_progress`].
+    ///
+    /// Starting one while one is running is refused, in words. Two downloads
+    /// into one folder would be two writers on one file name.
+    fn start_library_update(&mut self, user: &str, password: &str, remember: bool) -> Vec<Delta> {
+        if self
+            .library_update
+            .as_ref()
+            .is_some_and(|update| !update.lock().is_ok_and(|state| state.finished))
+        {
+            return vec![Delta::Notice {
+                level: NoticeLevel::Warn,
+                message: "a library update is already running".to_owned(),
+            }];
+        }
+        if user.trim().is_empty() || password.is_empty() {
+            return vec![Delta::Notice {
+                level: NoticeLevel::Warn,
+                message: "a GDTF Share account needs a user name and a password".to_owned(),
+            }];
+        }
+
+        let mut notices = Vec::new();
+        if remember {
+            // Said rather than swallowed: on a platform with no secret store
+            // the update still runs, and an operator who asked to be
+            // remembered has to know they will be asked again.
+            use crate::secrets::Store as _;
+            if let Err(why) = crate::secrets::Keychain.remember(user, password) {
+                notices.push(Delta::Notice {
+                    level: NoticeLevel::Warn,
+                    message: format!("the account was not kept: {why}"),
+                });
+            }
+        }
+
+        let state = Arc::new(std::sync::Mutex::new(LibraryUpdate::default()));
+        self.library_update = Some(Arc::clone(&state));
+        let directory = crate::paths::fixtures_dir(&self.machine.data_dir);
+        let base = std::env::var("PRISMDMX_GDTF_SHARE")
+            .unwrap_or_else(|_| "https://gdtf-share.com/apis/public".to_owned());
+        let user = user.to_owned();
+        let password = password.to_owned();
+        std::thread::spawn(move || {
+            let outcome = crate::share::Https::new(&base).and_then(|mut share| {
+                crate::share::update(&mut share, &user, &password, &directory, |progress| {
+                    if let Ok(mut held) = state.lock() {
+                        held.done = progress.done;
+                        held.total = progress.total;
+                        return !held.cancelled;
+                    }
+                    // The mutex is poisoned, which means the reading side
+                    // panicked. Stopping is the only safe answer.
+                    false
+                })
+            });
+            if let Ok(mut held) = state.lock() {
+                held.finished = true;
+                held.message = match outcome {
+                    Ok(report) => {
+                        held.written = report.written;
+                        format!(
+                            "Library updated: {} fixtures from {} published{}",
+                            report.written,
+                            report.listed,
+                            if report.skipped > 0 {
+                                format!(", {} skipped", report.skipped)
+                            } else {
+                                String::new()
+                            }
+                        )
+                    }
+                    Err(why) => format!("The library was not updated: {why}"),
+                };
+            }
+        });
+
+        notices.push(Delta::LibraryUpdate {
+            done: 0,
+            total: 0,
+            finished: false,
+            message: String::new(),
+        });
+        notices
+    }
+
+    /// What the running update has done since this was last asked — **S62**.
+    ///
+    /// Called from the daemon's housekeeping, which is where everything
+    /// periodic lives. Answers nothing while nothing has moved, so a desk with
+    /// no update running sends no traffic at all.
+    ///
+    /// When the update **finishes** this reloads the library, by the same call
+    /// start-up makes — for the reason `import_profile` gives: there is one
+    /// way into the library and this is it.
+    pub fn library_update_progress(&mut self) -> Vec<Delta> {
+        let Some(state) = self.library_update.clone() else {
+            return Vec::new();
+        };
+        let Ok(held) = state.lock() else {
+            // A worker that panicked. Forget it rather than reporting for ever.
+            self.library_update = None;
+            return Vec::new();
+        };
+        let (done, total, finished, message) =
+            (held.done, held.total, held.finished, held.message.clone());
+        let written = held.written;
+        drop(held);
+
+        if (done, total, finished) == self.library_update_seen {
+            return Vec::new();
+        }
+        self.library_update_seen = (done, total, finished);
+        let deltas = vec![Delta::LibraryUpdate {
+            done,
+            total,
+            finished,
+            message: message.clone(),
+        }];
+        if finished {
+            self.library_update = None;
+            self.library_update_seen = (0, 0, false);
+            if written > 0 {
+                let configured = self
+                    .machine
+                    .config
+                    .settings()
+                    .fixture_library
+                    .clone()
+                    .map(std::path::PathBuf::from);
+                self.file.library =
+                    crate::daemon::load_library(&self.machine.data_dir, configured.as_deref());
+            }
+            log::info("library", &message);
+        }
+        deltas
+    }
+
+    /// Takes the remembered account out of the secret store — S62.
+    fn forget_library_account(&mut self) -> Vec<Delta> {
+        use crate::secrets::Store as _;
+        let message = match crate::secrets::Keychain.forget() {
+            Ok(()) => "The GDTF Share account was taken out of this machine".to_owned(),
+            Err(why) => format!("The account could not be taken out: {why}"),
+        };
+        let mut deltas = vec![Delta::Notice {
+            level: NoticeLevel::Info,
+            message,
+        }];
+        deltas.push(Delta::MachineChanged {
+            settings: self.machine_settings(),
+        });
+        deltas
+    }
+
     /// Takes up a different `ShowStore` and loads what is in it.
     fn adopt(&mut self, store: ShowStore) -> Result<Vec<Delta>, CoreError> {
         self.store = store;
@@ -1628,6 +1826,29 @@ pub fn build_body(
     }
     body.resolve();
     Ok(body)
+}
+
+/// What a running library update has done so far — **S62**.
+///
+/// Written by the downloading thread and read by the daemon's housekeeping.
+/// Small on purpose: everything here is a number or a finished sentence, so
+/// holding the lock is never more than a few instructions and the thread doing
+/// network IO never waits on the one serving clients.
+#[derive(Debug, Default)]
+pub struct LibraryUpdate {
+    /// Fixtures dealt with.
+    pub done: u32,
+    /// Fixtures the service listed.
+    pub total: u32,
+    /// Fixtures actually written, which is what decides whether the library is
+    /// worth reading again.
+    pub written: u32,
+    /// Whether it has stopped.
+    pub finished: bool,
+    /// Set by this side to ask the thread to stop at the next fixture.
+    pub cancelled: bool,
+    /// What to tell the operator once it has stopped.
+    pub message: String,
 }
 
 /// A path's own file name, or a safe stand-in — **S62**.
@@ -3321,6 +3542,208 @@ mod tests {
                 .is_empty()
             );
             assert_eq!(core.file.show.sequence(SequenceId::new(7)), Some(&before));
+            driver.stop();
+        }
+    }
+
+    /// Updating the fixture library from GDTF Share — **S62**.
+    ///
+    /// **Nothing here touches a network.** The refusal is asserted on the way
+    /// in, before a thread is ever spawned, and the progress is asserted by
+    /// writing the shared state a downloading thread would have written — which
+    /// is the whole reason that state is a small struct behind a mutex rather
+    /// than something only a real download can produce. What a real download
+    /// does is `share.rs`'s, and that is covered over a fake there.
+    mod library_account {
+        use super::{Core, desk};
+        use crate::core::LibraryUpdate;
+        use prism_domain::{Command, Delta, NoticeLevel};
+        use std::sync::{Arc, Mutex};
+
+        /// Pretends a downloading thread has got this far.
+        fn reached(core: &mut Core, state: LibraryUpdate) {
+            match &core.library_update {
+                Some(held) => *held.lock().unwrap() = state,
+                None => core.library_update = Some(Arc::new(Mutex::new(state))),
+            }
+        }
+
+        /// **Half an account is not an account**, and it is refused here rather
+        /// than by the service — which would cost a minute and a round trip to
+        /// say the same thing.
+        #[test]
+        fn an_account_with_no_password_is_refused_before_anything_is_started() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk(dir.path());
+
+            let deltas = core
+                .apply(&Command::UpdateLibrary {
+                    user: "somebody".to_owned(),
+                    password: String::new(),
+                    remember: false,
+                })
+                .unwrap();
+            assert!(matches!(
+                deltas.as_slice(),
+                [Delta::Notice {
+                    level: NoticeLevel::Warn,
+                    ..
+                }]
+            ));
+            assert!(
+                core.library_update.is_none(),
+                "nothing was started for half an account"
+            );
+
+            // And the same for a user name of nothing but space.
+            let deltas = core
+                .apply(&Command::UpdateLibrary {
+                    user: "   ".to_owned(),
+                    password: "a secret".to_owned(),
+                    remember: false,
+                })
+                .unwrap();
+            assert!(matches!(
+                deltas.as_slice(),
+                [Delta::Notice {
+                    level: NoticeLevel::Warn,
+                    ..
+                }]
+            ));
+            assert!(core.library_update.is_none());
+            driver.stop();
+        }
+
+        /// **A second update into the same folder would be two writers on one
+        /// file name.** Refused in words while one is running.
+        #[test]
+        fn a_second_update_is_refused_while_one_is_running() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk(dir.path());
+            reached(
+                &mut core,
+                LibraryUpdate {
+                    done: 4,
+                    total: 100,
+                    ..LibraryUpdate::default()
+                },
+            );
+
+            let deltas = core
+                .apply(&Command::UpdateLibrary {
+                    user: "somebody".to_owned(),
+                    password: "a secret".to_owned(),
+                    remember: false,
+                })
+                .unwrap();
+            assert!(matches!(
+                deltas.as_slice(),
+                [Delta::Notice {
+                    level: NoticeLevel::Warn,
+                    ..
+                }]
+            ));
+            driver.stop();
+        }
+
+        /// **Silent unless something moved**, and the end is always reported.
+        #[test]
+        fn progress_is_sent_once_per_change_and_the_end_clears_the_update() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk(dir.path());
+
+            // Nothing running: nothing to say, on every tick for ever.
+            assert!(core.library_update_progress().is_empty());
+
+            reached(
+                &mut core,
+                LibraryUpdate {
+                    done: 7,
+                    total: 100,
+                    ..LibraryUpdate::default()
+                },
+            );
+            assert_eq!(
+                core.library_update_progress(),
+                [Delta::LibraryUpdate {
+                    done: 7,
+                    total: 100,
+                    finished: false,
+                    message: String::new(),
+                }]
+            );
+            // The same reading again is not news, and a desk sends nothing.
+            assert!(core.library_update_progress().is_empty());
+
+            reached(
+                &mut core,
+                LibraryUpdate {
+                    done: 8,
+                    total: 100,
+                    ..LibraryUpdate::default()
+                },
+            );
+            assert_eq!(
+                core.library_update_progress(),
+                [Delta::LibraryUpdate {
+                    done: 8,
+                    total: 100,
+                    finished: false,
+                    message: String::new(),
+                }]
+            );
+
+            reached(
+                &mut core,
+                LibraryUpdate {
+                    done: 100,
+                    total: 100,
+                    written: 0,
+                    finished: true,
+                    cancelled: false,
+                    message: "The library was not updated: it said no".to_owned(),
+                },
+            );
+            assert_eq!(
+                core.library_update_progress(),
+                [Delta::LibraryUpdate {
+                    done: 100,
+                    total: 100,
+                    finished: true,
+                    message: "The library was not updated: it said no".to_owned(),
+                }]
+            );
+            assert!(
+                core.library_update.is_none(),
+                "a finished update is let go of, so the next one starts clean"
+            );
+            assert!(core.library_update_progress().is_empty());
+            driver.stop();
+        }
+
+        /// Forgetting says what happened and republishes the settings, because
+        /// the panel draws the account name out of them.
+        #[test]
+        fn forgetting_the_account_says_so_and_republishes_the_settings() {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut core, _frames, driver) = desk(dir.path());
+            let deltas = core.apply(&Command::ForgetLibraryAccount).unwrap();
+            assert!(matches!(
+                deltas.as_slice(),
+                [
+                    Delta::Notice {
+                        level: NoticeLevel::Info,
+                        ..
+                    },
+                    Delta::MachineChanged { .. },
+                ]
+            ));
+            // This platform keeps nothing, so there is nobody signed in — which
+            // is what `secrets.rs` promises a desk with no store answers.
+            let Some(Delta::MachineChanged { settings }) = deltas.last() else {
+                panic!("the settings were not republished");
+            };
+            assert_eq!(settings.library_account, None);
             driver.stop();
         }
     }

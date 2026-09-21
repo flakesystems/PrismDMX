@@ -353,6 +353,35 @@ gepatcht haben, wird das Profil **in die Show kopiert**: eine `.prism`-Datei ist
 in sich vollständig und öffnet auf einem Pult, das Ihr Verzeichnis nie gesehen
 hat, genauso.
 
+### Die GDTF-Bibliothek mit dem eigenen Konto herunterladen
+
+Unter *Settings → This machine → **GDTF Share*** melden Sie sich mit einem
+eigenen Konto bei [gdtf-share.com](https://gdtf-share.com) an und holen die
+ganze veröffentlichte Bibliothek in genau denselben Ordner `fixtures/`. Alles,
+was das Pult lädt, lädt es **als Sie**, zu den Bedingungen, die Sie dort
+akzeptiert haben, und es geht nicht weiter: nichts davon wird weitergegeben und
+nichts davon steckt in irgendeinem Installationsprogramm.
+
+- **Sie brauchen ein eigenes Konto.** GDTF Share hat keinen anonymen Download.
+  Eines anzulegen ist kostenlos.
+- **Setzen Sie den Haken *Keep this account on this machine***, legt das Pult
+  Benutzernamen und Passwort in die **Anmeldeinformationsverwaltung von
+  Windows** — nie in eine Einstellungsdatei. *Forget this account* nimmt beides
+  wieder heraus. Auf Linux und auf dem Raspberry Pi gibt es keinen solchen
+  Speicher; dort sagt das Pult das und fragt stattdessen jedes Mal nach dem
+  Passwort.
+- **Es dauert mehrere Minuten**, es sind Tausende von Fixtures. Eine Zeile unter
+  dem Formular zählt mit, das Pult spielt während des Ladens weiter Licht, und
+  am Ende steht ein Satz, wie viele angekommen sind. Das Fenster zu schließen
+  hält es nicht an.
+- Ein Profil, das sich nicht laden lässt oder das geladen wird und keine lesbare
+  Fixture ist, wird **gezählt und übersprungen** — ein schlechter Eintrag kostet
+  Sie nicht den Rest.
+
+**Nötig ist das alles nicht.** Das Pult bringt die Open Fixture Library mit,
+liest eine `.gdtf`, die Sie selbst in den Ordner legen, und nimmt die `.mvr`
+eines Planers ganz. Das Konto ist die Zugabe, nicht die Tür.
+
 ---
 
 ## 6. Auswählen und programmieren

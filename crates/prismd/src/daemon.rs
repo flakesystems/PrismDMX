@@ -784,13 +784,14 @@ impl Daemon {
                     return;
                 }
                 _ = housekeeping.tick() => {
-                    // **One lock for all three**, and that is a cost decision
-                    // rather than tidiness: this arm runs on the same runtime as
-                    // the surface's millisecond poll, on machines with two cores
-                    // (a CI runner) as well as on a desk. Three acquisitions of
-                    // the `Core` mutex to learn that nothing has changed is
-                    // twice as much contention as one, for no answer.
-                    let (change, profile, exit, table) = {
+                    // **One lock for all of them**, and that is a cost
+                    // decision rather than tidiness: this arm runs on the same
+                    // runtime as the surface's millisecond poll, on machines
+                    // with two cores (a CI runner) as well as on a desk. One
+                    // acquisition of the `Core` mutex per question, to learn
+                    // that nothing has changed, is that much more contention
+                    // for no answer.
+                    let (change, profile, exit, table, library) = {
                         let mut core = self.desk.core();
                         (
                             // S36's other door, and it is here because the
@@ -817,6 +818,13 @@ impl Daemon {
                             // twice a second - the same cost decision the three
                             // above it record.
                             core.take_binding_change(),
+                            // S62's, and it is here for the same reason: a
+                            // library update runs on a thread of its own for
+                            // minutes, and this is the one place that looks at
+                            // what it has done. It answers nothing while
+                            // nothing has moved, so a desk with no update
+                            // running sends no traffic at all.
+                            core.library_update_progress(),
                         )
                     };
                     if let Some(port) = change {
@@ -853,6 +861,9 @@ impl Daemon {
                         self.server.broadcast(delta).await;
                     }
                     for delta in self.output_health_changes(&mut health) {
+                        self.server.broadcast(delta).await;
+                    }
+                    for delta in library {
                         self.server.broadcast(delta).await;
                     }
                 }

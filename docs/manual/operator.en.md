@@ -345,6 +345,32 @@ patched with one, the profile is **copied into the show**: a `.prism` file is
 complete in itself and opens the same way on a desk that has never seen your
 directory.
 
+### Downloading the GDTF library with your own account
+
+Under *Settings → This machine → **GDTF Share*** you can sign in with an account
+of your own at [gdtf-share.com](https://gdtf-share.com) and pull the whole
+published library down into that same `fixtures/` folder. Everything the desk
+downloads is downloaded **as you**, under the terms you agreed to there, and it
+goes no further: it is not shared on and it is not in anybody's installer.
+
+- **You need an account of your own.** GDTF Share has no anonymous download.
+  Making one is free.
+- **Tick *Keep this account on this machine*** and the desk puts the user name
+  and the password in **Windows' own credential manager** — never in a settings
+  file. *Forget this account* takes it back out. On Linux and on the Raspberry
+  Pi there is no such store, so the desk says so and asks for the password each
+  time instead.
+- **It takes several minutes** and there are thousands of fixtures. A line under
+  the form counts them, the desk keeps running lights while it works, and you
+  get one sentence at the end saying how many arrived. Closing the window does
+  not stop it.
+- A profile that will not download, or that downloads and is not a readable
+  fixture, is **counted and skipped** — one bad entry does not cost you the rest.
+
+**You do not need any of this.** The desk ships with the Open Fixture Library,
+reads a `.gdtf` you put in the folder yourself, and takes a planner's `.mvr`
+whole. The account is the extra, not the door.
+
 ---
 
 ## 6. Selecting and programming

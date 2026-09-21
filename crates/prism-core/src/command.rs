@@ -658,6 +658,10 @@ impl Show {
             Command::ImportProfile { path } => Ok(Applied::effect(Effect::ImportProfile(
                 crate::file::profile_path(path)?,
             ))),
+            // The two library-account commands are the daemon's alone: this
+            // crate has no network and no secret store, and a show has nothing
+            // to do with either.
+            Command::UpdateLibrary { .. } | Command::ForgetLibraryAccount => Ok(Applied::default()),
             // The sixteen session commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
             // the protocol is a compile error here instead of a silent

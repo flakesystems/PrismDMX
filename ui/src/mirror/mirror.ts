@@ -130,6 +130,11 @@ export function applyDelta(documents: Documents, delta: Delta): Documents {
     // S59: which keys of the surface are lit. A reading of the desk, held by
     // the store for the drawing to use — the show has no opinion about lamps.
     case "SurfaceLampsChanged":
+    // S62: how far a download of the fixture library has got. The library is
+    // the machine's folder rather than the show's contents — a show that
+    // recorded a download would be a show that could not be opened on another
+    // desk without one.
+    case "LibraryUpdate":
       return documents;
   }
 }

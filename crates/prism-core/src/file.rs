@@ -1504,6 +1504,8 @@ impl ShowFile {
             // command.
             | Command::ImportRig { .. }
             | Command::ImportProfile { .. }
+            | Command::UpdateLibrary { .. }
+            | Command::ForgetLibraryAccount
             | Command::SelectView { .. }
             | Command::StoreView { .. }
             | Command::NewView { .. }

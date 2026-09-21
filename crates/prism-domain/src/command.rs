@@ -1259,6 +1259,27 @@ pub enum Command {
         /// The `.gdtf` to read.
         path: String,
     },
+    /// Take the published GDTF library under the operator's own account —
+    /// **S62**.
+    ///
+    /// GDTF Share has no anonymous access, so this is the operator signing in
+    /// as themselves: the files land in **their** fixture folder, under the
+    /// terms they accepted when they made the account. This desk redistributes
+    /// nothing — decision **D12**, and `docs/FIXTURE_LIBRARY.md` §2.
+    ///
+    /// It runs for minutes and reports through [`crate::Delta::LibraryUpdate`].
+    UpdateLibrary {
+        /// The account name.
+        user: String,
+        /// Its password. **Never written to `machine.json`**: with `remember`
+        /// it goes to the operating system's own secret store and nowhere
+        /// else, and without it, nowhere at all.
+        password: String,
+        /// Whether to keep the account for next time.
+        remember: bool,
+    },
+    /// Take the remembered GDTF Share account out of the secret store — S62.
+    ForgetLibraryAccount,
     /// Switch the canvas to a stored view.
     SelectView {
         /// The view to activate.
@@ -1827,6 +1848,8 @@ impl Command {
                 | Self::ImportShow { .. }
                 | Self::ImportRig { .. }
                 | Self::ImportProfile { .. }
+                | Self::UpdateLibrary { .. }
+                | Self::ForgetLibraryAccount
                 // S29's, and the plainest case on this list: there is nothing
                 // to take back, and there would be nobody left to read the
                 // entry.

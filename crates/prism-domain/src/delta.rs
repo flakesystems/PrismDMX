@@ -248,6 +248,24 @@ pub enum Delta {
         /// Human-readable text.
         message: String,
     },
+    /// How far an update of the fixture library has got — **S62**.
+    ///
+    /// Sent while the desk is downloading from GDTF Share under the operator's
+    /// own account, and once more when it stops. It is a **delta and not an
+    /// answer** because nobody asked for it: an update runs for minutes and
+    /// the operator who started it may have gone to another window, so every
+    /// client is told rather than the one that asked.
+    LibraryUpdate {
+        /// Fixtures dealt with so far.
+        done: u32,
+        /// Fixtures the service listed. Nought until the list has arrived,
+        /// which is what a progress row shows as *starting*.
+        total: u32,
+        /// Whether it has stopped — for good or for ill.
+        finished: bool,
+        /// What to tell the operator. Empty while it is still running.
+        message: String,
+    },
     /// Which position every switched slot of the rig is in, **read off the
     /// cable** — punch-list **B52**.
     ///

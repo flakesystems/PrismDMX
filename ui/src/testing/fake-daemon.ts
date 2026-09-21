@@ -309,6 +309,7 @@ export function machine(overrides: Partial<MachineSettings> = {}): MachineSettin
     autostart: false,
     fixtureLibrary: null,
     surfaceProfile: null,
+    libraryAccount: null,
     overrides: [],
     ...overrides,
   };

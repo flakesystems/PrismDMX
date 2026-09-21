@@ -417,6 +417,14 @@ pub struct MachineSettings {
     pub autostart: bool,
     /// Where the installed fixture library is, or `None`.
     pub fixture_library: Option<String>,
+    /// The GDTF Share account this desk has remembered, by **name** — S62.
+    ///
+    /// The name and never the password: this travels to every client and into
+    /// every bug report, and it is here so a panel can say *signed in as* and
+    /// offer to forget. The password is in the operating system's own secret
+    /// store; see `prismd::secrets`.
+    #[serde(default)]
+    pub library_account: Option<String>,
     /// Which binding profile is in force, or `None` for the built-in table.
     pub surface_profile: Option<String>,
     /// How far the jog wheel moves a parameter, as a percentage of the built-in

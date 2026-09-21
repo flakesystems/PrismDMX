@@ -1,8 +1,9 @@
-# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61)
+# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61 + S62)
 
 **Gilt für:** den Build von `master` ab `5dd7112` — enthält **S59** (das
-Controls-Menü, die Tastenwörter, die Lampen, das Jogwheel) und **S61** (die
-Fixture-Bibliothek ist GDTF). Die Version im Installer ist weiterhin **`0.9.2`**:
+Controls-Menü, die Tastenwörter, die Lampen, das Jogwheel), **S61** (die
+Fixture-Bibliothek ist GDTF) und **S62** (wie eine Bibliothek hereinkommt: MVR,
+`.gdtf`-Import, der Login zu GDTF Share). Die Version im Installer ist weiterhin **`0.9.2`**:
 0.9.3 ist noch nicht getaggt, und was hineinkommt, steht in `CHANGELOG.md` unter
 *Noch nicht veröffentlicht*.
 
@@ -194,6 +195,81 @@ Move-Item (Join-Path $tmp "x.zip") (Join-Path $dir "irgendwas-ganz-anderes.gdtf"
 
 ---
 
+## 1b. Neu — wie eine Bibliothek hereinkommt (S62)
+
+**Wo:** View **Patch** (zwei neue Knöpfe) und *Settings* → **This machine** →
+Abschnitt **GDTF Share**.
+
+S61 hat das Pult GDTF lesen lassen; S62 baut die Wege, auf denen die Dateien
+ankommen. Für diese Prüfungen brauchen Sie zusätzlich eine **`.mvr`** — jede
+Planungssoftware exportiert eine, und wer keine hat, überspringt T-LIB.2 und
+T-LIB.3 und vermerkt das unten.
+
+### Die Prüfungen
+
+- [ ] **T-LIB.1 — eine einzelne `.gdtf` über den Dateidialog.** View **Patch** →
+      **Import profile (GDTF)** → die Datei aus §1 auswählen. Eine Notice sagt
+      *Profile imported: …*, und die Zeile steht **sofort** im Auswahlfeld —
+      ohne Neustart. Danach in `%APPDATA%\PrismDMX\fixtures\` nachsehen: die
+      Datei liegt dort, unter ihrem eigenen Namen.
+- [ ] **T-LIB.1b — was keine Fixture ist, kommt nicht in den Ordner.** Dasselbe
+      noch einmal mit einem umbenannten Textdokument. Es kommt eine Notice, die
+      sagt, dass die Datei keine lesbare Fixture ist, und in
+      `%APPDATA%\PrismDMX\fixtures\` liegt sie **nicht**. Das ist die
+      wichtigere Hälfte dieses Punktes.
+- [ ] **T-LIB.2 — ein ganzes Rig, mit Patch.** View **Patch** → **Import rig
+      (MVR)** → Ihre `.mvr` auswählen. Die Notice nennt vier Zahlen: wie viele
+      Fixtures gepatcht wurden, wie viele Profile ankamen, und was übersprungen
+      wurde. In der Patch-Tabelle stehen die geplanten Fixtures mit **ihren
+      Nummern und Adressen aus der Planung**.
+- [ ] **T-LIB.3 — ein Oops nimmt den ganzen Import zurück.** Direkt nach T-LIB.2
+      **einmal** Oops. **Alle** importierten Fixtures sind weg, die vorher
+      gepatchten stehen unverändert da, und ein Redo bringt alles zurück. *Ein
+      Import ist ein Schritt* — das ist die Zusage, und ein zweiter Oops-Druck,
+      der nur die Hälfte zurücknähme, wäre der Fehler, auf den hier geachtet
+      wird.
+- [ ] **T-LIB.3b — der Betreiber gewinnt.** Wenn die `.mvr` eine Fixture-Nummer
+      enthält, die Ihre Show schon benutzt: die vorhandene behält Nummer,
+      Adresse und Profil, und die geplante bekommt die nächste freie Nummer. Die
+      Notice zählt sie als *renumbered*.
+- [ ] **T-LIB.4 — der erste echte Login.** ⚠️ **Das ist der Punkt, der
+      hier nie getestet werden konnte** — der Entwicklungscontainer erreicht
+      `gdtf-share.com` nicht, und der Dienst hat keinen anonymen Zugang. Ein
+      kostenloses Konto anlegen, dann *Settings* → **This machine** → **GDTF
+      Share**: Benutzername und Passwort eintragen, **ohne** den Haken, und
+      **Update the library** drücken. Erwartet:
+      - Die Zeile unter dem Formular sagt zuerst *Signing in and asking what is
+        published…*, dann zählt sie (*412 of 3000 fixtures…*).
+      - **Das Pult spielt dabei weiter Licht.** Einen Fader bewegen, während der
+        Download läuft — er reagiert sofort. Das ist die eigentliche Prüfung.
+      - Am Ende **ein Satz**, der sagt, wie viele Fixtures angekommen sind.
+      - Die Profile stehen danach im Auswahlfeld, *Source* `yours`, *Format*
+        `GDTF`.
+      Schlägt der Login mit richtigen Zugangsdaten fehl, ist die wahrscheinliche
+      Ursache in `docs/FIXTURE_LIBRARY.md` §3 beschrieben (form-encoded statt
+      JSON) — **bitte den genauen Wortlaut der Meldung notieren**.
+- [ ] **T-LIB.5 — die Zugangsdaten merken, und wieder vergessen.** Den Haken
+      *Keep this account on this machine* setzen und noch einmal aktualisieren.
+      Dann: das Pult neu starten, *Settings* → **This machine** → **GDTF Share**
+      — es steht *Kept on this machine: <Ihr Name>*, und der Benutzername ist
+      vorausgefüllt. In der **Windows-Anmeldeinformationsverwaltung**
+      (`Systemsteuerung → Anmeldeinformationsverwaltung → Windows-Anmeldeinformationen`)
+      steht ein Eintrag **PrismDMX — GDTF Share**. Dann **Forget this account**
+      drücken: die Zeile sagt wieder *No account is kept on this machine*, und
+      der Eintrag in Windows ist **weg**.
+- [ ] **T-LIB.6 — nichts davon steht in `machine.json`.** `%APPDATA%\PrismDMX\machine.json`
+      öffnen und nach dem Passwort suchen. **Es darf nicht darin vorkommen** —
+      auch nicht der Benutzername in einem Feld, das wie ein Passwort aussieht.
+      Was dort stehen darf, ist nichts: der Kontoname kommt aus dem
+      Windows-Speicher, nicht aus der Datei.
+- [ ] **T-LIB.7 — ohne Konto ist alles trotzdem da.** *Forget this account*, das
+      Pult neu starten, und im Auswahlfeld suchen: die Open-Fixture-Library-Profile
+      sind da, Ihre eigenen Dateien sind da, und **nirgends steht eine
+      Fehlermeldung** darüber, dass niemand angemeldet ist. Der Login ist ein
+      Abschnitt, keine Tür.
+
+---
+
 ## 2. Neu — das Controls-Menü (S59)
 
 **Wo:** *Settings* → Tab **Controls**.
@@ -280,7 +356,7 @@ Move-Item (Join-Path $tmp "x.zip") (Join-Path $dir "irgendwas-ganz-anderes.gdtf"
 
 ---
 
-## 3. Was durch beide Sessions gehen musste
+## 3. Was durch alle drei Sessions gehen musste
 
 - [ ] **T-REG.1 — die Show öffnet unverändert.** `default.prism` öffnen: alle
       Fixtures, Cues, Gruppen, Presets und Executors sind da, mit denselben

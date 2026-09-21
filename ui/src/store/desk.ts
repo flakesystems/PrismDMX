@@ -173,6 +173,28 @@ export interface DeskState {
    * encoder band names a switched knob after the row it says is live.
    */
   readonly switchPositions: readonly SwitchState[];
+  /**
+   * What an update of the fixture library is doing — **S62**, or `null` while
+   * none is running.
+   *
+   * Held here rather than in the panel that starts it because the daemon is
+   * the one running it: a second browser opened half way through gets the
+   * progress it is actually at, and closing the settings window does not lose
+   * the answer at the end of it.
+   */
+  readonly libraryUpdate: LibraryUpdateState | null;
+}
+
+/** How far an update of the fixture library has got — **S62**. */
+export interface LibraryUpdateState {
+  /** Fixtures dealt with so far. */
+  readonly done: number;
+  /** Fixtures the service listed, or nought before the list arrived. */
+  readonly total: number;
+  /** Whether it has stopped, for good or for ill. */
+  readonly finished: boolean;
+  /** What to tell the operator, empty while it is still running. */
+  readonly message: string;
 }
 
 /** The state of a client that has never seen a daemon. */
@@ -192,6 +214,7 @@ export const INITIAL_STATE: DeskState = {
   unsavedChanges: false,
   notices: [],
   switchPositions: [],
+  libraryUpdate: null,
 };
 
 /** Something that wants to know when the state changed. */
@@ -359,6 +382,9 @@ export class DeskStore {
       showFile: null,
       unsavedChanges: false,
       switchPositions: [],
+      // S62: the download was the daemon's, and it went with it. A progress
+      // row left at 412 of 3000 would be describing work nobody is doing.
+      libraryUpdate: null,
       // S59: nobody's lamps are known once the daemon holding them has gone,
       // and a drawing that went on glowing would be showing a desk that may
       // already be dark.
@@ -525,6 +551,23 @@ export class DeskStore {
         return this.#withNotice(state, delta.level, delta.message);
       case "SwitchPositions":
         return { ...state, switchPositions: delta.positions };
+      // S62. The row stays after it has finished, holding what happened —
+      // that sentence is the whole answer an operator gets about a download
+      // that took ten minutes, and it must not vanish with the last frame.
+      case "LibraryUpdate": {
+        const update = {
+          done: delta.done,
+          total: delta.total,
+          finished: delta.finished,
+          message: delta.message,
+        };
+        // The finishing message is a notice as well, so it reaches a desk
+        // whose settings window is shut — which is where it will usually be,
+        // ten minutes after somebody pressed the button.
+        return delta.finished && delta.message !== ""
+          ? this.#withNotice({ ...state, libraryUpdate: update }, "Info", delta.message)
+          : { ...state, libraryUpdate: update };
+      }
       case "ShowPatch":
       case "SessionPatch":
       case "ProgrammerChanged":
