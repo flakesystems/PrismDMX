@@ -171,6 +171,18 @@ pub struct LibraryEntry {
     /// profiles that all came with the desk, which is what it was.
     #[serde(default)]
     pub own: bool,
+    /// Whether this profile was read from a **GDTF** file — S61.
+    ///
+    /// What the picker marks, and it says something an operator wants to know
+    /// before they patch: a GDTF profile carries the fixture's gobo pictures,
+    /// its size and where its beam comes out, so it is the one the 3D viewer
+    /// can draw properly. A profile out of the Open Fixture Library is
+    /// channels and names, which is all any desk had before this session.
+    ///
+    /// `#[serde(default)]` so a recording made before S61 reads as a library
+    /// with no GDTF in it, which is what it was.
+    #[serde(default)]
+    pub gdtf: bool,
 }
 
 /// One mode of a fixture in the desk's library — S57, punch-list **B60**.
@@ -191,6 +203,14 @@ pub struct LibraryMode {
     /// Whether the profile has an intensity of its own, which decides whether
     /// the patch form offers the desk's dimmer at all (S43).
     pub has_intensity: bool,
+    /// How many beams this mode's device has, as its GDTF states — S61.
+    ///
+    /// Nought for a profile out of the Open Fixture Library and for the four
+    /// built-in generics, which describe channels and not devices. It is on
+    /// the **mode** because that is what is patched, and because a GDTF file
+    /// may describe several devices and say per mode which one a mode drives.
+    #[serde(default)]
+    pub beams: u16,
 }
 
 /// One fixture of the desk's library with every mode it has — S57, **B60**.
@@ -209,6 +229,10 @@ pub struct LibraryFixture {
     /// Whether it is the venue's own (B43) rather than one that came with the
     /// desk.
     pub own: bool,
+    /// Whether it was read from a **GDTF** file — S61. See
+    /// [`LibraryEntry::gdtf`].
+    #[serde(default)]
+    pub gdtf: bool,
     /// Its modes, in the order its file lists them — never empty.
     #[cfg_attr(
         any(test, feature = "proptest"),
@@ -1141,11 +1165,13 @@ mod tests {
                     manufacturer: "Robe".to_owned(),
                     name: "MMX Spot".to_owned(),
                     own: false,
+                    gdtf: true,
                     modes: vec![crate::LibraryMode {
                         id: "robe/mmx/16ch".to_owned(),
                         mode: "16ch".to_owned(),
                         footprint: 16,
                         has_intensity: true,
+                        beams: 1,
                     }],
                 }],
                 matched: 1,

@@ -44,12 +44,16 @@ cargo test -p prism-core
 ```
 
 Nothing here needs hardware or a network. The fixture-library corpus tests want
-the Open Fixture Library installed and **skip themselves** without it, which is
-why every CI job that runs them fetches it first:
+the Open Fixture Library corpus installed and **skip themselves** without it,
+which is why every CI job that runs them fetches it first:
 
 ```bash
-tools/fetch-fixtures/fetch-fixtures.sh      # or .ps1 on Windows
+tools/fetch-fixtures/fetch-ofl.sh           # or .ps1 on Windows
 ```
+
+The **GDTF** reader (`library::gdtf`, S61) has no corpus and needs none: its
+upstream has no anonymous download, so every one of its tests builds the archive
+it reads byte by byte.
 
 ## Where the depth is
 

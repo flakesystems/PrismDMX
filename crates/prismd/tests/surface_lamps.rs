@@ -116,6 +116,8 @@ fn write_show(path: &Path) {
         mode: "1ch".to_owned(),
         footprint: 1,
         attributes: vec![attribute(AttributeType::Dimmer, 0)],
+        // S61: a profile written by hand describes channels and not a device.
+        physical: None,
     })
     .expect("a one-channel dimmer is a fixture type");
     show.patch_fixture(Fixture {

@@ -133,8 +133,19 @@ pub fn fixtures_dir(data_dir: &Path) -> PathBuf {
 pub const FIXTURES_README: &str = "\
 PrismDMX - your own fixture profiles
 
-Put fixture profiles here, in the Open Fixture Library's JSON format.
-Nothing that installs or updates PrismDMX touches this folder.
+Put fixture profiles here. Nothing that installs or updates PrismDMX
+touches this folder. Two formats are read.
+
+GDTF, which is what the desk's own library is made of:
+
+  anything.gdtf                 a .gdtf file from the manufacturer or from
+                                gdtf-share.com. The name does not matter:
+                                the file says which fixture it is, and if
+                                that is one the library already has, yours
+                                replaces it.
+
+Open Fixture Library JSON, for a light nobody has published a GDTF for -
+it is a far kinder thing to write by hand:
 
   my-light.json                 a light the library has no profile for.
                                 It appears under 'Custom' in the Patch window.
@@ -142,6 +153,10 @@ Nothing that installs or updates PrismDMX touches this folder.
   <manufacturer>/<fixture>.json a correction to a profile the library ships.
                                 Same folder and file name as the library,
                                 and yours replaces it.
+
+A GDTF profile carries the fixture's gobo pictures, its size and where its
+beam comes out, so the 3D viewer can draw it; a JSON one carries channels
+and names, which is all any desk had before.
 
 Restart the desk to read new files. A show embeds the profiles it uses,
 so a patched rig does not depend on this folder afterwards.
@@ -173,7 +188,7 @@ pub fn ensure_fixtures_dir(data_dir: &Path) -> std::io::Result<bool> {
     Ok(true)
 }
 
-/// Where the installer put the Open Fixture Library, if it can be found.
+/// Where the installer put the fixture library, if it can be found.
 ///
 /// Looked for beside the executable first — which is where an installed desk
 /// has it — and then up the tree from it, which is what finds
@@ -184,6 +199,19 @@ pub fn ensure_fixtures_dir(data_dir: &Path) -> std::io::Result<bool> {
 /// A path rather than a compiled-in constant, because the library is
 /// **downloaded at install time and not committed** — see
 /// `profiles/fixtures/SOURCE.md`.
+///
+/// # What makes a directory the library
+///
+/// It holds something a fixture library holds: a `.gdtf` file, an unpacked
+/// GDTF's `description.xml`, or an Open Fixture Library `manufacturers.json`.
+/// **Three tests rather than one since S61**, because the installed library is
+/// GDTF now and a GDTF library has no `manufacturers.json` in it — a desk whose
+/// library was installed before S61 still has one, and both are found.
+///
+/// An *empty* `profiles/fixtures/` is deliberately not it: the directory is
+/// committed with only its `SOURCE.md` in it, so a checkout nobody has run the
+/// installer in would otherwise look like a library with nothing in it rather
+/// than like no library at all, and the daemon would stop saying so.
 #[must_use]
 pub fn installed_library_dir() -> Option<PathBuf> {
     let executable = std::env::current_exe().ok()?;
@@ -193,12 +221,47 @@ pub fn installed_library_dir() -> Option<PathBuf> {
     // needs and stops well before the root of the disk.
     for _ in 0..6 {
         let candidate = directory.join("profiles").join("fixtures");
-        if candidate.join("manufacturers.json").is_file() {
+        if holds_a_library(&candidate) {
             return Some(candidate);
         }
         directory = directory.parent()?;
     }
     None
+}
+
+/// Whether a directory holds a fixture library — see [`installed_library_dir`].
+///
+/// One level down as well as at the top, because both layouts put the fixtures
+/// in a directory per manufacturer and `manufacturers.json` is the only thing
+/// either puts at the root.
+fn holds_a_library(root: &Path) -> bool {
+    if root.join("manufacturers.json").is_file() {
+        return true;
+    }
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        if path.is_dir() {
+            return path.join("description.xml").is_file() || has_gdtf(&path);
+        }
+        path.extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("gdtf"))
+    })
+}
+
+/// Whether one directory holds a `.gdtf` file.
+fn has_gdtf(directory: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        entry
+            .path()
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("gdtf"))
+    })
 }
 
 #[cfg(test)]

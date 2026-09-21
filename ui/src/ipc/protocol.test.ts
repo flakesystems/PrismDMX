@@ -433,7 +433,10 @@ describe("an answer", () => {
       manufacturer: "Robe",
       name: "Wash 7Q5",
       own: false,
-      modes: [{ id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true }],
+      // S61's two: which format the profile came from, and how many beams the
+      // device has for the viewer to draw.
+      gdtf: true,
+      modes: [{ id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true, beams: 2 }],
     };
     const page = { t: "LibraryFixtures", fixtures: [wash], matched: 2, total: 6 };
     expect(readAnswer(page, "a")).toEqual(page);
@@ -445,6 +448,21 @@ describe("an answer", () => {
     expect(() =>
       readAnswer({ ...page, fixtures: [{ ...wash, modes: [{ id: "x", mode: "", footprint: 1 }] }] }, "a"),
     ).toThrow("hasIntensity");
+
+    // **S61's two are read defensively**, because a recording made before this
+    // session carries neither and what it described was a library of Open
+    // Fixture Library profiles with no beams in them. A missing field draws an
+    // unmarked row; it does not fault the answer.
+    const before = {
+      manufacturer: "Robe",
+      name: "Wash 7Q5",
+      own: false,
+      modes: [{ id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true }],
+    };
+    expect(readAnswer({ t: "FixtureOfMode", fixture: before }, "a")).toEqual({
+      t: "FixtureOfMode",
+      fixture: { ...before, gdtf: false, modes: [{ ...before.modes[0], beams: 0 }] },
+    });
   });
 
   /**

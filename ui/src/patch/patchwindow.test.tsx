@@ -468,7 +468,9 @@ describe("the patch window", () => {
     await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
     const row = screen.getByTestId("library-row-robe/wash-7q5/4ch");
     const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
-    expect(cells).toEqual(["Robe", "Wash 7Q5", "4ch · 2ch", "library"]);
+    // The Format column is S61's: the recorded page is Open Fixture Library
+    // data, which is what a venue's hand-written profile still is.
+    expect(cells).toEqual(["Robe", "Wash 7Q5", "4ch · 2ch", "OFL", "library"]);
     expect(screen.queryByTestId("library-row-robe/wash-7q5/2ch")).toBeNull();
 
     // **Not the first cell** — the modes cell, which used to do nothing.
@@ -500,11 +502,11 @@ describe("the patch window", () => {
   });
 
   it("asks for the next page when the list is scrolled to its end, and not before", async () => {
-    // The third point. The recorded first page is one fixture of two.
+    // The third point. The recorded first page is one fixture of three.
     const { sent, answerQuery } = await desk();
     fireEvent.click(screen.getByText("Add fixture"));
     await answerQuery("BrowseLibrary", recordedAnswer("the first page of one"));
-    expect(screen.getByTestId("library-count").textContent).toBe("2 of 6 fixtures");
+    expect(screen.getByTestId("library-count").textContent).toBe("3 of 7 fixtures");
     const browsed = () => asked(sent(), "BrowseLibrary").map((message) => message.query);
 
     const list = screen.getByTestId("library-scroll");
@@ -523,8 +525,53 @@ describe("the patch window", () => {
     expect(browsed()).toHaveLength(2);
     await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
     expect(screen.getAllByTestId(/^library-row-/)).toHaveLength(2);
+    // Two of three: there is one left, so the button to fetch it is drawn.
+    expect(screen.getByTestId("library-more")).toBeTruthy();
+    list.scrollTop = 900;
+    fireEvent.scroll(list);
+    await answerQuery("BrowseLibrary", recordedAnswer("the third page"));
+    expect(screen.getAllByTestId(/^library-row-/)).toHaveLength(3);
     // Everything is here: there is nothing left to ask for.
     expect(screen.queryByTestId("library-more")).toBeNull();
+  });
+
+  /**
+   * **S61.** The Format column, and what the form says a GDTF carries.
+   *
+   * Driven off the recording rather than off a hand-written answer, because
+   * the point of the change is that the *daemon* now says which format a
+   * profile came from and how many beams its device has — see
+   * `crates/prismd/tests/ui_patch.rs`, which records a real `.gdtf` in the
+   * pinned library.
+   */
+  it("says which format a profile came from, and what its GDTF carries", async () => {
+    const { answerQuery } = await desk();
+    fireEvent.click(screen.getByText("Add fixture"));
+    await answerQuery("BrowseLibrary", recordedAnswer("the first page of one"));
+
+    // The list is scrolled to its end so the next page is asked for; what
+    // comes back is the recorded page holding the GDTF.
+    const list = screen.getByTestId("library-scroll");
+    Object.defineProperty(list, "clientHeight", { value: 200, configurable: true });
+    Object.defineProperty(list, "scrollHeight", { value: 1000, configurable: true });
+    list.scrollTop = 800;
+    fireEvent.scroll(list);
+    await answerQuery("BrowseLibrary", recordedAnswer("the third page"));
+    const gdtf = "robe-lighting/robin-t1-profile/mode-1";
+    const format = (id: string) => screen.getByTestId(`library-format-${id}`);
+    expect(format(gdtf).getAttribute("data-gdtf")).toBe("yes");
+    expect(format(gdtf).textContent).toBe("GDTF");
+    expect(format("robe/ledbeam/1ch").getAttribute("data-gdtf")).toBe("no");
+    expect(format("robe/ledbeam/1ch").textContent).toBe("OFL");
+
+    // Picking it says what the viewer will be able to draw.
+    fireEvent.click(screen.getByTestId(`library-row-${gdtf}`));
+    expect(screen.getByTestId("draft-physical").textContent).toBe("3D model · 1 beam");
+
+    // And a profile that carries nothing physical draws no line at all,
+    // rather than a line saying it has nothing.
+    fireEvent.click(screen.getByTestId("library-row-robe/ledbeam/1ch"));
+    expect(screen.queryByTestId("draft-physical")).toBeNull();
   });
 
   it("starts a new fixture at the next free address, and follows it until one is typed", async () => {
@@ -637,13 +684,15 @@ describe("the patch window", () => {
           manufacturer: "Robe",
           name: "Wash 7Q5",
           own: true,
-          modes: [{ id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true }],
+          gdtf: false,
+          modes: [{ id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true, beams: 0 }],
         },
         {
           manufacturer: "Robe",
           name: "LEDBeam 150",
           own: false,
-          modes: [{ id: "robe/ledbeam/1ch", mode: "1ch", footprint: 1, hasIntensity: true }],
+          gdtf: false,
+          modes: [{ id: "robe/ledbeam/1ch", mode: "1ch", footprint: 1, hasIntensity: true, beams: 0 }],
         },
       ],
       matched: 2,
@@ -693,7 +742,8 @@ describe("the patch window", () => {
         manufacturer: "Generic",
         name: "Dimmer",
         own: false,
-        modes: [{ id: "generic.dimmer", mode: "", footprint: 1, hasIntensity: true }],
+        gdtf: false,
+        modes: [{ id: "generic.dimmer", mode: "", footprint: 1, hasIntensity: true, beams: 0 }],
       },
     });
     expect(screen.getByTestId("draft-type").textContent).toBe("Generic Dimmer");

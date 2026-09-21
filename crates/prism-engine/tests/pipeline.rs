@@ -52,6 +52,7 @@ fn head() -> FixtureType {
                 32_768,
             ),
         ],
+        physical: None,
     }
 }
 

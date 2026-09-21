@@ -586,6 +586,17 @@
 }
 
 /*
+ * What the chosen profile carries besides its channels — **S61**. A reading
+ * under the fixture's name, dim because it is a property of the choice rather
+ * than a field to fill in, and drawn at all only for a GDTF profile.
+ */
+.patch-physical {
+    margin: 0 0 0.3rem;
+    color: var(--ink-dim);
+    font-size: 0.85em;
+}
+
+/*
  * What the row is set to, and the key that opens the library. Full ink against
  * the dimmed label beside it, because it is an answer and not a prompt.
  */
@@ -697,6 +708,22 @@
 
 .library-source[data-own="yes"] {
     color: var(--accent);
+}
+
+/*
+ * Which format a profile was read from — **S61**. GDTF is the one that carries
+ * the fixture's gobo pictures, its size and where its beam comes out, so it is
+ * the one worth picking out; an Open Fixture Library row stays dim, the same
+ * rule the Source column beside it follows.
+ */
+.library-format {
+    color: var(--ink-dim);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+}
+
+.library-format[data-gdtf="yes"] {
+    color: var(--ink);
 }
 
 .library-empty {

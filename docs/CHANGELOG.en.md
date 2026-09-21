@@ -28,6 +28,35 @@ Every version so far is a **pre-release**.
 owner is holding the release until the Controls round (S59) and the 3D viewer
 (S30) are in it.
 
+### The fixture library is GDTF now (S61)
+
+**The desk reads [GDTF](https://gdtf.eu)** — the format manufacturers publish
+their devices in, and the one a rig is exchanged between programs in. A `.gdtf`
+file carries what a channel list cannot: **the pictures of its gobos**, the
+device's **3D model**, its size, and **where its beam comes out** and which way
+it points. That is what the 3D viewer needs, which is why this comes before it.
+
+- **The installed library is GDTF.** `tools/fetch-fixtures/fetch-fixtures`
+  installs it, from a folder of `.gdtf` files or from a free account on
+  [gdtf-share.com](https://gdtf-share.com) — that service has no anonymous bulk
+  download, which is why the script asks for one and says so when it is given
+  neither.
+- **Your own fixtures in the Open Fixture Library's format keep working.** A
+  lamp nobody has published a GDTF for is still written as JSON in `fixtures/`
+  in the data directory; by hand that is far easier than a ZIP full of XML. Both
+  stand side by side in the list, and what is in the data directory still wins.
+- **A `.gdtf` in your own folder replaces the library's copy of that fixture
+  whatever it is called** — the key comes out of the file, not out of the file
+  name.
+- **The patch window says where a profile came from.** A new *Format* column
+  (`GDTF` or `OFL`), and a line under the chosen fixture's name saying what it
+  carries — *3D model · 1 beam*.
+- **Gobos have names and pictures.** Where a GDTF describes a wheel, a channel's
+  steps are named after the wheel's slots, and the picture's name travels with
+  the profile into the show.
+- The desk says at start-up how many profiles it offers and **how many of them
+  are GDTF** — and says so separately when the installed library has none yet.
+
 What the open beta reported in its first two weeks — ten reports, all ten
 fixed (S56 and S57), and the register's last open entry with them (B52, S58).
 **All ten GitHub issues are closed** (#9, #21, #23–#30):

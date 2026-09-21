@@ -158,3 +158,21 @@ export function modeLabel(mode: LibraryMode): string {
 export function modesSummary(fixture: LibraryFixture): string {
   return fixture.modes.map((mode) => (mode.mode === "" ? `${String(mode.footprint)} ch` : mode.mode)).join(" · ");
 }
+
+/**
+ * What a mode's profile carries **besides its channels** — S61.
+ *
+ * An empty string for a profile out of the Open Fixture Library or for one of
+ * the desk's four generics: they describe channels, which is what every desk
+ * had before this session, and a line saying *no beams* would be noise on four
+ * fifths of the library.
+ *
+ * For a GDTF profile it is the thing an operator wants to know before they
+ * patch: the viewer can draw this one, and how many beams it will draw.
+ */
+export function physicalSummary(mode: LibraryMode | undefined): string {
+  if (mode === undefined || mode.beams === 0) {
+    return "";
+  }
+  return mode.beams === 1 ? "3D model · 1 beam" : `3D model · ${String(mode.beams)} beams`;
+}

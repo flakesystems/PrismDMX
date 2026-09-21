@@ -47,6 +47,7 @@ pub(crate) fn par_type() -> FixtureType {
             attribute(AttributeType::Blue, 2),
             attribute(AttributeType::White, 3),
         ],
+        physical: None,
     }
 }
 
@@ -59,6 +60,7 @@ pub(crate) fn dimmer_type() -> FixtureType {
         mode: "1ch".to_owned(),
         footprint: 1,
         attributes: vec![attribute(AttributeType::Dimmer, 0)],
+        physical: None,
     }
 }
 
@@ -169,6 +171,7 @@ pub(crate) fn migration_fixture() -> crate::ShowFile {
                 attribute(AttributeType::Tilt, 2),
                 attribute(AttributeType::Dimmer, 3),
             ],
+            physical: None,
         })
         .unwrap();
     for (id, type_id, universe, address, x) in [

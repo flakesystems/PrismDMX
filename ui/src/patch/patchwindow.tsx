@@ -79,7 +79,7 @@ import { useAsk, useSend } from "../store/hooks";
 import type { PatchRow, ProfileRow } from "./patch";
 import { embeddedProfiles, nextFreeFixtureId, patchRows, profileLabel, wholeNumber } from "./patch";
 import type { LibraryView } from "./library";
-import { EMPTY_VIEW, LibraryPager, fixtureLabel, modeLabel, modesSummary } from "./library";
+import { EMPTY_VIEW, LibraryPager, fixtureLabel, modeLabel, modesSummary, physicalSummary } from "./library";
 import { PreviewRequester, conflictedFixtures, conflictsOf, placeText, previewText } from "./preview";
 
 /** How close to the end of the list, in pixels, the next page is asked for. */
@@ -682,6 +682,7 @@ function LibraryBrowser({
                                 <th scope="col">Manufacturer</th>
                                 <th scope="col">Fixture</th>
                                 <th scope="col">Modes</th>
+                                <th scope="col">Format</th>
                                 <th scope="col">Source</th>
                             </tr>
                         </thead>
@@ -708,6 +709,25 @@ function LibraryBrowser({
                                         </td>
                                         <td>{fixture.name}</td>
                                         <td title={modesSummary(fixture)}>{modesSummary(fixture)}</td>
+                                        {/*
+                                          **S61.** Which format this profile was read
+                                          from, because the two carry different things:
+                                          a GDTF knows what its gobos look like, how big
+                                          the fixture is and where its beam comes out, so
+                                          it is the one the 3D viewer can draw.
+                                        */}
+                                        <td
+                                            className="library-format"
+                                            data-testid={`library-format-${key}`}
+                                            data-gdtf={fixture.gdtf ? "yes" : "no"}
+                                            title={
+                                                fixture.gdtf
+                                                    ? "GDTF — carries gobo pictures, a 3D model and beam geometry"
+                                                    : "Open Fixture Library — channels and names"
+                                            }
+                                        >
+                                            {fixture.gdtf ? "GDTF" : "OFL"}
+                                        </td>
                                         {/*
                                           **B43.** Whose profile this is. A venue's own
                                           may deliberately carry a library key in order
@@ -770,6 +790,7 @@ function PatchForm({
     const free = preview?.nextFree ?? null;
     const moved =
         free !== null && (String(free.universe) !== draft.universe || String(free.address) !== draft.address);
+    const physical = physicalSummary(draft.fixture?.modes.find((mode) => mode.id === draft.typeId));
     return (
         <form
             className="patch-form"
@@ -789,6 +810,18 @@ function PatchForm({
                         ? "Choose a fixture from the library"
                         : draft.typeId}
             </p>
+            {/*
+              **S61.** What the chosen mode's profile carries besides its
+              channels. Empty — and so not drawn at all — for a profile out of
+              the Open Fixture Library, which describes channels and is what
+              every desk had before; a GDTF profile says here that the viewer
+              can draw it and with how many beams.
+            */}
+            {physical === "" ? null : (
+                <p className="patch-physical" data-testid="draft-physical">
+                    {physical}
+                </p>
+            )}
             <div className="patch-fields">
                 {draft.fixture === null ? null : (
                     <label>

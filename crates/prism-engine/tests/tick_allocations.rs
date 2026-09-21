@@ -306,6 +306,7 @@ fn fixture_type(attributes: usize, sixteen_bit: bool) -> FixtureType {
         mode: "test".to_owned(),
         footprint: (attributes.len() * width) as u16,
         attributes,
+        physical: None,
     }
 }
 
@@ -346,6 +347,7 @@ fn repeated_fixture_type(repeats: u8) -> FixtureType {
         mode: "32ch".to_owned(),
         footprint: u16::from(repeats),
         attributes,
+        physical: None,
     }
 }
 

@@ -92,7 +92,7 @@ stays the old build until it is restarted.
 | The program, `PrismDMX.exe` with `prismd.exe` beside it | `%LOCALAPPDATA%\PrismDMX` |
 | Shows, `machine.json`, key bindings, the log | `%APPDATA%\PrismDMX` |
 | Your own fixture profiles — made on the first start | `%APPDATA%\PrismDMX\fixtures` |
-| The bundled fixture library | beside the program, `profiles\fixtures` |
+| The installed fixture library — GDTF | beside the program, `profiles\fixtures` |
 
 `%APPDATA%\PrismDMX` is the **data directory**. It is the one setting that is read
 and never written, and the reason is that the settings live *inside* it: a desk
@@ -441,7 +441,8 @@ when something is reported.
 | Light on that nobody programmed | A second sender on the same universe. With sACN, priority decides |
 | The program starts but no window | A desk is already running and its listener is off. The message says which process holds the desk, where it wanted to be reachable, and which data directory the two are arguing about |
 | The window is white | The WebView2 runtime is missing (chapter 2) |
-| Fixture library empty | `profiles\fixtures` beside the program; an installation brings it. From source: `tools/fetch-fixtures/fetch-fixtures.ps1` |
+| Fixture library empty | `profiles\fixtures` beside the program. Install it with `tools\fetch-fixtures\fetch-fixtures.ps1`, which takes either a folder of `.gdtf` files (`PRISMDMX_GDTF_SOURCE`) or a free account on <https://gdtf-share.com> (`PRISMDMX_GDTF_USER` and `PRISMDMX_GDTF_PASSWORD`). That service has no anonymous bulk download, which is why it asks. The desk starts either way, with four built-in profiles, and says so in the log |
+| The library is there but nothing is drawn in 3D | The log says how many of the profiles are GDTF. A library installed before version 0.9.3 is Open Fixture Library data: the right channels in the right order, and no gobo pictures, no models and no beam geometry. Re-run the installer |
 
 **The log** is in `%APPDATA%\PrismDMX`. Before a reproducible fault, set the level
 in *Settings → This machine* to `debug`.

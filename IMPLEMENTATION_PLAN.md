@@ -1649,6 +1649,39 @@ this session's rather than a patch of its own.
 - A show stored before S60 opens unchanged, and every encoder is on its own
   executor as it was
 
+## S61 · `prism-domain` + `prism-core` + `prismd` + `ui` + `tools` — the fixture library is GDTF
+**Size:** L · **Depends on:** S44, S57 · **Done 2026-09-21** (`PROGRESS.md` §2.57)
+
+**Goal:** the owner's request of 2026-09-21, put before S30 on purpose: **the
+3D viewer cannot be built on a library that does not know what a fixture looks
+like.** The Open Fixture Library describes channels. It does not say what a gobo
+looks like, how big the fixture is, where its beam comes out of the body, or
+which way the body points when the yoke is at home. [GDTF](https://gdtf.eu) —
+DIN SPEC 15800, the format manufacturers publish in and the one MVR refers to —
+says all of it, and it is what the rest of this industry has standardised on.
+
+So this session is S30's groundwork, and it is a session of its own because a
+second fixture format is a reader, a container, an installer, a key rule and a
+line in the patch window, and none of that belongs inside a viewer.
+
+**Deliverables**
+- **A GDTF reader** (`prism_core::library::gdtf`): one `FixtureType` per DMX mode of break 1, every channel's attribute from the format's published table, its default, its physical range and its named ranges — and the **wheel slot pictures**, which is what OFL has no field for
+- **A ZIP reader** (`prism_core::library::zip`), because a `.gdtf` is a ZIP archive: the container's own fixed-width records, hand-written and **tested against bytes**, with `flate2` for DEFLATE and nothing else taken from a dependency
+- **A physical description on the profile** (`FixtureType::physical`, `#[serde(default, skip_serializing_if)]`): the device's size, its 3D model's name, and every beam with **where it sits and which way it points** — a direction vector rather than an Euler triple, because a triple needs an order and a viewer that chose a different one would point every beam somewhere else
+- **Keys out of the file, not out of the file name.** A GDTF's key is `slug(manufacturer)/slug(name)/slug(mode)`, so a venue's own copy of a published archive overrides the installed one **whatever either is called** — a better identity than a path, and the format's own
+- **The Open Fixture Library stays**, for the venue's own profiles: a light nobody has published a GDTF for is one somebody has to describe by hand, and a channel list in JSON is far kinder to write than a ZIP of XML. Both formats are read, the venue's wins, and the corpus goes in a tree of its own beside the GDTF
+- **Two installers.** `tools/fetch-fixtures` installs GDTF — from a folder of `.gdtf` files, or from an account on gdtf-share.com, which is the only way that service hands the library out; `tools/fetch-fixtures/fetch-ofl` installs the OFL corpus, which is what the reader's corpus tests and CI want
+- **The patch window says which format a profile came from**, and what a GDTF carries: a *Format* column and a line under the chosen fixture's name
+
+**Exit criteria**
+- A `.gdtf` archive read end to end — ZIP, XML, modes, attributes, wheels, geometry — with every case asserted against an archive the test builds **byte by byte**, because there is no corpus to download
+- A venue's own `.gdtf` overrides the installed copy of the same fixture under a different file name, asserted through `prismd::daemon::load_library` after the **real installer script** has run and wiped its destination (B43's rule, for the second format)
+- A hand-written Open Fixture Library profile and a `.gdtf` stand side by side in one library, and the picker says which is which
+- The two library answers carry the new fields as **bytes**, through a re-recorded `patch-recording.json` with a real `.gdtf` in the pinned library (B55's rule)
+- A `.gdtf` dropped into a desk's own folder is patched in Chromium against a real daemon, and the window says what it carries
+- A show patched before S61 opens unchanged, and one with no GDTF in it serialises back byte for byte
+- The tick makes no allocator call on any path this session adds
+
 ---
 
 # Phase 12 — Extended features, once the doors are open
@@ -1699,7 +1732,8 @@ flowchart LR
     S44 & S27 --> S57
     S54 & S57 --> S58
     S38 & S58 --> S59
-    S59 --> S30 --> S60
+    S44 & S57 --> S61
+    S59 & S61 --> S30 --> S60
 ```
 
 **Critical path to a usable console:** S0 → S1 → S2 → S3 → S4 → S7 → S11 → S12 → S16 → S17 → S19 → S21 → S22 → S23 → S25 → S26. *Reached at S26.*
@@ -1745,6 +1779,7 @@ is, is the order the work was planned to make sense in.
 | 25 | **S57** `ui`/core — the patch window, rebuilt around the library | **Done 2026-09-18** — see `PROGRESS.md` §2.54. Born out of S56 from B60, the owner's eight points about patching, and done as one rebuild because they lean on each other. All ten of the open beta's first reports are now closed |
 | 25a | **S58** core/`prismd`/`ui` — a knob follows the channel that switches it | **Done 2026-09-19** — see `PROGRESS.md` §2.55. B52, the register's last open entry, asked for by the owner before the next release. **The register has no open entry.** The owner worked through `docs/RELEASE_TEST.md` on the test rig on 2026-09-20 and accepted every point |
 | 25b | **S59** `ui`/`prism-surface`/`prismd` — the Controls panel, the owner's next round | **Done 2026-09-21** — see `PROGRESS.md` §2.56. The question round was answered on 2026-09-20 and its ten decisions are in the entry above — 2026-09-20, in the entry itself. The desk gains the console's whole vocabulary as bindable words, a key's lamp starts following **what it is bound to** rather than where it sits, the strip controls move to a collapsed advanced section, the jog wheel is recut to one DMX step a detent with a sensitivity factor, and the shipped table becomes one file with all sixty-four keys on it |
-| 25c | **S30** 3D viewer | **Next**, and the last thing the release waits for — the owner's decision of 2026-09-20 held it for the Controls round **and** the viewer, and the first of those is done. It is Phase 9's entry, unchanged, and the first of the five extended features to run |
+| 25b1 | **S61** domain/core/`prismd`/`ui`/`tools` — the fixture library is GDTF | **Done 2026-09-21** — see `PROGRESS.md` §2.57, and **built in parallel with S59 on another machine**; the two share no file. Asked for by the owner **in preparation for S30**, and it is the right order: the viewer draws a device, and until this session the library described only channels. GDTF is where a gobo's picture, a fixture's size and a beam's place come from, and the Open Fixture Library's format stays for the profiles a venue writes by hand. **Numbered S61 and not S60**: S60 was already the encoder-executor session below, and a number is an identity |
+| 25c | **S30** 3D viewer | **Next**, and the last thing the release waits for — the owner's decision of 2026-09-20 held it for the Controls round **and** the viewer, and the first of those is done. **Its groundwork is done too** (S61): every GDTF profile carries the device's size, its model and every beam with its place and direction. It is Phase 9's entry, unchanged, and the first of the five extended features to run |
 | 25d | **S60** core/`prismd`/`ui` — an encoder may hold an executor of its own | After **S30**, and deliberately **outside the coming release** — the owner's decision of 2026-09-20. It carries the encoder-in-crossfade fault of the same day, which is not in `docs/ISSUES.md` because it has not been finally verified |
 | 26 | **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | The rest of the extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author. **S30 moved ahead of them** (row 25c) |

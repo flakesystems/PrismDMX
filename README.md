@@ -237,25 +237,28 @@ means — and any line can be bound to a key on the X-Touch.
 
 ### Your own fixture profiles
 
-A light the Open Fixture Library does not know is a profile you can write
-yourself. It goes in **`fixtures/` inside the desk's own directory** —
-`%APPDATA%\PrismDMX\fixtures` on Windows — in the Open Fixture Library's own
-JSON format, and the desk reads it at start-up.
+A light the desk's library does not know is one you can add yourself. It goes in
+**`fixtures/` inside the desk's own directory** — `%APPDATA%\PrismDMX\fixtures`
+on Windows — and the desk reads it at start-up.
 
-That directory and not `profiles/fixtures/`: the second one is a **download**,
-and `tools/fetch-fixtures` empties it on every run, so anything of yours put
+That directory and not `profiles/fixtures/`: the second one is the **installed
+library**, and an installer empties it on every run, so anything of yours put
 there survives until the next install and no longer. The desk's own directory is
 never touched by an installer.
 
-Two shapes, and both work:
+Three shapes, and all three work:
 
 | Where you put it | What it is for |
 |---|---|
-| `fixtures/my-light.json` | A light nobody has a profile for. It is filed under *Custom* and appears in the picker beside everything else |
-| `fixtures/<manufacturer>/<fixture>.json` | A **correction** to a profile that came with the desk. Use the same manufacturer directory and file name the library uses and yours replaces it |
+| `fixtures/anything.gdtf` | A **GDTF** file from the manufacturer or from [gdtf-share.com](https://gdtf-share.com). The name does not matter: the file says which fixture it is, and if the library already has that fixture, yours replaces it |
+| `fixtures/my-light.json` | A light nobody has published a GDTF for, written by hand in the Open Fixture Library's own JSON format. It is filed under *Custom* and appears in the picker beside everything else |
+| `fixtures/<manufacturer>/<fixture>.json` | A **correction** to a JSON profile that came with the desk. Use the same manufacturer directory and file name the library uses and yours replaces it |
 
 Either way the picker marks the row **yours** in its *Source* column, so a
-profile you wrote is one you can find again. And once you have patched a fixture
+profile you wrote is one you can find again, and its *Format* column says which
+of the two kinds it is — a GDTF carries the pictures of its gobos, the size of
+the fixture and where its beam comes out, which is what the 3D viewer draws
+with. And once you have patched a fixture
 with it, the profile is **copied into the show**: a `.prism` file is
 self-contained, so it opens the same way on a desk that has never seen your
 directory.
@@ -337,10 +340,17 @@ has it already).
 ```bash
 git clone https://github.com/flakesystems/PrismDMX.git
 cd PrismDMX
-tools/fetch-fixtures/fetch-fixtures.sh   # or .ps1 on Windows
+tools/fetch-fixtures/fetch-ofl.sh        # or .ps1 on Windows
 cd ui && npm ci && cd ..
 cargo build --workspace
 ```
+
+That third line installs the Open Fixture Library corpus, which the library
+reader's tests run over. The desk's own library is **GDTF** and
+`tools/fetch-fixtures/fetch-fixtures.sh` installs it — from a folder of `.gdtf`
+files, or from a free account on [gdtf-share.com](https://gdtf-share.com), which
+has no anonymous bulk download. `profiles/fixtures/SOURCE.md` is the whole of
+it; nothing in this repository needs it to build or to test.
 
 Run the engine and the interface separately while developing:
 

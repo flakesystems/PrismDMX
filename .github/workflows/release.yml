@@ -113,9 +113,14 @@ jobs:
           }
           Write-Output "building $version"
 
-      - name: Install the fixture library
+      # The corpus the Open Fixture Library reader's tests run over. The desk's
+      # own library is **GDTF** since S61 and its upstream has no anonymous
+      # download, so a release build ships the installer rather than the data —
+      # which is what `profiles/fixtures/SOURCE.md` says and what the installer's
+      # manual tells a technician to run once on the machine.
+      - name: Install the Open Fixture Library corpus
         shell: pwsh
-        run: tools/fetch-fixtures/fetch-fixtures.ps1
+        run: tools/fetch-fixtures/fetch-ofl.ps1
 
       - name: Install the interface's dependencies
         working-directory: ui

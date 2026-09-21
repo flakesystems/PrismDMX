@@ -40,6 +40,7 @@ fn moving_head() -> FixtureType {
             attribute(AttributeType::Pan, 32_768, 2, Some(3)),
             attribute(AttributeType::Tilt, 32_768, 4, Some(5)),
         ],
+        physical: None,
     }
 }
 

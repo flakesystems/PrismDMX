@@ -96,7 +96,7 @@ Build, bis es neu gestartet wurde.
 | Das Programm, `PrismDMX.exe` und `prismd.exe` daneben | `%LOCALAPPDATA%\PrismDMX` |
 | Shows, `machine.json`, Tastenbelegung, Protokoll | `%APPDATA%\PrismDMX` |
 | Eigene Fixture-Profile — beim ersten Start angelegt | `%APPDATA%\PrismDMX\fixtures` |
-| Die mitgelieferte Fixture-Bibliothek | neben dem Programm, `profiles\fixtures` |
+| Die installierte Fixture-Bibliothek — GDTF | neben dem Programm, `profiles\fixtures` |
 
 `%APPDATA%\PrismDMX` ist das **Datenverzeichnis**. Es ist die einzige
 Einstellung, die gelesen und nie geschrieben wird, und der Grund ist, dass die
@@ -462,7 +462,8 @@ gefragt wird, wenn etwas gemeldet wird.
 | Licht an, das niemand programmiert hat | Ein zweiter Sender auf demselben Universe. Bei sACN entscheidet die Priorität |
 | Das Programm startet, aber kein Fenster | Ein Pult läuft schon, und sein Zuhörer ist aus. Die Meldung sagt, welcher Prozess das Pult hält, wo er zu erreichen sein wollte und über welches Datenverzeichnis die beiden streiten |
 | Das Fenster ist weiß | Die WebView2-Laufzeit fehlt (Kapitel 2) |
-| Fixture-Bibliothek leer | `profiles\fixtures` neben dem Programm; eine Installation bringt sie mit. Aus dem Quelltext: `tools/fetch-fixtures/fetch-fixtures.ps1` |
+| Fixture-Bibliothek leer | `profiles\fixtures` neben dem Programm. Installieren mit `tools\fetch-fixtures\fetch-fixtures.ps1`; das Skript nimmt entweder einen Ordner mit `.gdtf`-Dateien (`PRISMDMX_GDTF_SOURCE`) oder ein kostenloses Konto bei <https://gdtf-share.com> (`PRISMDMX_GDTF_USER` und `PRISMDMX_GDTF_PASSWORD`). Dieser Dienst hat keinen anonymen Massen-Download, darum fragt es. Das Pult startet so oder so, mit vier eingebauten Profilen, und sagt es im Log |
+| Die Bibliothek ist da, aber in 3D wird nichts gezeichnet | Das Log sagt, wie viele der Profile GDTF sind. Eine vor Version 0.9.3 installierte Bibliothek sind Daten der Open Fixture Library: die richtigen Kanäle in der richtigen Reihenfolge, und keine Gobo-Bilder, keine Modelle, keine Beam-Geometrie. Das Installationsskript erneut ausführen |
 
 **Das Protokoll** liegt in `%APPDATA%\PrismDMX`. Vor einem reproduzierbaren
 Fehler die Stufe in *Settings → This machine* auf `debug` stellen.

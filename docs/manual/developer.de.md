@@ -41,19 +41,33 @@ Linux braucht der Bau der Shell zusätzlich ein WebView-Toolkit
 ```bash
 git clone https://github.com/flakesystems/PrismDMX.git
 cd PrismDMX
-tools/fetch-fixtures/fetch-fixtures.sh   # oder .ps1 unter Windows
+tools/fetch-fixtures/fetch-ofl.sh        # oder .ps1 unter Windows
 cd ui && npm ci && cd ..
 cargo build --workspace
 ```
 
 Zwei dieser Schritte sind je einen Satz wert.
 
-**Die Fixture-Bibliothek wird geholt, nicht mitgeliefert.** Sie hat ein Upstream
-mit eigenem Veröffentlichungstakt, und eine Kopie in diesem Baum wäre die
-veraltete. Das Skript nagelt eine Revision fest, damit zwei Rechner, die an
-verschiedenen Tagen installieren, dieselben Profile bekommen. Die Corpus-Tests
-**überspringen sich selbst**, wenn sie fehlt — deshalb holt sie jeder CI-Job,
-der sie braucht, vorher.
+**Die Fixture-Bibliothek wird installiert, nicht mitgeliefert.** Sie hat ein
+Upstream mit eigenem Veröffentlichungstakt, und eine Kopie in diesem Baum wäre
+die veraltete. Seit **S61** gibt es zwei Installationsskripte, und sie tun
+Verschiedenes:
+
+- `fetch-fixtures` installiert die eigene Bibliothek des Pults, und die ist
+  **GDTF**. Es braucht entweder einen Ordner mit `.gdtf`-Dateien oder ein Konto
+  bei [gdtf-share.com](https://gdtf-share.com), denn dieser Dienst hat keinen
+  anonymen Massen-Download. **Kein CI-Job führt es aus**, und der GDTF-Reader
+  hat darum keinen Corpus-Test: was ihn hält, sind seine eigenen Unit-Tests, die
+  ihre Archive Byte für Byte bauen, und ein End-to-End-Test, der eine
+  `.gdtf`-Datei in das Datenverzeichnis eines Pults legt.
+- `fetch-ofl` installiert den Corpus der Open Fixture Library nach
+  `profiles/fixtures/ofl/`, auf einer festgenagelten Revision, damit zwei
+  Rechner, die an verschiedenen Tagen installieren, dieselben Profile bekommen.
+  Dieser Corpus ist das, worüber die Tests des *Open-Fixture-Library-Readers*
+  laufen, und sie **überspringen sich selbst**, wenn er fehlt — deshalb holt ihn
+  jeder CI-Job, der sie braucht, vorher, und deshalb steht er oben im Rezept.
+
+`profiles/fixtures/SOURCE.md` ist das Ganze davon.
 
 **`ui/src/bindings/` wird erzeugt, nicht mitgeliefert.**
 `cargo test -p prism-domain` schreibt es aus den Rust-Typen, sodass eine
@@ -399,16 +413,44 @@ nach:
 
 ## 6. Einen Fixture-Typ hinzufügen — oder dem Bibliotheks-Reader etwas beibringen
 
+### Zwei Reader, und in welchem man gerade ist
+
+Seit **S61** liest das Pult zwei Formate, und der Unterschied lohnt sich, bevor
+man an einem von beiden etwas ändert:
+
+| | `prism_core::library::gdtf` | `prism_core::library::ofl` |
+|---|---|---|
+| Was gelesen wird | eine `.gdtf` — ein ZIP aus XML, Modellen und Gobo-Bildern | ein Verzeichnis voll JSON |
+| Was der Schlüssel ist | was die **Datei** sagt, welches Fixture sie ist | das Verzeichnis und der Dateistamm |
+| Wofür | die installierte Bibliothek und jedes veröffentlichte Profil | ein handgeschriebenes Profil des Hauses |
+| Physische Beschreibung | Größe, Modell und jeder Beam mit Sitz und Richtung | keine — das Format nennt keine |
+| Corpus-Test | keiner: das Upstream hat keinen anonymen Download | 634 Fixtures, laufen in CI |
+
+Ein GDTF-Profil trägt `FixtureType::physical`; ein Profil der Open Fixture
+Library trägt `None`, und die vier eingebauten Generics auch. Das ist eine
+Aussage über das *Format*, nicht über das Fixture, und genau das sagt die
+Spalte *Format* im Patch-Fenster laut.
+
+Die drei eigenen Regeln des GDTF-Readers stehen am Modul und sind die, die eine
+Änderung am ehesten bricht: **die Nummer steckt im Namen** (`Gobo2` ist das
+zweite Goborad, in welcher Kanalreihenfolge auch immer), **ein Attribut, für das
+dieses Pult kein Wort hat, wird ein `Raw`-Knopf und kein Loch**, und **ein Modus
+ist Break 1** — ein Fixture mit zwei DMX-Starts sind zwei Adressen, und dieses
+Pult patcht eine.
+
+### Und dann: ist ein neuer `AttributeType` wirklich die Antwort?
+
 Meistens lautet die Antwort **nicht** „ein neuer `AttributeType`". Lesen Sie in
 dieser Reihenfolge:
 
 **Ist es eine Beschriftung, die ein Operator liest, oder ein Schlüssel, unter dem
 ein Preset abgelegt wird?** Eine Beschriftung kommt aus der Fixture-Datei —
-`AttributeDef::label` trägt den Kanalnamen des Herstellers auf den Encoder. Ein
-Schlüssel darf das **nicht**, denn `1 gobo at 50` muss den Kopf erreichen, dessen
-Datei *Gobo* sagt, und den, dessen Datei *Gobo Wheel* sagt, gleichermaßen. Die
-Capability-Typen der Open Fixture Library sind eine **geschlossene Menge**, es
-gibt also ohnehin keinen offenen Namen zum Übernehmen.
+`AttributeDef::label` trägt den Kanalnamen des Herstellers auf den Encoder, und
+bei GDTF ist das das `Pretty`, das seine `AttributeDefinitions`-Tabelle nennt.
+Ein Schlüssel darf das **nicht**, denn `1 gobo at 50` muss den Kopf erreichen,
+dessen Datei *Gobo* sagt, und den, dessen Datei *Gobo Wheel* sagt,
+gleichermaßen. Beide Formate benennen ihre Parameter aus einer veröffentlichten
+Tabelle, es gibt also ohnehin keinen offenen Namen zum Übernehmen.
 
 **Nennt das Format eine Unterscheidung, die das Modell nicht hat?** Dann wächst
 das Enum, und es wächst durch **Anhängen** — von den ersten fünfzehn Zeilen ist
@@ -429,14 +471,18 @@ Wenn das Enum doch wächst:
    geschlossen, und ein Rad ist keines von beidem (sein Wert ist eine
    Slot-Nummer). Das falsch zu machen lässt einen Rig beleuchtet hochkommen —
    siehe §3.
-3. Sie der Zuordnung in `prism_core::library::ofl` hinzufügen.
+3. Sie **beiden** Zuordnungen hinzufügen: der in `prism_core::library::ofl` und
+   der Tabelle in `prism_core::library::gdtf::attributes` — dort unter GDTFs
+   eigenem Namen, jede Ziffernfolge als `n` geschrieben.
 4. **Den Corpus laufen lassen.**
    `every_channel_in_the_installed_library_maps_to_an_attribute`,
    `no_slot_of_any_profile_is_out_of_reach`,
    `no_profile_in_the_installed_library_rests_a_colour_shut` und
    `every_profile_in_the_installed_library_is_one_a_show_accepts` sind die vier,
-   die finden, was ein handgeschriebener Test nicht kann. Sie brauchen die
-   installierte Bibliothek.
+   die finden, was ein handgeschriebener Test nicht kann. Sie brauchen den
+   installierten Corpus der Open Fixture Library. Für GDTF gibt es kein
+   Gegenstück und kann keines geben; ein dort hinzugefügtes Attribut hält allein
+   ein Unit-Test in `prism_core::library::gdtf::attributes` — schreiben Sie ihn.
 5. Prüfen, ob der Tick weiterhin nichts alloziert — und ob die neue Form einen
    elften Pfad in `tick_allocations.rs` verdient.
 

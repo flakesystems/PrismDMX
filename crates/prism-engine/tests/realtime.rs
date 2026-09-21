@@ -462,6 +462,7 @@ fn stress_fixture_type() -> FixtureType {
         mode: "6ch".to_owned(),
         footprint: 6,
         attributes,
+        physical: None,
     }
 }
 

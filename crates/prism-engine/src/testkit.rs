@@ -61,6 +61,7 @@ pub(crate) fn sized_fixture_type(
         mode: "test".to_owned(),
         footprint,
         attributes,
+        physical: None,
     }
 }
 

@@ -14,23 +14,27 @@
 //! profile into the show**. The copy is the point: after it, the show owns that
 //! profile, and a desk with a different library opens the show unchanged.
 //!
-//! # What is in it (S44)
+//! # What is in it (S44, and **GDTF since S61**)
 //!
 //! Three sources, in the order a key is resolved:
 //!
 //! 1. **The operator's own**, in `fixtures/` inside the daemon's data
-//!    directory, in the Open Fixture Library's own JSON format. Read at
-//!    start-up, and a key here **wins**, so a venue can correct a profile
-//!    without editing vendored data and without losing the correction on the
-//!    next import.
-//! 2. **The Open Fixture Library**, vendored in `profiles/fixtures/` —
-//!    634 fixtures across 132 manufacturers at schema 12.5.1. See
-//!    [`ofl`] for how a fixture becomes profiles, and
-//!    `profiles/fixtures/SOURCE.md` for which commit and how to re-import it.
+//!    directory. Read at start-up, and a key here **wins**, so a venue can
+//!    correct a profile without editing installed data and without losing the
+//!    correction on the next import. Both formats are read here: a `.gdtf`
+//!    file the manufacturer published, and a JSON file in the Open Fixture
+//!    Library's own format — which is what a light nobody has published a GDTF
+//!    for gets written in, because a channel list in JSON is a far kinder thing
+//!    to write by hand than a ZIP archive of XML.
+//! 2. **The installed library**, in `profiles/fixtures/` — **GDTF since S61**.
+//!    See [`gdtf`] for what a `.gdtf` file becomes and why the library moved to
+//!    it; [`ofl`] is still read from the same tree, so a desk whose library was
+//!    installed before S61 keeps working and a venue may mix the two. Which is
+//!    installed, and how, is `profiles/fixtures/SOURCE.md`.
 //! 3. **Four generic profiles** built in Rust: a dimmer, two PARs and a moving
 //!    head. They stay because a rig is often patched before anybody knows what
 //!    is actually hanging in it, and because a one-channel dimmer is not a
-//!    thing OFL has a sensible entry for.
+//!    thing either format has a sensible entry for.
 //!
 //! # Why the client does not send the profile, and no longer holds the list
 //!
@@ -47,12 +51,15 @@
 //!
 //! # What this is still not
 //!
-//! There is no GDTF import, no way to author a profile in the interface, and no
-//! matrix support — a mode whose channel list depends on state is skipped, with
-//! the count reported. See [`ofl`] for the whole of what conversion costs.
+//! There is no way to author a profile in the interface, and no GDTF is
+//! **written** — this desk reads the format, it does not publish in it. What
+//! each reader cannot use is counted rather than hidden: see [`gdtf`] and
+//! [`ofl`] for the whole of what each conversion costs.
 
+pub mod gdtf;
 mod matrix;
 pub mod ofl;
+pub mod zip;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -148,6 +155,7 @@ fn dimmer() -> FixtureType {
         mode: "1ch".to_owned(),
         footprint: 1,
         attributes: vec![eight_bit(AttributeType::Dimmer, 0, 0)],
+        physical: None,
     }
 }
 
@@ -164,6 +172,7 @@ fn rgb_par() -> FixtureType {
             colour(AttributeType::Green, 1),
             colour(AttributeType::Blue, 2),
         ],
+        physical: None,
     }
 }
 
@@ -181,6 +190,7 @@ fn rgbw_par() -> FixtureType {
             colour(AttributeType::Blue, 2),
             colour(AttributeType::White, 3),
         ],
+        physical: None,
     }
 }
 
@@ -216,6 +226,7 @@ fn moving_head() -> FixtureType {
             eight_bit(AttributeType::Gobo, 11, 0),
             eight_bit(AttributeType::Control, 12, 0),
         ],
+        physical: None,
     }
 }
 
@@ -252,8 +263,13 @@ pub struct FixtureLibrary {
     /// Which of `fixtures` a fixture key is, so a mode added later joins the
     /// fixture it belongs to. See [`fixture_key`].
     fixture_index: BTreeMap<(String, bool), usize>,
-    /// What reading the directories cost and what it could not use.
+    /// What reading the Open Fixture Library files cost and what they could
+    /// not use.
     conversion: ofl::Conversion,
+    /// The same, for the GDTF files — **S61**. Two counters rather than one
+    /// because the two formats lose different things, and a single total would
+    /// say neither.
+    gdtf_conversion: gdtf::Conversion,
     /// The fixture keys — `manufacturer/fixture`, without the mode — the venue
     /// supplied itself, so a vendored file of the same name is skipped whole.
     ///
@@ -303,6 +319,22 @@ const CUSTOM_NAME: &str = "Custom";
 /// The file stem of the manufacturer names table, which is not a fixture.
 const MANUFACTURERS_STEM: &str = "manufacturers";
 
+/// What a GDTF archive is called — **S61**.
+const GDTF_EXTENSION: &str = "gdtf";
+
+/// The document at the top of one, packed or unpacked.
+const GDTF_DESCRIPTION: &str = "description.xml";
+
+/// How far into a tree a fixture is looked for — **S61**.
+///
+/// The installed library is one directory per manufacturer, so one level is
+/// what it takes; three leaves room for an installer that files by
+/// manufacturer and then by range, and for the Open Fixture Library corpus in
+/// a tree of its own beside the GDTF. What it is really for is stopping a
+/// directory linked back to one of its own parents from being walked for ever
+/// at start-up.
+const MAX_LIBRARY_DEPTH: usize = 3;
+
 /// How many matches a search answers with when the caller does not say.
 ///
 /// A frame is capped at 1 MiB (`docs/IPC_PROTOCOL.md` §3) and an entry is a
@@ -332,23 +364,38 @@ impl FixtureLibrary {
         library
     }
 
-    /// Reads an Open Fixture Library tree into this library.
+    /// Reads the **installed library** into this library — S44, GDTF since
+    /// S61.
     ///
-    /// The layout is OFL's own: one directory per manufacturer, one JSON file
-    /// per fixture, and a `manufacturers.json` beside them giving each
-    /// manufacturer key a display name. A directory that is not there is not an
-    /// error — a daemon started from a build tree without the vendored profiles
-    /// keeps the profiles it has.
+    /// Two shapes live in one tree, and which of them a file is decided by its
+    /// extension rather than by where it sits:
+    ///
+    /// - a **`.gdtf`** archive, whose key is what the file says the fixture is
+    ///   and not what it is called. This is what `tools/fetch-fixtures`
+    ///   installs since S61;
+    /// - a **`.json`** in the Open Fixture Library's own layout — one directory
+    ///   per manufacturer, one file per fixture, a `manufacturers.json` beside
+    ///   them naming each directory. A desk whose library was installed before
+    ///   S61 still reads, and a venue may mix the two.
+    ///
+    /// A directory holding a `description.xml` is an **unpacked** GDTF and is
+    /// read as one, which is the shape an installer leaves behind when it wants
+    /// the models and the gobo pictures on disk beside the description rather
+    /// than inside an archive.
+    ///
+    /// A directory that is not there is not an error — a daemon started from a
+    /// build tree without an installed library keeps the profiles it has.
     ///
     /// **A key already in this library is kept.** So the caller reads the
-    /// operator's own folder *first* and the vendored tree second, and a
+    /// operator's own folder *first* and the installed tree second, and a
     /// correction in the data directory wins without anything having to know
     /// which of the two it came from.
     ///
-    /// Nothing here fails. A file that will not parse is counted in
-    /// [`Self::conversion`] and skipped, because a desk must start with a
-    /// corrupt profile in its folder.
-    pub fn read_ofl_tree(&mut self, root: &Path) {
+    /// Nothing here fails. A file that will not parse is counted — in
+    /// [`Self::conversion`] or [`Self::gdtf_conversion`] — and skipped, because
+    /// a desk must start with a corrupt profile in its folder.
+    pub fn read_installed_tree(&mut self, root: &Path) {
+        self.read_gdtf_dir(root, false);
         self.read_tree(root, false);
         self.resolve_redirects();
     }
@@ -370,22 +417,33 @@ impl FixtureLibrary {
     ///
     /// - **A loose `.json` at the top**, filed under `custom/<file stem>` — a
     ///   light nobody has a profile for, dropped in and restarted. The
-    ///   convenience S44 built this for.
+    ///   convenience S44 built this for, and **the reason the Open Fixture
+    ///   Library's format is still read at all after S61**: a channel list in
+    ///   JSON is a far kinder thing to write by hand than a ZIP archive of XML.
     /// - **A manufacturer directory**, exactly as the Open Fixture Library lays
     ///   one out, filed under `<directory>/<file stem>` — which is what makes
     ///   the override S44 documented actually work. A key already in this
-    ///   library is kept ([`Self::read_ofl_tree`]), and this is read *first*, so
-    ///   `martin/mac-700-profile.json` in here replaces the vendored Mac 700.
-    ///   Until S51 there was no way to write that key at all: everything went
-    ///   under `custom/`, so the documented correction was impossible.
+    ///   library is kept ([`Self::read_installed_tree`]), and this is read
+    ///   *first*, so `martin/mac-700-profile.json` in here replaces the
+    ///   installed Mac 700. Until S51 there was no way to write that key at
+    ///   all: everything went under `custom/`, so the documented correction was
+    ///   impossible.
+    /// - **A `.gdtf` file**, anywhere in here — S61. Its key is what the file
+    ///   itself says the fixture is, so a manufacturer's own published archive
+    ///   dropped in this directory overrides the installed copy of the same
+    ///   fixture whatever either of them is called. That is a better identity
+    ///   than a file name and it is the format's own.
     ///
     /// A `manufacturers.json` here names the directories, as it does in the
-    /// vendored tree; without one a directory is its own display name.
+    /// installed tree; without one a directory is its own display name.
     ///
     /// Every profile from here is marked [`LibraryEntry::own`], because the key
     /// cannot say where it came from once a venue is allowed to reuse one.
     pub fn read_own_tree(&mut self, root: &Path) {
-        // The loose files first, so a top-level `foo.json` and a
+        // The venue's GDTF first, so that its key is in `own_fixtures` before
+        // anything else claims it.
+        self.read_gdtf_dir(root, true);
+        // The loose files next, so a top-level `foo.json` and a
         // `custom/foo.json` resolve the way every other collision does: first
         // one wins, and the flat drop-in is the one this directory is for.
         self.read_manufacturer(root, CUSTOM_KEY, CUSTOM_NAME, true);
@@ -393,9 +451,118 @@ impl FixtureLibrary {
         self.resolve_redirects();
     }
 
+    /// Every `.gdtf` file and every unpacked GDTF in a tree — **S61**.
+    ///
+    /// Walked to [`MAX_LIBRARY_DEPTH`], so an installer may lay the library out
+    /// one directory per manufacturer, or flat, or not at all: a GDTF's key
+    /// comes out of the file, so where it sits says nothing and nothing has to
+    /// agree about it.
+    fn read_gdtf_dir(&mut self, root: &Path, own: bool) {
+        self.walk_gdtf(root, own, 0);
+    }
+
+    /// One level of [`Self::read_gdtf_dir`].
+    fn walk_gdtf(&mut self, directory: &Path, own: bool, depth: usize) {
+        if depth > MAX_LIBRARY_DEPTH {
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(directory) else {
+            return;
+        };
+        // Sorted, so a library built twice on two machines holds the same
+        // profiles in the same order and a recording of it is stable.
+        let mut paths: Vec<std::path::PathBuf> =
+            entries.flatten().map(|entry| entry.path()).collect();
+        paths.sort();
+
+        // An unpacked GDTF is a directory with a description in it, and its
+        // subdirectories are its models and its gobo pictures rather than more
+        // fixtures — so it is read here and not descended into.
+        let description = directory.join(GDTF_DESCRIPTION);
+        if depth > 0 && description.is_file() {
+            self.read_gdtf_description(&description, own);
+            return;
+        }
+        for path in paths {
+            if path.is_dir() {
+                self.walk_gdtf(&path, own, depth + 1);
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case(GDTF_EXTENSION))
+            {
+                self.read_gdtf_archive(&path, own);
+            }
+        }
+    }
+
+    /// One `.gdtf` archive.
+    fn read_gdtf_archive(&mut self, path: &Path, own: bool) {
+        let Ok(bytes) = std::fs::read(path) else {
+            self.gdtf_conversion.files_rejected += 1;
+            return;
+        };
+        let (built, counts) = gdtf::read_archive(&bytes, own);
+        self.absorb_gdtf(built, counts, own);
+    }
+
+    /// One unpacked GDTF's `description.xml`.
+    fn read_gdtf_description(&mut self, path: &Path, own: bool) {
+        let Ok(bytes) = std::fs::read(path) else {
+            self.gdtf_conversion.files_rejected += 1;
+            return;
+        };
+        let (built, counts) = gdtf::read_description(&bytes, own);
+        self.absorb_gdtf(built, counts, own);
+    }
+
+    /// Files what one GDTF file produced, honouring B43's rule.
+    ///
+    /// The key is taken from what was built rather than read a second time out
+    /// of the archive: it is the same string, and parsing a megabyte of XML
+    /// twice to learn a fixture's name would be the whole cost of the import
+    /// again.
+    fn absorb_gdtf(
+        &mut self,
+        built: Vec<(LibraryEntry, FixtureType)>,
+        counts: gdtf::Conversion,
+        own: bool,
+    ) {
+        self.gdtf_conversion.absorb(counts);
+        let Some(key) = built
+            .first()
+            .map(|(entry, _)| fixture_key(&entry.id).to_owned())
+        else {
+            return;
+        };
+        if own {
+            self.own_fixtures.insert(key);
+        } else if self.own_fixtures.contains(&key) {
+            // The venue has its own answer about this fixture — B43. Skipped
+            // whole rather than mode by mode; see `own_fixtures`.
+            return;
+        }
+        for (entry, profile) in built {
+            self.insert(entry, profile);
+        }
+    }
+
     /// One directory of manufacturer directories, in the Open Fixture Library's
-    /// own layout. Shared by the vendored tree and the venue's own.
+    /// own layout. Shared by the installed tree and the venue's own.
+    ///
+    /// **A subdirectory that has a `manufacturers.json` of its own is a tree
+    /// and not a manufacturer** — S61. `tools/fetch-fixtures/fetch-ofl` puts
+    /// the corpus in `profiles/fixtures/ofl/`, beside the GDTF rather than
+    /// mixed into it, because the two installers each empty what they write
+    /// and neither may take the other's data with it. Without this rule that
+    /// corpus would be read as one manufacturer called *ofl* with no fixtures
+    /// in it.
     fn read_tree(&mut self, root: &Path, own: bool) {
+        self.read_tree_at(root, own, 0);
+    }
+
+    /// One level of [`Self::read_tree`], with the depth that stops a directory
+    /// linked back to its own parent from being walked for ever.
+    fn read_tree_at(&mut self, root: &Path, own: bool, depth: usize) {
         let names = manufacturer_names(root);
         let Ok(directory) = std::fs::read_dir(root) else {
             return;
@@ -412,6 +579,10 @@ impl FixtureLibrary {
             let Some(key) = path.file_name().and_then(|name| name.to_str()) else {
                 continue;
             };
+            if depth < MAX_LIBRARY_DEPTH && path.join("manufacturers.json").is_file() {
+                self.read_tree_at(&path, own, depth + 1);
+                continue;
+            }
             let display = names.get(key).cloned().unwrap_or_else(|| key.to_owned());
             self.read_manufacturer(&path, key, &display, own);
         }
@@ -447,6 +618,9 @@ impl FixtureLibrary {
                         mode: mode.clone(),
                         footprint: profile.footprint,
                         own: redirect.own,
+                        // A redirect is an Open Fixture Library file: that
+                        // format is where redirects exist at all.
+                        gdtf: false,
                     },
                     FixtureType {
                         id: alias,
@@ -536,6 +710,9 @@ impl FixtureLibrary {
                 // The four built-in generics and anything a test hands over:
                 // shipped with the desk, so not the venue's.
                 own: false,
+                // and not GDTF, which is a claim about where a profile's
+                // physical description came from — S61.
+                gdtf: false,
             },
             profile,
         );
@@ -628,6 +805,7 @@ impl FixtureLibrary {
             manufacturer: first.manufacturer.clone(),
             name: first.name.clone(),
             own: first.own,
+            gdtf: first.gdtf,
             modes: modes
                 .iter()
                 .filter_map(|mode| self.entries.get(*mode))
@@ -639,6 +817,13 @@ impl FixtureLibrary {
                         .profiles
                         .get(&entry.id)
                         .is_some_and(FixtureType::has_dimmer),
+                    beams: self
+                        .profiles
+                        .get(&entry.id)
+                        .and_then(|profile| profile.physical.as_ref())
+                        .map_or(0, |physical| {
+                            u16::try_from(physical.beams.len()).unwrap_or(u16::MAX)
+                        }),
                 })
                 .collect(),
         })
@@ -656,10 +841,26 @@ impl FixtureLibrary {
         self.profiles.is_empty()
     }
 
-    /// What reading the directories cost.
+    /// What reading the Open Fixture Library files cost.
     #[must_use]
     pub const fn conversion(&self) -> ofl::Conversion {
         self.conversion
+    }
+
+    /// What reading the GDTF files cost — **S61**.
+    #[must_use]
+    pub const fn gdtf_conversion(&self) -> gdtf::Conversion {
+        self.gdtf_conversion
+    }
+
+    /// How many of the profiles offered came out of a GDTF file — **S61**.
+    ///
+    /// What the daemon logs at start-up, and what tells an installer whether
+    /// the GDTF library is actually installed: a desk offering four profiles
+    /// and none of them GDTF has not had its library downloaded.
+    #[must_use]
+    pub fn gdtf_profiles(&self) -> usize {
+        self.entries.iter().filter(|entry| entry.gdtf).count()
     }
 
     /// One profile by key, ready to embed into a show.
@@ -814,6 +1015,7 @@ mod tests {
             mode: mode.to_owned(),
             footprint,
             attributes: Vec::new(),
+            physical: None,
         }
     }
 
@@ -1086,7 +1288,7 @@ mod tests {
     fn an_ofl_tree_becomes_one_profile_per_mode() {
         let dir = on_disk(&[("robe/wash-7q5.json", HEAD)]);
         let mut library = FixtureLibrary::generic();
-        library.read_ofl_tree(dir.path());
+        library.read_installed_tree(dir.path());
 
         assert_eq!(library.len(), generic_profiles().len() + 2, "two modes");
         let four = library
@@ -1108,7 +1310,7 @@ mod tests {
     fn a_manufacturer_with_no_display_name_falls_back_to_its_key() {
         let dir = on_disk(&[("nameless-co/thing.json", HEAD)]);
         let mut library = FixtureLibrary::default();
-        library.read_ofl_tree(dir.path());
+        library.read_installed_tree(dir.path());
         assert_eq!(
             library
                 .profile("nameless-co/thing/4ch")
@@ -1131,8 +1333,8 @@ mod tests {
         let mut library = FixtureLibrary::default();
         // The operator's first, the installer's second — which is the order the
         // daemon reads them in and the only thing that makes this work.
-        library.read_ofl_tree(corrected.path());
-        library.read_ofl_tree(vendored.path());
+        library.read_installed_tree(corrected.path());
+        library.read_installed_tree(vendored.path());
         assert_eq!(
             library
                 .profile("robe/wash-7q5/4ch")
@@ -1147,7 +1349,7 @@ mod tests {
     #[test]
     fn nothing_about_a_missing_or_broken_directory_stops_anything() {
         let mut library = FixtureLibrary::generic();
-        library.read_ofl_tree(std::path::Path::new("no/such/directory"));
+        library.read_installed_tree(std::path::Path::new("no/such/directory"));
         assert_eq!(library.len(), generic_profiles().len());
 
         let dir = on_disk(&[
@@ -1155,7 +1357,7 @@ mod tests {
             ("robe/wash-7q5.json", HEAD),
             ("robe/notes.txt", "ignored: only .json is read"),
         ]);
-        library.read_ofl_tree(dir.path());
+        library.read_installed_tree(dir.path());
         assert_eq!(library.len(), generic_profiles().len() + 2);
         assert_eq!(library.conversion().files_rejected, 1);
     }
@@ -1213,7 +1415,7 @@ mod tests {
 
         let mut library = FixtureLibrary::default();
         library.read_own_tree(mine.path());
-        library.read_ofl_tree(vendored.path());
+        library.read_installed_tree(vendored.path());
 
         let profile = library
             .profile("martin/mac-700/9ch")
@@ -1236,7 +1438,7 @@ mod tests {
         let vendored = on_disk(&[("robe/mmx.json", HEAD)]);
         let mut library = FixtureLibrary::default();
         library.read_own_tree(mine.path());
-        library.read_ofl_tree(vendored.path());
+        library.read_installed_tree(vendored.path());
         for profile in generic_profiles() {
             library.insert_profile(profile);
         }
@@ -1278,6 +1480,223 @@ mod tests {
         );
     }
 
+    /* -- GDTF, S61 ---------------------------------------------------------- */
+
+    /// A `description.xml` for a one-mode fixture, with a beam in it.
+    fn gdtf_source(manufacturer: &str, name: &str, footprint: u16) -> String {
+        let channels: String = (1..=footprint)
+            .map(|offset| {
+                format!(
+                    r#"<DMXChannel Offset="{offset}">
+                         <LogicalChannel Attribute="Dimmer">
+                           <ChannelFunction Attribute="Dimmer"/>
+                         </LogicalChannel>
+                       </DMXChannel>"#
+                )
+            })
+            .collect();
+        format!(
+            r#"<GDTF DataVersion="1.2">
+                 <FixtureType Name="{name}" Manufacturer="{manufacturer}" FixtureTypeID="GUID">
+                   <Models><Model Name="Body" File="body" Length="0.2" Width="0.2" Height="0.3"/></Models>
+                   <Geometries>
+                     <Geometry Name="Body" Model="Body" Position="{IDENTITY}">
+                       <Beam Name="Beam" Position="{IDENTITY}" BeamAngle="15"/>
+                     </Geometry>
+                   </Geometries>
+                   <DMXModes>
+                     <DMXMode Name="Standard" Geometry="Body">
+                       <DMXChannels>{channels}</DMXChannels>
+                     </DMXMode>
+                   </DMXModes>
+                 </FixtureType>
+               </GDTF>"#
+        )
+    }
+
+    /// The identity, as GDTF writes a `Position`.
+    const IDENTITY: &str = "{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}";
+
+    /// A `.gdtf` archive on disk, at a path of the caller's choosing.
+    fn write_gdtf(root: &std::path::Path, at: &str, source: &str) {
+        let full = root.join(at);
+        std::fs::create_dir_all(full.parent().expect("a parent")).expect("it creates");
+        std::fs::write(
+            full,
+            crate::library::zip::testkit::one_file("description.xml", source.as_bytes()),
+        )
+        .expect("it writes");
+    }
+
+    /// **A `.gdtf` file is a fixture, and its key is what the file says it
+    /// is** — S61.
+    #[test]
+    fn a_gdtf_file_becomes_a_profile_keyed_by_its_contents() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        // Filed under a directory that says nothing, and named something else
+        // again, which is what a download off a manufacturer's site looks
+        // like. The key is neither of them.
+        write_gdtf(
+            dir.path(),
+            "downloads/Robe@Robin T1 Profile@3.gdtf",
+            &gdtf_source("Robe Lighting", "Robin T1 Profile", 2),
+        );
+        let mut library = FixtureLibrary::default();
+        library.read_installed_tree(dir.path());
+
+        assert_eq!(library.len(), 1);
+        let profile = library
+            .profile("robe-lighting/robin-t1-profile/standard")
+            .expect("the key comes out of the file");
+        assert_eq!(profile.manufacturer, "Robe Lighting");
+        assert_eq!(profile.footprint, 2);
+        let physical = profile.physical.as_ref().expect("a GDTF profile has one");
+        assert_eq!(physical.beams.len(), 1);
+        assert_eq!(physical.model.as_deref(), Some("body"));
+        assert_eq!(library.gdtf_conversion().fixtures, 1);
+        assert_eq!(library.gdtf_conversion().beams, 1);
+        assert_eq!(library.gdtf_profiles(), 1);
+        // And the entry says so, which is what the picker marks.
+        assert!(library.entries()[0].gdtf);
+    }
+
+    /// An **unpacked** GDTF — the shape an installer leaves when it wants the
+    /// models and the gobo pictures on disk beside the description.
+    #[test]
+    fn an_unpacked_gdtf_reads_the_same_as_an_archive() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        let source = gdtf_source("Robe Lighting", "Robin T1 Profile", 2);
+        std::fs::create_dir_all(dir.path().join("robe/t1/models")).expect("it creates");
+        std::fs::write(dir.path().join("robe/t1/description.xml"), &source).expect("it writes");
+        // A file under the unpacked fixture that is not a fixture, which must
+        // not be walked into as if it were one.
+        std::fs::write(dir.path().join("robe/t1/models/body.glb"), b"glb").expect("it writes");
+
+        let mut library = FixtureLibrary::default();
+        library.read_installed_tree(dir.path());
+        assert_eq!(library.len(), 1);
+        assert!(
+            library
+                .profile("robe-lighting/robin-t1-profile/standard")
+                .is_some()
+        );
+        assert_eq!(library.gdtf_conversion().files_rejected, 0);
+    }
+
+    /// **The venue's own GDTF wins** — B43's rule, on the format's own
+    /// identity rather than on a file name.
+    #[test]
+    fn a_venue_s_own_gdtf_replaces_the_installed_one_whatever_it_is_called() {
+        let mine = tempfile::tempdir().expect("a temporary directory");
+        let installed = tempfile::tempdir().expect("a temporary directory");
+        // Same fixture, four channels instead of two, under a different file
+        // name — which is the case a key taken from the file name gets wrong.
+        write_gdtf(
+            mine.path(),
+            "my-corrected-t1.gdtf",
+            &gdtf_source("Robe Lighting", "Robin T1 Profile", 4),
+        );
+        write_gdtf(
+            installed.path(),
+            "robe-lighting/robin-t1-profile.gdtf",
+            &gdtf_source("Robe Lighting", "Robin T1 Profile", 2),
+        );
+
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(mine.path());
+        library.read_installed_tree(installed.path());
+
+        assert_eq!(library.len(), 1, "one fixture, not two");
+        let profile = library
+            .profile("robe-lighting/robin-t1-profile/standard")
+            .expect("the venue's");
+        assert_eq!(profile.footprint, 4, "the venue's answer is the one kept");
+        assert!(library.entries()[0].own);
+    }
+
+    /// **A venue's Open Fixture Library file still works** — the whole of what
+    /// S61 promised to keep.
+    #[test]
+    fn the_two_formats_live_in_one_library() {
+        let mine = tempfile::tempdir().expect("a temporary directory");
+        let installed = tempfile::tempdir().expect("a temporary directory");
+        // A light nobody has published a GDTF for, written by hand in the
+        // kinder format.
+        std::fs::write(mine.path().join("shop-special.json"), HEAD).expect("it writes");
+        write_gdtf(
+            installed.path(),
+            "robe.gdtf",
+            &gdtf_source("Robe Lighting", "Robin T1 Profile", 2),
+        );
+
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(mine.path());
+        library.read_installed_tree(installed.path());
+
+        assert!(library.profile("custom/shop-special/4ch").is_some());
+        assert!(
+            library
+                .profile("robe-lighting/robin-t1-profile/standard")
+                .is_some()
+        );
+        assert_eq!(library.gdtf_profiles(), 1, "one of the three is GDTF");
+        assert_eq!(
+            library.len(),
+            3,
+            "two modes of the JSON and one of the GDTF"
+        );
+        // The fixture list marks which is which, which is what the picker
+        // shows.
+        let fixtures: Vec<(String, bool)> = (0..library.fixture_count())
+            .filter_map(|index| library.fixture_at(index))
+            .map(|fixture| (fixture.name, fixture.gdtf))
+            .collect();
+        assert_eq!(
+            fixtures,
+            [
+                ("Wash 7Q5".to_owned(), false),
+                ("Robin T1 Profile".to_owned(), true),
+            ]
+        );
+    }
+
+    /// A file that is not a fixture is counted and left, and the desk starts.
+    #[test]
+    fn a_broken_gdtf_is_counted_and_the_rest_still_reads() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        std::fs::write(
+            dir.path().join("truncated.gdtf"),
+            b"PK\x03\x04 and then nothing",
+        )
+        .expect("it writes");
+        write_gdtf(dir.path(), "good.gdtf", &gdtf_source("Maker", "Thing", 1));
+
+        let mut library = FixtureLibrary::default();
+        library.read_installed_tree(dir.path());
+        assert_eq!(library.gdtf_conversion().files_rejected, 1);
+        assert_eq!(library.len(), 1);
+    }
+
+    /// The number of beams travels to the picker, which is what tells an
+    /// operator the viewer can draw this one properly.
+    #[test]
+    fn a_mode_carries_how_many_beams_its_device_has() {
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        write_gdtf(dir.path(), "a.gdtf", &gdtf_source("Maker", "Thing", 1));
+        let mut library = FixtureLibrary::generic();
+        library.read_installed_tree(dir.path());
+
+        let gdtf = library
+            .fixture_of("maker/thing/standard")
+            .expect("it is in the library");
+        assert_eq!(gdtf.modes[0].beams, 1);
+        let generic = library
+            .fixture_of("generic.dimmer")
+            .expect("the desk carries one");
+        assert_eq!(generic.modes[0].beams, 0, "a generic describes no device");
+        assert!(!generic.gdtf);
+    }
+
     /* -- searching ---------------------------------------------------------- */
 
     /// A library big enough to have to be searched rather than listed.
@@ -1292,6 +1711,7 @@ mod tests {
                     mode: mode.to_owned(),
                     footprint,
                     own: false,
+                    gdtf: false,
                 },
                 FixtureType {
                     id: id.to_owned(),
@@ -1300,6 +1720,7 @@ mod tests {
                     mode: mode.to_owned(),
                     footprint,
                     attributes: Vec::new(),
+                    physical: None,
                 },
             )
         };

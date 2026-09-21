@@ -85,7 +85,7 @@
     <ul class="stats" role="list">
       <li><b data-count="44" data-suffix=" Hz">44 Hz</b><span>Tick, eigener Thread,<br>ohne eine Allokation</span></li>
       <li><b data-count="64">64</b><span>Universen<br>gleichzeitig</span></li>
-      <li><b data-count="2871" data-sep>2 871</b><span>Fixture-Profile<br>ab Werk</span></li>
+      <li><b data-count="2">2</b><span>Fixture-Formate:<br>GDTF und OFL</span></li>
       <li><b data-count="3">3</b><span>Ausgabearten:<br>Art-Net, sACN, USB</span></li>
     </ul>
   </div>
@@ -223,7 +223,7 @@
       <article class="card reveal">
         <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="8" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="6" cy="18" r="2"/></svg></div>
         <h3>Patch aus einer echten Bibliothek</h3>
-        <p>634 Fixtures mit 2 871 Profilen aus der Open Fixture Library liegen bei, dazu generische Profile. Bis zu 64 Universen.</p>
+        <p><b>GDTF</b> — das Format, in dem Hersteller ihre Geräte veröffentlichen: mit den Bildern seiner Gobos, seinem 3D-Modell und dem Ort, an dem der Strahl austritt. Dazu Profile der Open Fixture Library für alles, wofür es keine GDTF gibt, und generische. Bis zu 64 Universen.</p>
         <p class="fine">Und: <b>jeder DMX-Slot eines gepatchten Fixtures hat einen Regler.</b> Auch der, den kein Profil erklärt — der landet als benannter Knopf auf der Control-Bank statt still auf null.</p>
       </article>
 
@@ -454,6 +454,9 @@
         <p>Jedes gepatchte Fixture an seiner Position und in seiner Ausrichtung, Beams
         aus dem echten Ausgang. Er darf weder den Telemetrie-Canvas noch die Engine
         aufhalten — das ist das Abnahmekriterium, nicht ein Wunsch.</p>
+        <p class="fine">Die Vorarbeit steht: die Bibliothek ist <b>GDTF</b>, und jedes Profil
+        daraus trägt die Maße seines Geräts, sein Modell und jeden Beam mit Sitz und
+        Richtung — in die Show kopiert wie alles andere am Profil.</p>
       </li>
 
       <li class="stop reveal">
