@@ -593,6 +593,7 @@ impl Core {
                 Effect::NewShow(path) => deltas.extend(self.new_show(path.clone())?),
                 Effect::ExportShow(path) => deltas.extend(self.export_show(path)?),
                 Effect::ImportShow(path) => deltas.extend(self.import_show(path.clone())?),
+                Effect::ImportRig(path) => deltas.extend(self.import_rig(path.clone())?),
                 Effect::NewDeskIdentity => deltas.extend(self.new_desk_identity()),
                 Effect::NewToken => deltas.extend(self.new_token()),
                 Effect::Machine => deltas.extend(self.carry_out_machine()),
@@ -1084,6 +1085,43 @@ impl Core {
         Ok(deltas)
     }
 
+    /// Takes a venue's rig plan into the open show — **S62**.
+    ///
+    /// The daemon does the reading because `prism-core` does no IO; everything
+    /// that follows is `ShowFile::import_rig`'s, including the single undoable
+    /// step. What comes back here is the **report**, which is the thing worth
+    /// saying out loud: an import that patched eleven of twenty fixtures has to
+    /// say so, and the log is where a desk with no screen says it.
+    fn import_rig(&mut self, path: std::path::PathBuf) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path);
+        let bytes = std::fs::read(&path)
+            .map_err(|error| CoreError::Store(prism_core::StoreError::Io(error.to_string())))?;
+        let (applied, report) = self.file.import_rig(&bytes).map_err(CoreError::Refused)?;
+        log::info(
+            "library",
+            &format!(
+                "imported {}: {} fixtures patched, {} profiles embedded ({} without a profile, \
+                 {} without an address, {} renumbered, {} would not fit)",
+                path.display(),
+                report.patched,
+                report.profiles,
+                report.without_profile,
+                report.without_address,
+                report.renumbered,
+                report.would_not_fit,
+            ),
+        );
+        let mut deltas = self.carry_out(applied)?;
+        deltas.push(Delta::Notice {
+            level: NoticeLevel::Info,
+            message: rig_notice(&report),
+        });
+        deltas.push(Delta::DirtyFlag {
+            unsaved_changes: self.file.is_dirty(),
+        });
+        Ok(deltas)
+    }
+
     /// Takes up a different `ShowStore` and loads what is in it.
     fn adopt(&mut self, store: ShowStore) -> Result<Vec<Delta>, CoreError> {
         self.store = store;
@@ -1512,6 +1550,41 @@ pub fn build_body(
     }
     body.resolve();
     Ok(body)
+}
+
+/// What an operator is told a rig import did — **S62**.
+///
+/// One sentence, and it names what was **not** done as well: a plan that half
+/// arrived is the case where a number matters, and a notice that said only
+/// *imported* would be the one an operator trusts and should not.
+fn rig_notice(report: &prism_core::RigReport) -> String {
+    let mut text = format!(
+        "Rig imported: {} fixtures, {} profiles",
+        report.patched, report.profiles
+    );
+    let mut left = Vec::new();
+    if report.without_profile > 0 {
+        left.push(format!(
+            "{} with no profile in the file",
+            report.without_profile
+        ));
+    }
+    if report.without_address > 0 {
+        left.push(format!("{} with no address", report.without_address));
+    }
+    if report.would_not_fit > 0 {
+        left.push(format!("{} that would not fit", report.would_not_fit));
+    }
+    if !left.is_empty() {
+        text.push_str(&format!(". Skipped: {}", left.join(", ")));
+    }
+    if report.renumbered > 0 {
+        text.push_str(&format!(
+            ". {} renumbered, because the show was already using the plan's number",
+            report.renumbered
+        ));
+    }
+    text
 }
 
 #[cfg(test)]

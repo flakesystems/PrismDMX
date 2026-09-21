@@ -109,6 +109,15 @@ pub struct RigFixture {
     pub mode: String,
     /// The number the plan gives it, where it gives one.
     pub fixture_id: Option<u32>,
+    /// The library key of the profile this fixture is patched with, where the
+    /// archive carried one — **S62**.
+    ///
+    /// Resolved here rather than by the caller, because only this module knows
+    /// which member of the archive produced which profile: the plan names a
+    /// **file** (`GDTFSpec`) and a **mode**, and a key is what a patch needs.
+    /// `None` is the ordinary case of a plan that names a profile it did not
+    /// carry, and such a fixture is not patchable.
+    pub type_id: Option<String>,
     /// Its addresses, one per DMX break, in the order stated.
     pub addresses: Vec<RigAddress>,
     /// Where it hangs, in this desk's axes and in metres, where the plan says.
@@ -177,7 +186,9 @@ pub fn read_archive(
         .collect();
 
     let mut built = Vec::new();
-    let mut present: BTreeMap<String, ()> = BTreeMap::new();
+    // Which member produced which profiles, by the member's own file name —
+    // what a `GDTFSpec` refers to. One member yields one profile per DMX mode.
+    let mut present: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     for member in &members {
         counts.profiles += 1;
         let Some(inner) = archive.file(member) else {
@@ -192,7 +203,13 @@ pub fn read_archive(
         // Keyed by the member's own file name, because that is the name a
         // `GDTFSpec` refers to — the fixture's identity comes out of the
         // profile, but *which member is which* is a matter of the archive.
-        present.insert(file_name_of(member).to_ascii_lowercase(), ());
+        present.insert(
+            file_name_of(member).to_ascii_lowercase(),
+            profiles
+                .iter()
+                .map(|(entry, _)| (entry.mode.clone(), entry.id.clone()))
+                .collect(),
+        );
         built.extend(profiles);
     }
 
@@ -212,7 +229,7 @@ fn file_name_of(member: &str) -> &str {
 /// Reads `GeneralSceneDescription.xml`.
 fn read_scene(
     document: &[u8],
-    present: &BTreeMap<String, ()>,
+    present: &BTreeMap<String, Vec<(String, String)>>,
     counts: &mut Conversion,
 ) -> Option<Rig> {
     let root = gdtf::xml::parse(document)?;
@@ -225,20 +242,48 @@ fn read_scene(
     let mut rig = Rig::default();
     for node in fixtures.iter().take(MAX_FIXTURES) {
         let spec = node.child_text("GDTFSpec").to_owned();
+        let mode = node.child_text("GDTFMode").to_owned();
         counts.fixtures += 1;
-        if spec.is_empty() || !present.contains_key(&file_name_of(&spec).to_ascii_lowercase()) {
+        let type_id = present
+            .get(&file_name_of(&spec).to_ascii_lowercase())
+            .and_then(|modes| resolve_mode(modes, &mode));
+        if type_id.is_none() {
             counts.fixtures_without_profile += 1;
         }
         rig.fixtures.push(RigFixture {
             name: node.get("name").to_owned(),
             spec,
-            mode: node.child_text("GDTFMode").to_owned(),
+            type_id,
+            mode,
             fixture_id: node.child_text("FixtureID").parse::<u32>().ok(),
             addresses: read_addresses(node),
             position: position_of(node.child_text("Matrix")),
         });
     }
     Some(rig)
+}
+
+/// Which of a profile's modes a plan's `GDTFMode` means.
+///
+/// The name as written wins. Where it names no mode this desk built — an
+/// exporter that wrote the mode differently, or a profile whose modes this desk
+/// could not read — a profile with **exactly one** mode answers that one,
+/// because a plan naming a single-mode fixture can only mean it. Anything else
+/// is `None`: guessing between two modes would patch a footprint nobody chose.
+fn resolve_mode(modes: &[(String, String)], wanted: &str) -> Option<String> {
+    if let Some((_, id)) = modes.iter().find(|(name, _)| name == wanted) {
+        return Some(id.clone());
+    }
+    if let Some((_, id)) = modes
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(wanted))
+    {
+        return Some(id.clone());
+    }
+    match modes {
+        [(_, only)] => Some(only.clone()),
+        _ => None,
+    }
 }
 
 /// Every `Fixture` under a node, however deeply a plan nested it.

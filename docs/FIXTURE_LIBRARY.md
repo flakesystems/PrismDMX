@@ -143,7 +143,7 @@ Pult ohne Konto muss eine brauchbare Bibliothek haben.
 |---|---|---|---|
 | **OFL im Installer** | nein | nein | **da** — `release.yml` + `fetch-ofl` |
 | **Eigene Datei im Datenverzeichnis** | nein | nein | **da** — `.gdtf` oder `.json` in `fixtures\`, gewinnt gegen die installierte (B43) |
-| **MVR-Import** | nein | nein | **teilweise da** — eine `.mvr` im eigenen Ordner füllt die Bibliothek; der Knopf im Fenster fehlt noch |
+| **MVR-Import** | nein | nein | **da** — Knopf *Import rig (MVR)* im Patch-Fenster, und eine `.mvr` im eigenen Ordner füllt auch ohne ihn die Bibliothek |
 | **In-App-Login zu GDTF Share** | ja | ja | **geplant, S62** |
 
 Dazu der Pfad in *Settings → This machine → Fixture library*, mit dem ein
@@ -167,11 +167,24 @@ jedes Profil darin landet in der Bibliothek, unter dem Schlüssel, den das
 (B43). Ein Fixture, das zweimal ankommt — einmal im Plan, einmal einzeln —, ist
 **eine** Zeile.
 
-Was der Plan **sagt** — Fixture, Modus, Adresse, Position — wird gelesen und
-liegt in `mvr::Rig` bereit, aber **es wird nichts damit gepatcht**. Das ist mit
-Absicht getrennt: eine Bibliothek zu füllen fügt Profile hinzu, die ein
-Operator ignorieren kann; ein Rig zu patchen **ersetzt die geöffnete Show**.
-Die Entscheidung darüber gehört in S62 und muss begründet werden.
+**Und der Patch kommt mit** — die Entscheidung des Eigentümers vom 2026-09-21.
+`Command::ImportRig` nimmt eine `.mvr` in die geöffnete Show: jedes Profil wird
+eingebettet, jedes geplante Fixture gepatcht, **in einem Schritt, den ein Oops
+ganz zurücknimmt** (die Regel aus S57, über eine Datei).
+
+Drei Regeln, die dabei entschieden wurden:
+
+- **Es wird hinzugefügt, nicht ersetzt.** Ein Fixture, das die Show schon hat,
+  behält seine Nummer, seine Adresse und sein Profil. Das geplante Fixture
+  bekommt die nächste freie Nummer und wird als *umnummeriert* gezählt. Die
+  Nummerierung des Planers trifft auf die des Betreibers, und der Betreiber
+  gewinnt.
+- **Unvollständiges wird gezählt, nicht geraten.** Ein geplantes Fixture ohne
+  Profil im Archiv, ohne Adresse, oder das nicht in sein Universe passt, wird
+  übersprungen und gezählt.
+- **Was passiert ist, wird gesagt.** Der Daemon schickt eine Notice, die auch
+  nennt, was *nicht* ging — ein Import, der elf von zwanzig Fixtures gepatcht
+  hat, muss das sagen.
 
 ---
 
@@ -202,9 +215,8 @@ Die Entscheidung darüber gehört in S62 und muss begründet werden.
 
 `IMPLEMENTATION_PLAN.md` trägt den Eintrag. In der Reihenfolge des Nutzens:
 
-1. **MVR-Import** — die Rig-Datei vom Planer, ohne Konto und ohne Netz.
-   **Der Leser steht** (`library::mvr`, 13 Tests); es fehlen der Knopf im
-   Fenster und die Entscheidung, ob der Patch mitkommt.
+1. ~~**MVR-Import**~~ — **fertig.** Der Leser (`library::mvr`), der Import mit
+   Patch (`ShowFile::import_rig`) und der Knopf im Patch-Fenster.
 2. **`.gdtf`-Import** — die einzelne Datei von der Herstellerseite, über den
    Dateidialog statt über einen Ordner in `%APPDATA%`.
 3. **In-App-Login** — optional, lädt unter dem eigenen Konto des Betreibers ins

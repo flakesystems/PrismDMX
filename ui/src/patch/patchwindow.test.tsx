@@ -536,6 +536,39 @@ describe("the patch window", () => {
   });
 
   /**
+   * **S62.** The rig-plan key, and the one thing the browser decides about it.
+   *
+   * The dialogue is the shell's and the archive is the daemon's to read, so
+   * what this holds is the whole of the interface's part: the key exists only
+   * inside the shell, and what it sends is the path the operator chose.
+   */
+  it("takes a rig plan by asking the shell for a path and sending it", async () => {
+    // No shell: no key, because a browser has no file dialogue to open.
+    await desk();
+    expect(screen.queryByTestId("patch-import-rig")).toBeNull();
+
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+      invoke: (command: string) =>
+        command === "choose_path" ? Promise.resolve("D:/plans/aula.mvr") : Promise.resolve(null),
+    };
+    try {
+      const { commands } = await desk();
+      const key = screen.getAllByTestId("patch-import-rig").at(-1) as HTMLElement;
+      const before = commands().length;
+      fireEvent.click(key);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(commands().slice(before)).toEqual([
+        { t: "ImportRig", path: "D:/plans/aula.mvr" },
+      ]);
+    } finally {
+      delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+    }
+  });
+
+  /**
    * **S61.** The Format column, and what the form says a GDTF carries.
    *
    * Driven off the recording rather than off a hand-written answer, because

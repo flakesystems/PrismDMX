@@ -312,6 +312,13 @@ würde, und einer Taste, die es dorthin setzt.
 Ein Klick auf eine Zeile des Patches öffnet dasselbe Fenster für dieses Fixture:
 Modus, Nummer, Name oder Adresse ändern, oder es mit **Unpatch** entfernen.
 
+**Ein ganzes Rig auf einmal: *Import rig (MVR)*.** Hat Ihnen Ihr Planer eine
+`.mvr` geschickt, nimmt dieser Knopf sie in die Show: alle Profile daraus und
+jedes geplante Fixture, mit Nummer und Adresse, **in einem Schritt, den ein Oops
+ganz zurücknimmt**. Was schon gepatcht ist, bleibt unberührt — ein geplantes
+Fixture, dessen Nummer Ihre Show schon benutzt, bekommt die nächste freie. Das
+Pult sagt danach, wie viele Fixtures ankamen und was es übersprungen hat.
+
 **3. Nachsehen, ob es ankommt.** *DMX Sheet* öffnen, das Fixture auf voll
 ziehen, hinsehen. Wenn dort nichts passiert, liegt es an den Ausgängen und nicht
 am Patch.
@@ -331,7 +338,7 @@ Das Datenverzeichnis rührt kein Installationsprogramm an.
 | Wohin | Wofür |
 |---|---|
 | `fixtures/irgendwas.gdtf` | Eine `.gdtf`-Datei vom Hersteller oder von [gdtf-share.com](https://gdtf-share.com). **Der Name ist egal**: die Datei sagt, welches Fixture sie ist, und wenn die Bibliothek dieses Fixture schon hat, ersetzt Ihres es |
-| `fixtures/unser-rig.mvr` | Die **Rig-Datei vom Planer**. Eine `.mvr` enthält die Fixture-Profile genau Ihrer Produktion — das Pult nimmt sie alle in die Bibliothek. Kein Konto, kein Internet. Was der Plan über Adressen und Positionen sagt, wird **noch nicht** gepatcht |
+| `fixtures/unser-rig.mvr` | Die **Rig-Datei vom Planer**. Eine `.mvr` enthält die Fixture-Profile genau Ihrer Produktion — das Pult nimmt sie alle in die Bibliothek. Kein Konto, kein Internet. Wer damit auch **patchen** will, nimmt den Knopf *Import rig (MVR)* im Patch-Fenster |
 | `fixtures/meine-lampe.json` | Eine Lampe, für die es überhaupt kein Profil gibt, von Hand im JSON-Format der Open Fixture Library geschrieben — weit leichter zu schreiben als eine GDTF. Sie steht unter *Custom* neben allem anderen im Auswahlfeld |
 | `fixtures/<hersteller>/<fixture>.json` | Eine **Korrektur** an einem mitgelieferten JSON-Profil. Gleicher Herstellerordner, gleicher Dateiname wie in der Bibliothek — Ihres ersetzt es |
 

@@ -71,7 +71,7 @@ describe("the operating system's file dialogue", () => {
   });
 
   /** Every place the interface asks for a path has a name the shell knows. */
-  it("names the five file commands and the two machine paths", () => {
+  it("names the five file commands, the two machine paths and the rig plan", () => {
     const kinds: PathKind[] = [
       "OpenShow",
       "SaveShowAs",
@@ -80,6 +80,8 @@ describe("the operating system's file dialogue", () => {
       "ImportShow",
       "FixtureLibrary",
       "SurfaceProfile",
+      // S62: a venue's rig plan, which is neither a show nor a machine path.
+      "ImportRig",
     ];
     // A compile-time list asserted at run time: `prism_app::dialogs::PathKind`
     // has the matching test on the Rust side, and between the two a name that

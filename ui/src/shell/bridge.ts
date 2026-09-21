@@ -44,7 +44,8 @@ export type PathKind =
   | "ExportShow"
   | "ImportShow"
   | "FixtureLibrary"
-  | "SurfaceProfile";
+  | "SurfaceProfile"
+  | "ImportRig";
 
 /** What the shell says this machine's start-up entry actually is. */
 export interface AutostartReport {

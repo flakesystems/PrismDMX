@@ -1697,12 +1697,13 @@ vom Planer. Kein Konto, kein Netz, keine Lizenzfrage: die Datei gehört zu seine
 Produktion. Der Container-Reader aus S61 trägt sie schon.
 
 **Deliverables**
-- **MVR-Import**: die `.gdtf`-Dateien aus einer `.mvr` in die Bibliothek des
-  Betreibers, mit einem Bericht darüber, was ankam und was nicht. Ob die
-  **Patch-Daten** der MVR (Fixture, Adresse, Position) mit importiert werden,
-  ist die Entscheidung, die diese Session zu treffen und zu begründen hat — sie
-  ist der Unterschied zwischen *eine Bibliothek füllen* und *ein Rig übernehmen*
+- ✅ **MVR-Import**: die `.gdtf`-Dateien aus einer `.mvr` in die Bibliothek des
+  Betreibers, mit einem Bericht darüber, was ankam und was nicht. **Der Patch
+  kommt mit** — so entschieden vom Eigentümer am 2026-09-21: `ImportRig` patcht
+  jedes geplante Fixture in einem Schritt, den ein Oops ganz zurücknimmt, fügt
+  hinzu statt zu ersetzen, und zählt, was es übersprungen hat, statt zu raten
 - **`.gdtf`-Import** über den Dateidialog, statt von Hand nach `%APPDATA%`
+  *(offen — der MVR-Knopf ist da, der für eine einzelne `.gdtf` noch nicht)*
 - **In-App-Login** zu GDTF Share, optional: Zugangsdaten in den Einstellungen,
   Download ins **Datenverzeichnis** des Betreibers und nie ins
   Programmverzeichnis, mit Fortschritt und einem Abbruch, der nichts halb

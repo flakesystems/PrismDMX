@@ -275,6 +275,12 @@ pub enum Effect {
     ExportShow(std::path::PathBuf),
     /// Read a JSON export back over the running show — S37's `ImportShow`.
     ImportShow(std::path::PathBuf),
+    /// Take a venue's rig plan into the show — **S62**'s `ImportRig`.
+    ///
+    /// The daemon reads the archive, because this crate does no IO, and hands
+    /// the bytes to [`crate::ShowFile::import_rig`] — which is where the one
+    /// undoable step is built, out of what the file turned out to hold.
+    ImportRig(std::path::PathBuf),
     /// One of **this machine's** settings changed — S37.
     ///
     /// [`Self::Outputs`] and [`Self::Surface`] for the rest of the machine, and
@@ -643,6 +649,9 @@ impl Show {
             ))),
             Command::ImportShow { path } => Ok(Applied::effect(Effect::ImportShow(
                 crate::file::export_path(path)?,
+            ))),
+            Command::ImportRig { path } => Ok(Applied::effect(Effect::ImportRig(
+                crate::file::rig_path(path)?,
             ))),
             // The sixteen session commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to

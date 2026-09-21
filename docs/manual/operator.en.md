@@ -305,6 +305,13 @@ free address** it would fit at, and a key that moves it there.
 Clicking a row of the patch opens the same panel on that fixture: change its
 mode, number, name or address, or **Unpatch** it.
 
+**A whole rig at once: *Import rig (MVR)*.** If your planner sent you an
+`.mvr`, this key takes it into the show: every profile in it and every planned
+fixture, with its number and address, **in one step that one Oops takes back**.
+Nothing already patched is touched — a planned fixture whose number your show is
+already using gets the next free one. The desk then says how many fixtures
+arrived and what it skipped.
+
 **3. Check that it arrives.** Open the *DMX Sheet*, pull the fixture to full,
 look. If nothing happens there, it is the outputs and not the patch.
 
@@ -323,7 +330,7 @@ data directory.
 | Where | What for |
 |---|---|
 | `fixtures/anything.gdtf` | A `.gdtf` file from the manufacturer or from [gdtf-share.com](https://gdtf-share.com). **The name does not matter**: the file says which fixture it is, and if that is one the library already has, yours replaces it |
-| `fixtures/our-rig.mvr` | The **rig file from your planner**. An `.mvr` carries the fixture profiles of exactly your production, and the desk takes all of them into the library. No account, no internet. What the plan says about addresses and positions is **not** patched yet |
+| `fixtures/our-rig.mvr` | The **rig file from your planner**. An `.mvr` carries the fixture profiles of exactly your production, and the desk takes all of them into the library. No account, no internet. To **patch** from it as well, use *Import rig (MVR)* in the Patch window |
 | `fixtures/my-lamp.json` | A lamp there is no profile for at all, written by hand in the Open Fixture Library's JSON format — far easier to write than a GDTF. It appears under *Custom* beside everything else in the picker |
 | `fixtures/<manufacturer>/<fixture>.json` | A **correction** to a bundled JSON profile. Same manufacturer folder, same file name as in the library — yours replaces it |
 

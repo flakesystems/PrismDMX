@@ -56,6 +56,8 @@ pub enum PathKind {
     FixtureLibrary,
     /// A surface binding profile to read.
     SurfaceProfile,
+    /// A venue's rig plan to take into the show — **S62**.
+    ImportRig,
 }
 
 impl PathKind {
@@ -67,6 +69,7 @@ impl PathKind {
         Self::ExportShow,
         Self::ImportShow,
         Self::FixtureLibrary,
+        Self::ImportRig,
         Self::SurfaceProfile,
     ];
 }
@@ -177,6 +180,24 @@ pub const fn chooser(kind: PathKind) -> Chooser {
             title: "Where the fixture library is",
             mode: Mode::OpenDirectory,
             filters: &[],
+            suggested: None,
+        },
+        // An `.mvr` is what a planner sends, and `Every file` is beside it
+        // because an operator who was sent one under another extension should
+        // not have to rename it to find out this desk would have read it.
+        PathKind::ImportRig => Chooser {
+            title: "Import a rig plan (MVR)",
+            mode: Mode::OpenFile,
+            filters: &[
+                Filter {
+                    name: "Rig plan",
+                    extensions: &["mvr"],
+                },
+                Filter {
+                    name: "Every file",
+                    extensions: &["*"],
+                },
+            ],
             suggested: None,
         },
         PathKind::SurfaceProfile => Chooser {
