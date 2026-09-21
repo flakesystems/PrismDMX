@@ -230,3 +230,86 @@ pub fn show_file() -> ShowFile {
         ..ShowFile::new()
     }
 }
+
+/// A `.gdtf` archive with one mode of `footprint` dimmers — **S62**.
+///
+/// Stored rather than deflated, so this needs no compressor: the reader takes
+/// both, and everything here is the container's own fixed-width records.
+#[must_use]
+pub fn gdtf_archive(manufacturer: &str, name: &str, footprint: u16) -> Vec<u8> {
+    let channels: String = (1..=footprint)
+        .map(|offset| {
+            format!(
+                r#"<DMXChannel Offset="{offset}"><LogicalChannel Attribute="Dimmer">
+                     <ChannelFunction Attribute="Dimmer"/></LogicalChannel></DMXChannel>"#
+            )
+        })
+        .collect();
+    let description = format!(
+        r#"<GDTF DataVersion="1.2"><FixtureType Name="{name}" Manufacturer="{manufacturer}"
+             FixtureTypeID="GUID"><DMXModes><DMXMode Name="Mode 1">
+             <DMXChannels>{channels}</DMXChannels></DMXMode></DMXModes>
+           </FixtureType></GDTF>"#
+    );
+    let name = b"description.xml";
+    let body = description.as_bytes();
+    let crc = crc32(body);
+    let size = u32::try_from(body.len()).expect("a small member");
+    let mut out: Vec<u8> = Vec::new();
+
+    out.extend_from_slice(&0x0403_4b50_u32.to_le_bytes());
+    for value in [20_u16, 0, 0, 0, 0] {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out.extend_from_slice(&crc.to_le_bytes());
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    out.extend_from_slice(&0_u16.to_le_bytes());
+    out.extend_from_slice(name);
+    out.extend_from_slice(body);
+
+    let directory_at = u32::try_from(out.len()).expect("a small archive");
+    let mut central: Vec<u8> = Vec::new();
+    central.extend_from_slice(&0x0201_4b50_u32.to_le_bytes());
+    for value in [20_u16, 20, 0, 0, 0, 0] {
+        central.extend_from_slice(&value.to_le_bytes());
+    }
+    central.extend_from_slice(&crc.to_le_bytes());
+    central.extend_from_slice(&size.to_le_bytes());
+    central.extend_from_slice(&size.to_le_bytes());
+    central.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    for value in [0_u16, 0, 0, 0] {
+        central.extend_from_slice(&value.to_le_bytes());
+    }
+    central.extend_from_slice(&0_u32.to_le_bytes());
+    central.extend_from_slice(&0_u32.to_le_bytes());
+    central.extend_from_slice(name);
+
+    let directory_size = u32::try_from(central.len()).expect("a small directory");
+    out.extend_from_slice(&central);
+    out.extend_from_slice(&0x0605_4b50_u32.to_le_bytes());
+    for value in [0_u16, 0, 1, 1] {
+        out.extend_from_slice(&value.to_le_bytes());
+    }
+    out.extend_from_slice(&directory_size.to_le_bytes());
+    out.extend_from_slice(&directory_at.to_le_bytes());
+    out.extend_from_slice(&0_u16.to_le_bytes());
+    out
+}
+
+/// CRC-32 as ZIP states it.
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFF_u32;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            let carry = crc & 1;
+            crc >>= 1;
+            if carry != 0 {
+                crc ^= 0xEDB8_8320;
+            }
+        }
+    }
+    !crc
+}
