@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-09-20 (the owner accepted the build on the test rig; the branches are merged, and the release waits for S59 and S30)
+**Last updated:** 2026-09-21 (S59 done — the Controls round; the release now waits for S30 alone)
 **Current phase:** Phase 11 — what the beta sends back (the open beta, since S56)
-**Current session:** none — next is **S59**, the Controls panel's question round, then **S30**, the 3D viewer; the release waits for both (owner, 2026-09-20). §8 is the prompt
-**Last completed:** S58 — a knob follows the channel that switches it ✅ — **B52, the last open entry of the register.** A switching channel makes one slot a different channel depending on another's value; the owner chose that the **label** follows and the **key** does not, and that what decides is **what is on the cable**. So a switched slot carries its table (`AttributeDef::switched`: the deciding channel, and per range of it the slot's name and steps), the daemon reads the deciding channels off the frame it already holds for telemetry and says which row is live (`Delta::SwitchPositions`), and the encoder band names the knob from that row. In Chromium, against a real ADJ Flat Par QA12: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*. See §2.55. Before that: S57 — the patch window, rebuilt around the library ✅ — **the owner's eight points about patching, as one rebuild because they lean on each other.** *Add fixture* opens one panel over the canvas: the library on the left, **one row per fixture** with its modes in a column, the whole row picking and a page of sixty loaded each time the list reaches its end; the fixture's settings on the right, the mode a menu beside it. A new fixture starts at the **next free address** for its whole footprint, which an overlap names too — the daemon's answer (`PatchPreview::nextFree`), never the browser's. A fixture with no name is named after its type, in the daemon. And a **count**: the daemon places them (`PatchPreview::placements`) and they go as **one** `Command::PatchFixtures`, which embeds the library's profile in the same step and is **one Oops** — the journal now restores fixtures out, profiles, fixtures in, so one step undoes and redoes. Picking a row embeds nothing any more; the preview measures the library's copy. The profile key a show embeds is still per mode, so every show opens unchanged. See §2.54. Before that: S56 — what the open beta sent back ✅ — **ten GitHub issues in two weeks, one a blocker, and they chose the session over Phase 12.** The blocker was a hand-written decoder with no arm for two surface actions, which dropped the client on every visit to the Controls panel; it is now held to every variant by a fixture Rust writes from a `match` with no wildcard. The Oops key is a backspace while a line stands — decided in the daemon, so the X-Touch does it with no screen attached. A crossfade has **one** position on every client and on the motor, which reverses S51's *client-local* rule on purpose: the motor had been falling back to a stale position 150 ms after the hand let go. A view is chosen without touching the line, the first click into an unfocused window selects, the line's feedback is one row of fixed height, number fields can be emptied while typing, `fixtures/` exists after the first start, and the Cue Viewer has no store bar. B60 — the patch window — is **S57**. See §2.53. Before that: S41 + S42 — the manuals, and prismdmx.de ✅ — **everything a person who did not write this needs.** Three manuals: the operator's and the installer's in German because the building they were written for speaks it, the developer's in English because the code does, and the reason for each in `docs/manual/README.md`. A `README.md` in every one of the **ten** workspace members, saying which side of §10.1's rules its crate is on in a sentence with a link rather than a copy of the rule — checked by a test over the members. `cargo doc --workspace --no-deps` is warning-free for the first time and is a gate now: it had **31**, and four of them were prose naming items that had been renamed out from under it, which nothing could go red about. The manual's list of window types and its list of console words are **generated from the code** by a test that keeps the prose, inserts `TODO` for a new row, rewrites the file and fails — so a manual cannot quietly fall behind. And **prismdmx.de is generated out of this repository** by a workspace member that holds no content of its own: no JavaScript on any page, every page saying which version it documents, every anchor asserted to resolve, and a download-page checksum computed from the installer a release just built rather than typed by anybody. CI has a seventh job because a site that only builds on one machine is the same problem as an installer that does. Before that: S54 — no slot of a patched fixture is out of reach ✅. Before that: S46 — `prism-protocols` + `prismd` + `ui`, Art-Net node discovery ✅ (CI green on run **33272829395**) — **an Art-Net output knows whether anything is listening.** Punch-list B6: `Health::Ok` meant *the socket took the datagram* and UDP always takes it, so a configured node read *OK* over an empty rack. `prism-protocols` has a **receive path** for the first time — `ArtPoll` out, `ArtPollReply` parsed field by field out of §6 of the specification, on a seam of its own so no driver thread can be handed a call that blocks. A node is *answering*, *never answered* or *stopped* with the age of its last reply beside it, and the daemon folds that into the health every client is told, so an output whose nodes are silent reads **Degraded** in the snapshot, in the delta and in the answer. Nothing broadcasts: the poll goes only where this desk already sends, and what that costs is written down rather than hidden. A reply is an input from outside — the parser allocates **nothing**, the table is bounded, and a quarter of a million random bytes produce no panic and no allocation. Before that: S45 — `prism-core` + `prism-engine` + `ui`, the executor window and one sequence one playback ✅ (CI green on run **33261331368**, all five jobs on the first attempt) — **an executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list B18: a playback belongs to the *list*, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — asserted on the frames a mock output received, which is the only place the difference is real. Punch-list B15: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote; the editor writes that line rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason — a `Command`, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building. Before that: S33 — the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
+**Current session:** none — next is **S30**, the 3D viewer, which is the last thing the release waits for (owner, 2026-09-20). **S60** — an encoder holding an executor of its own, and the crossfade fault that goes with it — is after it and outside the release. §8 is the prompt
+**Last completed:** S59 — the Controls panel, the owner's round ✅ — **the desk gains the command line's vocabulary, and its lamps start saying something.** It began as a question round and ten decisions came out of it before anything was built. The finding that shaped it: `ARCHITECTURE_SPEC.md` §4.5 has said since S40 that *a key writes a word into the line, it does not act*, and the `CommandKeys` window has implemented it since S43 — what was missing was that **none of it reached the desk**. So the keypad moved into Rust (`prism_domain::CONSOLE_KEYS`, generated into the interface) and any key of an X-Touch can now carry one of its words, doing there exactly what it does on the screen. **A bound key is lit while pressing it would lead somewhere** — the line would take what it writes *and* what it writes would do something — which is the change underneath the rest: the desk had **two** lamps and both hung on where the key sat, so a key given to `Store` reported the unsaved-changes flag. `Clear` follows the **stage**, on the owner's correction, so the lamp does not go out one press early. The jog wheel was not slow but **dead**: a slow detent moved one thirteenth of a DMX step, so a dozen passed before an 8-bit channel changed; the floor is one whole step now and the ceiling four, with a 10–400 % knob in *This machine*. The strips left the list for a collapsed *Advanced* section and took the Strip/Selected column with them. There is a **drawing of the desk** beside the list, to scale, whose geometry is the device profile's and which lights with the real surface. And the shipped `xtouch.json` **is** the built-in defaults now — embedded, 183 lines of duplicated Rust deleted — with 62 of 64 panel keys bound and an update that replaces a desk's own table. See §2.56. Before that: S58 — a knob follows the channel that switches it ✅ — **B52, the last open entry of the register.** A switching channel makes one slot a different channel depending on another's value; the owner chose that the **label** follows and the **key** does not, and that what decides is **what is on the cable**. So a switched slot carries its table (`AttributeDef::switched`: the deciding channel, and per range of it the slot's name and steps), the daemon reads the deciding channels off the frame it already holds for telemetry and says which row is live (`Delta::SwitchPositions`), and the encoder band names the knob from that row. In Chromium, against a real ADJ Flat Par QA12: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*. See §2.55. Before that: S57 — the patch window, rebuilt around the library ✅ — **the owner's eight points about patching, as one rebuild because they lean on each other.** *Add fixture* opens one panel over the canvas: the library on the left, **one row per fixture** with its modes in a column, the whole row picking and a page of sixty loaded each time the list reaches its end; the fixture's settings on the right, the mode a menu beside it. A new fixture starts at the **next free address** for its whole footprint, which an overlap names too — the daemon's answer (`PatchPreview::nextFree`), never the browser's. A fixture with no name is named after its type, in the daemon. And a **count**: the daemon places them (`PatchPreview::placements`) and they go as **one** `Command::PatchFixtures`, which embeds the library's profile in the same step and is **one Oops** — the journal now restores fixtures out, profiles, fixtures in, so one step undoes and redoes. Picking a row embeds nothing any more; the preview measures the library's copy. The profile key a show embeds is still per mode, so every show opens unchanged. See §2.54. Before that: S56 — what the open beta sent back ✅ — **ten GitHub issues in two weeks, one a blocker, and they chose the session over Phase 12.** The blocker was a hand-written decoder with no arm for two surface actions, which dropped the client on every visit to the Controls panel; it is now held to every variant by a fixture Rust writes from a `match` with no wildcard. The Oops key is a backspace while a line stands — decided in the daemon, so the X-Touch does it with no screen attached. A crossfade has **one** position on every client and on the motor, which reverses S51's *client-local* rule on purpose: the motor had been falling back to a stale position 150 ms after the hand let go. A view is chosen without touching the line, the first click into an unfocused window selects, the line's feedback is one row of fixed height, number fields can be emptied while typing, `fixtures/` exists after the first start, and the Cue Viewer has no store bar. B60 — the patch window — is **S57**. See §2.53. Before that: S41 + S42 — the manuals, and prismdmx.de ✅ — **everything a person who did not write this needs.** Three manuals: the operator's and the installer's in German because the building they were written for speaks it, the developer's in English because the code does, and the reason for each in `docs/manual/README.md`. A `README.md` in every one of the **ten** workspace members, saying which side of §10.1's rules its crate is on in a sentence with a link rather than a copy of the rule — checked by a test over the members. `cargo doc --workspace --no-deps` is warning-free for the first time and is a gate now: it had **31**, and four of them were prose naming items that had been renamed out from under it, which nothing could go red about. The manual's list of window types and its list of console words are **generated from the code** by a test that keeps the prose, inserts `TODO` for a new row, rewrites the file and fails — so a manual cannot quietly fall behind. And **prismdmx.de is generated out of this repository** by a workspace member that holds no content of its own: no JavaScript on any page, every page saying which version it documents, every anchor asserted to resolve, and a download-page checksum computed from the installer a release just built rather than typed by anybody. CI has a seventh job because a site that only builds on one machine is the same problem as an installer that does. Before that: S54 — no slot of a patched fixture is out of reach ✅. Before that: S46 — `prism-protocols` + `prismd` + `ui`, Art-Net node discovery ✅ (CI green on run **33272829395**) — **an Art-Net output knows whether anything is listening.** Punch-list B6: `Health::Ok` meant *the socket took the datagram* and UDP always takes it, so a configured node read *OK* over an empty rack. `prism-protocols` has a **receive path** for the first time — `ArtPoll` out, `ArtPollReply` parsed field by field out of §6 of the specification, on a seam of its own so no driver thread can be handed a call that blocks. A node is *answering*, *never answered* or *stopped* with the age of its last reply beside it, and the daemon folds that into the health every client is told, so an output whose nodes are silent reads **Degraded** in the snapshot, in the delta and in the answer. Nothing broadcasts: the poll goes only where this desk already sends, and what that costs is written down rather than hidden. A reply is an input from outside — the parser allocates **nothing**, the table is bounded, and a quarter of a million random bytes produce no panic and no allocation. Before that: S45 — `prism-core` + `prism-engine` + `ui`, the executor window and one sequence one playback ✅ (CI green on run **33261331368**, all five jobs on the first attempt) — **an executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list B18: a playback belongs to the *list*, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — asserted on the frames a mock output received, which is the only place the difference is real. Punch-list B15: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote; the editor writes that line rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason — a `Command`, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building. Before that: S33 — the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
 
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
@@ -4539,6 +4539,84 @@ and their profile. `patch-rig.prism` is the committed one, unchanged.
 
 ---
 
+### 2.56 S59 verification record
+
+Measured on 2026-09-21, on `feat/s59-controls`. **The Controls round**, which
+began as a question round: the owner had change requests that deliberately did
+not go into the punch-list patch, and what they were was not written down. Ten
+decisions came out of it and they are in `IMPLEMENTATION_PLAN.md` S59 before any
+of this was built, which was the entry's own condition.
+
+**The finding that shaped the session.** `ARCHITECTURE_SPEC.md` §4.5 has said
+since S40 that *a key on the desk writes a word into the command line; it does
+not act*, and `ui/src/desk/keys.ts` has been an implementation of it since S43 —
+the `CommandKeys` window is a keypad of exactly these words, sorted into §4.5's
+three shapes. What was missing was not the design and not the vocabulary: it was
+that **none of it reached the desk**. So the session stopped inventing a second
+vocabulary and moved the first one into Rust.
+
+| What | Where | What holds it |
+|---|---|---|
+| One keypad, two devices | `prism_domain::CONSOLE_KEYS` — the word and its §4.5 shape — generated into `ui/src/bindings/variants.ts` beside `FEATURE_GROUP_ATTRIBUTES`. `keys.ts` keeps the English titles and reads the words from there. Four words added on both devices: **`Color`** (in §4.5's table from the start and never on the keypad), **`New`**, **`At`**, **`Thru`** | `offers every word of the keypad as a binding` (`actions.test.ts`), `has a title for every word` and `has no title left over` (`keys.test.ts` — the seam a generated table leaves), `each_shape_makes_its_own_line` (`console.rs`) |
+| A key of the keypad, on the desk | `SurfaceAction::ConsoleWord { word }`, resolved by the word's shape and not by this crate's opinion: *run* replaces the line and runs it, *write* replaces it and waits, *append* adds to the line **as it stands**, `Oops` writes nothing and sends `Command::Oops` (B58) | `a_bound_keypad_word_builds_the_line_its_shape_describes` (`controls.rs`) — three keys of a mock console, one per shape, read off the line rather than off the key; and in Chromium against a real daemon, `a console word bound to a key builds the line at the desk` |
+| **Found while building:** two words in one poll built one line | The `SurfaceContext` was read **once per poll** and is read **per event** now. Two keys can land in one 30 Hz poll, and `Store` `Cue` came out as `Cue ` — the second word answered from a context built before the first was applied. A line an operator did not type, produced only when their fingers were fast enough | `two_words_in_one_poll_build_one_line` (`controls.rs`): both presses into the port before a single slice runs, which is precisely that case. Red before the fix |
+| **A key's lamp follows what the key is bound to** | `prismd::lamp`. Until now the desk had **two** lamps and both hung on the hardware position — a strip's Select, and Save. `paint` asks every one of the sixty-four panel keys and five strip keys what its action's lamp should be | nine tests in `crates/prismd/tests/surface_lamps.rs`, every one asserted on the **Note On velocity that reached the mock surface** (`0x7F` / `0x00`) rather than on a model |
+| The rule, in two halves | **Grammar** — would the line accept what this key writes (`prism_core::console::accepts_next`)? Only an *append* key has a real answer; a *run* or *write* key starts a fresh line. **Meaning** — would it do something? Nine conditions by hand; everything else is **dark on purpose** | `an_argument_keyword_lights_only_where_the_line_would_take_it`: `Cue` is dark after `1 ` (the grammar takes only `at`, `thru`, `full` there) and lit after `store `. A desk that lit every key always would pass the test written the other way round |
+| `Clear` reads the **stage** | The owner's correction of 2026-09-20: *ich möchte aber das clear nicht auf den Programmer schaut, sondern auf die clear stufe*. The two part company at the end — the press that takes the values leaves a programmer with none while `ClearStage::All` still has the bank and the page to take | `the_clear_lamp_follows_the_stage_and_not_the_values`: three presses, and the lamp is asserted still lit after the first two. A lamp reading the values would go dark one press early and an operator would stop pressing one press early |
+| The jog wheel, in DMX steps | The report was *still too slow* and the arithmetic says why: at twenty attribute units a slow detent moved **one thirteenth of one DMX step**, so a dozen detents passed before an 8-bit channel changed at all. The wheel was not slow, it was **dead**. The floor is now exactly one DMX step (`COARSE`, 257) and the ceiling four (1028), geometrically spaced: **257 / 408 / 648 / 1028** | `the_slowest_detent_moves_a_coarse_channel_by_exactly_one_step`, `the_wheel_answers_fourfold_between_a_click_and_a_spin`, `the_rows_climb_evenly` |
+| …and a knob for it | `MachineSettings::jog_sensitivity`, 10–400 %, **this machine's** and not the show's, applied where a jog message is scaled so it takes effect on the next turn with nothing to restart. `serde(default)` to 100 on both sides of the wire — a message from a daemon that predates the field means *the curve as it ships*, and a wheel that moves nothing is the one answer that cannot be right | `sensitivity_scales_the_whole_curve`, `the_slowest_setting_still_moves_the_parameter` (a turned wheel never answers nought, whatever the setting) |
+| The page change the owner asked about | Named as a precaution rather than a sighting, after B56: *page braucht die gleiche Änderung wie view*. It was already right — the bar sends `SetExecutorPage` and `Bank ◀▶` always has — so this is a test rather than a fix | `a_page_change_from_the_desk_leaves_the_line_standing`: `Fixture 1 thru ` typed, a bound page key pressed on the mock console, the line still there |
+| The strips left the list | Into a collapsed **Advanced** section, one row per hardware control — S38's original panel kept as the back door it should have been. With them went the **Strip / Selected** column, because the rows that remain all mean the selected one, and a chooser offering *this strip* on a panel key would offer a binding that resolves to nothing | `keeps the strip controls out of the list and in the advanced section`, and `keeps the selected executor's functions in the ordinary list` — the owner's answer came back twice and the second one counts |
+| A drawing of the desk | Switchable beside the list, **to scale**, and it holds no picture of an X-Touch: every box arrives on its row (`SurfaceControl::geometry`) and the panel comes with the table. `prism_surface::layout` is where the X-Touch's is written | five in `layout.rs` — every control has a place, every button appears once, nothing runs off the panel, **no two keys overlap**, and the shapes are right; eleven in `ui/src/settings/panel.test.tsx` |
+| …and it lights | `Delta::SurfaceLampsChanged`, the whole set by name, sent **only when it moves**. Not how the surface is driven — the daemon does that over MIDI, so closing a browser changes nothing — but so that somebody reworking the table on a rig can see whether a condition they wrote is the one they meant. The list stays quiet | the delta decoded as **bytes** through `decodeServerMessage` (B55's rule): `crates/prismd/tests/ui_surface_lamps.rs` → `ui/tests/fixtures/surface-lamps.json` → `ui/src/ipc/surfacelamps.test.ts`; and in Chromium, `the drawing shows the panel the daemon sent, and lights with the desk` |
+| The shipped table is **one file** | `profiles/surface/xtouch.json` is the built-in defaults now, embedded with `include_str!` and parsed by `Bindings::defaults`. 183 lines of hand-written Rust table deleted. S22's round-trip assertion stopped guarding two copies of one table and started guarding the one that is left | `the_shipped_profile_parses_and_binds_the_whole_surface`. `defaults()` falls back to **empty** rather than panicking, because `load()` leans on it exactly when a profile will not parse; that arm is unreachable and this test is what makes it so |
+| Every key does something | 62 of the 64 panel keys bound. The two that are not are the two that must not be: **SMPTE/Beats** (§4.3's reserved key, the operator's way back to a sound console) and **Name/Value** (the one key on the panel with no lamp, which makes it a poor home for an operating function) | `the_whole_panel_is_bound_but_the_two_that_must_not_be` — this test used to be *nothing else is bound* and is the complement of the owner's *alle 64 Tasten belegen* now |
+| An update **overwrites** a desk's own table | `MachineConfig::surface_bindings_generation`, bumped by hand when the shipped defaults are reworked. A stored table from an older generation is passed over and the daemon **says so in the log**; the old table stays in `machine.json` and can still be exported. The owner's decision, and the reasoning is particular: the beta is small, the vocabulary underneath the table changed with it, and a desk left on an older one would be a panel whose new keys are all empty | `surface_bindings_are_stale` is a separate answer from `surface_bindings` for exactly that reason — *there is no table* and *there was one and it is out of date* are two things, and only the second is worth a line |
+
+| Exit criterion | Result |
+|---|---|
+| Every new word bound, pressed through `--mock-surface`, does what the same key does on the screen | ✅ one test per shape at the daemon, one in Chromium |
+| The keypad on screen and the words a key may be bound to are **one table** | ✅ generated, and asserted from both ends |
+| A key's LED asserted **against the bytes that reached the surface** for each of the nine conditions | ✅ nine tests; `store` dark then lit, `clear` walked through Selection → Values → All → Nothing |
+| An executor page change leaves a half-typed line exactly where it is | ✅ from a bound key on a mock console |
+| The shipped profile still **is** the built-in defaults after a round trip | ✅ now over one file rather than two |
+| A binding changed in the interface takes effect without restarting the daemon | ✅ S38's, unchanged and still green |
+| The strip rows are reachable in the advanced section and bind what they bound before | ✅ |
+| The drawing is read out of the profile: no geometry, no picture, and it says so | ✅ `says the surface has no drawing when the daemon sent no panel` |
+| No scrolling outside the canvas at 1280 × 720 with the drawing shown | ✅ document and canvas both measure `[0, 0]` with the picture open |
+| The tick measures **zero allocations on all ten paths** | ✅ nothing here runs on it |
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace` | **2 399 passed, 0 failed**, 0 ignored — 32 more than S58 |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean — two found on the way: an integer division in the new sensitivity scaling (allowed with its reason, the way `profile.rs` allows the two it has) and an `obfuscated_if_else` in `lamp.rs` |
+| `cargo fmt --all --check` | clean |
+| `cargo doc --workspace --no-deps`, warnings denied | clean — three intra-doc links to private items found and pointed at public ones, which is exactly what S41 made this a gate for |
+| `ui`: `tsc -b --force`, `npm run lint`, `npm run build` | clean; lint has the same six pre-existing escape warnings in two settings tests and no new ones |
+| `ui`: `npm run test` | **882 passed** in 61 files — 30 more than S58, in three new files |
+| `ui`: Playwright | **53 passed** against a real daemon — two more than S58 |
+| Tick allocations | **0 on all ten paths** |
+
+**Two red tests that were the machine and not the code, and both are recorded
+because the second one was not.** `prism-engine`'s two timing gates failed in one
+full run with `probe thread turns: 0/s` — §3.1's own signal that the machine was
+saturated, and they were green on a re-run of the target alone. That is the
+documented procedure and it worked. The second was **not** the machine:
+`crossfade.rs::a_crossfade_fader_is_only_ever_written_where_a_hand_put_it` failed
+about one run in three, on a count. It took its reading with `settle`'s twelve
+fixed slices — and the helper *directly above it* in the same file,
+`settled_frame`, carries a paragraph explaining why a fixed number of slices is a
+race and what to do instead. A late fader write from the walk landed after the
+count was taken and was blamed on the relabel that followed. `settled_fader_writes`
+applies that file's own rule to the other end of the desk; three runs green.
+
+**Not done, and named:** the owner's encoder-in-crossfade report of 2026-09-20 is
+**S60**, placed after S30 and outside the coming release by their decision. It is
+deliberately **not** in `docs/ISSUES.md` — it has not been finally verified, and
+the register is for faults that have been.
+
+---
+
 ## 3. Coverage tracking
 
 Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and protocols. Record **measured** figures only — leave blank until a run produces a number.
@@ -5600,6 +5678,83 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 ---
 
 ## 7. Next actions
+
+**Look for the design before writing one.** *(S59)* The session set out to give
+the desk a vocabulary and spent its first hour writing questions about what that
+vocabulary should be. The answer was already in the repository: `ARCHITECTURE_SPEC.md`
+§4.5 had specified it in S40 — *a key on the desk writes a word into the command
+line, it does not act*, with three writing shapes — and `ui/src/desk/keys.ts` had
+implemented it in S43. What was missing was not the design, the vocabulary or
+the rules. It was that **none of it reached the desk**. Had that gone unnoticed
+for another hour there would now be two vocabularies, two tables and a paragraph
+in this file explaining why they differ. **The move to make when a session opens
+with *what should this be*: grep the specification for the noun first.**
+
+**A table two devices read is generated, or it is two tables.** *(S59)* The
+words of the keypad were a hand-written TypeScript list, and that was right while
+one window drew them. The moment a *second* device offered the same vocabulary it
+became the failure this project keeps meeting: a word added to one list and not
+the other binds a key that does nothing, and **no compiler anywhere says so**. It
+is `prism_domain::CONSOLE_KEYS` now, generated into the interface beside
+`FEATURE_GROUP_ATTRIBUTES`, which is the fourth time the same remedy has been
+applied to the same shape. The rule as it stands: *what is generated is the thing
+that would actually drift*, and two devices reading one vocabulary is exactly
+that thing.
+
+**Feedback that hangs on a hardware position cannot survive rebindable keys.**
+*(S59)* The desk had two lamps and both were positional — the Save key lit the
+unsaved-changes flag because it was *the Save key*. That is correct for a fixed
+panel and a lie on a bound one, and it lies in the dark, which is where an
+operator reads it. The general shape, worth carrying into anything that reports
+state on hardware: **ask the binding, never the note number.** The cost turned
+out to be nothing measurable — sixty-four keys asked thirty times a second, all
+of it through a shadow model that sends only what changed.
+
+**A fixed number of slices is a race, and a file can carry the cure beside the
+disease.** *(S59)* `crossfade.rs` failed about one run in three on a count of
+fader writes taken after twelve fixed slices — while the helper **directly above
+it in the same file** carries a paragraph explaining why a fixed number of slices
+is a race on a loaded runner and settling on stability instead. The lesson is not
+*wait longer*; S46 already wrote that rule down and this file already quoted it.
+It is that **a rule written for one reading has to be looked for when a second
+reading is added**: the frame had the helper, the fader writes never got one.
+
+**A shipped data file should be the thing, not a copy of it.** *(S59)*
+`profiles/surface/xtouch.json` and `Bindings::defaults()` said the same table
+twice, held equal by a test, and that was defensible while both were edited by
+the same person in the same commit. It stopped being defensible the moment the
+workflow became *the owner reworks the table on a real desk and hands back an
+exported profile*: somebody then has to translate JSON into Rust, and a
+translation step is a step that can be skipped. The file is embedded with
+`include_str!` now and 183 lines of Rust are gone. **The test that had held two
+things equal was rewritten rather than deleted** — it asserts the embedded text
+parses and binds every control, because the new failure mode is a typo leaving
+`defaults()` silently empty.
+
+**Carried out of S59:**
+- **The owner reworks the shipped key table on the test rig next.** That is what
+  the full 64-key default, the single-source profile and
+  `SURFACE_BINDINGS_GENERATION` were built for: they export a profile from the
+  Controls panel, the file replaces `profiles/surface/xtouch.json`, the
+  generation is bumped, and every desk takes the new table on its next start.
+  No Rust has to change.
+- **The detent count of the jog wheel is still not measured.** Every
+  percentage-per-turn this project has ever claimed was back-calculated from a
+  value somebody watched move. The new table does not depend on it — a DMX step
+  is a DMX step — and `accel.rs` no longer contains a sentence of that form, but
+  the sensitivity slider is the admission that the last word belongs to a hand on
+  a real wheel.
+- **`SurfaceContext` is read per event, not per poll.** A batch of surface events
+  is applied one at a time and each one can move the state the next is resolved
+  against. Anything added to that context inherits the rule.
+- **The drawing's geometry is the device profile's**, so a second surface brings
+  its own picture. `prism_surface::layout` is the shape to copy: a table of boxes
+  keyed by control, a `PanelLayout` for the panel, and one row for the strips that
+  the drawing repeats.
+- **S60** is an encoder holding an executor of its own, and it carries the
+  owner's encoder-in-crossfade report of 2026-09-20 — deliberately **not** in
+  `docs/ISSUES.md`, because it has not been finally verified and that register is
+  for faults that have been.
 
 **A manual that nothing checks is a manual that goes stale, so two of its
 chapters are generated.** *(S41)* The list of window types and the list of
@@ -7903,63 +8058,65 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**The next session is S59, the Controls panel — and it starts by asking.** The
-owner accepted the punch-list build on the test rig on 2026-09-20 and held the
-release for two things: a round of changes to **Controls**, and the **3D
-viewer** (S30). What the owner wants changed about Controls is **not written
-down yet**: `IMPLEMENTATION_PLAN.md`'s S59 entry has ten questions this document
-could see, and the owner's own answers come first. Nothing is built before the
-answers are in the plan. **Read `gh issue list --state open` and
+**The next session is S30, the 3D viewer — and it is the last thing the release
+waits for.** The owner accepted the punch-list build on the test rig on
+2026-09-20 and held the release for two things; S59 is done, so the viewer is
+the other one. `IMPLEMENTATION_PLAN.md` §S30 is the entry, and it is Phase 9's
+own, unchanged since it was written. **Read `gh issue list --state open` and
 `docs/ISSUES.md` first** all the same: the register has no open entry today, and
-a new report goes before S59 exactly as B55 went before Phase 12.
+a new report goes before S30 exactly as B55 went before Phase 12.
 
-**One flake found and fixed, 2026-09-20.** The master run of the closing
-commit went red on `what the line would do never moves the canvas`: the test
-typed a second `Store Cue 1` **into the question the first one had already
-raised** — storing the programmer into a sequence makes cue 1, so the first
-store already asks — and on a slow machine the question the Escape cancelled
-was not the one the assertion then looked for. It now waits for each line to be
-cleared by the daemon before typing the next, and stores once. Four runs in a
-row locally, and the full suite of 51.
+**One thing is known and deliberately not in the register.** The owner met an
+**encoder that did nothing while the fader was in crossfade mode and the
+encoders were set to Master**, on the rig on 2026-09-20. It is **S60** — an
+encoder holding an executor of its own — placed after S30 and outside the coming
+release by their decision, and it is not in `docs/ISSUES.md` because it has not
+been finally verified. Do not fix it in passing; if S30 happens to prove or
+disprove it, say so.
 
-**Nothing is waiting on the owner.** The three branches are merged into
-`master`, and the ten GitHub issues (#9, #21, #23–#30) were closed on
-2026-09-20 — each with the commit that fixed it, the session, the tests that
-hold it, and the note that it ships in **v0.9.3**, which is not released yet.
-`gh issue list --state open` is empty, and so is the open half of
-`docs/ISSUES.md`. Anything outward-facing still gets asked for first.
+**What S59 left that the next session will meet.** The binding table is still
+the machine's (`machine.json`, one `MachineChange::SurfaceBinding` per control),
+but three things around it moved:
 
-**What S58 left that the next session will meet.** A switched slot's name and
-steps come from `AttributeDef::switched` and the daemon's `Delta::SwitchPositions`;
-the X-Touch's scribble strips show executors, not parameter names, so a Controls
-round does not meet that path. The Controls panel is `ui/src/settings/controls.tsx`
-over `ACTION_GROUPS`/`CUSTOM_KINDS` (`ui/src/settings/actions.ts`), the table in
-force is the machine's (`machine.json`, one `MachineChange::SurfaceBinding` per
-control), and `docs/MCU_MAPPING.md` §4 is its vocabulary.
+- the keypad's words are **`prism_domain::CONSOLE_KEYS`** and are generated into
+  `ui/src/bindings/variants.ts`; `ui/src/desk/keys.ts` holds only the titles. A
+  new console word therefore appears on the screen's keypad **and** as a
+  bindable action, and `crates/prism-core/tests/documentation.rs` rewrites the
+  manual for it;
+- **a key's lamp is a property of its action** (`prismd::lamp`), asked once per
+  frame for every control. Anything that adds a `SurfaceAction` should decide
+  whether it has a state worth a lamp, and the answer *dark* is a legitimate one;
+- **`profiles/surface/xtouch.json` is the built-in defaults**, embedded with
+  `include_str!`. Editing that file changes what every desk does, and
+  `SURFACE_BINDINGS_GENERATION` in `prism_core::desk` is what makes an update
+  replace a desk's own table.
 
-**What S57 left that the next session will meet.** The patch panel is one
-`Modal` of `size="full"` portalled to the canvas through `ModalLayer`; a modal
-opened inside any window is drawn over the canvas now. `Command::PatchFixtures`
-is how new fixtures are patched from the interface, and it embeds the library's
-profile itself; `EmbedFixtureType` is only sent when a patched fixture changes
-profile. `Query::BrowseLibrary` and `FixtureOfMode` are what the interface asks
-of the library; `SearchLibrary` is answered and asked by nothing.
+The Controls panel itself is `ui/src/settings/controls.tsx` over
+`ACTION_GROUPS` / `CONSOLE_KEYS` / `CUSTOM_KINDS` / `ADVANCED_KINDS`, with a
+drawing of the surface in `ui/src/settings/panel.tsx` whose geometry comes from
+`prism_surface::layout` by way of `SurfaceControl::geometry`.
+
+**What S57 and S58 left that the next session will meet.** A modal opened inside
+any window is portalled to the canvas through `ModalLayer`.
+`Command::PatchFixtures` is how new fixtures are patched from the interface and
+it embeds the library's profile itself. A switched slot's name and steps come
+from `AttributeDef::switched` and the daemon's `Delta::SwitchPositions`. The
+fixtures a viewer would draw carry `position` and `rotation` (`Vec3`) already,
+and nothing has ever read them.
 
 ---
 ```
-PrismDMX — S59: das Controls-Menü, und die Session beginnt mit Fragen
+PrismDMX — nächste Session: S30, der 3D-Viewer
 
 Projektverzeichnis: C:\Users\Milan\Prismdmx
 
 Der Daemon hält den Zustand und treibt DMX ohne jeden Client (D2); das Pult
 bedient ihn ohne Oberfläche (D11); seit S29 ist das Ganze ein Programm mit
-Installationsprogramm; seit S41/S42 gibt es Handbücher und eine Website; und
-seit **S56, S57 und S58** ist **jeder** Eintrag des Registers behoben — das
-Patch-Fenster ist um die Bibliothek herum neu gebaut (B60), und ein
-umgeschalteter Knopf folgt seinem Moduskanal (B52). Der Eigentümer hat diesen
-Build am 2026-09-20 auf dem Test-Rig abgenommen (`docs/RELEASE_TEST.md`, alle
-Punkte abgehakt) und das Release **bewusst zurückgestellt**: vorher sollen die
-Controls-Änderungen (diese Session) und der 3D-Viewer (S30) hinein.
+Installationsprogramm; seit S41/S42 gibt es Handbücher und eine Website; seit
+**S56, S57 und S58** ist jeder Eintrag des Registers behoben; und seit **S59**
+trägt das Pult das Vokabular der Kommandozeile, seine Tasten leuchten nach dem,
+was auf ihnen liegt, und die Controls-Seite hat eine maßstäbliche Zeichnung der
+Oberfläche.
 
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 
@@ -7968,27 +8125,20 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                     vollständig, GitHub Actions nur Linux
 2.  Die offenen Meldungen         — `gh issue list --state open` **und**
                                     `docs/ISSUES.md`. **Neue Meldungen wählen die
-                                    Session**, ein Blocker zuerst. Die offenen
-                                    Issues #9, #21, #23–#30 sind behoben, aber noch
-                                    nicht geschlossen — das entscheidet der
-                                    Eigentümer
-3.  IMPLEMENTATION_PLAN.md        — die Reihenfolge (Zeile 26: Phase 12) und die
-                                    Session, die es wird
-4.  PROGRESS.md §2.55 und §7      — was S58 gebaut hat, und alle „Carried out
+                                    Session**, ein Blocker zuerst. Das Register
+                                    hat heute keinen offenen Eintrag
+3.  IMPLEMENTATION_PLAN.md        — S30, und die Zeile 25c des Fahrplans
+4.  PROGRESS.md §2.56 und §7      — was S59 gebaut hat, und alle „Carried out
                                     of"-Listen
 5.  docs/manual/developer.en.md   — die Architektur, wie sie geworden ist
 6.  ARCHITECTURE_SPEC.md          — §1 (D1–D11), §4, §7.0, §10, §14
-7.  docs/MCU_MAPPING.md §4        — das Vokabular der Bindungen, und §4.3
-                                    (reservierte und permanente Controls)
-8.  ui/src/settings/controls.tsx  — das Menü, und `actions.ts` daneben
+7.  docs/                         — was die gewählte Session berührt
 
-Aufgabe: **S59 — das Controls-Menü, und zwar zuerst fragen.** Der Eigentümer hat
-Änderungswünsche, die absichtlich nicht in den Punch-List-Patch gingen; **was sie
-sind, steht nirgends**. `IMPLEMENTATION_PLAN.md` §S59 trägt zehn Fragen, die
-dieses Dokument selbst sehen konnte — stelle sie, **die eigenen Punkte des
-Eigentümers zuerst**, schreibe die Antworten als Deliverables und Exit-Kriterien
-in den Plan, und baue erst danach. Ist seit dem 2026-09-20 eine neue Meldung
-dazugekommen, geht sie vor.
+Aufgabe: **S30 umsetzen — der 3D-Viewer.** Er ist das Letzte, worauf das Release
+wartet (Entscheidung des Eigentümers, 2026-09-20). Die Fixtures tragen
+`position` und `rotation` als `Vec3` seit dem Patch-Modell, und **noch nie hat
+etwas sie gelesen** — das ist der Anfang. Ist seit dem 2026-09-21 eine neue
+Meldung dazugekommen, geht sie vor.
 
 ## Randbedingungen
 
@@ -7997,16 +8147,16 @@ dazugekommen, geht sie vor.
   eines Fake-Daemons (B55): eine neue `Answer`- oder `Delta`-Variante braucht eine
   Aufnahme, die durch `decodeServerMessage` geht.
 - **Ein Modal aus einem Fenster liegt über dem Canvas** (`ModalLayer`, S57).
-- **Die Bindungstabelle gehört der Maschine** (`machine.json`, ein
-  `MachineChange::SurfaceBinding` pro Control, eine Revision für alle Clients) —
-  wer das ändern will, ändert eine Entscheidung aus S33/S38 und schreibt sie auf.
-- **Das reservierte Control (SMPTE/Beats) und die permanenten bleiben tabu**
-  (`docs/MCU_MAPPING.md` §4.3).
-- **Nach S59 kommt S30, der 3D-Viewer**; das Release wartet auf beide.
+- **Eine neue `SurfaceAction` entscheidet mit, was ihre Lampe sagt**
+  (`prismd::lamp`, S59) — *dunkel* ist eine zulässige Antwort.
+- **Das Tastenfeld ist eine Tabelle in Rust** (`prism_domain::CONSOLE_KEYS`,
+  nach `variants.ts` erzeugt); ein neues Wort erscheint auf beiden Geräten und
+  schreibt das Handbuch um (`crates/prism-core/tests/documentation.rs`).
+- **`profiles/surface/xtouch.json` *ist* die eingebaute Tabelle** — wer sie
+  ändert, ändert, was jedes Pult tut, und zieht `SURFACE_BINDINGS_GENERATION`
+  nach.
 - **Neue Fixtures patcht die Oberfläche mit `PatchFixtures`**, ein Oops pro
   Geste; die Platzierungen sind die Antwort des Daemons.
-- **Ein neues Konsolenwort oder ein neuer `WindowType` schreibt das Handbuch
-  um** (`crates/prism-core/tests/documentation.rs`).
 - **Die `data-testid`s sind ein Vertrag** mit den Playwright-Tests.
 - **Beide Sprachen** der Handbücher und der Website ziehen mit.
 - **Die Version ist `0.9.2`**, bis ein Release entsteht; was seither dazukam,
@@ -8026,10 +8176,14 @@ dazugekommen, geht sie vor.
   `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`, und in `ui/`:
   `npx tsc -b --force`, `npm run lint`, `npm run test`, `npm run build`, sowie
   die Playwright-Tests. Rust- und Browser-Suite **einzeln**, nie überlappend.
+- **Ein rotes Timing-Gate ist zuerst eine Frage an die Maschine**: steht dort
+  `probe thread turns: 0/s`, war sie gesättigt — das Ziel allein wiederholen
+  (§3.1). Ein Test, der eine Zahl abliest, die der Daemon besitzt, **wartet, bis
+  sie sich nicht mehr bewegt** (S46, und S59 hat es noch einmal gelernt).
 - **Die ganze Suite eines Crates laufen lassen, bevor ein Commit die Bedeutung
   eines Befehls ändert** — nicht nur die neuen Tests (S56 §7).
 - Handbücher, Website und `docs/ISSUES.md` im selben Durchgang.
-- PROGRESS.md: Status, §2.56-Protokoll mit jeder gemessenen Zahl, §7
+- PROGRESS.md: Status, §2.57-Protokoll mit jeder gemessenen Zahl, §7
   „Carried out of", §8 neu.
 - **Alle Gates lokal vollständig**, dann Conventional Commits, pushen, den
   (Linux-)CI-Lauf bis grün beobachten und festhalten.

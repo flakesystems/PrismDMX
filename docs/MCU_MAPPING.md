@@ -499,6 +499,24 @@ it with a counting allocator, the way S19 measured the codec.
 
 Shipped as `profiles/surface/xtouch.json`, validated on load. A malformed profile falls back and raises a warning — it never prevents startup.
 
+> **Since S59 that file *is* the built-in table**, embedded with `include_str!`
+> and parsed by `prism_surface::Bindings::defaults`. There used to be two — the
+> file, and the same table written out again in Rust — held equal by a test; the
+> owner reworks the shipped table on a real desk and hands back an exported
+> profile, and a translation step between the two is a step that can be skipped.
+> A profile that will not parse now leaves the desk with **no** bindings rather
+> than with hand-written ones, which is why `tests/bindings.rs` asserts that the
+> embedded text parses: a typo in that file is a red test, not a dark console.
+>
+> **An update overwrites a desk's own table when the shipped one is reworked**
+> — the owner's decision of 2026-09-20. `MachineConfig::surface_bindings_generation`
+> carries the generation a stored table was written against, and a daemon that
+> finds an older one says so in the log and starts from the new defaults. The
+> old table stays in `machine.json` and can still be exported. The reasoning is
+> particular: the beta is small, and a desk left on a table written before the
+> console words existed would be a panel whose new keys are all empty and whose
+> owner has no way of knowing why.
+
 > **Since S38 the table is edited at the desk, and the file is an *import***
 > (§4.4). What a desk's keys do lives in `prism_core::MachineConfig` beside its
 > rig and its port; naming a profile reads that file **into** it, and
@@ -809,10 +827,13 @@ force:
    changing two keys cannot undo each other. A command carrying the whole table
    would have made that a race; §4.2's file format is a whole table because a
    *document* is written by one person at a time, and a protocol is not.
-3. **The shipped profile stays what a test says it is.** S22 asserts that
+3. **The shipped profile stays what a test says it is.** S22 asserted that
    `profiles/surface/xtouch.json` **is** `Bindings::defaults()`; an editor that
    wrote to it would change the defaults, and it would write into an installation
-   directory a school's account often cannot.
+   directory a school's account often cannot. *(S59 made that sentence literal
+   — the file is the defaults now, embedded — which strengthens this reason
+   rather than weakening it: an editor writing to that path would be editing the
+   build.)*
 
 **A file is therefore an import.** Naming one replaces the stored table with what
 the file says; the path is kept so the panel can say where the table came from
@@ -833,6 +854,66 @@ a key at the desk would find it back the way it was the next morning.
 Each row carries two facts that are the **device profile's** rather than the
 table's, because a client holds no profile: whether the control keeps reaching
 PrismDMX in the combined mode (§4.3) and whether it may be bound at all.
+
+#### The panel has a picture, and the picture is the profile's *(S59)*
+
+The control editor has two views: the list, sorted by what a key does, and a
+**drawing of the surface** with every control where it is. The owner asked for
+both on 2026-09-20 — they answer different questions, and the second one
+(*which keys are still free?*) is what somebody laying out a desk is actually
+asking.
+
+The drawing holds **no picture of an X-Touch**. Every box arrives on the row it
+belongs to (`SurfaceControl::geometry`) and the panel it is drawn on comes with
+the table (`Answer::SurfaceBindings::panel`); `prism_surface::layout` is where
+the X-Touch's is written. That is §4.3's rule again, and here it earns its keep
+twice over: a browser holding the layout would need a second one the day a second
+surface is supported, and a table with no panel draws nothing and says so, which
+is better than a picture of the wrong desk.
+
+`Strip[*]` is one row of the table and one column of the drawing; the drawing
+repeats it `panel.strips` times at `panel.stripPitch`, so an operator sees eight
+strips and clicks one row.
+
+**And it lights.** `Delta::SurfaceLampsChanged` carries the set of lit controls,
+by the names `SurfaceControl::name` uses, sent only when the set moves. It is
+not how the surface is driven — the daemon does that over MIDI, so closing a
+browser changes nothing about the lamps — it is so that somebody reworking the
+table on a rig can see whether a condition they wrote is the one they meant. The
+list stays quiet: twenty rows blinking is noise while they are being read.
+
+#### A key can be one of the console's own keys *(S59)*
+
+`SurfaceAction::ConsoleWord { word }` puts a key of the screen's keypad on the
+desk. `ARCHITECTURE_SPEC.md` §4.5 has said since S40 that *a key on the desk
+writes a word into the command line, it does not act*, and the keypad in the
+`CommandKeys` window has been an implementation of it since S43 — what was
+missing is that none of it reached the surface.
+
+**One table, two devices.** The words and their shapes live in
+`prism_domain::CONSOLE_KEYS` and are generated into the interface, so a word
+added in Rust appears on the screen's keypad and in the control editor together.
+Two hand-written lists would have made that a promise rather than a fact, and
+the failure would be quiet: a word on one of them binds a key that does nothing.
+
+What pressing one does is its **shape**, which is §4.5's and not this table's:
+
+| Shape | Words | What a bound key does |
+|---|---|---|
+| run | `Clear`, `Full`, `Update` | writes the word and runs it at once |
+| oops | `Oops` | writes nothing: takes the line's last word, or an edit back on an empty line (B58) |
+| write | `Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Color`, `Assign`, `New` | writes the word and waits |
+| append | `Fixture`, `Group`, `Sequence`, `Cue`, `Preset`, `View`, `Executor`, `At`, `Thru` | adds the word to the line as it stands |
+
+**There is no Enter key on the surface and there is not meant to be.** The
+owner's decision of 2026-09-20: *das Pult und die Oberfläche sind als sich
+ergänzende Geräte gedacht. Ein Pult sollte nie ohne Bildschirm betrieben
+werden. Andersrum muss natürlich trotzdem möglich sein, wenn man kein Pult
+besitzt.* A word key **begins** a line and the screen finishes it — which works
+because a click on a pool already appends its object and submits (§4.5). `Store`
+on the desk, Executor 3 clicked in the window, and the line has run. Nothing is
+written to the seven-segment display for the same reason: the line is read on
+the screen, so the desk does not have to show it.
 
 #### A key can carry a command line, and since S49 the daemon runs it
 
@@ -919,6 +1000,44 @@ has drawn since S22.
 ## 5. Feedback rules
 
 These two rules are not optimisations; without them the surface misbehaves visibly.
+
+### 5.0 What a key's lamp says *(S59)*
+
+**A bound key is lit while pressing it would lead somewhere.** The lamp is a
+property of the **action**, not of the note number underneath it: a key given to
+`Store` reports the programmer, and the same key given to `SaveShow` reports the
+unsaved-changes flag. `prismd::lamp` is where the question is answered, and the
+answer has two halves:
+
+- **the grammar** — would the command line accept what this key writes?
+  `prism_core::console::accepts_next`. Only an *argument keyword* has a real
+  answer here, because a key that runs or writes throws the standing line away
+  and starts a fresh one.
+- **the meaning** — would it *do* something?
+
+Nine actions have a meaning to check:
+
+| Lit while | |
+|---|---|
+| `Store` | the programmer holds values |
+| `Update` | a cue is open in the programmer |
+| `Full` | something is selected |
+| `Clear` | the Clear stage is not `Nothing` — the **stage**, not whether the programmer is empty, so the lamp does not go out one press early |
+| `Oops` | there is a word on the line, or an edit to take back (B58) |
+| `Redo` | there is something to bring back |
+| `Save` | there are unsaved changes — §4.1's own row, unchanged |
+| `On` / `Off` / `Go+` / `Go-` | the executor it acts on has a cue list |
+| `Select` on a strip | that strip's cue list is running — the one lamp that **reports** rather than offers, and it is what this row has always done |
+
+Everything else is **dark**, deliberately. A window is neither open nor closed
+from a key's point of view, a view is always reachable, an encoder bank is
+always switchable; a lamp that is always lit says nothing and costs an operator
+a glance to find that out.
+
+Before S59 there were two lamps on the whole desk and both were positional. The
+cost of the change is one comparison per key per frame: sixty-four keys asked
+thirty times a second, all of it through the shadow model of §5.2, so a still
+desk puts no bytes on the wire.
 
 ### 5.1 Touch suppression
 

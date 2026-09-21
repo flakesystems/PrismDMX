@@ -279,14 +279,20 @@ part-way through typing is already shared by every attached client; making the
 keys write into it means the line is not a second way of doing things beside the
 buttons — it is the **one** way, with the buttons as a faster keyboard for it.
 
-Three shapes, and every control on the screen is one of them:
+Three shapes, and every control on the screen is one of them — **and, since S59,
+every key on the surface that is bound to a word.** The table lives in
+`prism_domain::CONSOLE_KEYS` and is generated into the interface, because the
+keypad and the control editor offer one vocabulary and a word added to one of
+them has to reach the other. A bound key is **lit while pressing it would lead
+somewhere**: the line would accept what it writes, and what it writes would do
+something. See `prismd::lamp`.
 
 | Shape | Example | What pressing it does |
 |---|---|---|
 | **A whole command with no argument** | `Clear`, `Update`, `Full` | writes the word and **executes it at once** |
 | **The Oops key** *(B58)* | `Oops` | writes **nothing**: while a line stands it takes the line's last word, and only an empty line lets it undo. `ShowFile::apply` makes that choice for every key that sends `Command::Oops` — the X-Touch's Undo as well — and a *typed* `Oops`, run from the line, is always an undo |
-| **A command that needs arguments** | `Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Color`, `Assign` | writes the word and **waits** — the operator types the rest and presses Enter, which is also a key on the surface |
-| **An argument keyword** | `Fixture`, `Group`, `Sequence`, `Cue`, `Preset`, `View`, `Executor` | **appends** the word to the line as it stands |
+| **A command that needs arguments** | `Store`, `Edit`, `Goto`, `Move`, `Copy`, `Delete`, `Label`, `Color`, `Assign`, `New` | writes the word and **waits**. The line is finished **on the screen** — by Enter, or by a click on a list that supplies the argument and submits with it (see the paragraph below). *(S59: this row used to end “which is also a key on the surface”. There was never such an action and there will not be one: the owner's decision of 2026-09-20 is that the desk and the screen are complementary devices, so a key writes a word and the screen finishes the line.)* |
+| **An argument keyword** | `Fixture`, `Group`, `Sequence`, `Cue`, `Preset`, `View`, `Executor`, `At`, `Thru` | **appends** the word to the line as it stands |
 
 So `Fixture` `1` `Enter` is three presses that build `Fixture 1`, and it is the
 same line an operator could have typed. An item picked out of a **list** — a
