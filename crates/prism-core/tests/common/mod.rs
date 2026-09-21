@@ -231,6 +231,14 @@ pub fn show_commands() -> Vec<Command> {
             id: FixtureId::new(1),
             to: FixtureId::new(77),
         },
+        // S30's: fixture 1 hung six metres up, tipped towards the audience.
+        Command::PlaceFixtures {
+            placements: vec![prism_domain::FixturePlace {
+                id: FixtureId::new(1),
+                position: Vec3::new(0.0, 6.0, 2.0),
+                rotation: Vec3::new(30.0, 0.0, 0.0),
+            }],
+        },
         Command::EmbedFixtureType {
             type_id: "generic.rgb.par".to_owned(),
         },

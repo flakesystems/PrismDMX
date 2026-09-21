@@ -1306,6 +1306,14 @@ impl ShowFile {
                 Image::Fixture(*id, self.show.fixture(*id).cloned()),
                 Image::Fixture(*to, self.show.fixture(*to).cloned()),
             ],
+            // S30's: where each fixture hangs, and nothing else about it — an
+            // undo that restored the whole patch entry would repatch, and a
+            // placement never did.
+            Command::PlaceFixtures { placements } => placements
+                .iter()
+                .filter_map(|place| self.show.place_of(place.id))
+                .map(Image::Place)
+                .collect(),
             Command::EmbedFixtureType { type_id } => vec![Image::FixtureType(
                 type_id.clone(),
                 self.show.fixture_type(type_id).cloned(),
@@ -1721,6 +1729,13 @@ impl ShowFile {
                     // is being taken back (S4).
                     applied.effects.push(Effect::Repatch);
                 }
+                Image::Place(place) => {
+                    let ops = self.show.place_fixtures(core::slice::from_ref(place))?;
+                    if !ops.is_empty() {
+                        // No `Repatch`, for the reason the command has none.
+                        applied.deltas.push(Delta::ShowPatch { ops });
+                    }
+                }
                 Image::FixtureType(type_id, fixture_type) => {
                     let ops = match fixture_type {
                         Some(fixture_type) => self.show.embed_fixture_type(fixture_type.clone())?,
@@ -1817,6 +1832,7 @@ impl ShowFile {
                     }
                 }
                 Image::Fixture(..)
+                | Image::Place(..)
                 | Image::FixtureType(..)
                 | Image::Sequence(..)
                 | Image::Preset(..)

@@ -1151,6 +1151,35 @@ pub enum Command {
         /// one would delete a light nobody asked to delete.
         to: FixtureId,
     },
+    /// Put fixtures where they hang, and turn them the way they face — **S30**.
+    ///
+    /// `Fixture::position` and `Fixture::rotation` existed from S1 and nothing
+    /// could set them: `PatchFixture` carries neither on purpose (a repatch
+    /// keeps them), and S27 left the gap written down. The 3D viewer is what
+    /// needs them, so it is what sends this.
+    ///
+    /// # One command, and so one Oops
+    ///
+    /// *Spread these eight along the truss* is one gesture that moves eight
+    /// fixtures, and an operator who spread them wrong presses Oops once. So
+    /// they travel together, like [`Self::PatchFixtures`]' placements.
+    ///
+    /// # It is not a patch
+    ///
+    /// Where a fixture hangs moves no channel. The show answers with a
+    /// `ShowPatch` and **no** `Repatch`: the engine is never told, so moving a
+    /// head in the view costs the tick nothing. `crate::FixturePlace` has what
+    /// the numbers mean.
+    ///
+    /// # Refused whole
+    ///
+    /// A fixture that is not patched, a number that is not finite or a place
+    /// further than `crate::MAX_REACH` from the origin refuses the command, and
+    /// **none** of it is applied — half a spread is a rig nobody asked for.
+    PlaceFixtures {
+        /// Each fixture's place, whole.
+        placements: Vec<crate::FixturePlace>,
+    },
     /// Embed one of the desk's built-in profiles into the show.
     ///
     /// Carries the **key only**, for the same reason
@@ -2619,6 +2648,11 @@ mod tests {
             },
             Command::EmbedFixtureType {
                 type_id: "generic.dimmer".to_owned(),
+            },
+            // S30's: where a fixture hangs is the show's, and a spread along
+            // the wrong truss is exactly what Oops is for.
+            Command::PlaceFixtures {
+                placements: Vec::new(),
             },
             // S57's, which is one step however many fixtures it carries.
             Command::PatchFixtures {

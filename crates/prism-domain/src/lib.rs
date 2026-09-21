@@ -39,6 +39,7 @@ mod machine;
 mod midi;
 mod output;
 mod patch;
+mod placement;
 mod playback;
 mod preset;
 mod programmer;
@@ -82,6 +83,7 @@ pub use patch::{
     CHANNELS_PER_UNIVERSE, Fixture, Group, MAX_PATCH_AT_ONCE, PatchAddress, PatchPlacement,
     RgbColor, Vec3,
 };
+pub use placement::{FixturePlace, MAX_REACH, Orientation, orientation, rotation_of, turn};
 pub use playback::{PlaybackId, PlaybackTarget};
 pub use preset::{Preset, PresetPool, PresetValue};
 pub use programmer::{

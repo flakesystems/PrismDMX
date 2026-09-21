@@ -53,8 +53,9 @@ fn the_session_commands_are_the_session_group() {
             + daemon_commands().len(),
         // Sixty-**four** since S48's `SetCueTracking`, which is a **show**
         // command, and sixty-**five** since S29's `Shutdown`, which is a fourth
-        // kind with no applier at all.
-        65
+        // kind with no applier at all; sixty-**six** since S30's
+        // `PlaceFixtures`, which is a show command.
+        66
     );
 }
 

@@ -86,6 +86,7 @@ round_trip! {
     vec3 => crate::Vec3,
     rgb_color => crate::RgbColor,
     fixture => crate::Fixture,
+    fixture_place => crate::FixturePlace,
     group => crate::Group,
 
     preset_value => crate::PresetValue,
