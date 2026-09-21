@@ -132,7 +132,9 @@ test("a key rebound in the window does the new thing at the console", async ({ p
   // **F1 is a *custom* key** since the rebuild (B24): *open window* is fourteen
   // bindings rather than one action, so there the key is the row and carries
   // its own answer. That is where an operator finds it and changes it.
-  await expect(page.getByTestId("custom-Global.F1")).toContainText("FixtureSheet");
+  // The chosen value rather than the row's text, for the reason written at the
+  // rebind below: the row's `<select>` lists every window type.
+  await expect(page.getByTestId("custom-detail-Global.F1")).toHaveValue("FixtureSheet");
 
   // The press before: F1 opens a Fixture Sheet.
   pressConsole(keys, F1);
@@ -157,9 +159,16 @@ test("a key rebound in the window does the new thing at the console", async ({ p
   await expect(page.getByTestId("controls-learning")).toBeVisible();
   pressConsole(keys, F5);
 
-  // The table moved, and the window is drawing what the daemon answered — a
-  // row of its own for the key that now has a job.
-  await expect(page.getByTestId("custom-Global.F5")).toContainText("Patch");
+  // The table moved, and the window is drawing what the daemon answered.
+  //
+  // **The chosen value, not the row's text** — S59. F5 has a default since
+  // then (`CommandKeys`), so its row exists before the learn, and the row holds
+  // a `<select>` listing *every* window type: `toContainText("Patch")` was true
+  // the moment the page loaded. The press below then went out 11 ms after the
+  // learn, before the surface had taken up the new table, and opened the old
+  // binding's window — a daemon log read after a CI failure showed exactly that.
+  // An assertion that cannot fail is not a wait.
+  await expect(page.getByTestId("custom-detail-Global.F5")).toHaveValue("Patch");
 
   // **The press after.** Three bytes appended to a file by a process that is
   // neither this browser nor this daemon, on a key that did nothing a moment

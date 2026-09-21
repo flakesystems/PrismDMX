@@ -4618,6 +4618,28 @@ race and what to do instead. A late fader write from the walk landed after the
 count was taken and was blamed on the relabel that followed. `settled_fader_writes`
 applies that file's own rule to the other end of the desk; three runs green.
 
+**And one red CI run that was this session's.** The run on the documentation
+commit went red on `a key rebound in the window does the new thing at the
+console`, twice in a row on identical code, and locally about one run in five.
+The screenshot said *the engine is not answering*, which pointed at a crash; the
+daemon's own log, captured by hand, said otherwise and said it precisely:
+
+```
+46.537  learn named Global.F5
+46.548  F5 pressed -> OpenWindow { CommandKeys }      the old binding
+46.551  a control surface is attached: 70 controls bound
+```
+
+The second press left **11 ms** after the learn — before the surface had taken
+up the new table — because the assertion meant to hold it back could not fail:
+`toContainText("Patch")` on a custom row whose `<select>` lists every window type.
+It had always been vacuous; it only *mattered* once S59 gave F5 a default, so
+that the row existed before the learn instead of appearing because of it. The
+assertion is on the selected value now (`toHaveValue`), the same fix is applied to
+the F1 precondition that had the same shape, and the test is 15 green in 15
+locally. The *disconnected* picture was the teardown, not the fault. The lesson
+is in §7.
+
 **Not done, and named:** the owner's encoder-in-crossfade report of 2026-09-20 is
 **S60**, placed after S30 and outside the coming release by their decision. It is
 deliberately **not** in `docs/ISSUES.md` — it has not been finally verified, and
@@ -5726,6 +5748,15 @@ is a race on a loaded runner and settling on stability instead. The lesson is no
 *wait longer*; S46 already wrote that rule down and this file already quoted it.
 It is that **a rule written for one reading has to be looked for when a second
 reading is added**: the frame had the helper, the fader writes never got one.
+
+**An assertion that cannot fail is not a wait.** *(S59)* `toContainText` on an
+element that holds a `<select>` reads every option, so *the row says Patch* was
+true of every row with a window chooser in it. It went unnoticed for as long as
+the row itself was what appeared, because then the *appearing* was the wait. The
+general shape: **assert the value a control holds, not the text its subtree
+happens to contain** — and when a test goes red on CI and green locally, get the
+daemon's own log before believing the screenshot. Here the screenshot said
+*crash* and the log said *race*, to the millisecond.
 
 **A shipped data file should be the thing, not a copy of it.** *(S59)*
 `profiles/surface/xtouch.json` and `Bindings::defaults()` said the same table
