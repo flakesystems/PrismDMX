@@ -127,7 +127,7 @@ pub use desk::{
     DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, InvalidDeskId, JOG_SENSITIVITY_RANGE,
     MachineConfig, RECENT_SHOWS, RecentShows, SURFACE_BINDINGS_GENERATION, Settings,
 };
-pub use file::{ShowFile, ShowFileError};
+pub use file::{RigReport, ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
 pub use library::{
     DEFAULT_SEARCH_LIMIT, FixtureLibrary, LibraryPage, MAX_SEARCH_LIMIT, generic_profiles,

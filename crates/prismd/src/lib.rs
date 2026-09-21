@@ -74,7 +74,9 @@ pub mod log;
 pub mod machine;
 pub mod outputs;
 pub mod paths;
+pub mod secrets;
 pub mod server;
+pub mod share;
 pub mod surface;
 #[cfg(test)]
 mod testkit;

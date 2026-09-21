@@ -155,10 +155,12 @@ The show and the session travel as **documents** rather than as models, because 
 >   token: string | null;           // §2.1's, shown rather than hidden
 >   logLevel: "Debug" | "Info" | "Warn" | "Error" | "Off";
 >   universes: number;
+>   jogSensitivity: number;         // percent, 10–400 (S59)
 >   exitAction: "Hold" | "Blackout";
 >   autostart: boolean;
 >   fixtureLibrary: string | null;
 >   surfaceProfile: string | null;
+>   libraryAccount: string | null;  // the GDTF Share account NAME only (S62)
 >   overrides: MachineOverride[];   // which rows a flag is holding this run
 > }
 >
@@ -170,6 +172,13 @@ The show and the session travel as **documents** rather than as models, because 
 >   autosaveSeconds: number;
 > }
 > ```
+>
+> **`libraryAccount` is a name and never a password** *(S62)*. The password is
+> kept in the machine's own secret store if the operator asked for it to be kept
+> at all, and nothing reads it back out over this protocol — this field exists so
+> a settings panel can say *kept on this machine: somebody* and offer to forget
+> it. A daemon before S62 has no such field, and a client reads its absence as
+> `null`: nobody is signed in there.
 >
 > **`websocket` and `websocketOpen` are two fields on purpose**, and it is S36's
 > `configured` and `open` for a MIDI port one device along: *configured here,
@@ -256,6 +265,11 @@ type Command =
   | { t: "NewShow"; path: string }
   | { t: "ExportShow"; path: string }
   | { t: "ImportShow"; path: string }
+  // ---- The fixture library (S62) — a venue's own plan, and its own account ----
+  | { t: "ImportRig"; path: string }        // an .mvr: the profiles and the patch
+  | { t: "ImportProfile"; path: string }    // one .gdtf into the fixture folder
+  | { t: "UpdateLibrary"; user: string; password: string; remember: boolean }
+  | { t: "ForgetLibraryAccount" }
   // ---- Session and interface (D11) — issued by console and UI alike ----
   | { t: "SelectView"; viewId: number }
   | { t: "StoreView"; viewId: number; name: string }
@@ -461,6 +475,48 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > express — and these are in that company for `OpenWindow`'s reason: S40's grammar
 > has no noun for a file, and a path is not a word an operator types into a console
 > line.
+
+> **The fixture library, from a venue's own plan and from a venue's own
+> account** *(S62)*. Four commands, and none of them is a way to redistribute
+> anything — decision **D12** and `docs/FIXTURE_LIBRARY.md`.
+>
+> ```typescript
+> | { t: "ImportRig"; path: string }
+> | { t: "ImportProfile"; path: string }
+> | { t: "UpdateLibrary"; user: string; password: string; remember: boolean }
+> | { t: "ForgetLibraryAccount" }
+> ```
+>
+> **`ImportRig` is the one that changes the show**, and it is the only command
+> in this document whose Oops step cannot be imaged from the command: the
+> before-and-after has to be taken around the file's contents, so
+> `ShowFile::import_rig` files its own `UndoRecord` and `image()` refuses the
+> variant. One `.mvr` is **one** step — a plan of ninety fixtures taken back by
+> one press of Oops, because half a rig is not a state anybody asked for.
+>
+> **`ImportProfile` changes no show at all.** It copies one `.gdtf` into the
+> desk's fixture folder and re-reads the library by the same call start-up
+> makes, which is why it needs no delta: since S44 the library is **queried**
+> rather than mirrored, so the next search sees the new profile. A file that
+> does not read as a fixture is refused before it is written, so an operator's
+> folder never holds something this desk would not have accepted.
+>
+> **`UpdateLibrary` carries a password, and it is the only message in this
+> protocol that does.** It travels once, to the daemon, and is used to open a
+> session with GDTF Share; `remember` asks the daemon to put it in the
+> *machine's own secret store* (`crates/prismd/src/secrets.rs`) — never in
+> `machine.json`, which is a file people copy, quote in bug reports and commit
+> to a venue's backup. Nothing sends a password **back**:
+> `MachineSettings::libraryAccount` is the account **name** or `null`, which is
+> what a panel needs to say *signed in as* and all it needs.
+>
+> The work runs on a thread of its own and takes minutes, so the command is
+> acknowledged at once and the progress arrives as `Delta::LibraryUpdate`.
+> Starting a second update while one is running is refused in words: two
+> downloads into one folder would be two writers on one file name.
+>
+> **None of the four is a command-line word**, for the reason the five above
+> give: three of them carry a path and the fourth carries a password.
 
 > **Everything else about this machine, and the command line stops being the
 > only way to say it** *(S37)*. S33 made the rig data and S36 made the surface
@@ -870,6 +926,20 @@ The second group is the concrete form of **D11**. The console and the UI draw on
 > **`Delta::SwitchPositions` — which row a switched knob reads** *(punch-list B52)*. A switching channel (OFL's `switchChannels`) makes one slot a different channel depending on another channel's value. The slot's **key** does not follow — a cue files its value under one key while it runs — but its **name and named steps** do: `AttributeDef::switched` carries, per position of the deciding channel (`by`, an offset in the footprint), the label and the ranges the slot has then. Which position is live is read **off the cable** by the daemon, on the loop that already holds the telemetry frame, whether or not a client listens; the delta carries the whole list `{ fixture, offset, position | null }` and is sent only when it changes, and `Snapshot::switchPositions` carries the same list (`#[serde(default)]`). A client reads the label out of the profile it already mirrors. Every profile embedded before B52 has no table and keeps its one name.
 
 > **`PlaceFixtures` — where fixtures hang, and which way they face** *(S30)*. `Fixture::position` and `Fixture::rotation` existed from S1 and nothing could set them: `PatchFixture` carries neither on purpose, so a repatch keeps them. The 3D viewer sends this, one command per gesture — *spread these eight along the truss* is one Oops. Each `FixturePlace` is a fixture number, a `position` in metres and a `rotation` in degrees, **whole**, so a client sends what the fixture is after the gesture rather than one field. What the numbers mean is `prism_domain::placement`: show space is Y up with `z` growing upstage, and a rotation is applied **Z, then X, then Y** (`orientation` is `Ry · Rx · Rz`). The daemon answers with a `ShowPatch` of one `replace` per field that moved, and with **no repatch**: where a fixture hangs moves no channel, so the engine is never told — and an Oops over it restores the place alone (`UndoScope::Place`), which repatches nothing either. A fixture that is not patched, a number that is not finite or a coordinate further than `MAX_REACH` (1000 m) from the origin refuses **the whole list** (`FixtureOutOfReach` names the fixture), and a place a fixture already has writes nothing and files no step.
+
+> **`Delta::LibraryUpdate` — how far a download of the fixture library has
+> got** *(S62)*. Sent from the daemon's housekeeping tick while
+> `Command::UpdateLibrary`'s thread is running, and **only when something has
+> moved**: a desk with no update running sends nothing at all. `total` is nought
+> until the service has answered with a list, which is what a progress row draws
+> as *starting*; `message` is empty until `finished`, and then it is the one
+> sentence the operator is left with — whether that sentence is *2 998 fixtures
+> written* or *the account was refused*. It is **not** a show delta: the library
+> is a folder on this machine, so `prism_core::ShowMirror` ignores it exactly as
+> it ignores `MachineChanged`, and there is no snapshot field for it — a client
+> that connects half way through hears the next step of a download that is
+> already running, and a client that connects afterwards hears nothing, which
+> is the truth about a piece of work that has finished.
 
 > **`PatchFixtures` — several of one fixture in one gesture** *(S57, punch-list B60)*. Ten spots patched as ten `PatchFixture`s would be ten Oops steps, so they travel as one command and are filed as **one** step. It **embeds** as well: the profile is the library's copy when the desk has one, taken in the same step, so browsing the library embeds nothing and one Oops takes back the profile with the fixtures (the journal restores fixtures out, then profiles, then fixtures in, so the same step undoes and redoes). The placements are **the daemon's**: the client sends back verbatim what `Query::PatchPreview` with `adding` answered, and the daemon checks every one again — each must fit, each number must be **free** (a new fixture that replaced a patched one would delete a light nobody asked to delete), no two may share one, and at most `MAX_PATCH_AT_ONCE` (512). The whole list is checked before the first write, so a refusal writes nothing. An empty `name` is the profile's name, and with more than one fixture each gets its place after it — *Spot 1*, *Spot 2*. The same empty-name rule applies to `PatchFixture` since S57, in the one applier every patch reaches, so a line and a script get it too.
 
@@ -1379,7 +1449,9 @@ type Delta =
   | { t: "DirtyFlag"; unsavedChanges: boolean }   // drives the X-Touch Save LED
   | { t: "Notice"; level: "Info" | "Warn" | "Error"; message: string }
   | { t: "SwitchPositions"; positions: { fixture: FixtureId; offset: number;
-      position: number | null }[] };                 // B52: read off the cable
+      position: number | null }[] }                  // B52: read off the cable
+  | { t: "LibraryUpdate"; done: number; total: number; finished: boolean;
+      message: string };                             // S62: the download's progress
 ```
 
 Deltas are ordered per connection. A client that has applied every delta since its snapshot holds state identical to the daemon's.

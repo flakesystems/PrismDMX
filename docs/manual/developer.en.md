@@ -439,6 +439,44 @@ desk has no word for becomes a `Raw` knob rather than a hole**, and **a mode is
 break 1** — a fixture with two DMX starts is two addresses and this desk patches
 one.
 
+### Four ways a profile gets in, and where the seams are — S62
+
+Reading a format is one thing; **getting a file onto a desk** is another, and
+since S62 there are four ways, each with its own place in the tree:
+
+| How | What runs | Where |
+|---|---|---|
+| Put a file in `fixtures/` | the start-up read | `prismd::daemon::load_library` |
+| *Import profile (GDTF)* | copy the file, then **re-read the whole library** | `Core::import_profile` |
+| *Import rig (MVR)* | read the archive, embed, patch, file one Oops step | `ShowFile::import_rig` |
+| *Settings → GDTF Share* | sign in, list, download, write, report | `prismd::share::update` |
+
+Three things about that table are decisions rather than accidents.
+
+**An import re-reads the library rather than adding to it.** S62 wrote a
+hand-maintained `adopt_gdtf` that kept one of three parallel structures in step
+and re-sorted afterwards — it would have corrupted the picker's grouping. There
+is **one** way into the library and it is the start-up path; a profile that has
+just been copied is a profile the next read will find. The library has been
+*queried* rather than mirrored since S44, so no delta is needed either.
+
+**The network lives behind a trait.** `CLAUDE.md` says a test may not need a
+device, and a test that needs the internet is the same promise broken a
+different way — the more so here, where the service has no anonymous access, so
+there is nothing a CI job could log in as. So `prismd::share::Share` is the
+seam: `Https` is three URLs and a cookie jar and is the one part no test covers,
+and `update` — sign in, list, download, check, count, say what happened — is
+driven by a fake that answers from memory. `prismd::secrets::Store` is the same
+shape for the credential manager.
+
+**A password reaches `prismd` and stops there.** It is on `Command::UpdateLibrary`
+and nowhere else: `prism-core` never sees one (the two library-account commands
+are taken off at the top of `Core::apply`, before any applier), `machine.json`
+never holds one, and `MachineSettings::library_account` is the account **name**
+so a panel can say *kept on this machine*. `docs/FIXTURE_LIBRARY.md` has the
+licensing this all hangs off; decision **D12** is the short version: this desk
+does not redistribute GDTF.
+
 ### Then: is a new `AttributeType` really the answer?
 
 Most of the time it is **not**. Read this order:

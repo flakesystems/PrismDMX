@@ -81,6 +81,34 @@ kommt es vor ihm.
   GDTF sind** — und sagt es eigens, wenn eine Bibliothek installiert ist, die
   noch keine GDTF enthält.
 
+### Vier Wege, die Bibliothek zu füllen (S62)
+
+**Eine GDTF muss man jetzt nicht mehr von Hand in einen Ordner legen.** Das
+Patch-Fenster hat zwei neue Knöpfe, und die Einstellungen einen Abschnitt:
+
+- ***Import profile (GDTF)*** nimmt eine einzelne `.gdtf` über den Dateidialog,
+  liest sie, legt sie in Ihren Fixture-Ordner und bietet sie sofort im
+  Auswahlfeld an. Was keine lesbare Fixture-Datei ist, landet gar nicht erst im
+  Ordner.
+- ***Import rig (MVR)*** nimmt die Rig-Datei Ihres Planers **in die Show**: jedes
+  Profil darin und jedes geplante Fixture mit Nummer und Adresse, **in einem
+  Schritt, den ein Oops ganz zurücknimmt**. Gepatchtes wird nicht angefasst —
+  ein geplantes Fixture, dessen Nummer Ihre Show schon benutzt, bekommt die
+  nächste freie. Danach sagt das Pult, wie viele ankamen und was es übersprungen
+  hat. Eine `.mvr`, die einfach im Fixture-Ordner liegt, füllt auch ohne den
+  Knopf die Bibliothek.
+- ***Settings → This machine → GDTF Share*** lädt die ganze veröffentlichte
+  Bibliothek **mit Ihrem eigenen Konto** bei [gdtf-share.com](https://gdtf-share.com)
+  in Ihren Fixture-Ordner. Eine Zeile zählt mit, das Pult spielt dabei weiter
+  Licht, und am Ende steht ein Satz. Auf Wunsch merkt sich Windows Ihre
+  Zugangsdaten in der **Anmeldeinformationsverwaltung** — nie in einer
+  Einstellungsdatei; *Forget this account* nimmt sie wieder heraus.
+
+**Ein Konto braucht niemand.** Die Open Fixture Library ist weiter dabei, eine
+eigene Datei im Ordner gewinnt weiter gegen die installierte, und eine `.mvr`
+löst den realen Fall ganz ohne Internet. Warum das Pult die GDTF-Bibliothek
+nicht einfach mitliefert, steht in `docs/FIXTURE_LIBRARY.md`.
+
 Was die offene Beta in den ersten zwei Wochen gemeldet hat — zehn Meldungen,
 alle zehn behoben (S56 und S57), dazu der letzte offene Eintrag des Registers
 (B52, S58). **Alle zehn GitHub-Issues sind geschlossen** (#9, #21, #23–#30):

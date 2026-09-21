@@ -59,6 +59,7 @@ getrandom = "0.4"
 # workspace forbids `unsafe_code`. The same move S16 made with tokio's `net`
 # feature for the named pipe and the Unix domain socket.
 thread-priority = "3"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "cookies", "blocking", "form"] }
 
 [dev-dependencies]
 prism-ipc = { path = "../prism-ipc" }
@@ -69,3 +70,15 @@ tokio = { version = "1.49", features = ["test-util"] }
 
 [lints]
 workspace = true
+
+# The credential manager, for the GDTF Share account an operator asks this desk
+# to remember — S62, and `src/secrets.rs` says why a settings file is the wrong
+# place for a password.
+#
+# Windows only, and deliberately: a desk in a rack has no logged-in desktop
+# session to unlock a keyring, so on Linux and the Pi remembering is refused in
+# words rather than falling back to a file. `keyring`'s own platform stores are
+# target-gated, so the default `v1` feature here is the Windows one and nothing
+# else — and `v1` is not optional, the crate refuses to build without it.
+[target."cfg(windows)".dependencies]
+keyring = "4.2"

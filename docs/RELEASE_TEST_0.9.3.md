@@ -1,9 +1,9 @@
-# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61 + S30)
+# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61 + S62 + S30)
 
-**Gilt für:** den Build von `master` ab `5dd7112` — enthält **S59** (das
-Controls-Menü, die Tastenwörter, die Lampen, das Jogwheel) und **S61** (die
-Fixture-Bibliothek ist GDTF); Kapitel **2a** gilt ab dem Merge von **S30** (der
-3D-Viewer). Die Version im Installer ist weiterhin **`0.9.2`**:
+**Gilt für:** den Build von `master` nach dem Merge von **S30** — enthält **S59** (das
+Controls-Menü, die Tastenwörter, die Lampen, das Jogwheel), **S61** (die
+Fixture-Bibliothek ist GDTF), **S62** (wie eine Bibliothek hereinkommt: MVR,
+`.gdtf`-Import, der Login zu GDTF Share) und **S30** (der 3D-Viewer). Die Version im Installer ist weiterhin **`0.9.2`**:
 0.9.3 ist noch nicht getaggt, und was hineinkommt, steht in `CHANGELOG.md` unter
 *Noch nicht veröffentlicht*.
 
@@ -195,6 +195,104 @@ Move-Item (Join-Path $tmp "x.zip") (Join-Path $dir "irgendwas-ganz-anderes.gdtf"
 
 ---
 
+## 1b. Neu — wie eine Bibliothek hereinkommt (S62)
+
+**Wo:** View **Patch** (zwei neue Knöpfe) und *Settings* → **This machine** →
+Abschnitt **GDTF Share**.
+
+S61 hat das Pult GDTF lesen lassen; S62 baut die Wege, auf denen die Dateien
+ankommen. Für diese Prüfungen brauchen Sie zusätzlich eine **`.mvr`** — jede
+Planungssoftware exportiert eine, und wer keine hat, überspringt T-LIB.2 und
+T-LIB.3 und vermerkt das unten.
+
+**Schon vorab auf Windows geprüft** (beim Review vor dem Merge, PR #35), damit
+Sie wissen, worauf es hier noch ankommt: der Windows-Speicher für Zugangsdaten
+funktioniert — ein automatischer Test schreibt, liest über ein neues Handle
+zurück, ersetzt und löscht einen Eintrag im **echten** Credential Manager (unter
+einem eigenen Testnamen, Ihr Konto wird nie berührt); und das Pult erreicht
+`gdtf-share.com` über TLS. **Nicht** geprüft werden konnte alles, wofür ein
+echtes Konto nötig ist: der Login selbst und das Herunterladen (T-LIB.4/5).
+
+### Die Prüfungen
+
+- [ ] **T-LIB.1 — eine einzelne `.gdtf` über den Dateidialog.** View **Patch** →
+      **Import profile (GDTF)** → die Datei aus §1 auswählen. Eine Notice sagt
+      *Profile imported: …*, und die Zeile steht **sofort** im Auswahlfeld —
+      ohne Neustart. Danach in `%APPDATA%\PrismDMX\fixtures\` nachsehen: die
+      Datei liegt dort, unter ihrem eigenen Namen.
+- [ ] **T-LIB.1b — was keine Fixture ist, kommt nicht in den Ordner.** Dasselbe
+      noch einmal mit einem umbenannten Textdokument. Es kommt eine Notice, die
+      sagt, dass die Datei keine lesbare Fixture ist, und in
+      `%APPDATA%\PrismDMX\fixtures\` liegt sie **nicht**. Das ist die
+      wichtigere Hälfte dieses Punktes.
+- [ ] **T-LIB.2 — ein ganzes Rig, mit Patch.** View **Patch** → **Import rig
+      (MVR)** → Ihre `.mvr` auswählen. Die Notice nennt vier Zahlen: wie viele
+      Fixtures gepatcht wurden, wie viele Profile ankamen, und was übersprungen
+      wurde. In der Patch-Tabelle stehen die geplanten Fixtures mit **ihren
+      Nummern und Adressen aus der Planung**. Seit S30 sagt die Notice auch,
+      wie viele **dort hängen, wo die Planung sie hat** (*… hung where the plan
+      puts them*) — siehe T-BOTH.1.
+- [ ] **T-LIB.3 — ein Oops nimmt den ganzen Import zurück.** Direkt nach T-LIB.2
+      **einmal** Oops. **Alle** importierten Fixtures sind weg, die vorher
+      gepatchten stehen unverändert da, und ein Redo bringt alles zurück. *Ein
+      Import ist ein Schritt* — das ist die Zusage, und ein zweiter Oops-Druck,
+      der nur die Hälfte zurücknähme, wäre der Fehler, auf den hier geachtet
+      wird.
+- [ ] **T-LIB.3b — der Betreiber gewinnt.** Wenn die `.mvr` eine Fixture-Nummer
+      enthält, die Ihre Show schon benutzt: die vorhandene behält Nummer,
+      Adresse und Profil, und die geplante bekommt die nächste freie Nummer. Die
+      Notice zählt sie als *renumbered*.
+- [ ] **T-LIB.4 — der erste echte Login.** ⚠️ **Das ist der Punkt, der
+      hier nie getestet werden konnte** — der Entwicklungscontainer erreicht
+      `gdtf-share.com` nicht, und der Dienst hat keinen anonymen Zugang. Ein
+      kostenloses Konto anlegen, dann *Settings* → **This machine** → **GDTF
+      Share**: Benutzername und Passwort eintragen, **ohne** den Haken, und
+      **Update the library** drücken. Erwartet:
+      - Die Zeile unter dem Formular sagt zuerst *Signing in and asking what is
+        published…*, dann zählt sie (*412 of 3000 fixtures…*).
+      - **Das Pult spielt dabei weiter Licht.** Einen Fader bewegen, während der
+        Download läuft — er reagiert sofort. Das ist die eigentliche Prüfung.
+      - Am Ende **ein Satz**, der sagt, wie viele Fixtures angekommen sind.
+      - Die Profile stehen danach im Auswahlfeld, *Source* `yours`, *Format*
+        `GDTF`.
+      Schlägt der Login mit richtigen Zugangsdaten fehl, ist die wahrscheinliche
+      Ursache in `docs/FIXTURE_LIBRARY.md` §3 beschrieben (form-encoded statt
+      JSON) — **bitte den genauen Wortlaut der Meldung notieren**.
+- [ ] **T-LIB.5 — die Zugangsdaten merken, und wieder vergessen.** Den Haken
+      *Keep this account on this machine* setzen und noch einmal aktualisieren.
+      Dann: das Pult neu starten, *Settings* → **This machine** → **GDTF Share**
+      — es steht *Kept on this machine: <Ihr Name>*, und der Benutzername ist
+      vorausgefüllt. In der **Windows-Anmeldeinformationsverwaltung**
+      (`Systemsteuerung → Anmeldeinformationsverwaltung → Windows-Anmeldeinformationen`
+      → *Generische Anmeldeinformationen*) steht ein Eintrag
+      **`gdtf-share-account.PrismDMX — GDTF Share`** (so heißt er wirklich; in
+      einer Eingabeaufforderung zeigt `cmdkey /list` ihn ebenso). Aufklappen:
+      das Passwort ist **nicht** im Klartext zu sehen. Dann **Forget this
+      account** drücken: die Zeile sagt wieder *No account is kept on this
+      machine*, und der Eintrag in Windows ist **weg** (nach dem Schließen und
+      Neuöffnen der Anmeldeinformationsverwaltung).
+- [ ] **T-LIB.5b — ein falsches Passwort, gemerkt.** Haken setzen, absichtlich
+      ein **falsches** Passwort, **Update the library**. Erwartet: ein Satz, dass
+      das Konto abgelehnt wurde — und kein Absturz, kein hängender
+      Fortschritt. **Bekannt:** gemerkt wird *vor* dem Login, also steht jetzt
+      das falsche Passwort im Windows-Speicher. Danach mit dem richtigen
+      Passwort noch einmal: der gemerkte Eintrag wird **ersetzt**, nicht
+      verdoppelt (in der Anmeldeinformationsverwaltung steht weiterhin **ein**
+      Eintrag). Ob das falsche Passwort gar nicht erst gemerkt werden sollte,
+      ist eine Entscheidung für Sie — bitte vermerken.
+- [ ] **T-LIB.6 — nichts davon steht in `machine.json`.** `%APPDATA%\PrismDMX\machine.json`
+      öffnen und nach dem Passwort suchen. **Es darf nicht darin vorkommen** —
+      auch nicht der Benutzername in einem Feld, das wie ein Passwort aussieht.
+      Was dort stehen darf, ist nichts: der Kontoname kommt aus dem
+      Windows-Speicher, nicht aus der Datei.
+- [ ] **T-LIB.7 — ohne Konto ist alles trotzdem da.** *Forget this account*, das
+      Pult neu starten, und im Auswahlfeld suchen: die Open-Fixture-Library-Profile
+      sind da, Ihre eigenen Dateien sind da, und **nirgends steht eine
+      Fehlermeldung** darüber, dass niemand angemeldet ist. Der Login ist ein
+      Abschnitt, keine Tür.
+
+---
+
 ## 2. Neu — das Controls-Menü (S59)
 
 **Wo:** *Settings* → Tab **Controls**.
@@ -326,7 +424,41 @@ Move-Item (Join-Path $tmp "x.zip") (Join-Path $dir "irgendwas-ganz-anderes.gdtf"
 
 ---
 
-## 3. Was durch beide Sessions gehen musste
+## 2b. Neu — beides zusammen: ein Rig aus der Planung im Viewer (S62 + S30)
+
+**Wo:** View **Patch** und Fenster **Viewer 3D** nebeneinander. Braucht eine
+`.mvr` wie in T-LIB.2; ohne eine überspringen und unten vermerken.
+
+- [ ] **T-BOTH.1 — die Planung hängt, wo sie hängt.** Eine neue, leere Show
+      anlegen, dann **Import rig (MVR)**. Im Viewer
+      erscheinen die Fixtures **an ihren Plätzen aus der Planung**, nicht alle
+      im Ursprung; *Frame all* zeigt das ganze Rig. Die Zeile neben den Knöpfen
+      sagt *… not placed* nur für Fixtures, für die die Planung keinen Ort
+      angibt. Grob vergleichen: stimmt die Höhe der Traverse (Y) und die
+      Reihenfolge links/rechts mit dem Plan im Planungsprogramm?
+- [ ] **T-BOTH.2 — ein Oops nimmt Patch und Orte zusammen zurück.** Direkt nach
+      T-BOTH.1 **ein** Oops: im Viewer ist das Rig **ganz** weg, nicht nur
+      verschoben. Redo: es hängt wieder an seinen Plätzen.
+- [ ] **T-BOTH.3 — die Ausrichtung kommt noch nicht mit.** Alle importierten
+      Fixtures hängen mit dem Strahl **nach unten**, auch wenn sie in der Planung
+      gekippt oder gedreht sind — das ist bekannt und gewollt, bis die Richtung
+      der MVR-Rotation an einer echten Datei geklärt ist (`PROGRESS.md` §5).
+      **Bitte notieren**, welche Fixtures in Ihrer Planung eine Drehung haben und
+      wie (z. B. *Seitenlicht links, 90° zur Bühne*): das ist genau die Angabe,
+      mit der die Rotation eingebaut werden kann.
+- [ ] **T-BOTH.4 — ein importiertes Profil wird richtig gezeichnet.** Ein
+      Moving Head aus der `.mvr` hat im Viewer seine **eigene Größe**, und sein
+      Strahl folgt Pan und Tilt (wie T-3D.5). Sitzt der Strahl sichtbar an der
+      Linse, oder schwebt er neben dem Gerät? Das ist dieselbe offene Frage wie
+      T-3D.10, diesmal mit einem echten Gerät aus Ihrer Planung.
+- [ ] **T-BOTH.5 — die Bibliothek aktualisieren, während der Viewer läuft.**
+      Mit Konto (T-LIB.4): *Update the library* drücken, während *Viewer 3D* und
+      *DMX Sheet* offen sind und eine Cue läuft. Das DMX Sheet bleibt bei ~30 Hz,
+      der Viewer dreht sich flüssig weiter, das Licht am Rig flackert nicht.
+
+---
+
+## 3. Was durch alle Sessions gehen musste
 
 - [ ] **T-REG.1 — die Show öffnet unverändert.** `default.prism` öffnen: alle
       Fixtures, Cues, Gruppen, Presets und Executors sind da, mit denselben

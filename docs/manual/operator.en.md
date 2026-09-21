@@ -339,6 +339,18 @@ free address** it would fit at, and a key that moves it there.
 Clicking a row of the patch opens the same panel on that fixture: change its
 mode, number, name or address, or **Unpatch** it.
 
+**One file: *Import profile (GDTF)*.** The `.gdtf` from a manufacturer's
+website or a stick. The desk reads it, puts it in your own fixture folder and
+offers it in the picker at once — nothing is patched. Anything that is not a
+readable fixture file is refused and never lands in the folder.
+
+**A whole rig at once: *Import rig (MVR)*.** If your planner sent you an
+`.mvr`, this key takes it into the show: every profile in it and every planned
+fixture, with its number and address, **in one step that one Oops takes back**.
+Nothing already patched is touched — a planned fixture whose number your show is
+already using gets the next free one. The desk then says how many fixtures
+arrived and what it skipped.
+
 **3. Check that it arrives.** Open the *DMX Sheet*, pull the fixture to full,
 look. If nothing happens there, it is the outputs and not the patch.
 
@@ -357,6 +369,7 @@ data directory.
 | Where | What for |
 |---|---|
 | `fixtures/anything.gdtf` | A `.gdtf` file from the manufacturer or from [gdtf-share.com](https://gdtf-share.com). **The name does not matter**: the file says which fixture it is, and if that is one the library already has, yours replaces it |
+| `fixtures/our-rig.mvr` | The **rig file from your planner**. An `.mvr` carries the fixture profiles of exactly your production, and the desk takes all of them into the library. No account, no internet. To **patch** from it as well, use *Import rig (MVR)* in the Patch window |
 | `fixtures/my-lamp.json` | A lamp there is no profile for at all, written by hand in the Open Fixture Library's JSON format — far easier to write than a GDTF. It appears under *Custom* beside everything else in the picker |
 | `fixtures/<manufacturer>/<fixture>.json` | A **correction** to a bundled JSON profile. Same manufacturer folder, same file name as in the library — yours replaces it |
 
@@ -365,6 +378,32 @@ The *Source* column in the picker marks your profiles as **yours**, and the
 patched with one, the profile is **copied into the show**: a `.prism` file is
 complete in itself and opens the same way on a desk that has never seen your
 directory.
+
+### Downloading the GDTF library with your own account
+
+Under *Settings → This machine → **GDTF Share*** you can sign in with an account
+of your own at [gdtf-share.com](https://gdtf-share.com) and pull the whole
+published library down into that same `fixtures/` folder. Everything the desk
+downloads is downloaded **as you**, under the terms you agreed to there, and it
+goes no further: it is not shared on and it is not in anybody's installer.
+
+- **You need an account of your own.** GDTF Share has no anonymous download.
+  Making one is free.
+- **Tick *Keep this account on this machine*** and the desk puts the user name
+  and the password in **Windows' own credential manager** — never in a settings
+  file. *Forget this account* takes it back out. On Linux and on the Raspberry
+  Pi there is no such store, so the desk says so and asks for the password each
+  time instead.
+- **It takes several minutes** and there are thousands of fixtures. A line under
+  the form counts them, the desk keeps running lights while it works, and you
+  get one sentence at the end saying how many arrived. Closing the window does
+  not stop it.
+- A profile that will not download, or that downloads and is not a readable
+  fixture, is **counted and skipped** — one bad entry does not cost you the rest.
+
+**You do not need any of this.** The desk ships with the Open Fixture Library,
+reads a `.gdtf` you put in the folder yourself, and takes a planner's `.mvr`
+whole. The account is the extra, not the door.
 
 ---
 

@@ -905,3 +905,99 @@ async fn a_daemon_configured_on_the_command_line_refuses_a_setting() {
 
     daemon.shutdown().await;
 }
+
+/// **A `.gdtf` an operator hands over is in the library, and stays there** —
+/// S62.
+///
+/// The whole of the profile import: the file lands where a hand-copied one
+/// goes, the library offers it **now**, and the copy is what makes it survive a
+/// restart. Asserted against the daemon's own library rather than a reader,
+/// because what is being tested is that the desk took it.
+#[tokio::test]
+async fn a_profile_handed_over_is_in_the_library_and_in_the_venues_folder() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    write_show(&dir.path().join("aula.prism"));
+
+    // A `.gdtf` somewhere else entirely — a stick, a download folder.
+    let elsewhere = tempfile::tempdir().unwrap();
+    let handed_over = elsewhere.path().join("Robe@T1.gdtf");
+    std::fs::write(
+        &handed_over,
+        common::gdtf_archive("Robe Lighting", "Robin T1", 3),
+    )
+    .unwrap();
+
+    let daemon = Daemon::start(&options(dir.path())).await.unwrap();
+    let before = daemon.desk().core().file.library.len();
+
+    daemon
+        .desk()
+        .core()
+        .apply(&Command::ImportProfile {
+            path: handed_over.display().to_string(),
+        })
+        .unwrap_or_else(|error| panic!("a profile import was refused: {error}"));
+
+    // It is offered now — the library is queried, so nothing had to be sent.
+    let library = &daemon.desk().core().file.library;
+    assert_eq!(library.len(), before + 1, "one profile more than before");
+    let profile = library
+        .profile("robe-lighting/robin-t1/mode-1")
+        .expect("the key comes out of the file");
+    assert_eq!(profile.footprint, 3);
+    assert!(
+        library
+            .entries()
+            .iter()
+            .any(|entry| entry.id == profile.id && entry.own && entry.gdtf),
+        "it is the venue's own, and it is GDTF"
+    );
+
+    // And the copy is what makes it survive a restart.
+    let copied = prismd::paths::fixtures_dir(dir.path()).join("Robe@T1.gdtf");
+    assert!(copied.is_file(), "the file is in the venue's own folder");
+    assert_eq!(
+        std::fs::read(&copied).unwrap(),
+        std::fs::read(&handed_over).unwrap(),
+        "byte for byte what was handed over"
+    );
+}
+
+/// A file that is not a fixture is said and **not** put in the folder.
+///
+/// The order matters: a desk that copied first would leave an operator a file
+/// to find and wonder about.
+#[tokio::test]
+async fn something_that_is_not_a_profile_is_refused_before_it_is_copied() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    write_show(&dir.path().join("aula.prism"));
+
+    let elsewhere = tempfile::tempdir().unwrap();
+    let rubbish = elsewhere.path().join("holiday.gdtf");
+    std::fs::write(&rubbish, b"this is a photograph, not a fixture").unwrap();
+
+    let daemon = Daemon::start(&options(dir.path())).await.unwrap();
+    let before = daemon.desk().core().file.library.len();
+
+    daemon
+        .desk()
+        .core()
+        .apply(&Command::ImportProfile {
+            path: rubbish.display().to_string(),
+        })
+        .expect("saying no is not an error the desk stops on");
+
+    assert_eq!(
+        daemon.desk().core().file.library.len(),
+        before,
+        "the library is untouched"
+    );
+    assert!(
+        !prismd::paths::fixtures_dir(dir.path())
+            .join("holiday.gdtf")
+            .exists(),
+        "nothing was copied into the operator's folder"
+    );
+}

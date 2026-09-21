@@ -75,6 +75,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { JsonValue, LibraryFixture, LibraryMode, PatchPlacement, PatchPreview, Query } from "../bindings";
 import { Modal } from "../chrome/modal";
+import { choosePath, inShell } from "../shell/bridge";
 import { useAsk, useSend } from "../store/hooks";
 import type { PatchRow, ProfileRow } from "./patch";
 import { embeddedProfiles, nextFreeFixtureId, patchRows, profileLabel, wholeNumber } from "./patch";
@@ -224,6 +225,42 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
         });
     }, []);
 
+    /**
+     * Takes a venue's rig plan into the show — **S62**.
+     *
+     * The dialogue is the operating system's, so this only exists in the
+     * shell; what comes back is a path, and the **daemon** reads the archive.
+     * A client that read it would be a client deciding what a rig is, which is
+     * the same rule that keeps the show file out of the browser.
+     *
+     * What it did is said by the daemon, in a notice: an import that patched
+     * eleven of twenty fixtures has to say so, and the browser has no way of
+     * knowing the difference before the answer arrives.
+     */
+    const importRig = useCallback(() => {
+        void choosePath("ImportRig").then((path) => {
+            if (path !== null) {
+                send({ t: "ImportRig", path });
+            }
+        });
+    }, [send]);
+
+    /**
+     * Takes one `.gdtf` into the library — **S62**.
+     *
+     * The sibling of {@link importRig} and deliberately a separate key: a
+     * profile is not a rig. This one patches nothing and there is nothing to
+     * undo — it puts a fixture in the picker, and the daemon copies the file
+     * into the venue's own folder so it is still there next week.
+     */
+    const importProfile = useCallback(() => {
+        void choosePath("ImportProfile").then((path) => {
+            if (path !== null) {
+                send({ t: "ImportProfile", path });
+            }
+        });
+    }, [send]);
+
     const add = useCallback(() => {
         const newest = rows.at(-1);
         setDraft({
@@ -262,7 +299,13 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
 
     return (
         <div className="patch" data-testid="patch">
-            <PatchToolbar rows={rows} profiles={profiles} onAdd={add} />
+            <PatchToolbar
+                rows={rows}
+                profiles={profiles}
+                onAdd={add}
+                onImportRig={importRig}
+                onImportProfile={importProfile}
+            />
             <PatchTable rows={rows} conflicted={conflicted} editing={draft?.wasId ?? null} onEdit={edit} />
             {draft === null ? null : (
                 <PatchEditor
@@ -286,10 +329,14 @@ function PatchToolbar({
     rows,
     profiles,
     onAdd,
+    onImportRig,
+    onImportProfile,
 }: {
     readonly rows: readonly PatchRow[];
     readonly profiles: readonly ProfileRow[];
     readonly onAdd: () => void;
+    readonly onImportRig: () => void;
+    readonly onImportProfile: () => void;
 }) {
     return (
         <div className="patch-bar">
@@ -299,6 +346,32 @@ function PatchToolbar({
             <button type="button" data-testid="patch-add" onClick={onAdd}>
                 Add fixture
             </button>
+            {/*
+              **S62.** A rig plan from the venue's planner: an `.mvr` carries
+              the profiles *and* the patch, so this is the one key that fills a
+              library and builds a rig at once. Only in the shell, because it
+              opens the operating system's file dialogue — the same rule the
+              show-file keys follow, and a browser has no path to offer.
+            */}
+            {inShell() ? (
+                <>
+                    <button type="button" data-testid="patch-import-rig" onClick={onImportRig}>
+                        Import rig (MVR)
+                    </button>
+                    {/*
+                      One profile rather than a whole plan — the file from a
+                      manufacturer's website. It fills the library and patches
+                      nothing, which is why it is a key of its own.
+                    */}
+                    <button
+                        type="button"
+                        data-testid="patch-import-profile"
+                        onClick={onImportProfile}
+                    >
+                        Import profile (GDTF)
+                    </button>
+                </>
+            ) : null}
         </div>
     );
 }

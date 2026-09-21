@@ -30,6 +30,7 @@ import type {
   SurfaceStatus,
 } from "../bindings";
 import type { AutostartReport } from "../shell/bridge";
+import type { LibraryUpdateState } from "../store/desk";
 
 /**
  * The panels, in the order the window draws them.
@@ -282,4 +283,22 @@ export function autostartEntryText(wanted: boolean, entry: AutostartReport | nul
     return `A start-up entry exists but it starts another copy of the program: ${entry.command ?? "somewhere else"}. Tick the box again to point it at this one.`;
   }
   return "A start-up entry for this installation is in place.";
+}
+
+/**
+ * How far an update of the fixture library has got, in one sentence — **S62**.
+ *
+ * Three states rather than one number, because they say different things: the
+ * service has not answered yet and there is no total to count towards; it is
+ * running and the count is the answer; it has stopped and the daemon's own
+ * sentence is the answer, whether that sentence is a success or a refusal.
+ */
+export function libraryUpdateText(update: LibraryUpdateState): string {
+  if (update.finished) {
+    return update.message === "" ? "The update has stopped." : update.message;
+  }
+  if (update.total === 0) {
+    return "Signing in and asking what is published\u2026";
+  }
+  return `${String(update.done)} of ${String(update.total)} fixtures\u2026`;
 }
