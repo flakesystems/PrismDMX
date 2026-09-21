@@ -360,7 +360,10 @@ Was keine lesbare Fixture-Datei ist, wird abgelehnt und gar nicht erst abgelegt.
 jedes geplante Fixture, mit Nummer und Adresse, **in einem Schritt, den ein Oops
 ganz zurücknimmt**. Was schon gepatcht ist, bleibt unberührt — ein geplantes
 Fixture, dessen Nummer Ihre Show schon benutzt, bekommt die nächste freie. Das
-Pult sagt danach, wie viele Fixtures ankamen und was es übersprungen hat.
+Pult sagt danach, wie viele Fixtures ankamen und was es übersprungen hat. Jedes
+Fixture **hängt dort, wo die Planung es hat** — im *Viewer 3D* steht das Rig so,
+wie Ihr Planer es gezeichnet hat. Wohin jedes *zeigt*, wird noch nicht aus der
+Planung übernommen: alle hängen mit dem Strahl nach unten, bis Sie sie drehen.
 
 **3. Nachsehen, ob es ankommt.** *DMX Sheet* öffnen, das Fixture auf voll
 ziehen, hinsehen. Wenn dort nichts passiert, liegt es an den Ausgängen und nicht

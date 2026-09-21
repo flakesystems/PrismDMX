@@ -1874,6 +1874,12 @@ fn rig_notice(report: &prism_core::RigReport) -> String {
         "Rig imported: {} fixtures, {} profiles",
         report.patched, report.profiles
     );
+    if report.placed > 0 {
+        text.push_str(&format!(
+            ", {} hung where the plan puts them",
+            report.placed
+        ));
+    }
     let mut left = Vec::new();
     if report.without_profile > 0 {
         left.push(format!(

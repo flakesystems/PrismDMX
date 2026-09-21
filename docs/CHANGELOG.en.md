@@ -90,8 +90,10 @@ two new keys, and the settings have a section:
   profile in it and every planned fixture with its number and address, **in one
   step that one Oops takes back**. Nothing already patched is touched — a
   planned fixture whose number your show is already using gets the next free
-  one. The desk then says how many arrived and what it skipped. An `.mvr` simply
-  left in the fixture folder still fills the library without the key.
+  one. The desk then says how many arrived and what it skipped. The fixtures
+  **hang where the plan puts them** (visible in the 3D viewer); which way they
+  face is not taken over yet. An `.mvr` simply left in the fixture folder still
+  fills the library without the key.
 - ***Settings → This machine → GDTF Share*** downloads the whole published
   library **with your own account** at [gdtf-share.com](https://gdtf-share.com)
   into your fixture folder. A line counts them, the desk keeps running lights

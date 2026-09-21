@@ -95,8 +95,9 @@ Patch-Fenster hat zwei neue Knöpfe, und die Einstellungen einen Abschnitt:
   Schritt, den ein Oops ganz zurücknimmt**. Gepatchtes wird nicht angefasst —
   ein geplantes Fixture, dessen Nummer Ihre Show schon benutzt, bekommt die
   nächste freie. Danach sagt das Pult, wie viele ankamen und was es übersprungen
-  hat. Eine `.mvr`, die einfach im Fixture-Ordner liegt, füllt auch ohne den
-  Knopf die Bibliothek.
+  hat. Die Fixtures **hängen dort, wo die Planung sie hat** (im 3D-Viewer zu
+  sehen); ihre Ausrichtung wird noch nicht übernommen. Eine `.mvr`, die einfach
+  im Fixture-Ordner liegt, füllt auch ohne den Knopf die Bibliothek.
 - ***Settings → This machine → GDTF Share*** lädt die ganze veröffentlichte
   Bibliothek **mit Ihrem eigenen Konto** bei [gdtf-share.com](https://gdtf-share.com)
   in Ihren Fixture-Ordner. Eine Zeile zählt mit, das Pult spielt dabei weiter

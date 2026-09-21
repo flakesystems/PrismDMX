@@ -349,7 +349,9 @@ readable fixture file is refused and never lands in the folder.
 fixture, with its number and address, **in one step that one Oops takes back**.
 Nothing already patched is touched — a planned fixture whose number your show is
 already using gets the next free one. The desk then says how many fixtures
-arrived and what it skipped.
+arrived and what it skipped. Each fixture **hangs where the plan puts it** — in
+*Viewer 3D* the rig is where your planner drew it. Which way each one *faces*
+is not taken from the plan yet: they all hang beam-down until you turn them.
 
 **3. Check that it arrives.** Open the *DMX Sheet*, pull the fixture to full,
 look. If nothing happens there, it is the outputs and not the patch.
