@@ -103,7 +103,13 @@ mod desk;
 mod file;
 mod journal;
 mod layout;
-mod library;
+// Public since S60, because it always was in everything but the keyword:
+// `profiles/fixtures/SOURCE.md` names `prism_core::library::ofl` as the thing
+// that reads the installed tree, `FixtureLibrary::conversion` hands out a type
+// that lives in it, and the GDTF reader is a decoder somebody debugging a
+// fixture that will not patch needs to be able to read the documentation of.
+// Its own documentation is on the module.
+pub mod library;
 mod mirror;
 mod objects;
 mod outputs;

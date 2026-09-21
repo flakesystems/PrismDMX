@@ -16,7 +16,17 @@ Three requirements are structural — they cannot be retrofitted, and every deci
 2. **Deterministic timing.** A 44 Hz internal tick (22.727 ms) with low jitter.
 3. **School-grade operability.** Installation without an IT department, on ageing hardware.
 
-**Non-goals for V1:** multi-user sessions, RDM, timecode chase, media server integration, GDTF import.
+**Non-goals for V1:** multi-user sessions, RDM, timecode chase, media server integration.
+
+> **GDTF import was on that list until S60, and came off it.** The reason it was
+> a non-goal was that the Open Fixture Library answers the question a patch
+> window asks — *which channel does what* — and reading a second format for the
+> same answer buys nothing. What changed is the question: the 3D viewer (S30)
+> asks *where is the beam and what does the gobo look like*, and that is the
+> question GDTF is the only published answer to. So the desk's library is GDTF,
+> and the older format stays for the profiles a venue writes by hand. Writing
+> GDTF is still a non-goal: this desk reads the format, it does not publish in
+> it.
 
 ---
 
@@ -927,11 +937,14 @@ prismdmx/
 │  └─ src/bindings/      # generated from prism-domain
 ├─ profiles/
 │  ├─ surface/xtouch.json    # layer 3 bindings + the S20 verification record
-│  └─ fixtures/              # the Open Fixture Library, DOWNLOADED at install
-│                            # time and not committed (S44). Only SOURCE.md is
-│                            # in git; tools/fetch-fixtures installs the rest.
-│                            # A copy here would be the second copy of somebody
-│                            # else's data, and the one that is out of date.
+│  └─ fixtures/              # the fixture library: GDTF since S60, INSTALLED at
+│                            # install time and not committed (S44). Only
+│                            # SOURCE.md is in git; tools/fetch-fixtures puts
+│                            # the .gdtf files here and fetch-ofl puts the Open
+│                            # Fixture Library corpus in fixtures/ofl/ beside
+│                            # them. A copy here would be the second copy of
+│                            # somebody else's data — and for GDTF, data this
+│                            # project has no licence to redistribute.
 ├─ tools/
 │  └─ xtouch-probe/      # S20's bring-up tool. NOT a workspace member, and
 │                        # still not one after S36: what it does needs a device

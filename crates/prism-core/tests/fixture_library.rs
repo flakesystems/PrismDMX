@@ -8,9 +8,20 @@
 //! for the directory first and returns if it is absent — printing why, so a
 //! silent skip cannot be mistaken for a pass.
 //!
-//! CI installs it (`tools/fetch-fixtures`), so **these run there on every
-//! commit**. What they are for is the thing unit tests over hand-written JSON
-//! cannot give: the whole corpus, with every shape a real library has in it.
+//! CI installs it (`tools/fetch-fixtures/fetch-ofl.sh`), so **these run there on
+//! every commit**. What they are for is the thing unit tests over hand-written
+//! JSON cannot give: the whole corpus, with every shape a real library has in
+//! it.
+//!
+//! # This is about the **Open Fixture Library** reader, and stays so
+//!
+//! Since S60 the desk's own library is GDTF and this corpus lives in a tree of
+//! its own beside it (`profiles/fixtures/ofl/`). The reason this target did not
+//! move with it is that the format is still read — it is what a venue writes a
+//! profile by hand in — and a reader with two thousand real files to be run
+//! over should be run over them. The GDTF reader has no corpus to match: its
+//! upstream has no anonymous download, so what holds it is the unit tests in
+//! `prism_core::library::gdtf` and the archives they build byte by byte.
 //!
 //! # What is asserted, and what is only reported
 //!
@@ -32,25 +43,39 @@ use std::path::{Path, PathBuf};
 
 use prism_core::{FixtureLibrary, Show};
 
-/// Where the installer puts it, relative to this crate.
+/// The installed library's root, relative to this crate.
 fn library_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join("profiles/fixtures")
 }
 
+/// Whether the corpus is installed, and where its names table is.
+///
+/// Two places since S60: `fetch-ofl` writes `profiles/fixtures/ofl/`, and a
+/// desk whose library was installed before S60 has it at the root. Both are
+/// accepted, and reading the **root** either way is deliberate — it is what the
+/// daemon does, so this also holds the rule that a tree with a
+/// `manufacturers.json` of its own is read as a tree rather than as one
+/// manufacturer.
+fn corpus_is_installed() -> bool {
+    let root = library_root();
+    root.join("ofl/manufacturers.json").is_file() || root.join("manufacturers.json").is_file()
+}
+
 /// The installed library, or `None` with a reason printed.
 fn installed() -> Option<FixtureLibrary> {
     let root = library_root();
-    if !root.join("manufacturers.json").is_file() {
+    if !corpus_is_installed() {
         println!(
-            "skipping: no fixture library at {} — run tools/fetch-fixtures/fetch-fixtures.sh",
+            "skipping: no Open Fixture Library corpus under {} — run \
+             tools/fetch-fixtures/fetch-ofl.sh",
             root.display()
         );
         return None;
     }
     let mut library = FixtureLibrary::default();
-    library.read_ofl_tree(&root);
+    library.read_installed_tree(&root);
     Some(library)
 }
 
@@ -110,13 +135,13 @@ fn every_profile_in_the_installed_library_is_one_a_show_accepts() {
 #[test]
 fn reading_the_whole_library_is_timed() {
     let root = library_root();
-    if !root.join("manufacturers.json").is_file() {
+    if !corpus_is_installed() {
         println!("skipping: no fixture library installed");
         return;
     }
     let started = std::time::Instant::now();
     let mut library = FixtureLibrary::default();
-    library.read_ofl_tree(&root);
+    library.read_installed_tree(&root);
     let elapsed = started.elapsed();
     println!(
         "

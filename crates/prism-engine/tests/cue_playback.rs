@@ -60,6 +60,7 @@ fn fixture_type(id: &str, footprint: u16, attributes: Vec<AttributeDef>) -> Fixt
         mode: "test".to_owned(),
         footprint,
         attributes,
+        physical: None,
     }
 }
 

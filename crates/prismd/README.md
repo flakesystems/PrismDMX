@@ -42,11 +42,13 @@ cargo test -p prismd
 
 Nothing needs a device: `--mock-output` and `--mock-surface` are what the suite
 drives, and `tests/resilience.rs` is decision D2 executed — a client attached,
-killed, and the frames counted through the gap. The corpus and installer tests
-want the fixture library present:
+killed, and the frames counted through the gap. The installer tests run the real
+installer scripts against files they build themselves, so they need no network
+and no library installed; the corpus tests in `prism-core` want the Open Fixture
+Library corpus:
 
 ```bash
-tools/fetch-fixtures/fetch-fixtures.sh      # or .ps1 on Windows
+tools/fetch-fixtures/fetch-ofl.sh           # or .ps1 on Windows
 ```
 
 The recordings under `tests/` that the interface's own tests read back are

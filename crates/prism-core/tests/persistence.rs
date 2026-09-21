@@ -71,6 +71,7 @@ fn head_type() -> FixtureType {
             attribute(AttributeType::Zoom, 4, 16384),
             attribute(AttributeType::Gobo, 5, 0),
         ],
+        physical: None,
     }
 }
 

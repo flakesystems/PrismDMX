@@ -1622,6 +1622,7 @@ mod tests {
                         name: "Slow".to_owned(),
                         from: 0,
                         to: 100,
+                        media: None,
                     }],
                 },
             ],
@@ -1635,6 +1636,7 @@ mod tests {
                 mode: "2ch".to_owned(),
                 footprint: 2,
                 attributes: vec![mode, slot],
+                physical: None,
             })
             .unwrap();
         file.show

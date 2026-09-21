@@ -2720,9 +2720,11 @@ dependencies = [
 name = "prism-core"
 version = "0.9.2"
 dependencies = [
+ "flate2",
  "prism-domain",
  "prism-engine",
  "proptest",
+ "quick-xml",
  "rmp-serde",
  "rusqlite",
  "serde",

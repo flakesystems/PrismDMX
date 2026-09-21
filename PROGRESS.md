@@ -1,9 +1,9 @@
 # PROGRESS.md — PrismDMX Status Tracker
 
-**Last updated:** 2026-09-20 (the owner accepted the build on the test rig; the branches are merged, and the release waits for S59 and S30)
+**Last updated:** 2026-09-21 (S60: the fixture library is GDTF, in preparation for the 3D viewer)
 **Current phase:** Phase 11 — what the beta sends back (the open beta, since S56)
-**Current session:** none — next is **S59**, the Controls panel's question round, then **S30**, the 3D viewer; the release waits for both (owner, 2026-09-20). §8 is the prompt
-**Last completed:** S58 — a knob follows the channel that switches it ✅ — **B52, the last open entry of the register.** A switching channel makes one slot a different channel depending on another's value; the owner chose that the **label** follows and the **key** does not, and that what decides is **what is on the cable**. So a switched slot carries its table (`AttributeDef::switched`: the deciding channel, and per range of it the slot's name and steps), the daemon reads the deciding channels off the frame it already holds for telemetry and says which row is live (`Delta::SwitchPositions`), and the encoder band names the knob from that row. In Chromium, against a real ADJ Flat Par QA12: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*. See §2.55. Before that: S57 — the patch window, rebuilt around the library ✅ — **the owner's eight points about patching, as one rebuild because they lean on each other.** *Add fixture* opens one panel over the canvas: the library on the left, **one row per fixture** with its modes in a column, the whole row picking and a page of sixty loaded each time the list reaches its end; the fixture's settings on the right, the mode a menu beside it. A new fixture starts at the **next free address** for its whole footprint, which an overlap names too — the daemon's answer (`PatchPreview::nextFree`), never the browser's. A fixture with no name is named after its type, in the daemon. And a **count**: the daemon places them (`PatchPreview::placements`) and they go as **one** `Command::PatchFixtures`, which embeds the library's profile in the same step and is **one Oops** — the journal now restores fixtures out, profiles, fixtures in, so one step undoes and redoes. Picking a row embeds nothing any more; the preview measures the library's copy. The profile key a show embeds is still per mode, so every show opens unchanged. See §2.54. Before that: S56 — what the open beta sent back ✅ — **ten GitHub issues in two weeks, one a blocker, and they chose the session over Phase 12.** The blocker was a hand-written decoder with no arm for two surface actions, which dropped the client on every visit to the Controls panel; it is now held to every variant by a fixture Rust writes from a `match` with no wildcard. The Oops key is a backspace while a line stands — decided in the daemon, so the X-Touch does it with no screen attached. A crossfade has **one** position on every client and on the motor, which reverses S51's *client-local* rule on purpose: the motor had been falling back to a stale position 150 ms after the hand let go. A view is chosen without touching the line, the first click into an unfocused window selects, the line's feedback is one row of fixed height, number fields can be emptied while typing, `fixtures/` exists after the first start, and the Cue Viewer has no store bar. B60 — the patch window — is **S57**. See §2.53. Before that: S41 + S42 — the manuals, and prismdmx.de ✅ — **everything a person who did not write this needs.** Three manuals: the operator's and the installer's in German because the building they were written for speaks it, the developer's in English because the code does, and the reason for each in `docs/manual/README.md`. A `README.md` in every one of the **ten** workspace members, saying which side of §10.1's rules its crate is on in a sentence with a link rather than a copy of the rule — checked by a test over the members. `cargo doc --workspace --no-deps` is warning-free for the first time and is a gate now: it had **31**, and four of them were prose naming items that had been renamed out from under it, which nothing could go red about. The manual's list of window types and its list of console words are **generated from the code** by a test that keeps the prose, inserts `TODO` for a new row, rewrites the file and fails — so a manual cannot quietly fall behind. And **prismdmx.de is generated out of this repository** by a workspace member that holds no content of its own: no JavaScript on any page, every page saying which version it documents, every anchor asserted to resolve, and a download-page checksum computed from the installer a release just built rather than typed by anybody. CI has a seventh job because a site that only builds on one machine is the same problem as an installer that does. Before that: S54 — no slot of a patched fixture is out of reach ✅. Before that: S46 — `prism-protocols` + `prismd` + `ui`, Art-Net node discovery ✅ (CI green on run **33272829395**) — **an Art-Net output knows whether anything is listening.** Punch-list B6: `Health::Ok` meant *the socket took the datagram* and UDP always takes it, so a configured node read *OK* over an empty rack. `prism-protocols` has a **receive path** for the first time — `ArtPoll` out, `ArtPollReply` parsed field by field out of §6 of the specification, on a seam of its own so no driver thread can be handed a call that blocks. A node is *answering*, *never answered* or *stopped* with the age of its last reply beside it, and the daemon folds that into the health every client is told, so an output whose nodes are silent reads **Degraded** in the snapshot, in the delta and in the answer. Nothing broadcasts: the poll goes only where this desk already sends, and what that costs is written down rather than hidden. A reply is an input from outside — the parser allocates **nothing**, the table is bounded, and a quarter of a million random bytes produce no panic and no allocation. Before that: S45 — `prism-core` + `prism-engine` + `ui`, the executor window and one sequence one playback ✅ (CI green on run **33261331368**, all five jobs on the first attempt) — **an executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list B18: a playback belongs to the *list*, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — asserted on the frames a mock output received, which is the only place the difference is real. Punch-list B15: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote; the editor writes that line rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason — a `Command`, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building. Before that: S33 — the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
+**Current session:** none — next is **S59**, the Controls panel's question round, and then **S30**, the 3D viewer, whose groundwork S60 has just laid; the release waits for both (owner, 2026-09-20). §8 is the prompt
+**Last completed:** S60 — the fixture library is GDTF ✅ — **asked for by the owner in preparation for S30, and it is the right order.** The Open Fixture Library describes *channels*; it does not say what a gobo looks like, how big a fixture is, where its beam comes out of the body or which way the body points at home, and a 3D viewer needs every one of those. [GDTF](https://gdtf.eu) — DIN SPEC 15800, the format manufacturers publish in and the one MVR refers to — says all of it. So the desk reads it: a hand-written **ZIP reader** tested against bytes, an **XML reader**, and a converter that makes one `FixtureType` per DMX mode of break 1 with the format's own attribute names, its defaults, its physical ranges, its **wheel slot pictures**, and a new `FixtureType::physical` carrying the device's size, its model's name and **every beam with where it sits and which way it points** — a direction vector rather than an Euler triple, because a triple needs an order and a viewer that chose another one would point every beam somewhere else. A GDTF's key comes out of the **file** and not its name, so a venue's own copy of a published archive overrides the installed one whatever either is called. The Open Fixture Library's format stays, for the profiles a venue writes by hand, and the two live in one library side by side. Two installers: one for GDTF (a folder of `.gdtf` files, or an account on gdtf-share.com, which is the only way that service hands the library out) and one for the OFL corpus, which is what CI fetches. See §2.57. Before that: S58 — a knob follows the channel that switches it ✅ — **B52, the last open entry of the register.** A switching channel makes one slot a different channel depending on another's value; the owner chose that the **label** follows and the **key** does not, and that what decides is **what is on the cable**. So a switched slot carries its table (`AttributeDef::switched`: the deciding channel, and per range of it the slot's name and steps), the daemon reads the deciding channels off the frame it already holds for telemetry and says which row is live (`Delta::SwitchPositions`), and the encoder band names the knob from that row. In Chromium, against a real ADJ Flat Par QA12: *Strobe* → *Program Speed* → *Sound Sensitivity* → *Strobe*. See §2.55. Before that: S57 — the patch window, rebuilt around the library ✅ — **the owner's eight points about patching, as one rebuild because they lean on each other.** *Add fixture* opens one panel over the canvas: the library on the left, **one row per fixture** with its modes in a column, the whole row picking and a page of sixty loaded each time the list reaches its end; the fixture's settings on the right, the mode a menu beside it. A new fixture starts at the **next free address** for its whole footprint, which an overlap names too — the daemon's answer (`PatchPreview::nextFree`), never the browser's. A fixture with no name is named after its type, in the daemon. And a **count**: the daemon places them (`PatchPreview::placements`) and they go as **one** `Command::PatchFixtures`, which embeds the library's profile in the same step and is **one Oops** — the journal now restores fixtures out, profiles, fixtures in, so one step undoes and redoes. Picking a row embeds nothing any more; the preview measures the library's copy. The profile key a show embeds is still per mode, so every show opens unchanged. See §2.54. Before that: S56 — what the open beta sent back ✅ — **ten GitHub issues in two weeks, one a blocker, and they chose the session over Phase 12.** The blocker was a hand-written decoder with no arm for two surface actions, which dropped the client on every visit to the Controls panel; it is now held to every variant by a fixture Rust writes from a `match` with no wildcard. The Oops key is a backspace while a line stands — decided in the daemon, so the X-Touch does it with no screen attached. A crossfade has **one** position on every client and on the motor, which reverses S51's *client-local* rule on purpose: the motor had been falling back to a stale position 150 ms after the hand let go. A view is chosen without touching the line, the first click into an unfocused window selects, the line's feedback is one row of fixed height, number fields can be emptied while typing, `fixtures/` exists after the first start, and the Cue Viewer has no store bar. B60 — the patch window — is **S57**. See §2.53. Before that: S41 + S42 — the manuals, and prismdmx.de ✅ — **everything a person who did not write this needs.** Three manuals: the operator's and the installer's in German because the building they were written for speaks it, the developer's in English because the code does, and the reason for each in `docs/manual/README.md`. A `README.md` in every one of the **ten** workspace members, saying which side of §10.1's rules its crate is on in a sentence with a link rather than a copy of the rule — checked by a test over the members. `cargo doc --workspace --no-deps` is warning-free for the first time and is a gate now: it had **31**, and four of them were prose naming items that had been renamed out from under it, which nothing could go red about. The manual's list of window types and its list of console words are **generated from the code** by a test that keeps the prose, inserts `TODO` for a new row, rewrites the file and fails — so a manual cannot quietly fall behind. And **prismdmx.de is generated out of this repository** by a workspace member that holds no content of its own: no JavaScript on any page, every page saying which version it documents, every anchor asserted to resolve, and a download-page checksum computed from the installer a release just built rather than typed by anybody. CI has a seventh job because a site that only builds on one machine is the same problem as an installer that does. Before that: S54 — no slot of a patched fixture is out of reach ✅. Before that: S46 — `prism-protocols` + `prismd` + `ui`, Art-Net node discovery ✅ (CI green on run **33272829395**) — **an Art-Net output knows whether anything is listening.** Punch-list B6: `Health::Ok` meant *the socket took the datagram* and UDP always takes it, so a configured node read *OK* over an empty rack. `prism-protocols` has a **receive path** for the first time — `ArtPoll` out, `ArtPollReply` parsed field by field out of §6 of the specification, on a seam of its own so no driver thread can be handed a call that blocks. A node is *answering*, *never answered* or *stopped* with the age of its last reply beside it, and the daemon folds that into the health every client is told, so an output whose nodes are silent reads **Degraded** in the snapshot, in the delta and in the answer. Nothing broadcasts: the poll goes only where this desk already sends, and what that costs is written down rather than hidden. A reply is an input from outside — the parser allocates **nothing**, the table is bounded, and a quarter of a million random bytes produce no panic and no allocation. Before that: S45 — `prism-core` + `prism-engine` + `ui`, the executor window and one sequence one playback ✅ (CI green on run **33261331368**, all five jobs on the first attempt) — **an executor is a handle on a cue list's playback, and which handle it is, is editable.** Punch-list B18: a playback belongs to the *list*, so `Go` on either of two executors carrying it advances one cue pointer and two `Master` faders on it are two handles on one number — asserted on the frames a mock output received, which is the only place the difference is real. Punch-list B15: `Command::ConfigureExecutor` says what a fader, an encoder or one of four keys does, with a **custom row** that sends a line the operator wrote; the editor writes that line rather than sending a command, so the window, the console and a bound X-Touch key are one path. The decision the session existed to make is recorded with its reason — a `Command`, not a `MachineChange`, because an executor is a numbered show object rather than a control of this building. Before that: S33 — the output patch ✅ (CI green on run **32539636281**) — **a venue's rig is data now, and the data belongs to the building.** Twelve universes across five outputs of three kinds, built entirely from commands and asserted on the frames each driver was handed: every one got exactly the universes its row named and no others. An output added, removed or re-addressed while the show runs costs the outputs that did not change **no frame and no tick** — `prism_engine::FrameEnrolment` hands a subscriber over behind one atomic flag, and the tick that takes on four and gives up four makes **zero allocator calls**. Where the rig lives is the decision: `prism_core::MachineConfig`, beside the desk identity, so a show carried to another hall on a stick arrives with no cabling in it — asserted on the show file's own bytes
 
 **Plan:** [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) · **Architecture:** [`ARCHITECTURE_SPEC.md`](ARCHITECTURE_SPEC.md)
 
@@ -143,11 +143,12 @@
 | S54 | No slot of a patched fixture is out of reach | ✅ | 2026-09-06 | All exit criteria verified — see §2.50. The owner read S53 and said the thing S53 had not: *"Es kann nach dem aktuellen Prinzip passieren, dass manche Channels mancher Fixtures nicht ansteuerbar sind."* Measured rather than argued about, it was **707 DMX slots in 337 of the 2 871 profiles** — including **34 of the 35** channels of a `glp/knv-cube` and **9 of the 10** of a `jb-systems/twin-effect-laser`, both of them effectively unusable while every counter in the reader read nought. The counters could not see it because they only ever asked *did this channel reach an attribute*, never *does this slot have a knob*. The answer is a **floor and not four fixes**: `AttributeType::Raw`, the 41st and the only row that is not a kind of parameter, so that every slot of a patched fixture has exactly one `AttributeDef` — and the corpus asserts **that**, over 40 953 slots, rather than asserting the four causes away one at a time. A fifth cause is the reason it is a floor: a capability type a later version of the format adds. In the same pass **B49 is closed**, and the question turned out to be wrong: a switching alias never moves the footprint, so *resolve or refuse* was a false choice — where the file's own positions agree about what the slot is, it is that (**97 channels**), and where they disagree it is a raw knob under the alias's own name, because a knob labelled *Colour Wheel* that is a gobo half the time is worse than one labelled *Channel 2*. `B1`'s own test caught the one real defect on the way: a switched red rested shut |
 | S56 | What the open beta sent back | ✅ | 2026-09-18 | All exit criteria verified — see §2.53. Ten GitHub issues (#21, #23–#30) triaged as B53–B62; **nine closed, B60 promoted to S57, none deleted**. Every fix held by a test that was red before it, three of them only reachable in a real browser or at a real daemon: a canvas measured in Chromium (B61, 444 → 425 px), a click held as long as a hand holds one (B57), and a motor fader let go of on a mock X-Touch (B59, driven to `[0]`) |
 | S59 | The Controls panel, the owner's next round | ☐ | — | **Next**, and it starts with a question round — the owner's change requests are not written down yet. The plan carries ten questions this document could see; the owner's own come first |
-| S30 | 3D viewer | ☐ | — | After S59. Pulled ahead of the other extended features on 2026-09-20: the release waits for it |
+| S60 | The fixture library is GDTF | ✅ | 2026-09-21 | All exit criteria verified — see §2.57. Asked for by the owner **in preparation for S30**. A `.gdtf` is a ZIP of XML, models and gobo pictures: the container is 200 lines of the format's own records, hand-written and tested against bytes (B55's rule, applied to a second decoder), and `flate2` does DEFLATE and nothing else. One `FixtureType` per DMX mode of break 1, GDTF's published attribute names with **the number read out of the name** (`Gobo2` is the second gobo wheel in a mode that does not carry the first), and a name this desk has no word for becomes a `Raw` knob rather than a hole — S54's floor, kept. `FixtureType::physical` is what S30 draws with: size, model name, and each beam's position and direction. Keys come out of the file, so a venue's `.gdtf` overrides the installed fixture **whatever it is called** — asserted through `load_library` after the real installer wiped its destination. The Open Fixture Library's format still reads, for hand-written profiles, and its corpus moved into a tree of its own. **56 new tests** and no corpus for GDTF, because its upstream has no anonymous download |
+| S30 | 3D viewer | ☐ | — | After S59. Pulled ahead of the other extended features on 2026-09-20: the release waits for it. **Its groundwork is done** (S60): every GDTF profile carries the device's size, its model and every beam with its place and direction |
 | S58 | A knob follows the channel that switches it (B52) | ✅ | 2026-09-19 | All exit criteria verified — see §2.55. The label follows the live position of the deciding channel **on the cable**; the key a cue files under does not move. The register has **no open entry** |
 | S57 | The patch window, rebuilt around the library | ✅ | 2026-09-18 | All exit criteria verified — see §2.54. B60 (#28) closed: every one of the owner's eight points driven in Playwright against a real daemon with the installed library; the next free address asserted in Rust over gaps, universe ends and footprints that do not fit; **ten of one fixture are one undo step and ten fixtures that do not overlap**; a show patched before S57 opens unchanged; no scrolling outside the canvas at 1280 × 720 with the library open |
 
-**Done:** 37 / 49 · **In progress:** 0 · **Blocked:** 0
+**Done:** 38 / 50 · **In progress:** 0 · **Blocked:** 0
 
 **Eleven sessions were added on 2026-08-14** — S33–S43 — for the output patch,
 the real MIDI port, the settings window, the control editor, the desk-layout
@@ -4539,6 +4540,123 @@ and their profile. `patch-rig.prism` is the committed one, unchanged.
 
 ---
 
+### 2.57 S60 verification record
+
+Measured on 2026-09-21. **The fixture library is GDTF**, asked for by the owner
+in preparation for **S30**, the 3D viewer. Done on `claude/kind-turing-ui4kw0`.
+
+#### Why this session existed, in one paragraph
+
+The Open Fixture Library describes **channels**: it says a head has a gobo wheel
+with seven slots and what each slot is called. It does not say what any of those
+gobos looks like, how big the fixture is, where the beam leaves the body, or
+which way the body points with every axis at home. A 3D viewer needs all four,
+and so does the PSN follow calculation behind it (`ARCHITECTURE_SPEC.md` §8).
+**GDTF** — DIN SPEC 15800 — states every one of them, in the file the
+manufacturer publishes, and is what an MVR refers to a fixture by. So the
+library moved to it, and the session ran **before** S30 rather than inside it: a
+second fixture format is a container, a reader, a key rule, an installer and a
+line in the patch window, and none of that belongs in a viewer.
+
+| Deliverable | Outcome | What holds it |
+|---|---|---|
+| **A ZIP reader** | ✅ | `prism_core::library::zip`, 200 lines of the format's own fixed-width records — end record scanned backwards, ZIP64 where a field is the marker, the data's start computed from the **local** header because its extra field is routinely not the central directory's, CRC checked, entries capped at 10 000 and 64 MiB. `flate2` does DEFLATE and nothing else is taken from a dependency. **11 tests, every archive built byte by byte** (B55's rule, applied to the second hand-written decoder in this repository): a stored entry, a deflated one, the local-extra case, a corrupted CRC, a truncated file, a directory entry, a backslash separator, an unsupported method, an entry that claims more than the cap |
+| **An XML reader** | ✅ | `library::gdtf::xml` — the document read **once** into a tree, because the geometry, the attribute table, the wheels and the DMX modes are four walks over four parts of it and one state machine holding four jobs is how a reader gets a fixture wrong. 32 MiB and 64 levels are the caps; a truncated document is `None` and the file is counted. 7 tests |
+| **One `FixtureType` per DMX mode** | ✅ | Break 1 only — a fixture with two DMX starts is two addresses and this desk patches one — with the offsets read one-based, the default scaled out of GDTF's `value/bytes`, the physical range off the first channel function and every function's channel sets kept as **named ranges** |
+| **The number is in the name** | ✅ | GDTF numbers repeats (`Gobo1`, `Gobo2Pos`, `Blade3A`), so the occurrence S52 added is **read** rather than counted off channel order: `Gobo2` is the second gobo wheel in a mode that does not carry the first. Where two of GDTF's names are one of this desk's — `Shutter1` and `Shutter1Strobe` — the second takes the next free number, because two attributes of one fixture may not carry one key and the merge refuses a rig that does |
+| **A name with no word here is a knob, not a hole** | ✅ | S54's floor, kept across the second format: an unmapped attribute becomes `AttributeType::Raw` carrying GDTF's own name, so every slot of a patched fixture still has exactly one `AttributeDef`. Counted (`channels_raw`) rather than asserted to be nought, because this table falling behind the format should be visible and not fatal |
+| **The gobo pictures** | ✅ | A `ChannelFunction` names a wheel and a `ChannelSet` names a slot of it; the slot's `MediaFileName` lands on `AttributeRange::media`. A **name and never a path**, for the same reason the whole profile is copied into the show (S11): a show carrying this desk's directory layout would open elsewhere pointing at a file that is not there |
+| **The physical description** | ✅ | `FixtureType::physical` — `fixtureTypeId` (GDTF's GUID), `size`, `model`, and `beams`, each with `position`, `direction`, `beamAngle`, `luminousFlux` and `colorTemperature`. The geometry tree is walked with the matrices multiplied down it, and a `GeometryReference` is followed, which is how an LED bar states *and here are the same eight pixels again*: a bar comes out with eight beams at eight places rather than one at the origin |
+| **A direction, not three angles** | ✅ | GDTF's beam leaves along its geometry's **−Z**, and turning a matrix into an Euler triple means choosing an order to apply them in. A viewer that chose a different order would point every beam somewhere else, so the profile carries the **vector**. At identity it is straight down, which is where a hanging light points |
+| **Keys out of the file** | ✅ | `slug(manufacturer)/slug(name)/slug(mode)` — the same three-part shape an OFL key has, so `fixture_key` splits both and S57's *one row per fixture* is unchanged. It is the change that makes a venue's own archive work: a published `.gdtf` is called `Robe@Robin T1 Profile@3.gdtf` on one machine and something else on another, and the fixture it *is* does not move |
+| **The Open Fixture Library stays** | ✅ | For the venue's own profiles, and that is not a compatibility shim: a light nobody has published a GDTF for is one somebody has to describe by hand, and a channel list in JSON is far kinder to write than a ZIP of XML. Both formats are read from the venue's folder and from the installed tree, the venue's wins per fixture (B43), and a directory holding a `manufacturers.json` is read as a **tree** rather than as one manufacturer — which is what lets the corpus live in `profiles/fixtures/ofl/` beside the GDTF without either installer's wipe taking the other's data |
+| **Two installers** | ✅ | `tools/fetch-fixtures` installs GDTF from `PRISMDMX_GDTF_SOURCE` (a folder or an archive already on the machine) or from a gdtf-share.com account; `tools/fetch-fixtures/fetch-ofl` installs the corpus. Both write into a temporary directory first and touch the destination **last**, so a download that failed half way leaves the installed library where it was |
+| **The window says which format** | ✅ | A *Format* column beside *Source* (`GDTF` / `OFL`, `data-gdtf`), and a line under the chosen fixture's name saying what it carries — *3D model · 1 beam* — drawn only when there is something to say |
+
+| Exit criterion | Result |
+|---|---|
+| A `.gdtf` read end to end, every case against an archive built byte by byte | ✅ 45 tests in `library::gdtf` (18 on the converter, 9 on the geometry, 11 on the attribute table, 7 on the XML), plus the 11 on the container |
+| A venue's own `.gdtf` overrides the installed copy under a different name, through the real installer | ✅ `a_venues_own_gdtf_survives_a_library_re_install` (`crates/prismd/tests/fixture_install.rs`): the venue's four-channel correction is called `my-corrected-wash.gdtf`, the installed one `Robe@Wash 7Q5@3.gdtf`, the script runs for real including its wipe, and `load_library` answers the venue's |
+| Both formats in one library, and the picker says which is which | ✅ `the_two_formats_live_in_one_library` and `a_venue_may_write_either_format` |
+| The new fields travel as **bytes** | ✅ `ui/tests/fixtures/patch-recording.json` re-recorded with a **real `.gdtf` in the pinned library**, read through `decodeServerMessage` by `says which format a profile came from, and what its GDTF carries`; and `protocol.test.ts` asserts that a recording made before S60 — with neither field — reads as *not GDTF, no beams*, which is what it described |
+| A `.gdtf` patched in Chromium against a real daemon | ✅ `a .gdtf dropped into the desk's own folder is patched, and says what it carries` (`ui/e2e/patch.spec.ts`), which writes the archive into the desk's data directory and needs no network — the only way this could be tested at all, and the reason it is worth having |
+| A show patched before S60 opens unchanged | ✅ `physical` and `media` are `#[serde(default, skip_serializing_if = …)]`, so a profile with neither serialises back byte for byte; the whole persistence and Oops suite is green unchanged |
+| The tick allocates nothing | ✅ **0 on all eleven paths.** Nothing this session touched the tick: a profile is read on a library thread at start-up and reaches the engine as the `Repatch` it always did |
+
+| Gate | Result |
+|---|---|
+| `cargo test --workspace --exclude prism-app` | **2 372 passed, 0 failed**, 18 ignored |
+| `cargo clippy --workspace --exclude prism-app --all-targets -- -D warnings` | clean |
+| `cargo fmt --all --check` | clean |
+| `cargo doc --workspace --exclude prism-app --no-deps`, warnings denied | clean |
+| `ui`: `tsc -b --force`, `npm run lint`, `npm run build` | clean (lint: no errors; the pre-existing escape warnings in two settings tests are unchanged) |
+| `ui`: `npm run test` | **854 passed** in 58 files |
+| `ui`: Playwright | **49 passed, 3 skipped** — the three are the ones that need the Open Fixture Library corpus, which this machine could not download |
+| Tick allocations | **0 on all eleven paths** |
+
+#### What could **not** be run here, and why it is written down
+
+This session was worked in a container whose egress policy refuses both
+`codeload.github.com` and `gdtf-share.com`. Two consequences, and neither is a
+claim about the code:
+
+- **`prism-app` was not built.** It needs a webview toolkit this machine has
+  none of, which is the same reason `ci.yml` excludes it from the Linux gates.
+  Every figure above therefore says `--exclude prism-app`, and the Windows half
+  is the release workflow's.
+- **The Open Fixture Library corpus could not be installed**, so the six corpus
+  tests in `crates/prism-core/tests/fixture_library.rs` and the three end-to-end
+  tests that patch a real library fixture **skipped themselves by name**, which
+  is what they are written to do. CI installs the corpus and runs them.
+
+There is deliberately **no** corpus test for GDTF and there cannot be one: that
+format's upstream has no anonymous bulk download. What stands in its place is
+that every GDTF test builds the archive it reads — which is a weaker input and a
+stronger assertion, because nothing in the test agrees with the reader by
+sharing a library's opinion of the bytes.
+
+#### The three things found on the way
+
+**1. The fixture key could not come from the file name, and finding that out is
+what made the venue override work.** The first design filed a `.gdtf` the way
+the OFL reader files a JSON — directory and file stem — and it fails on the
+first real file: GDTF Share publishes `Robe@Robin T1 Profile@3.gdtf`, a
+manufacturer publishes `RobinT1Profile_v3.gdtf`, and B43's whole promise is that
+a venue's own copy **replaces** the installed one. Two names for one device is
+two rows. The key is now `slug(manufacturer)/slug(name)/slug(mode)` out of the
+document, which is the format's own identity, and the test that holds it patches
+the same fixture from two differently-named archives and asserts there is one.
+
+**2. Two of GDTF's names are one of this desk's, and the merge refuses that.**
+`Shutter1` and `Shutter1Strobe` both map to `Shutter`, and `AttributeKey` is
+(attribute, occurrence) — a fixture carrying both would be
+`MergeError::DuplicateAttribute` and a rig that will not patch at all. The second
+takes the next free number and `channels_renumbered` counts it. This is the same
+shape of fault S52 found in the OFL reader, arriving from the other direction: there
+a second wheel was **dropped**, here a second name would have **collided**.
+
+**3. Making `library` a public module was the fix for four dead-code warnings,
+and it was right anyway.** `zip::Archive::names`, `len` and `is_empty` are used
+by tests only, and in a private module that is dead code under
+`-D warnings`. The honest answer was not to delete them: `profiles/fixtures/SOURCE.md`
+has named `prism_core::library::ofl` as *the thing that reads the installed
+tree* since S44, and `FixtureLibrary::conversion` has been handing out a type
+from that module for as long. It was public in everything but the keyword.
+
+#### One thing that is **not** settled, and is in §5
+
+GDTF states lengths in metres and the translation part of a `Position` matrix in
+**millimetres**. That is one constant — `MATRIX_TO_METRES` in
+`library::gdtf::geometry`, applied in exactly one place and named rather than
+written as `0.001` in an expression — and it is the single assumption in this
+session that was **not** checked against a published archive, because none could
+be downloaded here. Everything else in that module is arithmetic the tests pin
+down. If it is ever found to be wrong, one constant is what changes and every
+beam moves by a factor of a thousand, which is not a thing that can be mistaken
+for anything else on a screen. §5 carries the row.
+
+---
+
 ## 3. Coverage tracking
 
 Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and protocols. Record **measured** figures only — leave blank until a run produces a number.
@@ -5043,6 +5161,8 @@ Every one is recorded as plain data so verification is a data update, not a refa
 
 | Item | Blocks | Status |
 |---|---|---|
+| 📏 **GDTF's matrix translation is millimetres** — S60 | nothing today; **S30** draws with it | ☐ **open, and it is one constant.** `MATRIX_TO_METRES` in `prism_core::library::gdtf::geometry`, applied in exactly one place: GDTF states lengths in metres and the translation part of a `Position` matrix in millimetres, and that second half could not be checked against a published archive in the container S60 was worked in — `gdtf-share.com` is refused by its egress policy, and the format's upstream has no anonymous download anyway. **How to close it:** open any published `.gdtf` for a moving head, read the `Position` of the geometry the `<Beam>` sits in, and compare the translation with the `Height` of the `Model` on the body. A head 550 mm tall whose beam sits at `400` means millimetres; one whose beam sits at `0.4` means metres. **What being wrong would look like:** every beam a thousand times too far from its fixture, or a thousand times too close — a whole rig in one place, or a rig the size of a county. It is not a fault that can hide, and one constant is the fix |
+| 🖼️ **A GDTF's models and gobo pictures reach a client** — S60 | **S30** | ☐ **open by design, and it is S30's to close.** A profile carries the **names** GDTF gives its model and its wheel slot images (`FixturePhysical::model`, `AttributeRange::media`) and deliberately not paths: a show embeds its profiles (S11) so that it means the same on a desk with a different library, and a path into this desk's directory would give that away again. What does not exist yet is the other half — a way for a client to *fetch* the bytes those names refer to out of the archive the desk has. That is a query and a cache, it is only wanted by a thing that draws, and the thing that draws is S30 |
 | 🚪 **A stranger gets from the front page to a running desk** | nothing — S41 and S42 are otherwise complete | ☐ **and it is the point of S42 rather than a loose end.** It is the one exit criterion in this project that no test can check, and it cannot be met from inside a session: it needs somebody who has not built this, on a Windows machine that has never had a Rust toolchain or this repository on it. **The recipe, and it is deliberately the whole of what that person should do:** (1) open `https://prismdmx.de` and read nothing but the front page; (2) follow *Herunterladen und installieren* and run the installer, clicking through SmartScreen or checking the checksum, whichever they prefer; (3) start it from the Start menu; (4) *Settings → Outputs*, add one output for whatever they have — an Art-Net node, an sACN receiver, or `--mock-output` if they have nothing, in which case (6) is read off the *DMX Sheet*; (5) open *Patch*, search the library for a fixture they own, give it number 1 and an address; (6) type `1 at full` and press Enter. **They must not ask the author anything, and every question they had to ask is the finding.** What comes back is a list of the places the site and the manuals are not enough, and that list is worth more than any test in this repository. Until somebody does it, S42's last criterion is met on paper and not in fact |
 #### S42's second follow-up: two languages, English by default, and a smaller site
 
@@ -5989,6 +6109,63 @@ because the owner reported a rig the desk could not drive, and that is not a
 question an open beta has to be asked; and the manuals ran last, which is what
 let them say *every channel of a patched fixture has a knob* as a promise rather
 than as a caveat.
+
+**S60 is done: the fixture library is GDTF.** Asked for by the owner in
+preparation for **S30**, and the groundwork the viewer needed. See §2.57.
+
+Carried out of S60:
+- **A format is chosen by the question it has to answer, and the question
+  changed.** GDTF import was a stated **non-goal** in `ARCHITECTURE_SPEC.md`
+  until this session, and the reasoning behind that was sound: the Open Fixture
+  Library answers *which channel does what*, and reading a second format for the
+  same answer buys nothing. What moved was not the answer — it was the question.
+  A viewer asks *where is the beam, and what does the gobo look like*, and
+  nothing in the older format can answer it at all. **Re-read a non-goal when
+  the thing it was weighed against is not the thing being asked for.**
+- **The identity of a fixture cannot be its file name, and the second format is
+  where that becomes obvious.** OFL's tree gives a key for free — a directory
+  and a stem — and it survived four sessions because upstream controls both.
+  GDTF files come off a manufacturer's website under whatever name that
+  manufacturer felt like, and B43's whole promise is that a venue's own copy
+  **replaces** the installed one. The key is in the document. **Where a file is
+  somebody else's, key it by what it says it is.**
+- **A second vocabulary maps onto one of ours many-to-one, and the merge is
+  what finds it.** `Shutter1` and `Shutter1Strobe` are both this desk's
+  `Shutter`, and a fixture carrying both would be `MergeError::DuplicateAttribute`
+  — a rig that will not patch at all. It is S52's fault arriving from the other
+  side: there a second wheel was silently **dropped**, here a second name would
+  have **collided**. **Whenever a reader maps an open vocabulary onto a closed
+  one, ask what happens when two of theirs are one of ours.**
+- **Write the container, take the compression.** A `.gdtf` is a ZIP, and the
+  two halves of that are not alike: the container is 200 lines of fixed-width
+  records whose limits should be this project's own and which can be tested
+  against **bytes**; DEFLATE is an algorithm with one right answer and no
+  reason to be written twice. The split is where the line falls naturally, not
+  where a dependency count would put it.
+- **An assumption that cannot be checked is written into one constant and named
+  in §5.** GDTF's matrix translation is millimetres; no published archive could
+  be downloaded in the container this ran in. The choice was between guessing
+  quietly, refusing to read geometry at all, or **applying it in exactly one
+  named place and saying so**. The third is the only one that leaves the next
+  session something to do rather than something to discover.
+- **`#[cfg(test)]` code in a private module is dead code, and the honest fix
+  was usually the public one.** Four warnings under `-D warnings` for methods
+  only tests use. Deleting them would have thinned the reader's API to match a
+  visibility nobody had chosen; the module had been named in
+  `profiles/fixtures/SOURCE.md` as public-facing since S44. **Check whether the
+  documentation already made the decision before writing code to satisfy the
+  compiler.**
+- **A pinned recording grows a row and every count in every test about it
+  moves.** Adding one `.gdtf` to `ui_patch.rs`'s pinned library changed
+  *two of six fixtures* to *three of seven* and moved which fixture is on which
+  page — in Rust and in jsdom. That is the recording working: the numbers are
+  the daemon's, not a browser's idea of them. Expect the count assertions to
+  move whenever the fixture does.
+- **A test that needs a service with no anonymous download is a test that has
+  to build its own input.** There is no GDTF corpus and there cannot be one. It
+  turned out to be a better position than the corpus: every archive is built
+  byte by byte, so no test can agree with the reader by sharing a library's
+  opinion of the format.
 
 **S56 is done: the open beta's first ten reports.** Nine closed and one — the
 patch window — promoted to **S57**, which is next. See §2.53.
@@ -7903,10 +8080,13 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**The next session is S59, the Controls panel — and it starts by asking.** The
-owner accepted the punch-list build on the test rig on 2026-09-20 and held the
-release for two things: a round of changes to **Controls**, and the **3D
-viewer** (S30). What the owner wants changed about Controls is **not written
+**S60 is done, and the next session is still S59, the Controls panel — which
+starts by asking.** The owner accepted the punch-list build on the test rig on
+2026-09-20 and held the release for two things: a round of changes to
+**Controls**, and the **3D viewer** (S30). S60 ran ahead of both on 2026-09-21,
+because the owner asked for the fixture library to move to GDTF *in preparation
+for* the viewer — see §2.57 — and that is S30's groundwork rather than a
+detour. What the owner wants changed about Controls is **not written
 down yet**: `IMPLEMENTATION_PLAN.md`'s S59 entry has ten questions this document
 could see, and the owner's own answers come first. Nothing is built before the
 answers are in the plan. **Read `gh issue list --state open` and
@@ -7945,6 +8125,32 @@ profile itself; `EmbedFixtureType` is only sent when a patched fixture changes
 profile. `Query::BrowseLibrary` and `FixtureOfMode` are what the interface asks
 of the library; `SearchLibrary` is answered and asked by nothing.
 
+**What S60 left, and it is mostly for S30.** The library reads **two** formats:
+`prism_core::library::gdtf` (a `.gdtf` is a ZIP — `library::zip` — of XML) and
+`prism_core::library::ofl`, with the venue's own folder winning per fixture. A
+GDTF profile carries `FixtureType::physical`: the device's `size`, its `model`
+name, and `beams`, each with a `position` in metres and a **`direction` unit
+vector** (GDTF's beam leaves along its geometry's −Z; at home that is straight
+down). An OFL profile and the four generics carry `None`, which a viewer should
+read as *draw a box with one beam out of the front* rather than as an error.
+`AttributeRange::media` carries a wheel slot's picture **by name**. Three things
+worth knowing before S30 starts:
+
+- **Names, never paths.** A show embeds its profiles, so `model` and `media` are
+  the names GDTF gives the files **inside the fixture's own archive**. Fetching
+  those bytes does not exist yet: it is a query and a cache, and §5 carries the
+  row because the thing that wants it is the thing that draws.
+- **`MATRIX_TO_METRES` is the one unchecked number** in the geometry reader —
+  §5 says how to settle it and what being wrong would look like. Settle it
+  before believing a rig's proportions on screen.
+- **There is no GDTF corpus and cannot be one.** `gdtf-share.com` has no
+  anonymous download, so every test builds its archive byte by byte. If S30
+  wants a fixture to draw, write one the way `ui/e2e/gdtf.ts` does.
+
+**The version stays `0.9.2`.** What has landed since it appears in `CHANGELOG.md`
+and `docs/CHANGELOG.en.md` under *Noch nicht veröffentlicht* / *Not yet
+released* and **ships as `0.9.3`**.
+
 ---
 ```
 PrismDMX — S59: das Controls-Menü, und die Session beginnt mit Fragen
@@ -7961,6 +8167,12 @@ Build am 2026-09-20 auf dem Test-Rig abgenommen (`docs/RELEASE_TEST.md`, alle
 Punkte abgehakt) und das Release **bewusst zurückgestellt**: vorher sollen die
 Controls-Änderungen (diese Session) und der 3D-Viewer (S30) hinein.
 
+Seit **S60** (2026-09-21) ist die Fixture-Bibliothek **GDTF** — auf Wunsch des
+Eigentümers als Vorarbeit für S30: jedes GDTF-Profil trägt jetzt die Maße seines
+Geräts, sein Modell und jeden Beam mit Sitz und Richtung, und die Gobo-Bilder
+heißen beim Namen. Eigene Fixtures im Format der Open Fixture Library laufen
+weiter. Siehe §2.57.
+
 Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
 
 1.  CLAUDE.md                     — verbindliche Qualitäts-, Architektur- und
@@ -7974,7 +8186,7 @@ Bitte lies zuerst in dieser Reihenfolge, bevor du irgendetwas änderst:
                                     Eigentümer
 3.  IMPLEMENTATION_PLAN.md        — die Reihenfolge (Zeile 26: Phase 12) und die
                                     Session, die es wird
-4.  PROGRESS.md §2.55 und §7      — was S58 gebaut hat, und alle „Carried out
+4.  PROGRESS.md §2.57 und §7      — was S60 gebaut hat, und alle „Carried out
                                     of"-Listen
 5.  docs/manual/developer.en.md   — die Architektur, wie sie geworden ist
 6.  ARCHITECTURE_SPEC.md          — §1 (D1–D11), §4, §7.0, §10, §14
@@ -7992,7 +8204,7 @@ dazugekommen, geht sie vor.
 
 ## Randbedingungen
 
-- **Der Tick bleibt unberührt**: die zehn allokationsfreien Pfade messen null.
+- **Der Tick bleibt unberührt**: die elf allokationsfreien Pfade messen null.
 - **Ein handgeschriebener Decoder wird an Bytes getestet**, nicht an Objekten
   eines Fake-Daemons (B55): eine neue `Answer`- oder `Delta`-Variante braucht eine
   Aufnahme, die durch `decodeServerMessage` geht.
@@ -8002,7 +8214,16 @@ dazugekommen, geht sie vor.
   wer das ändern will, ändert eine Entscheidung aus S33/S38 und schreibt sie auf.
 - **Das reservierte Control (SMPTE/Beats) und die permanenten bleiben tabu**
   (`docs/MCU_MAPPING.md` §4.3).
-- **Nach S59 kommt S30, der 3D-Viewer**; das Release wartet auf beide.
+- **Nach S59 kommt S30, der 3D-Viewer**; das Release wartet auf beide. Die
+  Vorarbeit steht: `FixtureType::physical` trägt Größe, Modell und jeden Beam
+  (Position in Metern, Richtung als Einheitsvektor); `None` heißt *ein Profil
+  der Open Fixture Library oder ein Generic* und nicht *ein Fehler*. Was noch
+  fehlt, steht in §5: die Bytes der Modelle und Gobo-Bilder erreichen noch
+  keinen Client, und `MATRIX_TO_METRES` ist die eine ungeprüfte Zahl.
+- **Es gibt keinen GDTF-Corpus und kann keinen geben** — gdtf-share.com hat
+  keinen anonymen Download. Jeder Test baut sein Archiv Byte für Byte; ein
+  Muster dafür steht in `ui/e2e/gdtf.ts` und in
+  `crates/prismd/tests/fixture_install.rs`.
 - **Neue Fixtures patcht die Oberfläche mit `PatchFixtures`**, ein Oops pro
   Geste; die Platzierungen sind die Antwort des Daemons.
 - **Ein neues Konsolenwort oder ein neuer `WindowType` schreibt das Handbuch
@@ -8029,8 +8250,12 @@ dazugekommen, geht sie vor.
 - **Die ganze Suite eines Crates laufen lassen, bevor ein Commit die Bedeutung
   eines Befehls ändert** — nicht nur die neuen Tests (S56 §7).
 - Handbücher, Website und `docs/ISSUES.md` im selben Durchgang.
-- PROGRESS.md: Status, §2.56-Protokoll mit jeder gemessenen Zahl, §7
+- PROGRESS.md: Status, §2.58-Protokoll mit jeder gemessenen Zahl, §7
   „Carried out of", §8 neu.
+- **Ein rotes Timing-Gate ist zuerst eine Frage an die Maschine**: steht dort
+  `probe thread turns: 0/s`, war sie gesättigt — das Ziel allein wiederholen
+  (§3.1). Ein Test, der eine Zahl abliest, die der Daemon besitzt, **wartet, bis
+  sie sich nicht mehr bewegt** (S46, S59).
 - **Alle Gates lokal vollständig**, dann Conventional Commits, pushen, den
   (Linux-)CI-Lauf bis grün beobachten und festhalten.
 ```

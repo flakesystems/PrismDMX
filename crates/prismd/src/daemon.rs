@@ -1117,23 +1117,42 @@ pub fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::F
         .or_else(paths::installed_library_dir);
     match installed {
         Some(root) => {
-            library.read_ofl_tree(&root);
-            let counts = library.conversion();
+            library.read_installed_tree(&root);
+            let ofl = library.conversion();
+            let gdtf = library.gdtf_conversion();
             log::info(
                 "library",
                 &format!(
-                    "{} profiles from {} ({} fixtures, {} modes skipped, {} redirects)",
+                    "{} profiles from {} ({} GDTF fixtures, {} modes, {} beams, {} models; \
+                     {} Open Fixture Library fixtures, {} modes skipped, {} redirects)",
                     library.len(),
                     root.display(),
-                    counts.fixtures,
-                    counts.modes_with_inserts,
-                    counts.redirects,
+                    gdtf.fixtures,
+                    gdtf.modes,
+                    gdtf.beams,
+                    gdtf.models,
+                    ofl.fixtures,
+                    ofl.modes_with_inserts,
+                    ofl.redirects,
                 ),
             );
+            // A library that is there and holds no GDTF is one installed before
+            // S60. It works, and it carries none of what the 3D viewer draws —
+            // which is a thing to say once at start-up rather than to leave an
+            // operator to discover from an empty stage.
+            if gdtf.fixtures == 0 && ofl.fixtures > 0 {
+                log::warn(
+                    "library",
+                    "the installed library is Open Fixture Library data only - it has no gobo \
+                     pictures, no models and no beam geometry; run tools/fetch-fixtures to \
+                     install the GDTF library",
+                );
+            }
         }
         None => log::warn(
             "library",
-            "no fixture library is installed - run tools/fetch-fixtures to install the              Open Fixture Library; the built-in generic profiles are all that is offered",
+            "no fixture library is installed - run tools/fetch-fixtures to install the GDTF \
+             library; the built-in generic profiles are all that is offered",
         ),
     }
 
@@ -1142,7 +1161,14 @@ pub fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::F
     for profile in prism_core::generic_profiles() {
         library.insert_profile(profile);
     }
-    log::info("library", &format!("{} profiles offered", library.len()));
+    log::info(
+        "library",
+        &format!(
+            "{} profiles offered, {} of them GDTF",
+            library.len(),
+            library.gdtf_profiles(),
+        ),
+    );
     library
 }
 

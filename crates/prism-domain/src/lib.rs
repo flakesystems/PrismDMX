@@ -50,8 +50,8 @@ mod surface;
 mod wire;
 
 pub use attribute::{
-    AttributeDef, AttributeKey, AttributeRange, AttributeType, FeatureGroup, FixtureType,
-    INLINE_OCCURRENCES, MergeMode, SwitchPosition, SwitchedSlot,
+    AttributeDef, AttributeKey, AttributeRange, AttributeType, FeatureGroup, FixtureBeam,
+    FixturePhysical, FixtureType, INLINE_OCCURRENCES, MergeMode, SwitchPosition, SwitchedSlot,
 };
 pub use command::{
     Command, CommandLineMode, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection,

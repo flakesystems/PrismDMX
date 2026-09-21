@@ -1191,6 +1191,10 @@ function readLibraryEntry(value: unknown, path: string): LibraryEntry {
     // file exists: an entry is a mirror of a document, and a missing field must
     // draw an unmarked row rather than fault the whole answer.
     own: field(record, "own") === true,
+    // **S60**, and the same defensive reading for the same reason: a recording
+    // made before GDTF existed carries no such field, and what it described was
+    // a library with no GDTF in it.
+    gdtf: field(record, "gdtf") === true,
   };
 }
 
@@ -1201,6 +1205,8 @@ function readLibraryFixture(value: unknown, path: string): LibraryFixture {
     manufacturer: asString(field(record, "manufacturer"), `${path}.manufacturer`),
     name: asString(field(record, "name"), `${path}.name`),
     own: asBoolean(field(record, "own"), `${path}.own`),
+    // Absent means *not GDTF* — S60. See `readLibraryEntry`.
+    gdtf: field(record, "gdtf") === true,
     modes: asArray(field(record, "modes"), `${path}.modes`).map((entry, index) =>
       readLibraryMode(entry, `${path}.modes[${index}]`),
     ),
@@ -1215,6 +1221,9 @@ function readLibraryMode(value: unknown, path: string): LibraryMode {
     mode: asString(field(record, "mode"), `${path}.mode`),
     footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
     hasIntensity: asBoolean(field(record, "hasIntensity"), `${path}.hasIntensity`),
+    // **S60.** Absent means none, which is what a mode of an Open Fixture
+    // Library profile has and what every mode had before this session.
+    beams: readOptionalInteger(field(record, "beams"), `${path}.beams`) ?? 0,
   };
 }
 

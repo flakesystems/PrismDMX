@@ -284,7 +284,13 @@ Bibliothek und die Einstellungen des Fixtures nebeneinander:
 - **Die Bibliothek, links**, führt jedes Fixture **einmal**, seine Modi in einer
   Spalte. Hersteller, Modell oder Modus tippen grenzt sie ein; beim Scrollen lädt
   sie nach, sobald Sie das Ende erreichen — man muss keinen Namen kennen, um ein
-  Fixture zu finden. Ein Klick **irgendwo auf die Zeile** wählt es.
+  Fixture zu finden. Ein Klick **irgendwo auf die Zeile** wählt es. Die Spalte
+  **Format** sagt, woher das Profil kommt: **GDTF** ist die vom Hersteller
+  veröffentlichte Datei, die die Bilder ihrer Gobos trägt, die Größe des
+  Fixtures und den Ort, an dem der Strahl austritt — der 3D-Viewer kann so ein
+  Fixture richtig zeichnen. **OFL** ist eine Kanalliste: die richtigen Kanäle in
+  der richtigen Reihenfolge, und nichts zum Ansehen. Wählen Sie ein GDTF-Profil,
+  sagt das Formular unter dem Namen des Fixtures, was es mitbringt.
 - **Die Einstellungen, rechts**: der **Modus** (ein Menü, denn die Modi einer
   Lampe sind eine Lampe), eine **Anzahl**, die erste **Nummer** (die, die Sie auf
   der Kommandozeile tippen), ein **Name**, und **Universe** und **Adresse**.
@@ -312,26 +318,27 @@ am Patch.
 
 ### Eigene Fixture-Profile
 
-Eine Lampe, die die Open Fixture Library nicht kennt, ist ein Profil, das Sie
-selbst schreiben können. Es gehört in **`fixtures/` im Datenverzeichnis des
-Pults** — unter Windows `%APPDATA%\PrismDMX\fixtures` —, im JSON-Format der Open
-Fixture Library, und wird beim Start gelesen. Das Pult legt das Verzeichnis beim
-ersten Start selbst an, mit einer `README.txt` darin, die das Folgende kurz
-wiederholt.
+Eine Lampe, die die Bibliothek des Pults nicht kennt, können Sie selbst
+hinzufügen. Sie gehört in **`fixtures/` im Datenverzeichnis des Pults** — unter
+Windows `%APPDATA%\PrismDMX\fixtures` — und wird beim Start gelesen. Das Pult
+legt das Verzeichnis beim ersten Start selbst an, mit einer `README.txt` darin,
+die das Folgende kurz wiederholt.
 
-Dieses Verzeichnis und **nicht** `profiles/fixtures/`: das zweite ist ein
-**Download**, den `tools/fetch-fixtures` bei jedem Lauf leert. Das
-Datenverzeichnis rührt kein Installationsprogramm an.
+Dieses Verzeichnis und **nicht** `profiles/fixtures/`: das zweite ist die
+**installierte Bibliothek**, die ein Installationsprogramm bei jedem Lauf leert.
+Das Datenverzeichnis rührt kein Installationsprogramm an.
 
 | Wohin | Wofür |
 |---|---|
-| `fixtures/meine-lampe.json` | Eine Lampe, für die es kein Profil gibt. Sie steht unter *Custom* neben allem anderen im Auswahlfeld |
-| `fixtures/<hersteller>/<fixture>.json` | Eine **Korrektur** an einem mitgelieferten Profil. Gleicher Herstellerordner, gleicher Dateiname wie in der Bibliothek — Ihres ersetzt es |
+| `fixtures/irgendwas.gdtf` | Eine `.gdtf`-Datei vom Hersteller oder von [gdtf-share.com](https://gdtf-share.com). **Der Name ist egal**: die Datei sagt, welches Fixture sie ist, und wenn die Bibliothek dieses Fixture schon hat, ersetzt Ihres es |
+| `fixtures/meine-lampe.json` | Eine Lampe, für die es überhaupt kein Profil gibt, von Hand im JSON-Format der Open Fixture Library geschrieben — weit leichter zu schreiben als eine GDTF. Sie steht unter *Custom* neben allem anderen im Auswahlfeld |
+| `fixtures/<hersteller>/<fixture>.json` | Eine **Korrektur** an einem mitgelieferten JSON-Profil. Gleicher Herstellerordner, gleicher Dateiname wie in der Bibliothek — Ihres ersetzt es |
 
-Die Spalte *Source* im Auswahlfeld markiert Ihre Profile als **yours**. Und
-sobald Sie damit gepatcht haben, wird das Profil **in die Show kopiert**: eine
-`.prism`-Datei ist in sich vollständig und öffnet auf einem Pult, das Ihr
-Verzeichnis nie gesehen hat, genauso.
+Die Spalte *Source* im Auswahlfeld markiert Ihre Profile als **yours**, und die
+Spalte *Format* sagt, welche der beiden Arten jedes ist. Und sobald Sie damit
+gepatcht haben, wird das Profil **in die Show kopiert**: eine `.prism`-Datei ist
+in sich vollständig und öffnet auf einem Pult, das Ihr Verzeichnis nie gesehen
+hat, genauso.
 
 ---
 

@@ -652,6 +652,25 @@ pub struct AttributeRange {
     pub from: u16,
     /// The highest value in the range, `0..=65535`.
     pub to: u16,
+    /// **The picture of this slot**, as GDTF's `MediaFileName` names it — S60.
+    ///
+    /// A gobo is a piece of metal or glass with a shape cut in it, and *Gobo 3*
+    /// is a worse answer than the shape itself. GDTF ships the picture inside
+    /// the fixture's own archive and names it on the wheel slot, so a range
+    /// that came from a wheel carries that name here.
+    ///
+    /// It is a **name and not a path**, for the reason the whole profile is
+    /// copied into the show rather than referenced
+    /// ([`crate::FixtureType`]): a show carrying this desk's directory layout
+    /// would open somewhere else with a reference to a file that is not there.
+    /// What a viewer does with a name it cannot resolve is draw the slot's
+    /// name, which is what every desk did before there were pictures.
+    ///
+    /// `None` for a range read from the Open Fixture Library, which states no
+    /// media, and for every profile a show embedded before S60.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(value = "None"))]
+    pub media: Option<String>,
 }
 
 impl AttributeRange {
@@ -869,6 +888,117 @@ pub struct FixtureType {
         proptest(strategy = "crate::arb::small_vec(4)")
     )]
     pub attributes: Vec<AttributeDef>,
+    /// **What the device is, physically** — S60, and what the 3D viewer (S30)
+    /// draws.
+    ///
+    /// `None` for a profile that came from the Open Fixture Library, which
+    /// describes channels and not devices, for the four built-in generics, and
+    /// for every profile a show embedded before S60. A viewer that is given
+    /// `None` draws the fixture as a box with one beam out of the front, which
+    /// is what it would have drawn for every fixture before this session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(value = "None"))]
+    pub physical: Option<FixturePhysical>,
+}
+
+/// The device a profile describes, as GDTF states it — **S60**.
+///
+/// # Why this is on the profile and not on the patched fixture
+///
+/// Where a fixture *hangs* is the show's business and lives on
+/// [`crate::Fixture`]; where its beam sits **inside its own body** is the
+/// device's, and is the same on every one of them. A rig of twelve of one head
+/// states the second fact once.
+///
+/// # Names, never paths
+///
+/// [`Self::model`] and [`AttributeRange::media`] are the names GDTF gives the
+/// files inside the fixture's own archive. They are deliberately not paths into
+/// this desk's library: a show **embeds** its profiles (S11) precisely so that
+/// it means the same thing on a desk with a different library, and a path would
+/// give that away again. A viewer resolves a name against the GDTF it has, and
+/// draws a plain shape when it has none.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct FixturePhysical {
+    /// The GDTF `FixtureTypeID`, the GUID the format identifies a device by.
+    ///
+    /// Empty when the file states none. It is the identity a viewer looks the
+    /// device's models and wheel pictures up by, and it is stable across
+    /// revisions of the same fixture, which a name is not.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(value = "String::new()"))]
+    pub fixture_type_id: String,
+    /// How big the whole device is, in metres: width, height, depth.
+    ///
+    /// [`crate::Vec3::ZERO`] when the file gives no model for the body, which
+    /// is a fixture a viewer sizes for itself rather than one of no size.
+    pub size: crate::Vec3,
+    /// The 3D model file GDTF names for the body, without a directory.
+    ///
+    /// `None` when the fixture ships no model — the format allows a profile
+    /// that is channels and geometry and nothing to look at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(any(test, feature = "proptest"), proptest(value = "None"))]
+    pub model: Option<String>,
+    /// Every beam the device has, in the order the geometry tree names them.
+    ///
+    /// Usually one. A blinder or an LED bar has several, and a viewer that drew
+    /// one would draw the wrong thing.
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(2)")
+    )]
+    pub beams: Vec<FixtureBeam>,
+}
+
+/// One beam of a device, where it sits and where it points — **S60**.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct FixtureBeam {
+    /// The geometry's own name — *Beam*, *Pixel 3*.
+    pub name: String,
+    /// Where it sits relative to the device's origin, in metres.
+    pub position: crate::Vec3,
+    /// **Which way it points with every axis at home**, as a unit vector.
+    ///
+    /// A direction rather than an Euler triple on purpose. GDTF states a
+    /// geometry's orientation as a 3×3 matrix and its beam leaves along that
+    /// matrix's **−Z**; turning that into three angles means choosing an order
+    /// to apply them in, and a viewer that chose a different one would point
+    /// every beam somewhere else. A vector has no order in it.
+    ///
+    /// [`crate::Vec3::ZERO`] never occurs: a matrix that does not invert falls
+    /// back to straight down, which is where a hanging light points.
+    pub direction: crate::Vec3,
+    /// The beam's full angle in degrees, as the file states it. 0 when it does
+    /// not.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::finite_f64()")
+    )]
+    pub beam_angle: f64,
+    /// Lumens at full, as the file states it. 0 when it does not.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::finite_f64()")
+    )]
+    pub luminous_flux: f64,
+    /// The lamp's colour temperature in kelvin, as the file states it. 0 when
+    /// it does not.
+    #[serde(with = "crate::finite")]
+    #[ts(as = "f64")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::finite_f64()")
+    )]
+    pub color_temperature: f64,
 }
 
 impl FixtureType {
@@ -1328,6 +1458,7 @@ mod tests {
             mode: "4ch".to_owned(),
             footprint: 4,
             attributes: vec![tilt()],
+            physical: None,
         };
         let json = serde_json::to_value(&fixture_type).unwrap();
         assert_eq!(json["id"], "generic.rgbw.par");

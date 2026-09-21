@@ -8,9 +8,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { Answer, LibraryFixture, Query } from "../bindings";
+import type { Answer, LibraryFixture, LibraryMode, Query } from "../bindings";
 import type { LibraryView } from "./library";
-import { LibraryPager, PAGE_SIZE, fixtureLabel, modeLabel, modesSummary } from "./library";
+import { LibraryPager, PAGE_SIZE, fixtureLabel, modeLabel, modesSummary, physicalSummary } from "./library";
 
 /** A daemon whose answers are given by hand, in any order. */
 function daemon(): {
@@ -37,7 +37,8 @@ function fixture(name: string): LibraryFixture {
     manufacturer: "Maker",
     name,
     own: false,
-    modes: [{ id: `maker/${name}/1ch`, mode: "1ch", footprint: 1, hasIntensity: true }],
+    gdtf: false,
+    modes: [{ id: `maker/${name}/1ch`, mode: "1ch", footprint: 1, hasIntensity: true, beams: 0 }],
   };
 }
 
@@ -115,19 +116,38 @@ describe("how the library names things", () => {
       manufacturer: "Robe",
       name: "Wash 7Q5",
       own: false,
+      gdtf: false,
       modes: [
-        { id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true },
-        { id: "robe/wash-7q5/x", mode: "", footprint: 2, hasIntensity: true },
+        { id: "robe/wash-7q5/4ch", mode: "4ch", footprint: 4, hasIntensity: true, beams: 0 },
+        { id: "robe/wash-7q5/x", mode: "", footprint: 2, hasIntensity: true, beams: 0 },
       ],
     };
     expect(fixtureLabel(wash)).toBe("Robe Wash 7Q5");
     expect(fixtureLabel({ ...wash, manufacturer: "" })).toBe("Wash 7Q5");
     expect(wash.modes.map(modeLabel)).toEqual(["4ch", "2 ch"]);
-    expect(modeLabel({ id: "x", mode: "Extended", footprint: 16, hasIntensity: true })).toBe(
+    expect(modeLabel({ id: "x", mode: "Extended", footprint: 16, hasIntensity: true, beams: 0 })).toBe(
       "Extended · 16 ch",
     );
     // A name that says a different width than the profile has is shown with both.
-    expect(modeLabel({ id: "x", mode: "8ch", footprint: 9, hasIntensity: true })).toBe("8ch · 9 ch");
+    expect(modeLabel({ id: "x", mode: "8ch", footprint: 9, hasIntensity: true, beams: 0 })).toBe("8ch · 9 ch");
     expect(modesSummary(wash)).toBe("4ch · 2 ch");
+  });
+
+  /** **S60.** What a mode carries besides its channels. */
+  it("says what a GDTF profile carries, and says nothing at all for one that carries none", () => {
+    const mode = (beams: number): LibraryMode => ({
+      id: "x",
+      mode: "",
+      footprint: 4,
+      hasIntensity: true,
+      beams,
+    });
+    // Nought is an Open Fixture Library profile or one of the desk's four
+    // generics — the line is not drawn at all rather than drawn saying *no
+    // beams*, which would be noise on four fifths of the library.
+    expect(physicalSummary(mode(0))).toBe("");
+    expect(physicalSummary(undefined)).toBe("");
+    expect(physicalSummary(mode(1))).toBe("3D model · 1 beam");
+    expect(physicalSummary(mode(8))).toBe("3D model · 8 beams");
   });
 });

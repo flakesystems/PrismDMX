@@ -268,6 +268,7 @@ mod tests {
                 physical_to: 100.0,
                 ranges: Vec::new(),
             }],
+            physical: None,
         };
         let mut with_intensity = colour_only.clone();
         with_intensity.attributes.push(crate::AttributeDef {

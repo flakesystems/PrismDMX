@@ -28,6 +28,22 @@ rmp-serde = { workspace = true }
 # operations a `Delta::ShowPatch` carries. That projection needs a serialiser,
 # and it is also the export format `prism_core::export_json` writes.
 serde_json = { workspace = true }
+# **GDTF** — S60. A `.gdtf` file is a ZIP archive of an XML document, some 3D
+# models and the pictures of its gobos, so reading one needs an XML reader and
+# something that can inflate a DEFLATE stream.
+#
+# `quick-xml` is a pull parser with one dependency of its own (`memchr`), and
+# what is wanted here is exactly a pull parser: `description.xml` of a moving
+# head is a megabyte of tree and this reader needs a dozen paths through it.
+# Writing a second XML parser would be writing a second XML parser.
+quick-xml = "0.41"
+# DEFLATE, and nothing else from it. The ZIP container itself is read here —
+# `library::zip`, 200 lines against the bytes of the format — because the
+# archives this desk opens use two of the format's methods and none of its
+# encryption; what is *not* worth writing a second time is the compression, and
+# `flate2`'s default backend is pure Rust, which is what the ARM64 cross-check
+# needs it to be.
+flate2 = "1.1"
 
 [dev-dependencies]
 # S1 put `arb` and the `Arbitrary` impls behind a feature so the crates above

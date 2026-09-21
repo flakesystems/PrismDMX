@@ -28,8 +28,13 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import type { Daemon } from "./daemon.ts";
 import { buildDaemon, forget, openWindow, startDaemon } from "./daemon.ts";
+import { description, writeGdtf } from "./gdtf.ts";
 
 /** A port of this suite's own, so a daemon on 7373 is neither used nor disturbed. */
 const PORT = 7393;
@@ -469,6 +474,64 @@ test("the library loads as it is scrolled, and nothing scrolls outside the canva
   await expect(page.getByTestId("draft-apply")).toBeInViewport();
 
   await daemon?.kill();
+  daemon = null;
+  forget(dataDir);
+});
+
+/**
+ * **A GDTF profile, end to end** — S60.
+ *
+ * The one test in this file that needs no installed library, and it is the one
+ * that could not have any: GDTF's upstream has no anonymous download, so
+ * nothing a CI job runs can fetch a published archive. What it can do is what
+ * a venue does — drop a `.gdtf` into `fixtures/` inside the desk's data
+ * directory (B43) — and everything after that is the real path: the real ZIP
+ * reader, the real XML reader, the real daemon, the real browser.
+ *
+ * What is asserted is what GDTF buys that the Open Fixture Library did not:
+ * the row says which format it came from, the form says the device has a model
+ * and a beam, and the patched fixture takes the footprint the file states.
+ */
+test("a .gdtf dropped into the desk's own folder is patched, and says what it carries", async ({
+  page,
+}) => {
+  const dataDir = mkdtempSync(join(tmpdir(), "prismdmx-gdtf-"));
+  writeGdtf(join(dataDir, "fixtures", "anything.gdtf"), description("Robe Lighting", "Robin T1 E2E"));
+
+  daemon = await startDaemon(PORT + 4, dataDir);
+  await page.goto(`/?daemon=${encodeURIComponent(daemon.url)}`);
+  await expect(page.getByTestId("connection-status")).toHaveText("Connected");
+  await openWindow(page, "Patch");
+  await page.getByRole("button", { name: "Add fixture" }).click();
+
+  // The key is what the **file** says the fixture is, not what it is called:
+  // the archive above is `anything.gdtf`.
+  const key = "robe-lighting/robin-t1-e2e/mode-1";
+  await page.getByTestId("library-search").fill("robin t1 e2e");
+  const row = page.getByTestId(`library-row-${key}`);
+  await expect(row).toBeVisible();
+
+  // The Format column, and the Source column beside it: the venue's own GDTF.
+  const format = page.getByTestId(`library-format-${key}`);
+  await expect(format).toHaveText("GDTF");
+  await expect(format).toHaveAttribute("data-gdtf", "yes");
+  await expect(page.getByTestId(`library-source-${key}`)).toHaveText("yours");
+
+  // Picking it says what the 3D viewer will have to draw with.
+  await row.locator("td").nth(1).click();
+  await expect(page.getByTestId("draft-physical")).toHaveText("3D model · 1 beam");
+
+  // And it patches, at the footprint the file states: two bytes of pan, a
+  // dimmer and a gobo wheel.
+  await typeNumber(page, "draft-id", "1");
+  await typeNumber(page, "draft-universe", "1");
+  await typeNumber(page, "draft-address", "1");
+  await page.getByTestId("draft-apply").click();
+  await expect(page.getByTestId("patch-row-1")).toBeVisible();
+  await expect(page.getByTestId("patch-row-1")).toContainText("Robin T1 E2E");
+  await expect(page.getByTestId("patch-row-1")).toContainText("4");
+
+  await daemon.kill();
   daemon = null;
   forget(dataDir);
 });

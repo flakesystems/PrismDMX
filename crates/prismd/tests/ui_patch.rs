@@ -117,9 +117,13 @@ fn generic(type_id: &str) -> prism_domain::FixtureType {
 /// Open Fixture Library is *downloaded at install time*
 /// (`profiles/fixtures/SOURCE.md`), so a recording made against whatever the
 /// developer happened to have installed would be a recording that fails on a
-/// fresh clone and changes whenever upstream does. Two fixtures in OFL's own
-/// format is enough to record what a search answers.
+/// fresh clone and changes whenever upstream does. Two fixtures in the Open
+/// Fixture Library's own format and **one GDTF** is enough to record what a
+/// search answers — and since S60 the third of them is what holds the
+/// interface to the two fields a GDTF profile carries that a hand-written one
+/// does not.
 fn write_library(root: &Path) {
+    write_gdtf(root);
     std::fs::create_dir_all(root.join("robe")).expect("a directory");
     std::fs::write(
         root.join("manufacturers.json"),
@@ -154,6 +158,116 @@ fn write_library(root: &Path) {
         }"#,
     )
     .expect("it writes");
+}
+
+/// **One GDTF in the pinned library** — S60.
+///
+/// A `.gdtf` file is a ZIP archive holding a `description.xml`, so this writes
+/// one byte by byte: an integration target links a crate's *library* and not
+/// its `#[cfg(test)]` modules, which is the same reason
+/// `crates/prism-core/src/testkit.rs` says its callers carry their own copy.
+/// Stored rather than deflated, so it stays the format and no compression.
+///
+/// It is here rather than in `crates/prismd/tests/common/mod.rs` because the
+/// recording is what it is for: the interface has to be held to a library with
+/// a GDTF profile in it, with its beams and its format marked, and that cannot
+/// be recorded off a library that has none.
+fn write_gdtf(root: &Path) {
+    const DESCRIPTION: &str = r#"<GDTF DataVersion="1.2">
+      <FixtureType Name="Robin T1 Profile" Manufacturer="Robe Lighting"
+                   FixtureTypeID="9F4A0000-0000-4000-8000-00000000T1PR">
+        <Models><Model Name="Body" File="body" Length="0.34" Width="0.34" Height="0.55"/></Models>
+        <Geometries>
+          <Geometry Name="Body" Model="Body" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
+            <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,400,1}"
+                  BeamAngle="13" LuminousFlux="11000" ColorTemperature="6500"/>
+          </Geometry>
+        </Geometries>
+        <DMXModes>
+          <DMXMode Name="Mode 1" Geometry="Body">
+            <DMXChannels>
+              <DMXChannel Offset="1,2">
+                <LogicalChannel Attribute="Pan">
+                  <ChannelFunction Attribute="Pan" PhysicalFrom="-270" PhysicalTo="270"/>
+                </LogicalChannel>
+              </DMXChannel>
+              <DMXChannel Offset="3">
+                <LogicalChannel Attribute="Dimmer">
+                  <ChannelFunction Attribute="Dimmer"/>
+                </LogicalChannel>
+              </DMXChannel>
+            </DMXChannels>
+          </DMXMode>
+        </DMXModes>
+      </FixtureType>
+    </GDTF>"#;
+
+    let name = b"description.xml";
+    let body = DESCRIPTION.as_bytes();
+    let crc = crc32(body);
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(&0x0403_4b50_u32.to_le_bytes()); // local header
+    out.extend_from_slice(&20_u16.to_le_bytes()); // version needed
+    out.extend_from_slice(&0_u16.to_le_bytes()); // flags
+    out.extend_from_slice(&0_u16.to_le_bytes()); // stored
+    out.extend_from_slice(&0_u32.to_le_bytes()); // time and date
+    out.extend_from_slice(&crc.to_le_bytes());
+    out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    out.extend_from_slice(&0_u16.to_le_bytes()); // extra
+    out.extend_from_slice(name);
+    out.extend_from_slice(body);
+
+    let directory_at = u32::try_from(out.len()).expect("a small archive");
+    let mut central: Vec<u8> = Vec::new();
+    central.extend_from_slice(&0x0201_4b50_u32.to_le_bytes());
+    central.extend_from_slice(&20_u16.to_le_bytes()); // made by
+    central.extend_from_slice(&20_u16.to_le_bytes()); // needed
+    central.extend_from_slice(&0_u16.to_le_bytes()); // flags
+    central.extend_from_slice(&0_u16.to_le_bytes()); // stored
+    central.extend_from_slice(&0_u32.to_le_bytes()); // time and date
+    central.extend_from_slice(&crc.to_le_bytes());
+    central.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    central.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    central.extend_from_slice(&(name.len() as u16).to_le_bytes());
+    central.extend_from_slice(&0_u16.to_le_bytes()); // extra
+    central.extend_from_slice(&0_u16.to_le_bytes()); // comment
+    central.extend_from_slice(&0_u16.to_le_bytes()); // disk
+    central.extend_from_slice(&0_u16.to_le_bytes()); // internal
+    central.extend_from_slice(&0_u32.to_le_bytes()); // external
+    central.extend_from_slice(&0_u32.to_le_bytes()); // local header offset
+    central.extend_from_slice(name);
+
+    let size = u32::try_from(central.len()).expect("a small directory");
+    out.extend_from_slice(&central);
+    out.extend_from_slice(&0x0605_4b50_u32.to_le_bytes()); // end record
+    out.extend_from_slice(&0_u16.to_le_bytes()); // this disk
+    out.extend_from_slice(&0_u16.to_le_bytes()); // directory's disk
+    out.extend_from_slice(&1_u16.to_le_bytes()); // entries here
+    out.extend_from_slice(&1_u16.to_le_bytes()); // entries in all
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&directory_at.to_le_bytes());
+    out.extend_from_slice(&0_u16.to_le_bytes()); // comment
+
+    std::fs::create_dir_all(root).expect("the library directory");
+    std::fs::write(root.join("robe-t1.gdtf"), out).expect("a .gdtf file");
+}
+
+/// CRC-32 as ZIP states it, by the table-free definition.
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFF_u32;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            let carry = crc & 1;
+            crc >>= 1;
+            if carry != 0 {
+                crc ^= 0xEDB8_8320;
+            }
+        }
+    }
+    !crc
 }
 
 /// Writes the rig into a `.prism` file for the daemon and the browser to open.
@@ -467,6 +581,14 @@ fn script() -> Vec<Scripted> {
             Query::BrowseLibrary {
                 text: "robe".to_owned(),
                 offset: 1,
+                limit: 1,
+            },
+        ),
+        Scripted::Ask(
+            "the third page, which is the GDTF and says so",
+            Query::BrowseLibrary {
+                text: "robe".to_owned(),
+                offset: 2,
                 limit: 1,
             },
         ),
@@ -850,7 +972,7 @@ fn pinned_library() -> Vec<LibraryEntry> {
     let dir = tempfile::tempdir().expect("a temporary directory");
     write_library(dir.path());
     let mut library = prism_core::FixtureLibrary::default();
-    library.read_ofl_tree(dir.path());
+    library.read_installed_tree(dir.path());
     for profile in prism_core::generic_profiles() {
         library.insert_profile(profile);
     }
@@ -1201,13 +1323,15 @@ fn the_library_is_browsed_a_fixture_at_a_time() {
     };
     let (first, matched, total) = page("the first page of one");
     let (second, _, _) = page("the page after it");
-    // Two Robe fixtures, three Robe modes: **two** matches.
-    assert_eq!(matched, 2);
+    // Three Robe fixtures since S60 — the two written in the Open Fixture
+    // Library's format and the GDTF beside them, whose manufacturer is *Robe
+    // Lighting* and so matches the same word.
+    assert_eq!(matched, 3);
     assert_eq!(first.len(), 1);
     assert_eq!(second.len(), 1);
     assert_ne!(first[0].name, second[0].name);
-    // The four generics and the two Robes.
-    assert_eq!(total, 6);
+    // The four generics, the two Robes and the GDTF.
+    assert_eq!(total, 7);
     let wash = first
         .iter()
         .chain(&second)
@@ -1222,6 +1346,27 @@ fn the_library_is_browsed_a_fixture_at_a_time() {
         "both modes, in the order the file lists them"
     );
     assert!(wash.modes.iter().all(|mode| mode.has_intensity));
+    // **S60's two fields, in the recording the browser reads.** The wash is a
+    // hand-written Open Fixture Library profile: channels and names, which is
+    // what every desk had before this session and what the Format column says
+    // *OFL* about.
+    assert!(!wash.gdtf);
+    assert!(wash.modes.iter().all(|mode| mode.beams == 0));
+
+    // And the GDTF beside it carries what the viewer draws.
+    let (third, _, _) = page("the third page, which is the GDTF");
+    let t1 = third.first().expect("a page of one");
+    assert_eq!(t1.name, "Robin T1 Profile");
+    assert_eq!(t1.manufacturer, "Robe Lighting");
+    assert!(t1.gdtf, "it came out of a .gdtf file");
+    assert_eq!(
+        t1.modes
+            .iter()
+            .map(|mode| (mode.id.as_str(), mode.footprint, mode.beams))
+            .collect::<Vec<_>>(),
+        vec![("robe-lighting/robin-t1-profile/mode-1", 3, 1)],
+        "one mode, three channels, one beam"
+    );
 
     let step = recording
         .steps

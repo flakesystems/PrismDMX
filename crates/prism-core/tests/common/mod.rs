@@ -49,6 +49,7 @@ pub fn par_type() -> FixtureType {
             attribute(AttributeType::Blue, 2, 0),
             attribute(AttributeType::White, 3, 0),
         ],
+        physical: None,
     }
 }
 
@@ -62,6 +63,7 @@ pub fn dimmer_type(id: &str, home: u16) -> FixtureType {
         mode: "1ch".to_owned(),
         footprint: 1,
         attributes: vec![attribute(AttributeType::Dimmer, 0, home)],
+        physical: None,
     }
 }
 

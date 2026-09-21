@@ -126,6 +126,7 @@ fn desk_show() -> ShowFile {
         mode: "1ch".to_owned(),
         footprint: 1,
         attributes: vec![attribute(AttributeType::Dimmer, 0)],
+        physical: None,
     })
     .expect("a one-channel dimmer is a fixture type");
     show.embed_fixture_type(FixtureType {
@@ -146,6 +147,7 @@ fn desk_show() -> ShowFile {
                 ..attribute(AttributeType::Zoom, 6)
             },
         ],
+        physical: None,
     })
     .expect("a moving head is a fixture type");
     // **A fixture with two of a parameter** — S52. Two cells, each with a red,
@@ -169,6 +171,7 @@ fn desk_show() -> ShowFile {
             cell(AttributeType::Blue, 1, 6),
             cell(AttributeType::White, 1, 7),
         ],
+        physical: None,
     })
     .expect("a two-cell bar is a fixture type");
 

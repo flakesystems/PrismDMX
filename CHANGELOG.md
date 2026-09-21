@@ -26,6 +26,39 @@ Alle Versionen bisher sind **Vorabversionen**.
 Programm — der Eigentümer hält das Release zurück, bis die Controls-Änderungen
 (S59) und der 3D-Viewer (S30) mit drin sind.
 
+### Die Fixture-Bibliothek ist jetzt GDTF (S60)
+
+**Das Pult liest [GDTF](https://gdtf.eu)** — das Format, in dem Hersteller ihre
+Geräte veröffentlichen und in dem ein Rig zwischen Programmen ausgetauscht wird.
+Eine `.gdtf`-Datei bringt mit, was eine Kanalliste nicht kann: **die Bilder der
+Gobos**, das **3D-Modell** des Geräts, seine Maße, und **wo der Strahl
+austritt** und wohin er zeigt. Das ist es, was der 3D-Viewer braucht, und darum
+kommt es vor ihm.
+
+- **Die installierte Bibliothek ist GDTF.**
+  `tools/fetch-fixtures/fetch-fixtures` installiert sie, aus einem Ordner voller
+  `.gdtf`-Dateien oder aus einem kostenlosen Konto bei
+  [gdtf-share.com](https://gdtf-share.com) — dieser Dienst hat keinen anonymen
+  Massen-Download, darum fragt das Skript danach und sagt es, wenn man ihm
+  nichts gibt.
+- **Eigene Fixtures im Format der Open Fixture Library laufen weiter.** Eine
+  Lampe, für die niemand eine GDTF veröffentlicht hat, schreibt man weiterhin
+  als JSON in `fixtures/` im Datenverzeichnis; das ist von Hand weit leichter zu
+  schreiben als ein ZIP voller XML. Beides steht nebeneinander in der Liste, und
+  was im Datenverzeichnis liegt, gewinnt weiterhin.
+- **Eine `.gdtf`-Datei im eigenen Ordner ersetzt das Fixture in der Bibliothek,
+  egal wie sie heißt** — der Schlüssel kommt aus der Datei und nicht aus dem
+  Dateinamen.
+- **Das Patch-Fenster sagt, woher ein Profil kommt.** Eine neue Spalte *Format*
+  (`GDTF` oder `OFL`), und unter dem Namen des gewählten Fixtures eine Zeile, die
+  sagt, was es mitbringt — *3D model · 1 beam*.
+- **Gobos haben Namen und Bilder.** Wo eine GDTF ein Rad beschreibt, heißen die
+  Stufen eines Kanals wie die Slots des Rades, und der Name des Bildes reist mit
+  dem Profil in die Show.
+- Das Pult sagt beim Start, wie viele Profile es anbietet und **wie viele davon
+  GDTF sind** — und sagt es eigens, wenn eine Bibliothek installiert ist, die
+  noch keine GDTF enthält.
+
 Was die offene Beta in den ersten zwei Wochen gemeldet hat — zehn Meldungen,
 alle zehn behoben (S56 und S57), dazu der letzte offene Eintrag des Registers
 (B52, S58). **Alle zehn GitHub-Issues sind geschlossen** (#9, #21, #23–#30):

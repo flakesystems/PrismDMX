@@ -39,18 +39,32 @@ building the shell additionally needs a webview toolkit (`libgtk-3-dev`,
 ```bash
 git clone https://github.com/flakesystems/PrismDMX.git
 cd PrismDMX
-tools/fetch-fixtures/fetch-fixtures.sh   # or .ps1 on Windows
+tools/fetch-fixtures/fetch-ofl.sh        # or .ps1 on Windows
 cd ui && npm ci && cd ..
 cargo build --workspace
 ```
 
 Two of those steps are worth a sentence each.
 
-**The fixture library is fetched, not committed.** It has an upstream with its
+**The fixture library is installed, not committed.** It has an upstream with its
 own release cadence, and a copy in this tree would be the one that is out of
-date. The script pins a revision, so two machines that install on different days
-get the same profiles. Corpus tests **skip themselves** when it is absent, which
-is why every CI job that runs them fetches it first.
+date. Since **S60** there are two installers and they do different jobs:
+
+- `fetch-fixtures` installs the desk's own library, which is **GDTF**. It needs
+  either a folder of `.gdtf` files or an account on
+  [gdtf-share.com](https://gdtf-share.com), because that service has no
+  anonymous bulk download. **No CI job runs it**, and the GDTF reader therefore
+  has no corpus test: what holds it is its own unit tests, which build their
+  archives byte by byte, and one end-to-end test that drops a `.gdtf` into a
+  desk's data directory.
+- `fetch-ofl` installs the Open Fixture Library corpus into
+  `profiles/fixtures/ofl/`, at a pinned revision, so two machines that install
+  on different days get the same profiles. That corpus is what the *Open Fixture
+  Library reader's* tests run over, and they **skip themselves** when it is
+  absent — which is why every CI job that runs them fetches it first, and why
+  the build recipe above does.
+
+`profiles/fixtures/SOURCE.md` is the whole of it.
 
 **`ui/src/bindings/` is generated, not committed.** `cargo test -p prism-domain`
 writes it from the Rust types, so a stale binding cannot survive a green build,
@@ -371,14 +385,42 @@ A command is the only way anything changes. The path, in order:
 
 ## 6. Adding a fixture type — or teaching the library reader
 
-Most of the time the answer is **not** a new `AttributeType`. Read this order:
+### Two readers, and which one you are in
+
+Since **S60** the desk reads two formats, and the difference is worth holding in
+mind before changing either:
+
+| | `prism_core::library::gdtf` | `prism_core::library::ofl` |
+|---|---|---|
+| What it reads | a `.gdtf` — a ZIP of XML, models and gobo pictures | a directory of JSON |
+| What the key is | what the **file** says the fixture is, slugged | the directory and the file stem |
+| What it is for | the installed library, and any published profile | a venue's own hand-written profile |
+| Physical description | size, model, and every beam with where it sits and which way it points | none — the format states none |
+| Corpus test | none: its upstream has no anonymous download | 634 fixtures, run in CI |
+
+A GDTF profile carries `FixtureType::physical`; an Open Fixture Library one
+carries `None`, and so does each of the four built-in generics. That is a
+statement about the *format*, not about the fixture, and it is what the patch
+window's Format column says out loud.
+
+The GDTF reader's own three rules are written on the module and are the ones a
+change is most likely to break: **the number is in the name** (`Gobo2` is the
+second gobo wheel, whatever order the channels come in), **an attribute this
+desk has no word for becomes a `Raw` knob rather than a hole**, and **a mode is
+break 1** — a fixture with two DMX starts is two addresses and this desk patches
+one.
+
+### Then: is a new `AttributeType` really the answer?
+
+Most of the time it is **not**. Read this order:
 
 **Is it a label an operator reads, or a key a preset is filed under?** A label
 comes out of the fixture file — `AttributeDef::label` carries the
-manufacturer's own channel name onto the encoder. A key must **not**, because
+manufacturer's own channel name onto the encoder, and for GDTF that is the
+`Pretty` its `AttributeDefinitions` table states. A key must **not**, because
 `1 gobo at 50` has to reach the head whose file says *Gobo* and the one whose
-file says *Gobo Wheel* alike. The Open Fixture Library's capability types are a
-**closed set**, so there is no open-ended name to lift anyway.
+file says *Gobo Wheel* alike. Both formats name their parameters from a
+published table, so there is no open-ended name to lift anyway.
 
 **Does the format state a distinction the model does not have?** Then the enum
 grows, and it grows by **appending** — the first fifteen rows are asserted to be
@@ -396,13 +438,17 @@ When the enum does grow:
 2. Decide its **resting value**: `is_additive_emitter` decides open vs shut, and
    a wheel is neither (its value is a slot number). Getting this wrong makes a
    rig come up lit — see §3.
-3. Add it to `prism_core::library::ofl`'s mapping.
+3. Add it to **both** mappings: `prism_core::library::ofl`'s, and the table in
+   `prism_core::library::gdtf::attributes` — GDTF's own name for it, with every
+   digit run written `n`.
 4. **Run the corpus.** `every_channel_in_the_installed_library_maps_to_an_attribute`,
    `no_slot_of_any_profile_is_out_of_reach`,
    `no_profile_in_the_installed_library_rests_a_colour_shut` and
    `every_profile_in_the_installed_library_is_one_a_show_accepts` are the four
-   that will find what a hand-written test cannot. They need the library
-   installed.
+   that will find what a hand-written test cannot. They need the Open Fixture
+   Library corpus installed. There is no GDTF equivalent and there cannot be
+   one, so a GDTF attribute added here is held by a unit test in
+   `prism_core::library::gdtf::attributes` and nothing else — write it.
 5. Check the tick still allocates nothing, and whether the new shape deserves an
    eleventh path in `tick_allocations.rs`.
 

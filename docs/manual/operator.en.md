@@ -279,7 +279,12 @@ library and the fixture's settings side by side:
 - **The library, on the left**, lists every fixture **once**, with its modes in
   one column. Type a make, a model or a mode to narrow it; scroll, and it loads
   more as you reach the end — you do not have to know a name to find a fixture.
-  Click **anywhere on a row** to take it.
+  Click **anywhere on a row** to take it. The **Format** column says where the
+  profile came from: **GDTF** is the manufacturer's own published file, which
+  carries the pictures of its gobos, the size of the fixture and where its beam
+  comes out — so the 3D viewer can draw it properly. **OFL** is a channel list:
+  the right channels in the right order, and nothing to look at. When you pick a
+  GDTF profile the form says what it carries, under the fixture's name.
 - **The settings, on the right**: the **mode** (a menu, because a lamp's modes
   are one lamp), a **count**, the first **number** (the one you type on the
   command line), a **name**, and the **universe** and **address**.
@@ -305,25 +310,27 @@ look. If nothing happens there, it is the outputs and not the patch.
 
 ### Your own fixture profiles
 
-A lamp the Open Fixture Library does not know is a profile you can write
-yourself. It goes in **`fixtures/` in the desk's data directory** — on Windows
-`%APPDATA%\PrismDMX\fixtures` — in the Open Fixture Library's JSON format, and is
-read at start-up. The desk makes the directory itself on its first start, with a
-`README.txt` inside that repeats what follows in short.
+A lamp the desk's library does not know is a profile you can add yourself. It
+goes in **`fixtures/` in the desk's data directory** — on Windows
+`%APPDATA%\PrismDMX\fixtures` — and is read at start-up. The desk makes the
+directory itself on its first start, with a `README.txt` inside that repeats
+what follows in short.
 
-That directory and **not** `profiles/fixtures/`: the second is a **download**
-that `tools/fetch-fixtures` empties on every run. No installer touches the data
-directory.
+That directory and **not** `profiles/fixtures/`: the second is the **installed
+library**, which an installer empties on every run. No installer touches the
+data directory.
 
 | Where | What for |
 |---|---|
-| `fixtures/my-lamp.json` | A lamp there is no profile for. It appears under *Custom* beside everything else in the picker |
-| `fixtures/<manufacturer>/<fixture>.json` | A **correction** to a bundled profile. Same manufacturer folder, same file name as in the library — yours replaces it |
+| `fixtures/anything.gdtf` | A `.gdtf` file from the manufacturer or from [gdtf-share.com](https://gdtf-share.com). **The name does not matter**: the file says which fixture it is, and if that is one the library already has, yours replaces it |
+| `fixtures/my-lamp.json` | A lamp there is no profile for at all, written by hand in the Open Fixture Library's JSON format — far easier to write than a GDTF. It appears under *Custom* beside everything else in the picker |
+| `fixtures/<manufacturer>/<fixture>.json` | A **correction** to a bundled JSON profile. Same manufacturer folder, same file name as in the library — yours replaces it |
 
-The *Source* column in the picker marks your profiles as **yours**. And as soon
-as you have patched with one, the profile is **copied into the show**: a `.prism`
-file is complete in itself and opens the same way on a desk that has never seen
-your directory.
+The *Source* column in the picker marks your profiles as **yours**, and the
+*Format* column says which of the two kinds each one is. And as soon as you have
+patched with one, the profile is **copied into the show**: a `.prism` file is
+complete in itself and opens the same way on a desk that has never seen your
+directory.
 
 ---
 
