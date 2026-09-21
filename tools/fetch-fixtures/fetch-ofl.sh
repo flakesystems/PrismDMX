@@ -2,7 +2,7 @@
 #
 # Installs the **Open Fixture Library** corpus into `profiles/fixtures/ofl/`.
 #
-# Split out of `fetch-fixtures.sh` in S60, when the desk's library became GDTF.
+# Split out of `fetch-fixtures.sh` in S61, when the desk's library became GDTF.
 # Two callers want this and neither is the ordinary install:
 #
 #   * `crates/prism-core/tests/fixture_library.rs` reads the whole corpus and

@@ -479,7 +479,7 @@ test("the library loads as it is scrolled, and nothing scrolls outside the canva
 });
 
 /**
- * **A GDTF profile, end to end** — S60.
+ * **A GDTF profile, end to end** — S61.
  *
  * The one test in this file that needs no installed library, and it is the one
  * that could not have any: GDTF's upstream has no anonymous download, so

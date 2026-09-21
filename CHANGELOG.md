@@ -26,7 +26,7 @@ Alle Versionen bisher sind **Vorabversionen**.
 Programm — der Eigentümer hält das Release zurück, bis die Controls-Änderungen
 (S59) und der 3D-Viewer (S30) mit drin sind.
 
-### Die Fixture-Bibliothek ist jetzt GDTF (S60)
+### Die Fixture-Bibliothek ist jetzt GDTF (S61)
 
 **Das Pult liest [GDTF](https://gdtf.eu)** — das Format, in dem Hersteller ihre
 Geräte veröffentlichen und in dem ein Rig zwischen Programmen ausgetauscht wird.
@@ -88,6 +88,37 @@ alle zehn behoben (S56 und S57), dazu der letzte offene Eintrag des Registers
   Nachbar von *Mode Select* an einer ADJ Flat Par QA12 —, heißt jetzt, was er
   gerade ist (*Strobe*, *Program Speed*, *Sound Sensitivity*), und bietet dessen
   Stufen an. Es zählt, was am Kabel anliegt, also folgt er auch einer Cue.
+
+**Und die Controls-Runde (S59)** — das Pult bekommt das Vokabular der
+Kommandozeile, und seine Lampen fangen an, etwas zu sagen:
+
+- **Jede Konsolentaste lässt sich auf das Pult legen.** `Store`, `Edit`,
+  `Label`, `Color`, `New`, `Fixture`, `Cue`, `At`, `Thru` und die übrigen sind
+  dieselbe Liste, die das Fenster *Command Keys* zeigt — eine Tabelle für beide
+  Geräte, damit kein Wort nur auf einem davon ankommt. `Color`, `New`, `At` und
+  `Thru` sind neu und auch am Bildschirm dazugekommen.
+- **Eine belegte Taste leuchtet, wenn ein Druck etwas bewürde.** Bisher gab es
+  auf dem ganzen Pult zwei Lampen, und beide hängen am Platz der Taste. Jetzt
+  hängt die Lampe an dem, was auf der Taste **liegt**: `Store` bleibt dunkel, bis
+  der Programmer etwas hält, `Clear` leuchtet, bis das dreistufige Clear nichts
+  mehr wegzunehmen hat, ein Argumentwort wie `Cue` leuchtet erst, wenn ein Verb
+  auf sein Objekt wartet.
+- **Das Jog-Rad ist deutlich schneller**, und zwar in der Einheit, die
+  entscheidet, ob man etwas sieht: eine langsame Raste bewegt jetzt **genau
+  einen DMX-Schritt** statt einem Dreizehntel davon, eine schnelle vier. Dazu
+  ein Regler in *This machine → Jog wheel*, 10 bis 400 %.
+- **Die Controls-Seite ist aufgeräumt.** Die Strips, der Main-Fader und das
+  Jog-Rad gehören dem Executor-Fenster und dem Programmer und sind in einen
+  ausklappbaren Bereich *Advanced* gewandert; die Spalte *Strip / Selected* ist
+  weg, weil die verbliebenen Zeilen alle den selektierten Executor meinen.
+- **Die Controls-Seite hat ein Bild des Pults.** Neben der Liste eine
+  maßstäbliche Zeichnung der Oberfläche mit jeder Taste an ihrem Platz — gefüllt
+  heißt belegt, hohl heißt frei, und was am echten Pult leuchtet, leuchtet hier
+  mit. So sieht man beim Einrichten, welche Tasten noch frei sind.
+- **Die mitgelieferte Tastenbelegung ist vollständig** — jede Taste des Panels
+  außer SMPTE/Beats (reserviert) und Name/Value (ohne Lampe) tut etwas. Beim
+  Update wird eine eigene Tabelle **ersetzt**; vorher exportieren, wer sie
+  behalten will.
 
 ---
 

@@ -1,4 +1,4 @@
-//! Where a device's beams are, and how big its body is — **S60**, and the
+//! Where a device's beams are, and how big its body is — **S61**, and the
 //! reason S30 can be built at all.
 //!
 //! # What GDTF states and this reads

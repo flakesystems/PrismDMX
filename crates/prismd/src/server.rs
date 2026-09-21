@@ -448,6 +448,8 @@ impl Desk {
                             action: bindings.action(control),
                             permanent: crate::surface::is_permanent(control),
                             reserved: control.reserved().is_some(),
+                            // The third fact off the device profile — S59.
+                            geometry: prism_surface::box_of(control),
                             control,
                         })
                         .collect(),
@@ -459,6 +461,7 @@ impl Desk {
                     profile: core.machine().settings().surface_profile.clone(),
                     revision: core.binding_revision(),
                     learning: core.is_learning(),
+                    panel: Some(prism_surface::X_TOUCH_PANEL),
                 }
             }
             Query::OutputStatus => {

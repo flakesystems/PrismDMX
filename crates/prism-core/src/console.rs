@@ -2185,6 +2185,30 @@ pub fn completions(line: &str) -> Vec<String> {
         .collect()
 }
 
+/// Whether the line as it stands would take this word **next** — S59.
+///
+/// [`completions`]'s question asked the other way round, and asked by a lamp
+/// rather than by a list: the control editor lets a key on the surface be bound
+/// to a word of the keypad, and a bound key is lit only when pressing it would
+/// lead anywhere. This is the grammar half of that (`IMPLEMENTATION_PLAN.md`
+/// S59 §6); whether the word would *do* anything is the daemon's, because it
+/// needs the show and this module deliberately never reads one.
+///
+/// It is only a real question for an **append** key
+/// ([`prism_domain::KeyShape::Append`]). A *run* or a *write* key throws the
+/// standing line away and starts a fresh one, and every line may start with a
+/// verb — so the answer for those is yes, always, and their lamp is decided
+/// entirely by what they would do.
+///
+/// Case is ignored, because the keypad's words are capitalised for reading and
+/// the grammar's are not.
+#[must_use]
+pub fn accepts_next(line: &str, word: &str) -> bool {
+    legal_words(&tokenise(line))
+        .into_iter()
+        .any(|legal| legal.eq_ignore_ascii_case(word))
+}
+
 /// A word as an operator is shown it: first letter upper case, rest untouched.
 fn capitalised(word: &str) -> String {
     let mut characters = word.chars();

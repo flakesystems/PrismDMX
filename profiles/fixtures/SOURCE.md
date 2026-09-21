@@ -3,7 +3,7 @@
 Everything else in this directory is fixture data **installed at install time**.
 Only this file is committed; `.gitignore` keeps the rest out.
 
-Since **S60** the desk's library is **GDTF**. The Open Fixture Library is still
+Since **S61** the desk's library is **GDTF**. The Open Fixture Library is still
 *read* — it is what a venue writes a profile by hand in — but it is no longer
 what the installer fetches. Both live in this directory and the desk reads both.
 
@@ -128,7 +128,7 @@ The desk starts, and says so. `prism_core::FixtureLibrary::generic()` is four
 built-in profiles — a dimmer, two PARs and a moving head — so a rig can still be
 patched, and the daemon logs how many profiles it found, where it looked, and
 **how many of them are GDTF**. A library with no GDTF in it gets a line of its
-own at start-up, because a desk whose library was installed before S60 works and
+own at start-up, because a desk whose library was installed before S61 works and
 carries none of what the 3D viewer draws.
 
 A lighting desk that would not start because a directory was missing would be a

@@ -1,4 +1,4 @@
-//! GDTF's attribute names, and which knob of this desk each one is — **S60**.
+//! GDTF's attribute names, and which knob of this desk each one is — **S61**.
 //!
 //! # The format names its parameters, and that is the whole reason to read it
 //!

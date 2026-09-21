@@ -57,14 +57,16 @@ use std::time::{Duration, Instant};
 use prism_domain::{AttributeKey, Delta, EXECUTORS_PER_PAGE, ExecutorId, NoticeLevel, ViewId};
 use prism_ipc::CommandOutcome;
 use prism_surface::{
-    Bindings, ButtonId, Control, DisplayLine, Fader, GlobalButton, LedState, MAX_MESSAGE_BYTES,
-    MAX_STRIPS, StripButton, StripColor, SurfaceController, SurfaceCounters, SurfaceEvent,
-    SurfaceHealth, SurfaceTiming, X_TOUCH,
+    Bindings, ButtonId, Control, DisplayLine, Fader, GlobalButton, MAX_MESSAGE_BYTES, MAX_STRIPS,
+    StripButton, StripColor, SurfaceController, SurfaceCounters, SurfaceEvent, SurfaceHealth,
+    SurfaceTiming, X_TOUCH,
 };
 
 use crate::core::Core;
+use crate::lamp;
 use crate::log;
 use crate::server::Desk;
+use prism_surface::JogAcceleration;
 
 /// How often the surface is polled: the minimum gap between two outbound
 /// messages, so the pacing floor below is the thing that limits the rate.
@@ -197,6 +199,17 @@ pub struct SurfaceLink {
     next_paint: Duration,
     /// The health last reported to the operator.
     reported: SurfaceHealth,
+    /// Which controls were lit the last time a client was told — S59.
+    ///
+    /// Held so that `Delta::SurfaceLampsChanged` is sent **when the set moves**
+    /// and not thirty times a second. The lamps themselves are worked out every
+    /// frame regardless, because the surface's own shadow model needs them; the
+    /// delta is the cheap half, and this field is what keeps it cheap.
+    ///
+    /// Sorted, because it is compared: two sets that differ only in the order
+    /// `BoundControl::all` happened to produce them would look like a change on
+    /// every frame.
+    lit: Vec<String>,
     /// A button whose **release** is still to be eaten - S38's learn.
     ///
     /// Learn is one shot, so the press that named a control disarmed it and the
@@ -248,6 +261,7 @@ impl SurfaceLink {
             events: Vec::new(),
             text: String::new(),
             next_paint: Duration::ZERO,
+            lit: Vec::new(),
             reported,
             swallow: None,
         }
@@ -329,7 +343,9 @@ impl SurfaceLink {
         }
         if now >= self.next_paint {
             self.next_paint = now.saturating_add(self.controller.timing().frame);
-            self.paint(&desk.core());
+            if let Some(lamps) = self.paint(&desk.core()) {
+                deltas.push(lamps);
+            }
         }
         self.send(now);
         self.follow_the_cable(now);
@@ -410,7 +426,6 @@ impl SurfaceLink {
     /// **Unless learn is armed**, in which case the first event that names a
     /// control names it and fires nothing - S38. See [`Self::learn`].
     fn apply(&mut self, desk: &Desk) -> Vec<Delta> {
-        let context = context_of(&desk.core());
         let mut deltas = Vec::new();
         let mut learning = desk.core().is_learning();
         // The events are taken rather than borrowed, because learning writes to
@@ -425,7 +440,22 @@ impl SurfaceLink {
                 learning = still;
                 continue;
             }
-            let Some(command) = self.bindings.command(*event, &context) else {
+            // **The context is read again for every event**, not once for the
+            // poll — S59. An *append* key adds its word to the line **as it
+            // stands** (`KeyShape::Append`), and two keys can land in one poll:
+            // `Store` and then `Cue` is `Store Cue `, and it is `Cue ` alone if
+            // the second one is answered out of a context built before the
+            // first was applied. The selected executor and the page can move
+            // under a batch for the same reason.
+            //
+            // The guard is taken and dropped inside this block because
+            // `Desk::command` locks the core itself and the mutex is not
+            // re-entrant.
+            let resolved = {
+                let core = desk.core();
+                self.bindings.command(*event, &context_of(&core))
+            };
+            let Some(command) = resolved else {
                 continue;
             };
             log::debug("surface", &format!("{event:?} -> {command:?}"));
@@ -512,12 +542,29 @@ impl SurfaceLink {
     ///
     /// Only the parts §4.1 gives the surface: the executors of the current page
     /// on the faders and the scribble strips, the selected executor on the main
-    /// fader, and the Save lamp on the unsaved-changes flag. Everything else is
-    /// left as it is, because a picture drawn from nothing would be a desk
-    /// asserting that nothing is assigned.
-    fn paint(&mut self, core: &Core) {
+    /// fader, and **every key's lamp, from what that key is bound to** (S59 —
+    /// see [`crate::lamp`]). Everything else is left as it is, because a picture
+    /// drawn from nothing would be a desk asserting that nothing is assigned.
+    fn paint(&mut self, core: &Core) -> Option<Delta> {
+        // **The operator's own wheel setting, applied where it is read** — S59.
+        // Compared rather than written, so a desk nobody has touched costs one
+        // integer comparison a frame and no state of its own; and it takes
+        // effect on the next turn of the wheel, because the curve is consulted
+        // where a jog message is scaled. There is nothing to restart.
+        let wanted = core.jog_sensitivity();
+        let (vpot, jog) = self.controller.curves();
+        if jog.sensitivity != wanted {
+            self.controller.set_curves(
+                vpot,
+                JogAcceleration {
+                    sensitivity: wanted,
+                    ..jog
+                },
+            );
+        }
         let session = core.file.session.session();
         let page = session.executor_page;
+        let mut lit: Vec<String> = Vec::new();
         for slot in 0..MAX_STRIPS {
             let Ok(index) = u8::try_from(slot) else {
                 continue;
@@ -539,17 +586,33 @@ impl SurfaceLink {
             if let Some(level) = fader_reading(executor, sequence) {
                 self.controller.set_fader(Fader::Strip(index), level);
             }
-            self.controller.set_led(
-                ButtonId::Strip {
-                    strip: index,
-                    button: StripButton::Select,
-                },
-                if sequence.is_some_and(|sequence| sequence.is_active) {
-                    LedState::On
-                } else {
-                    LedState::Off
-                },
-            );
+            // **All five keys of the strip, from what each is bound to** —
+            // S59. This was the Select lamp alone, lit off `is_active`, and it
+            // was right only while Select was the one thing a strip key could
+            // be: a profile that gives a strip key to `Store` gets a Store lamp
+            // now, and the old arrangement would have given it the neighbouring
+            // executor's running light. `lamp::lamp_of` carries the strip so
+            // that an `ExecutorTarget::Strip` still means *this* one — and the
+            // reporting lamp Select always had is one of its arms, unchanged.
+            for button in StripButton::ALL {
+                let control = prism_domain::BoundControl::StripButton { button };
+                let state =
+                    lamp::lamp_of(self.bindings.action(control).as_ref(), Some(index), core);
+                self.controller.set_led(
+                    ButtonId::Strip {
+                        strip: index,
+                        button,
+                    },
+                    state,
+                );
+                // **Only the leftmost strip is collected.** `Strip[*]` is one
+                // row of the binding table and one key of the drawing, so
+                // eight copies of the same name would be eight copies of one
+                // fact — and the drawing repeats the column itself.
+                if index == 0 && state != prism_surface::LedState::Off {
+                    lit.push(control.to_string());
+                }
+            }
             // The name is the sequence's, because that is what an operator
             // named. An executor with no sequence shows its own number, which is
             // what makes an empty strip readable rather than blank.
@@ -606,15 +669,35 @@ impl SurfaceLink {
         if let Some(level) = selected {
             self.controller.set_fader(Fader::Main, level);
         }
-        // §4.1: "Save | LED lit while unsaved changes exist".
-        self.controller.set_led(
-            ButtonId::Global(GlobalButton::Save),
-            if core.file.is_dirty() {
-                LedState::On
-            } else {
-                LedState::Off
-            },
-        );
+        // **Every panel key, from what it is bound to** — S59. §4.1's *Save |
+        // LED lit while unsaved changes exist* is still here; it is one arm of
+        // `lamp::lamp_of` now instead of the only lamp on the panel, and it
+        // follows the **Save action** rather than the key that happens to be
+        // called Save. A desk that has been re-bound is a desk whose lamps moved
+        // with the bindings.
+        //
+        // Sixty-four keys asked thirty times a second, and it costs nothing
+        // measurable: the answers go through `SurfaceController`'s shadow model,
+        // which sends only what changed (`docs/MCU_MAPPING.md` §2.2), so a still
+        // desk puts no bytes on the wire.
+        for button in GlobalButton::ALL {
+            let control = prism_domain::BoundControl::Global { button };
+            let state = lamp::lamp_of(self.bindings.action(control).as_ref(), None, core);
+            self.controller.set_led(ButtonId::Global(button), state);
+            if state != prism_surface::LedState::Off {
+                lit.push(control.to_string());
+            }
+        }
+
+        // **Sorted, then compared** — S59. The order `ALL` produces is stable,
+        // but sorting costs nothing here and makes the comparison a statement
+        // about the *set* rather than about the walk that built it.
+        lit.sort_unstable();
+        if lit == self.lit {
+            return None;
+        }
+        self.lit.clone_from(&lit);
+        Some(Delta::SurfaceLampsChanged { lit })
     }
 
     /// Sends whatever the pacing allows.
@@ -775,7 +858,7 @@ fn legend(executor: Option<&prism_domain::Executor>) -> String {
 /// rather than models: `prism-surface` holds no view library and no show, so the
 /// neighbours of the active view are resolved here.
 #[must_use]
-pub fn context_of(core: &Core) -> prism_surface::SurfaceContext {
+pub fn context_of(core: &Core) -> prism_surface::SurfaceContext<'_> {
     let state = &core.file.session;
     let session = state.session();
     let active = session.active_view_id;
@@ -798,6 +881,7 @@ pub fn context_of(core: &Core) -> prism_surface::SurfaceContext {
         previous_view: previous,
         next_view: next,
         programmer_page: session.programmer_page,
+        command_line: &session.command_line,
         parameter: parameter_of(
             &core.file.programmer,
             &core.file.show,

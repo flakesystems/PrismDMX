@@ -34,8 +34,8 @@ Three shapes, and every control on the screen is one of them:
 |---|---|---|
 | a whole command with no argument | `Clear` `Full` `Update` | writes the word and runs it at once |
 | the **Oops** key | `Oops` | writes nothing: while a line stands it takes the line's **last word**, and only on an empty line does it take the last edit back (B58). The daemon decides which, so the X-Touch's Undo key does the same with no screen attached |
-| a command that needs arguments | `Store` `Edit` `Goto` `Move` `Copy` `Delete` `Label` `Assign` | writes the word and **waits** for you to finish the line |
-| an argument keyword | `Fixture` `Group` `Sequence` `Cue` `Preset` `View` `Executor` | appends the word to the line as it stands |
+| a command that needs arguments | `Store` `Edit` `Goto` `Move` `Copy` `Delete` `Label` `Color` `New` `Assign` | writes the word and **waits** for you to finish the line |
+| an argument keyword | `Fixture` `Group` `Sequence` `Cue` `Preset` `View` `Executor` `At` `Thru` | appends the word to the line as it stands |
 | a **chooser** in a window | the `Executors` window's fader, encoder and key rows | writes the whole line and sends it, because the pointer has supplied every argument (S45) |
 
 So `Fixture` `1` `Enter` is three presses that build `Fixture 1`, and it is the
@@ -43,6 +43,28 @@ same line you could have typed. Picking an item out of a **list** — a group in
 the pool, a cue in the sheet, a fixture in the fixture sheet — writes the line
 that names it *and* submits it, because the pointer has supplied the argument
 the line was waiting for.
+
+### The same keys are on the desk *(S59)*
+
+Any key of an X-Touch can be bound to one of these words, in *Settings →
+Controls*, and pressing it does exactly what pressing the word on the screen
+does — the shape is the word's, not the device's. The list is one table
+(`prism_domain::CONSOLE_KEYS`) and the interface's keypad reads it, so the two
+devices cannot offer different vocabularies.
+
+**There is no Enter key on the desk.** A word key *begins* a line and the screen
+finishes it, which is what the paragraph above makes possible: `Store` on the
+desk, then Executor 3 clicked in the window, and the line has run without
+anybody reaching for a keyboard. The desk and the screen are meant to be used
+together; the screen on its own is a whole console, and the desk on its own is
+not.
+
+**A bound key lights up while pressing it would lead somewhere** — while the
+line would take the word, *and* while the word would do something. So `Store` is
+dark until the programmer holds a value, `Cue` is dark while you are building a
+selection and lights once a verb is waiting for an object, and `Clear` stays lit
+until the three-stage clear has nothing left to take.
+`docs/MCU_MAPPING.md` §5.0 has the whole table.
 
 **What is not a line**, deliberately and in full:
 
@@ -57,6 +79,10 @@ the line was waiting for.
   sends the same `SelectView` the X-Touch's `Channel ◀▶` always has. The bar's
   *menu* — store, new, rename, move, delete — still writes its lines;
 - **Add window**, which names a window *type* rather than a number;
+- **changing the executor page** — the bar sends `SetExecutorPage` and the
+  X-Touch's `Bank ◀▶` always has, so a line half typed survives a page change
+  exactly as it survives a view change. It is the same argument as B56's one
+  bullet up: paging is looking, not authoring;
 - the three **times** and the trigger of a cue, and the fields of the patch form:
   they carry a value rather than naming a place, and inventing `fade 2.5` would
   be a second grammar for something no console types.

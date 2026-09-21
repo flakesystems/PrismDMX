@@ -51,7 +51,7 @@ which is why every CI job that runs them fetches it first:
 tools/fetch-fixtures/fetch-ofl.sh           # or .ps1 on Windows
 ```
 
-The **GDTF** reader (`library::gdtf`, S60) has no corpus and needs none: its
+The **GDTF** reader (`library::gdtf`, S61) has no corpus and needs none: its
 upstream has no anonymous download, so every one of its tests builds the archive
 it reads byte by byte.
 

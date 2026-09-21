@@ -669,8 +669,18 @@ impl Core {
             autostart: settings.autostart,
             fixture_library: settings.fixture_library.clone(),
             surface_profile: settings.surface_profile.clone(),
+            jog_sensitivity: settings.jog_sensitivity,
             overrides: self.machine.overrides.clone(),
         }
+    }
+
+    /// How far the jog wheel moves a parameter, as a percentage — S59.
+    ///
+    /// One field of the machine's settings, reachable on its own because the
+    /// surface reads it every frame and has no business holding the rest.
+    #[must_use]
+    pub fn jog_sensitivity(&self) -> u16 {
+        self.machine.config.settings().jog_sensitivity
     }
 
     /// Records where the WebSocket listener actually bound — S37.

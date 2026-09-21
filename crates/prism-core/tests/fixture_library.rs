@@ -15,7 +15,7 @@
 //!
 //! # This is about the **Open Fixture Library** reader, and stays so
 //!
-//! Since S60 the desk's own library is GDTF and this corpus lives in a tree of
+//! Since S61 the desk's own library is GDTF and this corpus lives in a tree of
 //! its own beside it (`profiles/fixtures/ofl/`). The reason this target did not
 //! move with it is that the format is still read — it is what a venue writes a
 //! profile by hand in — and a reader with two thousand real files to be run
@@ -52,8 +52,8 @@ fn library_root() -> PathBuf {
 
 /// Whether the corpus is installed, and where its names table is.
 ///
-/// Two places since S60: `fetch-ofl` writes `profiles/fixtures/ofl/`, and a
-/// desk whose library was installed before S60 has it at the root. Both are
+/// Two places since S61: `fetch-ofl` writes `profiles/fixtures/ofl/`, and a
+/// desk whose library was installed before S61 has it at the root. Both are
 /// accepted, and reading the **root** either way is deliberate — it is what the
 /// daemon does, so this also holds the rule that a tree with a
 /// `manufacturers.json` of its own is read as a tree rather than as one

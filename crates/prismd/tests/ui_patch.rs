@@ -119,7 +119,7 @@ fn generic(type_id: &str) -> prism_domain::FixtureType {
 /// developer happened to have installed would be a recording that fails on a
 /// fresh clone and changes whenever upstream does. Two fixtures in the Open
 /// Fixture Library's own format and **one GDTF** is enough to record what a
-/// search answers — and since S60 the third of them is what holds the
+/// search answers — and since S61 the third of them is what holds the
 /// interface to the two fields a GDTF profile carries that a hand-written one
 /// does not.
 fn write_library(root: &Path) {
@@ -160,7 +160,7 @@ fn write_library(root: &Path) {
     .expect("it writes");
 }
 
-/// **One GDTF in the pinned library** — S60.
+/// **One GDTF in the pinned library** — S61.
 ///
 /// A `.gdtf` file is a ZIP archive holding a `description.xml`, so this writes
 /// one byte by byte: an integration target links a crate's *library* and not
@@ -1323,7 +1323,7 @@ fn the_library_is_browsed_a_fixture_at_a_time() {
     };
     let (first, matched, total) = page("the first page of one");
     let (second, _, _) = page("the page after it");
-    // Three Robe fixtures since S60 — the two written in the Open Fixture
+    // Three Robe fixtures since S61 — the two written in the Open Fixture
     // Library's format and the GDTF beside them, whose manufacturer is *Robe
     // Lighting* and so matches the same word.
     assert_eq!(matched, 3);
@@ -1346,7 +1346,7 @@ fn the_library_is_browsed_a_fixture_at_a_time() {
         "both modes, in the order the file lists them"
     );
     assert!(wash.modes.iter().all(|mode| mode.has_intensity));
-    // **S60's two fields, in the recording the browser reads.** The wash is a
+    // **S61's two fields, in the recording the browser reads.** The wash is a
     // hand-written Open Fixture Library profile: channels and names, which is
     // what every desk had before this session and what the Format column says
     // *OFL* about.

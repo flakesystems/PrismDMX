@@ -48,7 +48,7 @@ Two of those steps are worth a sentence each.
 
 **The fixture library is installed, not committed.** It has an upstream with its
 own release cadence, and a copy in this tree would be the one that is out of
-date. Since **S60** there are two installers and they do different jobs:
+date. Since **S61** there are two installers and they do different jobs:
 
 - `fetch-fixtures` installs the desk's own library, which is **GDTF**. It needs
   either a folder of `.gdtf` files or an account on
@@ -387,7 +387,7 @@ A command is the only way anything changes. The path, in order:
 
 ### Two readers, and which one you are in
 
-Since **S60** the desk reads two formats, and the difference is worth holding in
+Since **S61** the desk reads two formats, and the difference is worth holding in
 mind before changing either:
 
 | | `prism_core::library::gdtf` | `prism_core::library::ofl` |

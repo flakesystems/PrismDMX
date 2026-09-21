@@ -1,4 +1,4 @@
-//! What a GDTF file becomes — **S60**.
+//! What a GDTF file becomes — **S61**.
 //!
 //! Every case here is a `description.xml` written out in full, because the
 //! thing being tested is a reading of a document and a fixture built out of

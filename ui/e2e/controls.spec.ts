@@ -46,11 +46,19 @@ const PORT = 7401;
 /** F1, note 54 — §2.1's "Function" row: F1–F8 = 54–61. */
 const F1 = 54;
 
-/** F5, note 58 — the same row, four along. §4.1 leaves it free. */
+/** F5, note 58 — the same row, four along. */
 const F5 = 58;
 
-/** F6, note 59 — the next one along, also free. */
+/** F6, note 59 — the next one along. */
 const F6 = 59;
+
+/**
+ * Cancel, note 82 — §2.1's Utility row: Save 80, Undo 81, Cancel 82, Enter 83.
+ *
+ * S59's shipped table puts the console's `Clear` key on it, which is the one
+ * *run*-shaped word this suite can press without programming anything first.
+ */
+const CANCEL = 82;
 
 /**
  * SMPTE/Beats, note 53 — §4.3's reserved key.
@@ -124,7 +132,9 @@ test("a key rebound in the window does the new thing at the console", async ({ p
   // **F1 is a *custom* key** since the rebuild (B24): *open window* is fourteen
   // bindings rather than one action, so there the key is the row and carries
   // its own answer. That is where an operator finds it and changes it.
-  await expect(page.getByTestId("custom-Global.F1")).toContainText("FixtureSheet");
+  // The chosen value rather than the row's text, for the reason written at the
+  // rebind below: the row's `<select>` lists every window type.
+  await expect(page.getByTestId("custom-detail-Global.F1")).toHaveValue("FixtureSheet");
 
   // The press before: F1 opens a Fixture Sheet.
   pressConsole(keys, F1);
@@ -149,15 +159,114 @@ test("a key rebound in the window does the new thing at the console", async ({ p
   await expect(page.getByTestId("controls-learning")).toBeVisible();
   pressConsole(keys, F5);
 
-  // The table moved, and the window is drawing what the daemon answered — a
-  // row of its own for the key that now has a job.
-  await expect(page.getByTestId("custom-Global.F5")).toContainText("Patch");
+  // The table moved, and the window is drawing what the daemon answered.
+  //
+  // **The chosen value, not the row's text** — S59. F5 has a default since
+  // then (`CommandKeys`), so its row exists before the learn, and the row holds
+  // a `<select>` listing *every* window type: `toContainText("Patch")` was true
+  // the moment the page loaded. The press below then went out 11 ms after the
+  // learn, before the surface had taken up the new table, and opened the old
+  // binding's window — a daemon log read after a CI failure showed exactly that.
+  // An assertion that cannot fail is not a wait.
+  await expect(page.getByTestId("custom-detail-Global.F5")).toHaveValue("Patch");
 
   // **The press after.** Three bytes appended to a file by a process that is
   // neither this browser nor this daemon, on a key that did nothing a moment
   // ago.
   pressConsole(keys, F5);
   await expect(page.locator('[data-window-type="Patch"]')).toHaveCount(1);
+
+  await done(dataDir);
+});
+
+/**
+ * **S59's first exit criterion** — a bound word does on the desk what the same
+ * key does on the screen.
+ *
+ * `ARCHITECTURE_SPEC.md` §4.5 gives every key of the keypad one of three writing
+ * shapes, and until S59 only the screen had them. This presses two keys of a
+ * console the browser has never heard of, one per shape, and reads the line they
+ * build:
+ *
+ * - **append** — an argument keyword joins the line as it stands;
+ * - **run** — a whole command goes, and leaves nothing behind.
+ *
+ * The **line** is what is read rather than the key, which is the claim that
+ * matters: what arrives is the same line an operator could have typed. It is
+ * read off `command-line`, which is the daemon's own echo of it — not the box
+ * this browser types into.
+ */
+test("a console word bound to a key builds the line at the desk", async ({ page }) => {
+  const { dataDir, keys } = await desk(page, PORT + 5);
+
+  // Bind F5 to the `Cue` key — an argument keyword, which appends.
+  await page.getByTestId("word-learn-cue").click();
+  await expect(page.getByTestId("controls-learning")).toBeVisible();
+  pressConsole(keys, F5);
+  await expect(page.getByTestId("word-keys-cue")).toContainText("Global.F5");
+
+  // A verb standing in the line, typed the ordinary way.
+  await page.getByTestId("command-input").fill("Store ");
+  await expect(page.getByTestId("command-line")).toHaveText("Store");
+
+  // The console's key **joins** the line rather than replacing it.
+  pressConsole(keys, F5);
+  await expect(page.getByTestId("command-line")).toHaveText("Store Cue");
+
+  // And Cancel carries the `Clear` key out of the box — a whole command, so it
+  // runs, and a line the daemon has run is a line it clears.
+  pressConsole(keys, CANCEL);
+  await expect(page.getByTestId("command-line")).toHaveText("");
+
+  await done(dataDir);
+});
+
+/**
+ * **S59's drawing** — the picture is the device profile's, and it lights.
+ *
+ * Two claims in one pass because they share an expensive set-up. The drawing is
+ * built from what the daemon sent, so a key is where `prism_surface::layout`
+ * says it is rather than where this browser thinks it should be; and a key the
+ * real desk is lighting glows here too.
+ *
+ * Save is the lamp to use: §4.1 has lit it on unsaved changes since S22, so it
+ * is the one condition this suite can produce without programming anything.
+ */
+test("the drawing shows the panel the daemon sent, and lights with the desk", async ({
+  page,
+}) => {
+  const { dataDir } = await desk(page, PORT + 6);
+
+  await page.getByTestId("controls-view-drawing").click();
+  const drawing = page.getByTestId("desk-drawing");
+  await expect(drawing).toBeVisible();
+  // The panel's own proportions, which came off the profile rather than out of
+  // this browser.
+  await expect(drawing).toHaveAttribute("viewBox", /^0 0 \d+ \d+$/);
+
+  // One row of the table, eight columns of the drawing — D7's fader bank.
+  await expect(page.getByTestId("desk-Strip[*].Fader")).toHaveCount(8);
+  // The reserved control is drawn rather than left off: an operator looking for
+  // a free key has to be told it is not one.
+  await expect(page.getByTestId("desk-Global.SmpteBeats")).toHaveCount(1);
+
+  // **It lights.** Nothing has been edited, so the show is clean and Save is
+  // dark.
+  await expect(page.getByTestId("desk-Global.Save")).toHaveAttribute("data-lit", "no");
+
+  // An edit, and the key the daemon is now lighting glows here.
+  //
+  // **`Store View 2`, and the choice is not arbitrary.** It has to be an edit
+  // that leaves the canvas alone: `New View` makes an *empty* view and switches
+  // to it, which takes the settings window — and this drawing with it — off the
+  // screen. Storing one keeps the layout that is there and sets the session's
+  // dirty flag, which is the flag §4.1's Save lamp reads.
+  await page.getByTestId("controls-view-list").click();
+  await page.getByTestId("command-input").fill("Store View 2");
+  await page.getByTestId("command-input").press("Enter");
+  await expect(page.getByTestId("settings-controls")).toBeVisible();
+  await page.getByTestId("controls-view-drawing").click();
+  await expect(page.getByTestId("desk-Global.Save")).toHaveAttribute("data-lit", "yes");
 
   await done(dataDir);
 });
@@ -320,6 +429,24 @@ test("the whole action list scrolls inside the window and nothing outside the ca
     };
   });
   expect(outside).toEqual({ docX: 0, docY: 0, canvasX: 0, canvasY: 0 });
+
+  // **And the drawing does not push anything off either** — S59. It is an SVG
+  // that scales to the room it has, which is the reason it can be: a picture of
+  // a desk at its own size would be a thousand units wide and would take the
+  // canvas with it.
+  await page.getByTestId("controls-view-drawing").click();
+  await expect(page.getByTestId("desk-drawing")).toBeVisible();
+  const withDrawing = await page.evaluate(() => {
+    const doc = document.documentElement;
+    const canvas = document.querySelector('[data-testid="canvas"]');
+    return {
+      docX: doc.scrollWidth - doc.clientWidth,
+      docY: doc.scrollHeight - doc.clientHeight,
+      canvasX: canvas === null ? 0 : canvas.scrollWidth - canvas.clientWidth,
+      canvasY: canvas === null ? 0 : canvas.scrollHeight - canvas.clientHeight,
+    };
+  });
+  expect(withDrawing).toEqual({ docX: 0, docY: 0, canvasX: 0, canvasY: 0 });
 
   await done(dataDir);
 });

@@ -25,7 +25,7 @@
 # would be a dependency somebody has to install before they can install
 # anything.
 #
-# The Open Fixture Library is **not** installed by this script since S60. It is
+# The Open Fixture Library is **not** installed by this script since S61. It is
 # still read — a venue's own hand-written profiles are in that format — and
 # `tools/fetch-fixtures/fetch-ofl.sh` installs its corpus beside the GDTF for
 # anyone who wants it.

@@ -14,7 +14,7 @@
 //! profile into the show**. The copy is the point: after it, the show owns that
 //! profile, and a desk with a different library opens the show unchanged.
 //!
-//! # What is in it (S44, and **GDTF since S60**)
+//! # What is in it (S44, and **GDTF since S61**)
 //!
 //! Three sources, in the order a key is resolved:
 //!
@@ -26,10 +26,10 @@
 //!    Library's own format — which is what a light nobody has published a GDTF
 //!    for gets written in, because a channel list in JSON is a far kinder thing
 //!    to write by hand than a ZIP archive of XML.
-//! 2. **The installed library**, in `profiles/fixtures/` — **GDTF since S60**.
+//! 2. **The installed library**, in `profiles/fixtures/` — **GDTF since S61**.
 //!    See [`gdtf`] for what a `.gdtf` file becomes and why the library moved to
 //!    it; [`ofl`] is still read from the same tree, so a desk whose library was
-//!    installed before S60 keeps working and a venue may mix the two. Which is
+//!    installed before S61 keeps working and a venue may mix the two. Which is
 //!    installed, and how, is `profiles/fixtures/SOURCE.md`.
 //! 3. **Four generic profiles** built in Rust: a dimmer, two PARs and a moving
 //!    head. They stay because a rig is often patched before anybody knows what
@@ -266,7 +266,7 @@ pub struct FixtureLibrary {
     /// What reading the Open Fixture Library files cost and what they could
     /// not use.
     conversion: ofl::Conversion,
-    /// The same, for the GDTF files — **S60**. Two counters rather than one
+    /// The same, for the GDTF files — **S61**. Two counters rather than one
     /// because the two formats lose different things, and a single total would
     /// say neither.
     gdtf_conversion: gdtf::Conversion,
@@ -319,13 +319,13 @@ const CUSTOM_NAME: &str = "Custom";
 /// The file stem of the manufacturer names table, which is not a fixture.
 const MANUFACTURERS_STEM: &str = "manufacturers";
 
-/// What a GDTF archive is called — **S60**.
+/// What a GDTF archive is called — **S61**.
 const GDTF_EXTENSION: &str = "gdtf";
 
 /// The document at the top of one, packed or unpacked.
 const GDTF_DESCRIPTION: &str = "description.xml";
 
-/// How far into a tree a fixture is looked for — **S60**.
+/// How far into a tree a fixture is looked for — **S61**.
 ///
 /// The installed library is one directory per manufacturer, so one level is
 /// what it takes; three leaves room for an installer that files by
@@ -365,18 +365,18 @@ impl FixtureLibrary {
     }
 
     /// Reads the **installed library** into this library — S44, GDTF since
-    /// S60.
+    /// S61.
     ///
     /// Two shapes live in one tree, and which of them a file is decided by its
     /// extension rather than by where it sits:
     ///
     /// - a **`.gdtf`** archive, whose key is what the file says the fixture is
     ///   and not what it is called. This is what `tools/fetch-fixtures`
-    ///   installs since S60;
+    ///   installs since S61;
     /// - a **`.json`** in the Open Fixture Library's own layout — one directory
     ///   per manufacturer, one file per fixture, a `manufacturers.json` beside
     ///   them naming each directory. A desk whose library was installed before
-    ///   S60 still reads, and a venue may mix the two.
+    ///   S61 still reads, and a venue may mix the two.
     ///
     /// A directory holding a `description.xml` is an **unpacked** GDTF and is
     /// read as one, which is the shape an installer leaves behind when it wants
@@ -418,7 +418,7 @@ impl FixtureLibrary {
     /// - **A loose `.json` at the top**, filed under `custom/<file stem>` — a
     ///   light nobody has a profile for, dropped in and restarted. The
     ///   convenience S44 built this for, and **the reason the Open Fixture
-    ///   Library's format is still read at all after S60**: a channel list in
+    ///   Library's format is still read at all after S61**: a channel list in
     ///   JSON is a far kinder thing to write by hand than a ZIP archive of XML.
     /// - **A manufacturer directory**, exactly as the Open Fixture Library lays
     ///   one out, filed under `<directory>/<file stem>` — which is what makes
@@ -428,7 +428,7 @@ impl FixtureLibrary {
     ///   installed Mac 700. Until S51 there was no way to write that key at
     ///   all: everything went under `custom/`, so the documented correction was
     ///   impossible.
-    /// - **A `.gdtf` file**, anywhere in here — S60. Its key is what the file
+    /// - **A `.gdtf` file**, anywhere in here — S61. Its key is what the file
     ///   itself says the fixture is, so a manufacturer's own published archive
     ///   dropped in this directory overrides the installed copy of the same
     ///   fixture whatever either of them is called. That is a better identity
@@ -451,7 +451,7 @@ impl FixtureLibrary {
         self.resolve_redirects();
     }
 
-    /// Every `.gdtf` file and every unpacked GDTF in a tree — **S60**.
+    /// Every `.gdtf` file and every unpacked GDTF in a tree — **S61**.
     ///
     /// Walked to [`MAX_LIBRARY_DEPTH`], so an installer may lay the library out
     /// one directory per manufacturer, or flat, or not at all: a GDTF's key
@@ -550,7 +550,7 @@ impl FixtureLibrary {
     /// own layout. Shared by the installed tree and the venue's own.
     ///
     /// **A subdirectory that has a `manufacturers.json` of its own is a tree
-    /// and not a manufacturer** — S60. `tools/fetch-fixtures/fetch-ofl` puts
+    /// and not a manufacturer** — S61. `tools/fetch-fixtures/fetch-ofl` puts
     /// the corpus in `profiles/fixtures/ofl/`, beside the GDTF rather than
     /// mixed into it, because the two installers each empty what they write
     /// and neither may take the other's data with it. Without this rule that
@@ -711,7 +711,7 @@ impl FixtureLibrary {
                 // shipped with the desk, so not the venue's.
                 own: false,
                 // and not GDTF, which is a claim about where a profile's
-                // physical description came from — S60.
+                // physical description came from — S61.
                 gdtf: false,
             },
             profile,
@@ -847,13 +847,13 @@ impl FixtureLibrary {
         self.conversion
     }
 
-    /// What reading the GDTF files cost — **S60**.
+    /// What reading the GDTF files cost — **S61**.
     #[must_use]
     pub const fn gdtf_conversion(&self) -> gdtf::Conversion {
         self.gdtf_conversion
     }
 
-    /// How many of the profiles offered came out of a GDTF file — **S60**.
+    /// How many of the profiles offered came out of a GDTF file — **S61**.
     ///
     /// What the daemon logs at start-up, and what tells an installer whether
     /// the GDTF library is actually installed: a desk offering four profiles
@@ -1480,7 +1480,7 @@ mod tests {
         );
     }
 
-    /* -- GDTF, S60 ---------------------------------------------------------- */
+    /* -- GDTF, S61 ---------------------------------------------------------- */
 
     /// A `description.xml` for a one-mode fixture, with a beam in it.
     fn gdtf_source(manufacturer: &str, name: &str, footprint: u16) -> String {
@@ -1529,7 +1529,7 @@ mod tests {
     }
 
     /// **A `.gdtf` file is a fixture, and its key is what the file says it
-    /// is** — S60.
+    /// is** — S61.
     #[test]
     fn a_gdtf_file_becomes_a_profile_keyed_by_its_contents() {
         let dir = tempfile::tempdir().expect("a temporary directory");
@@ -1615,7 +1615,7 @@ mod tests {
     }
 
     /// **A venue's Open Fixture Library file still works** — the whole of what
-    /// S60 promised to keep.
+    /// S61 promised to keep.
     #[test]
     fn the_two_formats_live_in_one_library() {
         let mine = tempfile::tempdir().expect("a temporary directory");

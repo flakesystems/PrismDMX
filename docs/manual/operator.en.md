@@ -691,6 +691,69 @@ rebindable**, with a *Learn*: open the editor, press a key, and it is named
 rather than fired. A key can also send a whole line — the same possibility as the
 executor in chapter 8, and the same path.
 
+### The console keys are on the desk too
+
+Every key of the *Command Keys* window — `Store`, `Edit`, `Label`, `Fixture`,
+`Cue`, `Thru` and the rest — can be put on a key of the X-Touch, and it does
+there exactly what it does on the screen: `Clear`, `Full` and `Update` run at
+once, a verb writes its word and waits, an argument keyword joins the line as it
+stands.
+
+**There is no Enter key on the desk, and you do not need one.** Press `Store` on
+the X-Touch and then click Executor 3 in the window: the click supplies the
+argument the line was waiting for and sends it. The desk and the screen are
+meant to be used together — the screen alone is a whole console, the desk alone
+is not.
+
+### A key lights up when pressing it would do something
+
+A bound key's lamp is not decoration. It is lit while the line would accept what
+the key writes **and** while what it writes would lead somewhere:
+
+- `Store` is dark until there is something in the programmer to store;
+- `Update` is dark until a cue is open for editing;
+- `Full` is dark until fixtures are selected;
+- `Clear` stays lit until the three-stage clear has nothing left to take — so
+  the lamp going out is how you know you have pressed it enough;
+- `Oops` is lit while there is a word on the line or an edit to take back;
+- `Save` is lit while there are unsaved changes;
+- `Go`, `On` and `Off` are lit while the selected executor has a cue list;
+- an argument keyword like `Cue` is dark while you are building a selection and
+  lights once a verb is waiting for its object.
+
+Keys whose action has nothing to report — opening a window, jumping to a view,
+switching the encoder bank — stay **dark on purpose**. A lamp that is always on
+tells you nothing.
+
+Two keys are never bound: **SMPTE/Beats**, which is the operator's way back to a
+sound console when the surface is shared and must stay free, and **Name/Value**,
+which is the one key on the panel with no lamp at all.
+
+### A picture of the desk
+
+*Settings → Controls* has two views. The **list** is sorted by what a key does,
+which is how you find the key for a function you want. **The desk** is a drawing
+of the surface with every key where it really is, which is how you find a key
+that is still free — filled-in keys are bound, hollow ones are not, and a key
+that glows is lit on the real surface at that moment. Click a key in the drawing
+and it tells you what is on it.
+
+### If you have set up your own keys
+
+When an update reworks the keys the desk ships with, **your own table is
+replaced by the new one**. Export it first from *Settings → Controls* if you
+want to keep it — the file it writes can be read straight back in. The old
+table is also still in `machine.json` until you change something.
+
+### The jog wheel feels too light or too heavy
+
+*Settings → This machine → Jog wheel* is a percentage. At 100 % one slow click
+of the wheel moves a parameter by one step of an ordinary 8-bit channel — the
+smallest move a lamp can actually make — and a fast spin is worth four of them
+per click. Turn it up if the wheel feels slow, down if it feels twitchy; it
+applies from the next turn, with nothing to restart. The setting belongs to this
+desk and does not travel with a show.
+
 **What is known and unpleasant about the hardware:** saturate both directions at
 once and the X-Touch can stop **sending** while it goes on receiving, and only a
 power cycle brings it back. That is a property of the device that this desk is

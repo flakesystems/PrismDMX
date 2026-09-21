@@ -28,6 +28,7 @@ pub mod arb;
 
 mod attribute;
 mod command;
+mod console;
 mod delta;
 mod executor;
 mod export;
@@ -57,6 +58,7 @@ pub use command::{
     Command, CommandLineMode, GoDirection, ObjectRef, OutputChange, OverwriteMode, ParamDirection,
     SelectionMode, SequenceStoreMode,
 };
+pub use console::{CONSOLE_KEYS, ConsoleKey, KeyShape, appended};
 pub use delta::{Delta, NoticeLevel, SwitchState};
 pub use executor::{
     CrossfadeMode, EXECUTOR_BUTTONS, EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction,
@@ -100,6 +102,7 @@ pub use session::{
     WindowInstance, WindowType,
 };
 pub use surface::{
-    BoundControl, ExecutorTarget, GlobalButton, RESERVED_BUTTONS, RESERVED_REASON, Step,
-    StripButton, SurfaceAction, SurfaceBinding, SurfaceControl,
+    BoundControl, ControlBox, ControlShape, ExecutorTarget, GlobalButton, PanelLayout,
+    RESERVED_BUTTONS, RESERVED_REASON, Step, StripButton, SurfaceAction, SurfaceBinding,
+    SurfaceControl,
 };

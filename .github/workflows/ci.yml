@@ -87,7 +87,7 @@ jobs:
       # themselves: 634 fixtures is the input no hand-written JSON can stand in
       # for.
       #
-      # `fetch-ofl` and not `fetch-fixtures` since S60: the desk's own library
+      # `fetch-ofl` and not `fetch-fixtures` since S61: the desk's own library
       # is GDTF now, and GDTF's upstream has no anonymous download, so there is
       # nothing for a CI job to fetch. What holds the GDTF reader is its unit
       # tests, which build their archives byte by byte and need no network.
@@ -268,7 +268,7 @@ jobs:
       # the end-to-end tests that patch a real fixture out of the library run
       # against the real thing rather than skipping themselves by name.
       #
-      # `fetch-ofl` and not `fetch-fixtures` since S60 — see the gates job.
+      # `fetch-ofl` and not `fetch-fixtures` since S61 — see the gates job.
       - name: Install the Open Fixture Library corpus
         working-directory: .
         run: tools/fetch-fixtures/fetch-ofl.sh

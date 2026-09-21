@@ -171,7 +171,7 @@ pub struct LibraryEntry {
     /// profiles that all came with the desk, which is what it was.
     #[serde(default)]
     pub own: bool,
-    /// Whether this profile was read from a **GDTF** file — S60.
+    /// Whether this profile was read from a **GDTF** file — S61.
     ///
     /// What the picker marks, and it says something an operator wants to know
     /// before they patch: a GDTF profile carries the fixture's gobo pictures,
@@ -179,7 +179,7 @@ pub struct LibraryEntry {
     /// can draw properly. A profile out of the Open Fixture Library is
     /// channels and names, which is all any desk had before this session.
     ///
-    /// `#[serde(default)]` so a recording made before S60 reads as a library
+    /// `#[serde(default)]` so a recording made before S61 reads as a library
     /// with no GDTF in it, which is what it was.
     #[serde(default)]
     pub gdtf: bool,
@@ -203,7 +203,7 @@ pub struct LibraryMode {
     /// Whether the profile has an intensity of its own, which decides whether
     /// the patch form offers the desk's dimmer at all (S43).
     pub has_intensity: bool,
-    /// How many beams this mode's device has, as its GDTF states — S60.
+    /// How many beams this mode's device has, as its GDTF states — S61.
     ///
     /// Nought for a profile out of the Open Fixture Library and for the four
     /// built-in generics, which describe channels and not devices. It is on
@@ -229,7 +229,7 @@ pub struct LibraryFixture {
     /// Whether it is the venue's own (B43) rather than one that came with the
     /// desk.
     pub own: bool,
-    /// Whether it was read from a **GDTF** file — S60. See
+    /// Whether it was read from a **GDTF** file — S61. See
     /// [`LibraryEntry::gdtf`].
     #[serde(default)]
     pub gdtf: bool,
@@ -919,6 +919,16 @@ pub enum Answer {
         /// Whether learn is armed — the next control touched will be named
         /// rather than obeyed (`crate::Command::SetSurfaceLearn`).
         learning: bool,
+        /// The panel a drawing of this surface is drawn on — S59.
+        ///
+        /// `None` for a device whose profile has no layout, which is an
+        /// ordinary state and the one a drawing has to handle: a surface nobody
+        /// has drawn is a list and no picture, which is better than a picture
+        /// of the wrong desk. Carried here rather than asked for separately
+        /// because it is read at the same moment and by the same panel as the
+        /// rows, and the rows' own boxes are meaningless without it.
+        #[serde(default)]
+        panel: Option<crate::PanelLayout>,
     },
     /// What every cue of one list inherits, in playback order — S48.
     CueTracking {

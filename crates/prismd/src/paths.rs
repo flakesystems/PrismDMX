@@ -204,9 +204,9 @@ pub fn ensure_fixtures_dir(data_dir: &Path) -> std::io::Result<bool> {
 ///
 /// It holds something a fixture library holds: a `.gdtf` file, an unpacked
 /// GDTF's `description.xml`, or an Open Fixture Library `manufacturers.json`.
-/// **Three tests rather than one since S60**, because the installed library is
+/// **Three tests rather than one since S61**, because the installed library is
 /// GDTF now and a GDTF library has no `manufacturers.json` in it — a desk whose
-/// library was installed before S60 still has one, and both are found.
+/// library was installed before S61 still has one, and both are found.
 ///
 /// An *empty* `profiles/fixtures/` is deliberately not it: the directory is
 /// committed with only its `SOURCE.md` in it, so a checkout nobody has run the

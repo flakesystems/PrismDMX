@@ -152,6 +152,43 @@ pub enum Delta {
         )]
         control: Option<crate::BoundControl>,
     },
+    /// Which of the surface's controls are lit — **S59**.
+    ///
+    /// # Why the browser is told about lamps at all
+    ///
+    /// It is not so that it can drive them: the daemon lights the surface
+    /// itself, over MIDI, and a client that had to be asked would be a desk
+    /// whose lamps went out when a browser was closed. It is so that the
+    /// **drawing of the panel** in the Controls window can light up with the
+    /// real desk — the owner's decision of 2026-09-20 — and that turns out to
+    /// be worth more than it looks: somebody reworking the key table on a rig
+    /// can see at a glance whether a condition they wrote is the one they
+    /// meant, without looking away from the screen they are editing on.
+    ///
+    /// The list stays quiet; only the picture lights. A list of twenty rows
+    /// blinking is noise, and the panel is read while it is being *edited*.
+    ///
+    /// # It is a set, and it is sent only when it changes
+    ///
+    /// The whole set rather than the one that moved, for [`Self::OutputsChanged`]'s
+    /// reason: it is a handful of short strings rather than a document, and a
+    /// client that had to keep a tally of individual changes would be doing
+    /// arithmetic to learn something it can be told. The daemon holds the
+    /// previous set and says nothing while it stands, so a still desk costs
+    /// nothing — which matters, because the lamps are worked out thirty times a
+    /// second whether or not anybody is looking.
+    ///
+    /// The names are `crate::BoundControl`'s own spellings, the ones
+    /// `SurfaceControl::name` carries, so a drawing joins them to its rows
+    /// without a second table.
+    SurfaceLampsChanged {
+        /// Every control that is lit, by name.
+        #[cfg_attr(
+            any(test, feature = "proptest"),
+            proptest(strategy = "crate::arb::small_vec(3)")
+        )]
+        lit: Vec<String>,
+    },
     /// One of **this machine's** settings changed — S37.
     ///
     /// [`Self::OutputsChanged`]'s shape for the rest of the machine, and the

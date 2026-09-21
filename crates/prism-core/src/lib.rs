@@ -103,7 +103,7 @@ mod desk;
 mod file;
 mod journal;
 mod layout;
-// Public since S60, because it always was in everything but the keyword:
+// Public since S61, because it always was in everything but the keyword:
 // `profiles/fixtures/SOURCE.md` names `prism_core::library::ofl` as the thing
 // that reads the installed tree, `FixtureLibrary::conversion` hands out a type
 // that lives in it, and the GDTF reader is a decoder somebody debugging a
@@ -124,8 +124,8 @@ pub use command::{Applied, Effect, show_patch_ops};
 pub use conflict::{ShowIssue, dark_universes};
 pub use console::{ConsoleReading, ModeQuestion, ModeQuestionKind, parse_command_line};
 pub use desk::{
-    DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, InvalidDeskId, MachineConfig, RECENT_SHOWS,
-    RecentShows, Settings,
+    DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, InvalidDeskId, JOG_SENSITIVITY_RANGE,
+    MachineConfig, RECENT_SHOWS, RecentShows, SURFACE_BINDINGS_GENERATION, Settings,
 };
 pub use file::{ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};

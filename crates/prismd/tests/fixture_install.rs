@@ -1,5 +1,5 @@
 //! **A venue's own profiles survive a library re-install** — punch-list entry
-//! **B43**, and since S60 in both formats.
+//! **B43**, and since S61 in both formats.
 //!
 //! # This runs the installers, and that is the point
 //!
@@ -68,7 +68,7 @@ fn repository() -> PathBuf {
 }
 
 /* -------------------------------------------------------------------------- */
-/* GDTF — the library the desk installs since S60                             */
+/* GDTF — the library the desk installs since S61                             */
 /* -------------------------------------------------------------------------- */
 
 /// A `description.xml` for a fixture with one mode of `footprint` dimmers.
@@ -240,7 +240,7 @@ fn install_gdtf(destination: &Path, source: &Path) -> Option<(bool, String)> {
     }
 }
 
-/// **The exit criterion, in one run** — S60's half of B43.
+/// **The exit criterion, in one run** — S61's half of B43.
 ///
 /// A venue's own `.gdtf` is in the data directory and a different revision of
 /// the same fixture is in what the installer is about to write. The installer
@@ -330,7 +330,7 @@ fn a_venues_own_gdtf_survives_a_library_re_install() {
 }
 
 /// **A `.gdtf` and an Open Fixture Library file live in the venue's folder at
-/// once** — S60's promise that custom profiles in the old format keep working.
+/// once** — S61's promise that custom profiles in the old format keep working.
 #[test]
 fn a_venue_may_write_either_format() {
     let work = tempfile::tempdir().expect("a temporary directory");
@@ -359,7 +359,7 @@ fn a_venue_may_write_either_format() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* The Open Fixture Library corpus, which is a separate script since S60       */
+/* The Open Fixture Library corpus, which is a separate script since S61       */
 /* -------------------------------------------------------------------------- */
 
 /// Builds an archive shaped exactly as the one `fetch-ofl` downloads: a single
@@ -520,7 +520,7 @@ fn a_venues_own_profiles_survive_a_corpus_re_download() {
 ///
 /// Held as a check on the text because that is what the fault is: the two names
 /// are the same name, and no execution of the script with the override set can
-/// see it. Run over **both** scripts since S60, and the `-Source` of the GDTF
+/// see it. Run over **both** scripts since S61, and the `-Source` of the GDTF
 /// one is the same shape of parameter the fault was found in.
 #[test]
 fn no_powershell_local_is_also_a_parameter() {

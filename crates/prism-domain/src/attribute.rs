@@ -652,7 +652,7 @@ pub struct AttributeRange {
     pub from: u16,
     /// The highest value in the range, `0..=65535`.
     pub to: u16,
-    /// **The picture of this slot**, as GDTF's `MediaFileName` names it — S60.
+    /// **The picture of this slot**, as GDTF's `MediaFileName` names it — S61.
     ///
     /// A gobo is a piece of metal or glass with a shape cut in it, and *Gobo 3*
     /// is a worse answer than the shape itself. GDTF ships the picture inside
@@ -667,7 +667,7 @@ pub struct AttributeRange {
     /// name, which is what every desk did before there were pictures.
     ///
     /// `None` for a range read from the Open Fixture Library, which states no
-    /// media, and for every profile a show embedded before S60.
+    /// media, and for every profile a show embedded before S61.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(any(test, feature = "proptest"), proptest(value = "None"))]
     pub media: Option<String>,
@@ -888,12 +888,12 @@ pub struct FixtureType {
         proptest(strategy = "crate::arb::small_vec(4)")
     )]
     pub attributes: Vec<AttributeDef>,
-    /// **What the device is, physically** — S60, and what the 3D viewer (S30)
+    /// **What the device is, physically** — S61, and what the 3D viewer (S30)
     /// draws.
     ///
     /// `None` for a profile that came from the Open Fixture Library, which
     /// describes channels and not devices, for the four built-in generics, and
-    /// for every profile a show embedded before S60. A viewer that is given
+    /// for every profile a show embedded before S61. A viewer that is given
     /// `None` draws the fixture as a box with one beam out of the front, which
     /// is what it would have drawn for every fixture before this session.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -901,7 +901,7 @@ pub struct FixtureType {
     pub physical: Option<FixturePhysical>,
 }
 
-/// The device a profile describes, as GDTF states it — **S60**.
+/// The device a profile describes, as GDTF states it — **S61**.
 ///
 /// # Why this is on the profile and not on the patched fixture
 ///
@@ -953,7 +953,7 @@ pub struct FixturePhysical {
     pub beams: Vec<FixtureBeam>,
 }
 
-/// One beam of a device, where it sits and where it points — **S60**.
+/// One beam of a device, where it sits and where it points — **S61**.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "camelCase")]

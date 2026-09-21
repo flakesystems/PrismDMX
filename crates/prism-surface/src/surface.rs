@@ -1560,7 +1560,7 @@ mod tests {
         events.clear();
         // The first jog message after a pause is a click, not a spin.
         controller.push(&[0xB0, 60, 0x01], start, |event| events.push(event));
-        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 20 }]);
+        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 257 }]);
         events.clear();
         // The same magnitude five milliseconds later is a spin.
         controller.push(
@@ -1570,7 +1570,7 @@ mod tests {
                 events.push(event);
             },
         );
-        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 160 }]);
+        assert_eq!(events, vec![SurfaceEvent::Jog { steps: 1028 }]);
     }
 
     #[test]

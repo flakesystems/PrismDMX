@@ -1137,7 +1137,7 @@ pub fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::F
                 ),
             );
             // A library that is there and holds no GDTF is one installed before
-            // S60. It works, and it carries none of what the 3D viewer draws —
+            // S61. It works, and it carries none of what the 3D viewer draws —
             // which is a thing to say once at start-up rather than to leave an
             // operator to discover from an empty stage.
             if gdtf.fixtures == 0 && ofl.fixtures > 0 {
@@ -1267,6 +1267,18 @@ fn starting_bindings(
 ) -> (Bindings, bool) {
     if let Some(path) = &options.surface_profile {
         return (crate::surface::load_profile(path), false);
+    }
+    // **A table a generation behind is passed over** — S59, the owner's
+    // decision of 2026-09-20. It is said out loud rather than done quietly: an
+    // operator whose panel has been rearranged under them deserves the sentence,
+    // and Export was the way to keep the old one.
+    if machine.surface_bindings_are_stale() {
+        log::warn(
+            "surface",
+            "this desk's stored binding table was written against an older set of \
+             built-in bindings and has been replaced by the new ones. The old table \
+             is still in machine.json and can be exported from the Controls panel",
+        );
     }
     if let Some(rows) = machine.surface_bindings() {
         let (table, problem) = Bindings::from_rows(rows, &prism_surface::X_TOUCH);

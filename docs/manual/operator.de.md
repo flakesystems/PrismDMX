@@ -710,6 +710,74 @@ umbelegbar**, mit einem *Learn*: Editor auf, Taste drücken, sie wird benannt un
 nicht ausgelöst. Eine Taste kann auch eine ganze Zeile schicken — dieselbe
 Möglichkeit wie beim Executor in Kapitel 8, und derselbe Weg.
 
+### Die Konsolentasten liegen auch auf dem Pult
+
+Jede Taste des Fensters *Command Keys* — `Store`, `Edit`, `Label`, `Fixture`,
+`Cue`, `Thru` und die übrigen — lässt sich auf eine Taste des X-Touch legen, und
+sie tut dort genau das, was sie am Bildschirm tut: `Clear`, `Full` und `Update`
+werden sofort ausgeführt, ein Verb schreibt sein Wort und wartet, ein
+Argumentwort hängt sich an die Zeile an, wie sie gerade steht.
+
+**Eine Enter-Taste gibt es auf dem Pult nicht, und sie wird auch nicht
+gebraucht.** Drücken Sie `Store` am X-Touch und klicken Sie dann im Fenster auf
+Executor 3: der Klick liefert das Argument, auf das die Zeile gewartet hat, und
+schickt sie ab. Pult und Bildschirm sind dafür gedacht, zusammen benutzt zu
+werden — der Bildschirm allein ist ein vollständiges Pult, das Pult allein nicht.
+
+### Eine Taste leuchtet, wenn ein Druck etwas bewirken würde
+
+Die Lampe einer belegten Taste ist keine Dekoration. Sie leuchtet, solange die
+Zeile annehmen würde, was die Taste schreibt, **und** solange das, was sie
+schreibt, irgendwohin führt:
+
+- `Store` bleibt dunkel, bis im Programmer etwas zum Speichern steht;
+- `Update` bleibt dunkel, bis eine Cue zum Bearbeiten offen ist;
+- `Full` bleibt dunkel, bis Fixtures ausgewählt sind;
+- `Clear` leuchtet, bis das dreistufige Clear nichts mehr wegzunehmen hat — dass
+  die Lampe ausgeht, ist also die Auskunft, dass Sie oft genug gedrückt haben;
+- `Oops` leuchtet, solange ein Wort in der Zeile steht oder eine Änderung
+  zurückzunehmen ist;
+- `Save` leuchtet bei ungespeicherten Änderungen;
+- `Go`, `On` und `Off` leuchten, solange der selektierte Executor eine Sequenz
+  hat;
+- ein Argumentwort wie `Cue` bleibt dunkel, solange Sie eine Auswahl aufbauen,
+  und leuchtet, sobald ein Verb auf sein Objekt wartet.
+
+Tasten, deren Aktion nichts zu melden hat — ein Fenster öffnen, zu einer Ansicht
+springen, das Encoder-Band umschalten — bleiben **absichtlich dunkel**. Eine
+Lampe, die immer an ist, sagt nichts.
+
+Zwei Tasten werden nie belegt: **SMPTE/Beats**, der Rückweg zum Tonpult, wenn
+die Oberfläche geteilt wird, und **Name/Value**, die einzige Taste des Panels
+ganz ohne Lampe.
+
+### Ein Bild des Pults
+
+*Settings → Controls* hat zwei Ansichten. Die **Liste** ist danach sortiert, was
+eine Taste tut — so findet man die Taste zu einer Funktion. **The desk** ist eine
+Zeichnung der Oberfläche mit jeder Taste an ihrem wirklichen Platz — so findet
+man eine Taste, die noch frei ist: gefüllte Tasten sind belegt, hohle nicht, und
+eine Taste, die leuchtet, leuchtet in diesem Moment auch am echten Pult. Ein
+Klick auf eine Taste in der Zeichnung sagt, was auf ihr liegt.
+
+### Wenn Sie eigene Tasten eingerichtet haben
+
+Wenn ein Update die mitgelieferte Belegung überarbeitet, wird **Ihre eigene
+Tabelle durch die neue ersetzt**. Exportieren Sie sie vorher in *Settings →
+Controls*, wenn Sie sie behalten wollen — die Datei lässt sich direkt wieder
+einlesen. Die alte Tabelle steht außerdem weiter in `machine.json`, bis Sie
+etwas ändern.
+
+### Das Jog-Rad fühlt sich zu leicht oder zu schwer an
+
+*Settings → This machine → Jog wheel* ist ein Prozentwert. Bei 100 % bewegt
+eine langsame Raste einen Parameter um einen Schritt eines gewöhnlichen
+8-Bit-Kanals — die kleinste Bewegung, die eine Lampe überhaupt machen kann — und
+eine schnelle Drehung ist vier davon pro Raste wert. Drehen Sie ihn hoch, wenn
+das Rad träge wirkt, herunter, wenn es zappelig wirkt; er gilt ab der nächsten
+Drehung, ohne dass etwas neu gestartet werden muss. Die Einstellung gehört zu
+diesem Pult und reist nicht mit einer Show mit.
+
 **Was von der Hardware bekannt und unangenehm ist:** sättigt man beide
 Richtungen gleichzeitig, kann das X-Touch aufhören zu **senden**, während es
 weiter empfängt, und nur ein Aus- und Einschalten holt es zurück. Das ist eine

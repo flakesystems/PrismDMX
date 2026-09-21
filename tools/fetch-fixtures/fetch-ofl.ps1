@@ -3,7 +3,7 @@
 Downloads the Open Fixture Library corpus into `profiles/fixtures/ofl/`.
 
 .DESCRIPTION
-Split out of `fetch-fixtures.ps1` in S60, when the desk's library became GDTF.
+Split out of `fetch-fixtures.ps1` in S61, when the desk's library became GDTF.
 Two callers want this and neither is the ordinary install: the corpus test in
 `crates/prism-core/tests/fixture_library.rs`, and a venue that wants the channel
 data for lights nobody has published a GDTF for.

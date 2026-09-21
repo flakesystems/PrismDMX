@@ -710,7 +710,7 @@ function LibraryBrowser({
                                         <td>{fixture.name}</td>
                                         <td title={modesSummary(fixture)}>{modesSummary(fixture)}</td>
                                         {/*
-                                          **S60.** Which format this profile was read
+                                          **S61.** Which format this profile was read
                                           from, because the two carry different things:
                                           a GDTF knows what its gobos look like, how big
                                           the fixture is and where its beam comes out, so
@@ -811,7 +811,7 @@ function PatchForm({
                         : draft.typeId}
             </p>
             {/*
-              **S60.** What the chosen mode's profile carries besides its
+              **S61.** What the chosen mode's profile carries besides its
               channels. Empty — and so not drawn at all — for a profile out of
               the Open Fixture Library, which describes channels and is what
               every desk had before; a GDTF profile says here that the viewer

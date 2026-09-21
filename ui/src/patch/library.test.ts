@@ -133,7 +133,7 @@ describe("how the library names things", () => {
     expect(modesSummary(wash)).toBe("4ch · 2 ch");
   });
 
-  /** **S60.** What a mode carries besides its channels. */
+  /** **S61.** What a mode carries besides its channels. */
   it("says what a GDTF profile carries, and says nothing at all for one that carries none", () => {
     const mode = (beams: number): LibraryMode => ({
       id: "x",

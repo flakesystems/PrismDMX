@@ -64,7 +64,7 @@ ui/blob-report/
 ui/.playwright/
 
 # The fixture library, which is **installed at install time and not committed**
-# (S44, and GDTF since S60). `tools/fetch-fixtures` puts it here;
+# (S44, and GDTF since S61). `tools/fetch-fixtures` puts it here;
 # `profiles/fixtures/SOURCE.md` says how. Vendoring somebody else's data that
 # has an upstream and a release cadence would make this repository the second
 # copy of it, and the one that is out of date — and for GDTF it would be

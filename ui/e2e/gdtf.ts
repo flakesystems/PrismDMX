@@ -1,9 +1,9 @@
 /**
- * A `.gdtf` file, written for the end-to-end suite — **S60**.
+ * A `.gdtf` file, written for the end-to-end suite — **S61**.
  *
  * # Why the suite writes one instead of installing the library
  *
- * The desk's library is GDTF since S60, and GDTF's upstream — `gdtf-share.com`
+ * The desk's library is GDTF since S61, and GDTF's upstream — `gdtf-share.com`
  * — has **no anonymous download**: fetching it needs an account, which is that
  * service's decision and not this project's. So there is nothing a CI job can
  * install, and a browser test of *what a GDTF profile looks like in the patch
@@ -11,7 +11,7 @@
  *
  * The way out is the one the desk already offers a venue: a `.gdtf` file
  * dropped into `fixtures/` inside the daemon's **data directory** is read at
- * start-up and wins its key (punch-list B43, and S60's half of it). A test can
+ * start-up and wins its key (punch-list B43, and S61's half of it). A test can
  * write one there before the daemon starts, and then everything after that is
  * the real path — the real reader, the real daemon, the real browser.
  *

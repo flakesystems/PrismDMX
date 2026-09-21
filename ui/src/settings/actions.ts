@@ -48,6 +48,7 @@ import type {
   WindowType,
 } from "../bindings";
 import {
+  CONSOLE_KEYS,
   FEATURE_GROUP_VARIANTS,
   WINDOW_TYPE_VARIANTS,
 } from "../bindings";
@@ -75,6 +76,7 @@ export const ACTION_KINDS = [
   "Executor go +",
   "Executor go −",
   "Executor off",
+  "Executor on",
   "Executor button",
   "Select executor",
   "Clear programmer",
@@ -91,6 +93,7 @@ export const ACTION_KINDS = [
   "Encoder bank",
   "Open window",
   "Choose a window",
+  "Console key",
   "Type a command",
   "Save show",
   "Oops",
@@ -122,12 +125,11 @@ export const ACTION_GROUPS: readonly {
   {
     title: "Executors",
     kinds: [
-      "Executor master",
       "Executor go +",
       "Executor go −",
+      "Executor on",
       "Executor off",
       "Executor button",
-      "Select executor",
       "Executor page −",
       "Executor page +",
     ],
@@ -149,6 +151,41 @@ export const ACTION_GROUPS: readonly {
     kinds: ["Previous view", "Next view", "Choose a window", "Save show", "Oops", "Redo"],
   },
 ];
+
+/**
+ * The keypad, as rows — **S59**, and the section that is not written out here.
+ *
+ * Every word of `prism_domain::CONSOLE_KEYS` is a row, so the list is
+ * {@link CONSOLE_KEYS} itself and this is only the kind they all share. The
+ * word is the detail, which makes them one kind with many rows rather than
+ * twenty-three kinds — the same flattening {@link ACTION_KINDS} already does for
+ * a direction, pointed at a vocabulary instead of a sign.
+ *
+ * The rows are not spelled here for the reason the table is generated at all:
+ * the desk and the screen offer one list, so a word added in Rust appears in
+ * both without anybody editing this file.
+ */
+export const CONSOLE_KINDS: readonly ActionKind[] = ["Console key"];
+
+/**
+ * The kinds that moved out of the list and into the **advanced** section —
+ * S59, on the owner's decision of 2026-09-20.
+ *
+ * *Die Executor Strips (Fader, Executor Buttons und Encoder) sollten aus den
+ * Controls raus. Das ist Sache des Executor Fensters. In erweiterten
+ * Einstellungen könnten sie noch umgestellt werden.* These two are what that
+ * means as **rows**: a master is a strip fader or the main fader, and selecting
+ * an executor is something only a strip key can mean. The Strip half of
+ * *Executor button* goes with them, which is not a kind but a target — see
+ * {@link Target}.
+ *
+ * What explicitly did **not** move are the functions of the *selected*
+ * executor: Go, On, Off, the executor button and the page keys stay in the
+ * ordinary list, which is also what `docs/MCU_MAPPING.md` §4.3 asks for — the
+ * transport row is the part of the panel that keeps reaching PrismDMX while the
+ * surface is also driving a sound console.
+ */
+export const ADVANCED_KINDS: readonly ActionKind[] = ["Executor master", "Select executor"];
 
 /**
  * The kinds an operator adds one at a time — the **custom** section.
@@ -222,6 +259,8 @@ export function detailOf(action: SurfaceAction): string {
   switch (action.t) {
     case "WriteCommandLine":
       return action.line;
+    case "ConsoleWord":
+      return action.word;
     case "OpenWindow":
       return action.window;
     case "SelectView":
@@ -266,6 +305,8 @@ export function kindOf(action: SurfaceAction | null): ActionKind {
       return action.direction === "Next" ? "Executor go +" : "Executor go −";
     case "ExecutorOff":
       return "Executor off";
+    case "ExecutorOn":
+      return "Executor on";
     case "ExecutorButton":
       return "Executor button";
     case "SelectExecutor":
@@ -290,6 +331,8 @@ export function kindOf(action: SurfaceAction | null): ActionKind {
       return "Open window";
     case "OpenWindowPicker":
       return "Choose a window";
+    case "ConsoleWord":
+      return "Console key";
     case "WriteCommandLine":
       return "Type a command";
     case "SaveShow":
@@ -343,6 +386,8 @@ export function actionOfKind(
       return { t: "ExecutorGo", target, direction: "Prev" };
     case "Executor off":
       return { t: "ExecutorOff", target };
+    case "Executor on":
+      return { t: "ExecutorOn", target };
     case "Executor button":
       if (detail === "") {
         // *The key in this position, and the executor decides what that is* —
@@ -386,6 +431,14 @@ export function actionOfKind(
     }
     case "Choose a window":
       return { t: "OpenWindowPicker" };
+    // **A key of the console keypad** — S59. The detail is the word, narrowed
+    // against the generated table rather than trusted: a word the daemon does
+    // not have is a key that would be bound and never light, which is worse
+    // than a row that refuses to build.
+    case "Console key":
+      return CONSOLE_KEYS.some((key) => key.word === detail)
+        ? { t: "ConsoleWord", word: detail }
+        : null;
     // **The custom row** — S43, punch-list B4. The detail is the line itself, so
     // this is the one kind whose detail is free text rather than a name picked
     // from a generated table, and the one an operator adds as many of as they
@@ -432,6 +485,8 @@ export function actionText(action: SurfaceAction | null): string {
       return `${action.direction === "Next" ? "go +" : "go −"} on ${on(action.target)}`;
     case "ExecutorOff":
       return `off on ${on(action.target)}`;
+    case "ExecutorOn":
+      return `on on ${on(action.target)}`;
     case "ExecutorButton":
       return action.button.t === "Slot"
         ? `key ${action.button.index + 1} of ${on(action.target)}`
@@ -458,6 +513,8 @@ export function actionText(action: SurfaceAction | null): string {
       return `open ${action.window}`;
     case "OpenWindowPicker":
       return "choose a window to open";
+    case "ConsoleWord":
+      return `the ${action.word} key`;
     case "WriteCommandLine":
       return action.submit
         ? `type ${JSON.stringify(action.line)} into the command line and send it`

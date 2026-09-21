@@ -1,4 +1,4 @@
-//! The ZIP container a `.gdtf` file is — **S60**.
+//! The ZIP container a `.gdtf` file is — **S61**.
 //!
 //! # Why this is here rather than a dependency
 //!

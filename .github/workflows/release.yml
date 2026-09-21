@@ -114,7 +114,7 @@ jobs:
           Write-Output "building $version"
 
       # The corpus the Open Fixture Library reader's tests run over. The desk's
-      # own library is **GDTF** since S60 and its upstream has no anonymous
+      # own library is **GDTF** since S61 and its upstream has no anonymous
       # download, so a release build ships the installer rather than the data —
       # which is what `profiles/fixtures/SOURCE.md` says and what the installer's
       # manual tells a technician to run once on the machine.

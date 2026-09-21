@@ -468,7 +468,7 @@ describe("the patch window", () => {
     await answerQuery("BrowseLibrary", recordedAnswer("the page after it"));
     const row = screen.getByTestId("library-row-robe/wash-7q5/4ch");
     const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
-    // The Format column is S60's: the recorded page is Open Fixture Library
+    // The Format column is S61's: the recorded page is Open Fixture Library
     // data, which is what a venue's hand-written profile still is.
     expect(cells).toEqual(["Robe", "Wash 7Q5", "4ch · 2ch", "OFL", "library"]);
     expect(screen.queryByTestId("library-row-robe/wash-7q5/2ch")).toBeNull();
@@ -536,7 +536,7 @@ describe("the patch window", () => {
   });
 
   /**
-   * **S60.** The Format column, and what the form says a GDTF carries.
+   * **S61.** The Format column, and what the form says a GDTF carries.
    *
    * Driven off the recording rather than off a hand-written answer, because
    * the point of the change is that the *daemon* now says which format a

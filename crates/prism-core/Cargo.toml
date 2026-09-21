@@ -28,7 +28,7 @@ rmp-serde = { workspace = true }
 # operations a `Delta::ShowPatch` carries. That projection needs a serialiser,
 # and it is also the export format `prism_core::export_json` writes.
 serde_json = { workspace = true }
-# **GDTF** — S60. A `.gdtf` file is a ZIP archive of an XML document, some 3D
+# **GDTF** — S61. A `.gdtf` file is a ZIP archive of an XML document, some 3D
 # models and the pictures of its gobos, so reading one needs an XML reader and
 # something that can inflate a DEFLATE stream.
 #

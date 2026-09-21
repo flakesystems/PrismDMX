@@ -1,4 +1,4 @@
-//! Just enough of an XML tree to read a `description.xml` — **S60**.
+//! Just enough of an XML tree to read a `description.xml` — **S61**.
 //!
 //! `quick-xml` is a pull parser, and a pull parser is the right thing to read a
 //! megabyte of XML with. What it is not is a convenient thing to ask a dozen

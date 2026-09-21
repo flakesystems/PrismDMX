@@ -28,7 +28,7 @@ Every version so far is a **pre-release**.
 owner is holding the release until the Controls round (S59) and the 3D viewer
 (S30) are in it.
 
-### The fixture library is GDTF now (S60)
+### The fixture library is GDTF now (S61)
 
 **The desk reads [GDTF](https://gdtf.eu)** — the format manufacturers publish
 their devices in, and the one a rig is exchanged between programs in. A `.gdtf`
@@ -85,6 +85,36 @@ fixed (S56 and S57), and the register's last open entry with them (B52, S58).
   right now (*Strobe*, *Program Speed*, *Sound Sensitivity*) and offers that
   channel's steps. What counts is what is on the cable, so it follows a cue as
   well.
+
+**And the Controls round (S59)** — the desk gains the command line's vocabulary,
+and its lamps start saying something:
+
+- **Every console key can be put on the desk.** `Store`, `Edit`, `Label`,
+  `Color`, `New`, `Fixture`, `Cue`, `At`, `Thru` and the rest are the same list
+  the *Command Keys* window shows — one table for both devices, so a word cannot
+  reach one of them and not the other. `Color`, `New`, `At` and `Thru` are new,
+  and they have been added to the screen's keypad as well.
+- **A bound key lights up when pressing it would do something.** There were two
+  lamps on the whole desk until now and both hung on where the key sits; the
+  lamp follows **what the key is bound to** now: `Store` is dark until the
+  programmer holds something, `Clear` stays lit until the three-stage clear has
+  nothing left to take, an argument keyword like `Cue` lights only once a verb
+  is waiting for its object.
+- **The jog wheel is much faster**, in the unit that decides whether anything is
+  visible: a slow click now moves **exactly one DMX step** instead of a
+  thirteenth of one, and a fast one four. There is a slider for it in *This
+  machine → Jog wheel*, 10 to 400 %.
+- **The Controls page is tidier.** The strips, the main fader and the jog wheel
+  belong to the Executors window and to the programmer, and have moved into a
+  collapsible *Advanced* section; the *Strip / Selected* column is gone, because
+  the rows that remain all mean the selected executor.
+- **The Controls page has a picture of the desk.** Beside the list, a drawing
+  of the surface to scale with every key where it really is — filled in means
+  bound, hollow means free, and whatever is lit on the real desk glows here too.
+  It is how you see which keys are still free while you are laying one out.
+- **The shipped key table is complete** — every key on the panel does something
+  except SMPTE/Beats (reserved) and Name/Value (no lamp). An update **replaces**
+  a desk's own table; export it first if you want to keep it.
 
 ---
 

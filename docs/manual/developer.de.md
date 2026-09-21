@@ -50,7 +50,7 @@ Zwei dieser Schritte sind je einen Satz wert.
 
 **Die Fixture-Bibliothek wird installiert, nicht mitgeliefert.** Sie hat ein
 Upstream mit eigenem Veröffentlichungstakt, und eine Kopie in diesem Baum wäre
-die veraltete. Seit **S60** gibt es zwei Installationsskripte, und sie tun
+die veraltete. Seit **S61** gibt es zwei Installationsskripte, und sie tun
 Verschiedenes:
 
 - `fetch-fixtures` installiert die eigene Bibliothek des Pults, und die ist
@@ -415,7 +415,7 @@ nach:
 
 ### Zwei Reader, und in welchem man gerade ist
 
-Seit **S60** liest das Pult zwei Formate, und der Unterschied lohnt sich, bevor
+Seit **S61** liest das Pult zwei Formate, und der Unterschied lohnt sich, bevor
 man an einem von beiden etwas ändert:
 
 | | `prism_core::library::gdtf` | `prism_core::library::ofl` |

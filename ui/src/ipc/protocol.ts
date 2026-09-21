@@ -28,6 +28,7 @@ import type {
   BoundControl,
   Command,
   CommandLineQuestion,
+  ControlBox,
   Delta,
   ExecutorButtonRef,
   ExecutorTarget,
@@ -37,6 +38,7 @@ import type {
   MachineOverride,
   MidiPortInfo,
   MachineSettings,
+  PanelLayout,
   NodeReach,
   OutputHealth,
   OutputId,
@@ -64,6 +66,7 @@ import {
   ATTRIBUTE_TYPE_VARIANTS,
   COMMAND_LINE_MODE_VARIANTS,
   COMMAND_LINE_READING_KIND_VARIANTS,
+  CONTROL_SHAPE_VARIANTS,
   EXECUTOR_TARGET_VARIANTS,
   EXIT_ACTION_VARIANTS,
   FEATURE_GROUP_VARIANTS,
@@ -497,6 +500,17 @@ export function readDelta(value: unknown, path: string): Delta {
         learning: asBoolean(field(record, "learning"), `${path}.learning`),
         control: readOptionalBoundControl(field(record, "control"), `${path}.control`),
       };
+    // S59. The names are `BoundControl`'s own spellings, matched against the
+    // rows by text — so they are **not** narrowed here: a daemon one version
+    // ahead may light a control this build has no row for, and a drawing that
+    // simply does not find it is a better answer than a dropped connection.
+    case "SurfaceLampsChanged":
+      return {
+        t: "SurfaceLampsChanged",
+        lit: asArray(field(record, "lit"), `${path}.lit`).map((entry, index) =>
+          asString(entry, `${path}.lit[${String(index)}]`),
+        ),
+      };
     case "MachineChanged":
       return {
         t: "MachineChanged",
@@ -785,6 +799,7 @@ export function readAnswer(value: unknown, path: string): Answer {
         profile: readOptionalString(field(record, "profile"), `${path}.profile`),
         revision: asInteger(field(record, "revision"), `${path}.revision`),
         learning: asBoolean(field(record, "learning"), `${path}.learning`),
+        panel: readOptionalPanelLayout(field(record, "panel"), `${path}.panel`),
       };
     default:
       throw new ProtocolFault(`${path}.t`, `an answer this build knows, not ${JSON.stringify(tag)}`);
@@ -870,6 +885,40 @@ function readSurfaceControl(value: unknown, path: string): SurfaceControl {
     action: readOptionalSurfaceAction(field(record, "action"), `${path}.action`),
     permanent: asBoolean(field(record, "permanent"), `${path}.permanent`),
     reserved: asBoolean(field(record, "reserved"), `${path}.reserved`),
+    // S59. Absent for a daemon one version behind and for a device whose
+    // profile has no layout, and both read the same way: no box, so the drawing
+    // has nothing to draw for this control. That is the state the drawing is
+    // written to handle.
+    geometry: readOptionalControlBox(field(record, "geometry"), `${path}.geometry`),
+  };
+}
+
+/** Where a control sits on the panel, or nothing — S59. */
+function readOptionalControlBox(value: unknown, path: string): ControlBox | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const record = asRecord(value, path);
+  return {
+    x: asInteger(field(record, "x"), `${path}.x`),
+    y: asInteger(field(record, "y"), `${path}.y`),
+    w: asInteger(field(record, "w"), `${path}.w`),
+    h: asInteger(field(record, "h"), `${path}.h`),
+    shape: asVariant(field(record, "shape"), `${path}.shape`, CONTROL_SHAPE_VARIANTS),
+  };
+}
+
+/** The panel a drawing is drawn on, or nothing — S59. */
+function readOptionalPanelLayout(value: unknown, path: string): PanelLayout | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const record = asRecord(value, path);
+  return {
+    width: asInteger(field(record, "width"), `${path}.width`),
+    height: asInteger(field(record, "height"), `${path}.height`),
+    strips: asInteger(field(record, "strips"), `${path}.strips`),
+    stripPitch: asInteger(field(record, "stripPitch"), `${path}.stripPitch`),
   };
 }
 
@@ -907,8 +956,8 @@ function readOptionalSurfaceAction(value: unknown, path: string): SurfaceAction 
  * What a control does — the whole vocabulary of `docs/MCU_MAPPING.md` §4.
  *
  * Written out arm by arm rather than cast, for the reason every decoder in this
- * file is: what arrives off a socket is `unknown`, and a union with seventeen
- * shapes is seventeen chances for a daemon one version ahead to hand this build
+ * file is: what arrives off a socket is `unknown`, and a union with twenty-one
+ * shapes is twenty-one chances for a daemon one version ahead to hand this build
  * a field it does not have.
  */
 function readSurfaceAction(value: unknown, path: string): SurfaceAction {
@@ -919,6 +968,7 @@ function readSurfaceAction(value: unknown, path: string): SurfaceAction {
   switch (tag) {
     case "ExecutorMaster":
     case "ExecutorOff":
+    case "ExecutorOn":
     case "SelectExecutor":
       return { t: tag, target: target() };
     case "ExecutorGo":
@@ -981,6 +1031,13 @@ function readSurfaceAction(value: unknown, path: string): SurfaceAction {
         // `#[serde(default)]` in Rust: a profile written before S43 has none.
         submit: asBoolean(field(record, "submit") ?? false, `${path}.submit`),
       };
+    // S59's key of the console keypad. The word is read as text and **not**
+    // narrowed against `CONSOLE_KEYS` here: a daemon one version ahead may know
+    // a word this build does not, and refusing the message would take the whole
+    // Controls panel down over one unfamiliar key — which is the fault B55 was.
+    // What draws it decides what to do with a word it cannot place.
+    case "ConsoleWord":
+      return { t: "ConsoleWord", word: asString(field(record, "word"), `${path}.word`) };
     default:
       throw new ProtocolFault(`${path}.t`, `an action this build knows, not ${JSON.stringify(tag)}`);
   }
@@ -1191,7 +1248,7 @@ function readLibraryEntry(value: unknown, path: string): LibraryEntry {
     // file exists: an entry is a mirror of a document, and a missing field must
     // draw an unmarked row rather than fault the whole answer.
     own: field(record, "own") === true,
-    // **S60**, and the same defensive reading for the same reason: a recording
+    // **S61**, and the same defensive reading for the same reason: a recording
     // made before GDTF existed carries no such field, and what it described was
     // a library with no GDTF in it.
     gdtf: field(record, "gdtf") === true,
@@ -1205,7 +1262,7 @@ function readLibraryFixture(value: unknown, path: string): LibraryFixture {
     manufacturer: asString(field(record, "manufacturer"), `${path}.manufacturer`),
     name: asString(field(record, "name"), `${path}.name`),
     own: asBoolean(field(record, "own"), `${path}.own`),
-    // Absent means *not GDTF* — S60. See `readLibraryEntry`.
+    // Absent means *not GDTF* — S61. See `readLibraryEntry`.
     gdtf: field(record, "gdtf") === true,
     modes: asArray(field(record, "modes"), `${path}.modes`).map((entry, index) =>
       readLibraryMode(entry, `${path}.modes[${index}]`),
@@ -1221,7 +1278,7 @@ function readLibraryMode(value: unknown, path: string): LibraryMode {
     mode: asString(field(record, "mode"), `${path}.mode`),
     footprint: asInteger(field(record, "footprint"), `${path}.footprint`),
     hasIntensity: asBoolean(field(record, "hasIntensity"), `${path}.hasIntensity`),
-    // **S60.** Absent means none, which is what a mode of an Open Fixture
+    // **S61.** Absent means none, which is what a mode of an Open Fixture
     // Library profile has and what every mode had before this session.
     beams: readOptionalInteger(field(record, "beams"), `${path}.beams`) ?? 0,
   };
@@ -1303,6 +1360,10 @@ function readMachineSettings(value: unknown, path: string): MachineSettings {
     autostart: asBoolean(field(record, "autostart"), `${path}.autostart`),
     fixtureLibrary: readOptionalString(field(record, "fixtureLibrary"), `${path}.fixtureLibrary`),
     surfaceProfile: readOptionalString(field(record, "surfaceProfile"), `${path}.surfaceProfile`),
+    // **A daemon before S59 has no wheel setting**, and the honest answer for
+    // one is the curve unchanged rather than a wheel that does nothing — which
+    // is what a missing field read as nought would draw in the box.
+    jogSensitivity: asInteger(field(record, "jogSensitivity") ?? 100, `${path}.jogSensitivity`),
     // A row this build does not know is **left out** rather than refused, which
     // is `canvas/windows.ts`'s rule for a window type: a daemon one version
     // ahead should cost a greyed-out row, not a connection.
@@ -1329,6 +1390,7 @@ const NO_MACHINE: MachineSettings = {
   token: null,
   logLevel: "Info",
   universes: 0,
+  jogSensitivity: 100,
   exitAction: "Hold",
   autostart: false,
   fixtureLibrary: null,

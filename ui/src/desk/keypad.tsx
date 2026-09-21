@@ -42,7 +42,7 @@ import type { JsonValue } from "../bindings";
 import { cueEditInForce } from "../show/looks";
 import { useConsole } from "./consoleshell";
 import { COMMAND_INPUT_ID, focusCommandLine } from "./commandinput";
-import { CONSOLE_KEYS } from "./keys";
+import { CONSOLE_KEYS, titleOf } from "./keys";
 
 /** What the keypad reads: the session, for the Update key's blink. */
 export interface KeypadProps {
@@ -67,7 +67,7 @@ export function Keypad({ session }: KeypadProps) {
           title={
             key.word === "Update" && editing !== null
               ? `Store the programmer back into cue ${editing.cueNumber}`
-              : key.title
+              : titleOf(key.word)
           }
           // The line is somewhere else on the screen — this is a window and the
           // line is a band — so the key names it by its id rather than holding a

@@ -160,7 +160,7 @@ export function modesSummary(fixture: LibraryFixture): string {
 }
 
 /**
- * What a mode's profile carries **besides its channels** — S60.
+ * What a mode's profile carries **besides its channels** — S61.
  *
  * An empty string for a profile out of the Open Fixture Library or for one of
  * the desk's four generics: they describe channels, which is what every desk

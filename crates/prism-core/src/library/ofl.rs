@@ -306,7 +306,7 @@ pub fn read_fixture(
                 own,
                 // The Open Fixture Library describes channels and not devices,
                 // so a profile out of it carries no physical description —
-                // S60, and the whole reason the installed library moved.
+                // S61, and the whole reason the installed library moved.
                 gdtf: false,
             },
             FixtureType {
@@ -1227,7 +1227,7 @@ fn ranges_of(definition: &Value, wheels: &Wheels, channel: &str) -> Vec<Attribut
                 scale_to_full(high.saturating_add(1), full).saturating_sub(1)
             },
             // The Open Fixture Library states no picture for a wheel slot —
-            // S60. A gobo out of this tree is its name, as it was.
+            // S61. A gobo out of this tree is its name, as it was.
             media: None,
         });
     }

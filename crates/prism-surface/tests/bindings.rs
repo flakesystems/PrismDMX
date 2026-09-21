@@ -21,8 +21,8 @@ use prism_domain::{
     ViewId, WindowType,
 };
 use prism_surface::{
-    Bindings, BoundControl, ButtonId, ExecutorTarget, Fader, GlobalButton, ProfileError, Step,
-    StripButton, SurfaceAction, SurfaceContext, SurfaceEvent, X_TOUCH,
+    Bindings, BoundControl, ButtonId, ExecutorTarget, Fader, GlobalButton, ProfileError,
+    SHIPPED_PROFILE, Step, StripButton, SurfaceAction, SurfaceContext, SurfaceEvent, X_TOUCH,
 };
 
 /// The profile as it ships. Compiled in, so a file that stopped parsing fails
@@ -37,13 +37,17 @@ const SHIPPED: &str = include_str!(concat!(
 ///
 /// Nothing at its default, for S14's reason — a context of zeroes cannot tell
 /// *carried through* from *never read*.
-fn context() -> SurfaceContext {
+fn context() -> SurfaceContext<'static> {
     SurfaceContext {
         executor_page: 2,
         selected_executor: Some(ExecutorId::new(19)),
         previous_view: Some(ViewId::new(1)),
         next_view: Some(ViewId::new(7)),
         programmer_page: 3,
+        // A line already standing, for the reason the rest of this fixture is
+        // not at its defaults: an empty one cannot tell *appended to nothing*
+        // from *the line was thrown away*.
+        command_line: "Store ",
         parameter: Some(prism_domain::AttributeKey::first(
             prism_domain::AttributeType::Pan,
         )),
@@ -329,11 +333,16 @@ fn the_cursor_cluster_pages_the_programmer_and_walks_its_parameters() {
             direction: ParamDirection::Next,
         })
     );
-    assert_eq!(
-        table.action(BoundControl::Global {
-            button: GlobalButton::Zoom
-        }),
-        None
+    // The Zoom button beside the cluster is what a DAW uses to put those keys
+    // into a second mode, and PrismDMX does not — the cursor keys mean one
+    // thing. **S59 gave it a window instead of leaving it empty**, which is the
+    // same claim said the other way: it is not a modifier for its neighbours.
+    assert!(
+        matches!(
+            table.command(press(GlobalButton::Zoom), &context),
+            Some(Command::OpenWindow { .. })
+        ),
+        "Zoom is a key of its own, not a mode for the cursor cluster"
     );
 }
 
@@ -395,11 +404,16 @@ fn the_encoder_assign_section_switches_the_encoder_bank() {
 }
 
 #[test]
-fn the_eight_function_keys_are_free_and_four_of_them_open_a_window() {
+fn the_eight_function_keys_all_open_a_window() {
     // §4.1 row 15: "F1-F8 (XKeys) | free: open window, jump to view, macro,
     // executor | Session or Engine | yes". *Free* is the requirement, so what is
     // asserted is that they are configurable and that the defaults are windows
     // rather than which windows: the file is where that is decided.
+    //
+    // **All eight since S59.** Four of them were empty, on the reasoning that a
+    // template should leave room; the owner's answer of 2026-09-20 is the other
+    // one — *alle 64 Tasten belegen*, a full table to rework on the rig rather
+    // than an empty panel to design on.
     let table = Bindings::defaults();
     let context = context();
     for key in [
@@ -407,6 +421,10 @@ fn the_eight_function_keys_are_free_and_four_of_them_open_a_window() {
         GlobalButton::F2,
         GlobalButton::F3,
         GlobalButton::F4,
+        GlobalButton::F5,
+        GlobalButton::F6,
+        GlobalButton::F7,
+        GlobalButton::F8,
     ] {
         assert!(
             matches!(
@@ -414,18 +432,6 @@ fn the_eight_function_keys_are_free_and_four_of_them_open_a_window() {
                 Some(Command::OpenWindow { .. })
             ),
             "{key} should open a window"
-        );
-    }
-    for key in [
-        GlobalButton::F5,
-        GlobalButton::F6,
-        GlobalButton::F7,
-        GlobalButton::F8,
-    ] {
-        assert_eq!(
-            table.action(BoundControl::Global { button: key }),
-            None,
-            "{key}"
         );
     }
     // And "free" is a claim about the table rather than about the defaults: any
@@ -465,53 +471,38 @@ fn save_writes_the_show_and_undo_is_oops() {
 }
 
 #[test]
-fn nothing_else_on_the_panel_is_bound_by_default() {
-    // The complement of §4.1, which the table has to get right as well: a
-    // default that quietly bound the Automation row would be a desk that did
-    // something nobody asked for. Transcribed by hand from the rows above.
+fn the_whole_panel_is_bound_but_the_two_that_must_not_be() {
+    // **The complement of §4.1, turned round by S59.** This test used to be
+    // *nothing else is bound*, and it was the right claim while the panel was a
+    // template with room left in it: a default that quietly bound the Automation
+    // row would have been a desk doing something nobody asked for.
+    //
+    // The owner's answer of 2026-09-20 is the other one — *alle 64 Tasten
+    // belegen*, a full table to rework on a real desk rather than an empty panel
+    // to design on — so the claim is now the complement of *that*: every key on
+    // the panel does something, and the two that do not are the two that must
+    // not, each for its own reason.
     let table = Bindings::defaults();
-    let bound = [
-        GlobalButton::AssignTrack,
-        GlobalButton::AssignSend,
-        GlobalButton::AssignPan,
-        GlobalButton::AssignPlugin,
-        GlobalButton::AssignEq,
-        // S43: the sixth Assign key, which had deliberately been left empty
-        // while there were five banks and six buttons.
-        GlobalButton::AssignInstrument,
-        GlobalButton::BankLeft,
-        GlobalButton::BankRight,
-        GlobalButton::ChannelLeft,
-        GlobalButton::ChannelRight,
-        GlobalButton::Flip,
-        GlobalButton::F1,
-        GlobalButton::F2,
-        GlobalButton::F3,
-        GlobalButton::F4,
-        GlobalButton::Save,
-        GlobalButton::Undo,
-        GlobalButton::Enter,
-        GlobalButton::Rewind,
-        GlobalButton::FastForward,
-        GlobalButton::Stop,
-        GlobalButton::Play,
-        GlobalButton::Record,
-        GlobalButton::CursorUp,
-        GlobalButton::CursorDown,
-        GlobalButton::CursorLeft,
-        GlobalButton::CursorRight,
+    let free = [
+        // §4.3's reserved control. Layer 2 drops its presses as well.
+        GlobalButton::SmpteBeats,
+        // No lamp at all (§2.7's `buttonsWithoutLed`), which makes it a poor
+        // home for an operating function — and, since S59, the only key on the
+        // panel that could not report what it was doing.
+        GlobalButton::NameValue,
     ];
     for button in GlobalButton::ALL {
         let action = table.action(BoundControl::Global { button });
         assert_eq!(
-            action.is_some(),
-            bound.contains(&button),
+            action.is_none(),
+            free.contains(&button),
             "Global.{button} is {}bound and should not be",
             if action.is_some() { "" } else { "un" }
         );
     }
-    // 26 panel buttons, the two strip rows, the two faders and the wheel.
-    assert_eq!(table.bound(), bound.len() + 5 + 1 + 1 + 1);
+    // Sixty-two panel buttons, the four strip keys, the V-Pot push, the two
+    // faders and the wheel. The strip encoder is deliberately empty (§4.1).
+    assert_eq!(table.bound(), 62 + 5 + 1 + 1 + 1);
 }
 
 #[test]
@@ -543,13 +534,38 @@ fn the_reserved_button_is_unbound_in_the_defaults_as_well() {
 // ------------------------------------------------- the file that ships with it
 
 #[test]
-fn the_shipped_profile_is_the_built_in_default_table() {
-    // Two things that must not drift: the file a user edits and the table a
-    // daemon falls back to when that file is broken. If they differed, a
-    // malformed profile would silently change what the desk does — which is the
-    // opposite of what falling back is for.
+fn the_shipped_profile_parses_and_binds_the_whole_surface() {
+    // **This assertion changed shape in S59, and the change is the point.**
+    //
+    // It used to hold two things equal: the file a user edits, and a table
+    // written out again in Rust that a daemon falls back to when that file is
+    // broken. That was worth asserting while there were two — if they differed,
+    // a malformed profile would silently change what the desk does, which is the
+    // opposite of what falling back is for. But two things held equal by a test
+    // are still two things to edit, and the owner reworks the shipped table on a
+    // real desk and hands back a file.
+    //
+    // So there is one now: `Bindings::defaults()` **is** this file, embedded.
+    // Comparing them would be comparing a value with itself, so what is checked
+    // instead is the thing that can actually go wrong — the file not parsing,
+    // which would leave `defaults()` silently empty and every key on the desk
+    // dead. A typo in this file is a red test here, not a dark console in a hall.
     let table = Bindings::parse(SHIPPED, &X_TOUCH).expect("the profile this repository ships");
     assert_eq!(table, Bindings::defaults());
+    assert_eq!(table, Bindings::parse(SHIPPED_PROFILE, &X_TOUCH).unwrap());
+
+    // And it is not the empty table, which is what a fallback that had fired
+    // would look like.
+    assert!(
+        table.bound() > 60,
+        "the shipped profile binds {} controls",
+        table.bound()
+    );
+
+    // One row per control the surface has, bound or not: `rows()` is what the
+    // control editor draws and what a machine configuration stores, and a file
+    // that left controls out would give an operator a panel with holes in it.
+    assert_eq!(table.rows().len(), BoundControl::all().len());
 }
 
 /// **What the control editor exports is a profile this reader takes back.**

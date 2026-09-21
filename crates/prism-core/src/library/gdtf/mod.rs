@@ -1,5 +1,5 @@
 //! Reading **GDTF**, the fixture definition format this desk patches from —
-//! **S60**.
+//! **S61**.
 //!
 //! [General Device Type Format](https://gdtf.eu), DIN SPEC 15800. A `.gdtf`
 //! file is a ZIP archive ([`super::zip`]) holding a `description.xml`, the
@@ -480,7 +480,7 @@ fn close_ranges(ranges: &mut Vec<AttributeRange>) {
     }
 }
 
-/// What a fixture calls each of its attributes, in words — **S60**.
+/// What a fixture calls each of its attributes, in words — **S61**.
 ///
 /// GDTF's `AttributeDefinitions` table states a `Pretty` beside every
 /// attribute name: `Dim` for `Dimmer`, `Gobo1 <> ` for a gobo wheel's index.
