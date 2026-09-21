@@ -621,6 +621,17 @@ impl Show {
                     effects: vec![Effect::Repatch],
                 })
             }
+            // S30's, and the one patch-shaped command that is **not** a patch:
+            // where a fixture hangs moves no channel, so the engine is not told
+            // and the tick pays nothing for a head being moved in the 3D view.
+            Command::PlaceFixtures { placements } => {
+                let ops = self.place_fixtures(placements)?;
+                if ops.is_empty() {
+                    // Where they already were — `RenumberFixture`'s rule.
+                    return Ok(Applied::default());
+                }
+                Ok(Applied::patch(ops))
+            }
             // The library is `ShowFile`'s, so this is validated as far as the
             // show can see it — which is not far: a key is a key. See
             // [`Effect::EmbedProfile`].

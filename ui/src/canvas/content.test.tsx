@@ -121,18 +121,21 @@ describe("a window's body", () => {
     expect(screen.getByTestId("telemetry-canvas")).not.toBeNull();
   });
 
-  it("says so, by name, for the windows that are not built yet", () => {
-    // **Two, since S43 built the third.** `Settings` left this list in S37 and
-    // `ClockViewer` in S43 — a clock is a morning's work and the session's exit
-    // criterion says so in as many words. What is left is the two whose sessions
-    // have not happened: `Viewer3D` is S30 and `PhaserEditor` is an engine that
-    // does not exist yet, so both stay honest lines rather than empty windows.
-    for (const type of ["Viewer3D", "PhaserEditor"] as const) {
-      const text = body(type);
-      expect(text, type).toContain("is not built yet");
-      // Named, so an operator can tell which button they pressed.
-      expect(text, type).toMatch(/Viewer 3D|Phaser Editor/);
-    }
+  it("says so, by name, for the window that is not built yet", () => {
+    // **One, since S30 built the 3D viewer.** `Settings` left this list in S37,
+    // `ClockViewer` in S43 and `Viewer3D` in S30. What is left is the one whose
+    // engine does not exist: `PhaserEditor` stays an honest line rather than
+    // an empty window.
+    const text = body("PhaserEditor");
+    expect(text).toContain("is not built yet");
+    // Named, so an operator can tell which button they pressed.
+    expect(text).toMatch(/Phaser Editor/);
+  });
+
+  it("draws the 3D viewer, which S30 built", () => {
+    const text = body("Viewer3D");
+    expect(text).not.toContain("is not built yet");
+    expect(text).toContain("Frame all");
   });
 
   it("draws the clock, which S43 built", () => {

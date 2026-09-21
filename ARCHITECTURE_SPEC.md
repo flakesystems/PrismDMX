@@ -56,7 +56,7 @@ flowchart TB
     subgraph APP["prism-app — Tauri shell (process 2, allowed to crash)"]
         R["React + TypeScript"]
         Z["Read-model mirror (Zustand/Immer)"]
-        C3["3D viewer (react-three-fiber)"]
+        C3["3D viewer (2D canvas, S30)"]
         CV["Telemetry canvas renderer"]
     end
 
@@ -407,6 +407,12 @@ standing at a desk.
 
 ---
 
+### 4.7 The 3D viewer draws on a 2D canvas *(S30)*
+
+The first draft of this document named *react-three-fiber* for the viewer, and S30 decided against it. The viewer draws boxes, cones and a floor with its own projection onto a **2D canvas**, behind a `ViewSurface` interface (`ui/src/viewer/surface.ts`), for three reasons that are this project's rather than a taste: it has to work on every machine the desk runs on, and WebGL is missing or software-emulated on an ageing school laptop, a Raspberry Pi's webview (D10), a remote desktop and a CI runner; it has to be testable without a rasteriser like every other canvas here, which an interface in front of the drawing makes possible; and a rig is small — S30 measured 515 fixtures with 257 beams at a median of **6.4 ms** a picture in Chromium while the DMX Sheet beside it stayed at a p99 under 1 ms. What it gives up is a depth buffer (bodies are painted far to near, beams are added light) and the devices' own 3D models, which do not reach a client yet (`PROGRESS.md` §5). When they do, `ViewSurface` is the seam a WebGL surface goes behind.
+
+The viewer reads **the cable**, not the programmer: the telemetry frame the daemon already publishes, decoded outside React exactly as the DMX Sheet decodes it (§7 of `docs/IPC_PROTOCOL.md`). It asks the daemon nothing, so the engine does not know a viewer is open.
+
 ## 5. DMX engine pipeline
 
 One tick, in order:
@@ -558,6 +564,9 @@ interface Fixture {
   name: string; typeId: string;
   universe: UniverseId; address: number;   // 1..=512 start address
   position: Vec3; rotation: Vec3;          // 3D viewer + PSN follow
+  // Read since S30, set by PlaceFixtures. Metres, Y up, z growing upstage;
+  // a rotation in degrees applied Z, then X, then Y (Ry · Rx · Rz). The one
+  // definition is prism_domain::placement, and a recording holds the viewer to it.
   invertPan: boolean; invertTilt: boolean;
 }
 
@@ -747,6 +756,8 @@ the same size as the edits it is derived from.
 
 Applying a command produces a compact `UndoRecord` holding the inverse and the affected scope, kept in a 200-entry ring buffer.
 
+**`PlaceFixtures` is undoable, and its scope is the place and not the patch entry** *(S30)*. Where a fixture hangs is part of the rig and a spread along the wrong truss is exactly what Oops is for, so it is one step per gesture. Its image is `Image::Place` — position and rotation, nothing else — so an Oops over it moves fixtures in the 3D view and **repatches nothing**, the same as the command itself: the tick is not told about a placement in either direction.
+
 **Deliberately not undoable:** playback actions (`ExecutorGo`, `ExecutorOff`, `ExecutorOn`, `Goto`, `ExecutorButton`, master moves) and every session command from §4.4 — `SelectSequence` (S39) among them, because an Oops must not pull a cue list out from under an operator any more than it pulls a window. `ExecutorOn` and `Goto` are S40's and are excluded for the same reason as the two beside them: they change light somebody is currently driving.
 
 **Every machine command is excluded too** *(S33, six of them since S37, and S38 added no seventh)*, and that follows from where the output patch lives rather than from a separate decision. `AddOutput`, `ConfigureOutput`, `RemoveOutput`, `SetOutputEnabled`, `SetSurfacePort` and `ConfigureMachine` edit `prism_core::MachineConfig` (§7.0, §10.3), which is not show content: this journal belongs to the show, it is cleared when a show is loaded, and a record of a rig change would be a record of something the show it is filed against knows nothing about. It is also the playback rule met by another road — an Oops that re-addressed a node would move light on a stage while somebody was driving it. `Command::is_machine_command` is the predicate, `ShowFile::apply` refuses these four outright, and `crates/prism-core/tests/outputs.rs` asserts that a refusal leaves the journal exactly where it was.
@@ -907,7 +918,7 @@ Enttec USB Pro protocol over VCP. It uses the same `DmxOutput` boundary and is p
 
 ## 8. Incoming position data (PSN / OSC — openfollow.app)
 
-Trackers send at their own rate (typically 30–60 Hz), asynchronously to the tick. A receiver thread writes into a ring buffer; the tick reads **only the latest** value — stale positions are worthless, so nothing is queued. Fixtures with a follow assignment compute pan and tilt from tracker position combined with fixture position and rotation in 3D space.
+Trackers send at their own rate (typically 30–60 Hz), asynchronously to the tick. A receiver thread writes into a ring buffer; the tick reads **only the latest** value — stale positions are worthless, so nothing is queued. Fixtures with a follow assignment compute pan and tilt from tracker position combined with fixture position and rotation in 3D space. **What position and rotation mean is settled since S30** — `prism_domain::placement` — and the viewer's yoke (`ui/src/viewer/space.ts::yoke`, pan about the fixture's vertical, then tilt about the yoke's across axis) is the forward half of the calculation this section will need backwards.
 
 On packet timeout (500 ms) the last position is **held**, a warning appears in the UI, and nothing jumps.
 
@@ -940,6 +951,7 @@ prismdmx/
 ├─ ui/
 │  ├─ src/components/    # Canvas, Executor Bar, Encoder Bar, Console, View Selector
 │  ├─ src/windows/       # Fixture Sheet, Sequence Sheet, 3D Viewer, Patch, Settings …
+│  ├─ src/viewer/        # the 3D viewer (S30): show space, the rig, the cable, a 2D canvas
 │  ├─ src/state/         # read-model mirror, telemetry channel (canvas/refs, not useState)
 │  └─ src/bindings/      # generated from prism-domain
 ├─ profiles/

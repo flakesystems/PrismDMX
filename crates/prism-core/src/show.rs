@@ -139,6 +139,10 @@ pub enum ShowError {
     /// cannot share one, and replacing the other would delete a light nobody
     /// asked to delete.
     FixtureNumberInUse(prism_domain::FixtureId),
+    /// A place with a number that is not finite, or further from the origin
+    /// than `prism_domain::MAX_REACH` — S30. Named by the fixture it was for,
+    /// because a spread of eight that refuses has to say which one.
+    FixtureOutOfReach(prism_domain::FixtureId),
     /// A `Command::PatchFixtures` with no fixture in it — S57. Refused rather
     /// than applied as nothing, because a gesture that did nothing would still
     /// be a step for Oops to take back.
@@ -293,6 +297,11 @@ impl fmt::Display for ShowError {
             Self::FixtureNumberInUse(id) => {
                 write!(f, "fixture {id} is already patched")
             }
+            Self::FixtureOutOfReach(id) => write!(
+                f,
+                "fixture {id} cannot hang there: every coordinate must be a number within {} m",
+                prism_domain::MAX_REACH
+            ),
             Self::UnknownLibraryType(id) => {
                 write!(f, "this desk carries no profile {id:?}")
             }
@@ -939,6 +948,75 @@ impl Show {
             },
             op,
         ])
+    }
+
+    /// Where a fixture hangs and which way it faces, or `None` when it is not
+    /// patched — S30.
+    #[must_use]
+    pub fn place_of(&self, id: prism_domain::FixtureId) -> Option<prism_domain::FixturePlace> {
+        self.fixtures
+            .get(&id)
+            .map(|fixture| prism_domain::FixturePlace {
+                id,
+                position: fixture.position,
+                rotation: fixture.rotation,
+            })
+    }
+
+    /// Puts fixtures where they hang — `Command::PlaceFixtures`, S30.
+    ///
+    /// Everything is checked before anything is written, so a refusal leaves
+    /// the show exactly as it was: half a spread is a rig nobody asked for. A
+    /// fixture named twice ends where its **last** place puts it, which is what
+    /// applying the list in order would do.
+    ///
+    /// **Not a patch.** Only `position` and `rotation` are written, each as a
+    /// `replace` of its own, and the patch revision does not move — where a
+    /// fixture hangs changes no channel, so nothing the engine built from the
+    /// patch is out of date. A place a fixture already has writes nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`ShowError::UnknownFixture`] for a fixture that is not patched, and
+    /// [`ShowError::FixtureOutOfReach`] for a place
+    /// [`prism_domain::FixturePlace::is_reachable`] refuses.
+    pub fn place_fixtures(
+        &mut self,
+        placements: &[prism_domain::FixturePlace],
+    ) -> Result<Vec<JsonPatchOp>, ShowError> {
+        for place in placements {
+            self.require_fixture(place.id)?;
+            if !place.is_reachable() {
+                return Err(ShowError::FixtureOutOfReach(place.id));
+            }
+        }
+        let mut ops = Vec::new();
+        for place in placements {
+            let key = place.id.to_string();
+            let Some(fixture) = self.fixtures.get_mut(&place.id) else {
+                continue;
+            };
+            if fixture.position != place.position {
+                ops.push(put(
+                    format!("{}/position", pointer(FIXTURES, &key)),
+                    &place.position,
+                    true,
+                )?);
+                fixture.position = place.position;
+            }
+            if fixture.rotation != place.rotation {
+                ops.push(put(
+                    format!("{}/rotation", pointer(FIXTURES, &key)),
+                    &place.rotation,
+                    true,
+                )?);
+                fixture.rotation = place.rotation;
+            }
+        }
+        if !ops.is_empty() {
+            self.touch();
+        }
+        Ok(ops)
     }
 
     /// Stores a group, replacing one with the same number.
@@ -2188,6 +2266,7 @@ mod tests {
             // that names something twice, or nothing at all, is answered with a
             // sentence rather than with a silence.
             ShowError::FixtureNumberInUse(FixtureId::new(1)),
+            ShowError::FixtureOutOfReach(FixtureId::new(1)),
             ShowError::UnknownLibraryType("generic.par".to_owned()),
             ShowError::UnknownCue {
                 sequence: SequenceId::new(1),

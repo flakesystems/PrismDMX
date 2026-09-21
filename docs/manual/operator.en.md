@@ -156,7 +156,7 @@ stale without a test going red.
 | `DmxSheet` | *DMX Sheet* — the **wire**: universe by universe, channel by channel, with no fixtures at all |
 | `SequenceSheet` | *Sequence Sheet* — the **cue list**: which sequences exist, which one is current, and its cues with number, name, times and trigger |
 | `Groups` | *Groups* — the **group pool**: lists of fixtures, not looks. That is what makes `Group 3` a selection |
-| `Viewer3D` | *Viewer 3D* — the 3D stage view. **Not built in this build**; the window says so rather than staying empty |
+| `Viewer3D` | *Viewer 3D* — the rig as it hangs, with the beams the output is making; where fixtures are placed |
 | `PhaserEditor` | *Phaser Editor* — the effect editor. **Not built in this build**; there is no effect engine behind it yet |
 | `ClockViewer` | *Clock Viewer* — the clock, big enough to read from the back, and what is running. Timecode columns are missing because there is no timecode |
 | `CueViewer` | *Cue Viewer* — the **cue**: what it sets, fixture by fixture, with the preset references. For looking at, not for editing |
@@ -200,14 +200,48 @@ it sets nothing. `Store Group 3 "Front light"` files the current **selection**.
 
 ### Viewer 3D · `Viewer3D`
 
-Not built yet. The window opens and says so in one sentence — and that is
-deliberate: whoever opens it from an X-Touch F-key should find an answer, not an
-empty rectangle they will write a fault report about.
+The rig in space: every patched fixture where it hangs, and a beam out of every
+one that is lit, in the colour it is putting out. The beams are **what is on the
+cable** — the same levels the DMX Sheet shows — so what you see is what the rig
+is being told, whatever told it: the programmer, a cue, a master.
+
+- **Look around.** Drag to orbit, **Shift**-drag (or drag with the right button)
+  to slide, the wheel to come closer. **Front**, **Top**, **Side** and **3D**
+  are the four usual views, and **Frame all** stands back until every fixture is
+  in the picture. The camera is this screen's own: a second screen looking at
+  the same rig from somewhere else is the normal case, and nothing you do to the
+  view is sent to the desk.
+- **Pick.** A click on a fixture does what a click on a Fixture Sheet row does:
+  it adds it to the selection, or takes it out again.
+- **Place.** The panel on the right works on the **selection**. It starts from
+  where the first selected fixture hangs. **Set** puts every selected fixture at
+  the numbers in the form — a field you empty keeps each fixture's own value.
+  **Spread** lays them out across the stage in the order you selected them,
+  centred on **X**, a **Gap** apart (a metre when it is empty): `Fixture 1 Thru
+  8`, *Spread*, is a truss of eight hung in one go. Either is **one Oops**.
+- **What the numbers mean.** Metres, measured from a point you choose — the
+  middle of the stage front at floor level is a good one. **X** runs across the
+  stage (positive is stage left, which is the audience's right), **Y** is height
+  above the floor, **Z** runs upstage, away from the audience. A rotation of
+  nought hangs a fixture beam-down. **Rotation X** tips it: 90 points a hanging
+  beam at the audience, 180 stands the fixture up on the floor. **Rotation Y**
+  turns it about the vertical, and **Rotation Z** rolls it — for a fixture on a
+  boom, 90.
+- **The line beside the buttons** says how many fixtures there are, how many are
+  lit, how many have **not been placed** yet (a newly patched fixture is at the
+  origin until you place it) and how long a picture takes to draw.
+
+A fixture whose profile came from a **GDTF** file is drawn at its own size with
+its beam where the manufacturer says it leaves the body; any other is drawn as a
+small box with one beam out of the bottom. The fixtures' own 3D models and the
+pictures of their gobos are not drawn yet.
 
 ### Phaser Editor · `PhaserEditor`
 
-Also not built yet; what is missing behind it is the effect engine, not the
-window.
+Not built yet. The window opens and says so in one sentence — and that is
+deliberate: whoever opens it from an X-Touch F-key should find an answer, not an
+empty rectangle they will write a fault report about. What is missing behind it
+is the effect engine, not the window.
 
 ### Clock Viewer · `ClockViewer`
 
@@ -315,7 +349,9 @@ readable fixture file is refused and never lands in the folder.
 fixture, with its number and address, **in one step that one Oops takes back**.
 Nothing already patched is touched — a planned fixture whose number your show is
 already using gets the next free one. The desk then says how many fixtures
-arrived and what it skipped.
+arrived and what it skipped. Each fixture **hangs where the plan puts it** — in
+*Viewer 3D* the rig is where your planner drew it. Which way each one *faces*
+is not taken from the plan yet: they all hang beam-down until you turn them.
 
 **3. Check that it arrives.** Open the *DMX Sheet*, pull the fixture to full,
 look. If nothing happens there, it is the outputs and not the patch.
@@ -837,7 +873,8 @@ are, and a later installation finds them again.
 
 Named here rather than discovered by you:
 
-- **No 3D visualiser.** Planned.
+- **The 3D viewer draws boxes, not models** — a fixture's own 3D model and its
+  gobo pictures are not drawn yet, and it draws no haze and no gobo projection.
 - **No web remote** — a phone or tablet cannot run the desk yet. Planned.
 - **No timecode, no OSC, no PSN.** Planned.
 - **No effect engine** — the *Phaser Editor* window is empty because what goes

@@ -1330,6 +1330,14 @@ impl ShowFile {
                 Image::Fixture(*id, self.show.fixture(*id).cloned()),
                 Image::Fixture(*to, self.show.fixture(*to).cloned()),
             ],
+            // S30's: where each fixture hangs, and nothing else about it — an
+            // undo that restored the whole patch entry would repatch, and a
+            // placement never did.
+            Command::PlaceFixtures { placements } => placements
+                .iter()
+                .filter_map(|place| self.show.place_of(place.id))
+                .map(Image::Place)
+                .collect(),
             Command::EmbedFixtureType { type_id } => vec![Image::FixtureType(
                 type_id.clone(),
                 self.show.fixture_type(type_id).cloned(),
@@ -1703,6 +1711,10 @@ impl ShowFile {
         let mut taken: std::collections::BTreeSet<FixtureId> =
             self.show.fixtures().map(|fixture| fixture.id).collect();
         let mut plan: Vec<(FixtureId, String, String, u16, u16)> = Vec::new();
+        // Where the plan hangs each of them — S30 met S62 here. A position
+        // the desk would refuse (past `MAX_REACH`) is left out rather than
+        // refusing the rig: the fixture is still patched, at the origin.
+        let mut places: Vec<prism_domain::FixturePlace> = Vec::new();
         let mut wanted: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for fixture in &rig.fixtures {
             let Some(type_id) = fixture.type_id.clone() else {
@@ -1749,6 +1761,20 @@ impl ShowFile {
             }
             taken.insert(id);
             wanted.insert(type_id.clone());
+            if let Some(position) = fixture.position {
+                let place = prism_domain::FixturePlace {
+                    id,
+                    position,
+                    // The plan's rotation is not read yet: MVR states it as a
+                    // matrix, and turning that into `prism_domain::placement`'s
+                    // triple is `rotation_of`'s job once a published file has
+                    // shown which way round its rows are (PROGRESS.md §5).
+                    rotation: prism_domain::Vec3::ZERO,
+                };
+                if place.is_reachable() {
+                    places.push(place);
+                }
+            }
             plan.push((id, type_id, fixture.name.clone(), universe, address));
         }
 
@@ -1795,6 +1821,14 @@ impl ShowFile {
                     other => notices.push(other),
                 }
             }
+        }
+
+        // Hung where the plan says, **inside the same step**: the images
+        // below are taken afterwards, so one Oops takes back the patch and the
+        // places together. `place_fixtures` repatches nothing (S30).
+        if !places.is_empty() {
+            ops.extend(self.show.place_fixtures(&places)?);
+            report.placed = u32::try_from(places.len()).unwrap_or(u32::MAX);
         }
 
         let after: Vec<Image> =
@@ -1925,6 +1959,13 @@ impl ShowFile {
                     // is being taken back (S4).
                     applied.effects.push(Effect::Repatch);
                 }
+                Image::Place(place) => {
+                    let ops = self.show.place_fixtures(core::slice::from_ref(place))?;
+                    if !ops.is_empty() {
+                        // No `Repatch`, for the reason the command has none.
+                        applied.deltas.push(Delta::ShowPatch { ops });
+                    }
+                }
                 Image::FixtureType(type_id, fixture_type) => {
                     let ops = match fixture_type {
                         Some(fixture_type) => self.show.embed_fixture_type(fixture_type.clone())?,
@@ -2021,6 +2062,7 @@ impl ShowFile {
                     }
                 }
                 Image::Fixture(..)
+                | Image::Place(..)
                 | Image::FixtureType(..)
                 | Image::Sequence(..)
                 | Image::Preset(..)
@@ -2611,6 +2653,9 @@ pub struct RigReport {
     pub renumbered: u32,
     /// Skipped because they would not fit the universe their address names.
     pub would_not_fit: u32,
+    /// Hung where the plan puts them — S30, which gave the desk a command
+    /// that sets a fixture's place. The rest stay at the origin.
+    pub placed: u32,
 }
 
 #[cfg(test)]
@@ -2640,8 +2685,13 @@ mod rig_tests {
 
     /// One `<Fixture>` of a plan.
     fn planned(name: &str, id: u32, address: u32) -> String {
+        planned_at(name, id, address, "")
+    }
+
+    /// One `<Fixture>` of a plan, with whatever else it says — a `<Matrix>`.
+    fn planned_at(name: &str, id: u32, address: u32, extra: &str) -> String {
         format!(
-            r#"<Fixture uuid="F{id}" name="{name}">
+            r#"<Fixture uuid="F{id}" name="{name}">{extra}
                  <GDTFSpec>Maker@Head.gdtf</GDTFSpec><GDTFMode>Mode 1</GDTFMode>
                  <FixtureID>{id}</FixtureID>
                  <Addresses><Address break="1">{address}</Address></Addresses>
@@ -2720,6 +2770,47 @@ mod rig_tests {
         file.apply(&Command::Redo).expect("it redoes");
         assert_eq!(at(&file, 1), Some(("Front left".to_owned(), 1, 1)));
         assert_eq!(at(&file, 3), Some(("Back".to_owned(), 1, 9)));
+    }
+
+    /// **The rig arrives hung, too** — S30 and S62 meeting. MVR is Z-up in
+    /// millimetres, this desk Y-up in metres; the places are part of the one
+    /// step, so the Oops that takes the patch back takes them back with it.
+    #[test]
+    fn a_rig_arrives_hung_where_the_plan_puts_it() {
+        let mut file = ShowFile::default();
+        let archive = plan(
+            &format!(
+                "{}{}",
+                planned_at(
+                    "Truss left",
+                    1,
+                    1,
+                    "<Matrix>{1,0,0}{0,1,0}{0,0,1}{-2000,1500,6000}</Matrix>"
+                ),
+                planned("Nowhere said", 2, 5),
+            ),
+            4,
+        );
+        let (_, report) = file.import_rig(&archive).expect("the plan is taken");
+        assert_eq!(report.patched, 2);
+        assert_eq!(report.placed, 1);
+
+        let hung = file.show.fixture(prism_domain::FixtureId::new(1)).unwrap();
+        assert_eq!(hung.position, prism_domain::Vec3::new(-2.0, 6.0, 1.5));
+        assert_eq!(hung.rotation, prism_domain::Vec3::ZERO);
+        let unsaid = file.show.fixture(prism_domain::FixtureId::new(2)).unwrap();
+        assert_eq!(unsaid.position, prism_domain::Vec3::ZERO);
+
+        file.apply(&Command::Oops).expect("it undoes");
+        assert!(file.show.fixture(prism_domain::FixtureId::new(1)).is_none());
+        file.apply(&Command::Redo).expect("it redoes");
+        assert_eq!(
+            file.show
+                .fixture(prism_domain::FixtureId::new(1))
+                .unwrap()
+                .position,
+            prism_domain::Vec3::new(-2.0, 6.0, 1.5)
+        );
     }
 
     /// **The operator's show wins over the planner's numbering.**

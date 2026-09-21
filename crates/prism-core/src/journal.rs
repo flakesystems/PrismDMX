@@ -21,6 +21,7 @@
 //! |---|---|
 //! | `PatchFixture`, `UnpatchFixture` | that one fixture's patch entry |
 //! | `RenumberFixture` | **both** numbers' patch entries — the one it left and the one it took |
+//! | `PlaceFixtures` | where each of its fixtures hangs, and not their patch entries (S30) |
 //! | `EmbedFixtureType` | that one embedded profile |
 //! | `StoreCue`, `StoreSequence`, `EditCue`, `Update` | that one sequence and the whole desk state a programmer command moves |
 //! | `SelectFixtures`, `SetAttribute`, `ApplyPreset`, `ClearProgrammer` | the desk state, which is the programmer, its page state and the update state |
@@ -99,6 +100,10 @@ impl core::error::Error for JournalError {}
 pub enum UndoScope {
     /// One fixture's entry in the patch.
     Fixture(FixtureId),
+    /// Where one fixture hangs and which way it faces — S30. Its own scope
+    /// rather than [`Self::Fixture`], because it is not the patch entry: an
+    /// Oops over it moves a fixture in the 3D view and repatches nothing.
+    Place(FixtureId),
     /// One embedded profile.
     FixtureType(String),
     /// One sequence, with its cues.
@@ -135,6 +140,10 @@ pub(crate) enum Image {
     /// The absence is a real case and not defensive: patching a fixture for the
     /// first time has "not patched" as its inverse.
     Fixture(FixtureId, Option<Fixture>),
+    /// Where one fixture hangs — S30. Never absent: a fixture that is not
+    /// patched has no place, and a `PlaceFixtures` naming one is refused
+    /// before anything is filed.
+    Place(prism_domain::FixturePlace),
     /// One embedded profile. `None`: the show did not carry it.
     ///
     /// Embedding one for the first time has "not embedded" as its inverse, the
@@ -204,6 +213,7 @@ impl Image {
     pub(crate) fn scope(&self) -> UndoScope {
         match self {
             Self::Fixture(id, _) => UndoScope::Fixture(*id),
+            Self::Place(place) => UndoScope::Place(place.id),
             Self::FixtureType(type_id, _) => UndoScope::FixtureType(type_id.clone()),
             Self::Sequence(id, _) => UndoScope::Sequence(*id),
             Self::Preset(id, _) => UndoScope::Preset(*id),

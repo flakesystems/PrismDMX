@@ -2,12 +2,12 @@
  * What is inside a window.
  *
  * S25 builds the canvas, not the sheets: the fixture sheet is S27, the cue
- * viewer is S28 and the 3D viewer is S30. So the ones that are left are one
- * honest line saying the window exists and is not built yet — an operator who
- * opens a `PhaserEditor` from an X-Touch F-key should find a window that says so
- * rather than an empty rectangle they will file a bug about.
+ * viewer is S28 and the 3D viewer is S30. So the one that is left is one honest
+ * line saying the window exists and is not built yet — an operator who opens a
+ * `PhaserEditor` from an X-Touch F-key should find a window that says so rather
+ * than an empty rectangle they will file a bug about.
  *
- * Twelve of the fourteen are built. Three are about **light**, and S27 settled the
+ * Thirteen of the fourteen are built. Three are about **light**, and S27 settled the
  * difference between them:
  *
  * - **Patch** is the *rig* — which fixtures exist and where their channels are.
@@ -63,9 +63,17 @@
  * it *clocks and timecode* since the first draft and there is no timecode in
  * this build, so it draws the half that is real: the time, large enough to read
  * from the back of the room, and what is running. `show/clock.tsx` says which
- * columns are missing and why. That leaves **two** windows saying they are not
- * built, which is S43's exit criterion: `Viewer3D` is S30 and `PhaserEditor` is
- * an engine that does not exist.
+ * columns are missing and why. That left **two** windows saying they were not
+ * built, which was S43's exit criterion: `Viewer3D` was S30's and `PhaserEditor`
+ * is an engine that does not exist.
+ *
+ * # And one is the rig in space — S30
+ *
+ * **Viewer 3D** is the rig as it hangs, with the beams the cable is making:
+ * `viewer/viewer3d.tsx`. It reads the patch and the embedded profiles out of
+ * the show document and the levels out of the telemetry sink, and it is the
+ * one window that places fixtures — `Command::PlaceFixtures`, one Oops a
+ * gesture. That leaves **one** window saying it is not built: `PhaserEditor`.
  *
  * # Scrolling
  *
@@ -88,6 +96,7 @@ import { SequenceSheet } from "../show/sequencesheet";
 import { StatusWindow } from "../show/status";
 import { SettingsWindow } from "../settings/settingswindow";
 import { TelemetryPanel } from "../telemetry/panel";
+import { Viewer3D } from "../viewer/viewer3d";
 import type { CanvasWindow } from "./windows";
 import { windowTitle } from "./windows";
 
@@ -129,6 +138,7 @@ export function WindowContent({
     case "ClockViewer":
       return <ClockViewer show={show} session={session} />;
     case "Viewer3D":
+      return <Viewer3D show={show} programmer={programmer} />;
     case "PhaserEditor":
       return <NotBuiltYet window={instance} />;
   }
