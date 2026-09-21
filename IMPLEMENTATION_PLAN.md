@@ -1702,8 +1702,9 @@ Produktion. Der Container-Reader aus S61 trägt sie schon.
   kommt mit** — so entschieden vom Eigentümer am 2026-09-21: `ImportRig` patcht
   jedes geplante Fixture in einem Schritt, den ein Oops ganz zurücknimmt, fügt
   hinzu statt zu ersetzen, und zählt, was es übersprungen hat, statt zu raten
-- **`.gdtf`-Import** über den Dateidialog, statt von Hand nach `%APPDATA%`
-  *(offen — der MVR-Knopf ist da, der für eine einzelne `.gdtf` noch nicht)*
+- ✅ **`.gdtf`-Import** über den Dateidialog, statt von Hand nach `%APPDATA%`:
+  gelesen, dann kopiert, dann die Bibliothek neu eingelesen — derselbe Pfad wie
+  beim Start, damit es keinen zweiten Weg in die Bibliothek gibt
 - **In-App-Login** zu GDTF Share, optional: Zugangsdaten in den Einstellungen,
   Download ins **Datenverzeichnis** des Betreibers und nie ins
   Programmverzeichnis, mit Fortschritt und einem Abbruch, der nichts halb

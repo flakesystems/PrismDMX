@@ -1245,6 +1245,20 @@ pub enum Command {
         /// The `.mvr` to read.
         path: String,
     },
+    /// Take one fixture profile into this desk's library — **S62**.
+    ///
+    /// A `.gdtf` from a manufacturer's website or a stick. The file is **copied
+    /// into the venue's own fixture folder**, so it is there after a restart
+    /// exactly as a hand-copied one would be, and it wins its keys against the
+    /// installed library (B43).
+    ///
+    /// It changes the **library** and not the show: nothing is patched, and
+    /// there is nothing to undo. A profile only reaches a show when a fixture
+    /// is patched with it.
+    ImportProfile {
+        /// The `.gdtf` to read.
+        path: String,
+    },
     /// Switch the canvas to a stored view.
     SelectView {
         /// The view to activate.
@@ -1812,6 +1826,7 @@ impl Command {
                 | Self::ExportShow { .. }
                 | Self::ImportShow { .. }
                 | Self::ImportRig { .. }
+                | Self::ImportProfile { .. }
                 // S29's, and the plainest case on this list: there is nothing
                 // to take back, and there would be nobody left to read the
                 // entry.

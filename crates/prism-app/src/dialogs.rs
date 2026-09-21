@@ -58,6 +58,8 @@ pub enum PathKind {
     SurfaceProfile,
     /// A venue's rig plan to take into the show — **S62**.
     ImportRig,
+    /// One fixture profile to take into the library — **S62**.
+    ImportProfile,
 }
 
 impl PathKind {
@@ -70,6 +72,7 @@ impl PathKind {
         Self::ImportShow,
         Self::FixtureLibrary,
         Self::ImportRig,
+        Self::ImportProfile,
         Self::SurfaceProfile,
     ];
 }
@@ -192,6 +195,21 @@ pub const fn chooser(kind: PathKind) -> Chooser {
                 Filter {
                     name: "Rig plan",
                     extensions: &["mvr"],
+                },
+                Filter {
+                    name: "Every file",
+                    extensions: &["*"],
+                },
+            ],
+            suggested: None,
+        },
+        PathKind::ImportProfile => Chooser {
+            title: "Import a fixture profile (GDTF)",
+            mode: Mode::OpenFile,
+            filters: &[
+                Filter {
+                    name: "Fixture profile",
+                    extensions: &["gdtf"],
                 },
                 Filter {
                     name: "Every file",

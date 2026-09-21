@@ -437,7 +437,8 @@ impl SessionState {
             | Command::NewShow { .. }
             | Command::ExportShow { .. }
             | Command::ImportShow { .. }
-            | Command::ImportRig { .. } => return Err(SessionError::NotASessionCommand),
+            | Command::ImportRig { .. }
+            | Command::ImportProfile { .. } => return Err(SessionError::NotASessionCommand),
             // S33's four: this machine's rig, which is neither the show's nor
             // the session's. `crate::outputs` has the argument, and
             // `Command::is_machine_command` is what a daemon routes on.

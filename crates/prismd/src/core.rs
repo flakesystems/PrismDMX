@@ -594,6 +594,9 @@ impl Core {
                 Effect::ExportShow(path) => deltas.extend(self.export_show(path)?),
                 Effect::ImportShow(path) => deltas.extend(self.import_show(path.clone())?),
                 Effect::ImportRig(path) => deltas.extend(self.import_rig(path.clone())?),
+                Effect::ImportProfile(path) => {
+                    deltas.extend(self.import_profile(path.clone())?);
+                }
                 Effect::NewDeskIdentity => deltas.extend(self.new_desk_identity()),
                 Effect::NewToken => deltas.extend(self.new_token()),
                 Effect::Machine => deltas.extend(self.carry_out_machine()),
@@ -1122,6 +1125,81 @@ impl Core {
         Ok(deltas)
     }
 
+    /// Takes one `.gdtf` into this desk's library — **S62**.
+    ///
+    /// # Why it copies the file and then re-reads everything
+    ///
+    /// The file is copied into the venue's own fixture folder, which is where
+    /// a hand-placed one goes (B43, B54), and then the **whole library is read
+    /// again** by the same function that reads it at start-up.
+    ///
+    /// That is deliberate, and it is the cheaper answer in the only currency
+    /// that matters here. `FixtureLibrary` keeps three structures in step — the
+    /// entries, the per-fixture grouping S57 lists by, and the index between
+    /// them — and a second way in would have to maintain all three, including
+    /// the case where an imported profile *replaces* an installed one and so
+    /// changes the group it belongs to. Re-reading cannot get that wrong,
+    /// because it is the path every other profile already takes. It costs a
+    /// fraction of a second, once, when an operator asks for it.
+    ///
+    /// The library is **queried** and not in the snapshot (S44), so no client
+    /// has to be told anything: the next `BrowseLibrary` sees it.
+    fn import_profile(&mut self, path: std::path::PathBuf) -> Result<Vec<Delta>, CoreError> {
+        let path = self.resolve(path);
+        let bytes = std::fs::read(&path)
+            .map_err(|error| CoreError::Store(prism_core::StoreError::Io(error.to_string())))?;
+
+        // Read before it is copied: a file that is not a fixture should not
+        // land in the operator's folder for them to find and wonder about.
+        let (built, _) = prism_core::library::gdtf::read_archive(&bytes, true);
+        if built.is_empty() {
+            return Ok(vec![Delta::Notice {
+                level: NoticeLevel::Warn,
+                message: format!(
+                    "{} is not a fixture profile this desk can read, so nothing was imported",
+                    file_name_of(&path)
+                ),
+            }]);
+        }
+        let taken = u32::try_from(built.len()).unwrap_or(u32::MAX);
+        let names: Vec<String> = built
+            .iter()
+            .map(|(entry, _)| format!("{} {}", entry.manufacturer, entry.name))
+            .collect();
+
+        let directory = crate::paths::fixtures_dir(&self.machine.data_dir);
+        std::fs::create_dir_all(&directory)
+            .map_err(|error| CoreError::Store(prism_core::StoreError::Io(error.to_string())))?;
+        let destination = directory.join(file_name_of(&path));
+        std::fs::write(&destination, &bytes)
+            .map_err(|error| CoreError::Store(prism_core::StoreError::Io(error.to_string())))?;
+
+        // The same call the daemon makes at start-up, over the same two trees
+        // and with the same configured path — the settings panel's `Fixture
+        // library`, where a venue points at a stick or a network drive.
+        let configured = self
+            .machine
+            .config
+            .settings()
+            .fixture_library
+            .clone()
+            .map(std::path::PathBuf::from);
+        self.file.library =
+            crate::daemon::load_library(&self.machine.data_dir, configured.as_deref());
+        log::info(
+            "library",
+            &format!("imported {} into {}", path.display(), destination.display()),
+        );
+        Ok(vec![Delta::Notice {
+            level: NoticeLevel::Info,
+            message: match names.first() {
+                Some(first) if taken == 1 => format!("Profile imported: {first}"),
+                Some(first) => format!("{taken} profiles imported, including {first}"),
+                None => "Profile imported".to_owned(),
+            },
+        }])
+    }
+
     /// Takes up a different `ShowStore` and loads what is in it.
     fn adopt(&mut self, store: ShowStore) -> Result<Vec<Delta>, CoreError> {
         self.store = store;
@@ -1550,6 +1628,19 @@ pub fn build_body(
     }
     body.resolve();
     Ok(body)
+}
+
+/// A path's own file name, or a safe stand-in — **S62**.
+///
+/// An imported profile keeps the name it arrived under, because that is what
+/// an operator will look for in the folder afterwards. A path with no file
+/// name at all cannot be copied anywhere sensible, so it gets one.
+fn file_name_of(path: &std::path::Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("imported.gdtf")
+        .to_owned()
 }
 
 /// What an operator is told a rig import did — **S62**.

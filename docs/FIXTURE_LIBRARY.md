@@ -142,7 +142,7 @@ Pult ohne Konto muss eine brauchbare Bibliothek haben.
 | | Konto? | Netz? | Status |
 |---|---|---|---|
 | **OFL im Installer** | nein | nein | **da** — `release.yml` + `fetch-ofl` |
-| **Eigene Datei im Datenverzeichnis** | nein | nein | **da** — `.gdtf` oder `.json` in `fixtures\`, gewinnt gegen die installierte (B43) |
+| **Eigene Datei im Datenverzeichnis** | nein | nein | **da** — `.gdtf` oder `.json` in `fixtures\`, gewinnt gegen die installierte (B43); oder der Knopf *Import profile (GDTF)*, der die Datei genau dorthin kopiert |
 | **MVR-Import** | nein | nein | **da** — Knopf *Import rig (MVR)* im Patch-Fenster, und eine `.mvr` im eigenen Ordner füllt auch ohne ihn die Bibliothek |
 | **In-App-Login zu GDTF Share** | ja | ja | **geplant, S62** |
 

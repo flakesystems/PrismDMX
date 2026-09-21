@@ -945,6 +945,7 @@ impl Programmer {
             | Command::ExportShow { .. }
             | Command::ImportShow { .. }
             | Command::ImportRig { .. }
+            | Command::ImportProfile { .. }
             | Command::SelectView { .. }
             | Command::StoreView { .. }
             | Command::NewView { .. }

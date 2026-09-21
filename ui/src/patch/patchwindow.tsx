@@ -245,6 +245,22 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
         });
     }, [send]);
 
+    /**
+     * Takes one `.gdtf` into the library — **S62**.
+     *
+     * The sibling of {@link importRig} and deliberately a separate key: a
+     * profile is not a rig. This one patches nothing and there is nothing to
+     * undo — it puts a fixture in the picker, and the daemon copies the file
+     * into the venue's own folder so it is still there next week.
+     */
+    const importProfile = useCallback(() => {
+        void choosePath("ImportProfile").then((path) => {
+            if (path !== null) {
+                send({ t: "ImportProfile", path });
+            }
+        });
+    }, [send]);
+
     const add = useCallback(() => {
         const newest = rows.at(-1);
         setDraft({
@@ -283,7 +299,13 @@ export function PatchWindow({ show }: { readonly show: JsonValue }) {
 
     return (
         <div className="patch" data-testid="patch">
-            <PatchToolbar rows={rows} profiles={profiles} onAdd={add} onImportRig={importRig} />
+            <PatchToolbar
+                rows={rows}
+                profiles={profiles}
+                onAdd={add}
+                onImportRig={importRig}
+                onImportProfile={importProfile}
+            />
             <PatchTable rows={rows} conflicted={conflicted} editing={draft?.wasId ?? null} onEdit={edit} />
             {draft === null ? null : (
                 <PatchEditor
@@ -308,11 +330,13 @@ function PatchToolbar({
     profiles,
     onAdd,
     onImportRig,
+    onImportProfile,
 }: {
     readonly rows: readonly PatchRow[];
     readonly profiles: readonly ProfileRow[];
     readonly onAdd: () => void;
     readonly onImportRig: () => void;
+    readonly onImportProfile: () => void;
 }) {
     return (
         <div className="patch-bar">
@@ -330,9 +354,23 @@ function PatchToolbar({
               show-file keys follow, and a browser has no path to offer.
             */}
             {inShell() ? (
-                <button type="button" data-testid="patch-import-rig" onClick={onImportRig}>
-                    Import rig (MVR)
-                </button>
+                <>
+                    <button type="button" data-testid="patch-import-rig" onClick={onImportRig}>
+                        Import rig (MVR)
+                    </button>
+                    {/*
+                      One profile rather than a whole plan — the file from a
+                      manufacturer's website. It fills the library and patches
+                      nothing, which is why it is a key of its own.
+                    */}
+                    <button
+                        type="button"
+                        data-testid="patch-import-profile"
+                        onClick={onImportProfile}
+                    >
+                        Import profile (GDTF)
+                    </button>
+                </>
             ) : null}
         </div>
     );

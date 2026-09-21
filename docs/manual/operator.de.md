@@ -312,6 +312,11 @@ würde, und einer Taste, die es dorthin setzt.
 Ein Klick auf eine Zeile des Patches öffnet dasselbe Fenster für dieses Fixture:
 Modus, Nummer, Name oder Adresse ändern, oder es mit **Unpatch** entfernen.
 
+**Eine einzelne Datei: *Import profile (GDTF)*.** Die `.gdtf` von der
+Herstellerseite oder vom Stick. Das Pult liest sie, legt sie in Ihren eigenen
+Fixture-Ordner und bietet sie sofort im Auswahlfeld an — gepatcht wird nichts.
+Was keine lesbare Fixture-Datei ist, wird abgelehnt und gar nicht erst abgelegt.
+
 **Ein ganzes Rig auf einmal: *Import rig (MVR)*.** Hat Ihnen Ihr Planer eine
 `.mvr` geschickt, nimmt dieser Knopf sie in die Show: alle Profile daraus und
 jedes geplante Fixture, mit Nummer und Adresse, **in einem Schritt, den ein Oops

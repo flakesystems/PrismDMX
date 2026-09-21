@@ -84,6 +84,9 @@ const EXPORT_EXTENSION: &str = ".json";
 /// What a rig plan is called — **S62**.
 const RIG_EXTENSION: &str = ".mvr";
 
+/// What one fixture profile is called — **S62**.
+const PROFILE_EXTENSION: &str = ".gdtf";
+
 /// Reads a `.prism` path out of a file command — S37.
 ///
 /// # Why the check is here and why it is only this much
@@ -122,6 +125,15 @@ pub(crate) fn export_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
 /// [`ShowError::NotAShowPath`].
 pub(crate) fn rig_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
     checked_path(path, RIG_EXTENSION)
+}
+
+/// Reads a `.gdtf` path out of a profile import — **S62**.
+///
+/// # Errors
+///
+/// [`ShowError::NotAShowPath`].
+pub(crate) fn profile_path(path: &str) -> Result<std::path::PathBuf, ShowError> {
+    checked_path(path, PROFILE_EXTENSION)
 }
 
 /// The shared half of the two above.
@@ -1491,6 +1503,7 @@ impl ShowFile {
             // command whose content is in a file cannot be imaged from the
             // command.
             | Command::ImportRig { .. }
+            | Command::ImportProfile { .. }
             | Command::SelectView { .. }
             | Command::StoreView { .. }
             | Command::NewView { .. }

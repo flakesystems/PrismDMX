@@ -305,6 +305,11 @@ free address** it would fit at, and a key that moves it there.
 Clicking a row of the patch opens the same panel on that fixture: change its
 mode, number, name or address, or **Unpatch** it.
 
+**One file: *Import profile (GDTF)*.** The `.gdtf` from a manufacturer's
+website or a stick. The desk reads it, puts it in your own fixture folder and
+offers it in the picker at once — nothing is patched. Anything that is not a
+readable fixture file is refused and never lands in the folder.
+
 **A whole rig at once: *Import rig (MVR)*.** If your planner sent you an
 `.mvr`, this key takes it into the show: every profile in it and every planned
 fixture, with its number and address, **in one step that one Oops takes back**.

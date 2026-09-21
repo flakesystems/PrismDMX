@@ -543,9 +543,10 @@ describe("the patch window", () => {
    * inside the shell, and what it sends is the path the operator chose.
    */
   it("takes a rig plan by asking the shell for a path and sending it", async () => {
-    // No shell: no key, because a browser has no file dialogue to open.
+    // No shell: no keys, because a browser has no file dialogue to open.
     await desk();
     expect(screen.queryByTestId("patch-import-rig")).toBeNull();
+    expect(screen.queryByTestId("patch-import-profile")).toBeNull();
 
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
       invoke: (command: string) =>
@@ -562,6 +563,18 @@ describe("the patch window", () => {
       });
       expect(commands().slice(before)).toEqual([
         { t: "ImportRig", path: "D:/plans/aula.mvr" },
+      ]);
+
+      // And the sibling key, which fills the library and patches nothing.
+      const profile = screen.getAllByTestId("patch-import-profile").at(-1) as HTMLElement;
+      const afterRig = commands().length;
+      fireEvent.click(profile);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(commands().slice(afterRig)).toEqual([
+        { t: "ImportProfile", path: "D:/plans/aula.mvr" },
       ]);
     } finally {
       delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;

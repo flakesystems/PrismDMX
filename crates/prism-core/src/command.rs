@@ -281,6 +281,8 @@ pub enum Effect {
     /// the bytes to [`crate::ShowFile::import_rig`] — which is where the one
     /// undoable step is built, out of what the file turned out to hold.
     ImportRig(std::path::PathBuf),
+    /// Take one `.gdtf` into the library — **S62**'s `ImportProfile`.
+    ImportProfile(std::path::PathBuf),
     /// One of **this machine's** settings changed — S37.
     ///
     /// [`Self::Outputs`] and [`Self::Surface`] for the rest of the machine, and
@@ -652,6 +654,9 @@ impl Show {
             ))),
             Command::ImportRig { path } => Ok(Applied::effect(Effect::ImportRig(
                 crate::file::rig_path(path)?,
+            ))),
+            Command::ImportProfile { path } => Ok(Applied::effect(Effect::ImportProfile(
+                crate::file::profile_path(path)?,
             ))),
             // The sixteen session commands, named rather than caught by a
             // wildcard: this match is then exhaustive, so a command added to
