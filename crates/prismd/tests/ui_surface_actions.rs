@@ -35,8 +35,9 @@
 //! rather than a log to read.
 
 use prism_domain::{
-    Answer, BoundControl, ExecutorButtonFunction, ExecutorButtonRef, ExecutorTarget, FeatureGroup,
-    GoDirection, ParamDirection, Step, SurfaceAction, SurfaceControl, ViewId, WindowType,
+    Answer, BoundControl, ControlBox, ControlShape, ExecutorButtonFunction, ExecutorButtonRef,
+    ExecutorTarget, FeatureGroup, GoDirection, PanelLayout, ParamDirection, Step, SurfaceAction,
+    SurfaceControl, ViewId, WindowType,
 };
 use prism_ipc::ServerMessage;
 
@@ -112,6 +113,24 @@ fn every_action() -> Vec<SurfaceAction> {
             line: "Go Executor 1".to_owned(),
             submit: true,
         },
+        // One of each `KeyShape`, because the decoder reads a word and the
+        // *shape* is what the browser then looks up — a run word, a write word,
+        // an append word and the one that writes nothing.
+        SurfaceAction::ConsoleWord {
+            word: "Clear".to_owned(),
+        },
+        SurfaceAction::ConsoleWord {
+            word: "Store".to_owned(),
+        },
+        SurfaceAction::ConsoleWord {
+            word: "Thru".to_owned(),
+        },
+        SurfaceAction::ConsoleWord {
+            word: "Oops".to_owned(),
+        },
+        SurfaceAction::ExecutorOn {
+            target: ExecutorTarget::Selected,
+        },
         SurfaceAction::SaveShow,
         SurfaceAction::Oops,
         SurfaceAction::Redo,
@@ -139,6 +158,8 @@ fn every_action() -> Vec<SurfaceAction> {
             SurfaceAction::SaveShow => 16,
             SurfaceAction::Oops => 17,
             SurfaceAction::Redo => 18,
+            SurfaceAction::ConsoleWord { .. } => 19,
+            SurfaceAction::ExecutorOn { .. } => 20,
         }
     };
     let mut seen: Vec<usize> = actions.iter().map(index).collect();
@@ -146,7 +167,7 @@ fn every_action() -> Vec<SurfaceAction> {
     seen.dedup();
     assert_eq!(
         seen,
-        (0..=18).collect::<Vec<_>>(),
+        (0..=20).collect::<Vec<_>>(),
         "every SurfaceAction variant has to be in the fixture"
     );
     actions
@@ -164,6 +185,16 @@ fn answer() -> ServerMessage {
             action: Some(action),
             permanent: false,
             reserved: false,
+            // A box on every row, so the decoder's geometry arm is on the
+            // recorded bytes rather than only on the rows that happen to have
+            // one — S59. The numbers are this fixture's, not the X-Touch's.
+            geometry: Some(ControlBox {
+                x: 10,
+                y: 20,
+                w: 46,
+                h: 22,
+                shape: ControlShape::Key,
+            }),
         })
         .collect();
     ServerMessage::Answer {
@@ -176,6 +207,12 @@ fn answer() -> ServerMessage {
             profile: None,
             revision: 1,
             learning: false,
+            panel: Some(PanelLayout {
+                width: 1000,
+                height: 520,
+                strips: 8,
+                strip_pitch: 58,
+            }),
         },
     }
 }

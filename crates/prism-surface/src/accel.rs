@@ -127,39 +127,81 @@ pub struct JogAcceleration {
     /// matches something; a table whose rows all missed would silently stop the
     /// wheel.
     pub rows: &'static [(Duration, i16)],
+    /// The operator's own multiplier, as a percentage of [`Self::rows`].
+    ///
+    /// **S59.** The rows are a calibration and a calibration is somebody else's
+    /// taste; this is the knob that makes it theirs. It is a **machine**
+    /// setting (`MachineSettings::jog_sensitivity`) rather than a show one,
+    /// because a heavier hand is a property of the console somebody sits at and
+    /// not of the production they are running — a show carried to another hall
+    /// on a stick should not take the last operator's wheel feel with it.
+    ///
+    /// It is a field rather than a second table because the rows are
+    /// `&'static` and a scaled table cannot be: multiplying at the point of use
+    /// costs one multiply per jog message and keeps the calibration readable as
+    /// the numbers that were chosen.
+    pub sensitivity: u16,
 }
+
+/// The sensitivity of a wheel nobody has adjusted: the table exactly as written.
+pub const JOG_SENSITIVITY_DEFAULT: u16 = 100;
+
+/// The slowest a wheel may be made — a tenth of the table.
+pub const JOG_SENSITIVITY_MIN: u16 = 10;
+
+/// The fastest a wheel may be made — four times the table.
+///
+/// At the top the slowest detent is four DMX steps and the fastest sixteen,
+/// which is a wheel that crosses a parameter in a flick. Past that it stops
+/// being a control and starts being a switch, so the setting is clamped rather
+/// than left open.
+pub const JOG_SENSITIVITY_MAX: u16 = 400;
 
 /// The default jog curve.
 ///
 /// The wheel reports every detent it passes, so the interval *is* the speed. A
 /// deliberate click lands well beyond 40 ms; a fast spin puts messages 10 ms
-/// apart or less, and the spread between the two rows is eightfold — which is
-/// the punch list's *the rate scales with how fast the wheel is turned*.
+/// apart or less.
 ///
-/// # Where the four numbers come from — S43, punch-list B20
+/// # The numbers are DMX steps now — S59
 ///
-/// The owner measured the wheel: **a full turn moved a value by about 1 %**, and
-/// asked that a fast full turn be worth **about 20 %**. Those two numbers are
-/// enough to size the table without counting detents anywhere: the ratio is
-/// twenty, so every row is what it was times twenty. The shape — the eightfold
-/// spread, the interval boundaries S21's clock reads — is unchanged, because
-/// the shape was never what was wrong.
+/// S43 sized this table in percent-of-a-full-turn, on the owner's measurement
+/// that a full turn was worth about 1 % and their answer that it should be
+/// about 20 %. That worked and it was still too slow, and the arithmetic says
+/// why: twenty attribute units is **one thirteenth of one DMX step**, so on an
+/// ordinary 8-bit channel a dozen detents passed before the lamp did anything at
+/// all. The wheel was not slow, it was *dead* — and a control that does nothing
+/// for its first twelve clicks reads as broken however fast it is afterwards.
 ///
-/// The slowest row is [`COARSE`] / 13, deliberately finer than the V-Pot's
-/// smallest move: the wheel is the control an operator reaches for to *trim*,
-/// and a full slow turn is about 2.5 %.
+/// So the table is written in the unit that decides whether anything visible
+/// happens. **The slowest detent is exactly one DMX step** ([`COARSE`]), which
+/// is the smallest move the least precise fixture in a rig can make: every click
+/// of the wheel moves the light. The fastest is **four**, the owner's answer of
+/// 2026-09-20, and the two middle rows are the geometric mean steps between
+/// them — ∛4 ≈ 1.587 apart, so the wheel gathers speed evenly rather than in a
+/// jump.
 ///
-/// **This is a calibration, not a measurement**, and it is the one number in
-/// this module that wants a real wheel under a real hand to confirm. `CLAUDE.md`
-/// forbids a test touching the device, so what holds it is the ratio, asserted
-/// below, and the round of hand-testing recorded in `PROGRESS.md` §2.41.
+/// # What is still not measured, and is owed
+///
+/// **How many detents a full revolution has has never been counted.** Every
+/// percentage-per-turn this module has ever claimed was back-calculated from a
+/// value the owner watched move, which makes it an estimate wearing a decimal
+/// point. The numbers here do not depend on it — a DMX step is a DMX step — but
+/// any sentence of the form *a full turn is worth X %* does, so this module no
+/// longer contains one.
+///
+/// **This is a calibration, not a measurement**, and `CLAUDE.md` forbids a test
+/// touching the device. What holds it is the ratio, asserted below, the floor
+/// being exactly [`COARSE`], and [`JogAcceleration::sensitivity`] — which is
+/// the admission that the last word belongs to a hand on a real wheel.
 pub const JOG_ACCELERATION: JogAcceleration = JogAcceleration {
     rows: &[
-        (Duration::from_millis(40), 20),
-        (Duration::from_millis(20), 40),
-        (Duration::from_millis(10), 80),
-        (Duration::ZERO, 160),
+        (Duration::from_millis(40), COARSE),
+        (Duration::from_millis(20), 408),
+        (Duration::from_millis(10), 648),
+        (Duration::ZERO, 4 * COARSE),
     ],
+    sensitivity: JOG_SENSITIVITY_DEFAULT,
 };
 
 impl JogAcceleration {
@@ -174,14 +216,38 @@ impl JogAcceleration {
             return 0;
         }
         let Some(gap) = since else {
-            return i32::from(detents) * i32::from(self.slowest());
+            return self.scaled(i32::from(detents) * i32::from(self.slowest()));
         };
         let factor = self
             .rows
             .iter()
             .find(|(interval, _)| gap >= *interval)
             .map_or_else(|| self.slowest(), |(_, steps)| *steps);
-        i32::from(detents) * i32::from(factor)
+        self.scaled(i32::from(detents) * i32::from(factor))
+    }
+
+    /// [`Self::sensitivity`] applied — S59.
+    ///
+    /// **A turned wheel never answers nought.** The division would swallow a
+    /// single slow detent at a low enough setting, and a wheel that sometimes
+    /// does nothing is the fault this session set out to remove rather than a
+    /// milder version of it. So the sign is kept and the magnitude floors at
+    /// one: at the slowest setting the wheel is fine, not broken.
+    #[allow(
+        clippy::integer_division,
+        reason = "a percentage of a step count is a ratio, and the remainder is                   smaller than the parameter unit it would be spent on"
+    )]
+    fn scaled(&self, steps: i32) -> i32 {
+        if steps == 0 {
+            return 0;
+        }
+        let scaled = i64::from(steps) * i64::from(self.sensitivity) / 100;
+        let clamped = i32::try_from(scaled).unwrap_or(if steps < 0 { i32::MIN } else { i32::MAX });
+        if clamped == 0 {
+            if steps < 0 { -1 } else { 1 }
+        } else {
+            clamped
+        }
     }
 
     /// The factor for a wheel that is barely moving: the first row's, or one
@@ -193,29 +259,33 @@ impl JogAcceleration {
 
 #[cfg(test)]
 mod tests {
-    use super::{COARSE, JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
+    use super::{
+        COARSE, JOG_ACCELERATION, JOG_SENSITIVITY_DEFAULT, JOG_SENSITIVITY_MIN, JogAcceleration,
+        VPOT_ACCELERATION, VPotAcceleration,
+    };
     use std::time::Duration;
 
-    /// The floor of both curves, and **S43 changed what the floor is**.
+    /// The floor of both curves, and **S59 made them the same floor**.
     ///
-    /// This test used to say *one detent is one step* and mean one part in
-    /// 65 535, which is what punch-list B20 was reporting from the other end of
-    /// the cable: a control that could not move a lamp. The claim it makes now
-    /// is the same claim about a different number — a single click is the
-    /// smallest move an operator can *see*, which on a coarse channel is
-    /// [`COARSE`], and the wheel's slowest row is deliberately finer than that
-    /// because the wheel is the one that trims.
+    /// S43 changed what the floor *is* — from one part in 65 535, which is what
+    /// punch-list B20 reported from the other end of the cable, to the smallest
+    /// move an operator can see. It left the wheel deliberately finer than the
+    /// V-Pot, on the reasoning that the wheel is the one that trims, and that is
+    /// the sentence S59 had to take back: a thirteenth of a DMX step is not
+    /// *fine*, it is *nothing*, twelve times over. Both curves now start at one
+    /// coarse step, and a single click of either moves the least precise fixture
+    /// in a rig.
     #[test]
     fn one_detent_is_a_move_that_can_be_seen_on_both_curves() {
         assert_eq!(VPOT_ACCELERATION.steps(1), i32::from(COARSE));
         assert_eq!(VPOT_ACCELERATION.steps(-1), -i32::from(COARSE));
         assert_eq!(
             JOG_ACCELERATION.steps(1, Some(Duration::from_millis(500))),
-            20
+            i32::from(COARSE)
         );
         assert_eq!(
             JOG_ACCELERATION.steps(-1, Some(Duration::from_millis(500))),
-            -20
+            -i32::from(COARSE)
         );
     }
 
@@ -270,18 +340,18 @@ mod tests {
         // §2.7: +-1 in 404 messages however hard it was spun. Every row of the
         // table, on both sides of its boundary.
         for (gap, want) in [
-            (500u64, 20),
-            (41, 20),
-            (40, 20),
-            (39, 40),
-            (21, 40),
-            (20, 40),
-            (19, 80),
-            (11, 80),
-            (10, 80),
-            (9, 160),
-            (1, 160),
-            (0, 160),
+            (500u64, 257),
+            (41, 257),
+            (40, 257),
+            (39, 408),
+            (21, 408),
+            (20, 408),
+            (19, 648),
+            (11, 648),
+            (10, 648),
+            (9, 1028),
+            (1, 1028),
+            (0, 1028),
         ] {
             assert_eq!(
                 JOG_ACCELERATION.steps(1, Some(Duration::from_millis(gap))),
@@ -295,8 +365,8 @@ mod tests {
     fn the_first_message_after_a_pause_is_a_click_and_not_a_spin() {
         // There is no interval to read, and guessing "fast" would make the first
         // detent of every touch of the wheel jump eight rows.
-        assert_eq!(JOG_ACCELERATION.steps(1, None), 20);
-        assert_eq!(JOG_ACCELERATION.steps(-1, None), -20);
+        assert_eq!(JOG_ACCELERATION.steps(1, None), i32::from(COARSE));
+        assert_eq!(JOG_ACCELERATION.steps(-1, None), -i32::from(COARSE));
     }
 
     #[test]
@@ -305,7 +375,10 @@ mod tests {
         // answer something for a profile somebody half-filled in.
         let empty = VPotAcceleration { curve: &[] };
         assert_eq!(empty.steps(4), 0);
-        let empty = JogAcceleration { rows: &[] };
+        let empty = JogAcceleration {
+            rows: &[],
+            sensitivity: JOG_SENSITIVITY_DEFAULT,
+        };
         assert_eq!(empty.steps(1, Some(Duration::from_millis(5))), 1);
         assert_eq!(empty.steps(1, None), 1);
     }
@@ -336,39 +409,93 @@ mod tests {
         // the V-Pot curve would score as one.
         let fast_jog = JOG_ACCELERATION.steps(1, Some(Duration::from_millis(5)));
         let same_magnitude_on_a_pot = VPOT_ACCELERATION.steps(1);
-        assert_eq!(fast_jog, 160);
+        assert_eq!(fast_jog, 4 * i32::from(COARSE));
         assert_eq!(same_magnitude_on_a_pot, i32::from(COARSE));
     }
 
-    /// **The punch list's two numbers, as arithmetic** — S43, B20.
+    /// **The floor is one DMX step, and that is the whole of S59's fix.**
     ///
-    /// The owner measured a full turn of the wheel at about 1 % and asked for
-    /// about 20 % when it is spun. No test can count the detents in a
-    /// revolution without a wheel to turn, and `CLAUDE.md` forbids a test that
-    /// opens the device — so what is held here is the part that *is* knowable
-    /// from the two numbers: every row is twenty times the row it replaced, so
-    /// whatever a revolution is worth, it is worth twenty times what the owner
-    /// measured. The detent count cancels out, which is the whole reason the
-    /// table could be sized from a report rather than from a measurement.
+    /// The wheel was not slow, it was dead: at twenty attribute units a detent
+    /// moved one thirteenth of a step on an 8-bit channel, so a dozen clicks
+    /// changed nothing an operator could see. This is the assertion that would
+    /// go red if anybody sized the table in percent again — a slow detent moves
+    /// the least precise fixture in a rig by exactly one step, no less.
     #[test]
-    fn every_jog_row_is_twenty_times_the_row_the_owner_measured() {
-        let measured = [1i16, 2, 4, 8];
-        assert_eq!(JOG_ACCELERATION.rows.len(), measured.len());
-        for (row, before) in JOG_ACCELERATION.rows.iter().zip(measured) {
-            assert_eq!(row.1, before * 20, "{:?}", row.0);
+    fn the_slowest_detent_moves_a_coarse_channel_by_exactly_one_step() {
+        let click = JOG_ACCELERATION.steps(1, Some(Duration::from_millis(500)));
+        assert_eq!(click, i32::from(COARSE));
+    }
+
+    /// And the spread is fourfold, which is the owner's answer of 2026-09-20.
+    ///
+    /// It was eightfold while the floor was a thirteenth of a step; raising the
+    /// floor without lowering the spread would have made a spin worth eight DMX
+    /// steps a detent, which crosses a parameter faster than a hand can stop.
+    #[test]
+    fn the_wheel_answers_fourfold_between_a_click_and_a_spin() {
+        let click = JOG_ACCELERATION.steps(1, Some(Duration::from_millis(500)));
+        let spin = JOG_ACCELERATION.steps(1, Some(Duration::ZERO));
+        assert_eq!(spin, click * 4);
+        assert_eq!(spin, 4 * i32::from(COARSE));
+    }
+
+    /// The rows gather speed evenly rather than in a jump.
+    ///
+    /// Geometric, ∛4 ≈ 1.587 apart, so no boundary between two rows is felt
+    /// more than any other. A table that went 257, 257, 257, 1028 would satisfy
+    /// both tests above and feel like a switch.
+    #[test]
+    fn the_rows_climb_evenly() {
+        let steps: Vec<i32> = JOG_ACCELERATION
+            .rows
+            .iter()
+            .map(|(_, steps)| i32::from(*steps))
+            .collect();
+        assert_eq!(steps, vec![257, 408, 648, 1028]);
+        for pair in steps.windows(2) {
+            // Each row is between 1.5 and 1.7 times the one before it.
+            assert!(pair[1] * 10 >= pair[0] * 15, "{pair:?}");
+            assert!(pair[1] * 10 <= pair[0] * 17, "{pair:?}");
         }
     }
 
-    /// And the spread is untouched, because the spread was never what was wrong.
-    ///
-    /// *The rate scales with how fast the wheel is turned* is the entry's own
-    /// wording, and it was already true — eightfold between the slowest row and
-    /// the fastest. A retune that flattened it would satisfy `every_jog_row_is_
-    /// twenty_times…` and lose the thing the operator actually asked for.
+    /// The operator's own multiplier — S59.
     #[test]
-    fn the_wheel_still_answers_eightfold_between_a_click_and_a_spin() {
-        let click = JOG_ACCELERATION.steps(1, Some(Duration::from_millis(500)));
-        let spin = JOG_ACCELERATION.steps(1, Some(Duration::ZERO));
-        assert_eq!(spin, click * 8);
+    fn sensitivity_scales_the_whole_curve() {
+        let heavy = JogAcceleration {
+            sensitivity: 200,
+            ..JOG_ACCELERATION
+        };
+        let light = JogAcceleration {
+            sensitivity: 50,
+            ..JOG_ACCELERATION
+        };
+        let click = |curve: &JogAcceleration| curve.steps(1, Some(Duration::from_millis(500)));
+        assert_eq!(click(&JOG_ACCELERATION), i32::from(COARSE));
+        assert_eq!(click(&heavy), 2 * i32::from(COARSE));
+        assert_eq!(click(&light), i32::from(COARSE) / 2);
+        // The sign survives, which a scaling written as a `u32` multiply would
+        // have lost on the way down.
+        assert_eq!(
+            heavy.steps(-1, Some(Duration::from_millis(500))),
+            -2 * i32::from(COARSE)
+        );
+    }
+
+    /// **A turned wheel never answers nought**, whatever the setting.
+    ///
+    /// The division would swallow a single detent at the bottom of the range,
+    /// and a wheel that sometimes does nothing is the fault this session
+    /// removed rather than a milder version of it.
+    #[test]
+    fn the_slowest_setting_still_moves_the_parameter() {
+        let crawl = JogAcceleration {
+            rows: &[(Duration::ZERO, 1)],
+            sensitivity: JOG_SENSITIVITY_MIN,
+        };
+        assert_eq!(crawl.steps(1, Some(Duration::ZERO)), 1);
+        assert_eq!(crawl.steps(-1, Some(Duration::ZERO)), -1);
+        // A wheel that is not turning is still not turning.
+        assert_eq!(crawl.steps(0, Some(Duration::ZERO)), 0);
     }
 }

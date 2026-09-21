@@ -59,6 +59,10 @@ macro_rules! round_trip {
 }
 
 round_trip! {
+    key_shape => crate::KeyShape,
+    control_shape => crate::ControlShape,
+    control_box => crate::ControlBox,
+    panel_layout => crate::PanelLayout,
     fixture_id => crate::FixtureId,
     group_id => crate::GroupId,
     sequence_id => crate::SequenceId,

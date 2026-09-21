@@ -179,6 +179,9 @@ pub trait ServerHandler: Send + Sync + 'static {
                 profile: None,
                 revision: 0,
                 learning: false,
+                // And no panel either: a handler with no surface has no
+                // drawing of one to offer.
+                panel: None,
             },
             // And no parser: reading a line is `prism_core::console`'s, which a
             // protocol crate deliberately does not depend on. An empty reading

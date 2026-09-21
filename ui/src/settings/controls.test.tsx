@@ -32,6 +32,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import App from "../App";
 import type { Answer, BoundControl, Command, Delta, SurfaceControl } from "../bindings";
+import { CONSOLE_KEYS } from "../bindings";
 import { Connection } from "../ipc/connection";
 import type { Snapshot } from "../ipc/protocol";
 import { TelemetrySink } from "../ipc/telemetry";
@@ -81,7 +82,15 @@ function row(
   control: BoundControl,
   extra: Partial<SurfaceControl> = {},
 ): SurfaceControl {
-  return { control, name, action: null, permanent: false, reserved: false, ...extra };
+  return {
+    control,
+    name,
+    action: null,
+    permanent: false,
+    reserved: false,
+    geometry: null,
+    ...extra,
+  };
 }
 
 /**
@@ -123,6 +132,9 @@ function table(overrides: Partial<Extract<Answer, { t: "SurfaceBindings" }>> = {
     profile: null,
     revision: 3,
     learning: false,
+    // No panel, so no drawing — which is the state the list has to work in,
+    // and the one every gesture in this file is checked against.
+    panel: null,
     ...overrides,
   };
 }
@@ -422,11 +434,13 @@ describe("changing what a control does", () => {
     // one thing an action-first row cannot know about itself: `slotOfControl`
     // reads it off the `BoundControl` learn handed over, where S38 read it off
     // the row's name. Solo is §2.1's second key, so index 1.
+    //
+    // **The target comes off the control too, since S59** — there is no chooser
+    // to set. A strip key means that strip's executor and a panel key means the
+    // selected one, because a chooser offering *this strip* on a panel key would
+    // be offering a binding that resolves to nothing.
     const { answerQuery, commands, deliver } = await desk();
     await answerQuery("SurfaceBindings", table());
-    fireEvent.change(screen.getByTestId("action-target-Executor button"), {
-      target: { value: "Strip" },
-    });
     fireEvent.click(screen.getByTestId("action-learn-Executor button"));
     await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
     await deliver({
@@ -446,6 +460,94 @@ describe("changing what a control does", () => {
         },
       },
     });
+  });
+});
+
+describe("the sections S59 rearranged", () => {
+  /**
+   * **The keypad is a section of rows**, one per word of the generated table.
+   *
+   * Asserted against `CONSOLE_KEYS` rather than against a list written here:
+   * this file would otherwise be a third place a word has to be added, which is
+   * the arrangement moving the table into Rust removed.
+   */
+  it("gives every console word a row of its own", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    expect(screen.getByTestId("controls-keypad")).toBeTruthy();
+    for (const key of CONSOLE_KEYS) {
+      expect(
+        screen.getByTestId(`word-${key.word.toLowerCase()}`),
+        `${key.word} has no row`,
+      ).toBeTruthy();
+    }
+  });
+
+  /**
+   * **A word row binds the word, and nothing else has to be answered.**
+   *
+   * The row *is* the answer, which is what tells it apart from an action row:
+   * there is no second box to fill in before Learn can be pressed.
+   */
+  it("binds the word the row is, off one press", async () => {
+    const { answerQuery, commands, deliver } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    fireEvent.click(screen.getByTestId("word-learn-store"));
+    await deliver({ t: "SurfaceLearnChanged", learning: true, control: null });
+    await deliver({
+      t: "SurfaceLearnChanged",
+      learning: false,
+      control: { t: "Global", button: "F5" },
+    });
+    expect(commands().at(-1)).toEqual<Command>({
+      t: "ConfigureMachine",
+      change: {
+        t: "SurfaceBinding",
+        control: { t: "Global", button: "F5" },
+        action: { t: "ConsoleWord", word: "Store" },
+      },
+    });
+  });
+
+  /**
+   * **The strips left the list and are still reachable** — S59's exit
+   * criterion, and the half of the owner's decision that is easy to lose: they
+   * went to an *Advanced* section, not away.
+   */
+  it("keeps the strip controls out of the list and in the advanced section", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    // Gone from the list: a master is a strip fader or the main fader, and
+    // selecting an executor is something only a strip key can mean.
+    expect(screen.queryByTestId("action-Executor master")).toBeNull();
+    expect(screen.queryByTestId("action-Select executor")).toBeNull();
+    // And there, one row per hardware control.
+    expect(screen.getByTestId("controls-advanced")).toBeTruthy();
+    expect(screen.getByTestId("advanced-Strip[*].Fader")).toBeTruthy();
+    expect(screen.getByTestId("advanced-Main.Fader")).toBeTruthy();
+    expect(screen.getByTestId("advanced-Global.Jog")).toBeTruthy();
+  });
+
+  /**
+   * **The functions of the selected executor did *not* leave** — the owner's
+   * correction of 2026-09-20, said twice and asserted here because the first
+   * answer had been the other way.
+   */
+  it("keeps the selected executor's functions in the ordinary list", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    for (const kind of ["Executor go +", "Executor off", "Executor button", "Executor page +"]) {
+      expect(screen.getByTestId(`action-${kind}`), `${kind} left the list`).toBeTruthy();
+    }
+  });
+
+  /** A table with no panel draws no picture, and says so rather than nothing. */
+  it("says the surface has no drawing when the daemon sent no panel", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    fireEvent.click(screen.getByTestId("controls-view-drawing"));
+    expect(screen.getByTestId("panel-undrawn")).toBeTruthy();
+    expect(screen.queryByTestId("desk-drawing")).toBeNull();
   });
 });
 
@@ -682,11 +784,25 @@ describe("the rows that need a second answer", () => {
     const { answerQuery } = await desk();
     await answerQuery("SurfaceBindings", table());
     expect(screen.queryByTestId("action-detail-Oops")).toBeNull();
-    // And no *On* box either: an Oops acts on no executor.
-    expect(screen.queryByTestId("action-target-Oops")).toBeNull();
-    // While one that does have both, has both.
-    expect(screen.getByTestId("action-target-Executor button")).toBeTruthy();
+    // While one that does need an answer has its box.
     expect(screen.getByTestId("action-detail-Executor button")).toBeTruthy();
+  });
+
+  /**
+   * **And no row asks which executor any more** — S59.
+   *
+   * The panel had a *Strip / Selected* chooser on every executor row, and it
+   * had to: one list held both *the executor under this strip* and *the
+   * selected one*. The owner's decision of 2026-09-20 split them — the strip
+   * controls went to the advanced section, the functions of the selected
+   * executor stayed — and once they are apart the answer is a property of the
+   * control rather than a question for the operator.
+   */
+  it("asks no row which executor it means", async () => {
+    const { answerQuery } = await desk();
+    await answerQuery("SurfaceBindings", table());
+    expect(screen.queryByTestId("action-target-Executor button")).toBeNull();
+    expect(screen.queryByTestId("action-target-Executor off")).toBeNull();
   });
 
   it("disarms when the same row's Learn is pressed again", async () => {

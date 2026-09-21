@@ -233,6 +233,30 @@ pub struct MachineConfig {
     /// must open with no table rather than with an error.
     #[serde(default)]
     surface_bindings: Option<Vec<SurfaceBinding>>,
+    /// Which generation of the built-in table [`Self::surface_bindings`] grew
+    /// out of — **S59**.
+    ///
+    /// The owner's decision of 2026-09-20: when the shipped defaults are
+    /// reworked, an update **overwrites** a desk's own table rather than leaving
+    /// it on the old one. The reasoning is particular to where this is: the beta
+    /// is small, the vocabulary underneath the table changed this session, and
+    /// Export exists for anybody who wants their old one back. A desk left on a
+    /// table written before the words existed would be a panel whose new keys
+    /// are all empty and whose owner has no way of knowing why.
+    ///
+    /// So the stored table carries the generation it came from, and a daemon
+    /// that finds a different one starts from the defaults instead. It is a
+    /// **number that is bumped by hand**, not a hash of the table: a desk that
+    /// has been edited is *supposed* to differ from the defaults, and the
+    /// question this answers is whether the ground under it moved.
+    ///
+    /// `#[serde(default)]` is nought, which is what every `machine.json` written
+    /// before S59 reads as — and nought is not
+    /// [`SURFACE_BINDINGS_GENERATION`], so exactly those desks are the ones that
+    /// take the new table. That is the intended behaviour and not an accident of
+    /// the default.
+    #[serde(default)]
+    surface_bindings_generation: u32,
     /// The `.prism` file this desk had open, and the ones before it — S37.
     ///
     /// Written when a show is opened, made or saved under a new name, so a desk
@@ -285,7 +309,33 @@ pub struct Settings {
     /// Which X-Touch binding profile is in force, or `None` for the built-in
     /// table.
     pub surface_profile: Option<String>,
+    /// How far the jog wheel moves a parameter, as a percentage of the built-in
+    /// curve — S59. `100` is that curve exactly.
+    ///
+    /// `#[serde(default = ...)]` so a `machine.json` written before S59 reads
+    /// as the curve unchanged rather than as a wheel that does nothing, which
+    /// is what a plain `Default` of zero would have produced.
+    #[serde(default = "unity")]
+    pub jog_sensitivity: u16,
 }
+
+/// A jog wheel nobody has adjusted — the curve exactly as shipped.
+///
+/// A function rather than a constant because `serde`'s `default` attribute
+/// takes a path to one. `prism_surface::JOG_SENSITIVITY_DEFAULT` is the same
+/// number said where the curve lives; this crate is platform-neutral and reads
+/// no surface, so it says it again rather than depending on one.
+const fn unity() -> u16 {
+    100
+}
+
+/// The narrowest and widest a wheel may be made.
+///
+/// The same pair as `prism_surface::JOG_SENSITIVITY_MIN` / `MAX`, and repeated
+/// here for `unity`'s reason — a range is a rule about a number and this is the
+/// crate that holds the number. `a_jog_sensitivity_outside_the_range_is_pulled_
+/// into_it` is what keeps the two honest.
+pub const JOG_SENSITIVITY_RANGE: core::ops::RangeInclusive<u16> = 10..=400;
 
 impl Default for Settings {
     /// What a desk that has never been configured runs as.
@@ -309,9 +359,29 @@ impl Default for Settings {
             autostart: false,
             fixture_library: None,
             surface_profile: None,
+            jog_sensitivity: unity(),
         }
     }
 }
+
+/// Which rework of the shipped binding table this build carries — S59.
+///
+/// Bumped **by hand**, and only when the shipped defaults change in a way that
+/// should reach desks that have already been set up. A stored table from an
+/// older generation is passed over and the new defaults are used —
+/// [`MachineConfig::surface_bindings`] answers `None` for one, and
+/// [`MachineConfig::surface_bindings_are_stale`] is how a daemon says so.
+///
+/// The reasoning is the owner's decision of 2026-09-20 rather than the cautious
+/// one: the beta is small, the vocabulary underneath the table changed with it,
+/// and Export exists for anybody who wants their old one back. A desk left on a
+/// table written before the console words existed would be a panel whose new
+/// keys are all empty and whose owner has no way of knowing why.
+///
+/// It starts at **1** rather than at nought, because nought is what every
+/// configuration written before S59 reads as and those are exactly the ones this
+/// is meant to catch.
+pub const SURFACE_BINDINGS_GENERATION: u32 = 1;
 
 /// The port the WebSocket listener binds unless it is told otherwise.
 pub const DEFAULT_WEBSOCKET_PORT: u16 = 7373;
@@ -372,6 +442,7 @@ impl MachineConfig {
             surface_port: None,
             settings: Settings::default(),
             surface_bindings: None,
+            surface_bindings_generation: SURFACE_BINDINGS_GENERATION,
             shows: RecentShows::default(),
         }
     }
@@ -474,9 +545,29 @@ impl MachineConfig {
     }
 
     /// What this building's surface's keys do, or `None` for *never told* — S38.
+    ///
+    /// **`None` as well when the table is a generation behind** (S59): the
+    /// shipped defaults have been reworked since it was written, so what is in
+    /// force is the new ones — see [`SURFACE_BINDINGS_GENERATION`], and
+    /// [`Self::surface_bindings_are_stale`] for saying so out loud.
     #[must_use]
     pub fn surface_bindings(&self) -> Option<&[SurfaceBinding]> {
+        if self.surface_bindings_generation != SURFACE_BINDINGS_GENERATION {
+            return None;
+        }
         self.surface_bindings.as_deref()
+    }
+
+    /// Whether a stored table was passed over because it is a generation behind.
+    ///
+    /// Separate from [`Self::surface_bindings`] because a daemon should **say
+    /// so** rather than let an operator find their panel rearranged: the two
+    /// answers are *there is no table* and *there was one and it is out of
+    /// date*, and only the second is worth a line in the log.
+    #[must_use]
+    pub const fn surface_bindings_are_stale(&self) -> bool {
+        self.surface_bindings.is_some()
+            && self.surface_bindings_generation != SURFACE_BINDINGS_GENERATION
     }
 
     /// Writes the whole table down — S38.
@@ -491,6 +582,9 @@ impl MachineConfig {
     /// in force and hands the whole of it back through this door.
     pub fn set_surface_bindings(&mut self, rows: Vec<SurfaceBinding>) {
         self.surface_bindings = Some(rows);
+        // Written with the generation it was made against, so the next rework of
+        // the shipped defaults knows this table is older than they are — S59.
+        self.surface_bindings_generation = SURFACE_BINDINGS_GENERATION;
     }
 
     /// Applies one setting — S37, and [`Self::apply`] is the only door.
@@ -535,6 +629,15 @@ impl MachineConfig {
             // The daemon makes the token; nothing is written here. It is not an
             // error and it is not a no-op — see `Effect::NewToken`.
             MachineChange::NewToken | MachineChange::NewIdentity => {}
+            // **Clamped rather than refused** — S59. A percentage outside the
+            // range is a client that has not been told about it, and the answer
+            // a desk wants is the nearest wheel that works rather than an error
+            // in a settings panel. The delta that follows carries the number
+            // that was actually taken, so the box corrects itself.
+            MachineChange::JogSensitivity { percent } => {
+                self.settings.jog_sensitivity =
+                    (*percent).clamp(*JOG_SENSITIVITY_RANGE.start(), *JOG_SENSITIVITY_RANGE.end());
+            }
             MachineChange::LogLevel { level } => self.settings.log_level = *level,
             MachineChange::Universes { universes } => {
                 if *universes == 0 || *universes > DEFAULT_UNIVERSES {

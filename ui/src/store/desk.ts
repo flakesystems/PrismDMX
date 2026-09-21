@@ -118,6 +118,20 @@ export interface DeskState {
    * watched the same press.
    */
   readonly surfaceLearned: BoundControl | null;
+  /**
+   * Which of the surface's controls are lit right now — **S59**.
+   *
+   * By the name `SurfaceControl::name` carries, so the drawing of the panel
+   * joins them to its rows without a second table. It is a **reading of the
+   * desk** rather than a thing this client decides: the daemon lights the
+   * surface over MIDI and tells the browser afterwards, so a closed window
+   * changes nothing about the lamps an operator is looking at.
+   *
+   * Empty until the first `SurfaceLampsChanged` arrives, which is also what a
+   * daemon with no surface attached leaves it as — and an unlit drawing is the
+   * honest picture of a desk that is not plugged in.
+   */
+  readonly surfaceLamps: readonly string[];
   /** How the daemon is doing, or `null` when not connected. */
   readonly health: DaemonHealth | null;
   /**
@@ -170,6 +184,7 @@ export const INITIAL_STATE: DeskState = {
   surfaceBindings: 0,
   surfaceLearning: false,
   surfaceLearned: null,
+  surfaceLamps: [],
   health: null,
   fixtureLibrary: null,
   machine: null,
@@ -344,6 +359,10 @@ export class DeskStore {
       showFile: null,
       unsavedChanges: false,
       switchPositions: [],
+      // S59: nobody's lamps are known once the daemon holding them has gone,
+      // and a drawing that went on glowing would be showing a desk that may
+      // already be dark.
+      surfaceLamps: [],
     });
   }
 
@@ -463,6 +482,10 @@ export class DeskStore {
       // than a state, and the panel that armed learn is the one that acts on it.
       case "SurfaceLearnChanged":
         return { ...state, surfaceLearning: delta.learning, surfaceLearned: delta.control };
+      // S59: the whole set each time, because it is a handful of short strings
+      // and the daemon only sends it when it moves.
+      case "SurfaceLampsChanged":
+        return { ...state, surfaceLamps: delta.lit };
       // S37: this machine's settings and the show file it has open. Both arrive
       // whole, for `OutputsChanged`'s reason: they are a handful of fields
       // rather than a document, and a panel that had to diff a JSON patch to

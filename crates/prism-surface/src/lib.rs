@@ -145,6 +145,7 @@ mod codec;
 pub mod color;
 mod control;
 mod feedback;
+mod layout;
 mod midi;
 mod model;
 pub mod profile;
@@ -152,8 +153,8 @@ mod surface;
 
 pub use accel::{COARSE, JOG_ACCELERATION, JogAcceleration, VPOT_ACCELERATION, VPotAcceleration};
 pub use binding::{
-    Bindings, BoundControl, ExecutorTarget, PROFILE_VERSION, ProfileError, Step, SurfaceAction,
-    SurfaceContext,
+    Bindings, BoundControl, ExecutorTarget, PROFILE_VERSION, ProfileError, SHIPPED_PROFILE, Step,
+    SurfaceAction, SurfaceContext,
 };
 pub use codec::{CodecCounters, McuCodec};
 pub use color::quantize;
@@ -166,6 +167,7 @@ pub use feedback::{
     METER_LEVEL_0DB, METER_LEVEL_OVER, METER_SET_OVERLOAD, MeterSignal, RingMode,
     SCRIBBLE_STRIP_COLORS, SegmentChar, StripColor, VPotRing,
 };
+pub use layout::{X_TOUCH_PANEL, box_of};
 pub use midi::{
     DEFAULT_SYSEX_TIMEOUT, DecodeCounters, EncodeError, MAX_MESSAGE_BYTES, MAX_SYSEX_BYTES,
     MidiDecoder, MidiMessage,

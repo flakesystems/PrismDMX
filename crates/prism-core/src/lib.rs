@@ -118,8 +118,8 @@ pub use command::{Applied, Effect, show_patch_ops};
 pub use conflict::{ShowIssue, dark_universes};
 pub use console::{ConsoleReading, ModeQuestion, ModeQuestionKind, parse_command_line};
 pub use desk::{
-    DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, InvalidDeskId, MachineConfig, RECENT_SHOWS,
-    RecentShows, Settings,
+    DEFAULT_UNIVERSES, DEFAULT_WEBSOCKET_PORT, DeskId, InvalidDeskId, JOG_SENSITIVITY_RANGE,
+    MachineConfig, RECENT_SHOWS, RecentShows, SURFACE_BINDINGS_GENERATION, Settings,
 };
 pub use file::{ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};

@@ -28,8 +28,8 @@ use std::{fs, io};
 use ts_rs::{Config, ExportError, TS};
 
 use crate::{
-    Answer, Command, Cue, Delta, Executor, Fixture, FixtureType, Group, JsonValue, OutputHealth,
-    Preset, ProgrammerState, Query, Sequence, Session, View,
+    Answer, Command, Cue, Delta, Executor, Fixture, FixtureType, Group, JsonValue, KeyShape,
+    OutputHealth, Preset, ProgrammerState, Query, Sequence, Session, View,
 };
 
 /// Where the bindings live, relative to the workspace root.
@@ -92,6 +92,13 @@ pub fn export_bindings(out_dir: &Path) -> Result<Vec<String>, ExportError> {
     View::export_all(&cfg)?;
     OutputHealth::export_all(&cfg)?;
     JsonValue::export_all(&cfg)?;
+    // A root of its own, because nothing on the wire reaches it: the keypad is
+    // a **table**, not a message. What travels is the word, inside
+    // `SurfaceAction::ConsoleWord`, and the interface needs the shapes to know
+    // what pressing that word does. `ConsoleKey` itself is deliberately not
+    // exported — it holds a `&'static str` and cannot be decoded, so the
+    // generated `CONSOLE_KEYS` types its rows structurally. See `console.rs`.
+    KeyShape::export_all(&cfg)?;
 
     let names = exported_names(out_dir).map_err(ExportError::Io)?;
     write_variants(out_dir, &names).map_err(ExportError::Io)?;
@@ -174,8 +181,71 @@ fn write_variants(dir: &Path, names: &[String]) -> io::Result<Vec<String>> {
         ));
     }
     contents.push_str(&feature_group_attributes(&tables));
+    contents.push_str(&console_keys(&tables));
     fs::write(dir.join(format!("{VARIANTS}.ts")), contents)?;
     Ok(tables.into_iter().map(|(name, _)| name).collect())
+}
+
+/// The console keypad, as a TypeScript array — S59.
+///
+/// The second table here that is not a list of variants, and it is generated
+/// for [`feature_group_attributes`]'s reason one device along: **the keypad on
+/// the screen and the words a surface key may be bound to have to be one
+/// list**. They were two until S59 — `ui/src/desk/keys.ts` held the screen's
+/// and the desk had none — and the failure a second list would produce is the
+/// quiet kind: a word added to one of them binds a key that does nothing, and
+/// no compiler anywhere says so.
+///
+/// The shape spellings are read back out of the generated `KeyShape` union,
+/// exactly as every other table here reads its values, so a `rename_all`
+/// changed in Rust moves this table with it.
+///
+/// Answers an empty string if that union is missing, which cannot happen while
+/// [`crate::ConsoleKey`] is one of the exported roots.
+fn console_keys(tables: &[(String, Vec<String>)]) -> String {
+    let Some(shapes) = tables
+        .iter()
+        .find(|(table, _)| table == "KeyShape")
+        .map(|(_, values)| values)
+    else {
+        return String::new();
+    };
+
+    let mut out = String::from(
+        "
+/**
+ * The console keypad: the words a key writes, and which shape each one is.
+ *
+ * `ARCHITECTURE_SPEC.md` §4.5. Read by the `CommandKeys` window, by the header's
+ * Clear key, and by the control editor, which offers the same words as bindings
+ * for a key on the surface — one table, so a word cannot reach one device and
+ * not the other. `prism_domain::CONSOLE_KEYS` is where it is written; the
+ * English titles are `ui/src/desk/keys.ts`'s, because a title is prose about an
+ * interface rather than a fact about the grammar.
+ */
+export const CONSOLE_KEYS: readonly {
+  readonly word: string;
+  readonly shape: KeyShape;
+}[] = [
+",
+    );
+    for key in crate::CONSOLE_KEYS {
+        let Some(position) = crate::console::KEY_SHAPES
+            .iter()
+            .position(|candidate| *candidate == key.shape)
+        else {
+            return String::new();
+        };
+        let Some(spelling) = shapes.get(position) else {
+            return String::new();
+        };
+        out.push_str(&format!(
+            "  {{ word: \"{}\", shape: \"{spelling}\" }},\n",
+            key.word
+        ));
+    }
+    out.push_str("];\n");
+    out
 }
 
 /// The encoder banks and what is on each of them, as a TypeScript record.

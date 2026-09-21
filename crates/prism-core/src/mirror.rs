@@ -160,6 +160,7 @@ impl ShowMirror {
             | Delta::SurfaceChanged { .. }
             | Delta::SurfaceBindingsChanged { .. }
             | Delta::SurfaceLearnChanged { .. }
+            | Delta::SurfaceLampsChanged { .. }
             | Delta::MachineChanged { .. }
             | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }
@@ -250,6 +251,7 @@ impl SessionMirror {
             | Delta::SurfaceChanged { .. }
             | Delta::SurfaceBindingsChanged { .. }
             | Delta::SurfaceLearnChanged { .. }
+            | Delta::SurfaceLampsChanged { .. }
             | Delta::MachineChanged { .. }
             | Delta::ShowFileChanged { .. }
             | Delta::OutputHealth { .. }

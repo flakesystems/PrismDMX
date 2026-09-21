@@ -489,6 +489,20 @@ pub enum SurfaceAction {
         /// Which executor.
         target: ExecutorTarget,
     },
+    /// Start an executor — `on` in the console's grammar, and the half of the
+    /// playback row that had no action.
+    ///
+    /// **S59.** `Command::ExecutorOn` has existed since S26 and nothing on the
+    /// surface could reach it, which is the kind of gap that only shows up when
+    /// somebody sits down to bind a whole panel. Its three neighbours do not
+    /// need adding: `go` and `goback` are spellings of
+    /// [`Self::ExecutorGo`]'s two directions — `prism_core::console` resolves
+    /// them to `GoDirection::Next` and `Prev` — so binding them separately would
+    /// put the same action on the list twice under a second name.
+    ExecutorOn {
+        /// Which executor.
+        target: ExecutorTarget,
+    },
     /// Press one of an executor's buttons, and let the executor decide what that
     /// means — `docs/MCU_MAPPING.md` §4.1's strip-button and transport rows.
     ///
@@ -610,12 +624,131 @@ pub enum SurfaceAction {
         #[serde(default)]
         submit: bool,
     },
+    /// Press one of the console's keys — `ARCHITECTURE_SPEC.md` §4.5's keypad,
+    /// on the desk.
+    ///
+    /// **S59.** The word is one of [`crate::CONSOLE_KEYS`], and what pressing it
+    /// does is that key's [`crate::KeyShape`]: a *run* word is written and run
+    /// at once, a *write* word is written and left standing, an *append* word is
+    /// added to the line as it stands, and `Oops` writes nothing at all.
+    ///
+    /// # Why this is not a [`Self::WriteCommandLine`] carrying one word
+    ///
+    /// Because the two are not the same thing, and only one of them can be asked
+    /// a question. A bound *line* is an operator's sentence and the desk has
+    /// nothing to say about it; a bound *word* is a key of a keypad the desk
+    /// knows, so it can be asked **would this be accepted now, and would it do
+    /// anything** — which is the whole of S59's lamp. A profile that spelled a
+    /// word as a line would bind a key that works and never lights.
+    ///
+    /// The custom section of the control editor keeps
+    /// [`Self::WriteCommandLine`] unchanged for everything that is not a single
+    /// word: whole lines, with or without *and run it*.
+    ///
+    /// # The line is finished on the screen
+    ///
+    /// There is no Enter on the surface and there is not meant to be. §4.5:
+    /// an item picked out of a list *writes the command that names it and
+    /// submits it*, so `Store` on the desk and Executor 3 clicked in the window
+    /// is one finished gesture across the two devices. That is the owner's
+    /// decision of 2026-09-20 — *das Pult und die Oberfläche sind als sich
+    /// ergänzende Geräte gedacht* — and it is why this variant carries a word
+    /// and never a keystroke.
+    ConsoleWord {
+        /// Which key, spelled as [`crate::CONSOLE_KEYS`] spells it.
+        ///
+        /// Text rather than an index, because a profile file is written by hand
+        /// and a number in one would be unreadable and would move the day a key
+        /// is inserted. `ConsoleKey::named` is the door, and it ignores case.
+        word: String,
+    },
     /// Write the show to disk.
     SaveShow,
     /// Undo.
     Oops,
     /// Redo.
     Redo,
+}
+
+/// What a control looks like, so a drawing of the panel can draw it — S59.
+///
+/// Four shapes and not more: the question a picture of a desk has to answer is
+/// *which of these do I click*, and a key, a fader, a knob and a wheel are as
+/// far as that distinction goes. A profile that wanted to describe the bevel on
+/// a button would be describing a photograph.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum ControlShape {
+    /// A button: a rounded rectangle with a lamp.
+    #[default]
+    Key,
+    /// A fader: a tall slot.
+    Fader,
+    /// A rotary encoder: a circle.
+    Knob,
+    /// The jog wheel: a much larger circle.
+    Wheel,
+}
+
+/// Where a control sits on the panel — S59.
+///
+/// # Why this is the **device profile's** and not the interface's
+///
+/// The owner's decision of 2026-09-20, and it is the same rule
+/// [`SurfaceControl::permanent`] and [`SurfaceControl::reserved`] already
+/// follow: where a key is on a panel is a fact about that panel. An interface
+/// that held the X-Touch's layout would have to grow a second one the day a
+/// second surface is supported, and the second one would be in the wrong crate
+/// — a browser has no business knowing what a desk looks like, only how to draw
+/// what it is told.
+///
+/// # The units are the panel's own
+///
+/// Not pixels and not millimetres: a drawing space the profile chooses, which
+/// the interface scales to whatever room it has. Proportions are what matter —
+/// *maßstabsgetreu*, so the X-Touch is recognisably itself — and a fixed unit
+/// would make one of the two ends wrong.
+///
+/// A strip's controls carry the **leftmost** strip's box. The eight strips are
+/// one row of the binding table (`Strip[*]`, because D7 says the faders are a
+/// bank), so a drawing repeats the column [`PanelLayout::strips`] times at
+/// [`PanelLayout::strip_pitch`] rather than being given eight boxes that would
+/// all say the same thing.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct ControlBox {
+    /// Distance from the left edge of the panel.
+    pub x: u16,
+    /// Distance from the top edge.
+    pub y: u16,
+    /// Width.
+    pub w: u16,
+    /// Height.
+    pub h: u16,
+    /// What it is, for drawing.
+    pub shape: ControlShape,
+}
+
+/// The panel a drawing is drawn on — S59.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "camelCase")]
+pub struct PanelLayout {
+    /// How wide the panel is, in the units [`ControlBox`] uses.
+    pub width: u16,
+    /// How tall.
+    pub height: u16,
+    /// How many channel strips it has.
+    pub strips: u8,
+    /// How far apart their columns are.
+    pub strip_pitch: u16,
 }
 
 /// A control a binding can name.
@@ -827,6 +960,16 @@ pub struct SurfaceControl {
     pub permanent: bool,
     /// Whether it may never be bound (§4.3's SMPTE/Beats).
     pub reserved: bool,
+    /// Where it is on the panel, for the drawing — S59, and `None` for a
+    /// control whose profile has no layout.
+    ///
+    /// The third fact on this row that belongs to the **device profile** rather
+    /// than to the table, and it is here for the same reason as the other two:
+    /// a client holds no profile. An absent box is an ordinary state and the
+    /// one a drawing has to handle — a surface nobody has drawn yet is a list
+    /// and no picture, which is better than a picture of the wrong desk.
+    #[serde(default)]
+    pub geometry: Option<ControlBox>,
 }
 
 #[cfg(test)]
@@ -1029,10 +1172,11 @@ mod tests {
             action: None,
             permanent: true,
             reserved: false,
+            geometry: None,
         };
         assert_eq!(
             serde_json::to_string(&control).unwrap(),
-            r#"{"control":{"t":"Jog"},"name":"Global.Jog","action":null,"permanent":true,"reserved":false}"#
+            r#"{"control":{"t":"Jog"},"name":"Global.Jog","action":null,"permanent":true,"reserved":false,"geometry":null}"#
         );
     }
 }

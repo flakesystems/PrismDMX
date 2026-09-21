@@ -50,6 +50,12 @@ const CONTROL_CHANGE: u8 = 0xB0;
 /// F1, note 54 — §2.1's "Function" row: F1–F8 = 54–61.
 const F1: u8 = 54;
 
+/// F2, note 55.
+const F2: u8 = 55;
+
+/// F3, note 56.
+const F3: u8 = 56;
+
 /// Play, note 94 — §2.1's "Transport" row, and one of the five that reach
 /// PrismDMX permanently in the shared mode (§4.3).
 const PLAY: u8 = 94;
@@ -225,6 +231,158 @@ async fn a_binding_changed_over_the_protocol_takes_effect_without_a_restart() {
             .any(|window| window.window_type == WindowType::Patch)
     })
     .await;
+}
+
+/// **A bound word does on the desk what the same key does on the screen** —
+/// S59's exit criterion, and the point of having moved the table into Rust.
+///
+/// `ARCHITECTURE_SPEC.md` §4.5 gives every key of the keypad one of three
+/// writing shapes, and until S59 only the screen had them. This presses three
+/// keys of an X-Touch, one per shape, and reads the line they build:
+///
+/// - **write** — `Store` replaces the line with the word and waits;
+/// - **append** — `Cue` adds itself to what is standing, so two presses are one
+///   line an operator could have typed;
+/// - **run** — `Clear` is a whole command and goes at once, which is also the
+///   assertion that a run key does *not* leave its word lying in the line.
+///
+/// The bytes are §2.1's, written out by hand, and nothing here asks the profile
+/// which note to press — S20's method rule, and it matters most in this file.
+#[tokio::test]
+async fn a_bound_keypad_word_builds_the_line_its_shape_describes() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    let (mut daemon, surface) = desk(dir.path()).await;
+    let desk_handle = daemon.desk().clone();
+
+    let word = |text: &str| {
+        Some(SurfaceAction::ConsoleWord {
+            word: text.to_owned(),
+        })
+    };
+    bind(
+        &daemon,
+        BoundControl::Global {
+            button: GlobalButton::F1,
+        },
+        word("Store"),
+    );
+    bind(
+        &daemon,
+        BoundControl::Global {
+            button: GlobalButton::F2,
+        },
+        word("Cue"),
+    );
+    bind(
+        &daemon,
+        BoundControl::Global {
+            button: GlobalButton::F3,
+        },
+        word("Clear"),
+    );
+    run_until(&mut daemon, "the desk to draw with the new table", || {
+        desk_handle.core().bindings().action(BoundControl::Global {
+            button: GlobalButton::F3,
+        }) == word("Clear")
+    })
+    .await;
+
+    let line = || {
+        desk_handle
+            .core()
+            .file
+            .session
+            .session()
+            .command_line
+            .clone()
+    };
+
+    // A write key: the word, and a space for what comes next.
+    surface.press(NOTE_ON, F1);
+    run_until(&mut daemon, "Store to write its word", || {
+        line() == "Store "
+    })
+    .await;
+
+    // An append key: added to the line as it stands, not instead of it.
+    surface.press(NOTE_ON, F2);
+    run_until(&mut daemon, "Cue to join the line", || {
+        line() == "Store Cue "
+    })
+    .await;
+
+    // A run key: a whole command, so it goes — and the daemon clears a line it
+    // has run, which is what leaves nothing behind.
+    surface.press(NOTE_ON, F3);
+    run_until(&mut daemon, "Clear to run and leave nothing", || {
+        line().is_empty()
+    })
+    .await;
+}
+
+/// **Two words pressed in one poll build one line** — S59.
+///
+/// The surface is polled at 30 Hz and a poll can carry several events, so the
+/// context an action is resolved against is read **per event** rather than once
+/// for the batch. Read once, the second word would be appended to the line as it
+/// was *before* the first was applied, and `Store` `Cue` would come out as
+/// `Cue ` — a line an operator did not type, produced only when their fingers
+/// were fast enough. This sends both presses before the daemon runs at all,
+/// which is precisely that case.
+#[tokio::test]
+async fn two_words_in_one_poll_build_one_line() {
+    let _turn = common::one_daemon_at_a_time();
+    let dir = tempfile::tempdir().unwrap();
+    let (mut daemon, surface) = desk(dir.path()).await;
+    let desk_handle = daemon.desk().clone();
+
+    bind(
+        &daemon,
+        BoundControl::Global {
+            button: GlobalButton::F1,
+        },
+        Some(SurfaceAction::ConsoleWord {
+            word: "Store".to_owned(),
+        }),
+    );
+    bind(
+        &daemon,
+        BoundControl::Global {
+            button: GlobalButton::F2,
+        },
+        Some(SurfaceAction::ConsoleWord {
+            word: "Cue".to_owned(),
+        }),
+    );
+    run_until(&mut daemon, "the desk to draw with the new table", || {
+        desk_handle.core().bindings().action(BoundControl::Global {
+            button: GlobalButton::F2,
+        }) == Some(SurfaceAction::ConsoleWord {
+            word: "Cue".to_owned(),
+        })
+    })
+    .await;
+
+    // Both presses into the port before a single slice runs, so they arrive in
+    // one batch.
+    surface.press(NOTE_ON, F1);
+    surface.press(NOTE_ON, F2);
+    run_until(&mut daemon, "both words to reach the line", || {
+        !desk_handle
+            .core()
+            .file
+            .session
+            .session()
+            .command_line
+            .is_empty()
+    })
+    .await;
+    assert_eq!(
+        desk_handle.core().file.session.session().command_line,
+        "Store Cue ",
+        "the second word was answered from a context read before the first was applied"
+    );
 }
 
 /// **The shipped profile still *is* the built-in defaults after a round trip
@@ -614,7 +772,14 @@ async fn a_desk_starts_with_the_keys_it_was_left_with() {
     };
     {
         let (daemon, _surface) = desk(dir.path()).await;
-        assert_eq!(daemon.bindings().action(f5), None, "F5 is free in §4.1");
+        // **Not what it starts as**, which is the point: every panel key has a
+        // default since S59, so a test that bound a key to what it already did
+        // would pass for a desk that stored nothing at all.
+        assert_ne!(
+            daemon.bindings().action(f5),
+            Some(SurfaceAction::SaveShow),
+            "F5 already saves the show, so this proves nothing"
+        );
         bind(&daemon, f5, Some(SurfaceAction::SaveShow));
     }
     // A second daemon over the same data directory — which is how a desk comes

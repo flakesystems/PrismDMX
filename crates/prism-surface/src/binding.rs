@@ -67,9 +67,8 @@
 use core::fmt;
 
 use prism_domain::{
-    AttributeKey, Command, ExecutorButtonFunction, ExecutorButtonRef, ExecutorId, FeatureGroup,
-    GlobalButton, ParamDirection, PlaybackTarget, RESERVED_REASON, StripButton, SurfaceBinding,
-    ViewId, WindowType,
+    AttributeKey, Command, ConsoleKey, ExecutorId, GlobalButton, PlaybackTarget, RESERVED_REASON,
+    StripButton, SurfaceBinding, ViewId,
 };
 // Layer 3's vocabulary moved to `prism-domain` in S38 and is re-exported here
 // for `GlobalButton`'s reason: what a control is called is the protocol's, what
@@ -79,7 +78,7 @@ use serde::Deserialize;
 
 use crate::control::ButtonId;
 use crate::model::{STRIP_BUTTONS, SurfaceEvent};
-use crate::profile::{Fader, McuProfile};
+use crate::profile::{Fader, McuProfile, X_TOUCH};
 
 /// The profile format this crate reads — `profileVersion` in the JSON.
 pub const PROFILE_VERSION: u32 = 1;
@@ -94,7 +93,7 @@ const GLOBAL_SLOTS: usize = GlobalButton::ALL.len();
 /// view library, a show or an executor. `Copy`, and small enough to rebuild per
 /// event without anybody caring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct SurfaceContext {
+pub struct SurfaceContext<'a> {
     /// The executor page the fader bank is showing (**D7**).
     pub executor_page: u32,
     /// The executor the transport section and the main fader act on.
@@ -109,6 +108,22 @@ pub struct SurfaceContext {
     /// has selected. Nothing when nothing is selected, and then a turn of the
     /// wheel produces no command at all rather than a guess.
     pub parameter: Option<AttributeKey>,
+    /// The command line as it stands — `Session::command_line`.
+    ///
+    /// **S59**, and read by exactly one shape: an *append* key
+    /// ([`prism_domain::KeyShape::Append`]) adds its word to the line that is
+    /// there, so `Store` on one key and `Cue` on the next build `Store Cue `
+    /// between them. Every other action ignores it, and a *run* or *write* key
+    /// deliberately throws it away — both are starting a command.
+    ///
+    /// It is the **session's** line, which is the one every client shows
+    /// (§4.1): a key pressed on the desk continues the line somebody is typing
+    /// in a browser, because there is one line and one desk.
+    ///
+    /// Borrowed rather than owned so that this type stays `Copy` and an event
+    /// costs no allocation to answer — the context is built fresh for every
+    /// message the surface sends.
+    pub command_line: &'a str,
 }
 
 /// What a control carried with it, for the actions that need it.
@@ -201,7 +216,8 @@ const fn step_page(page: u32, delta: i32) -> u32 {
 /// three. The split is the point rather than a consequence of it.
 trait Resolve {
     /// The command this action means, or nothing.
-    fn resolve(self, origin: Origin, input: Input, context: &SurfaceContext) -> Option<Command>;
+    fn resolve(self, origin: Origin, input: Input, context: &SurfaceContext<'_>)
+    -> Option<Command>;
 }
 
 impl Resolve for SurfaceAction {
@@ -212,7 +228,12 @@ impl Resolve for SurfaceAction {
     // operator turning the jog wheel with nothing selected has done nothing,
     // and a table that binds a level to a button is a mistake that should cost
     // nothing at run time.
-    fn resolve(self, origin: Origin, input: Input, context: &SurfaceContext) -> Option<Command> {
+    fn resolve(
+        self,
+        origin: Origin,
+        input: Input,
+        context: &SurfaceContext<'_>,
+    ) -> Option<Command> {
         Some(match self {
             Self::ExecutorMaster { target } => Command::SetExecutorMaster {
                 executor_id: executor_of(target, origin, context)?,
@@ -223,6 +244,9 @@ impl Resolve for SurfaceAction {
                 direction,
             },
             Self::ExecutorOff { target } => Command::ExecutorOff {
+                target: PlaybackTarget::of_executor(executor_of(target, origin, context)?),
+            },
+            Self::ExecutorOn { target } => Command::ExecutorOn {
                 target: PlaybackTarget::of_executor(executor_of(target, origin, context)?),
             },
             Self::ExecutorButton { target, button } => Command::ExecutorButton {
@@ -286,6 +310,36 @@ impl Resolve for SurfaceAction {
                 Command::CommandLineInput {
                     text: line,
                     run: submit,
+                    mode: None,
+                }
+            }
+            // **A key of the screen's keypad, on the desk** — S59, and
+            // `ARCHITECTURE_SPEC.md` §4.5. What the word does is its
+            // `KeyShape`'s and the shape is `prism_domain`'s, so the two
+            // devices cannot disagree: nothing here decides anything, it looks
+            // the key up and asks it what line it makes.
+            //
+            // `pressed()?` for the reason `WriteCommandLine` has it — a key
+            // acts on the press and stays quiet on the release. A word written
+            // twice per press would be a line an operator did not type.
+            Self::ConsoleWord { word } => {
+                if !input.pressed().unwrap_or(true) {
+                    return None;
+                }
+                let key = ConsoleKey::named(&word)?;
+                // **Oops writes nothing** (B58). The daemon decides whether it
+                // takes the line's last word or an edit off the journal, which
+                // is precisely why the X-Touch's key can send the same command
+                // the screen's does with no screen attached to ask.
+                let Some((text, run)) = key.line_for(context.command_line) else {
+                    return Some(Command::Oops);
+                };
+                // No mode, for `WriteCommandLine`'s reason: a key is pressed
+                // with nobody to ask, so the line runs with the mode that
+                // cannot lose anything — the one its own parse carries.
+                Command::CommandLineInput {
+                    text,
+                    run,
                     mode: None,
                 }
             }
@@ -382,188 +436,18 @@ pub struct Bindings {
     jog: Option<SurfaceAction>,
 }
 
-/// The panel's default bindings, as `docs/MCU_MAPPING.md` §4.1 gives them.
+/// The shipped X-Touch profile, embedded at compile time — S59.
 ///
-/// A list of pairs rather than sixty-four array slots in declaration order: the
-/// array is indexed by [`GlobalButton::index`], and a table written out by
-/// position is one where inserting a button silently moves everything after it.
-const DEFAULT_GLOBAL: [(GlobalButton, SurfaceAction); 26] = [
-    // Encoder Assign — six feature groups on the six buttons.
-    //
-    // **There are seven banks since S43 and the surface has six keys**, so one
-    // bank has no key of its own and it is `Control`: it is the row a fixture is
-    // struck and reset from, touched once before a show and never during one,
-    // while every other bank is touched while light is on stage. The five that
-    // were bound before S43 kept their keys — an operator who has learned that
-    // *Pan* is Colour must not find it somewhere else — and `Gobo`, the bank the
-    // split created, took the sixth key that had deliberately been left empty.
-    //
-    // `Control` is reachable from the screen, and from any key an operator binds
-    // to it themselves: the table is editable at the desk since S38, which is
-    // exactly the case it was built for.
-    (
-        GlobalButton::AssignTrack,
-        SurfaceAction::SetEncoderBank {
-            group: FeatureGroup::Dimmer,
-        },
-    ),
-    (
-        GlobalButton::AssignSend,
-        SurfaceAction::SetEncoderBank {
-            group: FeatureGroup::Position,
-        },
-    ),
-    (
-        GlobalButton::AssignPan,
-        SurfaceAction::SetEncoderBank {
-            group: FeatureGroup::Color,
-        },
-    ),
-    (
-        GlobalButton::AssignPlugin,
-        SurfaceAction::SetEncoderBank {
-            group: FeatureGroup::Beam,
-        },
-    ),
-    (
-        GlobalButton::AssignEq,
-        SurfaceAction::SetEncoderBank {
-            group: FeatureGroup::Focus,
-        },
-    ),
-    (
-        GlobalButton::AssignInstrument,
-        SurfaceAction::SetEncoderBank {
-            group: FeatureGroup::Gobo,
-        },
-    ),
-    // Faderbank ◀▶ — executor page down and up (D7).
-    (
-        GlobalButton::BankLeft,
-        SurfaceAction::ExecutorPage { delta: -1 },
-    ),
-    (
-        GlobalButton::BankRight,
-        SurfaceAction::ExecutorPage { delta: 1 },
-    ),
-    // Channel ◀▶ — the UI view (D8).
-    (
-        GlobalButton::ChannelLeft,
-        SurfaceAction::StepView {
-            direction: Step::Prev,
-        },
-    ),
-    (
-        GlobalButton::ChannelRight,
-        SurfaceAction::StepView {
-            direction: Step::Next,
-        },
-    ),
-    // Flip — Go+ on the selected executor.
-    (
-        GlobalButton::Flip,
-        SurfaceAction::ExecutorButton {
-            target: ExecutorTarget::Selected,
-            button: ExecutorButtonRef::Function {
-                function: ExecutorButtonFunction::GoForward,
-            },
-        },
-    ),
-    // F1–F8: free. Four windows and four spare, which is what "free" means in a
-    // file somebody is expected to edit.
-    (
-        GlobalButton::F1,
-        SurfaceAction::OpenWindow {
-            window: WindowType::FixtureSheet,
-        },
-    ),
-    (
-        GlobalButton::F2,
-        SurfaceAction::OpenWindow {
-            window: WindowType::SequenceSheet,
-        },
-    ),
-    (
-        GlobalButton::F3,
-        SurfaceAction::OpenWindow {
-            window: WindowType::Patch,
-        },
-    ),
-    (
-        GlobalButton::F4,
-        SurfaceAction::OpenWindow {
-            window: WindowType::Settings,
-        },
-    ),
-    // Utility.
-    (GlobalButton::Save, SurfaceAction::SaveShow),
-    (GlobalButton::Undo, SurfaceAction::Oops),
-    (GlobalButton::Enter, SurfaceAction::Redo),
-    // Transport — the part of the panel that stays PrismDMX's in shared
-    // operation (§4.3), and therefore the part to spend on live-show work.
-    // §4.1 gives these four `Go-`, `Go+`, `Off` and `On` on the selected
-    // executor. Until S34 the protocol had no `On` and Play resolved to a Go,
-    // which is the second row of the deviation table §4.2.1 carried; now the
-    // row is bound as it is written.
-    (
-        GlobalButton::Rewind,
-        SurfaceAction::ExecutorButton {
-            target: ExecutorTarget::Selected,
-            button: ExecutorButtonRef::Function {
-                function: ExecutorButtonFunction::GoBack,
-            },
-        },
-    ),
-    (
-        GlobalButton::FastForward,
-        SurfaceAction::ExecutorButton {
-            target: ExecutorTarget::Selected,
-            button: ExecutorButtonRef::Function {
-                function: ExecutorButtonFunction::GoForward,
-            },
-        },
-    ),
-    (
-        GlobalButton::Stop,
-        SurfaceAction::ExecutorButton {
-            target: ExecutorTarget::Selected,
-            button: ExecutorButtonRef::Function {
-                function: ExecutorButtonFunction::Off,
-            },
-        },
-    ),
-    (
-        GlobalButton::Play,
-        SurfaceAction::ExecutorButton {
-            target: ExecutorTarget::Selected,
-            button: ExecutorButtonRef::Function {
-                function: ExecutorButtonFunction::On,
-            },
-        },
-    ),
-    (GlobalButton::Record, SurfaceAction::ClearProgrammer),
-    // The cursor cluster is XTouch.txt's "Zoom ▲▼ / ◀▶".
-    (
-        GlobalButton::CursorUp,
-        SurfaceAction::ProgrammerPage { delta: -1 },
-    ),
-    (
-        GlobalButton::CursorDown,
-        SurfaceAction::ProgrammerPage { delta: 1 },
-    ),
-    (
-        GlobalButton::CursorLeft,
-        SurfaceAction::SelectProgrammerParam {
-            direction: ParamDirection::Prev,
-        },
-    ),
-];
-
-/// The last of the panel's defaults, which the array above has no room for
-/// without becoming a table nobody can read the end of.
-const DEFAULT_CURSOR_RIGHT: SurfaceAction = SurfaceAction::SelectProgrammerParam {
-    direction: ParamDirection::Next,
-};
+/// `profiles/surface/xtouch.json`, which since S59 **is** the built-in binding
+/// table rather than a copy of it — see [`Bindings::defaults`]. Embedded rather
+/// than read from a path because the defaults have to exist before any file
+/// system question has been asked: a desk with no data directory, a first run,
+/// and the fallback [`Bindings::load`] takes when an operator's own profile is
+/// malformed.
+///
+/// Deleting the file breaks the build, which is deliberate. It used to be a copy
+/// that could go stale in silence.
+pub const SHIPPED_PROFILE: &str = include_str!("../../../profiles/surface/xtouch.json");
 
 impl Bindings {
     /// A table with nothing bound.
@@ -584,69 +468,37 @@ impl Bindings {
         }
     }
 
-    /// The built-in defaults — every row of `docs/MCU_MAPPING.md` §4.1.
+    /// The built-in defaults — **the shipped profile, embedded** (S59).
     ///
-    /// What a desk does with no profile file, with a profile that will not
-    /// parse, and what the shipped `profiles/surface/xtouch.json` reproduces. A
-    /// test asserts the third of those, and a *different* test asserts the rows
-    /// against expectations transcribed from the document by hand — because a
-    /// test that read the table it is checking would pass for any table at all.
+    /// # One table, not two
+    ///
+    /// Until S59 this function built the table in code and
+    /// `profiles/surface/xtouch.json` said the same thing again in JSON, with a
+    /// test holding the two equal. That worked and it was two places to edit,
+    /// which is the arrangement this project removes wherever it finds one: the
+    /// owner reworks the shipped table on a real desk, exports a profile and
+    /// hands the file back, and under the old shape somebody then had to
+    /// translate it into Rust or the defaults would quietly disagree with what
+    /// ships beside them.
+    ///
+    /// So the file **is** the defaults. [`SHIPPED_PROFILE`] is its text,
+    /// embedded at compile time, and this parses it.
+    ///
+    /// # It cannot fail, and what happens if it does
+    ///
+    /// This crate does not panic outside its tests, and [`load`](Self::load)
+    /// leans on this function precisely when a profile will *not* parse — so a
+    /// `defaults()` that could fail would be a desk with no answer at the moment
+    /// it needs one most. A shipped profile that does not parse therefore falls
+    /// back to [`empty`](Self::empty): a desk whose keys do nothing, which is
+    /// bad and is *visible*, rather than a start-up failure in a hall.
+    ///
+    /// It is unreachable, and `the_shipped_profile_parses_and_binds_the_whole_
+    /// surface` in `tests/bindings.rs` is what makes it so — the assertion that
+    /// used to compare two tables now checks the one that is left.
     #[must_use]
     pub fn defaults() -> Self {
-        let mut table = Self::empty();
-        // Strip fader: the master of the executor on that strip.
-        table.strip_fader = Some(SurfaceAction::ExecutorMaster {
-            target: ExecutorTarget::Strip,
-        });
-        // Strip encoder: Empty, per §4.1. Left as `None`.
-        // Rec / Solo / Mute / Select: **that strip executor's own** first,
-        // second, third and fourth button. §4.1 calls this row configurable and
-        // lists the eight `ExecutorButtonFunction`s; that list is the executor's
-        // and not this table's, so what the table binds is the *position* and
-        // the show says what it does (S34). `prism_core::default_executor` is
-        // where the desk's own answer to that lives — Go+, Go-, Off, Empty.
-        for button in [
-            StripButton::Rec,
-            StripButton::Solo,
-            StripButton::Mute,
-            StripButton::Select,
-        ] {
-            table.set_strip_button(
-                button,
-                Some(SurfaceAction::ExecutorButton {
-                    target: ExecutorTarget::Strip,
-                    button: ExecutorButtonRef::Slot {
-                        index: u8::try_from(button.index()).unwrap_or(u8::MAX),
-                    },
-                }),
-            );
-        }
-        // Pushing the V-Pot selects that strip's executor, which is what the
-        // transport section and the main fader then act on. Not a §4.1 row —
-        // that table has no line for the push — but the selection has to be
-        // reachable from the surface or half of §4.1 has no subject.
-        table.set_strip_button(
-            StripButton::VPotPush,
-            Some(SurfaceAction::SelectExecutor {
-                target: ExecutorTarget::Strip,
-            }),
-        );
-        // Main fader: the selected executor's fader. §4.1 calls it `XFade`,
-        // which is an `ExecutorFaderFunction` — what the executor does with its
-        // fader is show data (`ARCHITECTURE_SPEC.md` §6) and there is one fader
-        // command for all four functions. Since S34 the daemon routes that one
-        // command through the executor's own `fader_function`, so a fader set to
-        // `XFade` crossfades and this row means what §4.1 says it means.
-        table.main_fader = Some(SurfaceAction::ExecutorMaster {
-            target: ExecutorTarget::Selected,
-        });
-        // The jog wheel turns the selected programmer parameter.
-        table.jog = Some(SurfaceAction::AdjustParameter);
-        for (button, action) in DEFAULT_GLOBAL {
-            table.set_global(button, Some(action));
-        }
-        table.set_global(GlobalButton::CursorRight, Some(DEFAULT_CURSOR_RIGHT));
-        table
+        Self::parse(SHIPPED_PROFILE, &X_TOUCH).unwrap_or_else(|_| Self::empty())
     }
 
     /// Reads a profile, refusing anything it does not understand.
@@ -935,13 +787,14 @@ mod tests {
         ExecutorId, FeatureGroup, GoDirection, ParamDirection, PlaybackTarget, ViewId, WindowType,
     };
 
-    fn context() -> SurfaceContext {
+    fn context() -> SurfaceContext<'static> {
         SurfaceContext {
             executor_page: 2,
             selected_executor: Some(ExecutorId::new(19)),
             previous_view: Some(ViewId::new(1)),
             next_view: Some(ViewId::new(7)),
             programmer_page: 3,
+            command_line: "Store ",
             parameter: Some(AttributeKey::first(AttributeType::Tilt)),
         }
     }
