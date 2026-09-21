@@ -118,9 +118,17 @@ format it came from. See `README.md`.
 
 It has an upstream and a release cadence. A copy in this repository would be a
 second copy of somebody else's data — and the one that is out of date, because
-nothing here would ever tell us it had moved. For GDTF there is a second reason
-that is not a preference: those archives are the manufacturers', and this
-project has no licence to redistribute them.
+nothing here would ever tell us it had moved.
+
+For GDTF there is a second reason that is not a preference, and it was
+**researched with sources on 2026-09-21**: those archives are the
+**manufacturers'**, not GDTF Share's, and GDTF Share's own terms forbid using
+its materials for commercial purposes without a licence. So the desk does not
+redistribute them — that is decision **D12**, and
+[`docs/FIXTURE_LIBRARY.md`](../../docs/FIXTURE_LIBRARY.md) §2 has the clauses,
+the sources and what follows from them. The Open Fixture Library corpus is MIT
+and **is** shipped in the installer, which is what a desk whose operator will
+not log in has to fall back on.
 
 ## What happens when it is not there
 

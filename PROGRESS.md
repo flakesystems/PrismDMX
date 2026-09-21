@@ -5302,7 +5302,7 @@ Every one is recorded as plain data so verification is a data update, not a refa
 | Item | Blocks | Status |
 |---|---|---|
 | 📏 **GDTF's matrix translation is millimetres** — S61 | nothing today; **S30** draws with it | ☐ **open, and it is one constant.** `MATRIX_TO_METRES` in `prism_core::library::gdtf::geometry`, applied in exactly one place: GDTF states lengths in metres and the translation part of a `Position` matrix in millimetres, and that second half could not be checked against a published archive in the container S60 was worked in — `gdtf-share.com` is refused by its egress policy, and the format's upstream has no anonymous download anyway. **How to close it:** open any published `.gdtf` for a moving head, read the `Position` of the geometry the `<Beam>` sits in, and compare the translation with the `Height` of the `Model` on the body. A head 550 mm tall whose beam sits at `400` means millimetres; one whose beam sits at `0.4` means metres. **What being wrong would look like:** every beam a thousand times too far from its fixture, or a thousand times too close — a whole rig in one place, or a rig the size of a county. It is not a fault that can hide, and one constant is the fix |
-| 🖼️ **A GDTF's models and gobo pictures reach a client** — S61 | **S30** | ☐ **open by design, and it is S30's to close.** A profile carries the **names** GDTF gives its model and its wheel slot images (`FixturePhysical::model`, `AttributeRange::media`) and deliberately not paths: a show embeds its profiles (S11) so that it means the same on a desk with a different library, and a path into this desk's directory would give that away again. What does not exist yet is the other half — a way for a client to *fetch* the bytes those names refer to out of the archive the desk has. That is a query and a cache, it is only wanted by a thing that draws, and the thing that draws is S30 |
+| 🖼️ **A GDTF's models and gobo pictures reach a client** — S61 | **S30** | ☐ **open by design, and it is S30's to close.** Where the archives come from in the first place is now settled and researched — `docs/FIXTURE_LIBRARY.md`, decision **D12**: nothing from GDTF Share is redistributed, so the bytes a viewer wants live in the venue's own files. A profile carries the **names** GDTF gives its model and its wheel slot images (`FixturePhysical::model`, `AttributeRange::media`) and deliberately not paths: a show embeds its profiles (S11) so that it means the same on a desk with a different library, and a path into this desk's directory would give that away again. What does not exist yet is the other half — a way for a client to *fetch* the bytes those names refer to out of the archive the desk has. That is a query and a cache, it is only wanted by a thing that draws, and the thing that draws is S30 |
 | 🚪 **A stranger gets from the front page to a running desk** | nothing — S41 and S42 are otherwise complete | ☐ **and it is the point of S42 rather than a loose end.** It is the one exit criterion in this project that no test can check, and it cannot be met from inside a session: it needs somebody who has not built this, on a Windows machine that has never had a Rust toolchain or this repository on it. **The recipe, and it is deliberately the whole of what that person should do:** (1) open `https://prismdmx.de` and read nothing but the front page; (2) follow *Herunterladen und installieren* and run the installer, clicking through SmartScreen or checking the checksum, whichever they prefer; (3) start it from the Start menu; (4) *Settings → Outputs*, add one output for whatever they have — an Art-Net node, an sACN receiver, or `--mock-output` if they have nothing, in which case (6) is read off the *DMX Sheet*; (5) open *Patch*, search the library for a fixture they own, give it number 1 and an address; (6) type `1 at full` and press Enter. **They must not ask the author anything, and every question they had to ask is the finding.** What comes back is a list of the places the site and the manuals are not enough, and that list is worth more than any test in this repository. Until somebody does it, S42's last criterion is met on paper and not in fact |
 #### S42's second follow-up: two languages, English by default, and a smaller site
 
@@ -8376,7 +8376,17 @@ worth knowing before S30 starts:
   before believing a rig's proportions on screen.
 - **There is no GDTF corpus and cannot be one.** `gdtf-share.com` has no
   anonymous download, so every test builds its archive byte by byte. If S30
-  wants a fixture to draw, write one the way `ui/e2e/gdtf.ts` does.
+  wants a fixture to draw, write one the way `ui/e2e/gdtf.ts` does, or paste the
+  PowerShell recipe in `docs/RELEASE_TEST_0.9.3.md` §1 on a real machine.
+- **Read `docs/FIXTURE_LIBRARY.md` before wondering why the installer has no
+  GDTF in it.** The licensing was researched on 2026-09-21 with sources and is
+  decision **D12**: the files are the manufacturers', GDTF Share's terms forbid
+  commercial use of its materials without a licence, and every product that
+  integrates the Share does it with the **user's own** account. The installer
+  ships the Open Fixture Library corpus (MIT) instead, and **that stays** — a
+  desk whose operator will not log in must still have a usable library. **S62**
+  builds the three ways that need no redistribution: MVR import, `.gdtf` import,
+  and an optional in-app login.
 
 **The version stays `0.9.2`.** What has landed since it appears in `CHANGELOG.md`
 and `docs/CHANGELOG.en.md` under *Noch nicht veröffentlicht* / *Not yet
