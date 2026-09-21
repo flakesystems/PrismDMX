@@ -119,12 +119,12 @@ function windowNote(type: WindowType): string {
       return "The time, read from the back of the room";
     case "Settings":
       return "Outputs, devices, controls and files";
-    // The two the daemon knows and this build cannot draw yet. They are in
-    // `WindowType` because the daemon places them (S43's B10) and a later
-    // session fills them in; the note says so rather than leaving a name with
-    // nothing under it, which is what an operator meets when they open one.
     case "Viewer3D":
-      return "The rig in three dimensions — a later session";
+      return "The rig as it hangs, and its beams";
+    // The one the daemon knows and this build cannot draw yet. It is in
+    // `WindowType` because the daemon places it (S43's B10) and a later
+    // session fills it in; the note says so rather than leaving a name with
+    // nothing under it, which is what an operator meets when they open one.
     case "PhaserEditor":
       return "Effects and their shapes — a later session";
   }
