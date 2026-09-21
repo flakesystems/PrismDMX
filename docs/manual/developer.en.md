@@ -64,7 +64,10 @@ date. Since **S61** there are two installers and they do different jobs:
   absent — which is why every CI job that runs them fetches it first, and why
   the build recipe above does.
 
-`profiles/fixtures/SOURCE.md` is the whole of it.
+`profiles/fixtures/SOURCE.md` says how to run both.
+**`docs/FIXTURE_LIBRARY.md` says why the installer carries no GDTF** — the
+licensing, researched with sources, and the four ways a venue actually gets a
+library. Read it before proposing to bundle one.
 
 **`ui/src/bindings/` is generated, not committed.** `cargo test -p prism-domain`
 writes it from the Rust types, so a stale binding cannot survive a green build,

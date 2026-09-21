@@ -67,7 +67,11 @@ Verschiedenes:
   laufen, und sie **überspringen sich selbst**, wenn er fehlt — deshalb holt ihn
   jeder CI-Job, der sie braucht, vorher, und deshalb steht er oben im Rezept.
 
-`profiles/fixtures/SOURCE.md` ist das Ganze davon.
+`profiles/fixtures/SOURCE.md` sagt, wie man beide ausführt.
+**`docs/FIXTURE_LIBRARY.md` sagt, warum der Installer kein GDTF mitbringt** —
+die Rechtslage, mit Quellen recherchiert, und die vier Wege, auf denen ein Haus
+tatsächlich zu einer Bibliothek kommt. Bitte lesen, bevor jemand vorschlägt,
+eine mitzuliefern.
 
 **`ui/src/bindings/` wird erzeugt, nicht mitgeliefert.**
 `cargo test -p prism-domain` schreibt es aus den Rust-Typen, sodass eine

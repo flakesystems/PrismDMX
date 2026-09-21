@@ -1682,6 +1682,47 @@ line in the patch window, and none of that belongs inside a viewer.
 - A show patched before S61 opens unchanged, and one with no GDTF in it serialises back byte for byte
 - The tick makes no allocator call on any path this session adds
 
+## S62 · `prism-core` + `prismd` + `ui` — wie eine Bibliothek auf ein Pult kommt
+**Size:** L · **Depends on:** S61 · **Nicht begonnen**
+
+**Goal:** S61 hat das Pult GDTF lesen lassen und dabei die Frage offengelassen,
+die ein Betreiber tatsächlich hat: *woher nehme ich die Dateien?* GDTF Share
+verlangt ein Konto und verbietet die Weitergabe — `docs/FIXTURE_LIBRARY.md` §2
+hat die Rechtslage recherchiert und schreibt sie mit Quellen fest. Diese Session
+baut die drei Wege, die ohne Weitergabe auskommen.
+
+**Der Kern ist MVR und nicht der Login.** Eine `.mvr` ist ein ZIP mit den
+GDTF-Dateien **genau des Rigs**, um das es geht, und der Betreiber bekommt sie
+vom Planer. Kein Konto, kein Netz, keine Lizenzfrage: die Datei gehört zu seiner
+Produktion. Der Container-Reader aus S61 trägt sie schon.
+
+**Deliverables**
+- **MVR-Import**: die `.gdtf`-Dateien aus einer `.mvr` in die Bibliothek des
+  Betreibers, mit einem Bericht darüber, was ankam und was nicht. Ob die
+  **Patch-Daten** der MVR (Fixture, Adresse, Position) mit importiert werden,
+  ist die Entscheidung, die diese Session zu treffen und zu begründen hat — sie
+  ist der Unterschied zwischen *eine Bibliothek füllen* und *ein Rig übernehmen*
+- **`.gdtf`-Import** über den Dateidialog, statt von Hand nach `%APPDATA%`
+- **In-App-Login** zu GDTF Share, optional: Zugangsdaten in den Einstellungen,
+  Download ins **Datenverzeichnis** des Betreibers und nie ins
+  Programmverzeichnis, mit Fortschritt und einem Abbruch, der nichts halb
+  Geschriebenes hinterlässt. Die API ist
+  `https://gdtf-share.com/apis/public/` — Endpunkte und die Falle in ihrer
+  Dokumentation stehen in `docs/FIXTURE_LIBRARY.md` §3
+- **OFL bleibt die Grundausstattung** im Installer, unverändert und ohne Konto
+
+**Exit criteria**
+- Eine MVR, die der Test selbst baut, füllt die Bibliothek, und die Fixtures
+  darin sind danach patchbar — ohne Netz, wie jeder Test dieses Projekts
+- Ein `.gdtf` aus dem Dateidialog landet dort, wo eine von Hand kopierte Datei
+  landet, und gewinnt dieselben Schlüssel (B43)
+- Der Login ist **abschaltbar und übersprungen** der Normalfall: ein Pult ohne
+  Konto zeigt nirgends eine Fehlermeldung, sondern die OFL-Bibliothek
+- Zugangsdaten stehen **nicht** in `machine.json` im Klartext, und eine
+  Entscheidung darüber, wo sie stehen, ist begründet aufgeschrieben
+- Ein abgebrochener Download lässt die installierte Bibliothek unberührt
+- **Nichts wird gebündelt**, und `docs/FIXTURE_LIBRARY.md` §2 bleibt wahr
+
 ---
 
 # Phase 12 — Extended features, once the doors are open
@@ -1732,7 +1773,7 @@ flowchart LR
     S44 & S27 --> S57
     S54 & S57 --> S58
     S38 & S58 --> S59
-    S44 & S57 --> S61
+    S44 & S57 --> S61 --> S62
     S59 & S61 --> S30 --> S60
 ```
 
@@ -1781,5 +1822,6 @@ is, is the order the work was planned to make sense in.
 | 25b | **S59** `ui`/`prism-surface`/`prismd` — the Controls panel, the owner's next round | **Done 2026-09-21** — see `PROGRESS.md` §2.56. The question round was answered on 2026-09-20 and its ten decisions are in the entry above — 2026-09-20, in the entry itself. The desk gains the console's whole vocabulary as bindable words, a key's lamp starts following **what it is bound to** rather than where it sits, the strip controls move to a collapsed advanced section, the jog wheel is recut to one DMX step a detent with a sensitivity factor, and the shipped table becomes one file with all sixty-four keys on it |
 | 25b1 | **S61** domain/core/`prismd`/`ui`/`tools` — the fixture library is GDTF | **Done 2026-09-21** — see `PROGRESS.md` §2.57, and **built in parallel with S59 on another machine**; the two share no file. Asked for by the owner **in preparation for S30**, and it is the right order: the viewer draws a device, and until this session the library described only channels. GDTF is where a gobo's picture, a fixture's size and a beam's place come from, and the Open Fixture Library's format stays for the profiles a venue writes by hand. **Numbered S61 and not S60**: S60 was already the encoder-executor session below, and a number is an identity |
 | 25c | **S30** 3D viewer | **Next**, and the last thing the release waits for — the owner's decision of 2026-09-20 held it for the Controls round **and** the viewer, and the first of those is done. **Its groundwork is done too** (S61): every GDTF profile carries the device's size, its model and every beam with its place and direction. It is Phase 9's entry, unchanged, and the first of the five extended features to run |
+| 25c1 | **S62** core/`prismd`/`ui` — wie eine Bibliothek auf ein Pult kommt | **Nicht begonnen.** Fällt aus S61: das Pult liest GDTF, aber GDTF Share verlangt ein Konto und verbietet die Weitergabe (`docs/FIXTURE_LIBRARY.md` §2, mit Quellen). MVR-Import, `.gdtf`-Import und ein optionaler In-App-Login; OFL bleibt die Grundausstattung. **MVR ist der wichtigste Teil** — die Rig-Datei vom Planer löst den realen Fall ohne Konto, ohne Netz und ohne Lizenzfrage |
 | 25d | **S60** core/`prismd`/`ui` — an encoder may hold an executor of its own | After **S30**, and deliberately **outside the coming release** — the owner's decision of 2026-09-20. It carries the encoder-in-crossfade fault of the same day, which is not in `docs/ISSUES.md` because it has not been finally verified |
 | 26 | **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | The rest of the extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author. **S30 moved ahead of them** (row 25c) |
