@@ -84,8 +84,14 @@ pub trait Store {
 ///
 /// Windows-only because the store is: on a platform with no credential manager
 /// there is no entry to name.
-#[cfg(windows)]
+#[cfg(all(windows, not(test)))]
 const SERVICE: &str = "PrismDMX — GDTF Share";
+
+/// The same, for this crate's own tests — **a name of its own**, so running the
+/// suite on an operator's machine can never overwrite or delete the account
+/// they asked this desk to remember.
+#[cfg(all(windows, test))]
+const SERVICE: &str = "PrismDMX — GDTF Share (test)";
 
 /// The entry's user field. The account name is the **secret**'s partner here,
 /// so the slot itself is named for what it is rather than for who owns it.
@@ -262,5 +268,73 @@ mod tests {
     #[test]
     fn the_platform_store_exists() {
         let _ = Keychain;
+    }
+
+    /// **The Windows credential manager, for real** — added when S62 was
+    /// reviewed on Windows, because the module's first draft named this as the
+    /// one part no test covered and the release waits on it working.
+    ///
+    /// Every step goes through a **fresh** [`Keychain`], so what is asserted is
+    /// that the account is in the operating system's store and not in a value
+    /// this process happens to hold — the failure a mock-backed store would
+    /// have. `cmdkey /list` is asked as well: an entry the credential manager
+    /// itself lists is one an operator can find and remove by hand, which is
+    /// what the module documentation promises.
+    ///
+    /// It uses the test service name, never the operator's (see `SERVICE`).
+    #[cfg(windows)]
+    #[test]
+    fn the_windows_credential_manager_keeps_forgets_and_lists_the_account() {
+        let listed = || {
+            let output = std::process::Command::new("cmdkey")
+                .arg("/list")
+                .output()
+                .expect("cmdkey is part of Windows");
+            // `gdtf-share-account.PrismDMX — GDTF Share (test)`, as a generic
+            // credential. Matched on the entry **and** the test suffix, so an
+            // operator's own remembered account never counts; the dash is
+            // left out because `cmdkey` prints it in the console's code page.
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|line| line.contains(super::ENTRY) && line.contains("GDTF Share (test)"))
+        };
+
+        Keychain.forget().expect("a clean start");
+        assert_eq!(Keychain.recall(), None, "nothing is kept to begin with");
+
+        // A password with the characters a real one has: spaces, umlauts, the
+        // separator this module writes between user and password.
+        Keychain
+            .remember(
+                "operator@venue.example",
+                "Pässwort mit
+Zeile & €",
+            )
+            .expect("the credential manager keeps it");
+        assert_eq!(
+            Keychain.recall(),
+            Some((
+                "operator@venue.example".to_owned(),
+                "Pässwort mit
+Zeile & €"
+                    .to_owned()
+            )),
+            "a second handle reads back what the first wrote"
+        );
+        assert!(listed(), "the credential manager lists the entry");
+
+        // Remembering again replaces rather than adds a second entry.
+        Keychain
+            .remember("operator@venue.example", "neu")
+            .expect("it replaces");
+        assert_eq!(
+            Keychain.recall().map(|(_, password)| password).as_deref(),
+            Some("neu")
+        );
+
+        Keychain.forget().expect("it is taken out");
+        assert_eq!(Keychain.recall(), None, "forgotten is gone");
+        assert!(!listed(), "and the credential manager no longer lists it");
+        Keychain.forget().expect("forgetting twice is not an error");
     }
 }

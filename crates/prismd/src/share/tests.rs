@@ -228,3 +228,32 @@ fn the_list_is_read_out_of_what_the_service_answers() {
     assert!(parse_list("<html>service unavailable</html>").is_empty());
     assert!(parse_list("").is_empty());
 }
+
+/// **The real service answers this desk over TLS** — added when S62 was
+/// reviewed on Windows.
+///
+/// It sends no account at all: it asks for the list without logging in, and
+/// whatever the service says to that — a refusal is the expected answer — is
+/// an HTTP answer, which is the proof that the TLS client this desk builds
+/// trusts the service's certificate on this machine. What it must not be is a
+/// failure to connect. Ignored by default because it needs the internet; run
+/// it on the machine the installer is built on:
+///
+/// ```text
+/// cargo test -p prismd --lib reaches_gdtf_share -- --ignored
+/// ```
+#[test]
+#[ignore = "reaches gdtf-share.com over the internet"]
+fn reaches_gdtf_share_over_tls_without_an_account() {
+    let mut share = super::Https::new("https://gdtf-share.com/apis/public").expect("a TLS client");
+    match share.list() {
+        Ok(_) => {}
+        Err(ShareError::Unreachable(why)) => assert!(
+            why.chars()
+                .next()
+                .is_some_and(|first| first.is_ascii_digit()),
+            "the service was not reached, which is not a refusal: {why}"
+        ),
+        Err(other) => panic!("an unexpected answer: {other:?}"),
+    }
+}

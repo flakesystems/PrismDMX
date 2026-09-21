@@ -64,7 +64,7 @@ pub enum PathKind {
 
 impl PathKind {
     /// Every kind, so a test can walk them and the caller can list them.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::OpenShow,
         Self::SaveShowAs,
         Self::NewShow,
@@ -326,6 +326,8 @@ mod tests {
                 "\"ExportShow\"",
                 "\"ImportShow\"",
                 "\"FixtureLibrary\"",
+                "\"ImportRig\"",
+                "\"ImportProfile\"",
                 "\"SurfaceProfile\"",
             ]
         );
