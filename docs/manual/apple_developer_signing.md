@@ -167,8 +167,19 @@ path**; §5.1 stays for whoever prefers the window.
 ```
 
 ```bash
-/usr/bin/openssl req -new -key prismdmx.key -out prismdmx.certSigningRequest -subj "/emailAddress=YOUR@EMAIL/CN=PrismDMX Developer ID/C=DE"
+/usr/bin/openssl req -new -key prismdmx.key -out prismdmx.certSigningRequest -subj "/CN=PrismDMX Developer ID"
 ```
+
+> **The subject does not matter, and it is worth knowing that before you worry
+> about it.** Apple takes the *public key* out of the request and issues a
+> certificate whose name it composes itself — `Developer ID Application: <your
+> team> (<TEAMID>)` — so the `CN` above is a label for your own request file
+> and nothing else, and an e-mail address in it is not used at all. Add
+> `/emailAddress=…` if you like the record; leave it out and nothing changes.
+>
+> **The address that *must* be right is `APPLE_ID` (§6 and §9)**: the Apple ID
+> of the Developer Program account, the same one the app-specific password
+> belongs to. A wrong one there fails notarisation with *Invalid credentials*.
 
 2. Upload `prismdmx.certSigningRequest` at §5.2 and download
    `developerID_application.cer`.
@@ -236,7 +247,9 @@ the dialogue were not and may be worded differently. **§5.0 avoids all of it.**
    Certificate Authority…** — German: **Schlüsselbundverwaltung →
    Zertifikatsassistent → „Zertifikat einer Zertifizierungsinstanz anfordern …"**
 3. Fill it in:
-   - **User Email Address**: the Apple ID of the developer account.
+   - **User Email Address**: the Apple ID of the developer account. (Like the
+     `CN` in §5.0, this is not carried into the issued certificate — Apple
+     composes that name itself. It is a label on your own request.)
    - **Common Name**: something you will recognise in a keychain list, e.g.
      `PrismDMX Developer ID`.
    - **CA Email Address**: leave **empty**.
