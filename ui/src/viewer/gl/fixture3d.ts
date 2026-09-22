@@ -196,6 +196,12 @@ export class FixtureBeam {
    * facet, each carrying its share of the light. The mask's "up" is the
    * beam's own Y turned by the gobo's spin, which is the turn the volume
    * applies (`uRot`) — so the shafts and the pool turn together.
+   *
+   * A projector throws from a point, and the volume leaves the **whole lens**
+   * — at a distance `d` it is `radius + d · k` wide. So each projector stands
+   * at the cone's apex, `radius / k` behind the lens, where a point source
+   * lights exactly the circle the volume draws: the shaft ends flush with its
+   * pool. From the lens itself the pool was a lens radius too small.
    */
   projectors(into: Projector[]): void {
     if (this.light <= 0.02) {
@@ -213,8 +219,10 @@ export class FixtureBeam {
         this.#projectors.push(held);
       }
       source.updateWorldMatrix(true, false);
-      held.position.setFromMatrixPosition(source.matrixWorld);
       held.direction.set(0, 0, -1).transformDirection(source.matrixWorld);
+      held.position
+        .setFromMatrixPosition(source.matrixWorld)
+        .addScaledVector(held.direction, -Math.max(0.005, this.radius) / spread);
       held.up.set(sin, cos, 0).transformDirection(source.matrixWorld);
       into.push({
         position: held.position,
@@ -300,15 +308,18 @@ export class Fixture3D {
       const stand = standIn(moves, detail.segments);
       root.add(stand.root);
       this.#standIn = { yoke: stand.yoke, head: stand.head };
-      const angle = fixture.beams[0]?.angle ?? 25;
-      const beam = new FixtureBeam(stand.radius, angle, detail, cone);
-      stand.lens.add(beam.anchor);
-      this.beams.set(0, beam);
+      // The body is what a click lands on and what the selection box goes
+      // round — collected before the beam is hung in it, or the cone of
+      // light, metres long, would be both.
       stand.root.traverse((object) => {
         if (object instanceof Mesh) {
           this.bodies.push(object);
         }
       });
+      const angle = fixture.beams[0]?.angle ?? 25;
+      const beam = new FixtureBeam(stand.radius, angle, detail, cone);
+      stand.lens.add(beam.anchor);
+      this.beams.set(0, beam);
     }
     this.place.traverse((object) => {
       object.userData.fixture = fixture.id;
@@ -447,12 +458,24 @@ export class Fixture3D {
     if (this.#outline === null) {
       return;
     }
+    // Measured in the fixture's own frame: a box taken square to the world
+    // and turned back is the box of a box, and on a fixture hung at an angle
+    // it came out twice the size of the fixture.
     const box = new Box3();
     const inverse = new Matrix4().copy(this.place.matrixWorld).invert();
+    const relative = new Matrix4();
     for (const body of this.bodies) {
+      if (!(body instanceof Mesh)) {
+        continue;
+      }
       body.updateWorldMatrix(true, false);
-      const local = new Box3().setFromObject(body).applyMatrix4(inverse);
-      box.union(local);
+      const geometry = body.geometry as BufferGeometry;
+      geometry.computeBoundingBox();
+      if (geometry.boundingBox === null) {
+        continue;
+      }
+      relative.multiplyMatrices(inverse, body.matrixWorld);
+      box.union(geometry.boundingBox.clone().applyMatrix4(relative));
     }
     if (box.isEmpty()) {
       box.set(new Vector3(-0.15, -0.15, -0.15), new Vector3(0.15, 0.15, 0.15));

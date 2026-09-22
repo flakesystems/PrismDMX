@@ -68,6 +68,18 @@ import { Floor } from "./floor";
 import { graphics } from "./graphics";
 import type { Picture, Pictures } from "./mask";
 
+/** A size a stage gave its renderer: CSS pixels and device pixels per one. */
+export interface AppliedSize {
+  readonly width: number;
+  readonly height: number;
+  readonly scale: number;
+}
+
+/** Whether a stage must size its renderer again — always, the first time. */
+export function sizeChanged(applied: AppliedSize | null, width: number, height: number, scale: number): boolean {
+  return applied === null || applied.width !== width || applied.height !== height || applied.scale !== scale;
+}
+
 /** How much of the resolution a software renderer draws at. */
 const SOFTWARE_SCALE = 0.5;
 
@@ -93,6 +105,8 @@ export class Stage {
   #pictures = new Map<string, Picture | "loading" | "none">();
   #resources: ResourceCache | null;
   #outline = new LineBasicMaterial({ color: 0xffd479 });
+  /** The size this stage last gave the renderer; nothing until the first. */
+  #applied: AppliedSize | null = null;
   /** The fence behind the last frame handed to the GPU, until it is passed. */
   #fence: WebGLSync | null = null;
   #raycaster = new Raycaster();
@@ -254,10 +268,16 @@ export class Stage {
     // A software renderer fills every pixel on the processor: half the
     // resolution is a quarter of that (`./graphics.ts`).
     const scale = Math.min(ratio, this.#detail.pixelRatio) * (graphics().software ? SOFTWARE_SCALE : 1);
-    const size = this.renderer.getSize(new Vector2());
-    if (size.x === width && size.y === height && this.renderer.getPixelRatio() === scale) {
+    // Compared with what this stage last applied, never with what the
+    // renderer reports: a stage built when the detail changes takes over a
+    // canvas the last one already sized, and its renderer reads that size
+    // back as its own. Where the old and the new level draw at the same
+    // resolution, nothing looked changed and the camera kept its square
+    // aspect — the picture was stretched until the window was resized.
+    if (!sizeChanged(this.#applied, width, height, scale)) {
       return false;
     }
+    this.#applied = { width, height, scale };
     this.renderer.setPixelRatio(scale);
     this.renderer.setSize(width, height, false);
     this.#composer?.setPixelRatio(scale);
