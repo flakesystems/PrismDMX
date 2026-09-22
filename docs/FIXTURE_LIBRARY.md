@@ -191,21 +191,29 @@ Drei Regeln, die dabei entschieden wurden:
 
 ## 6. Was S30 davon wissen muss
 
-- Ein **GDTF-Profil** trägt `FixtureType::physical`: Maße, Modellname, und jeden
+- Ein **GDTF-Profil** trägt `FixtureType::physical`: Maße, Modellname, jeden
   Beam mit Position (in Metern) und Richtung (Einheitsvektor, bei Grundstellung
-  senkrecht nach unten).
+  senkrecht nach unten) — und seit **S30b** das ganze Gerät
+  (`prism_domain::device`): den Geometriebaum mit der Matrix jedes Knotens, jede
+  Funktion jedes Kanals mit ihren Sets und Mode-Mastern und jedes Rad, das der
+  Modus benutzt, mit Farbe (CIE xyY nach sRGB), Transmission, Bildname und
+  Prismenfacetten jedes Slots.
 - Ein **OFL-Profil und die vier Generics** tragen `None`. Das ist kein Fehler,
-  sondern die Aussage *dieses Format beschreibt kein Gerät* — der Viewer sollte
-  daraus eine Kiste mit einem Strahl nach vorn machen, nicht eine Fehlermeldung.
-- **Die Bytes der Modelle und Gobo-Bilder erreichen noch keinen Client.** Das
-  Profil trägt nur die **Namen**, die GDTF den Dateien im Archiv gibt — mit
-  Absicht, weil eine Show ihre Profile einbettet und ein Pfad in dieses
-  Datenverzeichnis anderswo ins Leere zeigt. Sie zu holen ist eine Query und ein
-  Cache, und das gehört zu dem, was zeichnet. **Das ist S30s Arbeit**, siehe
-  `PROGRESS.md` §5.
-- `MATRIX_TO_METRES` in `library::gdtf::geometry` ist die eine Zahl, die nicht
-  gegen ein veröffentlichtes Archiv geprüft werden konnte. Vor dem Vertrauen in
-  Proportionen auf dem Schirm: `PROGRESS.md` §5 sagt, wie man sie festmacht.
+  sondern die Aussage *dieses Format beschreibt kein Gerät* — der Viewer macht
+  daraus einen Moving Head oder eine PAR-Kanne, je nachdem, ob es Pan oder Tilt
+  hat.
+- **Die Modelle und Gobo-Bilder holt sich der Viewer selbst** (S30b): das Profil
+  trägt nur die **Namen**, die GDTF den Dateien im Archiv gibt — mit Absicht,
+  weil eine Show ihre Profile einbettet und ein Pfad in dieses Datenverzeichnis
+  anderswo ins Leere zeigt —, und `Query::FixtureResource` liefert die Datei aus
+  dem Archiv, das die Bibliothek unter der GUID des Geräts kennt
+  (`docs/IPC_PROTOCOL.md` §5.2).
+- **Die Matrix einer GDTF-Geometrie** ist die der Spezifikation: vier Zeilen,
+  die **Verschiebung in der vierten Spalte, in Metern**. S61 hatte sie als
+  Spalten gelesen und in Millimetern; ein veröffentlichtes Robe-Robin-T1-Profil
+  hat das am 2026-09-21 widerlegt (S30b), und das `MATRIX_TO_METRES` in
+  `library::gdtf::geometry` gibt es nicht mehr. Ein MVR schreibt seine Matrizen anders — `{u}{v}{w}{o}`, Millimeter —,
+  und das ist in `library::mvr` richtig.
 - Zum Ausprobieren ohne Konto: `docs/RELEASE_TEST_0.9.3.md` §1 baut mit
   Bordmitteln eine gültige `.gdtf`, und `ui/e2e/gdtf.ts` tut dasselbe in
   TypeScript.

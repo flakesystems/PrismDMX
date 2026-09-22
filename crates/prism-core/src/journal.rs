@@ -149,7 +149,11 @@ pub(crate) enum Image {
     /// Embedding one for the first time has "not embedded" as its inverse, the
     /// same shape a fixture has — and for the same reason, since S27 made both
     /// reachable from the interface.
-    FixtureType(String, Option<FixtureType>),
+    ///
+    /// Boxed since S30b: a profile carries its device — geometry, functions,
+    /// wheels — and inline it would make every image in the journal as large
+    /// as the largest.
+    FixtureType(String, Option<Box<FixtureType>>),
     /// A sequence and its cues. `None`: the show did not have it.
     ///
     /// The absence arrived in **S28**, exactly where the note here said it

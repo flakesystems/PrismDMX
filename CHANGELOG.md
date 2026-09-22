@@ -26,14 +26,27 @@ Alle Versionen bisher sind **Vorabversionen**.
 Programm — der Eigentümer hielt das Release zurück, bis die Controls-Änderungen
 (S59) und der 3D-Viewer (S30) mit drin sind, und beide sind es jetzt.
 
-### Der 3D-Viewer (S30)
+### Der 3D-Visualizer (S30, S30b)
 
-**Das Fenster *Viewer 3D* zeigt das Rig, wie es hängt**, und aus jedem Fixture,
-das leuchtet, einen Strahl in der Farbe, die es gerade ausgibt. Die Strahlen
-kommen **vom Kabel** — dieselben Werte wie im DMX Sheet —, also sieht man, was
-dem Rig tatsächlich gesagt wird: Pan, Tilt, Zoom, Dimmer, Farbe, ein
-geschlossener Shutter.
+**Das Fenster *Viewer 3D* zeigt das Rig, wie es hängt** — jedes Gerät als das,
+was es ist, und aus jedem, das leuchtet, seine Strahlen im Dunst und dort, wo
+sie auf den Boden treffen. Alles kommt **vom Kabel** — dieselben Werte wie im
+DMX Sheet —, also sieht man, was dem Rig tatsächlich gesagt wird, egal von wem.
 
+- **Ein GDTF-Gerät wird gezeichnet, wie der Hersteller es gebaut hat**: mit
+  seinen eigenen 3D-Modellen, Fuß, Bügel und Kopf von Pan und Tilt bewegt.
+  Gezeigt werden Dimmer, Shutter, **Strobe** und Puls in ihrer Rate, **jede
+  Farbe** — auch Warm- und Kaltweiß, Amber, Lime, UV, CMY, Farbtemperatur und
+  Farbräder in den Farben der Datei —, Zoom, **Fokus**, **Frost**, Iris,
+  **Gobos und Animationsräder** als ihre eigenen Bilder, gedreht und rotierend,
+  **Prismen** und die **Blenden**. Ein Robe Robin T1 ist ein Robin T1 und kein
+  Rechteck mehr.
+- **Detail und Dunst** stellt man im Fenster ein: vier Stufen von *Low* bis
+  *Ultra*, für ältere Rechner weniger. Beides gehört dem Bildschirm und wird vom
+  Browser gemerkt. Auf einem Rechner ohne Grafikhardware beginnt das Fenster von
+  selbst auf *Low* und zeichnet sparsam, damit der Rest des Pults schnell bleibt.
+- Ein Profil aus der Open Fixture Library oder ein generisches wird als Moving
+  Head oder PAR-Kanne gezeichnet, mit dem, was seine Kanalnamen sagen.
 - **Fixtures platzieren.** Ein Feld neben dem Bild arbeitet mit der Auswahl:
   *Set* setzt Position und Rotation, *Spread* verteilt die Auswahl quer über die
   Bühne — eine Traverse mit acht Geräten in einem Zug. Jedes davon ist **ein
@@ -42,11 +55,11 @@ geschlossener Shutter.
   Die Kamera gehört dem Bildschirm; ein zweiter Bildschirm darf das Rig von
   woanders zeigen.
 - **Ein Klick auf ein Fixture** wählt es aus wie ein Klick im Fixture Sheet.
-- Ein Profil aus einer **GDTF**-Datei wird in seiner Größe gezeichnet, mit dem
-  Strahl dort, wo der Hersteller ihn angibt; jedes andere als kleiner Kasten.
-  Die eigenen 3D-Modelle der Geräte und die Gobo-Bilder kommen später.
-- Gezeichnet wird auf einer gewöhnlichen 2D-Fläche, damit es auf jedem Rechner
-  läuft, auf dem das Pult läuft — auch ohne Grafikkarte.
+- Ein Browser ganz ohne 3D bekommt ein einfaches flaches Bild.
+- **Behoben:** Ein Wert, der im selben Augenblick gesetzt wurde, in dem das Rig
+  neu aufgebaut wurde — etwa gleich nach einem Patch oder einem Oops —, konnte
+  auf dem Ausgang fehlen, obwohl der Programmer ihn hatte. Er kommt jetzt immer
+  an.
 
 ### Die Fixture-Bibliothek ist jetzt GDTF (S61)
 

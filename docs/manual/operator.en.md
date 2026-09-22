@@ -200,8 +200,9 @@ it sets nothing. `Store Group 3 "Front light"` files the current **selection**.
 
 ### Viewer 3D · `Viewer3D`
 
-The rig in space: every patched fixture where it hangs, and a beam out of every
-one that is lit, in the colour it is putting out. The beams are **what is on the
+The rig in space: every patched fixture where it hangs, as the device it is,
+and a beam out of every one that is lit — in haze, and where it lands on the
+floor. The beams are **what is on the
 cable** — the same levels the DMX Sheet shows — so what you see is what the rig
 is being told, whatever told it: the programmer, a cue, a master.
 
@@ -227,14 +228,38 @@ is being told, whatever told it: the programmer, a cue, a master.
   beam at the audience, 180 stands the fixture up on the floor. **Rotation Y**
   turns it about the vertical, and **Rotation Z** rolls it — for a fixture on a
   boom, 90.
+- **Detail** says how much this screen draws: **Low**, **Medium** (the
+  starting point), **High** and **Ultra**. Higher levels draw the fixtures' own
+  models, finer shafts of light in the haze, more beams on the floor, sharper
+  gobos, a glow around bright light and a finer picture. Lower it on an older
+  machine. **Haze** is how thick the air is — at nought only the floor shows the
+  light. Both are this screen's own, like the camera, and are remembered by
+  this browser.
 - **The line beside the buttons** says how many fixtures there are, how many are
   lit, how many have **not been placed** yet (a newly patched fixture is at the
   origin until you place it) and how long a picture takes to draw.
 
-A fixture whose profile came from a **GDTF** file is drawn at its own size with
-its beam where the manufacturer says it leaves the body; any other is drawn as a
-small box with one beam out of the bottom. The fixtures' own 3D models and the
-pictures of their gobos are not drawn yet.
+**What is drawn.** A fixture whose profile came from a **GDTF** file is drawn as
+the manufacturer built it: its own 3D models — base, yoke, head — each axis
+turned by its pan and tilt, and its beams where the manufacturer says the light
+leaves. Every channel is read the way the file describes it, so the picture
+shows the **dimmer and shutter** (closed, open, strobe and pulse at their
+rate), **every colour** (red, green, blue, white, warm and cold white, amber,
+lime, UV, cyan, magenta, yellow, colour temperature and colour wheels in the
+colours the file gives), **zoom**, **focus** (a soft edge away from sharp),
+**frost**, **iris**, **gobos and animation wheels** as their own pictures,
+turned and spinning, **prisms** splitting the beam into its facets, and the
+**framing blades** and their rotation. A profile from the Open Fixture Library
+or a generic one has no drawing of the device: it is drawn as a moving head
+when it has pan or tilt and as a PAR can when it has not, with what its channel
+names say — a gobo is then a built-in pattern, so you can still see that one is
+in.
+
+**On a machine without graphics hardware** — a virtual machine, a remote
+desktop, an old laptop — the browser draws 3D in software. The window notices,
+starts at **Low**, draws at half resolution and at most four pictures a second,
+so the rest of the desk stays quick. You can still raise the detail. A browser
+with no 3D at all gets the simple flat picture instead.
 
 ### Phaser Editor · `PhaserEditor`
 
@@ -873,8 +898,9 @@ are, and a later installation finds them again.
 
 Named here rather than discovered by you:
 
-- **The 3D viewer draws boxes, not models** — a fixture's own 3D model and its
-  gobo pictures are not drawn yet, and it draws no haze and no gobo projection.
+- **The 3D viewer draws the rig, not the venue** — no truss, set or walls out
+  of an MVR file, and no shadows. A fixture placed by an MVR import keeps the
+  plan's position but not its rotation yet.
 - **No web remote** — a phone or tablet cannot run the desk yet. Planned.
 - **No timecode, no OSC, no PSN.** Planned.
 - **No effect engine** — the *Phaser Editor* window is empty because what goes

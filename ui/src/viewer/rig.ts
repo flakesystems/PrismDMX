@@ -20,6 +20,8 @@
 import type { JsonValue } from "../bindings";
 import { isArray, isObject } from "../mirror/patch";
 import { pointerToken, valueAt } from "../mirror/select";
+import type { Device } from "./device";
+import { deviceOf } from "./device";
 import type { Mat3, V3 } from "./space";
 import { DOWN, ORIGIN, normalize, orientation, v3 } from "./space";
 
@@ -80,6 +82,11 @@ export const LOOK_ATTRIBUTES = [
   "Pan",
   "Tilt",
   "Zoom",
+  "Focus",
+  "Frost",
+  "Iris",
+  "Gobo",
+  "Prism",
   "Shutter",
   "ColorWheel",
   "Red",
@@ -126,6 +133,10 @@ export interface RigFixture {
   readonly channels: RigChannels;
   /** Whether its profile came with a physical description (S61). */
   readonly described: boolean;
+  /** The profile key. */
+  readonly typeId: string;
+  /** The GDTF device — geometry tree, channel functions, wheels (S30b) — or `null`. */
+  readonly device: Device | null;
 }
 
 /** A number, or `fallback` for anything that is not a finite one. */
@@ -254,7 +265,10 @@ export function rigOf(show: JsonValue | null): readonly RigFixture[] {
   if (fixtures === null || !isObject(fixtures)) {
     return [];
   }
-  const profiles = new Map<string, Pick<RigFixture, "size" | "beams" | "described" | "channels">>();
+  const profiles = new Map<
+    string,
+    Pick<RigFixture, "size" | "beams" | "described" | "channels" | "device">
+  >();
   const rig: RigFixture[] = [];
   for (const [key, entry] of Object.entries(fixtures)) {
     const id = Number(key);
@@ -265,9 +279,11 @@ export function rigOf(show: JsonValue | null): readonly RigFixture[] {
     let profile = profiles.get(typeId);
     if (profile === undefined) {
       const base = `/fixtureTypes/${pointerToken(typeId)}`;
+      const physical = valueAt(show, `${base}/physical`);
       profile = {
-        ...bodyOf(valueAt(show, `${base}/physical`)),
+        ...bodyOf(physical),
         channels: channelsOf(valueAt(show, `${base}/attributes`)),
+        device: deviceOf(physical),
       };
       profiles.set(typeId, profile);
     }
@@ -282,6 +298,7 @@ export function rigOf(show: JsonValue | null): readonly RigFixture[] {
       rotation,
       orientation: orientation(rotation),
       unplaced: isNought(position) && isNought(rotation),
+      typeId,
       ...profile,
     });
   }

@@ -407,11 +407,17 @@ standing at a desk.
 
 ---
 
-### 4.7 The 3D viewer draws on a 2D canvas *(S30)*
+### 4.7 The 3D viewer is a WebGL visualiser, with a 2D fallback *(S30, S30b)*
 
-The first draft of this document named *react-three-fiber* for the viewer, and S30 decided against it. The viewer draws boxes, cones and a floor with its own projection onto a **2D canvas**, behind a `ViewSurface` interface (`ui/src/viewer/surface.ts`), for three reasons that are this project's rather than a taste: it has to work on every machine the desk runs on, and WebGL is missing or software-emulated on an ageing school laptop, a Raspberry Pi's webview (D10), a remote desktop and a CI runner; it has to be testable without a rasteriser like every other canvas here, which an interface in front of the drawing makes possible; and a rig is small — S30 measured 515 fixtures with 257 beams at a median of **6.4 ms** a picture in Chromium while the DMX Sheet beside it stayed at a p99 under 1 ms. What it gives up is a depth buffer (bodies are painted far to near, beams are added light) and the devices' own 3D models, which do not reach a client yet (`PROGRESS.md` §5). When they do, `ViewSurface` is the seam a WebGL surface goes behind.
+S30 drew the viewer on a **2D canvas** — boxes, cones and a floor — for reasons that still hold: it has to work on every machine the desk runs on, it has to be testable without a rasteriser, and it must never cost the console its command line. The owner looked at it with a real fixture and turned it down: no focus, no strobe, no blades, no gobos, colours such as cold white missing, and a Robe Robin T1 drawn as a rectangle. *A complete visualiser was asked for.* **S30b** reversed the decision and kept its reasons as constraints on the new one:
 
-The viewer reads **the cable**, not the programmer: the telemetry frame the daemon already publishes, decoded outside React exactly as the DMX Sheet decodes it (§7 of `docs/IPC_PROTOCOL.md`). It asks the daemon nothing, so the engine does not know a viewer is open.
+- **three.js on WebGL 2** (`ui/src/viewer/gl/`), wherever the browser has it; the 2D picture behind `ViewSurface` stays as the fallback for a browser without WebGL and is what the unit tests draw through.
+- **The device, not a box.** A GDTF profile embeds its whole device (`prism_domain::device`): the geometry tree with every node's matrix, every channel's functions with their sets and mode masters, and every wheel with its slots' colours, pictures and prism facets. The viewer evaluates the functions against the cable (`ui/src/viewer/state.ts`), moves each axis, and draws the fixture's **own models** and **gobo pictures**, fetched from its archive a part at a time (`Query::FixtureResource`, §7 of `docs/IPC_PROTOCOL.md`). A profile with no device — Open Fixture Library, a generic — is drawn as a stand-in moving head or PAR from its attribute list.
+- **Beams in haze** are ray-marched volumes shaped by one mask per beam (gobos, iris, blades, softness from focus and frost); the floor projects the same masks, so the shaft and the pool agree. Prisms split the beam into its facets.
+- **Detail is a client-local setting** (§4.2) in four levels — models, ray-march steps, beams drawn in the haze, floor projectors, mask resolution, glow and resolution cap — remembered by the browser and never sent to the desk.
+- **The console comes first.** The loop draws only on a change (the same DMX bytes under a new sequence number are none), measures what a frame costs on the page's thread and on the GPU (a fence per frame) and rests twice that, reads the rig without drawing while the window is hidden, and on a **software renderer** (SwiftShader, llvmpipe, the Basic Render Driver) starts at Low detail, draws at half resolution without multisampling and at most four frames a second. The 64-universe end-to-end test holds the DMX Sheet beside a viewer being orbited to its rate.
+
+The viewer still reads **the cable**, not the programmer: the telemetry frame the daemon already publishes, decoded outside React exactly as the DMX Sheet decodes it. The only thing it asks the daemon for is files.
 
 ## 5. DMX engine pipeline
 

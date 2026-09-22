@@ -3235,7 +3235,7 @@
  * for both stacks them, picture first.
  */
 .viewer3d {
-    container-type: inline-size;
+    container-type: size;
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
@@ -3350,12 +3350,48 @@
     flex: 1 1 0;
 }
 
+/* A narrow window keeps the picture and the form side by side, the form
+   narrower and scrolling inside itself; only a window that is narrow **and**
+   tall stacks them. A window the daemon had to fit into a corner (S43's
+   placement shrinks one to the room there is) that stacked them would give
+   the form all its height and the picture none — S30b. */
 @container (max-width: 30rem) {
+    .viewer-place {
+        flex: 0 0 10rem;
+        min-height: 0;
+        overflow-y: auto;
+    }
+}
+
+@container (max-width: 30rem) and (min-height: 30rem) {
     .viewer-body {
         flex-direction: column;
     }
 
-    .viewer-place {
-        flex: 0 0 auto;
+    .viewer-canvas {
+        flex: 1 1 10rem;
+        min-height: 8rem;
     }
+
+    .viewer-place {
+        flex: 0 1 auto;
+    }
+}
+
+/* Viewer 3D's two per-screen settings — S30b. */
+.viewer-setting {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--ink-dim);
+    font-size: 0.72rem;
+}
+
+.viewer-setting select,
+.viewer-setting input {
+    font: inherit;
+}
+
+.viewer-setting input[type="range"] {
+    width: 5rem;
 }

@@ -204,8 +204,9 @@ Der Gruppen-Pool. Eine Gruppe ist eine **Liste von Fixtures**, kein Look: `Group
 
 ### Viewer 3D · `Viewer3D`
 
-Das Rig im Raum: jedes gepatchte Fixture dort, wo es hängt, und aus jedem, das
-leuchtet, ein Strahl in der Farbe, die es gerade ausgibt. Die Strahlen sind **das,
+Das Rig im Raum: jedes gepatchte Fixture dort, wo es hängt, als das Gerät, das
+es ist, und aus jedem, das leuchtet, ein Strahl — im Dunst und dort, wo er auf
+den Boden trifft. Die Strahlen sind **das,
 was auf dem Kabel liegt** — dieselben Werte, die das DMX Sheet zeigt —, Sie sehen
 also, was dem Rig gerade gesagt wird, egal von wem: vom Programmer, von einem Cue,
 von einem Master.
@@ -234,15 +235,40 @@ von einem Master.
   kippt es: 90 richtet einen hängenden Strahl aufs Publikum, 180 stellt das
   Fixture auf den Boden. **Rotation Y** dreht es um die Senkrechte, **Rotation
   Z** rollt es — für ein Fixture an einem Galgen 90.
+- **Detail** sagt, wie viel dieser Bildschirm zeichnet: **Low**, **Medium**
+  (der Ausgangspunkt), **High** und **Ultra**. Höhere Stufen zeichnen die
+  eigenen Modelle der Geräte, feinere Lichtstrahlen im Dunst, mehr Strahlen auf
+  dem Boden, schärfere Gobos, ein Glühen um helles Licht und ein feineres Bild.
+  Auf einem älteren Rechner stellen Sie es niedriger. **Haze** ist, wie dicht
+  die Luft ist — bei null zeigt nur der Boden das Licht. Beides gehört wie die
+  Kamera diesem Bildschirm allein und wird von diesem Browser gemerkt.
 - **Die Zeile neben den Knöpfen** sagt, wie viele Fixtures es gibt, wie viele
   leuchten, wie viele noch **nicht platziert** sind (ein frisch gepatchtes Fixture
   steht im Ursprung, bis Sie es platzieren) und wie lange ein Bild zum Zeichnen
   braucht.
 
-Ein Fixture, dessen Profil aus einer **GDTF**-Datei kommt, wird in seiner eigenen
-Größe gezeichnet, und sein Strahl tritt dort aus, wo der Hersteller es angibt;
-jedes andere ist ein kleiner Kasten mit einem Strahl nach unten. Die eigenen
-3D-Modelle der Geräte und die Bilder ihrer Gobos werden noch nicht gezeichnet.
+**Was gezeichnet wird.** Ein Fixture, dessen Profil aus einer **GDTF**-Datei
+kommt, wird so gezeichnet, wie der Hersteller es gebaut hat: mit seinen eigenen
+3D-Modellen — Fuß, Bügel, Kopf —, jede Achse von Pan und Tilt gedreht, und seine
+Strahlen treten dort aus, wo der Hersteller es angibt. Jeder Kanal wird so
+gelesen, wie die Datei ihn beschreibt; das Bild zeigt also **Dimmer und
+Shutter** (zu, offen, Strobe und Puls in ihrer Rate), **jede Farbe** (Rot, Grün,
+Blau, Weiß, Warm- und Kaltweiß, Amber, Lime, UV, Cyan, Magenta, Gelb,
+Farbtemperatur und Farbräder in den Farben, die die Datei angibt), **Zoom**,
+**Fokus** (eine weiche Kante abseits der Schärfe), **Frost**, **Iris**, **Gobos
+und Animationsräder** als ihre eigenen Bilder, gedreht und rotierend,
+**Prismen**, die den Strahl in ihre Facetten teilen, und die **Blenden** samt
+ihrer Drehung. Ein Profil aus der Open Fixture Library oder ein generisches hat
+keine Zeichnung des Geräts: Es wird als Moving Head gezeichnet, wenn es Pan oder
+Tilt hat, sonst als PAR-Kanne, mit dem, was seine Kanalnamen sagen — ein Gobo
+ist dann ein eingebautes Muster, damit Sie trotzdem sehen, dass eines drin ist.
+
+**Auf einem Rechner ohne Grafikhardware** — einer virtuellen Maschine, einem
+Remote-Desktop, einem alten Laptop — zeichnet der Browser 3D in Software. Das
+Fenster merkt das, beginnt auf **Low**, zeichnet mit halber Auflösung und
+höchstens vier Bildern in der Sekunde, damit der Rest des Pults schnell bleibt.
+Die Detailstufe können Sie trotzdem erhöhen. Ein Browser ganz ohne 3D bekommt
+stattdessen das einfache flache Bild.
 
 ### Phaser Editor · `PhaserEditor`
 
@@ -907,9 +933,10 @@ und eine spätere Installation findet sie wieder.
 
 Hier genannt, statt von Ihnen entdeckt zu werden:
 
-- **Der 3D-Viewer zeichnet Kästen, keine Modelle** — das eigene 3D-Modell
-  eines Geräts und seine Gobo-Bilder werden noch nicht gezeichnet, und er
-  zeichnet weder Dunst noch Gobo-Projektionen.
+- **Der 3D-Viewer zeichnet das Rig, nicht den Saal** — keine Traversen,
+  Kulissen oder Wände aus einer MVR-Datei und keine Schatten. Ein Fixture, das
+  ein MVR-Import platziert hat, behält den Ort aus der Planung, ihre Rotation
+  aber noch nicht.
 - **Keine Web-Fernbedienung** — ein Telefon oder Tablet kann das Pult noch nicht
   fahren. Geplant.
 - **Kein Timecode, kein OSC, kein PSN.** Geplant.

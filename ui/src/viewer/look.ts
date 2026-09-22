@@ -101,6 +101,53 @@ const WHEEL_COLOURS: readonly (readonly [RegExp, number, number, number])[] = [
   [/pink/i, 1, 0.55, 0.75],
 ];
 
+/** An sRGB `0..=255` component as linear light. */
+export function linear(component: number): number {
+  const value = component / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+/**
+ * The colour of a black body at `kelvin`, as linear RGB with its largest
+ * component 1 — Tanner Helland's fit, which is what every visualiser uses and
+ * is within a few per cent of the Planckian locus from 1 000 to 40 000 K.
+ */
+export function kelvinColour(kelvin: number): [number, number, number] {
+  const t = Math.min(40000, Math.max(1000, kelvin)) / 100;
+  const red = t <= 66 ? 255 : 329.698727446 * (t - 60) ** -0.1332047592;
+  const green = t <= 66 ? 99.4708025861 * Math.log(t) - 161.1195681661 : 288.1221695283 * (t - 60) ** -0.0755148492;
+  const blue = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+  const rgb: [number, number, number] = [
+    linear(Math.min(255, Math.max(0, red))),
+    linear(Math.min(255, Math.max(0, green))),
+    linear(Math.min(255, Math.max(0, blue))),
+  ];
+  const top = Math.max(...rgb, 1e-6);
+  return [rgb[0] / top, rgb[1] / top, rgb[2] / top];
+}
+
+/**
+ * The colour a wheel slot's **name** says, or `undefined` when the name is
+ * not a colour. A colour temperature — *5600K*, *CTB 8000 K* — is the colour
+ * of that temperature; *cold* and *warm white* (and the German *kalt* and
+ * *warm*) are 7500 K and 3000 K. Those come first, because *Cold White* is not
+ * white and *CTO 3200K* is not amber.
+ */
+export function wheelColour(name: string): readonly [number, number, number] | undefined {
+  const kelvin = /(\d{4,5})\s*k\b/i.exec(name);
+  if (kelvin !== null) {
+    return kelvinColour(Number(kelvin[1]));
+  }
+  if (/cold|cool|kalt/i.test(name)) {
+    return kelvinColour(7500);
+  }
+  if (/warm/i.test(name)) {
+    return kelvinColour(3000);
+  }
+  const found = WHEEL_COLOURS.find(([pattern]) => pattern.test(name));
+  return found === undefined ? undefined : [found[1], found[2], found[3]];
+}
+
 /** A shutter range that is dark. */
 const CLOSED = /clos|blackout|\boff\b/i;
 
@@ -229,11 +276,11 @@ export function readLook(
   const wheel = channels.ColorWheel;
   if (wheel !== undefined) {
     const slot = rangeAt(wheel, channelValue(frame, index, fixture.address, wheel));
-    const colour = slot === null ? undefined : WHEEL_COLOURS.find(([name]) => name.test(slot));
+    const colour = slot === null ? undefined : wheelColour(slot);
     if (colour !== undefined) {
-      red *= colour[1];
-      green *= colour[2];
-      blue *= colour[3];
+      red *= colour[0];
+      green *= colour[1];
+      blue *= colour[2];
     }
   }
 

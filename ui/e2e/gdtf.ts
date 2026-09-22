@@ -58,7 +58,7 @@ export function description(manufacturer: string, name: string): string {
     </Models>
     <Geometries>
       <Geometry Name="Body" Model="Body" Position="${identity}">
-        <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,400,1}"
+        <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0.4}{0,0,0,1}"
               BeamAngle="13" LuminousFlux="11000" ColorTemperature="6500"/>
       </Geometry>
     </Geometries>

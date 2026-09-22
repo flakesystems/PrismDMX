@@ -67,7 +67,7 @@ use std::path::Path;
 
 use prism_domain::{
     AttributeDef, AttributeType, FeatureGroup, FixtureType, LibraryEntry, LibraryFixture,
-    LibraryMode, MergeMode,
+    LibraryMode, MergeMode, ResourceKind,
 };
 
 /// An 8-bit attribute at an offset, filed under its own feature group.
@@ -292,6 +292,110 @@ pub struct FixtureLibrary {
     /// points at is usually under another manufacturer and may not have been
     /// read yet.
     pending: Vec<PendingRedirect>,
+    /// Where each GDTF profile's archive is — **S30b** — by profile key and by
+    /// `guid:<FixtureTypeID>`, so a viewer can be sent the models and the gobo
+    /// pictures the profile names ([`Self::resource`]).
+    sources: BTreeMap<String, Source>,
+}
+
+/// Where a profile's files are — **S30b**.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Source {
+    /// A `.gdtf` archive.
+    Archive(std::path::PathBuf),
+    /// An unpacked GDTF: the directory `description.xml` is in.
+    Unpacked(std::path::PathBuf),
+    /// A rig plan: the `.gdtf` members inside it are searched by GUID.
+    Plan(std::path::PathBuf),
+}
+
+/// The largest file [`FixtureLibrary::resource`] serves — a gobo picture of a
+/// published fixture is about a megabyte; a model a few hundred kilobytes.
+const MAX_RESOURCE_BYTES: usize = 32 * 1024 * 1024;
+
+/// The files a [`ResourceKind`] and a name may be, most wanted first.
+fn resource_candidates(kind: ResourceKind, name: &str) -> Vec<String> {
+    match kind {
+        ResourceKind::Model => vec![
+            format!("models/gltf/{name}.glb"),
+            format!("models/3ds/{name}.3ds"),
+        ],
+        ResourceKind::Wheel => ["png", "jpg", "jpeg", "svg"]
+            .iter()
+            .map(|extension| format!("wheels/{name}.{extension}"))
+            .collect(),
+    }
+}
+
+/// The first candidate an archive holds, and its bytes.
+fn resource_in(archive: &zip::Archive<'_>, candidates: &[String]) -> Option<(String, Vec<u8>)> {
+    for candidate in candidates {
+        let found = archive
+            .names()
+            .find(|name| name.eq_ignore_ascii_case(candidate))
+            .map(str::to_owned);
+        if let Some(found) = found
+            && let Some(bytes) = archive.file(&found)
+        {
+            return Some((found, bytes));
+        }
+    }
+    None
+}
+
+/// Where a file of a fixture's archive is, found by
+/// [`FixtureLibrary::resource_lookup`] and read by [`Self::read`] — **S30b**.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceLookup {
+    source: Source,
+    guid: String,
+    candidates: Vec<String>,
+}
+
+impl ResourceLookup {
+    /// Reads the file: its path inside the archive and its bytes, or `None`
+    /// when the archive has no such file or it is larger than a fixture's file
+    /// has any business being.
+    #[must_use]
+    pub fn read(&self) -> Option<(String, Vec<u8>)> {
+        let candidates = &self.candidates;
+        let guid = &self.guid;
+        let found = match &self.source {
+            Source::Archive(path) => {
+                let bytes = std::fs::read(path).ok()?;
+                resource_in(&zip::Archive::read(&bytes)?, candidates)
+            }
+            Source::Unpacked(directory) => candidates.iter().find_map(|candidate| {
+                let bytes = std::fs::read(directory.join(candidate)).ok()?;
+                Some((candidate.clone(), bytes))
+            }),
+            Source::Plan(path) => {
+                let bytes = std::fs::read(path).ok()?;
+                let plan = zip::Archive::read(&bytes)?;
+                let members: Vec<String> = plan
+                    .names()
+                    .filter(|member| member.to_ascii_lowercase().ends_with(".gdtf"))
+                    .map(str::to_owned)
+                    .collect();
+                members.iter().find_map(|member| {
+                    let inner = plan.file(member)?;
+                    let archive = zip::Archive::read(&inner)?;
+                    let description = archive.file(archive.find(GDTF_DESCRIPTION)?)?;
+                    let text = String::from_utf8_lossy(&description).to_ascii_uppercase();
+                    let wanted = if guid.is_empty() {
+                        false
+                    } else {
+                        text.contains(&format!("FIXTURETYPEID=\"{guid}\""))
+                    };
+                    // A plan with one fixture type needs no GUID to be sure.
+                    (wanted || members.len() == 1)
+                        .then(|| resource_in(&archive, candidates))
+                        .flatten()
+                })
+            }
+        }?;
+        (found.1.len() <= MAX_RESOURCE_BYTES).then_some(found)
+    }
 }
 
 /// A redirect waiting for the tree to finish being read.
@@ -519,7 +623,7 @@ impl FixtureLibrary {
             return;
         };
         let (built, counts) = gdtf::read_archive(&bytes, own);
-        self.absorb_gdtf(built, counts, own);
+        self.absorb_gdtf(built, counts, own, &Source::Archive(path.to_path_buf()));
     }
 
     /// One `.mvr` — **S62**.
@@ -538,6 +642,7 @@ impl FixtureLibrary {
         // Each profile of the archive is filed on its own: they are separate
         // fixtures that happened to travel together, and B43's rule is per
         // fixture rather than per file.
+        let source = Source::Plan(path.to_path_buf());
         for (entry, profile) in built {
             let key = fixture_key(&entry.id).to_owned();
             if own {
@@ -545,7 +650,7 @@ impl FixtureLibrary {
             } else if self.own_fixtures.contains(&key) {
                 continue;
             }
-            self.insert(entry, profile);
+            self.insert_from(entry, profile, &source);
         }
     }
 
@@ -556,7 +661,8 @@ impl FixtureLibrary {
             return;
         };
         let (built, counts) = gdtf::read_description(&bytes, own);
-        self.absorb_gdtf(built, counts, own);
+        let directory = path.parent().unwrap_or(path).to_path_buf();
+        self.absorb_gdtf(built, counts, own, &Source::Unpacked(directory));
     }
 
     /// Files what one GDTF file produced, honouring B43's rule.
@@ -570,6 +676,7 @@ impl FixtureLibrary {
         built: Vec<(LibraryEntry, FixtureType)>,
         counts: gdtf::Conversion,
         own: bool,
+        source: &Source,
     ) {
         self.gdtf_conversion.absorb(counts);
         let Some(key) = built
@@ -586,8 +693,80 @@ impl FixtureLibrary {
             return;
         }
         for (entry, profile) in built {
-            self.insert(entry, profile);
+            self.insert_from(entry, profile, source);
         }
+    }
+
+    /// [`Self::insert`], remembering where the profile's files are — S30b.
+    fn insert_from(&mut self, entry: LibraryEntry, profile: FixtureType, source: &Source) {
+        let key = profile.id.clone();
+        let guid = profile
+            .physical
+            .as_ref()
+            .map(|physical| physical.fixture_type_id.to_ascii_uppercase())
+            .filter(|guid| !guid.is_empty());
+        if self.insert(entry, profile) {
+            self.sources.insert(key, source.clone());
+            if let Some(guid) = guid {
+                self.sources
+                    .entry(format!("guid:{guid}"))
+                    .or_insert_with(|| source.clone());
+            }
+        }
+    }
+
+    /// One file out of a fixture's own archive — **S30b**, and what
+    /// `Query::FixtureResource` answers with.
+    ///
+    /// The archive is found by the device's GUID first — the same across
+    /// revisions of a fixture and across desks, so a show from another desk
+    /// finds this desk's copy — and by the profile key second. `name` is a
+    /// name and never a path: one with a separator or a `..` in it is refused,
+    /// because an unpacked GDTF is a directory and a name is joined to it.
+    ///
+    /// Answers the member's path inside the archive, so a client knows the
+    /// format, and its bytes; `None` when the desk has no such file. The same
+    /// as [`Self::resource_lookup`] and [`ResourceLookup::read`] one after the
+    /// other, which is what a caller holding a lock should do instead.
+    #[must_use]
+    pub fn resource(
+        &self,
+        fixture_type_id: &str,
+        type_id: &str,
+        kind: ResourceKind,
+        name: &str,
+    ) -> Option<(String, Vec<u8>)> {
+        self.resource_lookup(fixture_type_id, type_id, kind, name)?
+            .read()
+    }
+
+    /// **Where** a file of a fixture's archive would be, without reading it.
+    ///
+    /// The daemon asks this under its core lock and reads the file after it
+    /// has let go (`prismd`'s `Desk::query`): a disk read of a published
+    /// archive is milliseconds, and a command waiting behind it is an operator
+    /// waiting behind it.
+    #[must_use]
+    pub fn resource_lookup(
+        &self,
+        fixture_type_id: &str,
+        type_id: &str,
+        kind: ResourceKind,
+        name: &str,
+    ) -> Option<ResourceLookup> {
+        if name.is_empty() || name.contains(['/', '\\']) || name.contains("..") {
+            return None;
+        }
+        let guid = fixture_type_id.trim().to_ascii_uppercase();
+        let source = (!guid.is_empty())
+            .then(|| self.sources.get(&format!("guid:{guid}")))
+            .flatten()
+            .or_else(|| self.sources.get(type_id))?;
+        Some(ResourceLookup {
+            source: source.clone(),
+            guid,
+            candidates: resource_candidates(kind, name),
+        })
     }
 
     /// One directory of manufacturer directories, in the Open Fixture Library's
@@ -763,9 +942,9 @@ impl FixtureLibrary {
     }
 
     /// Adds a profile unless its key is taken. See [`Self::read_ofl_tree`].
-    fn insert(&mut self, entry: LibraryEntry, profile: FixtureType) {
+    fn insert(&mut self, entry: LibraryEntry, profile: FixtureType) -> bool {
         if self.profiles.contains_key(&profile.id) {
-            return;
+            return false;
         }
         self.profiles.insert(profile.id.clone(), profile);
         let key = (fixture_key(&entry.id).to_owned(), entry.own);
@@ -777,6 +956,7 @@ impl FixtureLibrary {
             Some(modes) => modes.push(index),
             None => self.fixtures.push(vec![index]),
         }
+        true
     }
 
     /// How many fixtures there are, counting each fixture once however many
@@ -1754,6 +1934,75 @@ mod tests {
     /// The whole point of reading MVR: a venue that was sent its own plan was
     /// sent the profiles it needs, and needs no account and no network to use
     /// them.
+    #[test]
+    fn a_profile_s_files_are_served_out_of_its_own_archive() {
+        use crate::library::zip::testkit::Builder;
+        use prism_domain::ResourceKind;
+
+        let archive = Builder::new()
+            .deflated(
+                "description.xml",
+                gdtf_source("Robe Lighting", "Robin T1 Profile", 3).as_bytes(),
+            )
+            .stored("models/gltf/body.glb", b"glTF-bytes")
+            .stored("models/3ds/other.3ds", b"3ds-bytes")
+            .stored("wheels/15020356.png", b"png-bytes")
+            .build();
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        std::fs::write(dir.path().join("t1.gdtf"), &archive).expect("it writes");
+        let mut library = FixtureLibrary::default();
+        library.read_own_tree(dir.path());
+
+        let key = "robe-lighting/robin-t1-profile/standard";
+        // By the device's GUID, whatever key a show carries it under — and in
+        // either case of the GUID.
+        assert_eq!(
+            library.resource("guid", "some/other/key", ResourceKind::Model, "body"),
+            Some(("models/gltf/body.glb".to_owned(), b"glTF-bytes".to_vec()))
+        );
+        // By the key where the GUID is unknown.
+        assert_eq!(
+            library.resource("", key, ResourceKind::Model, "other"),
+            Some(("models/3ds/other.3ds".to_owned(), b"3ds-bytes".to_vec()))
+        );
+        assert_eq!(
+            library.resource("GUID", key, ResourceKind::Wheel, "15020356"),
+            Some(("wheels/15020356.png".to_owned(), b"png-bytes".to_vec()))
+        );
+        // Nothing the archive does not have, and nothing that is not a name.
+        assert_eq!(
+            library.resource("GUID", key, ResourceKind::Model, "head"),
+            None
+        );
+        assert_eq!(
+            library.resource("NOPE", "no/such/key", ResourceKind::Model, "body"),
+            None
+        );
+        for sneaky in ["../t1", "models/gltf/body", r"a\b", ""] {
+            assert_eq!(
+                library.resource("GUID", key, ResourceKind::Model, sneaky),
+                None,
+                "{sneaky}"
+            );
+        }
+
+        // And out of a rig plan, whose members are searched by GUID.
+        let plan = Builder::new()
+            .deflated("GeneralSceneDescription.xml", b"<GeneralSceneDescription/>")
+            .stored("Robe@T1.gdtf", &archive)
+            .build();
+        let other = tempfile::tempdir().expect("a temporary directory");
+        std::fs::write(other.path().join("rig.mvr"), plan).expect("it writes");
+        let mut from_plan = FixtureLibrary::default();
+        from_plan.read_own_tree(other.path());
+        assert_eq!(
+            from_plan
+                .resource("GUID", "", ResourceKind::Wheel, "15020356")
+                .map(|(path, _)| path),
+            Some("wheels/15020356.png".to_owned())
+        );
+    }
+
     #[test]
     fn an_mvr_in_the_venues_folder_is_read_like_a_gdtf() {
         use crate::library::zip::testkit::Builder;

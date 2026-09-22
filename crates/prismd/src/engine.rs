@@ -52,6 +52,29 @@
 //! decision log; `CuePlayer::load` already leaves *its* playback stopped, so the
 //! difference is about the other executors and not about the one being edited.
 //!
+//! # Why the swap is a command in the queue
+//!
+//! A tick drains its command queue **and then** renders (`Engine::tick`). A
+//! body offered just before a tick used to be taken in `render`, so every
+//! command the core thread had sent *after* offering it was drained into the
+//! outgoing body and thrown away with it: the programmer the core believed the
+//! engine held (it had just told the new body so) was missing whatever had
+//! changed in those few milliseconds — silently, and for good, because the
+//! core only ever sends differences. S30b's recording found it: a hang taken
+//! back and put back, the head selected and opened, and the frame carried the
+//! pan and the gobo but not the dimmer.
+//!
+//! Taking the body before *every* command, S30b's first answer, was wrong the
+//! other way: a `Go` queued **before** a repatch then ran in the new body, and
+//! survived a rebuild that stops every playback — or not, by a few
+//! milliseconds. What is right is the order the core sent things in. So
+//! [`EngineThread::install`] leaves the body and then **queues
+//! [`TickCommand::AdoptBody`]**, and `DaemonBody` swaps when it drains that
+//! marker: everything before it reaches the body that leaves, everything after
+//! it the body that arrives. Only if the marker cannot be queued — a queue that
+//! is full is a tick that has stopped — is the body taken at the next frame
+//! instead, so a rebuilt rig is never left waiting.
+//!
 //! # Why the frame is blanked when a body arrives
 //!
 //! S4's encoder writes only the channels the patch covers, so a channel that is
@@ -88,6 +111,9 @@ pub struct BodySwap {
     /// does not distinguish an allocation from a deallocation.
     retired: Mutex<Vec<MergeBody>>,
     waiting: AtomicBool,
+    /// Set when the marker that says *swap here* could not be queued, so the
+    /// next frame takes the body instead.
+    unmarked: AtomicBool,
 }
 
 impl BodySwap {
@@ -121,6 +147,7 @@ impl BodySwap {
         if !self.waiting.load(Ordering::Acquire) {
             return None;
         }
+        self.unmarked.store(false, Ordering::Release);
         // Never `lock`: this runs on the tick thread, and a thread with a
         // deadline does not wait for one without. A failed attempt costs a
         // compare-and-swap and the body arrives 23 ms later instead.
@@ -209,14 +236,13 @@ struct DaemonBody {
     blank_next_frame: bool,
 }
 
-impl TickBody for DaemonBody {
-    fn apply(&mut self, command: TickCommand) {
-        self.body.apply(command);
-    }
-
-    fn render(&mut self, tick: &TickInfo, frame: &mut DmxFrame) {
-        // Cheapest thing that can be done per tick: one acquire load of an
-        // atomic that is false almost always.
+impl DaemonBody {
+    /// Takes a rebuilt body if one is waiting — when its marker is drained, or
+    /// at a frame when the marker could not be queued; see the module
+    /// documentation.
+    fn adopt_waiting_body(&mut self) {
+        // Cheapest thing that can be done: one acquire load of an atomic that
+        // is false almost always.
         if self.swap.is_pending()
             && let Some(next) = self.swap.take()
         {
@@ -226,6 +252,22 @@ impl TickBody for DaemonBody {
             self.swap.retire(previous);
             self.blank_next_frame = true;
             self.health.swaps.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+impl TickBody for DaemonBody {
+    fn apply(&mut self, command: TickCommand) {
+        if command == TickCommand::AdoptBody {
+            self.adopt_waiting_body();
+        } else {
+            self.body.apply(command);
+        }
+    }
+
+    fn render(&mut self, tick: &TickInfo, frame: &mut DmxFrame) {
+        if self.swap.unmarked.load(Ordering::Acquire) {
+            self.adopt_waiting_body();
         }
         if self.blank_next_frame {
             frame.blackout();
@@ -331,9 +373,14 @@ impl EngineThread {
         self.refused
     }
 
-    /// Hands a rebuilt merge body to the tick.
-    pub fn install(&self, body: MergeBody) {
+    /// Hands a rebuilt merge body to the tick, which takes it over **at this
+    /// point in the command queue** — see the module documentation.
+    pub fn install(&mut self, body: MergeBody) {
         self.swap.offer(body);
+        if !self.send(TickCommand::AdoptBody) {
+            // A full queue: the next frame takes the body instead.
+            self.swap.unmarked.store(true, Ordering::Release);
+        }
     }
 
     /// Whether a handed-over body has not been taken yet.
@@ -466,15 +513,16 @@ pub fn telemetry_subscriber(publisher: &mut FramePublisher) -> FrameSubscriber {
 
 #[cfg(test)]
 mod tests {
-    use super::{BodySwap, EngineThread, TickHealth, raise_this_thread, ticks};
+    use super::{BodySwap, DaemonBody, EngineThread, TickHealth, raise_this_thread, ticks};
     use crate::testkit::{dimmer_type, fixture};
     use prism_domain::UniverseId;
     use prism_engine::{
-        FrameLayout, FramePublisher, MergeBody, TICK_HZ, TICK_PERIOD, TickCommand,
+        FrameLayout, FramePublisher, MergeBody, TICK_HZ, TICK_PERIOD, TickBody, TickCommand,
         UNIVERSE_CHANNELS,
     };
     use prism_protocols::{MockOutput, RunnerConfig, spawn};
     use std::sync::Arc;
+    use std::sync::atomic::Ordering;
     use std::time::{Duration, Instant};
 
     fn layout() -> Arc<FrameLayout> {
@@ -540,7 +588,7 @@ mod tests {
         let frames = output.handle();
         let driver = spawn("out-mock", output, subscriber, RunnerConfig::default()).unwrap();
 
-        let engine = EngineThread::start(body(65535), publisher).unwrap();
+        let mut engine = EngineThread::start(body(65535), publisher).unwrap();
         until("the first rig to reach the wire", || {
             frames.last_frame().is_some_and(|(_, data)| data[0] == 255)
         });
@@ -578,7 +626,7 @@ mod tests {
         let output = MockOutput::new(prism_domain::OutputId::new(1), [UniverseId::new(1)]);
         let frames = output.handle();
         let driver = spawn("out-mock", output, subscriber, RunnerConfig::default()).unwrap();
-        let engine = EngineThread::start(body(65535), publisher).unwrap();
+        let mut engine = EngineThread::start(body(65535), publisher).unwrap();
         until("the lit rig", || {
             frames.last_frame().is_some_and(|(_, data)| data[0] == 255)
         });
@@ -635,6 +683,100 @@ mod tests {
         swap.collect();
     }
 
+    /// **The swap happens where the core queued it** — the race S30b's
+    /// recording found, pinned without a thread. A value queued before the
+    /// rebuilt body was offered reaches the body that leaves (the new one was
+    /// built from the show and holds it already, and a `Go` queued before a
+    /// repatch is stopped by it as designed); a value queued after reaches the
+    /// body that arrives, even when the tick drains both before it renders.
+    #[test]
+    fn a_rebuilt_body_takes_over_where_it_was_queued() {
+        let swap = Arc::new(BodySwap::default());
+        let mut host = DaemonBody {
+            body: body(0),
+            swap: Arc::clone(&swap),
+            health: Arc::new(TickHealth::default()),
+            blank_next_frame: false,
+        };
+        let layout = layout();
+        let mut frame = prism_engine::DmxFrame::new(&layout);
+        let tick = prism_engine::TickInfo {
+            index: 1,
+            deadline: TICK_PERIOD,
+            started: TICK_PERIOD,
+            missed: 0,
+        };
+
+        // Before the offer: the old body's.
+        host.apply(TickCommand::SetProgrammerValue {
+            slot: 0,
+            value: 1_000,
+        });
+        // The rebuilt rig, dark at home, and its marker; then the operator's
+        // value — all drained in one tick.
+        swap.offer(body(0));
+        host.apply(TickCommand::AdoptBody);
+        host.apply(TickCommand::SetProgrammerValue {
+            slot: 0,
+            value: 65535,
+        });
+        host.render(&tick, &mut frame);
+
+        assert_eq!(host.health.swaps(), 1, "the rebuilt body was taken");
+        assert_eq!(
+            host.body.values(),
+            [65535_u16].as_slice(),
+            "the value queued after the marker went into the body that is running"
+        );
+        assert!(!swap.is_pending());
+        swap.collect();
+    }
+
+    /// Nothing queued before the marker reaches the new body, and a frame does
+    /// not take the body early while its marker is on its way.
+    #[test]
+    fn a_rebuilt_body_waits_for_its_marker() {
+        let swap = Arc::new(BodySwap::default());
+        let mut host = DaemonBody {
+            body: body(0),
+            swap: Arc::clone(&swap),
+            health: Arc::new(TickHealth::default()),
+            blank_next_frame: false,
+        };
+        let layout = layout();
+        let mut frame = prism_engine::DmxFrame::new(&layout);
+        let tick = prism_engine::TickInfo {
+            index: 1,
+            deadline: TICK_PERIOD,
+            started: TICK_PERIOD,
+            missed: 0,
+        };
+        swap.offer(body(0));
+        host.apply(TickCommand::SetProgrammerValue {
+            slot: 0,
+            value: 777,
+        });
+        host.render(&tick, &mut frame);
+        assert_eq!(host.health.swaps(), 0, "no marker yet: the old body runs");
+        assert_eq!(host.body.values(), [777_u16].as_slice());
+
+        host.apply(TickCommand::AdoptBody);
+        host.render(&tick, &mut frame);
+        assert_eq!(host.health.swaps(), 1);
+        assert_eq!(
+            host.body.values(),
+            [0_u16].as_slice(),
+            "the new body did not get what was queued before it"
+        );
+
+        // A marker that could not be queued: the next frame takes the body.
+        swap.offer(body(65535));
+        swap.unmarked.store(true, Ordering::Release);
+        host.render(&tick, &mut frame);
+        assert_eq!(host.health.swaps(), 2);
+        swap.collect();
+    }
+
     #[test]
     fn tick_health_starts_at_nothing_and_reports_a_rate() {
         let health = TickHealth::default();
@@ -644,7 +786,7 @@ mod tests {
         // Before the first tick, and on a clock that has not moved: zero rather
         // than a NaN, which a client would compare against itself for ever.
         assert!((health.rate(Duration::ZERO) - 0.0).abs() < f64::EPSILON);
-        health.ticks.store(44, std::sync::atomic::Ordering::Relaxed);
+        health.ticks.store(44, Ordering::Relaxed);
         assert!((health.rate(Duration::from_secs(1)) - 44.0).abs() < f64::EPSILON);
     }
 

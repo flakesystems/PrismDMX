@@ -1340,7 +1340,7 @@ impl ShowFile {
                 .collect(),
             Command::EmbedFixtureType { type_id } => vec![Image::FixtureType(
                 type_id.clone(),
-                self.show.fixture_type(type_id).cloned(),
+                self.show.fixture_type(type_id).cloned().map(Box::new),
             )],
             // Every fixture it adds and the profile it embeds: one step. The
             // restore orders them (fixtures out, profile, fixtures in), so the
@@ -1356,7 +1356,7 @@ impl ShowFile {
                 })
                 .chain(core::iter::once(Image::FixtureType(
                     type_id.clone(),
-                    self.show.fixture_type(type_id).cloned(),
+                    self.show.fixture_type(type_id).cloned().map(Box::new),
                 )))
                 .collect(),
             Command::SelectFixtures { .. }
@@ -1784,11 +1784,12 @@ impl ShowFile {
             .iter()
             .map(|(id, ..)| Image::Fixture(*id, self.show.fixture(*id).cloned()))
             .collect();
-        before.extend(
-            wanted
-                .iter()
-                .map(|key| Image::FixtureType(key.clone(), self.show.fixture_type(key).cloned())),
-        );
+        before.extend(wanted.iter().map(|key| {
+            Image::FixtureType(
+                key.clone(),
+                self.show.fixture_type(key).cloned().map(Box::new),
+            )
+        }));
         if before.is_empty() {
             // Nothing to do and nothing to undo. Still a success: the report
             // is what says the plan held nothing this desk could patch.
@@ -1831,13 +1832,16 @@ impl ShowFile {
             report.placed = u32::try_from(places.len()).unwrap_or(u32::MAX);
         }
 
-        let after: Vec<Image> =
-            plan.iter()
-                .map(|(id, ..)| Image::Fixture(*id, self.show.fixture(*id).cloned()))
-                .chain(wanted.iter().map(|key| {
-                    Image::FixtureType(key.clone(), self.show.fixture_type(key).cloned())
-                }))
-                .collect();
+        let after: Vec<Image> = plan
+            .iter()
+            .map(|(id, ..)| Image::Fixture(*id, self.show.fixture(*id).cloned()))
+            .chain(wanted.iter().map(|key| {
+                Image::FixtureType(
+                    key.clone(),
+                    self.show.fixture_type(key).cloned().map(Box::new),
+                )
+            }))
+            .collect();
         let record = UndoRecord::new(
             Command::ImportRig {
                 path: String::new(),
@@ -1968,7 +1972,9 @@ impl ShowFile {
                 }
                 Image::FixtureType(type_id, fixture_type) => {
                     let ops = match fixture_type {
-                        Some(fixture_type) => self.show.embed_fixture_type(fixture_type.clone())?,
+                        Some(fixture_type) => {
+                            self.show.embed_fixture_type((**fixture_type).clone())?
+                        }
                         None => self.show.remove_fixture_type(type_id)?,
                     };
                     applied.deltas.push(Delta::ShowPatch { ops });

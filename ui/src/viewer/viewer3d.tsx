@@ -26,13 +26,29 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { JsonValue, ProgrammerState } from "../bindings";
 import { pick, useConsole } from "../desk/consoleshell";
-import { useSend } from "../store/hooks";
+import { useAsk, useSend } from "../store/hooks";
 import { useTelemetryChannel } from "../telemetry/context";
 import { devicePixelRatio, resizeCanvas } from "../telemetry/painter";
 import type { Camera, ViewName } from "./camera";
 import { frameAll, look, newCamera, orbit, slide, zoom } from "./camera";
-import type { ViewerDriver } from "./driver";
+import type { ViewerDriver, ViewerReadout } from "./driver";
 import { driveViewer, readoutText } from "./driver";
+import type { DetailLevel } from "./gl/detail";
+import {
+  DEFAULT_DETAIL,
+  DETAIL,
+  DETAIL_LEVELS,
+  DETAIL_NAMES,
+  isDetailLevel,
+  rememberDetail,
+  rememberHaze,
+  rememberedDetail,
+  rememberedHaze,
+} from "./gl/detail";
+import { SOFTWARE_FRAME_MS, driveStage } from "./gl/driver3d";
+import { graphics } from "./gl/graphics";
+import { Stage, webglAvailable } from "./gl/stage";
+import { ResourceCache } from "./resources";
 import type { PlaceFields } from "./place";
 import { fieldsAreNumbers, fieldsOf, placeSet, placeSpread, readField, selectedFixtures } from "./place";
 import type { RigFixture } from "./rig";
@@ -80,6 +96,24 @@ export function Viewer3D({
   }, [rig, selection]);
 
   const [camera] = useState<Camera>(newCamera);
+  // Client-local, like the camera (§4.2): how much this screen draws, and how
+  // thick the haze is. Remembered by the browser, never sent to the desk.
+  // A machine that draws WebGL in software starts at the lowest level
+  // (`./gl/graphics.ts`); the operator's own choice, once made, wins.
+  const [detail, setDetail] = useState<DetailLevel>(() =>
+    rememberedDetail(makeSurface === canvasViewSurface && graphics().software ? "low" : DEFAULT_DETAIL),
+  );
+  const [haze, setHaze] = useState<number>(rememberedHaze);
+  const hazeRef = useRef(haze);
+  useEffect(() => {
+    hazeRef.current = haze;
+  }, [haze]);
+  const ask = useAsk();
+  const resources = useMemo(() => new ResourceCache(ask), [ask]);
+  // Which renderer the picture is drawn by — a WebGL stage wherever there is
+  // WebGL, the 2D fallback where there is none (and in a test that hands in a
+  // surface of its own).
+  const webglRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const readoutRef = useRef<HTMLParagraphElement>(null);
   const driverRef = useRef<ViewerDriver | null>(null);
@@ -98,33 +132,61 @@ export function Viewer3D({
   useEffect(() => {
     const canvas = canvasRef.current;
     const readoutNode = readoutRef.current;
-    const surface = canvas === null ? null : makeSurface(canvas);
-    const driver = driveViewer({
-      sink: channel?.sink ?? null,
-      surface,
-      rig: () => rigRef.current,
-      selection: () => selectionRef.current,
-      camera,
-      scale: devicePixelRatio,
-      scheduler: channel?.scheduler,
-      clock: channel?.clock,
-      readout: (line) => {
-        if (readoutNode === null) {
-          return;
-        }
-        readoutNode.textContent = readoutText(line);
-        readoutNode.dataset.fixtures = String(line.fixtures);
-        readoutNode.dataset.lit = String(line.lit);
-        readoutNode.dataset.unplaced = String(line.unplaced);
-        readoutNode.dataset.painted = String(line.painted);
-        readoutNode.dataset.median = line.median.toFixed(3);
-        readoutNode.dataset.p99 = line.p99.toFixed(3);
-      },
-    });
+    const readout = (renderer: string) => (line: ViewerReadout) => {
+      if (readoutNode === null) {
+        return;
+      }
+      readoutNode.textContent = readoutText(line);
+      readoutNode.dataset.renderer = renderer;
+      readoutNode.dataset.fixtures = String(line.fixtures);
+      readoutNode.dataset.lit = String(line.lit);
+      readoutNode.dataset.unplaced = String(line.unplaced);
+      readoutNode.dataset.painted = String(line.painted);
+      readoutNode.dataset.median = line.median.toFixed(3);
+      readoutNode.dataset.p99 = line.p99.toFixed(3);
+    };
+    const webgl = canvas !== null && makeSurface === canvasViewSurface && webglAvailable();
+    webglRef.current = webgl;
+    let driver: ViewerDriver;
+    if (webgl) {
+      const stage = new Stage(canvas, DETAIL[detail], resources);
+      driver = driveStage({
+        sink: channel?.sink ?? null,
+        stage,
+        rig: () => rigRef.current,
+        selection: () => selectionRef.current,
+        camera,
+        haze: () => hazeRef.current,
+        size: () => ({
+          width: canvas.clientWidth,
+          height: canvas.clientHeight,
+          ratio: devicePixelRatio(),
+        }),
+        scheduler: channel?.scheduler,
+        clock: channel?.clock,
+        readout: readout("webgl"),
+        minimumFrameMs: graphics().software ? SOFTWARE_FRAME_MS : 0,
+      });
+    } else {
+      const surface = canvas === null ? null : makeSurface(canvas);
+      driver = driveViewer({
+        sink: channel?.sink ?? null,
+        surface,
+        rig: () => rigRef.current,
+        selection: () => selectionRef.current,
+        camera,
+        scale: devicePixelRatio,
+        scheduler: channel?.scheduler,
+        clock: channel?.clock,
+        readout: readout("2d"),
+      });
+    }
     driverRef.current = driver;
 
     const measure = (): void => {
-      if (resizeCanvas(canvas, devicePixelRatio())) {
+      // The WebGL stage sizes its own drawing buffer each frame; only the 2D
+      // fallback is sized here.
+      if (!webgl && resizeCanvas(canvas, devicePixelRatio())) {
         driver.invalidate();
       }
     };
@@ -148,7 +210,7 @@ export function Viewer3D({
       driver.stop();
       driverRef.current = null;
     };
-  }, [camera, channel, makeSurface]);
+  }, [camera, channel, makeSurface, detail, resources]);
 
   const shell = useConsole();
   const { run } = shell;
@@ -180,6 +242,42 @@ export function Viewer3D({
           Frame all
         </button>
         {/* Written by the loop and never by React: see `./driver.ts`. */}
+        <label className="viewer-setting" title="How much this screen draws — fewer details for an older machine">
+          <span>Detail</span>
+          <select
+            data-testid="viewer-detail"
+            value={detail}
+            onChange={(event) => {
+              const level = event.target.value;
+              if (isDetailLevel(level)) {
+                rememberDetail(level);
+                setDetail(level);
+              }
+            }}
+          >
+            {DETAIL_LEVELS.map((level) => (
+              <option key={level} value={level}>
+                {DETAIL_NAMES[level]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="viewer-setting" title="How thick the haze the beams are seen in is">
+          <span>Haze</span>
+          <input
+            type="range"
+            data-testid="viewer-haze"
+            min={0}
+            max={1}
+            step={0.05}
+            value={haze}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              rememberHaze(value);
+              setHaze(value);
+            }}
+          />
+        </label>
         <p ref={readoutRef} className="viewer-readout" data-testid="viewer-stats" />
       </div>
       <div className="viewer-body">
@@ -225,7 +323,9 @@ export function Viewer3D({
               return;
             }
             const box = event.currentTarget.getBoundingClientRect();
-            const ratio = devicePixelRatio();
+            // The WebGL stage casts a ray from a point in CSS pixels; the 2D
+            // fallback searches round a point in device pixels.
+            const ratio = webglRef.current ? 1 : devicePixelRatio();
             const id = driverRef.current?.pick(
               (event.clientX - box.left) * ratio,
               (event.clientY - box.top) * ratio,

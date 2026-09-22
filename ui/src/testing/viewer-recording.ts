@@ -4,8 +4,10 @@
  * object a fake daemon made up.
  *
  * `crates/prismd/tests/ui_viewer.rs` wrote it: two GDTF heads and a generic
- * PAR patched, hung, a refused spread, an Oops and a Redo, and one telemetry
- * frame with the first head open and panned three quarters of the way.
+ * PAR patched, hung, a refused spread, an Oops and a Redo, one telemetry frame
+ * with the first head open, panned three quarters of the way and its dots gobo
+ * in, and three of the viewer's questions for files out of the head's archive
+ * with the daemon's answers (S30b).
  *
  * Scenery, not a fixture — `src/testing/` is excluded from coverage.
  */
@@ -48,6 +50,11 @@ export interface ViewerRecording {
     readonly firstHead: readonly number[];
     readonly secondHead: readonly number[];
   };
+  readonly resources: readonly {
+    readonly what: string;
+    readonly client: string;
+    readonly answer: string;
+  }[];
 }
 
 /** The recording. */

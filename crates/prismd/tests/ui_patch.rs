@@ -179,7 +179,7 @@ fn write_gdtf(root: &Path) {
         <Models><Model Name="Body" File="body" Length="0.34" Width="0.34" Height="0.55"/></Models>
         <Geometries>
           <Geometry Name="Body" Model="Body" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
-            <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,400,1}"
+            <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0.4}{0,0,0,1}"
                   BeamAngle="13" LuminousFlux="11000" ColorTemperature="6500"/>
           </Geometry>
         </Geometries>

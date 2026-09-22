@@ -66,6 +66,7 @@ import {
   ATTRIBUTE_TYPE_VARIANTS,
   COMMAND_LINE_MODE_VARIANTS,
   COMMAND_LINE_READING_KIND_VARIANTS,
+  RESOURCE_KIND_VARIANTS,
   CONTROL_SHAPE_VARIANTS,
   EXECUTOR_TARGET_VARIANTS,
   EXIT_ACTION_VARIANTS,
@@ -780,6 +781,20 @@ export function readAnswer(value: unknown, path: string): Answer {
         completions: asArray(field(record, "completions"), `${path}.completions`).map(
           (word, index) => asString(word, `${path}.completions[${index}]`),
         ),
+      };
+    // S30b. Part of a fixture's own file — a model or a gobo picture. `data`
+    // is base64 text and is decoded where it is used (`viewer/resources.ts`),
+    // not here: this reader checks shapes and never allocates a buffer the
+    // size of a model on a message it is only validating.
+    case "FixtureResource":
+      return {
+        t: "FixtureResource",
+        kind: asVariant(field(record, "kind"), `${path}.kind`, RESOURCE_KIND_VARIANTS),
+        name: asString(field(record, "name"), `${path}.name`),
+        path: asString(field(record, "path"), `${path}.path`),
+        offset: asInteger(field(record, "offset"), `${path}.offset`),
+        total: asInteger(field(record, "total"), `${path}.total`),
+        data: asString(field(record, "data"), `${path}.data`),
       };
     case "DarkUniverses":
       return {

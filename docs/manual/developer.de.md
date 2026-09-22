@@ -185,15 +185,44 @@ entfernen kostet die Ausgänge, die sich nicht geändert haben, **keinen Tick un
 kein Frame**.
 
 
-### Der 3D-Viewer fragt den Daemon nichts
+### Der 3D-Viewer fragt den Daemon nach Dateien und sonst nichts
 
-`ui/src/viewer/` (S30) zeichnet das Rig aus zwei Dingen, die die Oberfläche
-schon hat: dem **Show-Dokument**, für den Ort jedes Fixtures und das, was sein
-Profil über Körper und Strahlen sagt, und der **Telemetrie-Senke**, für das, was
-das Kabel ihm sagt. Der Frame wird in einer Animation-Frame-Schleife außerhalb
-von React gelesen — `viewer/driver.ts` ist `telemetry/driver.ts` mit einem
-anderen Bild —, und gezeichnet wird nur, wenn sich Payload, Rig, Auswahl, Kamera
-oder Größe geändert haben. Die Kamera gehört dem Client (§4.2 der Spezifikation).
+`ui/src/viewer/` (S30, in S30b zum Visualizer umgebaut) zeichnet das Rig aus
+zwei Dingen, die die Oberfläche schon hat: dem **Show-Dokument**, für den Ort
+jedes Fixtures und das, was sein Profil über es sagt, und der
+**Telemetrie-Senke**, für das, was das Kabel ihm sagt. Der Frame wird in einer
+Animation-Frame-Schleife außerhalb von React gelesen — `viewer/gl/driver3d.ts`
+ist `telemetry/driver.ts` mit einem anderen Bild —, und gezeichnet wird nur,
+wenn sich Pegel, Rig, Auswahl, Kamera, Größe oder Dunst geändert haben oder
+etwas sich von selbst bewegt (ein Strobe, ein drehendes Gobo). Kamera und
+Detailstufe gehören dem Client (§4.2 der Spezifikation). Das Einzige, was er den
+Daemon fragt, sind die eigenen Dateien eines Fixtures — seine Modelle und seine
+Gobo-Bilder — mit `Query::FixtureResource`, ein halbes Megabyte auf einmal
+(`viewer/resources.ts`).
+
+Die Teile, in der Reihenfolge, in der ein Frame sie durchläuft:
+
+- `viewer/device.ts` liest das Gerät, das ein GDTF-Profil einbettet
+  (`prism_domain::device`): den Geometriebaum, jede Funktion jedes Kanals mit
+  ihren Sets und Mode-Mastern, jedes Rad.
+- `viewer/state.ts` wertet diese Funktionen gegen den Frame aus, zu einem
+  `BeamState` je Strahl und Pan und Tilt je Achse — Dimmer, Shutter und Strobe,
+  jedes Farbsystem, Zoom, Fokus, Frost, Iris, Gobos und Animationsräder,
+  Prismen, Blenden. Ein OFL- oder generisches Profil wird stattdessen aus seiner
+  Attributliste und seinen Bereichsnamen gelesen. **Hierhin gehört ein neues
+  Attribut**, mit einem Test in `state.test.ts` auf dem aufgenommenen Frame.
+- `viewer/gl/` zeichnet es: `fixture3d.ts` baut den Baum, `mask.ts` malt, was
+  in einem Strahl ist, `beam3d.ts` rechnet den Dunst per Raymarching,
+  `floor.ts` projiziert die Maske jedes Strahls auf den Boden, `stage.ts` setzt
+  es zusammen, `detail.ts` hält die vier Stufen.
+
+Die Regeln der Schleife (`driver3d.ts`) sind das, was das Pult vorne hält, und
+eine Änderung, die eine davon bricht, scheitert am 64-Universen-Test in
+`e2e/viewer.spec.ts`: für einen Frame mit denselben Bytes unter einer neuen
+Sequenznummer zeichnet sie nichts; sie ruht doppelt so lange, wie ein Frame auf
+dem Thread der Seite und auf der GPU gekostet hat (ein Fence je Frame); und auf
+einem Software-Renderer (`gl/graphics.ts`) beginnt sie auf Niedrig, zeichnet mit
+halber Auflösung ohne Multisampling und höchstens vier Bilder in der Sekunde.
 
 Zwei Regeln, die zu halten sind:
 
@@ -208,8 +237,9 @@ Zwei Regeln, die zu halten sind:
   Ort. Eine Änderung, durch die Platzieren repatcht, legte einen Neubau des
   Merge-Körpers auf eine Geste, die ein Bediener durch Ziehen macht.
 
-Gezeichnet wird auf einem 2D-Canvas hinter `viewer/surface.ts::ViewSurface`;
-die Gründe stehen in §4.7 der Spezifikation.
+Ein Browser ohne WebGL — und jeder Unit-Test — bekommt das 2D-Bild aus S30
+hinter `viewer/surface.ts::ViewSurface`; die Gründe für beides stehen in §4.7
+der Spezifikation.
 
 ---
 
@@ -219,6 +249,27 @@ Jede davon steht in `PROGRESS.md` §6, mit der Session, die sie gelernt hat, und
 dem Test, der es gefangen hat. Sie stehen hier, weil sie sich verallgemeinern —
 und weil jede von ihnen mindestens einmal in einer zweiten Gestalt neu gelernt
 werden musste.
+
+### Ein neu gebauter Körper übernimmt dort, wo er eingereiht wurde
+
+Ein Tick leert erst seine Befehlswarteschlange und rendert dann. Die Aufnahme
+aus S30b hat gezeigt, dass ein kurz vor einem Tick angebotener Körper erst in
+`render` übernommen wurde — **nachdem** die Befehle, die der Core seit dem
+Angebot geschickt hatte, in den Körper gegangen waren, der gerade ging. Ein
+Programmer-Wert, der in denselben 23 ms wie ein Neubau gesetzt wurde, war
+verloren, und zwar still und endgültig, weil der Core nur Unterschiede schickt:
+der Frame trug Pan und Gobo, aber nicht den Dimmer. Die erste Korrektur — den
+Körper vor *jedem* Befehl übernehmen — war in die andere Richtung falsch: ein
+`Go`, das **vor** einem Repatch eingereiht war, lief dann im neuen Körper und
+überlebte einen Neubau, der jede Wiedergabe anhält — oder eben nicht, um ein
+paar Millisekunden; `resilience.rs` hat das in zwei von fünf Läufen gefangen.
+Der Tausch ist jetzt selbst ein Befehl in der Warteschlange,
+`TickCommand::AdoptBody`, den `EngineThread::install` gleich nach dem Angebot
+schickt: alles davor erreicht den alten Körper, alles danach den neuen;
+`a_rebuilt_body_takes_over_where_it_was_queued` und
+`a_rebuilt_body_waits_for_its_marker` halten beide Hälften ohne Thread fest.
+Die allgemeine Form: **Wenn zwei Dinge asynchron den Platz tauschen, gehört der
+Platztausch in denselben geordneten Strom wie alles, was an sie gerichtet ist.**
 
 ### Eine Regel, die in zwei Schichten gefragt wird, ist eine Funktion und kein `match`
 

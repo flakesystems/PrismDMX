@@ -56,17 +56,26 @@ async function command(page: Page, line: string): Promise<void> {
   await input.press("Enter");
 }
 
-/** How many pixels of the viewer's canvas are bright, read back out of the bitmap. */
+/**
+ * How many pixels of the viewer are bright, read back out of what the browser
+ * **shows** — a screenshot of the canvas, decoded in the page. A WebGL canvas
+ * has no 2D context to read, and its drawing buffer is cleared once it is on
+ * the screen, so the screen is what is asked.
+ */
 async function brightPixels(page: Page): Promise<number> {
-  return page.getByTestId("viewer-canvas").evaluate((element) => {
-    if (!(element instanceof HTMLCanvasElement)) {
-      return -1;
-    }
-    const context = element.getContext("2d");
+  const png = (await page.getByTestId("viewer-canvas").screenshot()).toString("base64");
+  return page.evaluate(async (data) => {
+    const blob = await (await fetch(`data:image/png;base64,${data}`)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
     if (context === null) {
       return -1;
     }
-    const image = context.getImageData(0, 0, element.width, element.height);
+    context.drawImage(bitmap, 0, 0);
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
     let bright = 0;
     for (let at = 0; at < image.data.length; at += 4) {
       if ((image.data[at] ?? 0) + (image.data[at + 1] ?? 0) + (image.data[at + 2] ?? 0) > 360) {
@@ -74,7 +83,7 @@ async function brightPixels(page: Page): Promise<number> {
       }
     }
     return bright;
-  });
+  }, png);
 }
 
 test("a rig is hung from the viewer, taken back in one Oops, and lit from the line", async ({
@@ -104,6 +113,9 @@ test("a rig is hung from the viewer, taken back in one Oops, and lit from the li
 
   await openWindow(page, "Viewer3D");
   const stats = page.getByTestId("viewer-stats");
+  // A browser with WebGL draws the rig in 3D (S30b); the 2D picture is only
+  // for one without.
+  await expect(stats).toHaveAttribute("data-renderer", "webgl");
   // Four fixtures, and every one of them where a patch leaves it.
   await expect(stats).toHaveAttribute("data-fixtures", "4");
   await expect(stats).toHaveAttribute("data-unplaced", "4");
@@ -168,6 +180,26 @@ test("with the DMX Sheet and the viewer open on 64 universes, the DMX Sheet keep
   // which is the worst case for overdraw.
   await expect.poll(async () => Number((await viewer.getAttribute("data-lit")) ?? 0)).toBeGreaterThan(200);
 
+  // An operator orbiting the camera the whole time, so the viewer is really
+  // drawing while the DMX Sheet is measured — a still rig on a steady cable
+  // draws nothing at all (`src/viewer/gl/driver3d.ts`).
+  const canvas = page.getByTestId("viewer-canvas");
+  const box = await canvas.boundingBox();
+  let orbiting = box !== null;
+  const orbit = (async () => {
+    if (box === null) {
+      return;
+    }
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    while (orbiting) {
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 40, y + 5, { steps: 4 });
+      await page.mouse.up();
+    }
+  })();
+
   // Let both run for the length of the DMX Sheet's paint window.
   const telemetry = page.getByTestId("telemetry-stats");
   await expect
@@ -176,14 +208,22 @@ test("with the DMX Sheet and the viewer open on 64 universes, the DMX Sheet keep
       intervals: [500],
     })
     .toBeGreaterThanOrEqual(150);
+  // The viewer keeps drawing — at the rate this browser allows it. Here WebGL
+  // is done in software (SwiftShader), so the viewer starts at Low, draws at
+  // half resolution without multisampling and at most four frames a second
+  // (`src/viewer/gl/graphics.ts`, `driver3d.ts`), and the page stays the
+  // console's. The rate is written down, not required.
   await expect
     .poll(async () => Number((await viewer.getAttribute("data-painted")) ?? 0), { timeout: 20_000 })
-    .toBeGreaterThanOrEqual(120);
+    .toBeGreaterThanOrEqual(10);
+
+  orbiting = false;
+  await orbit;
 
   const line = (await telemetry.textContent()) ?? "";
   const hz = Number(/([\d.]+) Hz/.exec(line)?.[1] ?? 0);
   const p99 = Number(/p99 ([\d.]+) ms/.exec(line)?.[1] ?? Number.POSITIVE_INFINITY);
-  const viewerLine = `${(await viewer.textContent()) ?? ""} (median ${String(await viewer.getAttribute("data-median"))} ms, p99 ${String(await viewer.getAttribute("data-p99"))} ms)`;
+  const viewerLine = `${(await viewer.textContent()) ?? ""} · ${String(await viewer.getAttribute("data-painted"))} painted (median ${String(await viewer.getAttribute("data-median"))} ms, p99 ${String(await viewer.getAttribute("data-p99"))} ms)`;
   // Onto the console and into the report: `PROGRESS.md` records these.
   test.info().annotations.push({ type: "telemetry", description: line });
   test.info().annotations.push({ type: "viewer", description: viewerLine });

@@ -137,7 +137,21 @@ pub struct Desk {
     /// state: the `Core` is what a command reaches when it has something to
     /// change, and this one has the **process** as its subject.
     stop: Arc<tokio::sync::Notify>,
+    /// The fixture files served last — S30b — so a model asked for half a
+    /// megabyte at a time is read from its archive once, not once a part.
+    /// Newest last, at most [`KEPT_RESOURCES`].
+    resources: Mutex<Vec<(ResourceKey, ResourceFile)>>,
 }
+
+/// What a fixture file is asked for by: GUID, profile, kind and name.
+type ResourceKey = (String, String, prism_domain::ResourceKind, String);
+
+/// A fixture file read: its path inside the archive, and its bytes.
+type ResourceFile = Arc<(String, Vec<u8>)>;
+
+/// How many fixture files [`Desk`] keeps read. A rig's worth of one device's
+/// models and gobos is a handful, and the viewer asks for them one at a time.
+const KEPT_RESOURCES: usize = 8;
 
 impl Desk {
     /// A desk over a wired-up core.
@@ -148,6 +162,7 @@ impl Desk {
             open_surface: Mutex::new(None),
             surface_status: Mutex::new(None),
             stop: Arc::new(tokio::sync::Notify::new()),
+            resources: Mutex::new(Vec::new()),
         }
     }
 
@@ -327,6 +342,16 @@ impl Desk {
     /// that no client has to compute it. The lock is taken for reading and let
     /// go again, exactly as `snapshot` does.
     pub fn query(&self, query: &Query) -> Answer {
+        if let Query::FixtureResource {
+            fixture_type_id,
+            type_id,
+            kind,
+            name,
+            offset,
+        } = query
+        {
+            return self.fixture_resource(fixture_type_id, type_id, *kind, name, *offset);
+        }
         let core = self.core();
         match query {
             Query::PatchConflicts => Answer::PatchConflicts {
@@ -620,6 +645,15 @@ impl Desk {
             Query::FixtureOfMode { type_id } => Answer::FixtureOfMode {
                 fixture: core.file.library.fixture_of(type_id),
             },
+            // Answered above, without the core: see `fixture_resource`.
+            Query::FixtureResource { kind, name, .. } => Answer::FixtureResource {
+                kind: *kind,
+                name: name.clone(),
+                path: String::new(),
+                offset: 0,
+                total: 0,
+                data: String::new(),
+            },
             Query::SearchLibrary { text, limit } => Answer::LibraryMatches {
                 matches: core
                     .file
@@ -627,6 +661,64 @@ impl Desk {
                     .search(text, usize::try_from(*limit).unwrap_or(usize::MAX)),
                 total: u32::try_from(core.file.library.len()).unwrap_or(u32::MAX),
             },
+        }
+    }
+
+    /// A model or a gobo picture out of the fixture's own archive, a part at
+    /// a time — S30b, `Query::FixtureResource`.
+    ///
+    /// **The core lock is held only to find where the file is.** Reading a
+    /// published archive off the disk takes milliseconds, and every command
+    /// from every client waits for the core; so the library answers *where*
+    /// under the lock and the file is read after it is let go. The last few
+    /// files read are kept, because a model is asked for half a megabyte at a
+    /// time and each part would otherwise read the whole archive again.
+    fn fixture_resource(
+        &self,
+        fixture_type_id: &str,
+        type_id: &str,
+        kind: prism_domain::ResourceKind,
+        name: &str,
+        offset: u32,
+    ) -> Answer {
+        let key: ResourceKey = (
+            fixture_type_id.to_owned(),
+            type_id.to_owned(),
+            kind,
+            name.to_owned(),
+        );
+        let kept = self.resources.lock().ok().and_then(|held| {
+            held.iter()
+                .find(|(each, _)| *each == key)
+                .map(|(_, file)| Arc::clone(file))
+        });
+        let file = kept.or_else(|| {
+            let lookup =
+                self.core()
+                    .file
+                    .library
+                    .resource_lookup(fixture_type_id, type_id, kind, name);
+            let read = Arc::new(lookup.and_then(|lookup| lookup.read())?);
+            if let Ok(mut held) = self.resources.lock() {
+                held.retain(|(each, _)| *each != key);
+                held.push((key, Arc::clone(&read)));
+                if held.len() > KEPT_RESOURCES {
+                    held.remove(0);
+                }
+            }
+            Some(read)
+        });
+        let (path, bytes) = file.as_deref().map_or(("", &[][..]), |(path, bytes)| {
+            (path.as_str(), bytes.as_slice())
+        });
+        let (start, part) = resource_part(bytes, offset);
+        Answer::FixtureResource {
+            kind,
+            name: name.to_owned(),
+            path: path.to_owned(),
+            offset: start,
+            total: u32::try_from(bytes.len()).unwrap_or(u32::MAX),
+            data: base64(part),
         }
     }
 
@@ -681,6 +773,97 @@ impl ServerHandler for DeskHandler {
         // §8: the daemon frees its state and carries on. Nothing about the show
         // changes, and this line is the whole of what a client leaving costs.
         log::info("ipc", &format!("{client} disconnected"));
+    }
+}
+
+/// How much of a fixture's file one answer carries — S30b.
+///
+/// Half a megabyte, which is two thirds of a megabyte as base64 and so well
+/// inside `prism_ipc::MAX_FRAME_BYTES` with the rest of the message around it.
+const RESOURCE_CHUNK: usize = 512 * 1024;
+
+/// The part of a file that starts at `offset`: at most [`RESOURCE_CHUNK`]
+/// bytes, and where it really starts — the end of the file for an offset past
+/// it, so a client that asks for more than there is gets an empty part and
+/// stops rather than an error it would have to understand.
+fn resource_part(bytes: &[u8], offset: u32) -> (u32, &[u8]) {
+    let start = usize::try_from(offset)
+        .unwrap_or(usize::MAX)
+        .min(bytes.len());
+    let end = start.saturating_add(RESOURCE_CHUNK).min(bytes.len());
+    (u32::try_from(start).unwrap_or(u32::MAX), &bytes[start..end])
+}
+
+/// Standard base64 with padding (RFC 4648 §4) — S30b's answer carries a file
+/// part as text; see `Answer::FixtureResource`.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let a = u32::from(chunk[0]);
+        let b = chunk.get(1).map_or(0, |byte| u32::from(*byte));
+        let c = chunk.get(2).map_or(0, |byte| u32::from(*byte));
+        let triple = (a << 16) | (b << 8) | c;
+        for (index, shift) in [18_u32, 12, 6, 0].into_iter().enumerate() {
+            if index > chunk.len() {
+                out.push('=');
+            } else {
+                let at = usize::try_from((triple >> shift) & 0x3f).unwrap_or(0);
+                out.push(char::from(ALPHABET[at]));
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::{RESOURCE_CHUNK, base64, resource_part};
+
+    /// RFC 4648 §10's vectors, which cover every padding.
+    #[test]
+    fn base64_is_the_rfc_s() {
+        for (plain, encoded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(base64(plain.as_bytes()), encoded, "{plain:?}");
+        }
+        assert_eq!(base64(&[0xfb, 0xff, 0xbf]), "+/+/");
+    }
+
+    /// A file is served half a megabyte at a time, each part where it was
+    /// asked for, and a part asked for past the end is empty at the end.
+    #[test]
+    fn a_file_is_served_a_part_at_a_time() {
+        let file: Vec<u8> = (0..RESOURCE_CHUNK * 2 + 10)
+            .map(|index| u8::try_from(index % 251).unwrap_or(0))
+            .collect();
+        let chunk = u32::try_from(RESOURCE_CHUNK).expect("half a megabyte");
+        let (start, first) = resource_part(&file, 0);
+        assert_eq!((start, first.len()), (0, RESOURCE_CHUNK));
+        let (start, second) = resource_part(&file, chunk);
+        assert_eq!((start, second.len()), (chunk, RESOURCE_CHUNK));
+        let (start, last) = resource_part(&file, chunk * 2);
+        assert_eq!((start, last), (chunk * 2, &file[RESOURCE_CHUNK * 2..]));
+        let whole: Vec<u8> = [first, second, last].concat();
+        assert_eq!(whole, file);
+
+        let end = u32::try_from(file.len()).expect("a small file");
+        assert_eq!(resource_part(&file, u32::MAX), (end, &[][..]));
+        assert_eq!(resource_part(&[], 0), (0, &[][..]));
+    }
+
+    /// A part as base64, with the answer around it, fits in one IPC frame.
+    #[test]
+    fn a_part_fits_in_a_frame() {
+        let part = vec![0xff_u8; RESOURCE_CHUNK];
+        assert!(base64(&part).len() + 4096 < prism_ipc::MAX_FRAME_BYTES);
     }
 }
 
