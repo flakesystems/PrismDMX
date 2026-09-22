@@ -543,11 +543,38 @@ notarised (§1's second state).
 | Secret | Value | From |
 |---|---|---|
 | `APPLE_CERTIFICATE` | The `.p12` from §5.4, **base64 encoded** | the command below |
-| `APPLE_CERTIFICATE_PASSWORD` | The password you set when exporting it | §5.4 step 5 |
+| `APPLE_CERTIFICATE_PASSWORD` | **A password you invent**, not one Apple issues — see the note below | §5.0 step 3, or §5.4 step 5 |
 | `APPLE_SIGNING_IDENTITY` | `Developer ID Application: Your Name (ABCDE12345)` — the full string, quotes not included | `security find-identity -v -p codesigning` |
 | `APPLE_ID` | The Apple ID e-mail of the developer account | §6.1 |
 | `APPLE_APP_SPECIFIC_PASSWORD` | `abcd-efgh-ijkl-mnop` | §6.1 |
 | `APPLE_TEAM_ID` | `ABCDE12345` | §6.2 |
+
+> ### `APPLE_CERTIFICATE_PASSWORD` does not come from Apple
+>
+> It is the password that protects the `.p12` file, and **you choose it at the
+> moment you create that file**. Apple never sees it and cannot tell it to you.
+> It is not your Apple ID password, not the app-specific password, and not your
+> Mac's login password.
+>
+> * **§5.0 (command line):** it is what `openssl pkcs12 -export` asks for at
+>   *Enter Export Password*.
+> * **§5.4 (the window):** it is the **first** password the export asks for.
+>   The **second** one it asks for is your macOS login password, which lets the
+>   private key out of the keychain — that one is *not* the secret.
+>
+> Generate one that is worth having, and put it in your password manager
+> **before** you use it, because you need it twice — once for the file, once as
+> the secret:
+>
+> ```bash
+> /usr/bin/openssl rand -base64 24
+> ```
+>
+> **If you lose it, nothing is ruined and you do not need a new certificate.**
+> Build a fresh `.p12` from the certificate and key you already have, with a new
+> password (§5.0 step 3, or export again from the keychain). This matters
+> because the alternative people reach for — issuing another Developer ID
+> certificate — spends one of the five an account ever gets (§2).
 
 To produce the base64, **with no line breaks in it** — this is the single most
 common way this goes wrong, because `base64` on some systems wraps at 76
