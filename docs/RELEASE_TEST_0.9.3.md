@@ -403,7 +403,8 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
 - [ ] **T-3D.3 — ein Oops.** `Oops` + Enter. **Alle vier** stehen wieder im
       Ursprung — die ganze Geste war ein Schritt. Nochmal **Spread**.
 - [ ] **T-3D.4 — die Strahlen kommen vom Kabel.** `Fixture 1 Thru 4 At Full`. Aus
-      allen vier kommt ein Strahl im Dunst, am Boden ein Lichtfleck; die Zeile
+      allen vier kommt ein Strahl im Dunst, am Boden ein Lichtfleck — der Strahl
+      endet **bündig** mit dem Fleck, nicht breiter und nicht schmaler; die Zeile
       sagt *4 lit*. Ein Executor mit einer Cue tut dasselbe: **was im DMX Sheet
       steht, steht auch hier**.
 - [ ] **T-3D.5 — gleich nach dem Oops.** `Oops`, **sofort** danach `Fixture 1
@@ -417,7 +418,9 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
       *Front / Top / Side / 3D / Frame all* tun, was sie sagen. Ein zweiter
       Client (zweites Fenster, anderer Bildschirm) behält **seine** Ansicht.
 - [ ] **T-3D.8 — klicken wählt.** Ein Klick auf ein Fixture im Bild nimmt es in
-      die Auswahl (gelber Rand); nochmal klicken nimmt es heraus.
+      die Auswahl (gelber Rand); nochmal klicken nimmt es heraus. Der gelbe Rand
+      liegt **eng um das Gerät**, auch bei einer PAR-Kanne oder einem OFL-Gerät —
+      nicht um den Strahl. Ein Klick in den Strahl neben dem Gerät wählt nichts.
 - [ ] **T-3D.9 — der Ausgang merkt nichts.** Während *DMX Sheet* und *Viewer 3D*
       offen sind und eine Cue läuft: **im Viewer dauernd drehen** (Ziehen, eine
       halbe Minute). Das DMX Sheet zeigt weiter ~30 Hz, die Lampen am Rig
@@ -450,8 +453,10 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
       *Medium* die Modelle, bei *High* und *Ultra* feinere Strahlen und ein
       Glühen um helles Licht. Die Zeile zeigt, wie lange ein Bild braucht —
       **bitte für jede Stufe notieren** (mit der Zahl der Fixtures). **Haze** auf
-      null: nur noch der Boden zeigt das Licht. Fenster schließen und wieder
-      öffnen: beide Einstellungen sind noch da.
+      null: nur noch der Boden zeigt das Licht. Nach **jedem** Wechsel der Stufe
+      ist das Bild unverzerrt (ein runder Fleck bleibt rund, ohne das Fenster
+      anzufassen). Fenster schließen und wieder öffnen: beide Einstellungen sind
+      noch da.
 - [ ] **T-3D.17 — ein Profil ohne Gerätedaten.** Ein OFL-Moving-Head wird als
       einfacher Moving Head gezeichnet und folgt Pan und Tilt; eine PAR-Kanne
       als Kanne. Hat es ein Goborad, ist bei einem Gobo ein Muster im Strahl.

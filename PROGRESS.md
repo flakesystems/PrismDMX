@@ -5076,6 +5076,20 @@ of its files did.
 | Interface gates | ✅ `tsc -b --force`, lint, vitest **1 046 passed** in 80 files, build; Playwright **57 passed** (4.6 min), none flaky |
 | CI green on the pushed commit | ✅ runs **35696241615** and **35696263504** on `d099402` (PR #37) — all seven Linux jobs green in both on the first attempt, the end-to-end job (3 m 27 s) included, which runs the 64-universe test with the WebGL viewer orbited on the runner's software renderer |
 
+#### After the owner's first look (2026-09-22)
+
+Three findings on the generic and OFL stand-ins, all three real:
+
+| Finding | Cause | Now | Held by |
+|---|---|---|---|
+| The hitbox was far too big | the stand-in's meshes were collected as clickable bodies **after** the beam was hung in it, so the cone — metres long — was part of the fixture for clicks and for the selection box; and the box was taken square to the world and turned back, the box of a box, twice the size on a fixture hung at an angle | bodies collected before the beam; the box measured in the fixture's own frame | `is clicked and outlined by its body, not by its beam` |
+| The beam was not flush with its pool | the volume leaves the whole lens (`radius + d · k` wide), the floor projected from the lens's centre, so the pool was a lens radius too small | each projector stands at the cone's apex, `radius / k` behind the lens | `hangs where the show hangs it…` asserts pool width = volume width at the floor |
+| The picture was stretched after a detail change | a new stage takes over a canvas the old one sized, and compared with the size its renderer read back; where both levels draw at the same resolution (Medium, High and Ultra on a 1× screen) nothing looked changed and the camera kept a square aspect | a stage compares with what **it** last applied (`sizeChanged`) | `stage.test.ts` |
+
+Looked at in Chromium on the recorded rig at Medium, High, Ultra and Low. Gates:
+vitest **1 049** in 81 files, lint, typecheck, build, `viewer.spec.ts` 2 passed
+(`64 universes · 23.8 Hz · paint 0.20 ms (p99 0.30 ms)` with the viewer orbited).
+
 **Not done, and said so:** the venue — truss, set and walls out of an MVR — is
 not drawn, and there are no shadows; an MVR plan's rotation is still not read
 (§5). The visual checks with the T1 are screenshots looked at by the author,
