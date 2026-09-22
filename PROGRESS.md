@@ -5305,17 +5305,20 @@ why nothing noticed.
 
 **Not done, and said so.**
 
-- **`prism-app` and `prismd` were not type-checked for Windows.** The two crates
-  that cross-check cleanly are the two with no C dependency; the other two stop
-  in `aws-lc-sys`'s build script, so the `winreg` autostart arm and the
-  `keyring` credential-manager arm are covered by the manifest and `cfg`
-  evidence above and **not by a compiler**. That is most of what S61 and S62
-  each learnt the hard way (*a textually clean change is not a compiling one*),
-  and two `Cargo.toml` files were edited, which is where such a break hides.
-  **Run `release.yml` by hand (`workflow_dispatch`) before merging**: it builds
-  the Windows half and publishes nothing, and it is the cheapest possible check
-  of the part this machine could not reach. That run also exercises the
-  corrected installer check, which would have failed the next tag as it stood.
+- **Windows compiles, and that is now measured rather than argued.** The
+  `workflow_dispatch` run of 2026-09-22 (`35783499000`) took the Windows job
+  through **`cargo fmt --all --check`, `cargo clippy --workspace --all-targets
+  -D warnings` and `cargo doc --workspace`** — all three green. Clippy over
+  `--all-targets` compiles every crate and every test target, `prism-app` and
+  `prismd` included, so the `winreg` autostart arm, the `keyring`
+  credential-manager arm and both edited manifests are held by a **compiler**
+  now and not by the `cfg` evidence alone. It also confirms the
+  `BUNDLE_PAYLOAD` doc-link fix, which was made for exactly that job.
+- **`cargo test` on Windows still has not finished.** The same run was
+  cancelled during that step, so the Windows *tests* — the named pipe, the
+  credential manager, the corpus on a CRLF checkout — remain unrun, and so do
+  the installer build and its payload check. **Run `release.yml` again**: what
+  is left to learn is the second half of that job.
 - **No DMX cable was driven on the Mac.** §5 has the item, the two specific
   risks and how to close it.
 - **Nothing was signed with a *Developer ID*, and that is still the open item**
@@ -6044,6 +6047,7 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 
 | Date | Session | Finding | Consequence |
 |---|---|---|---|
+| 2026-09-22 | S63 | **A bound on a worst case is a measurement of the machine, and this repository had already written that down before S63 made the same mistake.** The regression test for the sliced sleep asserted the **worst of eight** ticks against one millisecond; it passed on the developer's Mac at 128 µs and failed the first `release.yml` run at **15.5 ms** — a scheduler stall on a shared, virtualised GitHub runner. `tests/realtime.rs` carries the identical lesson from three earlier failures: *a bound on a tail stood at 5 ms for seven sessions, failed a documentation-only commit at 16 ms, was loosened to one whole tick period, and failed again at 210 ms.* The comment was there to be read and was not | The test asserts the **median of twenty-one** ticks instead, against `SLEEP_SLICE` rather than a number of its own — the claim is that the approach to the deadline is governed by one slice, so an error smaller than a slice is the claim holding. **The defect was systematic, so the statistic can be**: broken measured a 3.45 ms median on an *idle* machine, fixed measures 76 ns, and no single stall can move a median. The per-tick assertion that it never returns **early** stays, because that is correctness and no load excuses it. The general shape: **choose the statistic the defect has, not the one that sounds strictest** |
 | 2026-09-22 | S63 | **Tauri does not sign an executable it carried in as a *resource*, and `codesign --verify` does not notice.** Found by signing a bundle locally with the machine's Apple Development identity — which the session had not intended to do and which is the only reason this was caught. The `.app` and the `.dmg` came out signed and hardened; `prismd` inside `Contents/Resources/` came out `flags=0x20002(adhoc, linker-signed)`, which is what the linker leaves and not a signature by anybody. Notarisation rejects exactly that — *the binary is not signed with a valid Developer ID certificate* — so **the first real release would have failed at Apple's end**. Worse, the job's own verification step said *the engine inside the bundle is signed too* and was **wrong**: an ad-hoc binary is *valid on disk* and *satisfies its designated requirement*, so `--verify` passes on an engine nobody signed | The engine is signed **before** the bundler copies it (`--options runtime --timestamp`), which is the ordinary inside-out order — verified locally that the signature and the hardened runtime survive bundling. The verification now asks for the **authority and the flags** rather than validity, and fails on the word `adhoc`. The general shape: **`verify` answers *is this signature intact*, never *whose is it*** — a check that cannot tell an ad-hoc signature from yours is a check that passes on the failure it exists to catch. `docs/manual/apple_developer_signing.md` §7, §10 and two new rows in §11 |
 | 2026-09-22 | S63 | **A step inserted by matching text landed in the wrong job**, because `- name: Build the engine` is in both the Windows job and the macOS one and the first match is Windows'. `actionlint` caught it in one line — *property "signing" is not defined* — because the guard step it referred to exists only in the macOS job | The edit is scoped to the text after the `macos:` key and asserted to match exactly once. **`actionlint` and `shellcheck` are worth running over the workflows**, and especially over a job that has never executed: a fault in one would otherwise surface for the first time on a release tag. They also found `ls …/*.dmg \| head -1` handing an empty string onward where the Windows job beside it has said *no installer was produced* since S29 |
 | 2026-09-22 | S63 | **An intra-doc link is a platform-conditional dependency, and the host's own doc gate cannot see it.** `cargo doc -D warnings` fails on a link whose target does not exist, and a `#[cfg]`-gated item **does not exist** on the platforms it is gated out of. S63 wrote `[`VcpBackend::write`](crate::VcpBackend)` into the docs of `system_backend`, which is *not* gated, while `VcpBackend` is gated to Windows and macOS — so it resolved on the machine that wrote it and failed the Linux CI. A second one was caught by the same reading: `daemon_beside`'s doc linked to the macOS-only `BUNDLE_PAYLOAD`, which would have failed the **Windows** release job later | **A doc comment may only link to an item that exists everywhere the comment does**; where it does not, the item is named in backticks rather than linked. Both links are now plain code spans with the reason written beside them. `docs/manual/developer.en.md` §8 carries the rule and the cheap second check — `cargo doc --target aarch64-unknown-linux-gnu` over the platform-neutral crates, which needs no linker and takes seconds. The general shape is the session's own lesson turned on itself: **a second platform is a second observer, and that cuts both ways** — running every gate on one platform is running most of them once |

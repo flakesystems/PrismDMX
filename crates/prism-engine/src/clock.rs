@@ -215,7 +215,7 @@ impl Clock for ManualClock {
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use super::{Clock, ManualClock, SystemClock};
+    use super::{Clock, ManualClock, SLEEP_SLICE, SystemClock};
     use std::time::Duration;
 
     #[test]
@@ -272,11 +272,31 @@ mod tests {
     /// proportion to its length, so it woke up past the deadline and there was
     /// no margin left to spin through. See [`SystemClock`].
     ///
-    /// The bound is deliberately loose — **one whole millisecond**, against a
-    /// measured worst case of 128 µs — because this runs beside every other
-    /// test binary in the workspace and a tight percentile on a loaded machine
-    /// measures the machine. What it catches is the failure that was real: an
-    /// overshoot of *milliseconds*, every time, on an idle machine.
+    /// # Why this asserts the **median** and not the worst
+    ///
+    /// Because the first version asserted the worst of eight ticks against one
+    /// millisecond, and a GitHub macOS runner failed it at **15.5 ms** — a
+    /// scheduler stall on a shared, virtualised machine, which is a fact about
+    /// the runner and not about this code.
+    ///
+    /// `tests/realtime.rs` had already learnt exactly this, and wrote it down:
+    /// a bound on a tail *"stood at 5 ms for seven sessions, failed a
+    /// documentation-only commit at 16 ms, was loosened to one whole tick
+    /// period — and failed again two commits later at 210 ms"*. A maximum over
+    /// a handful of samples is whatever else the machine was doing.
+    ///
+    /// **The defect was systematic, so the statistic can be too.** The broken
+    /// version overshot by a median of 3.45 ms — *every tick, on an idle
+    /// machine* — and the fixed one by 76 ns. A median cleanly separates those
+    /// two and a single stall cannot move it. The bound is
+    /// [`SLEEP_SLICE`] rather than a number of its own: the whole claim is that
+    /// the approach to the deadline is governed by one **slice** instead of by
+    /// the whole remainder, so an error smaller than a slice is the claim
+    /// holding, and the 3.45 ms that failed is larger than one.
+    ///
+    /// The per-tick assertion that it never returns **early** stays, because
+    /// that one is correctness rather than timing and no amount of load can
+    /// excuse it.
     #[test]
     fn a_sleep_of_several_slices_still_wakes_on_time() {
         let clock = SystemClock::new();
@@ -284,17 +304,25 @@ mod tests {
         // length the real grid asks for.
         let period = Duration::from_micros(22_727);
 
-        let mut worst = Duration::ZERO;
-        for _ in 0..8 {
+        // An odd count so the median is a measured sample rather than a mean of
+        // two, and enough of them that one stall cannot reach the middle.
+        let mut overshoot = Vec::with_capacity(21);
+        for _ in 0..21 {
             let deadline = clock.now() + period;
             clock.sleep_until(deadline);
             let now = clock.now();
             assert!(now >= deadline, "it returned early");
-            worst = worst.max(now - deadline);
+            overshoot.push(now - deadline);
         }
+        overshoot.sort_unstable();
+        let median = overshoot[overshoot.len() / 2];
+
         assert!(
-            worst <= Duration::from_millis(1),
-            "the worst of eight ticks overshot by {worst:?}, which is the drift S63 removed"
+            median < SLEEP_SLICE,
+            "the median of twenty-one ticks overshot by {median:?}, which is not \
+             smaller than one {SLEEP_SLICE:?} slice — the drift S63 removed is back \
+             (worst was {:?}, which this deliberately does not judge)",
+            overshoot[overshoot.len() - 1]
         );
     }
 
@@ -303,7 +331,7 @@ mod tests {
     #[test]
     fn the_slice_bounds_one_sleep_and_not_the_whole_wait() {
         let clock = SystemClock::new();
-        let deadline = clock.now() + super::SLEEP_SLICE * 5;
+        let deadline = clock.now() + SLEEP_SLICE * 5;
         clock.sleep_until(deadline);
         assert!(clock.now() >= deadline);
     }
