@@ -1426,7 +1426,7 @@ impl FixtureLibrary {
 
     /// One profile by key, ready to embed into a show.
     ///
-    /// A GDTF profile is read back out of its file ([`Held`]) — a few
+    /// A GDTF profile is read back out of its file (`Held`) — a few
     /// milliseconds, once per patch rather than once per start — and the
     /// last few read are kept, so a patch window previewing on every
     /// keystroke reads the file once. `None` when there is no such key, or

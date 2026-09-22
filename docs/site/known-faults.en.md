@@ -179,6 +179,38 @@ appear that shifts parts of the UI.
 programmer into a cue or creating a new cue. This is redundant — cues are stored
 via the command line.
 
+## Found while testing the next release
+
+These concern features that are not in 0.9.2 yet and come with the next
+release. They are listed so that nobody testing a build of it is surprised.
+
+## B63 — the drawing of the desk in the Controls panel is wrong
+
+**Where:** Settings, Controls, the *The desk* view.
+**Severity:** annoying.
+
+**What happens.** The drawing of the Behringer X-Touch does not match the
+device. The key bindings themselves work; it is the picture that is off. It will
+be fixed in a session of its own.
+
+## B65 — a rig cannot be exported as MVR
+
+**Where:** Patch.
+**Severity:** annoying.
+
+**What happens.** A planner's `.mvr` can be imported, but a rig built or
+corrected at the desk cannot be written back out as one. Open question before it
+is built: fixtures from the Open Fixture Library have no GDTF file to put in the
+export, and they must not be lost on the way.
+
+## B66 — several functions sit on several keys
+
+**Where:** Settings, Controls.
+**Severity:** cosmetic.
+
+**What happens.** In the standard X-Touch layout some functions are on more than
+one key, which is confusing. Every key can be rebound in the Controls panel.
+
 ## Something else is wrong
 
 If you hit anything not on this page, that is worth reporting even if you are not

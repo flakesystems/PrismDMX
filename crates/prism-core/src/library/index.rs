@@ -4,7 +4,7 @@
 //! descriptions is most of a minute on a desk's processor. Almost none of them
 //! change between two starts. So after a read the library writes down, per
 //! file, what it got out of it — the menu entries and the two facts per mode a
-//! patch window shows ([`super::Held`]) — beside the file's length and time of
+//! patch window shows (`library::Held`) — beside the file's length and time of
 //! last change; the next start takes a file whose length and time are the same
 //! from here instead of parsing it. A file that changed, a new file, and every
 //! file after a change to the reader ([`VERSION`]) are parsed again.
