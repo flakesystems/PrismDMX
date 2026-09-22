@@ -75,10 +75,22 @@ workspace = true
 # to remember — S62, and `src/secrets.rs` says why a settings file is the wrong
 # place for a password.
 #
-# Windows only, and deliberately: a desk in a rack has no logged-in desktop
-# session to unlock a keyring, so on Linux and the Pi remembering is refused in
-# words rather than falling back to a file. `keyring`'s own platform stores are
-# target-gated, so the default `v1` feature here is the Windows one and nothing
-# else — and `v1` is not optional, the crate refuses to build without it.
+# Windows and macOS, and the pair is deliberate: both are machines a person is
+# logged in to, with a secret store the desktop session unlocks. On Linux and
+# the Pi remembering is still refused in words rather than falling back to a
+# file — a desk in a rack has no session to unlock a keyring with, and a
+# silent fallback would be the plaintext `src/secrets.rs` exists to avoid.
+#
+# `keyring`'s own platform stores are target-gated, so the default features
+# resolve to the Windows store here and nothing else — and `v1` is not
+# optional, the crate refuses to build without it.
 [target."cfg(windows)".dependencies]
 keyring = "4.2"
+
+# The same crate and the same `v1` API on macOS — **S63**. The Apple store is
+# *not* a default feature (the defaults are `v1`, the Windows store and the
+# Secret Service one), so it is asked for by name; with it, `keyring::Entry`
+# reaches the login keychain and `src/secrets.rs` needs one `#[cfg]` widened
+# rather than a second implementation.
+[target."cfg(target_os = \"macos\")".dependencies]
+keyring = { version = "4.2", features = ["apple-native-keyring-store"] }

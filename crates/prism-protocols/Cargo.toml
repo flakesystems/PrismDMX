@@ -20,8 +20,27 @@ prism-engine = { path = "../prism-engine" }
 #
 # `static` links FTDI's own D2XX library into the binary rather than depending
 # on whichever ftd2xx.dll a school's machine happens to have installed.
+#
+# **Windows only, and it stays that way** — S63. D2XX on macOS means unloading
+# Apple's own `AppleUSBFTDI` driver before the library can claim the device,
+# which is a kernel extension a school cannot be asked to touch and which would
+# take the virtual COM port away from every other program on the machine.
 [target.'cfg(windows)'.dependencies]
 libftd2xx = { version = "0.33", features = ["static"] }
+
+# **The serial port, on both platforms that have one** — S63.
+#
+# `serialport` is what the virtual COM port path (`vcp.rs`) is written against
+# and it is cross-platform already: `COM3` on Windows, `/dev/cu.usbserial-…` on
+# macOS, both reached through the same `set_break`/`clear_break` calls. So macOS
+# gains an access path by declaring a dependency it already had the code for,
+# rather than by a second implementation — see `system.rs`.
+#
+# Linux is deliberately **not** in this list. §7.1 gives it libftdi and not the
+# kernel's `ftdi_sio`, D10 has no machine to verify one on, and adding
+# `serialport` there would drag `libudev` into the ARM64 cross-check, which is
+# a C library that job must not need.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 serialport = "4.9"
 
 [target.'cfg(windows)'.dev-dependencies]

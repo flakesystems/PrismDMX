@@ -1738,6 +1738,82 @@ Zugangsdaten geht nur auf Windows. Beides steht mit Begründung in
 
 ---
 
+## S63 · `prism-protocols` + `prismd` + `prism-app` + `prism-engine` — Mac support, the cross-platform abstraction and Apple code signing
+**Size:** L · **Depends on:** S29 (the shell), S62 (the credential manager) · ✅ **Done 2026-09-22**
+
+**Goal:** make macOS a **second release target** — a signed, notarised `.dmg`
+beside the Windows installer — without touching the Windows build.
+
+**Numbered S63 and not S60.** The brief proposed S60; that number is row 25d,
+*an encoder may hold an executor of its own*, and a number is an identity
+(*Conventions*). S62 was the highest in use.
+
+**The premise this session had to change before it could write code.** §10.1
+recorded, in writing, that a macOS autostart written then would be *code nothing
+ever builds, which is the rot this section exists to prevent*. That argument is
+correct and is not waved away: **the CI job comes first and the platform code
+second**, and that order is now the rule in §10.1 rather than this session's
+habit.
+
+**The rule about `ci.yml` is stronger here, not weaker.** §7 keeps every push on
+Linux because runner minutes are billed by platform. A macOS minute costs **ten
+times** a Linux one where Windows costs twice, so the `macos` job belongs in
+`release.yml` and nowhere else. `ci.yml` was not modified.
+
+### Deliverables
+- **Audit, then add — never replace.** Every platform-specific arm gets a macOS
+  sibling beside the Windows one; no Windows-only logic is removed
+- **`prism-protocols`**: `serialport` becomes the macOS access path. Apple ships
+  the driver that publishes an FT232R, so the Windows *fallback* is the macOS
+  *default*; D2XX is not used, because it would first have to unload a kernel
+  extension a school cannot be asked to touch
+- **`prismd`**: `keyring`'s Apple store, behind one widened `#[cfg]`
+- **`prism-app`**: `autostart::macos`, one implementation of S29's `Entry` trait
+- `docs/manual/apple_developer_signing.md` — the certificate, the keychain, the
+  notarisation credentials, the Tauri configuration and the five secrets
+- A `macos-latest` job in **`release.yml` only**
+
+### Exit criteria
+- `cargo build --workspace` and `npm run build` succeed on macOS
+- Windows compilation preserved: no Windows-only logic removed without a `cfg`
+  sibling
+- The signing guide exists and covers certificate generation, keychain setup and
+  the Tauri/Actions configuration
+- `release.yml` has a macOS build-and-sign job reading GitHub Secrets;
+  **`ci.yml` is untouched**
+- The build is verified natively on the machine
+
+### What it found, and the part worth carrying
+Three of the four bugs had nothing to do with macOS; a second platform is a
+**second observer**, which is the argument §10.1 has always made and this is the
+first session to collect on it.
+
+- **The 44 Hz tick was waking late.** An operating system that batches timers
+  grants slack in proportion to the sleep asked for, so one long sleep is a
+  loose one. The tick sleeps in 2 ms slices now (`prism_engine::SLEEP_SLICE`)
+- **The tick allocated on a hot reconfiguration.** A `std::sync::Mutex` is a
+  word on Windows and Linux and a **heap-boxed `pthread_mutex_t` on first lock**
+  on macOS, and that first lock was on the tick thread. The locks are warmed in
+  the constructor
+- **The bundled shell could not find its engine.** An `.app` keeps its payload
+  in a *sibling* directory and both payload searches walked only up
+- **`release.yml`'s installer check named a file S61 had moved.** The next `v*`
+  tag would have failed on it
+
+**Neither engine fix is `#[cfg]`-gated and neither may become one** —
+`prism-engine` may contain no platform code at all. Both are portable
+improvements that a second platform merely made visible. Re-run the `loom`
+models, not only `cargo test`, if either is touched.
+
+### What stays open
+Nothing has been **signed** — there is no Developer ID certificate, which needs
+a membership the project has not bought — and no **DMX cable** has been driven
+on a Mac. Both are rows in `PROGRESS.md` §5 with the procedure and the specific
+risks. Nothing was verified on **Windows**: run `release.yml` by hand
+(`workflow_dispatch`) before merging.
+
+---
+
 # Phase 12 — Extended features, once the doors are open
 
 *Everything in Phase 9 that has not run: **S30** 3D viewer, **S31** Web Remote, **S32** PSN / OSC, **S47** timecode, **S50** macros. They are not renumbered — the numbers are identity — and they are not reordered among themselves. What moved is the schedule: the open beta comes first, and what an open beta asks for should choose between these five better than this document can.*
@@ -1836,5 +1912,6 @@ is, is the order the work was planned to make sense in.
 | 25b1 | **S61** domain/core/`prismd`/`ui`/`tools` — the fixture library is GDTF | **Done 2026-09-21** — see `PROGRESS.md` §2.57, and **built in parallel with S59 on another machine**; the two share no file. Asked for by the owner **in preparation for S30**, and it is the right order: the viewer draws a device, and until this session the library described only channels. GDTF is where a gobo's picture, a fixture's size and a beam's place come from, and the Open Fixture Library's format stays for the profiles a venue writes by hand. **Numbered S61 and not S60**: S60 was already the encoder-executor session below, and a number is an identity |
 | 25c | **S30** 3D viewer | **Done 2026-09-21** — see `PROGRESS.md` §2.59. The last thing the release waited for: fixtures are placed from the viewer (`PlaceFixtures`, one Oops, no repatch), the beams come off the cable, and the DMX Sheet keeps its budget with the viewer open on 64 universes. The first of Phase 9's five to run. **0.9.3 can be tagged** once the owner's rig test (`docs/RELEASE_TEST_0.9.3.md`, now with chapter 2a) comes back clean |
 | 25c1 | **S62** core/`prismd`/`ui` — wie eine Bibliothek auf ein Pult kommt | ✅ **Fertig 2026-09-21** — siehe `PROGRESS.md` §2.58. Fällt aus S61: das Pult liest GDTF, aber GDTF Share verlangt ein Konto und verbietet die Weitergabe (`docs/FIXTURE_LIBRARY.md` §2, mit Quellen). MVR-Import **mit Patch**, `.gdtf`-Import über den Dateidialog und der optionale In-App-Login; OFL bleibt die Grundausstattung. **MVR ist der wichtigste Teil** — die Rig-Datei vom Planer löst den realen Fall ohne Konto, ohne Netz und ohne Lizenzfrage. Offen: der echte Dienst ist ungetestet, und das Merken der Zugangsdaten geht nur auf Windows |
+| 25c2 | **S63** protocols/`prismd`/`prism-app`/`prism-engine` — Mac support, the cross-platform abstraction and Apple code signing | ✅ **Done 2026-09-22** — see `PROGRESS.md` §2.61. Asked for on a physical MacBook and run entirely there. Not a feature: it is the second release target, and what made it cheap is §10.1 — `cargo build --workspace` **already succeeded** on macOS before a line changed, so the work was a cable, an autostart and a keychain rather than a port. Every change is a macOS arm **beside** the Windows one; nothing Windows-only was removed. The `macos` job is in `release.yml` and **must never be copied into `ci.yml`**: a macOS runner minute costs ten times a Linux one, which makes §7 stronger here rather than weaker. **Numbered S63 and not S60**, which the brief proposed: S60 is row 25d below and a number is an identity. It found four bugs, and three had nothing to do with macOS — two latent ones in `prism-engine` (a tick waking late, a tick allocating) and an installer check naming a file S61 had moved, which **would have failed the next tag**. Open: nothing has been signed, because there is no Developer ID certificate, and no cable has been driven on a Mac |
 | 25d | **S60** core/`prismd`/`ui` — an encoder may hold an executor of its own | After **S30**, and deliberately **outside the coming release** — the owner's decision of 2026-09-20. It carries the encoder-in-crossfade fault of the same day, which is not in `docs/ISSUES.md` because it has not been finally verified |
 | 26 | **S31** Web Remote · **S32** PSN / OSC · **S47** timecode · **S50** macros | The rest of the extended features, in whichever order the venue asks for them — and after the open beta, so that *the venue* is a larger set of people than the author. **S30 moved ahead of them** (row 25c) |

@@ -160,7 +160,7 @@ mod tick;
 mod triple_buffer;
 
 pub use body::{MergeBody, NO_PLAYBACKS};
-pub use clock::{Clock, ManualClock, SystemClock};
+pub use clock::{Clock, ManualClock, SLEEP_SLICE, SystemClock};
 pub use command::TickCommand;
 pub use cue::{
     CueError, CuePlan, CueSlot, CueValue, MAX_CUE_PARTS, MAX_CUES, SequencePlan, TrackPoint,

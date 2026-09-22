@@ -276,7 +276,7 @@ impl core::fmt::Debug for Enrolment {
 
 impl Enrolment {
     fn new(layout: Arc<FrameLayout>) -> Self {
-        Self {
+        let enrolment = Self {
             layout,
             pending: AtomicBool::new(false),
             changes: Mutex::new(Pending::default()),
@@ -289,7 +289,48 @@ impl Enrolment {
             retired: Mutex::new(Vec::with_capacity(MAX_SUBSCRIBERS)),
             live: AtomicUsize::new(0),
             next_id: AtomicU64::new(1),
-        }
+        };
+        enrolment.warm_locks();
+        enrolment
+    }
+
+    /// Takes and releases both locks once, here, where allocating is allowed.
+    ///
+    /// # Why this exists — **S63**, and it is the same argument as the
+    /// `Vec::with_capacity` above
+    ///
+    /// **A `std::sync::Mutex` does not cost the same on every platform.** On
+    /// Windows it is an `SRWLOCK` and on Linux a futex: a word, initialised by
+    /// being written, allocating nothing ever. On macOS — and on every Unix
+    /// where the standard library falls back to its pthread backend — it is a
+    /// `pthread_mutex_t`, which may not be moved after it is first used, so the
+    /// standard library **boxes it on the heap the first time the mutex is
+    /// locked**.
+    ///
+    /// First time, and lazily. So the allocation happens inside whichever call
+    /// touches the lock first — and for `retired` that call is
+    /// [`Enrolment::retire`], which runs **on the tick thread**, on the first
+    /// tick that takes a subscriber on or gives one up. That is an allocation
+    /// inside a tick, which `ARCHITECTURE_SPEC.md` §3.1 forbids, and it happens
+    /// at the least convenient moment there is: hot reconfiguration, with an
+    /// output being added to a running show.
+    ///
+    /// `tests/tick_allocations.rs` is what found it — the target measured one
+    /// allocator call on macOS and none on Windows, which is precisely this and
+    /// is why that target exists.
+    ///
+    /// It is deliberately **not** `#[cfg(target_os = …)]`: this crate is
+    /// platform-neutral by rule (§10.1), the call is two uncontended locks at
+    /// construction time, and on a platform whose mutex needs no warming it
+    /// costs two atomic operations once and buys the same guarantee.
+    fn warm_locks(&self) {
+        // `try_lock` rather than `lock`: nothing else can hold either of these
+        // yet, and a constructor that could block is a worse thing than a warm
+        // lock is a good one. The result is discarded because what matters is
+        // that the standard library has done its lazy initialisation, not
+        // whether this attempt won.
+        drop(self.changes.try_lock());
+        drop(self.retired.try_lock());
     }
 
     /// Takes a place and a number without asking whether there is room.
@@ -813,6 +854,36 @@ mod tests {
         // the whole reason `retired` exists.
         assert_eq!(enrolment.collect(), 1);
         assert_eq!(enrolment.collect(), 0);
+    }
+
+    /// **Both locks are usable before the tick ever reaches one** — S63.
+    ///
+    /// The unit-level half of what `tests/tick_allocations.rs` measures. A
+    /// `std::sync::Mutex` on a pthread platform boxes itself on the heap the
+    /// first time it is locked, and for `retired` that first time would
+    /// otherwise be [`Enrolment::retire`], on the tick thread. See
+    /// [`Enrolment::warm_locks`].
+    ///
+    /// This cannot assert *no allocation* — that needs the global allocator the
+    /// integration target installs. What it asserts is the property that makes
+    /// the allocation impossible: a freshly built enrolment's locks are already
+    /// live, so nothing is left for a later caller to initialise.
+    #[test]
+    fn a_new_enrolment_has_both_of_its_locks_already_warmed() {
+        let publisher = FramePublisher::new(layout(1));
+        let enrolment = publisher.enrolment();
+
+        // Uncontended, on the thread that built it: both must be grantable
+        // immediately, which is only true if the standard library has finished
+        // with them.
+        assert!(
+            enrolment.inner.changes.try_lock().is_ok(),
+            "the change list was not warmed"
+        );
+        assert!(
+            enrolment.inner.retired.try_lock().is_ok(),
+            "the retirement slot was not warmed"
+        );
     }
 
     /// The awkward interleaving: asked for and given up again before the tick

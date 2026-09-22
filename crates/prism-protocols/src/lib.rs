@@ -10,7 +10,8 @@
 //!
 //! This is one of only two crates permitted to contain `#[cfg(target_os = ...)]`
 //! (see `ARCHITECTURE_SPEC.md` section 10.1) - the FTDI backend differs by
-//! platform: D2XX on Windows, libftdi on Linux.
+//! platform: D2XX on Windows with the virtual COM port behind it, the virtual
+//! COM port alone on macOS (**S63**), and libftdi on Linux.
 //!
 //! Sessions **S7-S10**.
 //!
@@ -101,7 +102,9 @@ mod runner;
 mod sacn;
 mod system;
 mod udp;
-#[cfg(windows)]
+// The virtual COM port path: the Windows fallback, and on macOS the only one
+// there is — S63. See `system.rs` for why macOS has no D2XX path.
+#[cfg(any(windows, target_os = "macos"))]
 mod vcp;
 
 pub use artnet::{
@@ -146,5 +149,5 @@ pub use udp::{
     MockUdp, MockUdpHandle, MockUdpNode, MockUdpNodeHandle, SystemUdp, SystemUdpNode, UdpError,
     UdpNode, UdpSender, classify,
 };
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 pub use vcp::VcpBackend;

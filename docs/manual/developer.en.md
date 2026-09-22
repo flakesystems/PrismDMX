@@ -636,12 +636,25 @@ info file would let a stale error through.
 **Where CI runs what — since 2026-09-18, for cost.** Windows runner minutes cost
 twice as much as Linux ones, and the two Windows jobs ran about twenty minutes on
 every push. So every push and pull request runs **Linux only** (`ci.yml`), and the
-**complete** pass — the Windows half and the installer — runs in `release.yml`: on
-a `v*` tag, and by hand with `workflow_dispatch` (which builds and publishes
-nothing) when a change needs the Windows half before a release. `release.yml`
-calls `ci.yml` first, so a release is gated on both halves. Do not add a Windows
-or a heavy job to `ci.yml`: a check belongs on Linux if Linux can answer it, and
-in the release pass if only Windows can.
+**complete** pass — the Windows half, **the macOS half since S63**, and both
+installers — runs in `release.yml`: on a `v*` tag, and by hand with
+`workflow_dispatch` (which builds and publishes nothing) when a change needs one
+of them before a release. `release.yml` calls `ci.yml` first, so a release is
+gated on every half. Do not add a Windows **or a macOS** job to `ci.yml`: a
+check belongs on Linux if Linux can answer it, and in the release pass if only
+another platform can. macOS is the strongest case of the rule rather than an
+exception to it — a macOS runner minute is billed at **ten times** a Linux one.
+
+**If you are developing on a Mac**, the block above is the whole local suite and
+it runs unchanged; `prism-app` builds here as it does on Windows, so your
+`cargo clippy --workspace --all-targets` covers the shell where a Linux one
+cannot. Two of the tests reach the operating system and are worth knowing about
+before they surprise you: `prismd`'s `the_macos_login_keychain_…` writes to and
+deletes from your **login keychain** — under a service name of its own, never
+the one a real remembered account uses — and `prism_app::autostart::macos`
+writes launch agents into a temporary directory and never into
+`~/Library/LaunchAgents`. Signing is `docs/manual/apple_developer_signing.md`
+and is not part of any gate.
 
 On every push:
 
@@ -661,6 +674,7 @@ Only in the release pass (`release.yml`):
 |---|---|
 | **Linux gates** | Every job above, called from `ci.yml`, so a release cannot be cut from a commit whose Linux half is red |
 | **Windows — full pass and installer** | The release target: format, clippy and `cargo doc` over the **whole** workspace including the shell, every test including the corpus on a Windows checkout, the interface's tests, and then the installer — which it also *inspects*, because a bundler given a configuration with no payload exits zero happily. An installer that only ever builds on one person's machine is a file, not a release |
+| **macOS — full pass, bundle and signature** *(S63)* | The same pass on the second release target, and the only job that produces a **signed** artefact. It runs the whole workspace's tests on a platform with real `#[cfg(target_os = "macos")]` code in it — the FTDI access path, the login keychain, the LaunchAgent — then builds the `.app` and `.dmg`, inspects the bundle the way the Windows job inspects the installer, and **verifies the signature rather than assuming it**: a run that has a certificate and silently signed nothing is worse than one with no certificate, because the artefact looks finished. With no Apple secrets configured it still builds, unsigned, and says so. See `docs/manual/apple_developer_signing.md` |
 
 The doc gate is worth a note: `cargo doc` is run with warnings denied, so a
 broken intra-doc link fails the build. The crate documentation is a large part

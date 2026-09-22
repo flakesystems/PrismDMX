@@ -15,13 +15,21 @@
 //!
 //! # Platforms
 //!
-//! Windows has a credential manager and this uses it. **Linux and the
-//! Raspberry Pi do not, here**: a desk in a rack has no logged-in desktop
-//! session to unlock a keyring, and a store that silently fell back to a file
-//! would be the plaintext this module exists to avoid. So on those platforms
-//! remembering is refused, in words, and the operator types their password
-//! when they update — which still works. `docs/FIXTURE_LIBRARY.md` §3 carries
-//! that as the open half.
+//! Windows has a credential manager and this uses it. **macOS has the login
+//! keychain and this uses that** — S63, and it is the same code: `keyring`
+//! offers one API over both stores, so the platform split here is a `#[cfg]`
+//! on a dependency rather than a second implementation of anything.
+//!
+//! **Linux and the Raspberry Pi still have none, here**: a desk in a rack has
+//! no logged-in desktop session to unlock a keyring, and a store that silently
+//! fell back to a file would be the plaintext this module exists to avoid. So
+//! on those platforms remembering is refused, in words, and the operator types
+//! their password when they update — which still works.
+//! `docs/FIXTURE_LIBRARY.md` §3 carries that as the open half.
+//!
+//! The line is therefore **not** Windows against the rest; it is *a machine
+//! somebody is logged in to* against *a machine in a rack*, which is the
+//! distinction that was always meant and is now the one the `#[cfg]` spells.
 //!
 //! # The seam
 //!
@@ -82,32 +90,37 @@ pub trait Store {
 /// What the store is called, so an operator can find it in their own
 /// credential manager and take it out by hand.
 ///
-/// Windows-only because the store is: on a platform with no credential manager
+/// Defined only where the store is: on a platform with no credential manager
 /// there is no entry to name.
-#[cfg(all(windows, not(test)))]
+#[cfg(all(any(windows, target_os = "macos"), not(test)))]
 const SERVICE: &str = "PrismDMX — GDTF Share";
 
 /// The same, for this crate's own tests — **a name of its own**, so running the
 /// suite on an operator's machine can never overwrite or delete the account
 /// they asked this desk to remember.
-#[cfg(all(windows, test))]
+#[cfg(all(any(windows, target_os = "macos"), test))]
 const SERVICE: &str = "PrismDMX — GDTF Share (test)";
 
 /// The entry's user field. The account name is the **secret**'s partner here,
 /// so the slot itself is named for what it is rather than for who owns it.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 const ENTRY: &str = "gdtf-share-account";
 
 /// The operating system's own secret store.
 ///
-/// The one part of this module no test covers, for the reason the module
-/// documentation gives. On Windows it is the credential manager; everywhere
-/// else every call answers [`SecretError::Unsupported`] and [`Store::recall`]
-/// answers `None`.
+/// On Windows it is the credential manager and on macOS the login keychain
+/// (S63); on Linux and the Pi every call answers [`SecretError::Unsupported`]
+/// and [`Store::recall`] answers `None`.
+///
+/// Both real stores are exercised by a test of their own — `cmdkey` on
+/// Windows, `security find-generic-password` on macOS — against a service name
+/// that is not the operator's. The module documentation used to call this the
+/// one part no test covered; since S62's Windows review and S63 that is no
+/// longer true on either platform that has a store.
 #[derive(Debug, Default)]
 pub struct Keychain;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 impl Store for Keychain {
     fn remember(&mut self, user: &str, password: &str) -> Result<(), SecretError> {
         // The user name travels with the password, because the credential
@@ -144,7 +157,7 @@ impl Store for Keychain {
 /// credential store could not be initialised at all, which is *this desk
 /// cannot keep a password here* and not *the store said no*. An operator told
 /// the wrong one of those would go looking in the wrong place.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn from_keyring(error: keyring::Error) -> SecretError {
     match error {
         keyring::Error::NoDefaultStore => SecretError::Unsupported,
@@ -152,7 +165,7 @@ fn from_keyring(error: keyring::Error) -> SecretError {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 impl Store for Keychain {
     fn remember(&mut self, _user: &str, _password: &str) -> Result<(), SecretError> {
         Err(SecretError::Unsupported)
@@ -252,7 +265,7 @@ mod tests {
     /// remembered account, which is a fact rather than a fault, and a caller
     /// that treated it as one would put an error in front of an operator every
     /// time they opened the panel.
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "macos")))]
     #[test]
     fn a_platform_without_a_store_refuses_to_remember_and_recalls_nothing() {
         let mut store = Keychain;
@@ -335,6 +348,79 @@ Zeile & €"
         Keychain.forget().expect("it is taken out");
         assert_eq!(Keychain.recall(), None, "forgotten is gone");
         assert!(!listed(), "and the credential manager no longer lists it");
+        Keychain.forget().expect("forgetting twice is not an error");
+    }
+
+    /// **The macOS login keychain, for real** — S63, and the same test the
+    /// Windows one above is, one platform along.
+    ///
+    /// It is written out rather than shared with it because the two differ in
+    /// the only part that matters: what an operator would type to find the
+    /// entry by hand. `security find-generic-password` is macOS's `cmdkey`, and
+    /// asking it is what makes good on the module's promise that a remembered
+    /// account can be taken out without this program's help.
+    ///
+    /// Every step goes through a **fresh** [`Keychain`], so what is asserted is
+    /// that the account is in the operating system's store and not in a value
+    /// this process happens to hold. It uses the test service name, never the
+    /// operator's (see `SERVICE`).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_macos_login_keychain_keeps_forgets_and_lists_the_account() {
+        let listed = || {
+            // `-s` is the service and `-a` the account, which are the two
+            // fields `keyring` writes. Nothing is printed: the exit status is
+            // the whole answer, and `-w` would put the password on stdout.
+            std::process::Command::new("security")
+                .args([
+                    "find-generic-password",
+                    "-s",
+                    super::SERVICE,
+                    "-a",
+                    super::ENTRY,
+                ])
+                .output()
+                .expect("`security` is part of macOS")
+                .status
+                .success()
+        };
+
+        Keychain.forget().expect("a clean start");
+        assert_eq!(Keychain.recall(), None, "nothing is kept to begin with");
+
+        // A password with the characters a real one has: spaces, umlauts, and
+        // the separator this module writes between user and password.
+        Keychain
+            .remember(
+                "operator@venue.example",
+                "Pässwort mit
+Zeile & €",
+            )
+            .expect("the login keychain keeps it");
+        assert_eq!(
+            Keychain.recall(),
+            Some((
+                "operator@venue.example".to_owned(),
+                "Pässwort mit
+Zeile & €"
+                    .to_owned()
+            )),
+            "a second handle reads back what the first wrote"
+        );
+        assert!(listed(), "the login keychain lists the entry");
+
+        // Remembering again replaces rather than adds a second entry.
+        Keychain
+            .remember("operator@venue.example", "neu")
+            .expect("it replaces");
+        assert_eq!(
+            Keychain.recall().map(|(_, password)| password).as_deref(),
+            Some("neu")
+        );
+
+        Keychain.forget().expect("it is taken out");
+        assert_eq!(Keychain.recall(), None, "forgotten is gone");
+        assert!(!listed(), "and the login keychain no longer lists it");
         Keychain.forget().expect("forgetting twice is not an error");
     }
 }

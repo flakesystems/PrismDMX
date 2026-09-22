@@ -305,11 +305,11 @@ second list.
 
 Three levels, and the middle one is what you want in a school:
 
-| Level | Windows | Rights |
-|---|---|---|
-| **Default** | The window starts `prismd` as a child and leaves it running when it closes | none |
-| **Autostart** | A value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | **none** |
-| **Permanent** | A Windows service | administrator |
+| Level | Windows | macOS | Rights |
+|---|---|---|---|
+| **Default** | The window starts `prismd` as a child and leaves it running when it closes | the same | none |
+| **Autostart** | A value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | a **LaunchAgent** at `~/Library/LaunchAgents/de.prismdmx.desk.plist` | **none** |
+| **Permanent** | A Windows service | a LaunchDaemon under `/Library` | administrator |
 
 The checkbox is in *Settings → This machine*. It starts the desk into the
 notification area at logon.
@@ -320,10 +320,19 @@ deleted by hand, an installation that moved, and a switch thrown somewhere else.
 Delete the registry value by hand and open the window again: the line says it was
 removed outside the program.
 
-**Autostart exists only on Windows.** The setting exists everywhere, the entry is
-only written there. The reason is honest: Windows is the only release target, no
-CI job builds the shell on Linux or macOS, and a Linux autostart would be code
-nobody builds.
+**Autostart is written on Windows and on macOS; on Linux it is not.** The setting
+exists everywhere and the switch is the same switch. The reason for the gap is
+the honest one: no CI job builds the shell on Linux, so a Linux autostart would
+be code nobody builds. macOS was in that sentence until S63 and is not any more,
+because the release pass builds and tests the shell on a Mac now.
+
+**On macOS the entry is a file, which means you can read it.**
+`~/Library/LaunchAgents/de.prismdmx.desk.plist` is plain XML naming the program
+and the `--hidden` flag that starts it into the menu bar. Delete it by hand and
+open the window again: the line under the checkbox says it was removed outside
+the program, exactly as it does on Windows. It carries **no `KeepAlive`** — the
+desk is a program a person quits, and one that came back the moment they did
+would be one that cannot be closed.
 
 ---
 

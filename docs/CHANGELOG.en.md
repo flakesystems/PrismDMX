@@ -91,6 +91,30 @@ it points. That is what the 3D viewer needs, which is why this comes before it.
 - The desk says at start-up how many profiles it offers and **how many of them
   are GDTF** — and says so separately when the installed library has none yet.
 
+### PrismDMX runs on the Mac (S63)
+
+**The desk builds, runs and ships on macOS** — as a signed `.dmg` beside the
+Windows installer. Nothing about Windows changed: every platform-specific place
+gained a macOS branch **beside** the Windows one, and none was replaced.
+
+- **Open DMX USB works on a Mac.** An FT232R appears there as a serial port on
+  its own, with no driver to install — plugging it in is the whole setup.
+  (Windows still prefers D2XX.)
+- **Autostart on a Mac**: the box in *Settings → This machine* writes a
+  **LaunchAgent**, where Windows writes a registry value. No administrator
+  rights, and the line underneath still says what the machine actually has.
+- **A Mac remembers the GDTF Share account in the login keychain**, as Windows
+  remembers it in the credential manager. Never in a settings file.
+- **The frame rate on a Mac is as steady as it is on Windows.** Porting turned
+  up that macOS grants a long sleep more slack than a short one, so the 44 Hz
+  tick was waking milliseconds late. The tick now sleeps in short slices;
+  measured, the median lateness fell from 2.5 ms to under a microsecond. **That
+  holds on every platform.**
+
+The `.dmg` is notarised by Apple: it opens with no right-click and no warning.
+
+---
+
 ### Four ways to fill the library (S62)
 
 **A GDTF no longer has to be put into a folder by hand.** The Patch window has

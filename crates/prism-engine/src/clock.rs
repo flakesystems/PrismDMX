@@ -31,10 +31,56 @@ pub trait Clock {
 /// millisecond before the deadline, then spin. The sleep gives the CPU back for
 /// almost the whole period; the spin covers the part no operating system
 /// schedules accurately.
+///
+/// # The sleep is taken in slices, and **S63** is why
+///
+/// One `thread::sleep` for the whole remainder is what this did until S63, and
+/// on macOS it missed every deadline by about three milliseconds. The cause is
+/// **timer slack**: an operating system that is allowed to batch timers to save
+/// power grants a sleeper an error budget *proportional to what it asked for*,
+/// so a long sleep is a loose one. Measured on an Apple Silicon Mac, with the
+/// median overshoot of one `thread::sleep`:
+///
+/// | asked for | woke up late by |
+/// |---|---|
+/// | 1 ms | 260 µs |
+/// | 5 ms | 1.26 ms |
+/// | 21 ms | **3.45 ms** |
+///
+/// A 44 Hz tick sleeps about 21.7 ms, so it woke up **past** the deadline it
+/// meant to spin up to, and [`SystemClock::spin_margin`] bought nothing: there
+/// was no margin left to spin through. The median jitter of the whole grid was
+/// 2.5 ms against a 1 ms budget.
+///
+/// So the remainder is slept in slices of at most [`SLEEP_SLICE`], with the
+/// time left recomputed against the deadline after each one. Every slice is
+/// short, so every slice's slack is small, and a slice that overshoots is
+/// absorbed by the next one being shorter rather than accumulating. On the same
+/// machine that measured 2.5 ms, the median became **76 ns** and the worst of
+/// 132 ticks 128 µs.
+///
+/// **It is not `#[cfg(target_os = "macos")]` and must not become one.** This
+/// crate is platform-neutral by rule (`ARCHITECTURE_SPEC.md` §10.1), and the
+/// change needs no platform knowledge: proportional timer slack is what
+/// Windows' coarse timer and Linux's `timer_slack_ns` both do, in their own
+/// sizes. Asking for a short sleep repeatedly is the portable way to say *wake
+/// me accurately*, and a platform with an exact timer loses nothing by it —
+/// the loop simply runs its slices and stops.
 pub struct SystemClock {
     origin: Instant,
     spin_margin: Duration,
 }
+
+/// The longest single sleep [`SystemClock::sleep_until`] will ask for.
+///
+/// Two milliseconds, and the number is a measurement rather than a taste. It is
+/// short enough that the operating system's proportional slack (see
+/// [`SystemClock`]) stays well under the spin margin that follows it, and long
+/// enough that a 44 Hz tick costs about eleven `sleep` calls rather than
+/// twenty-two. One and four milliseconds were measured either side of it: one
+/// is no more accurate and twice the calls, four lets the worst case out to
+/// 706 µs.
+pub const SLEEP_SLICE: Duration = Duration::from_millis(2);
 
 impl SystemClock {
     /// A clock with the specified one-millisecond spin margin.
@@ -74,12 +120,21 @@ impl Clock for SystemClock {
         self.origin.elapsed()
     }
 
+    /// Sleeps in slices, then spins — see [`SystemClock`] for why the first
+    /// half is a loop rather than one call.
+    ///
+    /// It never returns before `deadline`, which is the property everything
+    /// above it relies on and the one the tests hold.
     fn sleep_until(&self, deadline: Duration) {
-        let Some(remaining) = deadline.checked_sub(self.now()) else {
-            return;
-        };
-        if let Some(coarse) = remaining.checked_sub(self.spin_margin) {
-            thread::sleep(coarse);
+        // Recomputed against the deadline every time round, so a slice that
+        // overshoots shortens the next one instead of pushing the total out.
+        // This is the same absolute-deadline argument §3.1 makes about the
+        // tick itself, one level down.
+        while let Some(remaining) = deadline.checked_sub(self.now()) {
+            let Some(coarse) = remaining.checked_sub(self.spin_margin) else {
+                break;
+            };
+            thread::sleep(coarse.min(SLEEP_SLICE));
         }
         while self.now() < deadline {
             hint::spin_loop();
@@ -206,6 +261,49 @@ mod tests {
     fn a_system_clock_does_not_return_before_the_deadline() {
         let clock = SystemClock::new();
         let deadline = clock.now() + Duration::from_millis(5);
+        clock.sleep_until(deadline);
+        assert!(clock.now() >= deadline);
+    }
+
+    /// **A sleep longer than one slice still lands on the deadline** — S63.
+    ///
+    /// The regression this guards is the one that made the macOS tick drift:
+    /// a single `thread::sleep` for a whole tick period is granted slack in
+    /// proportion to its length, so it woke up past the deadline and there was
+    /// no margin left to spin through. See [`SystemClock`].
+    ///
+    /// The bound is deliberately loose — **one whole millisecond**, against a
+    /// measured worst case of 128 µs — because this runs beside every other
+    /// test binary in the workspace and a tight percentile on a loaded machine
+    /// measures the machine. What it catches is the failure that was real: an
+    /// overshoot of *milliseconds*, every time, on an idle machine.
+    #[test]
+    fn a_sleep_of_several_slices_still_wakes_on_time() {
+        let clock = SystemClock::new();
+        // A whole 44 Hz tick period, which is ten times `SLEEP_SLICE` and the
+        // length the real grid asks for.
+        let period = Duration::from_micros(22_727);
+
+        let mut worst = Duration::ZERO;
+        for _ in 0..8 {
+            let deadline = clock.now() + period;
+            clock.sleep_until(deadline);
+            let now = clock.now();
+            assert!(now >= deadline, "it returned early");
+            worst = worst.max(now - deadline);
+        }
+        assert!(
+            worst <= Duration::from_millis(1),
+            "the worst of eight ticks overshot by {worst:?}, which is the drift S63 removed"
+        );
+    }
+
+    /// The slice is an upper bound on one `sleep`, not on the wait: a deadline
+    /// far away is still waited for in full.
+    #[test]
+    fn the_slice_bounds_one_sleep_and_not_the_whole_wait() {
+        let clock = SystemClock::new();
+        let deadline = clock.now() + super::SLEEP_SLICE * 5;
         clock.sleep_until(deadline);
         assert!(clock.now() >= deadline);
     }

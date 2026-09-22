@@ -30,6 +30,17 @@ pub const DAEMON_EXECUTABLE: &str = "prismd.exe";
 #[cfg(not(windows))]
 pub const DAEMON_EXECUTABLE: &str = "prismd";
 
+/// The directory a macOS application bundle keeps its payload in, relative to
+/// the directory the executable is in — **S63**.
+///
+/// An `.app` is not a flat installation directory. The program is at
+/// `PrismDMX.app/Contents/MacOS/PrismDMX` and everything it ships with is at
+/// `PrismDMX.app/Contents/Resources/`, which is a **sibling** of `MacOS/` and
+/// not an ancestor of the executable. A search that only walks *up* therefore
+/// never reaches it — see [`daemon_beside`].
+#[cfg(target_os = "macos")]
+pub const BUNDLE_PAYLOAD: &str = "Resources";
+
 /// Where the daemon is, given where this executable is.
 ///
 /// Beside it first, which is where an installed desk has it — the installer puts
@@ -41,6 +52,26 @@ pub const DAEMON_EXECUTABLE: &str = "prismd";
 /// The same shape as `installed_library_dir`, deliberately: two searches with
 /// two different ideas of where an installation is would be two ways for a desk
 /// to come up half-configured.
+///
+/// # On macOS it also looks sideways, and it has to — **S63**
+///
+/// Walking up from `PrismDMX.app/Contents/MacOS/` gives `Contents/`, then
+/// `PrismDMX.app/`, and the engine is in none of them: it is in
+/// `Contents/Resources/`, a sibling. The first bundle this session built
+/// launched, found no daemon and said so — which is the shell behaving
+/// correctly about a desk that could not work.
+///
+/// So each level of the walk is asked twice, once for the directory itself and
+/// once for a [`BUNDLE_PAYLOAD`] directory inside it. `Contents/` is the level
+/// that answers. The walk is unchanged otherwise, so a `cargo run` inside a
+/// checkout still finds `target/debug/prismd` exactly as it did.
+///
+/// **The daemon's own search needs nothing**: `prismd` lives *in*
+/// `Contents/Resources/` with `profiles/` beside it, so
+/// `prismd::paths::installed_library_dir` finds the library at the first level
+/// it tries. That is why this is the only function S63 had to change, and it is
+/// also why `prismd` keeps its rule of containing no platform code at all
+/// (`ARCHITECTURE_SPEC.md` §10.1) — this crate is one of the four that may.
 #[must_use]
 pub fn daemon_beside(executable: &Path) -> Option<PathBuf> {
     let mut directory = executable.parent()?;
@@ -48,6 +79,13 @@ pub fn daemon_beside(executable: &Path) -> Option<PathBuf> {
         let candidate = directory.join(DAEMON_EXECUTABLE);
         if candidate.is_file() {
             return Some(candidate);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let inside = directory.join(BUNDLE_PAYLOAD).join(DAEMON_EXECUTABLE);
+            if inside.is_file() {
+                return Some(inside);
+            }
         }
         directory = directory.parent()?;
     }
@@ -116,6 +154,48 @@ mod tests {
             Some(above),
             "a shell in a subdirectory of the installation still finds the daemon"
         );
+    }
+
+    /// **The real `.app` layout** — S63, and the bug it is a regression test
+    /// for was found by launching one.
+    ///
+    /// `PrismDMX.app/Contents/MacOS/PrismDMX` with the engine at
+    /// `PrismDMX.app/Contents/Resources/prismd`: a sibling of the executable's
+    /// directory, not an ancestor, so the walk up the tree reaches
+    /// `Contents/`, then `PrismDMX.app/`, and finds nothing in either. The
+    /// first bundle this session built launched and reported no daemon.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_daemon_is_found_in_a_mac_application_bundle() {
+        let dir = tempfile::tempdir().unwrap();
+        let contents = dir.path().join("PrismDMX.app").join("Contents");
+        let macos = contents.join("MacOS");
+        let resources = contents.join("Resources");
+        std::fs::create_dir_all(&macos).unwrap();
+        std::fs::create_dir_all(&resources).unwrap();
+
+        let engine = resources.join(DAEMON_EXECUTABLE);
+        std::fs::write(&engine, b"not really a daemon").unwrap();
+
+        assert_eq!(
+            daemon_beside(&macos.join("PrismDMX")),
+            Some(engine),
+            "a bundled shell has to find the engine in Contents/Resources"
+        );
+    }
+
+    /// And a bundle with nothing in `Resources/` still answers `None` rather
+    /// than a path that is not there — the sideways look is a second place to
+    /// search, not a second answer.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_bundle_with_no_engine_in_it_finds_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let contents = dir.path().join("PrismDMX.app").join("Contents");
+        let macos = contents.join("MacOS");
+        std::fs::create_dir_all(&macos).unwrap();
+        std::fs::create_dir_all(contents.join("Resources")).unwrap();
+        assert_eq!(daemon_beside(&macos.join("PrismDMX")), None);
     }
 
     #[test]

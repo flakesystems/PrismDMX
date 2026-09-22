@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "resources": {
+      "../../target/release/prismd": "prismd",
+      "../../profiles/surface/xtouch.json": "profiles/surface/xtouch.json",
+      "../../profiles/fixtures/": "profiles/fixtures/"
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "entitlements": "entitlements.plist"
+    }
+  }
+}
