@@ -130,7 +130,8 @@ pub use desk::{
 pub use file::{RigReport, ShowFile, ShowFileError};
 pub use journal::{Journal, JournalError, UndoRecord, UndoScope};
 pub use library::{
-    DEFAULT_SEARCH_LIMIT, FixtureLibrary, LibraryPage, MAX_SEARCH_LIMIT, generic_profiles,
+    DEFAULT_SEARCH_LIMIT, FixtureLibrary, LibraryIndex, LibraryPage, MAX_SEARCH_LIMIT,
+    generic_profiles,
 };
 pub use mirror::{JsonMirror, MirrorError, SessionMirror, ShowMirror};
 pub use outputs::{MachineError, validate as validate_output};

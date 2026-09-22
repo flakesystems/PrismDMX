@@ -56,10 +56,48 @@ DMX Sheet —, also sieht man, was dem Rig tatsächlich gesagt wird, egal von we
   woanders zeigen.
 - **Ein Klick auf ein Fixture** wählt es aus wie ein Klick im Fixture Sheet.
 - Ein Browser ganz ohne 3D bekommt ein einfaches flaches Bild.
+
+### Eine große Bibliothek hält den Start nicht mehr auf
+
+- **Behoben:** Mit der ganzen heruntergeladenen GDTF-Bibliothek (über 12 000
+  Fixtures) brauchte das Pult über eine Minute zum Starten, die Oberfläche kam
+  nicht und das Tray-Symbol auch nicht. Jetzt ist das Pult nach wenigen Sekunden
+  da; beim ersten Start nach einem Download kommt die Bibliothek im Hintergrund
+  dazu, jeder weitere Start hat sie sofort. Das Pult braucht dafür ein
+  Zwölftel des Speichers.
+- **Behoben:** Ein Profil zu importieren oder die Bibliothek zu aktualisieren
+  hielt das ganze Pult fest, solange die Bibliothek neu gelesen wurde.
 - **Behoben:** Ein Wert, der im selben Augenblick gesetzt wurde, in dem das Rig
   neu aufgebaut wurde — etwa gleich nach einem Patch oder einem Oops —, konnte
   auf dem Ausgang fehlen, obwohl der Programmer ihn hatte. Er kommt jetzt immer
   an.
+
+### PrismDMX läuft jetzt auf dem Mac (S63)
+
+**Das Pult baut, läuft und wird auf macOS ausgeliefert** — als signierte `.dmg`
+neben dem Windows-Installer. Für Windows ändert sich nichts: jede
+plattformspezifische Stelle hat einen macOS-Zweig **neben** der Windows-Variante
+bekommen, keine wurde ersetzt.
+
+- **Open DMX USB funktioniert am Mac.** Ein FT232R meldet sich dort von selbst
+  als serieller Port, ohne dass irgendein Treiber installiert werden muss —
+  einstecken genügt. (Windows benutzt weiterhin zuerst D2XX.)
+- **Autostart am Mac**: der Haken in *Settings → This machine* legt einen
+  **LaunchAgent** an, wie er unter Windows einen Registry-Eintrag anlegt. Keine
+  Administratorrechte, und die Zeile darunter sagt weiterhin, was die Maschine
+  wirklich hat.
+- **Das GDTF-Share-Konto merkt sich der Mac im Schlüsselbund**, so wie Windows
+  es in der Anmeldeinformationsverwaltung tut. Nie in einer Einstellungsdatei.
+- **Die Bildrate ist am Mac so ruhig wie unter Windows.** Beim Portieren kam
+  heraus, dass macOS einen langen Schlaf großzügiger auslegt als einen kurzen,
+  wodurch der 44-Hz-Takt um Millisekunden zu spät aufwachte. Der Takt schläft
+  jetzt in kurzen Abschnitten; gemessen fiel der mittlere Versatz von 2,5 ms auf
+  unter eine Mikrosekunde. **Das gilt auf allen Plattformen.**
+
+Wer die `.dmg` lädt, bekommt sie von Apple beglaubigt: sie öffnet sich ohne den
+Rechtsklick-Umweg und ohne Warnung.
+
+---
 
 ### Die Fixture-Bibliothek ist jetzt GDTF (S61)
 
@@ -93,33 +131,6 @@ kommt es vor ihm.
 - Das Pult sagt beim Start, wie viele Profile es anbietet und **wie viele davon
   GDTF sind** — und sagt es eigens, wenn eine Bibliothek installiert ist, die
   noch keine GDTF enthält.
-
-### PrismDMX läuft jetzt auf dem Mac (S63)
-
-**Das Pult baut, läuft und wird auf macOS ausgeliefert** — als signierte `.dmg`
-neben dem Windows-Installer. Für Windows ändert sich nichts: jede
-plattformspezifische Stelle hat einen macOS-Zweig **neben** der Windows-Variante
-bekommen, keine wurde ersetzt.
-
-- **Open DMX USB funktioniert am Mac.** Ein FT232R meldet sich dort von selbst
-  als serieller Port, ohne dass irgendein Treiber installiert werden muss —
-  einstecken genügt. (Windows benutzt weiterhin zuerst D2XX.)
-- **Autostart am Mac**: der Haken in *Settings → This machine* legt einen
-  **LaunchAgent** an, wie er unter Windows einen Registry-Eintrag anlegt. Keine
-  Administratorrechte, und die Zeile darunter sagt weiterhin, was die Maschine
-  wirklich hat.
-- **Das GDTF-Share-Konto merkt sich der Mac im Schlüsselbund**, so wie Windows
-  es in der Anmeldeinformationsverwaltung tut. Nie in einer Einstellungsdatei.
-- **Die Bildrate ist am Mac so ruhig wie unter Windows.** Beim Portieren kam
-  heraus, dass macOS einen langen Schlaf großzügiger auslegt als einen kurzen,
-  wodurch der 44-Hz-Takt um Millisekunden zu spät aufwachte. Der Takt schläft
-  jetzt in kurzen Abschnitten; gemessen fiel der mittlere Versatz von 2,5 ms auf
-  unter eine Mikrosekunde. **Das gilt auf allen Plattformen.**
-
-Wer die `.dmg` lädt, bekommt sie von Apple beglaubigt: sie öffnet sich ohne den
-Rechtsklick-Umweg und ohne Warnung.
-
----
 
 ### Vier Wege, die Bibliothek zu füllen (S62)
 

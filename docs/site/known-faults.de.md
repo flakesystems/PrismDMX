@@ -187,6 +187,40 @@ der aktuelle Programmer-Inhalt in einen Cue gespeichert oder ein neuer Cue
 erstellt werden kann. Diese Sektion ist überflüssig — Cues werden über die
 Kommandozeile gespeichert.
 
+## Beim Test der nächsten Version gefunden
+
+Diese betreffen Funktionen, die es in 0.9.2 noch nicht gibt und die mit der
+nächsten Version kommen. Sie stehen hier, damit niemand, der einen Build davon
+testet, überrascht wird.
+
+## B63 — Die Zeichnung des Pults im Controls-Menü ist falsch
+
+**Wo:** Settings, Controls, Ansicht *The desk*.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Die Zeichnung der Behringer X-Touch stimmt nicht mit dem Gerät
+überein. Die Belegung selbst funktioniert; falsch ist das Bild. Es wird in einer
+eigenen Session behoben.
+
+## B65 — Ein Rig lässt sich nicht als MVR exportieren
+
+**Wo:** Patch.
+**Schwere:** ärgerlich.
+
+**Was passiert.** Die `.mvr` eines Planers lässt sich importieren, ein am Pult
+gebautes oder korrigiertes Rig aber nicht als eine zurückschreiben. Offene Frage,
+bevor es gebaut wird: Fixtures aus der Open Fixture Library haben keine
+GDTF-Datei, die in den Export könnte, und sie dürfen dabei nicht verloren gehen.
+
+## B66 — Mehrere Funktionen liegen auf mehreren Tasten
+
+**Wo:** Settings, Controls.
+**Schwere:** Schönheitsfehler.
+
+**Was passiert.** In der Standardbelegung der X-Touch liegen manche Funktionen
+auf mehr als einer Taste, das ist verwirrend. Jede Taste lässt sich im
+Controls-Menü neu belegen.
+
 ## Etwas anderes stimmt nicht
 
 Wenn Sie auf etwas stoßen, das hier nicht steht, ist das eine Meldung wert —

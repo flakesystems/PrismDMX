@@ -157,6 +157,26 @@ schließen, anordnen, Ansichten, Seiten, was zu groß oder zu klein ist.*
 - **So sieht man es:** Etwas in die Kommandozeile tippen und beobachten, wie das UI springt
 - **Ergebnis:** ✅ **behoben** — die Rückmeldung bleibt, weil sie Syntaxfehler **vor** Enter zeigt (§4.5), aber sie bewegt nichts mehr. Sie war ein Absatz ohne eigene Höhe: leer null, mit einem Satz eine Zeile, mit einem langen zwei, und die Frage *Merge / Override / Cancel* kam als weitere Zeile dazu — jede Änderung verschob die Leinwand (gemessen: 444 → 425 px beim Tippen von `de`). Jetzt ist es **eine Zeile fester Höhe** (`.command-status`): links die Rückmeldung, abgeschnitten statt umbrochen und vollständig im Tooltip, oder an ihrer Stelle die Frage, solange sie steht; rechts die Engine-Zeile. Test: *what the line would do never moves the canvas* (`ui/e2e/console.spec.ts`) misst die Leinwand in Chromium vor dem Tippen, nach einer Fehlermeldung, nach einer Meldung, die viel breiter als der Bildschirm ist, mit stehender Frage und nach Escape — vor dem Fix rot, danach grün; ein Browser-Test, weil `jsdom` kein Layout rechnet.
 
+### B67 — Viewer 3D: Trefferfläche zu groß, Strahl nicht bündig, Bild verzerrt
+
+- **Wo:** Viewer 3D, generische und OFL-Fixtures
+- **Schwere:** ärgerlich
+- **Was passiert:** Die Klick- und Auswahlfläche eines OFL-Geräts ist viel zu
+  groß; der Strahl endet nicht bündig mit dem Lichtkreis am Boden; nach einem
+  Wechsel der Detailstufe wirkt das Bild verzerrt (Eigentümer, 2026-09-22)
+- **Was passieren soll:** Die Fläche ist das Gerät, Strahl und Kreis passen
+  aufeinander, das Bild bleibt unverzerrt
+- **So sieht man es:** Ein OFL-Fixture auswählen; einen Strahl auf den Boden
+  richten; die Detailstufe wechseln
+- **Ergebnis:** ✅ **behoben** (2026-09-22). Der Strahlkegel zählte als Körper
+  des Geräts, und der Rahmen wurde als Kasten eines Kastens gemessen; der Boden
+  projizierte aus der Mitte der Linse statt aus der Spitze des Kegels; ein
+  neuer Renderer verglich mit der Größe, die er vom alten Canvas übernahm, und
+  setzte das Seitenverhältnis der Kamera nicht. Tests:
+  `is clicked and outlined by its body, not by its beam`, `hangs where the show
+  hangs it…` (Fleck so breit wie der Kegel am Boden), `stage.test.ts`; Prüfung
+  am Rig: T-3D.4a, T-3D.8a, T-3D.16a
+
 ## Kommandozeile
 
 *Die Zeile selbst, ihre Rückmeldungen, ihre Fehlermeldungen, die Historie, und
@@ -659,6 +679,47 @@ angezeigt wird.*
 - **Ergebnis:** ✅ **behoben in S57** — die acht Punkte als **ein** Umbau, weil sie aneinanderhängen: welches Fixture gewählt ist, bestimmt den Footprint, der Footprint die nächste freie Adresse, und die nächste freie Adresse ist, was das gleichzeitige Patchen mehrerer braucht. **Ein Fenster statt zwei Formularen:** *Add fixture* öffnet die Bibliothek links und die Einstellungen des Fixtures rechts in **einem** Fenster über dem Canvas; ein Klick auf eine Zeile des Patches öffnet dasselbe für dieses Fixture. **(1) Ein Eintrag pro Fixture:** `Query::BrowseLibrary` antwortet mit `LibraryFixture` — Hersteller, Name, Herkunft und die **Modi** darin —, der Modus ist ein Menü im Formular; der Profilschlüssel einer Show bleibt **pro Modus**, eine vor S57 gepatchte Show öffnet also unverändert. **(2) Die ganze Zeile wählt**, und die erste Zelle behält ihren `<button>` für die Tastatur. **(3) Nachladen beim Scrollen:** seitenweise zu sechzig, die nächste Seite wird am Ende der Liste gefragt (`ui/src/patch/library.ts`); eine Seite, die die Liste nicht füllt, zieht die nächste sofort nach. **(4) *Add fixture* ist die Bibliothek.** **(5) Die Überlappung nennt die nächste freie Adresse** — `PatchPreview::nextFree`, die Antwort des Daemons für den **ganzen** Footprint (`prism_core::conflict::next_free`: dasselbe Universe zuerst, dann die folgenden bis 64), und eine Taste *Move to 1.5*. **(6) Ein neues Fixture beginnt dort**, im zuletzt gepatchten Universe, und folgt ihr beim Moduswechsel, bis eine Adresse getippt wird. **(7) Ohne Namen heißt es wie sein Typ** — im Daemon, in dem einen Applier, den jeder Patch erreicht, also auch für eine Zeile oder ein Skript; mehrere heißen *Typ 1*, *Typ 2*. **(8) Mehrere auf einmal:** eine Anzahl, platziert vom Daemon (`PatchPreview::placements` mit `adding`), gesendet als **ein** `Command::PatchFixtures` — ein Oops-Schritt, der das Profil aus der Bibliothek **im selben Schritt** einbettet. Das Einbetten beim Anklicken (S43/B1) ist damit weg: die Vorschau misst jetzt die Kopie der Bibliothek, und durchs Blättern bleibt nichts in der Show zurück. Nebenbei gefunden: ein Modal, das **aus einem Fenster** geöffnet wurde, lag im Fenster statt über dem Canvas — jetzt über `ModalLayer` in den Canvas portiert. Tests: `crates/prism-core/tests/patch_several.rs` (vierzehn, darunter `the_next_free_address_fits_the_whole_footprint_and_skips_a_gap_too_small`, `the_next_free_address_runs_on_into_the_next_universe`, `patching_ten_of_one_fixture_is_one_undo_step_and_ten_that_do_not_overlap` und `a_refused_gesture_writes_nothing`), zwei in `crates/prism-core/src/library/mod.rs`, `several_of_one_fixture_go_where_the_preview_said_and_one_oops_takes_them_back` und `the_library_is_browsed_a_fixture_at_a_time` über die neu aufgenommene `ui/tests/fixtures/patch-recording.json`, `ui/src/patch/library.test.ts`, dreizehn neue in `ui/src/patch/patchwindow.test.tsx`, und in `ui/e2e/patch.spec.ts` alle acht gegen einen echten Daemon mit der installierten Bibliothek — dazu *keine Scrollbalken außerhalb des Canvas bei 1280 × 720*.
 
 
+### B64 — Mit der ganzen GDTF-Bibliothek startet das Pult nicht
+
+- **Wo:** Start des Daemons, Fixture-Bibliothek
+- **Schwere:** blocker
+- **Was passiert:** Mit der heruntergeladenen Bibliothek (über 12 000 Fixtures)
+  braucht der Start über eine Minute; die Oberfläche und das Tray-Symbol kommen
+  nicht, weil die Desktop-Shell in ihr Zeitlimit läuft, und das Pult muss von
+  Hand gestartet werden (Eigentümer, 2026-09-22)
+- **Was passieren soll:** Das Pult ist in Sekunden da, mit welcher Bibliothek
+  auch immer
+- **So sieht man es:** Bibliothek über *GDTF Share* herunterladen, App neu starten
+- **Ergebnis:** ✅ **behoben** (2026-09-22). Gemessen an 12 574 Dateien: 74 s bis
+  zur ersten Antwort und 1,8 GB Speicher. Der Start wartet jetzt höchstens drei
+  Sekunden auf die Bibliothek und nimmt sie sonst im Hintergrund dazu; eine
+  `.gdtf` wird ohne ihre Modelle gelesen; die Bibliothek hält je Modus nur, was
+  die Liste zeigt, und liest das ganze Profil beim Patchen; ein Index neben der
+  Show erspart jedem weiteren Start das Parsen, und die Verzeichnisse werden
+  ohne ein Öffnen jeder Datei gelesen. Danach: 4 s bis zur ersten Antwort beim
+  ersten Start (Bibliothek nach 19 s), 2,4 s mit der ganzen Bibliothek bei jedem
+  weiteren, 140 MB. Import und Aktualisierung halten das Pult nicht mehr fest.
+  Tests: `start_up_waits_for_the_library_only_so_long`,
+  `a_library_read_with_its_index_is_the_library_read_without_it`,
+  `a_gdtf_profile_is_read_back_out_of_its_file_when_it_is_wanted`,
+  `one_entry_read_from_a_file_is_the_entry_read_from_its_bytes`;
+  `docs/FIXTURE_LIBRARY.md` §6a; Prüfung am Rig: T-BOTH.6, T-BOTH.7
+
+### B65 — Ein Rig lässt sich nicht als MVR exportieren
+
+- **Wo:** Patch, Datei
+- **Schwere:** ärgerlich
+- **Was passiert:** MVR lässt sich importieren (S62), aber nicht exportieren —
+  ein am Pult gebautes oder korrigiertes Rig kommt nicht zurück ins
+  Planungsprogramm (Befund der Rig-Abnahme 0.9.3, 2026-09-22)
+- **Was passieren soll:** Das Rig des Pults — Fixtures, Adressen, Orte, die
+  Profile — als `.mvr` schreiben. **Offene Frage des Eigentümers:** was mit
+  Fixtures aus der Open Fixture Library geschieht; ein MVR trägt GDTF, und
+  diese Fixtures dürfen dabei nicht verloren gehen
+- **So sieht man es:** —
+- **Ergebnis:** ☐ offen — groß genug für eine eigene Session; die Frage nach
+  den OFL-Fixtures entscheidet der Eigentümer vorher
+
 ## Einstellungen und Pult
 
 *Das Einstellungs-Fenster, die fünf Panels, der Control-Editor, das X-Touch.*
@@ -718,6 +779,30 @@ angezeigt wird.*
 - **Was passieren soll:** Das Binden einer Taste soll stabil funktionieren und den Client nicht trennen
 - **So sieht man es:** Settings öffnen → Controls → eine neue Taste binden
 - **Ergebnis:** ✅ **behoben** — kein Absturz des Daemons, sondern ein **Decoder**, der zwei Aktionen nicht kannte. `ui/src/ipc/protocol.ts::readSurfaceAction` ist Arm für Arm geschrieben, und S43 hatte dem Vokabular `OpenWindowPicker` und `WriteCommandLine` gegeben, ohne dass der Decoder sie lernte. Wer eine Taste auf eine der beiden legte, schrieb sie in die Tabelle in `machine.json`; die nächste Antwort `SurfaceBindings` trug sie, der Decoder warf, und ein Client, der eine Nachricht nicht lesen kann, trennt die Verbindung — **bei jedem Öffnen** des Controls-Menüs, auch nach einem Neustart, weil die Tabelle die der Maschine ist. Die Tests des Editors fuhren gegen einen Fake-Daemon, der Objekte statt Bytes liefert, und sahen den Decoder nie. Beide Arme sind jetzt da, und der Test ist so gebaut, dass die **nächste** vergessene Variante rot wird: `crates/prismd/tests/ui_surface_actions.rs` schreibt eine echte `Answer::SurfaceBindings` mit **jeder** Variante nach `ui/tests/fixtures/surface-actions.json` — die Liste ist ein `match` ohne Wildcard, eine neue Variante kompiliert also nicht, bevor sie dort steht — und `ui/src/ipc/surfaceactions.test.ts` liest sie durch das echte `decodeServerMessage` (vor dem Fix rot mit genau der gemeldeten Meldung). Nebenbei geprüft: alle 13 `Delta`- und 11 `Answer`-Varianten haben einen Arm.
+
+### B63 — Die Zeichnung des Pults im Controls-Menü ist falsch
+
+- **Wo:** Settings, Controls, Ansicht *The desk* (T-S59.14)
+- **Schwere:** ärgerlich
+- **Was passiert:** Die Zeichnung der X-Touch stimmt nicht mit dem Gerät
+  überein (Befund der Rig-Abnahme 0.9.3, 2026-09-22; die Einzelheiten stehen
+  noch aus)
+- **Was passieren soll:** Die Zeichnung zeigt die Tasten dort und so, wie sie am
+  Gerät liegen
+- **So sieht man es:** Settings → Controls → *The desk*
+- **Ergebnis:** ☐ offen — der Eigentümer wünscht dafür eine eigene Session
+
+### B66 — Mehrere Funktionen liegen auf mehreren Tasten
+
+- **Wo:** Settings, Controls; die Grundbelegung `profiles/surface/xtouch.json`
+- **Schwere:** Schönheitsfehler
+- **Was passiert:** Viele Funktionen sind auf mehr als einer Taste, das ist
+  verwirrend (Befund der Rig-Abnahme 0.9.3, 2026-09-22)
+- **Was passieren soll:** Eine Funktion, eine Taste — soweit es der Eigentümer
+  so will
+- **So sieht man es:** Settings → Controls → *List*
+- **Ergebnis:** ☐ offen — der Eigentümer korrigiert die Belegung selbst; ob die
+  mitgelieferte Grundbelegung danach angepasst wird, entscheidet er
 
 ## Sonstiges
 

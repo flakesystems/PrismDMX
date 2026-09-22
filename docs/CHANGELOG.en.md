@@ -58,9 +58,43 @@ Sheet — so what you see is what the rig is actually being told, whoever told i
   somewhere else.
 - **A click on a fixture** selects it, as a click in the Fixture Sheet does.
 - A browser with no 3D at all gets a simple flat picture.
+
+### A large library no longer holds the start up
+
+- **Fixed:** with the whole downloaded GDTF library (over 12,000 fixtures) the
+  desk took over a minute to start, and neither the interface nor the tray icon
+  came up. Now the desk is up in seconds; on the first start after a download
+  the library joins in the background, and every later start has it at once. It
+  takes a twelfth of the memory it did.
+- **Fixed:** importing a profile or updating the library held the whole desk
+  while the library was read again.
 - **Fixed:** a value set in the very moment the rig was rebuilt — just after a
   patch or an Oops, say — could be missing from the output although the
   programmer had it. It always arrives now.
+
+### PrismDMX runs on the Mac (S63)
+
+**The desk builds, runs and ships on macOS** — as a signed `.dmg` beside the
+Windows installer. Nothing about Windows changed: every platform-specific place
+gained a macOS branch **beside** the Windows one, and none was replaced.
+
+- **Open DMX USB works on a Mac.** An FT232R appears there as a serial port on
+  its own, with no driver to install — plugging it in is the whole setup.
+  (Windows still prefers D2XX.)
+- **Autostart on a Mac**: the box in *Settings → This machine* writes a
+  **LaunchAgent**, where Windows writes a registry value. No administrator
+  rights, and the line underneath still says what the machine actually has.
+- **A Mac remembers the GDTF Share account in the login keychain**, as Windows
+  remembers it in the credential manager. Never in a settings file.
+- **The frame rate on a Mac is as steady as it is on Windows.** Porting turned
+  up that macOS grants a long sleep more slack than a short one, so the 44 Hz
+  tick was waking milliseconds late. The tick now sleeps in short slices;
+  measured, the median lateness fell from 2.5 ms to under a microsecond. **That
+  holds on every platform.**
+
+The `.dmg` is notarised by Apple: it opens with no right-click and no warning.
+
+---
 
 ### The fixture library is GDTF now (S61)
 
@@ -90,30 +124,6 @@ it points. That is what the 3D viewer needs, which is why this comes before it.
   the profile into the show.
 - The desk says at start-up how many profiles it offers and **how many of them
   are GDTF** — and says so separately when the installed library has none yet.
-
-### PrismDMX runs on the Mac (S63)
-
-**The desk builds, runs and ships on macOS** — as a signed `.dmg` beside the
-Windows installer. Nothing about Windows changed: every platform-specific place
-gained a macOS branch **beside** the Windows one, and none was replaced.
-
-- **Open DMX USB works on a Mac.** An FT232R appears there as a serial port on
-  its own, with no driver to install — plugging it in is the whole setup.
-  (Windows still prefers D2XX.)
-- **Autostart on a Mac**: the box in *Settings → This machine* writes a
-  **LaunchAgent**, where Windows writes a registry value. No administrator
-  rights, and the line underneath still says what the machine actually has.
-- **A Mac remembers the GDTF Share account in the login keychain**, as Windows
-  remembers it in the credential manager. Never in a settings file.
-- **The frame rate on a Mac is as steady as it is on Windows.** Porting turned
-  up that macOS grants a long sleep more slack than a short one, so the 44 Hz
-  tick was waking milliseconds late. The tick now sleeps in short slices;
-  measured, the median lateness fell from 2.5 ms to under a microsecond. **That
-  holds on every platform.**
-
-The `.dmg` is notarised by Apple: it opens with no right-click and no warning.
-
----
 
 ### Four ways to fill the library (S62)
 

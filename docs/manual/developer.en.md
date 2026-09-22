@@ -656,6 +656,33 @@ writes launch agents into a temporary directory and never into
 `~/Library/LaunchAgents`. Signing is `docs/manual/apple_developer_signing.md`
 and is not part of any gate.
 
+**One gate is platform-sensitive, and it is the one you will trip over.**
+`cargo doc` with warnings denied fails on an intra-doc link whose target does
+not exist — and a `#[cfg]`-gated item *does not exist* on the platforms it is
+gated out of. So a link written on a Mac to something behind
+`#[cfg(target_os = "macos")]`, from a doc comment that is **not** itself gated,
+passes locally and fails on the Linux CI. S63 shipped exactly that and was
+caught by the push. The rule is simple: **a doc comment may only link to an
+item that exists everywhere the comment does.** Where it does not, name it in
+backticks instead of linking it.
+
+Running the host's doc gate does not check this. Cross-document the
+platform-neutral crates for a second target before pushing, which needs no
+linker and takes seconds:
+
+```bash
+rustup target add aarch64-unknown-linux-gnu
+```
+
+```bash
+RUSTDOCFLAGS="-D warnings" cargo doc -p prism-protocols -p prism-engine -p prism-domain --no-deps --target aarch64-unknown-linux-gnu
+```
+
+The crates with a C dependency (`prism-core` and everything above it) cannot be
+cross-documented without a cross C toolchain — `cargo` stops in the build script
+of `rusqlite` or `aws-lc-sys`, which is a missing toolchain rather than a
+portability break. For those, the CI run is the check.
+
 On every push:
 
 | Job | What it is for |

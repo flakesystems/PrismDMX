@@ -62,7 +62,10 @@ pub const BUNDLE_PAYLOAD: &str = "Resources";
 /// correctly about a desk that could not work.
 ///
 /// So each level of the walk is asked twice, once for the directory itself and
-/// once for a [`BUNDLE_PAYLOAD`] directory inside it. `Contents/` is the level
+/// once for a `BUNDLE_PAYLOAD` directory inside it — named rather than
+/// linked, because that constant is macOS-only and this function is not,
+/// and a link would fail the documentation gate on every other platform.
+/// `Contents/` is the level
 /// that answers. The walk is unchanged otherwise, so a `cargo run` inside a
 /// checkout still finds `target/debug/prismd` exactly as it did.
 ///

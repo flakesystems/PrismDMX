@@ -177,7 +177,13 @@ impl FtdiBackend for UnsupportedBackend {
 /// and [`AccessPath::fallback`] says `None` for the same reason it does on
 /// Linux. What that costs is what `vcp.rs` documents: the FTDI latency timer is
 /// out of reach, so a frame leaves when the arithmetic in
-/// [`VcpBackend::write`](crate::VcpBackend) says it has and not before.
+/// `VcpBackend::write` says it has and not before.
+///
+/// `VcpBackend` is deliberately **not linked** here, and neither is
+/// `D2xxBackend`: both are `#[cfg]`-gated and this function is not, so a
+/// link to either resolves on the platform that has it and fails the
+/// documentation build on the one that does not. The Linux `cargo doc`
+/// gate is what says so.
 #[must_use]
 pub fn system_backend() -> Box<dyn FtdiBackend> {
     #[cfg(windows)]

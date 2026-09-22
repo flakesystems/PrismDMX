@@ -60,11 +60,18 @@ describe("the recorded head", () => {
     const projectors = projectorsOf(head);
     expect(projectors).toHaveLength(1);
     const [light] = projectors;
+    const beam = head.beams.get(3);
+    const radius = beam?.radius ?? 0;
+    const k = Math.tan((8 * Math.PI) / 360);
+    // The projector stands at the cone's apex, straight above the lens…
     expect(light?.position.x).toBeCloseTo(-2, 4);
-    expect(light?.position.y).toBeCloseTo(5.8, 4);
     // Show's z is three's −z.
     expect(light?.position.z).toBeCloseTo(-1, 4);
     expect(light?.direction.y).toBeCloseTo(-1, 6);
+    expect(light?.position.y).toBeCloseTo(5.8 + radius / k, 4);
+    // …so the pool it throws on the floor is exactly as wide as the volume
+    // is where it meets the floor, 5.8 m below the lens: flush.
+    expect((light?.position.y ?? 0) * (light?.spread ?? 0)).toBeCloseTo(radius + 5.8 * k, 6);
     // Its colour is the lamp's 6500 K at full: open, and lit.
     expect(Math.max(...(light?.color ?? [0]))).toBeCloseTo(1, 6);
     // The beam is drawn from the lens to a little past the floor.
@@ -166,6 +173,20 @@ describe("the recorded head", () => {
 });
 
 describe("a fixture with no device", () => {
+  it("is clicked and outlined by its body, not by its beam", () => {
+    const par = built(10);
+    // Only the can's own mesh: neither the cone of light nor the lens.
+    expect(par.bodies.every((body) => body.name === "stand-in:par-body")).toBe(true);
+    const beam = par.beams.get(0);
+    for (const volume of beam?.volumes ?? []) {
+      expect(par.bodies).not.toContain(volume.mesh);
+    }
+    par.selected = true;
+    const outline = par.place.children.find((child) => child.type === "LineSegments");
+    // A PAR can is some 30 cm across and 40 long; the cone was metres.
+    expect(Math.max(outline?.scale.x ?? 9, outline?.scale.y ?? 9, outline?.scale.z ?? 9)).toBeLessThan(0.5);
+  });
+
   it("stands in as a PAR, its one beam lit by its attribute list", () => {
     const par = built(10);
     expect(par.beams.size).toBe(1);

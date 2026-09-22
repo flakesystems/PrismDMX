@@ -36,7 +36,8 @@
 //! and reads as `None`; nothing that writes GDTF uses one.
 
 use std::collections::BTreeMap;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
 
 /// The end-of-central-directory record's signature.
 const EOCD: u32 = 0x0605_4b50;
@@ -155,46 +156,7 @@ impl<'a> Archive<'a> {
         if count > MAX_ENTRIES {
             return None;
         }
-
-        let mut at = usize::try_from(start).ok()?;
-        let mut entries = BTreeMap::new();
-        for _ in 0..count {
-            if u32_at(bytes, at)? != CENTRAL {
-                return None;
-            }
-            let name_length = usize::from(u16_at(bytes, at + 28)?);
-            let extra_length = usize::from(u16_at(bytes, at + 30)?);
-            let comment_length = usize::from(u16_at(bytes, at + 32)?);
-            let name_at = at.checked_add(CENTRAL_FIXED)?;
-            let name = bytes.get(name_at..name_at.checked_add(name_length)?)?;
-            let extra = bytes.get(
-                name_at.checked_add(name_length)?
-                    ..name_at
-                        .checked_add(name_length)?
-                        .checked_add(extra_length)?,
-            )?;
-
-            let mut entry = Entry {
-                method: u16_at(bytes, at + 10)?,
-                crc: u32_at(bytes, at + 16)?,
-                compressed: u64::from(u32_at(bytes, at + 20)?),
-                size: u64::from(u32_at(bytes, at + 24)?),
-                offset: u64::from(u32_at(bytes, at + 42)?),
-            };
-            widen(&mut entry, extra);
-
-            // A directory entry — the format's own convention, a name ending in
-            // a slash and nothing in it. Not a file, so not in the index.
-            if !name.ends_with(b"/")
-                && let Ok(name) = std::str::from_utf8(name)
-            {
-                entries.insert(normalise(name), entry);
-            }
-            at = name_at
-                .checked_add(name_length)?
-                .checked_add(extra_length)?
-                .checked_add(comment_length)?;
-        }
+        let entries = directory(bytes.get(usize::try_from(start).ok()?..)?, count)?;
         Some(Self { bytes, entries })
     }
 
@@ -216,34 +178,167 @@ impl<'a> Archive<'a> {
         // **not** the central directory's: the extra field is routinely
         // different in the two places. So the data's start is computed here.
         let header = usize::try_from(entry.offset).ok()?;
-        if u32_at(self.bytes, header)? != LOCAL {
-            return None;
-        }
-        let name_length = usize::from(u16_at(self.bytes, header + 26)?);
-        let extra_length = usize::from(u16_at(self.bytes, header + 28)?);
-        let from = header
-            .checked_add(LOCAL_FIXED)?
-            .checked_add(name_length)?
-            .checked_add(extra_length)?;
+        let fixed = self.bytes.get(header..header.checked_add(LOCAL_FIXED)?)?;
+        let from = header.checked_add(data_offset(fixed)?)?;
         let compressed = usize::try_from(entry.compressed).ok()?;
         let raw = self.bytes.get(from..from.checked_add(compressed)?)?;
-
-        let out = match entry.method {
-            Entry::STORED => raw.to_vec(),
-            Entry::DEFLATE => inflate(raw, usize::try_from(entry.size).ok()?)?,
-            _ => return None,
-        };
-        if out.len() as u64 != entry.size {
-            return None;
-        }
-        let mut crc = flate2::Crc::new();
-        crc.update(&out);
-        if crc.sum() != entry.crc {
-            return None;
-        }
-        Some(out)
+        decode(entry, raw)
     }
+}
 
+/// The central directory's entries, from the bytes that start with it.
+fn directory(bytes: &[u8], count: usize) -> Option<BTreeMap<String, Entry>> {
+    let mut at = 0_usize;
+    let mut entries = BTreeMap::new();
+    for _ in 0..count {
+        if u32_at(bytes, at)? != CENTRAL {
+            return None;
+        }
+        let name_length = usize::from(u16_at(bytes, at + 28)?);
+        let extra_length = usize::from(u16_at(bytes, at + 30)?);
+        let comment_length = usize::from(u16_at(bytes, at + 32)?);
+        let name_at = at.checked_add(CENTRAL_FIXED)?;
+        let name = bytes.get(name_at..name_at.checked_add(name_length)?)?;
+        let extra = bytes.get(
+            name_at.checked_add(name_length)?
+                ..name_at
+                    .checked_add(name_length)?
+                    .checked_add(extra_length)?,
+        )?;
+
+        let mut entry = Entry {
+            method: u16_at(bytes, at + 10)?,
+            crc: u32_at(bytes, at + 16)?,
+            compressed: u64::from(u32_at(bytes, at + 20)?),
+            size: u64::from(u32_at(bytes, at + 24)?),
+            offset: u64::from(u32_at(bytes, at + 42)?),
+        };
+        widen(&mut entry, extra);
+
+        // A directory entry — the format's own convention, a name ending in
+        // a slash and nothing in it. Not a file, so not in the index.
+        if !name.ends_with(b"/")
+            && let Ok(name) = std::str::from_utf8(name)
+        {
+            entries.insert(normalise(name), entry);
+        }
+        at = name_at
+            .checked_add(name_length)?
+            .checked_add(extra_length)?
+            .checked_add(comment_length)?;
+    }
+    Some(entries)
+}
+
+/// Where an entry's data starts, counted from its local header — whose name
+/// and extra lengths are its own and not the central directory's.
+fn data_offset(local: &[u8]) -> Option<usize> {
+    if u32_at(local, 0)? != LOCAL {
+        return None;
+    }
+    let name_length = usize::from(u16_at(local, 26)?);
+    let extra_length = usize::from(u16_at(local, 28)?);
+    LOCAL_FIXED
+        .checked_add(name_length)?
+        .checked_add(extra_length)
+}
+
+/// An entry's stored bytes, inflated and checked against its size and CRC.
+fn decode(entry: &Entry, raw: &[u8]) -> Option<Vec<u8>> {
+    let out = match entry.method {
+        Entry::STORED => raw.to_vec(),
+        Entry::DEFLATE => inflate(raw, usize::try_from(entry.size).ok()?)?,
+        _ => return None,
+    };
+    if out.len() as u64 != entry.size {
+        return None;
+    }
+    let mut crc = flate2::Crc::new();
+    crc.update(&out);
+    if crc.sum() != entry.crc {
+        return None;
+    }
+    Some(out)
+}
+
+/// The largest central directory [`read_from_file`] will read.
+///
+/// [`MAX_ENTRIES`] entries of a few hundred bytes of name each is far below
+/// it; a directory claiming more is not one this reader would accept anyway.
+const MAX_DIRECTORY: u64 = 16 * 1024 * 1024;
+
+/// **One file out of an archive on disk, without reading the archive** —
+/// the library's start-up path.
+///
+/// A published GDTF is a megabyte of XML beside tens of megabytes of models and
+/// gobo pictures, and a library of twelve thousand of them is thirteen
+/// gigabytes. Reading each whole to get its `description.xml` out took the
+/// desk a minute and more to start (2026-09-22). This reads the end record,
+/// the central directory and the one entry — a few hundred kilobytes a file —
+/// and answers exactly what [`Archive::read`] and [`Archive::file`] answer over
+/// the whole file: the entry whose **last path segment** is `file`, ignoring
+/// case ([`Archive::find`]'s rule), with its name, or `None`.
+#[must_use]
+pub fn read_from_file(path: &Path, file: &str) -> Option<(String, Vec<u8>)> {
+    let mut handle = std::fs::File::open(path).ok()?;
+    let length = handle.metadata().ok()?.len();
+
+    // The end record is within the last 64 kB and a bit; the ZIP64 locator,
+    // when there is one, sits just before it.
+    let tail_length = length.min((EOCD_FIXED + 0xFFFF + 20) as u64);
+    let tail_start = length - tail_length;
+    let tail = read_at(&mut handle, tail_start, tail_length)?;
+    let eocd = find_eocd(&tail)?;
+    let (mut count, mut size, mut start) = (
+        usize::from(u16_at(&tail, eocd + 10)?),
+        u64::from(u32_at(&tail, eocd + 12)?),
+        u64::from(u32_at(&tail, eocd + 16)?),
+    );
+    if count == usize::from(ZIP64_MARKER_16)
+        || size == u64::from(ZIP64_MARKER_32)
+        || start == u64::from(ZIP64_MARKER_32)
+    {
+        let locator = eocd.checked_sub(20)?;
+        if u32_at(&tail, locator)? != EOCD64_LOCATOR {
+            return None;
+        }
+        let record = read_at(&mut handle, u64_at(&tail, locator + 8)?, 56)?;
+        if u32_at(&record, 0)? != EOCD64 {
+            return None;
+        }
+        count = usize::try_from(u64_at(&record, 32)?).ok()?;
+        size = u64_at(&record, 40)?;
+        start = u64_at(&record, 48)?;
+    }
+    if count > MAX_ENTRIES || size > MAX_DIRECTORY || start.checked_add(size)? > length {
+        return None;
+    }
+    let entries = directory(&read_at(&mut handle, start, size)?, count)?;
+
+    let wanted = file.to_ascii_lowercase();
+    let (name, entry) = entries.into_iter().find(|(name, _)| {
+        name.rsplit('/')
+            .next()
+            .is_some_and(|last| last.eq_ignore_ascii_case(&wanted))
+    })?;
+    if entry.size > MAX_FILE as u64 || entry.compressed > MAX_FILE as u64 {
+        return None;
+    }
+    let local = read_at(&mut handle, entry.offset, LOCAL_FIXED as u64)?;
+    let from = entry.offset.checked_add(data_offset(&local)? as u64)?;
+    let raw = read_at(&mut handle, from, entry.compressed)?;
+    Some((name, decode(&entry, &raw)?))
+}
+
+/// `length` bytes of a file from `at`, or `None` when the file ends first.
+fn read_at(handle: &mut std::fs::File, at: u64, length: u64) -> Option<Vec<u8>> {
+    handle.seek(SeekFrom::Start(at)).ok()?;
+    let mut bytes = vec![0_u8; usize::try_from(length).ok()?];
+    handle.read_exact(&mut bytes).ok()?;
+    Some(bytes)
+}
+
+impl Archive<'_> {
     /// Every file in the archive, by name, in one order on every machine.
     pub fn names(&self) -> impl Iterator<Item = &str> {
         self.entries.keys().map(String::as_str)
@@ -644,5 +739,69 @@ mod tests {
         let archive = Archive::read(&bytes).expect("it is an archive");
         assert_eq!(archive.file("b.txt"), None);
         assert!(!archive.is_empty());
+    }
+
+    /// **One entry read off the disk is the entry read out of the whole
+    /// file** — the start-up path (2026-09-22) against the reader every other
+    /// test here holds.
+    #[test]
+    fn one_entry_read_from_a_file_is_the_entry_read_from_its_bytes() {
+        let description = b"<GDTF DataVersion=\"1.2\"/>".repeat(40);
+        let model = vec![7_u8; 200_000];
+        let bytes = Builder::new()
+            .deflated("models/gltf/head.glb", &model)
+            .stored("wheels/gobo.png", b"\x89PNG")
+            .deflated("Fixture/Description.XML", &description)
+            .build();
+        let dir = tempfile::tempdir().expect("a directory");
+        let path = dir.path().join("head.gdtf");
+        std::fs::write(&path, &bytes).expect("written");
+
+        let archive = Archive::read(&bytes).expect("it is an archive");
+        let name = archive.find("description.xml").expect("found").to_owned();
+        let (read_name, read) =
+            super::read_from_file(&path, "description.xml").expect("read off the disk");
+        assert_eq!(read_name, name, "the same entry, found the same way");
+        assert_eq!(Some(read), archive.file(&name));
+        let (_, png) = super::read_from_file(&path, "GOBO.png").expect("stored, and any case");
+        assert_eq!(png, b"\x89PNG");
+        assert_eq!(super::read_from_file(&path, "missing.xml"), None);
+    }
+
+    /// Nothing about a bad file is trusted from the disk either.
+    #[test]
+    fn a_file_that_is_not_an_archive_or_is_cut_short_reads_as_nothing() {
+        let dir = tempfile::tempdir().expect("a directory");
+        let bytes = Builder::new()
+            .deflated("description.xml", &[b'x'; 5_000])
+            .build();
+
+        let cut = dir.path().join("cut.gdtf");
+        std::fs::write(&cut, &bytes[..bytes.len() - 10]).expect("written");
+        assert_eq!(super::read_from_file(&cut, "description.xml"), None);
+
+        let text = dir.path().join("text.gdtf");
+        std::fs::write(&text, b"this is not a zip archive").expect("written");
+        assert_eq!(super::read_from_file(&text, "description.xml"), None);
+
+        let empty = dir.path().join("empty.gdtf");
+        std::fs::write(&empty, b"").expect("written");
+        assert_eq!(super::read_from_file(&empty, "description.xml"), None);
+
+        // A corrupted payload fails its CRC exactly as it does in memory.
+        let mut flipped = Builder::new().stored("description.xml", b"<GDTF/>").build();
+        let at = flipped
+            .windows(7)
+            .position(|window| window == b"<GDTF/>")
+            .expect("the payload is in there");
+        flipped[at] = b'!';
+        let bad = dir.path().join("bad.gdtf");
+        std::fs::write(&bad, &flipped).expect("written");
+        assert_eq!(super::read_from_file(&bad, "description.xml"), None);
+
+        assert_eq!(
+            super::read_from_file(&dir.path().join("absent.gdtf"), "description.xml"),
+            None
+        );
     }
 }
