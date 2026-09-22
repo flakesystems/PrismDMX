@@ -548,7 +548,18 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          dmg=$(ls target/release/bundle/dmg/*.dmg | head -1)
+          # The disk image, located the way the Windows job locates the
+          # installer: **named, and refused when it is not there.** `ls | head -1`
+          # would hand an empty string to the next command and fail somewhere
+          # less obvious — a bundler given no payload exits zero happily, which
+          # is the whole reason these steps exist.
+          shopt -s nullglob
+          images=(target/release/bundle/dmg/*.dmg)
+          if [ ${#images[@]} -eq 0 ]; then
+            echo "::error::no disk image was produced"
+            exit 1
+          fi
+          dmg="${images[0]}"
           xcrun notarytool submit "$dmg" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_PASSWORD" \
@@ -564,7 +575,18 @@ jobs:
         id: bundle
         run: |
           set -euo pipefail
-          dmg=$(ls target/release/bundle/dmg/*.dmg | head -1)
+          # The disk image, located the way the Windows job locates the
+          # installer: **named, and refused when it is not there.** `ls | head -1`
+          # would hand an empty string to the next command and fail somewhere
+          # less obvious — a bundler given no payload exits zero happily, which
+          # is the whole reason these steps exist.
+          shopt -s nullglob
+          images=(target/release/bundle/dmg/*.dmg)
+          if [ ${#images[@]} -eq 0 ]; then
+            echo "::error::no disk image was produced"
+            exit 1
+          fi
+          dmg="${images[0]}"
           hash=$(shasum -a 256 "$dmg" | cut -d' ' -f1)
           {
             echo "path=$dmg"
