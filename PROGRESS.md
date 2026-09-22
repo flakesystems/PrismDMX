@@ -5323,11 +5323,14 @@ why nothing noticed.
   they are skipped in that one job and run everywhere else. Loosening them was
   not attempted, because `realtime.rs` records three previous attempts at
   exactly that, each of which failed again on a commit that changed nothing.
-- **`cargo test` on Windows still has not finished.** The same run was
-  cancelled during that step, so the Windows *tests* — the named pipe, the
-  credential manager, the corpus on a CRLF checkout — remain unrun, and so do
-  the installer build and its payload check. **Run `release.yml` again**: what
-  is left to learn is the second half of that job.
+- ~~`cargo test` on Windows still has not finished.~~ **Closed the same day.**
+  The second `workflow_dispatch` run (`35786806410`) took the Windows job all
+  the way: `cargo test --workspace`, the interface's three gates, the release
+  build, **the installer and `What the installer contains`**, and the checksum
+  — every step green. So the Windows tests that have no counterpart on a Mac
+  are run (the named pipe, S62's credential manager, the corpus on a CRLF
+  checkout), and **the corrected `ofl/manufacturers.json` path is proved**: the
+  stale one would have failed that step, after the whole Windows build.
 - **No DMX cable was driven on the Mac.** §5 has the item, the two specific
   risks and how to close it.
 - **Nothing was signed with a *Developer ID*, and that is still the open item**

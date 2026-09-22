@@ -54,6 +54,20 @@ on:
   # So the whole thing can be exercised without cutting a release: it builds and
   # uploads the installer as a workflow artefact, and creates nothing.
   workflow_dispatch:
+    inputs:
+      # **A cost switch, and nothing else** — S63. A tag always runs everything;
+      # this only narrows a *by-hand* run. It exists because getting the macOS
+      # signing right took several goes, and each one rebuilt a Windows half
+      # that had already passed — twenty-five minutes at twice the Linux rate,
+      # for an answer nobody was waiting for.
+      #
+      # The Linux gates always run: they are the cheapest of the three and they
+      # are what `release.yml` calls `ci.yml` for.
+      only:
+        description: "Which platform to build (a tag always builds both)"
+        type: choice
+        default: all
+        options: [all, macos, windows]
 
 permissions:
   contents: write
@@ -70,6 +84,12 @@ jobs:
   build:
     name: Windows - full pass and installer
     needs: linux
+    # Always on a tag; on a by-hand run only when it was asked for. `inputs` is
+    # empty for any event but `workflow_dispatch`, so the first clause is what
+    # makes a release build everything.
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.only == 'all' || inputs.only == 'windows'
     runs-on: windows-latest
     # Every gate again, then a release build of the daemon, then the shell with
     # LTO and one codegen unit, on a cache this job has never warmed. Ninety
@@ -305,6 +325,10 @@ jobs:
   macos:
     name: macOS - full pass, bundle and signature
     needs: linux
+    # See the Windows job above.
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || inputs.only == 'all' || inputs.only == 'macos'
     runs-on: macos-latest
     # The gates again, then a release build of the daemon and the shell with
     # LTO and one codegen unit, on a cache this job has never warmed, and then
