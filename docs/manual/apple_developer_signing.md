@@ -210,8 +210,26 @@ its private key. The key is missing or is in a different keychain, and the
 certificate has to be re-issued against a new request (§5.1). Apple cannot send
 you the key; nobody has it but you.
 
-The ten characters in the brackets — `ABCDE12345` above — are your **Team ID**.
-Write it down; §6 and §9 both want it.
+The ten characters in the brackets — `ABCDE12345` above — are your **Team ID**,
+*on a Developer ID certificate*. Write it down; §6 and §9 both want it.
+
+> **The brackets are not always the Team ID, and getting this wrong costs an
+> afternoon.** On an **Apple Development** certificate the brackets hold the
+> *individual's* identifier, which is a different string from the team's — this
+> machine's Development identity reads
+> `Apple Development: … (FPH8XF8FP4)` while its `TeamIdentifier` is
+> `RS8R9CG44U`. Notarisation given the wrong one fails with *Invalid
+> credentials*, which reads like a bad password and is not. If you have both
+> kinds of certificate installed, read the Team ID off the **signature** rather
+> than the name:
+>
+> ```bash
+> codesign --display --verbose=2 /path/to/Something.app 2>&1 | grep TeamIdentifier
+> ```
+>
+> or from *Membership details* at
+> [developer.apple.com/account](https://developer.apple.com/account), which is
+> unambiguous.
 
 ### 5.4 Export the `.p12`, for CI and for a backup
 
@@ -256,13 +274,20 @@ the account it would not work anyway.
 
 ### 6.2 The Team ID
 
-The ten characters from §5.3, also visible at the top right of
+The ten characters from §5.3 — **from the Developer ID certificate**, and see
+the warning there if you also have an Apple Development one installed. It is
+also at the top right of
 [developer.apple.com/account](https://developer.apple.com/account) under
-*Membership details*, and available from a terminal:
+*Membership details*, which is the reading that cannot be ambiguous, and from a
+terminal:
 
 ```bash
-security find-identity -v -p codesigning | sed -n 's/.*(\([A-Z0-9]\{10\}\)).*/\1/p'
+security find-identity -v -p codesigning | grep "Developer ID Application" | sed -n 's/.*(\([A-Z0-9]\{10\}\)).*/\1/p'
 ```
+
+The `grep` is the part that matters: without it the command answers with
+whichever identity happens to be listed first, which on a developer's own
+machine is usually the Apple Development one.
 
 ### 6.3 Check them before you need them
 
@@ -317,12 +342,37 @@ names the bundle targets, the payload and the signing options:
 }
 ```
 
-**`resources` is the part a signature depends on in a way that is easy to miss.**
-`prismd` is a second executable living inside `PrismDMX.app/Contents/Resources/`.
-Under the hardened runtime a nested executable must be signed **by the same
-team** as the bundle around it, or the whole thing is refused — so the release
-job verifies the engine's signature separately rather than trusting that the
-bundle's covered it.
+**`resources` is the part a signature depends on in a way that is easy to miss,
+and S63 missed it first.** `prismd` is a second executable living inside
+`PrismDMX.app/Contents/Resources/`. Under the hardened runtime a nested
+executable must be signed **by the same team** as the bundle around it, or the
+whole thing is refused.
+
+**Tauri does not sign it.** It signs the `.app` and the `.dmg`; an executable it
+carried in as a *resource* is data as far as the bundler is concerned. The first
+signed bundle built for this document had `prismd` inside it still reading
+`flags=0x20002(adhoc, linker-signed)` — which is what the linker leaves behind
+and not a signature by anybody. Notarisation rejects that: *the binary is not
+signed with a valid Developer ID certificate*.
+
+So the release job signs the engine **before** the bundler copies it, which is
+the ordinary inside-out order — the signature travels with the file and Tauri
+then seals the app around it:
+
+```bash
+codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" target/release/prismd
+```
+
+`--options runtime` is the hardened runtime, which notarisation requires of
+**every** executable and not only the outer one, and `--timestamp` is a trusted
+timestamp, without which the signature stops verifying once the certificate
+expires.
+
+> **`codesign --verify` does not catch this, which is why §10 asks for more.**
+> An ad-hoc signed binary is *valid on disk* and *satisfies its designated
+> requirement*, so a check that only verifies passes on an engine nobody signed.
+> What tells the two apart is the **authority** and the **flags**, and the
+> release job asks for both.
 
 **There is deliberately no `signingIdentity` in this file.** It comes from the
 `APPLE_SIGNING_IDENTITY` environment variable instead, so that the repository
@@ -475,6 +525,17 @@ You want `runtime` in the flags.
 codesign --verify --deep --strict --verbose=2 target/release/bundle/macos/PrismDMX.app
 ```
 
+**And is the engine signed by *you*** — which the command above does **not**
+answer, because an ad-hoc signature verifies perfectly well (§7):
+
+```bash
+codesign --display --verbose=2 target/release/bundle/macos/PrismDMX.app/Contents/Resources/prismd
+```
+
+`Authority=Developer ID Application: …` and `flags=0x10000(runtime)`. The word
+**`adhoc`** anywhere in those flags means the engine was never signed, the
+bundle will be rejected by notarisation, and §7 is where the fix is.
+
 **Would Gatekeeper let a stranger open it** — the real question, and the only
 one of the four that answers it:
 
@@ -505,6 +566,8 @@ whether it is signed or not, and will tell you nothing.
 | Notarisation: `Team is not yet configured for notarization` | A new account Apple has not finished provisioning | wait; it is usually under an hour. If it persists, Apple Developer Support |
 | Notarisation: `Invalid credentials` | The app-specific password was revoked, mistyped, or belongs to a different Apple ID than `APPLE_ID` | §6.1, and test with §6.3 before re-running a release |
 | Notarisation rejected, `The executable does not have the hardened runtime enabled` | Signed without `--options runtime` | the identity was empty at build time, so nothing was signed properly. Check the `Is there a certificate` step's log |
+| Notarisation rejected, `The binary is not signed with a valid Developer ID certificate` | Usually the **nested engine**, not the app: Tauri does not sign an executable carried in as a resource | §7 — sign `target/release/prismd` before the bundler copies it. Check with `codesign -d --verbose=2 …/Contents/Resources/prismd`; the word `adhoc` in the flags is the symptom |
+| `codesign --verify` passes but notarisation still rejects it | An ad-hoc signature is *valid* and *satisfies its designated requirement*; verifying does not ask **who** signed it | ask for the authority and the flags instead of only verifying (§10) |
 | Notarisation rejected, `The signature of the binary is invalid` | Something inside the bundle was modified **after** signing | nothing may touch the `.app` between the Tauri build and the `.dmg` |
 | `xcrun: error: unable to find utility "notarytool"` | Command Line Tools rather than full Xcode | §6.3's note |
 | The `.dmg` opens on your Mac but not on anyone else's | You are testing a file that was never quarantined | §10's last paragraph |

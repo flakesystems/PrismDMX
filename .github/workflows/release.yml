@@ -475,6 +475,36 @@ jobs:
       - name: Build the engine
         run: cargo build --release -p prismd
 
+      # **Signed here, before the bundler copies it in** — S63, and found by
+      # signing a bundle locally and looking at what came out.
+      #
+      # Tauri signs the `.app` and the `.dmg`. It does **not** sign an
+      # executable it carried in as a *resource*: `prismd` arrived in
+      # `Contents/Resources/` still `adhoc, linker-signed`, which is what the
+      # linker leaves and not a signature by anybody. A hardened, notarised
+      # bundle with an ad-hoc nested executable is exactly what Apple rejects
+      # — *the binary is not signed with a valid Developer ID certificate* —
+      # and what Gatekeeper refuses to execute at the far end.
+      #
+      # Signing it **first** is the ordinary inside-out order: the signature
+      # travels with the file when the bundler copies it, and Tauri then seals
+      # the app around it. Verified locally: the engine keeps its authority and
+      # its hardened runtime through bundling.
+      #
+      # `--options runtime` is the hardened runtime, which notarisation
+      # requires of **every** executable and not only the outer one;
+      # `--timestamp` is a trusted timestamp, without which a signature stops
+      # verifying once the certificate expires.
+      - name: Sign the engine
+        if: steps.signing.outputs.signing == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          codesign --force --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" target/release/prismd
+          codesign --display --verbose=2 target/release/prismd
+
       # `tauri.bundle.macos.conf.json` rather than `tauri.bundle.conf.json`:
       # the Windows one names `prismd.exe` and asks the bundler for an `nsis`
       # target, neither of which exists here.
@@ -531,8 +561,28 @@ jobs:
           # silently lacks.
           codesign --display --verbose=2 "$app" 2>&1 | grep -q 'flags=.*runtime' || {
             echo "::error::the bundle is signed without the hardened runtime"; exit 1; }
+          # **`--verify` is not enough here, and that is the point.** An
+          # `adhoc, linker-signed` binary is *valid* and *satisfies its
+          # designated requirement*, so verifying alone passes on an engine
+          # nobody signed — which is what S63's first locally signed bundle
+          # actually contained. So the **authority and the flags** are asked
+          # for, which ad-hoc has neither of.
           codesign --verify --strict --verbose=2 "$app/Contents/Resources/prismd"
-          echo "the engine inside the bundle is signed too"
+          engine=$(codesign --display --verbose=2 "$app/Contents/Resources/prismd" 2>&1)
+          echo "$engine"
+          if echo "$engine" | grep -q 'adhoc'; then
+            echo "::error::the engine inside the bundle is ad-hoc signed, not signed by us"
+            exit 1
+          fi
+          echo "$engine" | grep -q 'Authority=Developer ID Application' || {
+            echo "::error::the engine inside the bundle carries no Developer ID authority"
+            exit 1
+          }
+          echo "$engine" | grep -qE 'flags=.*runtime' || {
+            echo "::error::the engine inside the bundle has no hardened runtime"
+            exit 1
+          }
+          echo "the engine inside the bundle is signed, hardened and ours"
 
       # ---- Notarisation ----
       # Tauri notarises the `.app` itself when the three `APPLE_*` credentials
