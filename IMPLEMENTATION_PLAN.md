@@ -1770,7 +1770,7 @@ times** a Linux one where Windows costs twice, so the `macos` job belongs in
 - **`prismd`**: `keyring`'s Apple store, behind one widened `#[cfg]`
 - **`prism-app`**: `autostart::macos`, one implementation of S29's `Entry` trait
 - `docs/manual/apple_developer_signing.md` — the certificate, the keychain, the
-  notarisation credentials, the Tauri configuration and the five secrets
+  notarisation credentials, the Tauri configuration and the six secrets
 - A `macos-latest` job in **`release.yml` only**
 
 ### Exit criteria

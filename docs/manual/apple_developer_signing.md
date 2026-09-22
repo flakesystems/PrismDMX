@@ -9,7 +9,7 @@ it.
 
 > **The short version.** You need a **Developer ID Application** certificate and
 > an **app-specific password**, both from one Apple Developer Program account.
-> The certificate signs the bundle; the password notarises it. Five values go
+> The certificate signs the bundle; the password notarises it. **Six** values go
 > into GitHub Secrets and `.github/workflows/release.yml` does the rest. §5, §6
 > and §9 are the three sections you cannot skip.
 
@@ -25,7 +25,7 @@ it.
 6. [The notarisation credentials](#6-the-notarisation-credentials)
 7. [How PrismDMX is configured to be signed](#7-how-prismdmx-is-configured-to-be-signed)
 8. [Signing on your own Mac](#8-signing-on-your-own-mac)
-9. [GitHub Actions: the five secrets and the job that reads them](#9-github-actions-the-five-secrets-and-the-job-that-reads-them)
+9. [GitHub Actions: the six secrets and the job that reads them](#9-github-actions-the-six-secrets-and-the-job-that-reads-them)
 10. [Checking the result — the four commands that actually prove it](#10-checking-the-result--the-four-commands-that-actually-prove-it)
 11. [When it goes wrong](#11-when-it-goes-wrong)
 12. [Expiry, revocation and handover](#12-expiry-revocation-and-handover)
@@ -433,12 +433,15 @@ xcrun notarytool submit target/release/bundle/dmg/*.dmg --keychain-profile "pris
 
 ---
 
-## 9. GitHub Actions: the five secrets and the job that reads them
+## 9. GitHub Actions: the six secrets and the job that reads them
 
 ### 9.1 The secrets
 
-*Settings → Secrets and variables → Actions → New repository secret*, five
-times. The names are exact — the workflow reads these and no others.
+*Settings → Secrets and variables → Actions → New repository secret*, **six
+times**. The names are exact — the workflow reads these and no others, and a
+missing one is not an error but a **half-configured build**: without the first
+three the bundle is unsigned, without the last three it is signed but not
+notarised (§1's second state).
 
 | Secret | Value | From |
 |---|---|---|
