@@ -107,6 +107,43 @@ impl SystemClock {
     pub const fn spin_margin(&self) -> Duration {
         self.spin_margin
     }
+
+    /// How long to sleep next, with `remaining` left before the deadline, or
+    /// `None` to stop sleeping and spin the rest.
+    ///
+    /// # This is the whole of the decision, and it is here so it can be tested
+    /// without a clock — **S63**
+    ///
+    /// The first three attempts at a regression test for the sliced sleep all
+    /// measured **wall-clock time**, and all three were flaky on a shared CI
+    /// runner: a worst case of 15.5 ms against a 1 ms budget, then a *median*
+    /// of 9.7 ms against a 2 ms one, on a three-core virtual machine running
+    /// every test binary at once. Tuning the threshold a fourth time would have
+    /// produced a bound so loose it could catch nothing.
+    ///
+    /// What actually changed in S63 is not a duration — it is a **decision**:
+    /// *ask for at most one slice, and recompute*. A decision can be checked
+    /// exactly, with no machine in the loop, which is what this function is
+    /// for. The timing itself is measured where it means something:
+    /// `tests/realtime.rs` on a machine with a core to spare, and the
+    /// ten-minute release-profile runs.
+    #[must_use]
+    pub fn nap(&self, remaining: Duration) -> Option<Duration> {
+        // Nothing left but the margin: stop sleeping, the spin covers the rest.
+        let coarse = remaining.checked_sub(self.spin_margin)?;
+        // **Exactly at the margin, `checked_sub` says `Some(0)`, not `None`.**
+        // Asking the operating system to sleep for no time is a syscall that
+        // buys nothing, and the spin below is what that last stretch is for.
+        // Found by the test beside this, which expected the boundary to be
+        // clean and found one wasted call there.
+        if coarse.is_zero() {
+            return None;
+        }
+        // **The cap is the point.** An operating system grants slack in
+        // proportion to what is asked for, so asking for the whole remainder is
+        // asking for a loose wake-up.
+        Some(coarse.min(SLEEP_SLICE))
+    }
 }
 
 impl Default for SystemClock {
@@ -131,10 +168,10 @@ impl Clock for SystemClock {
         // This is the same absolute-deadline argument §3.1 makes about the
         // tick itself, one level down.
         while let Some(remaining) = deadline.checked_sub(self.now()) {
-            let Some(coarse) = remaining.checked_sub(self.spin_margin) else {
+            let Some(nap) = self.nap(remaining) else {
                 break;
             };
-            thread::sleep(coarse.min(SLEEP_SLICE));
+            thread::sleep(nap);
         }
         while self.now() < deadline {
             hint::spin_loop();
@@ -265,65 +302,79 @@ mod tests {
         assert!(clock.now() >= deadline);
     }
 
-    /// **A sleep longer than one slice still lands on the deadline** — S63.
+    /// **The decision, checked exactly and without a clock** — S63.
     ///
-    /// The regression this guards is the one that made the macOS tick drift:
-    /// a single `thread::sleep` for a whole tick period is granted slack in
-    /// proportion to its length, so it woke up past the deadline and there was
-    /// no margin left to spin through. See [`SystemClock`].
+    /// This is the regression test for the sliced sleep, and it is the fourth
+    /// attempt at one. The first three measured wall-clock time and all three
+    /// were flaky on a shared CI runner — a worst case of 15.5 ms against a
+    /// 1 ms budget, then a median of 9.7 ms against a 2 ms one, on code whose
+    /// median is 76 ns on real hardware. See [`SystemClock::nap`].
     ///
-    /// # Why this asserts the **median** and not the worst
-    ///
-    /// Because the first version asserted the worst of eight ticks against one
-    /// millisecond, and a GitHub macOS runner failed it at **15.5 ms** — a
-    /// scheduler stall on a shared, virtualised machine, which is a fact about
-    /// the runner and not about this code.
-    ///
-    /// `tests/realtime.rs` had already learnt exactly this, and wrote it down:
-    /// a bound on a tail *"stood at 5 ms for seven sessions, failed a
-    /// documentation-only commit at 16 ms, was loosened to one whole tick
-    /// period — and failed again two commits later at 210 ms"*. A maximum over
-    /// a handful of samples is whatever else the machine was doing.
-    ///
-    /// **The defect was systematic, so the statistic can be too.** The broken
-    /// version overshot by a median of 3.45 ms — *every tick, on an idle
-    /// machine* — and the fixed one by 76 ns. A median cleanly separates those
-    /// two and a single stall cannot move it. The bound is
-    /// [`SLEEP_SLICE`] rather than a number of its own: the whole claim is that
-    /// the approach to the deadline is governed by one **slice** instead of by
-    /// the whole remainder, so an error smaller than a slice is the claim
-    /// holding, and the 3.45 ms that failed is larger than one.
-    ///
-    /// The per-tick assertion that it never returns **early** stays, because
-    /// that one is correctness rather than timing and no amount of load can
-    /// excuse it.
+    /// What S63 changed is a **decision**, not a duration: *ask for at most one
+    /// slice, and recompute against the deadline*. The broken version asked for
+    /// the whole remainder in one go, which is what earned it slack in
+    /// proportion. So that is what is asserted, exactly.
     #[test]
-    fn a_sleep_of_several_slices_still_wakes_on_time() {
+    fn a_nap_is_never_longer_than_one_slice_and_never_reaches_the_margin() {
         let clock = SystemClock::new();
-        // A whole 44 Hz tick period, which is ten times `SLEEP_SLICE` and the
-        // length the real grid asks for.
+        let margin = clock.spin_margin();
+
+        // A whole 44 Hz period — what the real grid asks for, and ten times a
+        // slice. The broken version returned all 21.7 ms of it.
         let period = Duration::from_micros(22_727);
+        assert_eq!(clock.nap(period), Some(SLEEP_SLICE));
 
-        // An odd count so the median is a measured sample rather than a mean of
-        // two, and enough of them that one stall cannot reach the middle.
-        let mut overshoot = Vec::with_capacity(21);
-        for _ in 0..21 {
-            let deadline = clock.now() + period;
-            clock.sleep_until(deadline);
-            let now = clock.now();
-            assert!(now >= deadline, "it returned early");
-            overshoot.push(now - deadline);
-        }
-        overshoot.sort_unstable();
-        let median = overshoot[overshoot.len() / 2];
-
-        assert!(
-            median < SLEEP_SLICE,
-            "the median of twenty-one ticks overshot by {median:?}, which is not \
-             smaller than one {SLEEP_SLICE:?} slice — the drift S63 removed is back \
-             (worst was {:?}, which this deliberately does not judge)",
-            overshoot[overshoot.len() - 1]
+        // Longer than a slice once the margin is off: capped.
+        assert_eq!(clock.nap(margin + SLEEP_SLICE * 2), Some(SLEEP_SLICE));
+        // Exactly a slice once the margin is off: that slice.
+        assert_eq!(clock.nap(margin + SLEEP_SLICE), Some(SLEEP_SLICE));
+        // Less than a slice: the rest, so the last nap lands short rather than
+        // over. This is what makes the approach to the deadline accurate.
+        assert_eq!(
+            clock.nap(margin + Duration::from_micros(300)),
+            Some(Duration::from_micros(300))
         );
+
+        // At the margin and inside it there is nothing left to sleep for — the
+        // spin covers it, and a sleep here is exactly what would overshoot.
+        assert_eq!(clock.nap(margin), None);
+        assert_eq!(clock.nap(margin / 2), None);
+        assert_eq!(clock.nap(Duration::ZERO), None);
+    }
+
+    /// The two invariants over the whole range, rather than at the points the
+    /// test above happens to name.
+    ///
+    /// Swept in 37 µs steps across three tick periods — a step that divides
+    /// neither the slice nor the margin, so it does not only ever land on the
+    /// round numbers a bug would land on too.
+    #[test]
+    fn no_nap_ever_overshoots_the_margin_or_the_slice() {
+        let clock = SystemClock::new();
+        let margin = clock.spin_margin();
+
+        let mut remaining = Duration::ZERO;
+        let limit = Duration::from_micros(22_727 * 3);
+        while remaining <= limit {
+            if let Some(nap) = clock.nap(remaining) {
+                assert!(
+                    nap <= SLEEP_SLICE,
+                    "a nap of {nap:?} with {remaining:?} left is longer than one slice"
+                );
+                // The safety property: a nap can never reach into the margin,
+                // so the spin always has something left to spin through.
+                assert!(
+                    nap + margin <= remaining,
+                    "a nap of {nap:?} with {remaining:?} left eats into the {margin:?} margin"
+                );
+            } else {
+                assert!(
+                    remaining <= margin,
+                    "{remaining:?} left is more than the {margin:?} margin and should still sleep"
+                );
+            }
+            remaining += Duration::from_micros(37);
+        }
     }
 
     /// The slice is an upper bound on one `sleep`, not on the wait: a deadline
