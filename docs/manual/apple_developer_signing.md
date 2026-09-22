@@ -11,7 +11,9 @@ it.
 > an **app-specific password**, both from one Apple Developer Program account.
 > The certificate signs the bundle; the password notarises it. **Six** values go
 > into GitHub Secrets and `.github/workflows/release.yml` does the rest. §5, §6
-> and §9 are the three sections you cannot skip.
+> and §9 are the three sections you cannot skip — and **§5.0 does the
+> certificate on the command line**, which is shorter than the windows and does
+> not depend on what language your macOS is in.
 
 ---
 
@@ -144,14 +146,95 @@ expired one fails to launch**, which is a worse failure than not having had one.
 Four steps, in this order. Steps 1 and 4 are on your Mac; 2 and 3 are on Apple's
 website.
 
+### 5.0 The short way, on the command line — **and it is language-independent**
+
+**Added after the owner pointed out that §5.1's menu names are the English
+ones.** macOS is localised and this document is not: on a German system the
+menus below read *Schlüsselbundverwaltung → Zertifikatsassistent → „Zertifikat
+einer Zertifizierungsinstanz anfordern …"*, and the field labels differ again.
+
+The whole of §5.1 and §5.4 can be done with `openssl` instead, which says the
+same thing in every language, can be pasted, and produces the `.p12` §9 wants
+directly rather than through an export dialogue. **This is the recommended
+path**; §5.1 stays for whoever prefers the window.
+
+**Use `/usr/bin/openssl` explicitly** — see the warning below.
+
+1. A private key and a certificate signing request:
+
+```bash
+/usr/bin/openssl genrsa -out prismdmx.key 2048
+```
+
+```bash
+/usr/bin/openssl req -new -key prismdmx.key -out prismdmx.certSigningRequest -subj "/emailAddress=YOUR@EMAIL/CN=PrismDMX Developer ID/C=DE"
+```
+
+2. Upload `prismdmx.certSigningRequest` at §5.2 and download
+   `developerID_application.cer`.
+
+3. Apple returns **DER**. Convert it and pack both halves into the `.p12`:
+
+```bash
+/usr/bin/openssl x509 -inform DER -in developerID_application.cer -out cert.pem
+```
+
+```bash
+/usr/bin/openssl pkcs12 -export -out Certificates.p12 -inkey prismdmx.key -in cert.pem
+```
+
+It asks for an export password. That is `APPLE_CERTIFICATE_PASSWORD` (§9) —
+long, random, into your password manager now.
+
+4. For signing **locally** as well, put the same file in your keychain:
+
+```bash
+security import Certificates.p12 -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign
+```
+
+5. Check it arrived, which is §5.3's test either way:
+
+```bash
+security find-identity -v -p codesigning | grep "Developer ID Application"
+```
+
+> ### ⚠️ Which `openssl` — this one bites, and its error message lies
+>
+> macOS ships **LibreSSL** at `/usr/bin/openssl`. Homebrew installs **OpenSSL
+> 3** and usually puts it *earlier* in `PATH`, so a bare `openssl` is often not
+> the one you think. They do not produce the same `.p12`:
+>
+> | Built with | `security import` says |
+> |---|---|
+> | `/usr/bin/openssl` (LibreSSL) | **imports** |
+> | Homebrew OpenSSL 3, no flag | **`MAC verification failed during PKCS12 import (wrong password?)`** |
+> | Homebrew OpenSSL 3, `-legacy` | **imports** |
+>
+> OpenSSL 3 defaults to an encryption macOS's importer does not read, and the
+> error it produces **blames the password**, which is the one thing that is not
+> wrong. All three rows were measured on a real keychain import.
+>
+> So: use `/usr/bin/openssl`, or add `-legacy` to the `pkcs12 -export` line.
+> `openssl version` tells you which you have — LibreSSL, or OpenSSL 3.
+
+---
+
 ### 5.1 Make the signing request on your Mac
 
 The private key is created here and **never leaves this machine**. What you send
 Apple is a request containing only the public half.
 
-1. Open **Keychain Access** (`/Applications/Utilities/`).
+**The menu names below are the English ones.** On a German system they read
+*Schlüsselbundverwaltung*, *Zertifikatsassistent* and *„Zertifikat einer
+Zertifizierungsinstanz anfordern …"*; the German names in this section were
+read out of the application's own localisation tables, the field labels inside
+the dialogue were not and may be worded differently. **§5.0 avoids all of it.**
+
+1. Open **Keychain Access** — German: **Schlüsselbundverwaltung**
+   (`/Applications/Utilities/`, German *Dienstprogramme*).
 2. Menu **Keychain Access → Certificate Assistant → Request a Certificate From a
-   Certificate Authority…**
+   Certificate Authority…** — German: **Schlüsselbundverwaltung →
+   Zertifikatsassistent → „Zertifikat einer Zertifizierungsinstanz anfordern …"**
 3. Fill it in:
    - **User Email Address**: the Apple ID of the developer account.
    - **Common Name**: something you will recognise in a keychain list, e.g.
@@ -236,7 +319,8 @@ The ten characters in the brackets — `ABCDE12345` above — are your **Team ID
 CI has no keychain, so it is handed the certificate and its private key together
 in one encrypted file.
 
-1. Keychain Access → **login** → **My Certificates**.
+1. Keychain Access → **login** → **My Certificates**. German: **Anmeldung** →
+   **Meine Zertifikate** (the private key sits under **Schlüssel**).
 2. Find **Developer ID Application: …**, and **expand the disclosure triangle**
    so you can see the private key underneath it.
 3. Right-click the **certificate** row (not the key) → **Export "Developer ID
@@ -565,6 +649,7 @@ whether it is signed or not, and will tell you nothing.
 | `errSecInternalComponent` when signing | The keychain re-locked, or `codesign` may not use the key | `security set-key-partition-list` (§9.2 step 2). Locally: unlock the login keychain |
 | `User interaction is not allowed` | The same thing, on a headless runner: something wanted to show a dialog | as above |
 | `The specified item could not be found in the keychain` | `APPLE_SIGNING_IDENTITY` does not match a certificate that is there — usually a truncated string or the wrong Team ID | copy the identity verbatim from `security find-identity -v -p codesigning` |
+| `security import`: **`MAC verification failed during PKCS12 import (wrong password?)`** | The password is almost certainly right. The `.p12` was built by **Homebrew OpenSSL 3** without `-legacy`, and macOS cannot read its encryption | rebuild it with `/usr/bin/openssl`, or add `-legacy` (§5.0's warning). This also fails the CI import step, where the message is just as misleading |
 | Base64 decode fails in CI | The `.p12` was encoded with line wraps | re-encode with `base64 -i … \| tr -d '\n'` (§9.1) |
 | Notarisation: `Team is not yet configured for notarization` | A new account Apple has not finished provisioning | wait; it is usually under an hour. If it persists, Apple Developer Support |
 | Notarisation: `Invalid credentials` | The app-specific password was revoked, mistyped, or belongs to a different Apple ID than `APPLE_ID` | §6.1, and test with §6.3 before re-running a release |
