@@ -427,6 +427,13 @@ goes no further: it is not shared on and it is not in anybody's installer.
   not stop it.
 - A profile that will not download, or that downloads and is not a readable
   fixture, is **counted and skipped** — one bad entry does not cost you the rest.
+- **A library this size is read in the background.** The first start after a
+  download, and the minute after an update, the desk comes up with its built-in
+  profiles and adds the library when it has read it — a line at the bottom says
+  *The fixture library is ready*. Lights and the show are there from the first
+  second; only the list of fixtures to *add* grows. From then on the desk
+  remembers what it read (`library-index.json` in its data folder, safe to
+  delete) and starts with the whole library in a few seconds.
 
 **You do not need any of this.** The desk ships with the Open Fixture Library,
 reads a `.gdtf` you put in the folder yourself, and takes a planner's `.mvr`

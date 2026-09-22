@@ -817,9 +817,9 @@ impl ShowFile {
         let library = self.library.profile(type_id);
         let show = self.show.fixture_type(type_id);
         let profile = if adding > 0 {
-            library.or(show)
+            library.as_ref().or(show)
         } else {
-            show.or(library)
+            show.or(library.as_ref())
         };
         self.show
             .preview_patch_with(profile, type_id, request, adding)
@@ -837,7 +837,7 @@ impl ShowFile {
         let Command::EmbedFixtureType { type_id } = command else {
             return Ok(Applied::default());
         };
-        let Some(profile) = self.library.profile(type_id).cloned() else {
+        let Some(profile) = self.library.profile(type_id) else {
             return Err(ShowFileError::Show(ShowError::UnknownLibraryType(
                 type_id.clone(),
             )));
@@ -888,7 +888,7 @@ impl ShowFile {
                 placements.len(),
             )));
         }
-        let from_library = self.library.profile(type_id).cloned();
+        let from_library = self.library.profile(type_id);
         let Some(profile) = from_library
             .clone()
             .or_else(|| self.show.fixture_type(type_id).cloned())
@@ -2216,7 +2216,7 @@ mod tests {
         // owns it, which is what makes a show open on a desk without it.
         assert_eq!(
             file.show.fixture_type("generic.rgb.par"),
-            file.library.profile("generic.rgb.par")
+            file.library.profile("generic.rgb.par").as_ref()
         );
     }
 

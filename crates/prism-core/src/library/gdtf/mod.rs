@@ -97,7 +97,7 @@ const PATCHED_BREAK: u32 = 1;
 /// Counted rather than logged, so a test can assert on it and an installed
 /// library can be compared with the last one. Every field is a *loss* except
 /// the first two and the last three.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Conversion {
     /// Files that were read and understood.
     pub fixtures: usize,
@@ -181,6 +181,30 @@ pub fn read_archive(bytes: &[u8], own: bool) -> (Vec<(LibraryEntry, FixtureType)
         return rejected;
     };
     read_description(&source, own)
+}
+
+/// Reads a `.gdtf` **on disk** without reading the archive — the library's
+/// start-up path (2026-09-22).
+///
+/// The same answer as [`read_archive`] over the file's bytes: only the end
+/// record, the central directory and the description are read off the disk
+/// ([`super::zip::read_from_file`]), not the tens of megabytes of models and
+/// pictures a published fixture carries beside them.
+#[must_use]
+pub fn read_archive_file(
+    path: &std::path::Path,
+    own: bool,
+) -> (Vec<(LibraryEntry, FixtureType)>, Conversion) {
+    match super::zip::read_from_file(path, "description.xml") {
+        Some((_, source)) => read_description(&source, own),
+        None => (
+            Vec::new(),
+            Conversion {
+                files_rejected: 1,
+                ..Conversion::default()
+            },
+        ),
+    }
 }
 
 /// Reads an unpacked `description.xml`.

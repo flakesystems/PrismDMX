@@ -116,6 +116,15 @@ pub struct Core {
     library_update: Option<Arc<std::sync::Mutex<LibraryUpdate>>>,
     /// What was last reported, so nothing is sent twice.
     library_update_seen: (u32, u32, bool),
+    /// The fixture library being read in the background, if it is
+    /// (2026-09-22). Reading a library of twelve thousand GDTF files is tens
+    /// of seconds the first time, and neither start-up nor a command may wait
+    /// for it: the desk goes on with the library it has and takes the new one
+    /// when it is read ([`Self::take_loaded_library`]).
+    library_loading: Option<std::thread::JoinHandle<prism_core::FixtureLibrary>>,
+    /// Asked to read the library again while it was being read — so it is,
+    /// once, when that read ends.
+    library_reload: bool,
     store: ShowStore,
     engine: EngineThread,
     layout: Arc<FrameLayout>,
@@ -237,6 +246,8 @@ impl Core {
             machine,
             library_update: None,
             library_update_seen: (0, 0, false),
+            library_loading: None,
+            library_reload: false,
             store,
             engine,
             layout,
@@ -1211,18 +1222,13 @@ impl Core {
         std::fs::write(&destination, &bytes)
             .map_err(|error| CoreError::Store(prism_core::StoreError::Io(error.to_string())))?;
 
-        // The same call the daemon makes at start-up, over the same two trees
-        // and with the same configured path — the settings panel's `Fixture
-        // library`, where a venue points at a stick or a network drive.
-        let configured = self
-            .machine
-            .config
-            .settings()
-            .fixture_library
-            .clone()
-            .map(std::path::PathBuf::from);
-        self.file.library =
-            crate::daemon::load_library(&self.machine.data_dir, configured.as_deref());
+        // Offered at once, and the whole library read again **in the
+        // background** to settle which of two copies of a fixture wins — the
+        // same read the daemon makes at start-up, which on a library of twelve
+        // thousand files would otherwise hold the desk for as long
+        // (2026-09-22).
+        self.file.library.file_imported(built, &destination);
+        self.start_library_load();
         log::info(
             "library",
             &format!("imported {} into {}", path.display(), destination.display()),
@@ -1366,19 +1372,83 @@ impl Core {
             self.library_update = None;
             self.library_update_seen = (0, 0, false);
             if written > 0 {
-                let configured = self
-                    .machine
-                    .config
-                    .settings()
-                    .fixture_library
-                    .clone()
-                    .map(std::path::PathBuf::from);
-                self.file.library =
-                    crate::daemon::load_library(&self.machine.data_dir, configured.as_deref());
+                // Read in the background, like every read of the library
+                // since 2026-09-22 — it is the whole download.
+                self.start_library_load();
             }
             log::info("library", &message);
         }
         deltas
+    }
+
+    /// Hands the core a library that start-up did not wait for — 2026-09-22.
+    pub fn adopt_library_load(
+        &mut self,
+        loading: std::thread::JoinHandle<prism_core::FixtureLibrary>,
+    ) {
+        self.library_loading = Some(loading);
+    }
+
+    /// Reads the library again, in the background, over the same trees and
+    /// with the same configured path start-up uses — or, while a read is
+    /// running, once more when it ends.
+    fn start_library_load(&mut self) {
+        if self.library_loading.is_some() {
+            self.library_reload = true;
+            return;
+        }
+        let configured = self
+            .machine
+            .config
+            .settings()
+            .fixture_library
+            .clone()
+            .map(std::path::PathBuf::from);
+        self.library_loading = Some(crate::daemon::spawn_library_load(
+            &self.machine.data_dir,
+            configured,
+        ));
+    }
+
+    /// Takes a library read in the background, once it is — 2026-09-22.
+    ///
+    /// Asked by the daemon's housekeeping every half second, and answers
+    /// nothing while nothing has finished. The show is untouched by it: a
+    /// patched fixture's profile is embedded in the show (S11), so a library
+    /// arriving changes what can be **added**, never what is running.
+    pub fn take_loaded_library(&mut self) -> Vec<Delta> {
+        if !self
+            .library_loading
+            .as_ref()
+            .is_some_and(std::thread::JoinHandle::is_finished)
+        {
+            return Vec::new();
+        }
+        let Some(loading) = self.library_loading.take() else {
+            return Vec::new();
+        };
+        self.file.library = crate::daemon::join_library_load(loading);
+        let fixtures = self.file.library.fixture_count();
+        log::info(
+            "library",
+            &format!(
+                "the fixture library is read: {} profiles of {fixtures} fixtures",
+                self.file.library.len()
+            ),
+        );
+        if std::mem::take(&mut self.library_reload) {
+            self.start_library_load();
+        }
+        vec![Delta::Notice {
+            level: NoticeLevel::Info,
+            message: format!("The fixture library is ready: {fixtures} fixtures"),
+        }]
+    }
+
+    /// Whether the library is being read in the background. For the tests.
+    #[must_use]
+    pub const fn library_loading(&self) -> bool {
+        self.library_loading.is_some()
     }
 
     /// Takes the remembered account out of the secret store — S62.

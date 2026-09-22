@@ -5099,6 +5099,40 @@ somebody else.
 
 ---
 
+### 2.61 A library of twelve thousand — verification record (B64)
+
+Measured on 2026-09-22. The owner downloaded the whole GDTF library through
+S62's *GDTF Share* panel and the desk would not start: *"über eine Minute zum
+Booten und dann nicht einmal die UI oder das Tray-Icon gestartet, weil es in
+ein Timeout lief."* Reproduced on this machine against the same 12 574 files
+(13 GB, 54 658 modes) with a release build: **74 s** before the listeners bound
+— the desktop shell gives up after twenty — and **1.8 GB** held.
+
+| Cause | Now | Held by |
+|---|---|---|
+| Start-up joined the library thread before binding its listeners | waits at most `LIBRARY_WAIT` (3 s), then runs with the built-in profiles; `Core::take_loaded_library` swaps the library in from the housekeeping with a notice. Import and library update were **synchronous under the core lock** — a 74 s freeze of every command after each — and read in the background now; an import files its profiles at once (`FixtureLibrary::file_imported`), so it is still offered immediately | `start_up_waits_for_the_library_only_so_long`; `settings.rs` import tests unchanged and green |
+| Every `.gdtf` read whole — models and pictures — for its description | `zip::read_from_file`: end record, central directory, one entry | `one_entry_read_from_a_file_is_the_entry_read_from_its_bytes`, `a_file_that_is_not_an_archive_or_is_cut_short_reads_as_nothing` |
+| Every mode's whole device in memory, S30b's geometry and functions included | `library::Held`: the patch window's two facts per mode; a GDTF profile read back from its file by `FixtureLibrary::profile` when patched, sixteen kept | `a_gdtf_profile_is_read_back_out_of_its_file_when_it_is_wanted` |
+| Every file parsed at every start, one after another | files parsed in parallel; `library::index` — `library-index.json` beside the show — remembers each file's length, time and entries (`VERSION` bumped when a reader changes) | `a_library_read_with_its_index_is_the_library_read_without_it` (same library, same counts, a changed file read again, a broken index ignored) |
+| On Windows, each file asked for its kind and time by opening it | the walks take kind, length and time from the directory listing | measured: 7.5 s of walk and 8 s of stamps became nothing |
+
+| Start | Listening after | Library in after | Memory |
+|---|---|---|---|
+| before | 74 s | 74 s | 1.8 GB |
+| first, no index | **4.0 s** | **19 s** (in the background) | 247 MB peak |
+| every later one | **2.4 s** | **2.4 s** (whole) | **140 MB** |
+
+**The rig-test findings of 2026-09-22** (`docs/RELEASE_TEST_0.9.3.md` §5, the
+owner's commit `3f64b9a`) are in `docs/ISSUES.md`: **B63** the drawing of the
+desk in the Controls panel is wrong (T-S59.14; a session of its own, the owner's
+wish), **B65** an MVR export is missing (and the owner's open question: what
+becomes of Open Fixture Library fixtures in it), **B66** several functions on
+several keys (the owner rebinds them themselves). **B64** is this record and **B67**
+the viewer's three findings (§2.60's addendum). Every other item of the
+checklist is ticked.
+
+---
+
 ## 3. Coverage tracking
 
 Targets from `CLAUDE.md`: ≥ 85 % global, > 95 % on engine, programmer and protocols. Record **measured** figures only — leave blank until a run produces a number.
@@ -8719,12 +8753,16 @@ it assumes no memory of this conversation and no knowledge of the project.
 
 **S30b is done — the 3D viewer rebuilt as a visualiser** after the owner turned
 S30's down (§2.60). It is on the branch `feat/s30b-visualizer`, not yet merged.
-What is left before the tag is **the owner's rig test**:
-`docs/RELEASE_TEST_0.9.3.md`, with chapter **1b** for S62's ways into the
-library, **2a** for the visualiser (T-3D.10 to T-3D.17 are new, and want a
-GDTF moving head such as the Robin T1) and **2b** for what only works with
-both. A clean result is the tag; a finding is a B-number and the release waits
-for it.
+**The owner's rig test is done** (2026-09-22, `docs/RELEASE_TEST_0.9.3.md`
+§5) and found three things, now **B63** (the desk drawing in the Controls
+panel — a session of its own), **B65** (MVR export, with the open question of
+what becomes of OFL fixtures) and **B66** (several functions on several keys —
+the owner rebinds them). **The release waits on B63 and B65** by the
+checklist's own rule, unless the owner decides otherwise. Two more came out of
+the same day and are fixed on the branch `fix/library-startup`: **B64**, the
+desk not starting with the whole GDTF library (§2.61), and **B67**, three viewer
+findings (§2.60). T-3D.4a, T-3D.8a, T-3D.16a, T-BOTH.6 and T-BOTH.7 are the
+checks for them on the rig.
 
 Three things S30b changed that a next session will meet:
 

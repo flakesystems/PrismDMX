@@ -27,7 +27,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use prism_core::{MachineConfig, ShowFile, ShowStore};
 use prism_domain::{Delta, OutputHealth, OutputId, OutputInstance, UniverseId};
@@ -353,13 +353,30 @@ impl Daemon {
 
         let engine = EngineThread::start(body, publisher)?;
 
-        // Joined **after** the engine is running and **before** anything can
-        // ask: a client's first `Snapshot` carries how many profiles this desk
-        // has, and a number that was right a moment later would be worse than a
-        // handshake that waited. By now the load has had the whole of the
-        // engine and output start-up to run in.
+        // Waited for **briefly**, after the engine is running and before
+        // anything can ask (2026-09-22). A library of a few hundred profiles is
+        // read long before this and the desk starts with it, as it always has.
+        // One of twelve thousand is not, and a desk whose listeners waited for
+        // it answered nobody for over a minute — long enough for the desktop
+        // shell to give up on it. So past `LIBRARY_WAIT` the desk starts with
+        // the built-in profiles, and the housekeeping takes the library when it
+        // is read and says so (`Core::take_loaded_library`).
         let mut file = file;
-        file.library = join_library_load(loading);
+        let still_loading = match wait_for_library(loading, LIBRARY_WAIT) {
+            Ok(library) => {
+                file.library = library;
+                None
+            }
+            Err(loading) => {
+                log::info(
+                    "library",
+                    "the fixture library is still being read; the desk starts with the built-in \
+                     profiles and offers the library as soon as it is read",
+                );
+                file.library = built_in_library();
+                Some(loading)
+            }
+        };
         // The rig this run is using, so that a snapshot shows what is actually
         // there. When the command line supplied it, `machine_path` is `None`,
         // the stored configuration is left alone and the four output commands
@@ -405,6 +422,9 @@ impl Daemon {
         // — S37. Recorded here rather than in `Core::open_show`, because the
         // show a daemon starts with does not arrive through a command.
         core.remember_show();
+        if let Some(loading) = still_loading {
+            core.adopt_library_load(loading);
+        }
         let desk = Arc::new(Desk::new(core));
 
         // 4. The listeners, and only then their addresses.
@@ -824,7 +844,14 @@ impl Daemon {
                             // what it has done. It answers nothing while
                             // nothing has moved, so a desk with no update
                             // running sends no traffic at all.
-                            core.library_update_progress(),
+                            {
+                                // And a library read in the background — at
+                                // start-up, after an import, after an update —
+                                // taken the moment it is read (2026-09-22).
+                                let mut deltas = core.library_update_progress();
+                                deltas.extend(core.take_loaded_library());
+                                deltas
+                            },
                         )
                     };
                     if let Some(port) = change {
@@ -1058,13 +1085,47 @@ impl Daemon {
     }
 }
 
+/// How long start-up waits for the fixture library before it starts without it.
+///
+/// Well inside the desktop shell's own patience with the daemon (twenty
+/// seconds), and far longer than a library of a few hundred profiles or a
+/// library read from its index takes — so an ordinary start is exactly what it
+/// always was.
+const LIBRARY_WAIT: Duration = Duration::from_secs(3);
+
+/// The library the load produced, or the load itself when it has not finished
+/// within `patience`.
+fn wait_for_library(
+    loading: std::thread::JoinHandle<prism_core::FixtureLibrary>,
+    patience: Duration,
+) -> Result<prism_core::FixtureLibrary, std::thread::JoinHandle<prism_core::FixtureLibrary>> {
+    let deadline = Instant::now() + patience;
+    while !loading.is_finished() {
+        if Instant::now() >= deadline {
+            return Err(loading);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    Ok(join_library_load(loading))
+}
+
+/// The four built-in generics, and nothing else — what a desk offers while its
+/// library is being read, and when reading it failed.
+pub(crate) fn built_in_library() -> prism_core::FixtureLibrary {
+    let mut library = prism_core::FixtureLibrary::default();
+    for profile in prism_core::generic_profiles() {
+        library.insert_profile(profile);
+    }
+    library
+}
+
 /// Starts reading the profile directories on a thread of its own.
 ///
 /// See [`Daemon::start`] for why: the read is hundreds of milliseconds and
 /// nothing before the first DMX frame needs it. `std::thread` rather than a
 /// runtime task because it is a blocking file walk — `ARCHITECTURE_SPEC.md` §3
 /// keeps `core-main`'s executor for work that yields.
-fn spawn_library_load(
+pub(crate) fn spawn_library_load(
     data_dir: &Path,
     configured: Option<PathBuf>,
 ) -> std::thread::JoinHandle<prism_core::FixtureLibrary> {
@@ -1078,7 +1139,7 @@ fn spawn_library_load(
 /// than stopping it: `CLAUDE.md`'s zero-crash invariant applies to a fixture
 /// menu as much as to anything else, and a desk with four profiles is one an
 /// operator can still patch a dimmer into.
-fn join_library_load(
+pub(crate) fn join_library_load(
     loading: std::thread::JoinHandle<prism_core::FixtureLibrary>,
 ) -> prism_core::FixtureLibrary {
     loading.join().unwrap_or_else(|_| {
@@ -1113,6 +1174,11 @@ fn join_library_load(
 /// exit criterion, and not something a test of `FixtureLibrary` alone can say.
 pub fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::FixtureLibrary {
     let mut library = prism_core::FixtureLibrary::default();
+    // What the last start read, so a file that has not changed is not parsed
+    // again (2026-09-22) — see `prism_core::library::index`.
+    library.use_index(prism_core::LibraryIndex::open(&paths::library_index(
+        data_dir,
+    )));
 
     // **The venue's own, first** — punch-list entry B43. First because
     // `FixtureLibrary` keeps the first profile it is given for a key, which is
@@ -1195,6 +1261,16 @@ pub fn load_library(data_dir: &Path, configured: Option<&Path>) -> prism_core::F
                 plans.profiles_rejected,
             ),
         );
+    }
+    if let Some(index) = library.take_index() {
+        log::info(
+            "library",
+            &format!(
+                "{} files taken from the library index, the rest read",
+                index.hits()
+            ),
+        );
+        index.save();
     }
     library
 }
@@ -1415,11 +1491,30 @@ pub fn data_dir_of(options: &Options) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Daemon, StartError, data_dir_of, label_for, open_show, show_universes, source_name,
+        Daemon, StartError, built_in_library, data_dir_of, label_for, open_show, show_universes,
+        source_name, wait_for_library,
     };
     use crate::testkit::show_file;
     use prism_domain::UniverseId;
     use std::path::Path;
+
+    /// **Start-up waits for the library only so long** (2026-09-22): a read
+    /// that outlasts the wait is handed back to be taken later, and one that
+    /// finished is the library.
+    #[test]
+    fn start_up_waits_for_the_library_only_so_long() {
+        let slow = std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            built_in_library()
+        });
+        let started = std::time::Instant::now();
+        let slow = wait_for_library(slow, std::time::Duration::from_millis(30))
+            .expect_err("a read past the wait is not waited for");
+        assert!(started.elapsed() < std::time::Duration::from_millis(300));
+        let library = wait_for_library(slow, std::time::Duration::from_secs(5))
+            .expect("and it is the library once it is read");
+        assert_eq!(library.len(), built_in_library().len());
+    }
 
     #[test]
     fn a_label_distinguishes_two_data_directories_and_is_stable() {

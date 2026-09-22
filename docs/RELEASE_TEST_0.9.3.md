@@ -406,6 +406,9 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
       allen vier kommt ein Strahl im Dunst, am Boden ein Lichtfleck; die Zeile
       sagt *4 lit*. Ein Executor mit einer Cue tut dasselbe: **was im DMX Sheet
       steht, steht auch hier**.
+- [ ] **T-3D.4a — Strahl und Fleck bündig** *(Befund der ersten Runde, behoben)*.
+      Der Strahl endet genau am Rand seines Lichtflecks, nicht breiter und nicht
+      schmaler — auch bei einem OFL- oder generischen Gerät.
 - [x] **T-3D.5 — gleich nach dem Oops.** `Oops`, **sofort** danach `Fixture 1
       At Full` (beides schnell hintereinander, oder als Makro). Das Licht am Rig
       **und** im Viewer geht an. Vor S30b konnte ein Wert, der im selben Moment
@@ -418,6 +421,10 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
       Client (zweites Fenster, anderer Bildschirm) behält **seine** Ansicht.
 - [x] **T-3D.8 — klicken wählt.** Ein Klick auf ein Fixture im Bild nimmt es in
       die Auswahl (gelber Rand); nochmal klicken nimmt es heraus.
+- [ ] **T-3D.8a — der Rand liegt am Gerät** *(Befund der ersten Runde, behoben)*.
+      Der gelbe Rand liegt eng um das Gerät, auch bei einer PAR-Kanne oder einem
+      OFL-Gerät — nicht um den Strahl. Ein Klick in den Strahl neben dem Gerät
+      wählt nichts.
 - [x] **T-3D.9 — der Ausgang merkt nichts.** Während *DMX Sheet* und *Viewer 3D*
       offen sind und eine Cue läuft: **im Viewer dauernd drehen** (Ziehen, eine
       halbe Minute). Das DMX Sheet zeigt weiter ~30 Hz, die Lampen am Rig
@@ -452,6 +459,9 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
       **bitte für jede Stufe notieren** (mit der Zahl der Fixtures). **Haze** auf
       null: nur noch der Boden zeigt das Licht. Fenster schließen und wieder
       öffnen: beide Einstellungen sind noch da.
+- [ ] **T-3D.16a — unverzerrt nach dem Wechsel** *(Befund der ersten Runde,
+      behoben)*. Nach **jedem** Wechsel der Detailstufe ist das Bild unverzerrt —
+      ein runder Fleck bleibt rund, ohne das Fenster anzufassen.
 - [x] **T-3D.17 — ein Profil ohne Gerätedaten.** Ein OFL-Moving-Head wird als
       einfacher Moving Head gezeichnet und folgt Pan und Tilt; eine PAR-Kanne
       als Kanne. Hat es ein Goborad, ist bei einem Gobo ein Muster im Strahl.
@@ -485,6 +495,17 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
       T-3D.10), sein Strahl tritt an der Linse aus und folgt Pan und Tilt. Das
       Gerät kommt aus der `.gdtf` **in** der `.mvr` — auch ohne dass es einzeln
       in der Bibliothek liegt.
+- [ ] **T-BOTH.6 — das Pult startet mit der ganzen Bibliothek.** Mit der
+      heruntergeladenen GDTF-Bibliothek (über 12 000 Fixtures) die PrismDMX-App
+      beenden und neu starten. **Erster Start danach:** Oberfläche und
+      Tray-Symbol sind nach wenigen Sekunden da; nach einer Weile (auf dem
+      Entwicklungsrechner 19 s) meldet die Zeile unten *The fixture library is
+      ready*. **Zweiter Start:** die ganze Bibliothek ist sofort da (Patch-Fenster,
+      Suche nach einem Gerät). Im Task-Manager braucht `prismd` einige hundert
+      MB, nicht Gigabytes. **Bitte beide Zeiten notieren.**
+- [ ] **T-BOTH.7 — Import hält das Pult nicht an.** Während eine Cue läuft,
+      *Import fixture (GDTF)*: das importierte Gerät ist sofort im
+      Patch-Fenster, und das Pult reagiert in der Zeit danach ohne Pause.
 - [x] **T-BOTH.5 — die Bibliothek aktualisieren, während der Viewer läuft.**
       Mit Konto (T-LIB.4): *Update the library* drücken, während *Viewer 3D* und
       *DMX Sheet* offen sind und eine Cue läuft. Das DMX Sheet bleibt bei ~30 Hz,
