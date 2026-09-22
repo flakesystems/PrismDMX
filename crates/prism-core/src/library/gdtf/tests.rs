@@ -555,3 +555,289 @@ fn counts_add_up() {
     assert_eq!(total.channels_raw, 4);
     assert_eq!(total.beams, 5);
 }
+
+/// **A published archive, read whole** — S30b.
+///
+/// There is no GDTF corpus in this repository and there cannot be one (D12),
+/// so this reads a file the person running it supplies:
+///
+/// ```text
+/// PRISMDMX_GDTF_SAMPLE=path/to/Robe@Robin_T1_Profile.gdtf \
+///   cargo test -p prism-core --lib a_published_archive -- --ignored --nocapture
+/// ```
+///
+/// It asserts what every published moving head has — a tree with an axis in
+/// it, a lens that is **not** at the base, channels that name the geometry they
+/// move, a shutter with more than one function — and prints the rest, so the
+/// person who ran it can compare it with the file.
+#[test]
+#[ignore = "reads a published .gdtf named by PRISMDMX_GDTF_SAMPLE"]
+// Printing what it read is the point: the person who ran it compares it.
+#[allow(clippy::print_stdout)]
+fn a_published_archive_is_read_whole() {
+    let Ok(path) = std::env::var("PRISMDMX_GDTF_SAMPLE") else {
+        panic!("set PRISMDMX_GDTF_SAMPLE to a published .gdtf");
+    };
+    let bytes = std::fs::read(&path).expect("the sample can be read");
+    let (built, counts) = read_archive(&bytes, true);
+    assert!(!built.is_empty(), "no mode was read: {counts:?}");
+    let (entry, profile) = &built[0];
+    let physical = profile
+        .physical
+        .as_ref()
+        .expect("a GDTF profile is physical");
+    println!(
+        "{} — {} channels, {} geometries, {} wheels",
+        entry.id,
+        profile.footprint,
+        physical.geometries.len(),
+        physical.wheels.len()
+    );
+    for node in &physical.geometries {
+        println!(
+            "  {:>2} {:<10} {:<8} parent {:?} model {:?}/{:?} at {:?}",
+            node.name.len(),
+            node.name,
+            node.kind,
+            node.parent,
+            node.model,
+            node.primitive,
+            node.position
+        );
+    }
+    for beam in &physical.beams {
+        println!(
+            "  beam {} at {:?} pointing {:?}",
+            beam.name, beam.position, beam.direction
+        );
+    }
+    assert!(
+        physical.geometries.iter().any(|node| node.kind == "Axis"),
+        "a head has axes"
+    );
+    assert!(
+        physical
+            .beams
+            .iter()
+            .all(|beam| beam.position.y.abs() > 0.05),
+        "the lens is not at the base: {:?}",
+        physical.beams
+    );
+    assert!(
+        physical
+            .channels
+            .iter()
+            .any(|detail| detail.geometry.is_some())
+    );
+    let shutter = physical
+        .channels
+        .iter()
+        .find(|detail| detail.attribute.starts_with("Shutter"))
+        .expect("a moving head has a shutter");
+    println!(
+        "  shutter: {:?}",
+        shutter
+            .functions
+            .iter()
+            .map(|f| (&f.attribute, f.from, f.to, f.physical_from, f.physical_to))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        shutter.functions.len() > 1,
+        "open/closed and strobe are two functions"
+    );
+    for wheel in &physical.wheels {
+        println!(
+            "  wheel {}: {:?}",
+            wheel.name,
+            wheel
+                .slots
+                .iter()
+                .map(|slot| (
+                    &slot.name,
+                    slot.color,
+                    slot.media.as_deref(),
+                    slot.facets.len()
+                ))
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+/// **Every function of a channel is carried for the visualiser** — S30b.
+///
+/// A shutter is closed-and-open, then a strobe with a rate; a gobo's index
+/// channel is an index while its master stands in one range and a rotation in
+/// another. Each function keeps its attribute, its physical range and its
+/// sets; a function ends where the next one **under the same master mode**
+/// starts, so the index and the rotation overlap on purpose.
+#[test]
+fn a_channel_s_functions_are_carried_whole_for_the_visualiser() {
+    let source = description(&format!(
+        r#"<Geometries>
+             <Geometry Name="Base" Position="{IDENTITY}">
+               <Axis Name="Head" Position="{IDENTITY}">
+                 <Beam Name="Beam" Position="{IDENTITY}" BeamAngle="20"/>
+               </Axis>
+             </Geometry>
+           </Geometries>
+           <DMXModes>
+             <DMXMode Name="Standard" Geometry="Base">
+               <DMXChannels>
+                 <DMXChannel DMXBreak="1" Offset="1" Geometry="Beam">
+                   <LogicalChannel Attribute="Shutter1">
+                     <ChannelFunction Attribute="Shutter1" DMXFrom="0/1">
+                       <ChannelSet Name="Closed" DMXFrom="0/1"/>
+                       <ChannelSet Name="Open" DMXFrom="32/1"/>
+                     </ChannelFunction>
+                     <ChannelFunction Attribute="Shutter1Strobe" DMXFrom="64/1"
+                                      PhysicalFrom="0.3" PhysicalTo="20"/>
+                   </LogicalChannel>
+                 </DMXChannel>
+                 <DMXChannel DMXBreak="1" Offset="2" Geometry="Head">
+                   <LogicalChannel Attribute="Gobo1">
+                     <ChannelFunction Attribute="Gobo1" DMXFrom="0/1"/>
+                     <ChannelFunction Attribute="Gobo1" DMXFrom="32/1"/>
+                   </LogicalChannel>
+                 </DMXChannel>
+                 <DMXChannel DMXBreak="1" Offset="3,4" Geometry="Head">
+                   <LogicalChannel Attribute="Gobo1Pos">
+                     <ChannelFunction Attribute="Gobo1Pos" DMXFrom="0/2"
+                                      PhysicalFrom="-180" PhysicalTo="180"
+                                      ModeMaster="Head_Gobo1" ModeFrom="0/1" ModeTo="31/1"/>
+                     <ChannelFunction Attribute="Gobo1PosRotate" DMXFrom="0/2"
+                                      PhysicalFrom="-760" PhysicalTo="760"
+                                      ModeMaster="Head_Gobo1" ModeFrom="32/1" ModeTo="255/1"/>
+                   </LogicalChannel>
+                 </DMXChannel>
+               </DMXChannels>
+             </DMXMode>
+           </DMXModes>"#
+    ));
+    let (profile, _) = only_mode(&source);
+    let physical = profile.physical.expect("a GDTF profile is physical");
+    let channels = &physical.channels;
+    assert_eq!(channels.len(), 3);
+
+    let shutter = &channels[0];
+    assert_eq!((shutter.offset, shutter.fine), (0, None));
+    assert_eq!(shutter.geometry.as_deref(), Some("Beam"));
+    let strobe_from = dmx_value("64/1").expect("a value");
+    assert_eq!(shutter.functions[0].to, strobe_from - 1);
+    assert_eq!(shutter.functions[1].attribute, "Shutter1Strobe");
+    assert_eq!(shutter.functions[1].from, strobe_from);
+    assert_eq!(shutter.functions[1].to, u16::MAX);
+    assert!((shutter.functions[1].physical_from - 0.3).abs() < 1e-9);
+    assert!((shutter.functions[1].physical_to - 20.0).abs() < 1e-9);
+    let sets: Vec<(&str, u16, u16)> = shutter.functions[0]
+        .sets
+        .iter()
+        .map(|set| (set.name.as_str(), set.from, set.to))
+        .collect();
+    let open_from = dmx_value("32/1").expect("a value");
+    assert_eq!(
+        sets,
+        [
+            ("Closed", 0, open_from - 1),
+            ("Open", open_from, strobe_from - 1)
+        ]
+    );
+
+    // Two functions under the same master mode (none) share the channel.
+    let gobo = &channels[1];
+    assert_eq!(gobo.functions[0].to, open_from - 1);
+
+    // Under a master, each mode's function runs the whole channel.
+    let index = &channels[2];
+    assert_eq!((index.offset, index.fine), (2, Some(3)));
+    for function in &index.functions {
+        assert_eq!((function.from, function.to), (0, u16::MAX));
+        assert_eq!(function.mode_master.as_deref(), Some("Head_Gobo1"));
+    }
+    assert_eq!(
+        index.functions[0].mode_to,
+        dmx_value("31/1").expect("a value")
+    );
+    assert_eq!(index.functions[1].mode_from, open_from);
+    assert_eq!(index.functions[1].attribute, "Gobo1PosRotate");
+}
+
+/// **A wheel slot's colour is its CIE colour in sRGB**, and its transmission
+/// is the Y — S30b. White (D65) is no filter at all; a prism's facets are where
+/// each pushes its beam; and only the wheels a mode uses travel with it.
+#[test]
+fn a_wheel_slot_is_read_with_its_colour_and_its_facets() {
+    let source = description(
+        r#"<Wheels>
+             <Wheel Name="Color1">
+               <Slot Name="Open" Color="0.3127,0.3290,100.0"/>
+               <Slot Name="Red" Color="0.6400,0.3300,21.26"/>
+               <Slot Name="Blue" Color="0.1500,0.0600,7.22"/>
+             </Wheel>
+             <Wheel Name="Prism1">
+               <Slot Name="Open"/>
+               <Slot Name="3-facet">
+                 <Facet Color="0.3127,0.3290,100.0" Rotation="{1,0,0}{0,1,0}{0.2,-0.1,1}"/>
+                 <Facet Color="0.3127,0.3290,100.0" Rotation="{1,0,0}{0,1,0}{-0.2,-0.1,1}"/>
+                 <Facet Color="0.3127,0.3290,100.0" Rotation="{1,0,0}{0,1,0}{0,0.2,1}"/>
+               </Slot>
+             </Wheel>
+             <Wheel Name="Unused">
+               <Slot Name="Nothing"/>
+             </Wheel>
+           </Wheels>
+           <DMXModes>
+             <DMXMode Name="Standard">
+               <DMXChannels>
+                 <DMXChannel DMXBreak="1" Offset="1">
+                   <LogicalChannel Attribute="Color1">
+                     <ChannelFunction Attribute="Color1" Wheel="Color1">
+                       <ChannelSet DMXFrom="0/1" WheelSlotIndex="1"/>
+                       <ChannelSet DMXFrom="10/1" WheelSlotIndex="2"/>
+                       <ChannelSet DMXFrom="20/1" WheelSlotIndex="3"/>
+                     </ChannelFunction>
+                   </LogicalChannel>
+                 </DMXChannel>
+                 <DMXChannel DMXBreak="1" Offset="2">
+                   <LogicalChannel Attribute="Prism1">
+                     <ChannelFunction Attribute="Prism1" Wheel="Prism1">
+                       <ChannelSet DMXFrom="0/1" WheelSlotIndex="1"/>
+                       <ChannelSet DMXFrom="128/1" WheelSlotIndex="2"/>
+                     </ChannelFunction>
+                   </LogicalChannel>
+                 </DMXChannel>
+               </DMXChannels>
+             </DMXMode>
+           </DMXModes>"#,
+    );
+    let (profile, _) = only_mode(&source);
+    let physical = profile.physical.expect("a GDTF profile is physical");
+    let names: Vec<&str> = physical
+        .wheels
+        .iter()
+        .map(|wheel| wheel.name.as_str())
+        .collect();
+    assert_eq!(names, ["Color1", "Prism1"]);
+
+    let colours = &physical.wheels[0].slots;
+    assert_eq!(colours[0].color, None, "D65 is white: no filter");
+    assert!((colours[0].transmission - 1.0).abs() < 1e-9);
+    let red = colours[1].color.expect("red is a colour");
+    assert_eq!(red.r, 255);
+    assert!(red.g < 40 && red.b < 40, "{red:?}");
+    assert!((colours[1].transmission - 0.2126).abs() < 1e-9);
+    let blue = colours[2].color.expect("blue is a colour");
+    assert_eq!(blue.b, 255);
+    assert!(blue.r < 40 && blue.g < 40, "{blue:?}");
+
+    let prism = &physical.wheels[1].slots;
+    assert!(prism[0].facets.is_empty());
+    let pushes: Vec<(f64, f64)> = prism[1]
+        .facets
+        .iter()
+        .map(|facet| (facet.x, facet.y))
+        .collect();
+    assert_eq!(pushes, [(0.2, -0.1), (-0.2, -0.1), (0.0, 0.2)]);
+    let sets = &physical.channels[1].functions[0].sets;
+    assert_eq!(sets[1].slot, Some(2));
+}

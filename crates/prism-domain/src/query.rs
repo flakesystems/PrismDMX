@@ -710,6 +710,43 @@ pub enum Query {
         /// completions are for the word being written or for the next one.
         text: String,
     },
+    /// A file out of a fixture's own archive — a 3D model or a wheel's picture
+    /// — **S30b**, and the half of S61's *names, never paths* that was left.
+    ///
+    /// A profile carries the **names** GDTF gives its models and its gobos, so
+    /// a show means the same on a desk with another library. The bytes are the
+    /// desk's: it looks the archive up by the device's GUID first (which is the
+    /// same across revisions of one fixture and across desks) and by the
+    /// profile key second, and answers with whatever part of the file starts at
+    /// `offset`. A picture can be larger than one frame of this protocol
+    /// (`prism_ipc::MAX_FRAME_BYTES`), so a client asks again at the offset the
+    /// last answer ended at until it has `total` bytes.
+    FixtureResource {
+        /// The device's GDTF GUID — `FixturePhysical::fixture_type_id`.
+        fixture_type_id: String,
+        /// The profile key, for a profile whose GUID the library does not know.
+        type_id: String,
+        /// What kind of file.
+        kind: ResourceKind,
+        /// The name the profile carries — `head`, `15020356`.
+        name: String,
+        /// Where in the file to start.
+        offset: u32,
+    },
+}
+
+/// Which of a GDTF archive's files a [`Query::FixtureResource`] asks for.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize, TS,
+)]
+#[cfg_attr(any(test, feature = "proptest"), derive(proptest_derive::Arbitrary))]
+pub enum ResourceKind {
+    /// A model — `models/gltf/<name>.glb`, or `models/3ds/<name>.3ds` where the
+    /// archive has no glTF.
+    #[default]
+    Model,
+    /// A wheel slot's picture — `wheels/<name>.png`.
+    Wheel,
 }
 
 /// The daemon's answer to a [`Query`].
@@ -1008,6 +1045,25 @@ pub enum Answer {
             proptest(strategy = "crate::arb::small_vec(3)")
         )]
         completions: Vec<String>,
+    },
+    /// Part of a fixture's file — **S30b**.
+    FixtureResource {
+        /// What was asked for, echoed so a client can file the answer.
+        kind: ResourceKind,
+        /// The name asked for, echoed.
+        name: String,
+        /// Which file of the archive this is — `models/gltf/head.glb` — so a
+        /// client knows the format. Empty when the desk has no such file.
+        path: String,
+        /// Where this part starts.
+        offset: u32,
+        /// How long the whole file is; nought when there is none.
+        total: u32,
+        /// The part, base64 (RFC 4648 §4). Text rather than MessagePack's
+        /// `bin`, because a domain type is also a JSON type and one encoding
+        /// for both is simpler than two; a third larger is a price paid once
+        /// per model, never per frame.
+        data: String,
     },
 }
 

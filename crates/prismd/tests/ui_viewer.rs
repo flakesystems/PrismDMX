@@ -18,9 +18,18 @@
 //!   byte by byte — there is no corpus and cannot be one — and the profile the
 //!   show embeds carries `physical`, which is where the viewer reads the beam's
 //!   place, direction and angle from.
+//! - **What a GDTF device is** (S30b). The head is a device, not a box: a
+//!   yoke and a head on two axes, a gobo wheel whose picture is in the archive,
+//!   a shutter with a closed, an open and a strobe function. The show embeds
+//!   the geometry tree, every channel function and every wheel, and the
+//!   visualiser evaluates them against the frame (`ui/src/viewer/state.ts`).
+//! - **A file out of the fixture's own archive** (S30b). Three
+//!   `Query::FixtureResource` exchanges: the gobo's picture served, a picture
+//!   the archive does not have, and a name that tries to climb out of the
+//!   archive — the last two answered with nothing, not refused.
 //! - **What is on the cable.** One real telemetry frame with the first head
-//!   lit and panned, so the viewer's reading of pan, tilt and intensity is
-//!   tested against `prism_ipc::TelemetryFrame::encode`'s bytes.
+//!   lit, panned and its gobo in, so the viewer's reading of it is tested
+//!   against `prism_ipc::TelemetryFrame::encode`'s bytes.
 //!
 //! # It is frozen, and the guards run on every commit
 //!
@@ -39,8 +48,8 @@ use std::time::Duration;
 
 use prism_core::ShowMirror;
 use prism_domain::{
-    AttributeType, Command, FixtureId, FixturePlace, JsonValue, Orientation, PatchPlacement,
-    SelectionMode, UniverseId, Vec3, orientation,
+    Answer, AttributeType, Command, FixtureId, FixturePlace, JsonValue, Orientation,
+    PatchPlacement, Query, ResourceKind, SelectionMode, UniverseId, Vec3, orientation,
 };
 use prism_ipc::{ClientKind, ClientMessage, Hello, ServerMessage, TelemetryFrame, Wire, local};
 use prismd::cli::{Options, mock_output};
@@ -60,6 +69,15 @@ const HEAD: &str = "prism-test/viewer-head/standard";
 /// reading of a 16-bit channel through a physical range has to arrive at.
 const PAN: u16 = 49_151;
 
+/// The head's GDTF GUID, which is how the viewer asks for its files.
+const GUID: &str = "5A1E0000-0000-4000-8000-0000000030AA";
+
+/// How many channels the head takes.
+const FOOTPRINT: usize = 8;
+
+/// The gobo channel's value with the dots in: the middle of its `10…19` set.
+const DOTS: u8 = 15;
+
 /// How many telemetry frames must agree before one is kept.
 ///
 /// A fade has no time here, but a frame already on its way when the last command
@@ -77,44 +95,77 @@ fn recording_path() -> PathBuf {
 /* The library: one moving head, as GDTF                                      */
 /* -------------------------------------------------------------------------- */
 
-/// The head's description: pan and tilt at sixteen bits, a dimmer and a zoom,
-/// in a body 0.3 × 0.5 × 0.3 m with its beam **0.2 m below** the origin.
+/// The head's description: a body with a yoke on the pan axis and a head on
+/// the tilt axis, the beam **0.2 m below** the head's origin, and eight
+/// channels — pan and tilt at sixteen bits, a dimmer, a zoom, a gobo wheel and
+/// a shutter.
 ///
-/// The beam's translation is written in millimetres (`-200`), which is what
-/// `MATRIX_TO_METRES` assumes of GDTF; `PROGRESS.md` §5 carries that as the one
-/// unchecked number, and this recording is where a browser would first see a
-/// head drawn a kilometre from its beam if it were wrong.
+/// The beam's translation is written as the GDTF specification states it — the
+/// fourth number of the third row, in metres (`-0.2`) — which a published
+/// Robe Robin T1 Profile confirmed on 2026-09-21 (S30b). The shutter stands
+/// open by default, as a real one's does, so a head with only its dimmer up is
+/// lit.
 const DESCRIPTION: &str = r#"<GDTF DataVersion="1.2">
   <FixtureType Name="Viewer Head" Manufacturer="Prism Test"
                FixtureTypeID="5A1E0000-0000-4000-8000-0000000030AA">
+    <Wheels>
+      <Wheel Name="Gobo1">
+        <Slot Name="Open"/>
+        <Slot Name="Dots" MediaFileName="gobo-dots"/>
+        <Slot Name="Star" MediaFileName="gobo-star"/>
+      </Wheel>
+    </Wheels>
     <Models><Model Name="Body" File="viewer-head" Length="0.3" Width="0.3" Height="0.5"/></Models>
     <Geometries>
       <Geometry Name="Body" Model="Body" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
-        <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,-200,1}"
-              BeamAngle="18" LuminousFlux="9000" ColorTemperature="6500"/>
+        <Axis Name="Yoke" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
+          <Axis Name="Head" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
+            <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,-0.2}{0,0,0,1}"
+                  BeamAngle="18" LuminousFlux="9000" ColorTemperature="6500"/>
+          </Axis>
+        </Axis>
       </Geometry>
     </Geometries>
     <DMXModes>
       <DMXMode Name="Standard" Geometry="Body">
         <DMXChannels>
-          <DMXChannel Offset="1,2">
+          <DMXChannel Offset="1,2" Geometry="Yoke">
             <LogicalChannel Attribute="Pan">
               <ChannelFunction Attribute="Pan" PhysicalFrom="-270" PhysicalTo="270"/>
             </LogicalChannel>
           </DMXChannel>
-          <DMXChannel Offset="3,4">
+          <DMXChannel Offset="3,4" Geometry="Head">
             <LogicalChannel Attribute="Tilt">
               <ChannelFunction Attribute="Tilt" PhysicalFrom="-135" PhysicalTo="135"/>
             </LogicalChannel>
           </DMXChannel>
-          <DMXChannel Offset="5">
+          <DMXChannel Offset="5" Geometry="Beam">
             <LogicalChannel Attribute="Dimmer">
               <ChannelFunction Attribute="Dimmer"/>
             </LogicalChannel>
           </DMXChannel>
-          <DMXChannel Offset="6">
+          <DMXChannel Offset="6" Geometry="Beam">
             <LogicalChannel Attribute="Zoom">
               <ChannelFunction Attribute="Zoom" PhysicalFrom="8" PhysicalTo="40"/>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel Offset="7" Geometry="Head">
+            <LogicalChannel Attribute="Gobo1">
+              <ChannelFunction Attribute="Gobo1" Wheel="Gobo1" DMXFrom="0/1">
+                <ChannelSet Name="Open" DMXFrom="0/1" WheelSlotIndex="1"/>
+                <ChannelSet Name="Dots" DMXFrom="10/1" WheelSlotIndex="2"/>
+                <ChannelSet Name="Star" DMXFrom="20/1" WheelSlotIndex="3"/>
+              </ChannelFunction>
+            </LogicalChannel>
+          </DMXChannel>
+          <DMXChannel Offset="8" Geometry="Beam" Default="32/1">
+            <LogicalChannel Attribute="Shutter1">
+              <ChannelFunction Attribute="Shutter1" DMXFrom="0/1" Default="32/1">
+                <ChannelSet Name="Closed" DMXFrom="0/1"/>
+                <ChannelSet Name="Open" DMXFrom="32/1"/>
+              </ChannelFunction>
+              <ChannelFunction Attribute="Shutter1Strobe" DMXFrom="64/1"
+                               PhysicalFrom="1" PhysicalTo="20"/>
             </LogicalChannel>
           </DMXChannel>
         </DMXChannels>
@@ -123,63 +174,126 @@ const DESCRIPTION: &str = r#"<GDTF DataVersion="1.2">
   </FixtureType>
 </GDTF>"#;
 
-/// Writes the head as a `.gdtf` — a stored ZIP of one entry — byte by byte.
+/// Writes the head as a `.gdtf` — a stored ZIP of its description and the
+/// dots gobo's picture — byte by byte. The star has no picture: a slot whose
+/// file the archive lacks is the ordinary case, and answered with nothing.
 ///
 /// A copy of `ui_patch.rs`'s writer rather than a shared one: an integration
 /// target links a crate's library and not another target's helpers, and the
 /// two recordings are allowed to move independently.
 fn write_library(root: &Path) {
-    let name = b"description.xml";
-    let body = DESCRIPTION.as_bytes();
-    let crc = crc32(body);
-    let size = u32::try_from(body.len()).expect("a small description");
+    let dots = dots_picture();
+    let entries: [(&[u8], &[u8]); 2] = [
+        (b"description.xml", DESCRIPTION.as_bytes()),
+        (b"wheels/gobo-dots.png", &dots),
+    ];
     let mut out: Vec<u8> = Vec::new();
-    out.extend_from_slice(&0x0403_4b50_u32.to_le_bytes()); // local header
-    out.extend_from_slice(&20_u16.to_le_bytes()); // version needed
-    out.extend_from_slice(&0_u16.to_le_bytes()); // flags
-    out.extend_from_slice(&0_u16.to_le_bytes()); // stored
-    out.extend_from_slice(&0_u32.to_le_bytes()); // time and date
-    out.extend_from_slice(&crc.to_le_bytes());
-    out.extend_from_slice(&size.to_le_bytes());
-    out.extend_from_slice(&size.to_le_bytes());
-    out.extend_from_slice(&15_u16.to_le_bytes()); // name length
-    out.extend_from_slice(&0_u16.to_le_bytes()); // extra
-    out.extend_from_slice(name);
-    out.extend_from_slice(body);
+    let mut central: Vec<u8> = Vec::new();
+    for (name, body) in entries {
+        let crc = crc32(body);
+        let size = u32::try_from(body.len()).expect("a small entry");
+        let name_length = u16::try_from(name.len()).expect("a short name");
+        let at = u32::try_from(out.len()).expect("a small archive");
+        out.extend_from_slice(&0x0403_4b50_u32.to_le_bytes()); // local header
+        out.extend_from_slice(&20_u16.to_le_bytes()); // version needed
+        out.extend_from_slice(&0_u16.to_le_bytes()); // flags
+        out.extend_from_slice(&0_u16.to_le_bytes()); // stored
+        out.extend_from_slice(&0_u32.to_le_bytes()); // time and date
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&size.to_le_bytes());
+        out.extend_from_slice(&size.to_le_bytes());
+        out.extend_from_slice(&name_length.to_le_bytes());
+        out.extend_from_slice(&0_u16.to_le_bytes()); // extra
+        out.extend_from_slice(name);
+        out.extend_from_slice(body);
+
+        central.extend_from_slice(&0x0201_4b50_u32.to_le_bytes());
+        central.extend_from_slice(&20_u16.to_le_bytes()); // made by
+        central.extend_from_slice(&20_u16.to_le_bytes()); // needed
+        central.extend_from_slice(&0_u16.to_le_bytes()); // flags
+        central.extend_from_slice(&0_u16.to_le_bytes()); // stored
+        central.extend_from_slice(&0_u32.to_le_bytes()); // time and date
+        central.extend_from_slice(&crc.to_le_bytes());
+        central.extend_from_slice(&size.to_le_bytes());
+        central.extend_from_slice(&size.to_le_bytes());
+        central.extend_from_slice(&name_length.to_le_bytes());
+        central.extend_from_slice(&0_u16.to_le_bytes()); // extra
+        central.extend_from_slice(&0_u16.to_le_bytes()); // comment
+        central.extend_from_slice(&0_u16.to_le_bytes()); // disk
+        central.extend_from_slice(&0_u16.to_le_bytes()); // internal
+        central.extend_from_slice(&0_u32.to_le_bytes()); // external
+        central.extend_from_slice(&at.to_le_bytes()); // local header offset
+        central.extend_from_slice(name);
+    }
 
     let directory_at = u32::try_from(out.len()).expect("a small archive");
-    let mut central: Vec<u8> = Vec::new();
-    central.extend_from_slice(&0x0201_4b50_u32.to_le_bytes());
-    central.extend_from_slice(&20_u16.to_le_bytes()); // made by
-    central.extend_from_slice(&20_u16.to_le_bytes()); // needed
-    central.extend_from_slice(&0_u16.to_le_bytes()); // flags
-    central.extend_from_slice(&0_u16.to_le_bytes()); // stored
-    central.extend_from_slice(&0_u32.to_le_bytes()); // time and date
-    central.extend_from_slice(&crc.to_le_bytes());
-    central.extend_from_slice(&size.to_le_bytes());
-    central.extend_from_slice(&size.to_le_bytes());
-    central.extend_from_slice(&15_u16.to_le_bytes()); // name length
-    central.extend_from_slice(&0_u16.to_le_bytes()); // extra
-    central.extend_from_slice(&0_u16.to_le_bytes()); // comment
-    central.extend_from_slice(&0_u16.to_le_bytes()); // disk
-    central.extend_from_slice(&0_u16.to_le_bytes()); // internal
-    central.extend_from_slice(&0_u32.to_le_bytes()); // external
-    central.extend_from_slice(&0_u32.to_le_bytes()); // local header offset
-    central.extend_from_slice(name);
-
     let directory = u32::try_from(central.len()).expect("a small directory");
+    let count = u16::try_from(entries.len()).expect("two entries");
     out.extend_from_slice(&central);
     out.extend_from_slice(&0x0605_4b50_u32.to_le_bytes()); // end record
     out.extend_from_slice(&0_u16.to_le_bytes()); // this disk
     out.extend_from_slice(&0_u16.to_le_bytes()); // directory's disk
-    out.extend_from_slice(&1_u16.to_le_bytes()); // entries here
-    out.extend_from_slice(&1_u16.to_le_bytes()); // entries in all
+    out.extend_from_slice(&count.to_le_bytes()); // entries here
+    out.extend_from_slice(&count.to_le_bytes()); // entries in all
     out.extend_from_slice(&directory.to_le_bytes());
     out.extend_from_slice(&directory_at.to_le_bytes());
     out.extend_from_slice(&0_u16.to_le_bytes()); // comment
 
     std::fs::create_dir_all(root).expect("the library directory");
     std::fs::write(root.join("viewer-head.gdtf"), out).expect("a .gdtf file");
+}
+
+/// The dots gobo: a 16 × 16 greyscale PNG, white dots on black — GDTF's own
+/// convention, white is light — built byte by byte like the archive around it.
+///
+/// PNG's picture is a zlib stream; this one is a single **stored** deflate
+/// block, which every PNG reader must take and which needs no compressor here.
+fn dots_picture() -> Vec<u8> {
+    const SIZE: usize = 16;
+    let mut raw = Vec::with_capacity(SIZE * (SIZE + 1));
+    for y in 0..SIZE {
+        raw.push(0); // no filter
+        for x in 0..SIZE {
+            let lit = x % 4 != 0 && x % 4 != 3 && y % 4 != 0 && y % 4 != 3;
+            raw.push(if lit { u8::MAX } else { 0 });
+        }
+    }
+    let length = u16::try_from(raw.len()).expect("one stored block");
+    let mut zlib = vec![0x78, 0x01, 0x01];
+    zlib.extend_from_slice(&length.to_le_bytes());
+    zlib.extend_from_slice(&(!length).to_le_bytes());
+    zlib.extend_from_slice(&raw);
+    zlib.extend_from_slice(&adler32(&raw).to_be_bytes());
+
+    let side = u32::try_from(SIZE).expect("a small picture");
+    let mut header = Vec::new();
+    header.extend_from_slice(&side.to_be_bytes());
+    header.extend_from_slice(&side.to_be_bytes());
+    header.extend_from_slice(&[8, 0, 0, 0, 0]); // 8-bit grey, no interlace
+
+    let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+    for (kind, body) in [(b"IHDR", header), (b"IDAT", zlib), (b"IEND", Vec::new())] {
+        png.extend_from_slice(
+            &u32::try_from(body.len())
+                .expect("a small chunk")
+                .to_be_bytes(),
+        );
+        let mut checked = kind.to_vec();
+        checked.extend_from_slice(&body);
+        png.extend_from_slice(&checked);
+        png.extend_from_slice(&crc32(&checked).to_be_bytes());
+    }
+    png
+}
+
+/// Adler-32, zlib's checksum.
+fn adler32(bytes: &[u8]) -> u32 {
+    let (mut a, mut b) = (1_u32, 0_u32);
+    for byte in bytes {
+        a = (a + u32::from(*byte)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    (b << 16) | a
 }
 
 /// CRC-32 as ZIP states it, by the table-free definition.
@@ -296,6 +410,37 @@ fn script() -> Vec<(&'static str, Command)> {
                 relative: false,
             },
         ),
+        (
+            "and put the dots in",
+            Command::SetAttribute {
+                attribute: AttributeType::Gobo,
+                occurrence: 0,
+                value: i32::from(u16::from(DOTS) * 257),
+                relative: false,
+            },
+        ),
+    ]
+}
+
+/// The files the viewer asks the daemon for, and why each.
+fn resource_queries() -> Vec<(&'static str, Query)> {
+    let ask = |name: &str| Query::FixtureResource {
+        fixture_type_id: GUID.to_owned(),
+        type_id: HEAD.to_owned(),
+        kind: ResourceKind::Wheel,
+        name: name.to_owned(),
+        offset: 0,
+    };
+    vec![
+        (
+            "the dots gobo's picture, out of the head's own archive",
+            ask("gobo-dots"),
+        ),
+        ("a picture the archive does not have", ask("gobo-star")),
+        (
+            "a name that tries to climb out of the archive",
+            ask("../description"),
+        ),
     ]
 }
 
@@ -327,6 +472,18 @@ struct RecordedOrientation {
     matrix: Orientation,
 }
 
+/// One question the viewer asked, and the daemon's answer.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Exchange {
+    /// What the question is for.
+    what: String,
+    /// The client's message, base64.
+    client: String,
+    /// The daemon's `Answer` message, base64.
+    answer: String,
+}
+
 /// The lit frame, and what is on the cable in it.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -337,9 +494,9 @@ struct LitFrame {
     message: String,
     /// The universe the heads are in.
     universe: u32,
-    /// The first head's six channels, as the frame carries them.
+    /// The first head's eight channels, as the frame carries them.
     first_head: Vec<u8>,
-    /// The second head's six channels.
+    /// The second head's eight channels.
     second_head: Vec<u8>,
 }
 
@@ -361,6 +518,8 @@ struct Recording {
     orientations: Vec<RecordedOrientation>,
     /// The frame with the first head lit.
     lit: LitFrame,
+    /// The files the viewer asked for.
+    resources: Vec<Exchange>,
 }
 
 /// What this build says every rotation of the hang means.
@@ -374,7 +533,7 @@ fn orientations() -> Vec<RecordedOrientation> {
         .collect()
 }
 
-/// The six channels of the head at `address` in a decoded frame.
+/// The channels of the head at `address` in a decoded frame.
 fn head_at(frame: &TelemetryFrame, universe: u32, address: usize) -> Vec<u8> {
     let levels = frame
         .universes
@@ -382,7 +541,7 @@ fn head_at(frame: &TelemetryFrame, universe: u32, address: usize) -> Vec<u8> {
         .find(|section| section.universe.get() == universe)
         .map(|section| &section.levels)
         .expect("the frame carries the heads' universe");
-    levels[address - 1..address - 1 + 6].to_vec()
+    levels[address - 1..address - 1 + FOOTPRINT].to_vec()
 }
 
 /* -------------------------------------------------------------------------- */
@@ -509,7 +668,7 @@ async fn record_the_viewer_script_for_the_interface() {
         looked += 1;
         // Ten seconds of telemetry is far past any settling this desk does.
         assert!(looked < 300, "the first head never opened: {head:?}");
-        if head[4] != u8::MAX {
+        if head[4] != u8::MAX || head[6] != DOTS {
             continue;
         }
         if last.as_ref() == Some(&head) {
@@ -528,6 +687,29 @@ async fn record_the_viewer_script_for_the_interface() {
         }
     };
 
+    let mut resources = Vec::new();
+    for (index, (what, query)) in resource_queries().into_iter().enumerate() {
+        let seq = 1000 + u64::try_from(index).unwrap_or(0);
+        let message = ClientMessage::Query { seq, query };
+        let client = common::encode_base64(&prism_ipc::encode(&message).expect("it encodes"));
+        wire.send_message(&message)
+            .await
+            .expect("a question must reach the daemon");
+        let answer = loop {
+            let payload = next_payload(&mut wire).await;
+            if matches!(decode(&payload), ServerMessage::Answer { seq: answered, .. } if answered == seq)
+            {
+                break common::encode_base64(&payload);
+            }
+        };
+        println!("resource {index} ({what}) answered");
+        resources.push(Exchange {
+            what: what.to_owned(),
+            client,
+            answer,
+        });
+    }
+
     let (final_wire, final_snapshot) = connect(&address).await;
     final_wire.shutdown().await;
     wire.shutdown().await;
@@ -544,6 +726,7 @@ async fn record_the_viewer_script_for_the_interface() {
         final_snapshot: common::encode_base64(&final_snapshot),
         orientations: orientations(),
         lit,
+        resources,
     };
 
     let path = recording_path();
@@ -696,7 +879,7 @@ fn every_recorded_matrix_is_what_this_build_computes() {
 }
 
 /// **The profile the show embedded carries the beam the `.gdtf` states**, in
-/// show space and in metres — `MATRIX_TO_METRES` applied once.
+/// show space and in metres, read from the matrix's fourth column.
 #[test]
 fn the_embedded_head_carries_its_beam() {
     let show = show_of(&recording().final_snapshot);
@@ -733,5 +916,111 @@ fn the_lit_frame_is_the_first_head_open_and_panned() {
     assert_eq!(head_at(&frame, lit.universe, 11), lit.second_head);
     assert_eq!(lit.first_head[..2], PAN.to_be_bytes());
     assert_eq!(lit.first_head[4], u8::MAX, "the dimmer is open");
+    assert_eq!(lit.first_head[6], DOTS, "the dots are in");
+    assert_eq!(
+        lit.first_head[7], 32,
+        "the shutter stands at its open default"
+    );
     assert_eq!(lit.second_head[4], 0, "the second head is dark");
+}
+
+/// **The profile the show embedded is the whole device** (S30b): the tree, the
+/// channels' functions with their sets, and the wheel with its pictures.
+#[test]
+fn the_embedded_head_is_a_device() {
+    let show = show_of(&recording().final_snapshot);
+    let mirror = prism_core::JsonMirror::new(show);
+    let key = HEAD.replace('~', "~0").replace('/', "~1");
+    let at = |pointer: &str| {
+        mirror
+            .get(&format!("/fixtureTypes/{key}/physical{pointer}"))
+            .ok()
+            .cloned()
+    };
+    let text = |pointer: &str| match at(pointer) {
+        Some(JsonValue::String(text)) => text,
+        other => panic!("{pointer}: {other:?}"),
+    };
+    let int = |pointer: &str| match at(pointer) {
+        Some(JsonValue::Int(value)) => value,
+        other => panic!("{pointer}: {other:?}"),
+    };
+    // Body, Yoke, Head, Beam — each hanging from the one before.
+    for (index, (name, kind)) in [
+        ("Body", "Geometry"),
+        ("Yoke", "Axis"),
+        ("Head", "Axis"),
+        ("Beam", "Beam"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(text(&format!("/geometries/{index}/name")), name);
+        assert_eq!(text(&format!("/geometries/{index}/kind")), kind);
+        if index > 0 {
+            assert_eq!(
+                int(&format!("/geometries/{index}/parent")),
+                index as i64 - 1
+            );
+        }
+    }
+    assert_eq!(text("/fixtureTypeId"), GUID);
+    // The gobo channel: one function on the wheel, three sets onto its slots.
+    assert_eq!(text("/channels/4/attribute"), "Gobo1");
+    assert_eq!(text("/channels/4/functions/0/wheel"), "Gobo1");
+    assert_eq!(int("/channels/4/functions/0/sets/1/slot"), 2);
+    assert_eq!(text("/channels/4/functions/0/sets/1/name"), "Dots");
+    // The shutter: closed-and-open, then the strobe from 64.
+    assert_eq!(text("/channels/5/functions/1/attribute"), "Shutter1Strobe");
+    assert_eq!(text("/wheels/0/slots/1/media"), "gobo-dots");
+}
+
+/// **A file out of the head's own archive**, and nothing for a file it has not
+/// got or a name that is not a file's.
+#[test]
+fn the_head_s_files_are_served_out_of_its_archive() {
+    let recording = recording();
+    assert_eq!(recording.resources.len(), resource_queries().len());
+    for (index, (exchange, (what, query))) in recording
+        .resources
+        .iter()
+        .zip(resource_queries())
+        .enumerate()
+    {
+        assert_eq!(exchange.what, what);
+        let expected = ClientMessage::Query {
+            seq: 1000 + u64::try_from(index).unwrap_or(0),
+            query,
+        };
+        assert_eq!(
+            common::decode_base64(&exchange.client),
+            prism_ipc::encode(&expected).expect("it encodes"),
+            "resource {index}: the recorded question is not this one"
+        );
+        let ServerMessage::Answer {
+            answer:
+                Answer::FixtureResource {
+                    kind,
+                    path,
+                    offset,
+                    total,
+                    data,
+                    ..
+                },
+            ..
+        } = decode(&common::decode_base64(&exchange.answer))
+        else {
+            panic!("resource {index} was not answered with a file");
+        };
+        assert_eq!(kind, ResourceKind::Wheel);
+        assert_eq!(offset, 0);
+        if index == 0 {
+            let picture = dots_picture();
+            assert_eq!(path, "wheels/gobo-dots.png");
+            assert_eq!(total as usize, picture.len());
+            assert_eq!(common::decode_base64(&data), picture);
+        } else {
+            assert_eq!((path.as_str(), total, data.as_str()), ("", 0, ""), "{what}");
+        }
+    }
 }

@@ -172,15 +172,43 @@ Frames leave through a triple buffer, one subscriber per output driver. Adding
 or removing an output while the show runs costs the outputs that did not change
 **no tick and no frame**.
 
-### The 3D viewer asks the daemon nothing
+### The 3D viewer asks the daemon for files and nothing else
 
-`ui/src/viewer/` (S30) draws the rig from two things the interface already has:
-the **show document**, for where each fixture hangs and what its profile says
-about its body and beams, and the **telemetry sink**, for what the cable is
-telling it. It decodes the frame in an animation-frame loop outside React —
-`viewer/driver.ts` is `telemetry/driver.ts` with a different picture — and it
-paints only when the payload, the rig, the selection, the camera or the size
-changed. The camera is client-local (§4.2 of the specification).
+`ui/src/viewer/` (S30, rebuilt as a visualiser in S30b) draws the rig from two
+things the interface already has: the **show document**, for where each fixture
+hangs and what its profile says about it, and the **telemetry sink**, for what
+the cable is telling it. It decodes the frame in an animation-frame loop outside
+React — `viewer/gl/driver3d.ts` is `telemetry/driver.ts` with a different
+picture — and it draws only when the levels, the rig, the selection, the camera,
+the size or the haze changed, or while something moves on its own (a strobe, a
+spinning gobo). The camera and the detail level are client-local (§4.2 of the
+specification). The one thing it asks the daemon for is a fixture's own files —
+its models and its gobo pictures — with `Query::FixtureResource`, half a
+megabyte at a time (`viewer/resources.ts`).
+
+The parts, in the order a frame goes through them:
+
+- `viewer/device.ts` reads the device a GDTF profile embeds
+  (`prism_domain::device`): the geometry tree, every channel's functions with
+  their sets and mode masters, every wheel.
+- `viewer/state.ts` evaluates those functions against the frame into one
+  `BeamState` per beam and a pan and tilt per axis — dimmer, shutter and
+  strobe, every colour system, zoom, focus, frost, iris, gobos and animation
+  wheels, prisms, blades. An OFL or generic profile is read from its attribute
+  list and range names instead. **This is where a new attribute goes**, with a
+  test in `state.test.ts` on the recorded frame.
+- `viewer/gl/` draws it: `fixture3d.ts` builds the tree, `mask.ts` paints what
+  is in a beam, `beam3d.ts` ray-marches the haze, `floor.ts` projects every
+  beam's mask onto the floor, `stage.ts` puts it together, `detail.ts` holds
+  the four levels.
+
+The rules of the loop (`driver3d.ts`) are what keep the console first, and a
+change that breaks one of them fails `e2e/viewer.spec.ts`'s 64-universe test:
+it draws nothing for a frame with the same bytes under a new sequence number;
+it rests twice what a frame cost on the page's thread and on the GPU (a fence
+per frame); and on a software renderer (`gl/graphics.ts`) it starts at Low,
+draws at half resolution without multisampling and at most four frames a
+second.
 
 Two rules to keep:
 
@@ -195,8 +223,9 @@ Two rules to keep:
   alone. A change that made a placement repatch would put a rebuild of the
   merge body on a gesture an operator makes by dragging.
 
-It draws on a 2D canvas behind `viewer/surface.ts::ViewSurface`, and the
-reasons are in the specification's §4.7.
+A browser without WebGL — and every unit test — gets S30's 2D picture behind
+`viewer/surface.ts::ViewSurface`; the specification's §4.7 has the reasons for
+both.
 
 ---
 
@@ -205,6 +234,25 @@ reasons are in the specification's §4.7.
 Every one of these is in `PROGRESS.md` §6 with the session that learned it and
 the test that caught it. They are here because they generalise, and because each
 of them has already been re-learned in a second shape at least once.
+
+### A rebuilt body takes over where it was queued
+
+A tick drains its command queue and then renders. S30b's recording found that
+a body offered just before a tick was taken in `render` — **after** the
+commands the core had sent since offering it had gone into the body that was
+leaving. A programmer value set in the same 23 ms as a rebuild was lost, and
+silently for good, because the core only ever sends differences: the frame
+carried the pan and the gobo and not the dimmer. The first fix — take the body
+before *every* command — was wrong the other way: a `Go` queued **before** a
+repatch then ran in the new body and survived a rebuild that stops every
+playback, or not, by a few milliseconds, which `resilience.rs` caught two runs
+in five. The swap is now a command in the queue, `TickCommand::AdoptBody`,
+sent by `EngineThread::install` right after the offer, so everything before it
+reaches the old body and everything after it the new one;
+`a_rebuilt_body_takes_over_where_it_was_queued` and
+`a_rebuilt_body_waits_for_its_marker` pin both halves without a thread. The
+general form: **when two things change places asynchronously, the change of
+place belongs in the same ordered stream as everything addressed to them.**
 
 ### A rule asked in two layers is a function, not a `match`
 

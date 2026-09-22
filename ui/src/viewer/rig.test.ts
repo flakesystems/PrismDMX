@@ -90,7 +90,7 @@ describe("a show the viewer cannot make sense of", () => {
             { attribute: "Dimmer", occurrence: 1, coarseOffset: 3 },
             { attribute: "Dimmer", coarseOffset: 0, ranges: [7, { from: 1 }] },
             { attribute: "Dimmer", coarseOffset: 9 },
-            { attribute: "Focus", coarseOffset: 2 },
+            { attribute: "Effect", coarseOffset: 2 },
           ],
         },
       },

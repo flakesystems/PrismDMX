@@ -74,8 +74,8 @@ mod geometry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use prism_domain::{
-    AttributeDef, AttributeKey, AttributeRange, AttributeType, FixturePhysical, FixtureType,
-    LibraryEntry,
+    AttributeDef, AttributeKey, AttributeRange, AttributeType, ChannelDetail, ChannelFunction,
+    ChannelSet, FixturePhysical, FixtureType, LibraryEntry, PrismFacet, RgbColor, Wheel, WheelSlot,
 };
 
 use self::geometry::Geometries;
@@ -228,7 +228,8 @@ pub fn read_description(
     };
     for mode in modes.children_named("DMXMode") {
         let mode_name = non_empty(mode.get("Name")).unwrap_or("Mode").to_owned();
-        let Some((attributes, losses, footprint)) = read_mode(mode, &wheels, &pretty) else {
+        let Some((attributes, losses, footprint, details)) = read_mode(mode, &wheels, &pretty)
+        else {
             continue;
         };
         counts.attributes += attributes.len();
@@ -242,7 +243,12 @@ pub fn read_description(
         }
         counts.modes += 1;
 
-        let physical = geometries.physical(mode.get("Geometry"), fixture.get("FixtureTypeID"));
+        let mut physical = geometries.physical(mode.get("Geometry"), fixture.get("FixtureTypeID"));
+        // S30b: what a visualiser needs of the channels and the wheels. Only
+        // the wheels this mode's channels name, so a mode that drives no
+        // animation wheel does not carry one.
+        physical.wheels = wheels.used_by(&details);
+        physical.channels = details;
         counts.beams += physical.beams.len();
         if physical.model.is_some() {
             counts.models += 1;
@@ -294,10 +300,11 @@ fn read_mode(
     mode: &Node,
     wheels: &Wheels,
     pretty: &PrettyNames,
-) -> Option<(Vec<AttributeDef>, Losses, u16)> {
+) -> Option<(Vec<AttributeDef>, Losses, u16, Vec<ChannelDetail>)> {
     let channels = mode.child("DMXChannels")?;
     let mut losses = Losses::default();
     let mut attributes: Vec<AttributeDef> = Vec::new();
+    let mut details: Vec<ChannelDetail> = Vec::new();
     let mut taken: BTreeSet<AttributeKey> = BTreeSet::new();
     let mut footprint: usize = 0;
 
@@ -326,6 +333,9 @@ fn read_mode(
         let Some(definition) = channel_definition(channel, wheels, pretty) else {
             continue;
         };
+        if let Some(detail) = channel_detail(channel, coarse - 1, offsets.1.map(|fine| fine - 1)) {
+            details.push(detail);
+        }
         let (attribute, stated) = definition.attribute;
         if attribute == AttributeType::Raw {
             losses.raw += 1;
@@ -368,7 +378,111 @@ fn read_mode(
     if footprint == 0 {
         return None;
     }
-    Some((attributes, losses, footprint))
+    Some((attributes, losses, footprint, details))
+}
+
+/// One channel as a visualiser reads it — **S30b**: which geometry it acts on
+/// and **every** function, with the DMX range and the physical range of each.
+///
+/// [`channel_definition`] keeps the first function's range, because a desk's
+/// attribute has one; a beam is drawn from all of them. A shutter is closed,
+/// open or strobing at 0.3 to 20 Hz on one channel, and only the functions say
+/// which and how fast.
+fn channel_detail(channel: &Node, offset: u16, fine: Option<u16>) -> Option<ChannelDetail> {
+    let logical = channel.child("LogicalChannel")?;
+    let functions: Vec<&Node> = logical.children_named("ChannelFunction").collect();
+    let attribute = non_empty(logical.get("Attribute"))
+        .or_else(|| {
+            functions
+                .first()
+                .and_then(|first| non_empty(first.get("Attribute")))
+        })?
+        .to_owned();
+
+    let mut read: Vec<ChannelFunction> = functions
+        .iter()
+        .map(|function| {
+            let master = non_empty(function.get("ModeMaster")).map(str::to_owned);
+            ChannelFunction {
+                attribute: non_empty(function.get("Attribute"))
+                    .unwrap_or(&attribute)
+                    .to_owned(),
+                from: dmx_value(function.get("DMXFrom")).unwrap_or(0),
+                to: u16::MAX,
+                physical_from: number(function.get("PhysicalFrom")).unwrap_or(0.0),
+                physical_to: number(function.get("PhysicalTo")).unwrap_or(1.0),
+                wheel: non_empty(function.get("Wheel")).map(str::to_owned),
+                sets: function
+                    .children_named("ChannelSet")
+                    .filter_map(|set| {
+                        Some(ChannelSet {
+                            name: set.get("Name").trim().to_owned(),
+                            from: dmx_value(set.get("DMXFrom"))?,
+                            to: u16::MAX,
+                            slot: set
+                                .get("WheelSlotIndex")
+                                .trim()
+                                .parse::<u16>()
+                                .ok()
+                                .filter(|index| *index >= 1),
+                        })
+                    })
+                    .collect(),
+                mode_from: master
+                    .as_ref()
+                    .and_then(|_| dmx_value(function.get("ModeFrom")))
+                    .unwrap_or(0),
+                mode_to: master
+                    .as_ref()
+                    .and_then(|_| dmx_value(function.get("ModeTo")))
+                    .unwrap_or(u16::MAX),
+                mode_master: master,
+            }
+        })
+        .collect();
+
+    // A function ends where the next one **in force at the same time** starts:
+    // the file states only starts, and functions under different modes of a
+    // master overlap on purpose.
+    let starts: Vec<(Option<String>, u16, u16)> = read
+        .iter()
+        .map(|function| {
+            (
+                function.mode_master.clone(),
+                function.mode_from,
+                function.from,
+            )
+        })
+        .collect();
+    for function in &mut read {
+        let next = starts
+            .iter()
+            .filter(|(master, mode_from, from)| {
+                *master == function.mode_master
+                    && *mode_from == function.mode_from
+                    && *from > function.from
+            })
+            .map(|(_, _, from)| *from)
+            .min();
+        function.to = next.map_or(u16::MAX, |from| from.saturating_sub(1));
+        function.sets.sort_by_key(|set| set.from);
+        let ends: Vec<u16> = function.sets.iter().skip(1).map(|set| set.from).collect();
+        let last = function.to;
+        for (index, set) in function.sets.iter_mut().enumerate() {
+            set.to = ends
+                .get(index)
+                .map_or(last, |next| next.saturating_sub(1))
+                .max(set.from);
+        }
+    }
+
+    Some(ChannelDetail {
+        offset,
+        fine,
+        geometry: non_empty(channel.get("Geometry")).map(str::to_owned),
+        attribute,
+        functions: read,
+    })
 }
 
 /// One channel's coarse and fine offsets, **one-based**, as `Offset` states
@@ -533,6 +647,12 @@ struct Wheels(BTreeMap<String, Vec<Slot>>);
 struct Slot {
     name: String,
     media: Option<String>,
+    /// GDTF's `Color`, as the brightest sRGB of its hue — `None` for white.
+    color: Option<RgbColor>,
+    /// GDTF's `Y` over 100.
+    transmission: f64,
+    /// A prism slot's facets.
+    facets: Vec<PrismFacet>,
 }
 
 impl Wheels {
@@ -550,15 +670,54 @@ impl Wheels {
             let slots = wheel
                 .children_named("Slot")
                 .enumerate()
-                .map(|(index, slot)| Slot {
-                    name: non_empty(slot.get("Name"))
-                        .map_or_else(|| format!("Slot {}", index + 1), str::to_owned),
-                    media: non_empty(slot.get("MediaFileName")).map(str::to_owned),
+                .map(|(index, slot)| {
+                    let (color, transmission) = cie_colour(slot.get("Color"));
+                    Slot {
+                        name: non_empty(slot.get("Name"))
+                            .map_or_else(|| format!("Slot {}", index + 1), str::to_owned),
+                        media: non_empty(slot.get("MediaFileName")).map(str::to_owned),
+                        color,
+                        transmission,
+                        facets: slot
+                            .children_named("Facet")
+                            .filter_map(|facet| facet_of(facet.get("Rotation")))
+                            .collect(),
+                    }
                 })
                 .collect();
             wheels.insert(name, slots);
         }
         Self(wheels)
+    }
+
+    /// The wheels a mode's channels name, as the domain carries them — S30b.
+    fn used_by(&self, details: &[ChannelDetail]) -> Vec<Wheel> {
+        let mut names: Vec<&str> = details
+            .iter()
+            .flat_map(|detail| detail.functions.iter())
+            .filter_map(|function| function.wheel.as_deref())
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        names
+            .into_iter()
+            .filter_map(|name| {
+                let slots = self.0.get(name)?;
+                Some(Wheel {
+                    name: name.to_owned(),
+                    slots: slots
+                        .iter()
+                        .map(|slot| WheelSlot {
+                            name: slot.name.clone(),
+                            color: slot.color,
+                            transmission: slot.transmission,
+                            media: slot.media.clone(),
+                            facets: slot.facets.clone(),
+                        })
+                        .collect(),
+                })
+            })
+            .collect()
     }
 
     /// Appends one channel function's named ranges.
@@ -595,6 +754,67 @@ impl Wheels {
             });
         }
     }
+}
+
+/// A GDTF `ColorCIE` — `"x,y,Y"` — as the brightest sRGB of its hue and how
+/// much light it passes — **S30b**.
+///
+/// `Y` is a luminance out of 100, so a filter slot's `Y` is its transmission:
+/// *Tokyo Blue* passes one per cent and *Open* all of it. The hue is taken
+/// through CIE XYZ to linear sRGB (the IEC 61966-2-1 matrix), negative
+/// components clipped — a colour outside sRGB is drawn as the nearest it can
+/// be — and scaled so its brightest component is full. A hue within a hair of
+/// D65, which is what GDTF writes for *open* and for every gobo, is `None`:
+/// white filters nothing.
+fn cie_colour(value: &str) -> (Option<RgbColor>, f64) {
+    let numbers: Vec<f64> = value.split(',').filter_map(number).collect();
+    let [x, y, luminance] = numbers[..] else {
+        return (None, 1.0);
+    };
+    let transmission = (luminance / 100.0).clamp(0.0, 1.0);
+    if y <= f64::EPSILON || ((x - 0.3127).abs() < 0.005 && (y - 0.3290).abs() < 0.005) {
+        return (None, transmission);
+    }
+    let big_x = x / y;
+    let big_z = (1.0 - x - y) / y;
+    let red = 3.2406 * big_x - 1.5372 - 0.4986 * big_z;
+    let green = -0.9689 * big_x + 1.8758 + 0.0415 * big_z;
+    let blue = 0.0557 * big_x - 0.2040 + 1.0570 * big_z;
+    let (red, green, blue) = (red.max(0.0), green.max(0.0), blue.max(0.0));
+    let top = red.max(green).max(blue);
+    if top <= f64::EPSILON {
+        return (None, transmission);
+    }
+    // Gamma-encoded, because an `RgbColor` is what a person would pick.
+    let encode = |linear: f64| -> u8 {
+        let value = linear / top;
+        let encoded = if value <= 0.003_130_8 {
+            12.92 * value
+        } else {
+            1.055 * value.powf(1.0 / 2.4) - 0.055
+        };
+        (encoded.clamp(0.0, 1.0) * 255.0).round() as u8
+    };
+    (
+        Some(RgbColor {
+            r: encode(red),
+            g: encode(green),
+            b: encode(blue),
+        }),
+        transmission,
+    )
+}
+
+/// A prism facet's `Rotation` — a 3×3 matrix of three groups — as where it
+/// pushes its beam: the third group's first two numbers, which is the point a
+/// unit along the beam lands at.
+fn facet_of(value: &str) -> Option<PrismFacet> {
+    let third = value.split('{').nth(3)?.split_once('}')?.0;
+    let numbers: Vec<f64> = third.split(',').filter_map(number).collect();
+    Some(PrismFacet {
+        x: *numbers.first()?,
+        y: *numbers.get(1)?,
+    })
 }
 
 /// A GDTF `DMXValue` — `"128/1"`, `"32768/2"` — scaled to this desk's 16 bits.
@@ -686,6 +906,9 @@ pub(crate) fn empty_physical(fixture_type_id: &str) -> FixturePhysical {
         size: prism_domain::Vec3::ZERO,
         model: None,
         beams: Vec::new(),
+        geometries: Vec::new(),
+        channels: Vec::new(),
+        wheels: Vec::new(),
     }
 }
 

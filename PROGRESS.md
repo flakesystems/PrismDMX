@@ -124,6 +124,7 @@
 | Session | Title | Status | Date | Note |
 |---|---|---|---|---|
 | S30 | 3D viewer | ✅ | 2026-09-21 | See §2.59 |
+| S30b | The 3D viewer, rebuilt as a visualiser | ✅ | 2026-09-22 | All exit criteria verified — see §2.60. The owner turned S30's 2D viewer down with a real Robe Robin T1 (*es ist ein kompletter Visualizer gefordert worden*). three.js on WebGL 2 with S30's picture as the fallback; a GDTF profile embeds its whole device and the viewer evaluates every channel function off the cable — strobe, every colour, focus, frost, iris, gobos and animation wheels as their own pictures, prisms, blades — and draws the fixture's own models, fetched with `Query::FixtureResource`. Four detail levels and haze, client-local. The GDTF matrix settled against the T1. **Found and fixed on the way: a programmer value sent in the same 23 ms as a rebuild was lost since S11** — the swap is a marker in the command queue now. On a software renderer the viewer keeps the console first; the 64-universe test holds the DMX Sheet to its rate with the viewer orbited |
 | S31 | Web Remote | ☐ | | The settings window travels there; the **machine** panel does not, and the daemon is what refuses it |
 | S32 | PSN / OSC — openfollow.app | ☐ | | Gains its settings panel, and OSC as a *surface* in the control editor rather than a second mapping system |
 
@@ -5029,6 +5030,58 @@ way. Test: `a_rig_arrives_hung_where_the_plan_puts_it`.
 
 ---
 
+### 2.60 S30b verification record
+
+Measured on 2026-09-22. **The 3D viewer, rebuilt as a visualiser.** The owner
+opened S30's viewer with a published Robe Robin T1 Profile and turned it down:
+*"deutlich an detail fehlt. Viele Sachen werden gar nicht erst gerendert (Fokus,
+Strobe, Blades, manche Farben wie z.B. Kaltweiß, Gobos, etc.) … Ich habe zum Test
+ein Robe T1 Profile gdtf runtergeladen und dort hat nur ein komisches Rechteck
+gerendert … Wir können von mir aus aus Performance Gründen Einstellungen
+hinzufügen, wie detailreich es sein soll, aber da muss deutlich mehr drin sein.
+Es ist ein kompletter Visualizer gefordert worden und nicht geliefert."* Built
+on the branch `feat/s30b-visualizer` from `master` (`c718369`, S30 and S62
+merged).
+
+#### What the session had to start from
+
+S30 drew boxes and cones on a 2D canvas (`ARCHITECTURE_SPEC.md` §4.7, now
+rewritten). The rectangle had two causes, both older than S30: S61's reader
+took a GDTF matrix's translation from the fourth **row** and in millimetres, so
+every node of a published head sat at the origin; and the viewer drew only the
+base model's box. Nothing of a device but its beams reached a client, and none
+of its files did.
+
+| Deliverable | Outcome | What holds it |
+|---|---|---|
+| **The matrix, settled** | ✅ | `library::gdtf::geometry::Matrix` reads the specification's layout: the translation in the fourth entry of the first three groups, in **metres**, the rotation as its columns. Checked against the published T1: yoke `-0.074`, head `-0.335`, beam `-0.291636` — the lens 0.70 m below the base. `MATRIX_TO_METRES` is gone from the GDTF reader; the three byte-built archives were rewritten to the specification and both recordings regenerated. The ignored `a_published_archive_is_read_whole` reads any published file named by `PRISMDMX_GDTF_SAMPLE` and asserts a lens that is not at the base, axes in the tree and a shutter with more than one function — green on the T1 (11 geometries, 8 shutter functions, a 6-facet prism) |
+| **The whole device, embedded** | ✅ | `prism_domain::device`: `GeometryNode` (the tree, each node's matrix in show axes, its model or primitive, its beam's optics), `ChannelDetail` and `ChannelFunction` (every function of every channel: attribute, DMX range, physical range, wheel, sets with their slot, mode master), `Wheel` and `WheelSlot` (colour from CIE xyY to sRGB, transmission, picture, prism facets). `FixturePhysical` carries them per mode, `#[serde(default)]`, so a show from before reads as a device with none. Only the wheels a mode's channels use travel. Tests: `a_channel_s_functions_are_carried_whole_for_the_visualiser` (ends per master mode, sets, fine bytes), `a_wheel_slot_is_read_with_its_colour_and_its_facets` (D65 is no filter, red and blue in sRGB, Y as transmission, facets), the wire round trip over every new type |
+| **A fixture's files reach the viewer** | ✅ | `Query::FixtureResource` → `Answer::FixtureResource`: a model (`models/gltf/<name>.glb`, else `models/3ds/<name>.3ds`) or a wheel picture (`wheels/<name>.png` …) out of the archive the library read — found by GDTF GUID first, profile key second, inside a `.gdtf`, an unpacked directory or an MVR plan. A name with a separator or `..` is answered with nothing. Half a megabyte a part as base64 (`resource_part`, `base64` against RFC 4648 §10's vectors, a part inside `MAX_FRAME_BYTES`). The daemon holds the core only for the lookup (`FixtureLibrary::resource_lookup`, `ResourceLookup::read`) and keeps the last eight files. **B55:** `ui_viewer.rs` records three exchanges — the dots gobo served (a PNG built byte by byte, with a stored deflate block), a picture the archive lacks, a name that tries to leave it — `the_head_s_files_are_served_out_of_its_archive` guards them and `resources.test.ts` encodes the same questions and decodes the same answers |
+| **The recording is a device** | ✅ | The test head has a body, a yoke and a head on two axes, a gobo wheel with a picture, and a shutter with closed, open and strobe functions; the lit frame has its dots in. `the_embedded_head_is_a_device` asserts the tree, the channels and the wheel in the served show |
+| **Every function, off the cable** | ✅ | `ui/src/viewer/state.ts` finds the function in force (mode masters included), interpolates its physical value and applies it by attribute family: dimmer; shutter by its sets' names (*Closed*, *Open*) and GDTF's 0/1; strobe, pulse open and close, random at their rate; every emitter GDTF names (R, G, B, W, WW, CW, A, UV and the mixed ones such as GY for lime), CMY, CTO/CTB/colour temperature, colour and macro wheels in the file's colours with their transmission; zoom; focus; frost read from its band (*Open*, *from 0% to 100%*, *100%*, a pulse half in); iris; **any** gobo or animation-wheel function whose set names a slot (the T1 selects its animation wheel through `AnimationWheel1Pos`); gobo and prism index and rotation, the speed from the physical range where the file states one and a steady turn where it does not (`speedOf`: the T1's prism is `1…-1` and its centre *No rotation middle*); blades A, B and rotation; the shaper; pan and tilt per axis. OFL and generics: the attribute list and range names, cold and warm white and colour temperatures by name (`wheelColour`). `state.test.ts` (17) on the recorded frame and T1-shaped functions, `device.test.ts` (5) |
+| **The picture** | ✅ | `ui/src/viewer/gl/`: three.js 0.186 on WebGL 2. Each fixture a tree of the file's matrices with a motion group per axis (`fixture3d.ts`); the file's own glTF models, near-black paint lifted to a housing grey so a body reads on a dark stage; merged, shared primitives and stand-ins where there are none. One mask per beam (`mask.ts`: gobo pictures layered and multiplied, iris, four blades, softness from focus and frost) sampled by a ray-marched volume in the haze (`beam3d.ts`) and by the floor, which projects every beam's mask out of one atlas (`floor.ts`, replacing spot lights, which ran out of texture units at six beams). Prisms split a beam into its facets. A beam with nothing in it shares one open mask. `fixture3d.test.ts` (8: the light 0.2 m below the recorded head pointing down, the tilt carried round by the pan, a prism's projectors, the model replacing the primitive), `parts.test.ts` (11), `coords.test.ts` (6) |
+| **Detail and haze** | ✅ | Four levels (`detail.ts`): models, ray-march steps, beams drawn in the haze (24 / 64 / 160 / 400), floor projectors, mask size, glow, resolution cap. Client-local (§4.2), in the browser's storage, never a command; `viewer3d.test.tsx` asserts both are remembered and nothing is sent |
+| **The console comes first** | ✅ | `driver3d.ts`: draws only on a change — the same DMX bytes under a new sequence number are none; rests twice what a frame cost on the page's thread and on the GPU (a fence per frame); reads the rig without drawing while hidden, so the readout stays true behind another window; and on a software renderer (`graphics.ts`: SwiftShader, llvmpipe, the Basic Render Driver) starts at Low, draws at half resolution without multisampling and at most four frames a second. `driver3d.test.ts` (11). The narrow-window layout stacks picture and form only when the window is tall enough, so a window the daemon fitted into a corner still shows the rig |
+| **A programmer value lost after a rebuild** | ✅ fixed | Found by the recorder: after an Oops and a Redo, *select, open, pan, gobo* — and the frame carried pan and gobo but not the dimmer, in two runs of three. The tick drained commands into the outgoing body before `render` took the new one; since S11 a value sent in the same 23 ms as a rebuild was lost for good. The first fix (take the body before every command) let a `Go` queued before a repatch survive it, which `resilience.rs` caught two runs in five. **The swap is a marker in the queue now**, `TickCommand::AdoptBody`, sent by `EngineThread::install` after the offer; a full queue falls back to the next frame. `a_rebuilt_body_takes_over_where_it_was_queued` and `a_rebuilt_body_waits_for_its_marker` fail without it; the recorder ran green three times running and `resilience.rs` six |
+| **Both languages** | ✅ | Operator manual *Viewer 3D* (what is drawn, detail and haze, machines without graphics hardware) and chapter 13; developer manual §2 (the viewer's parts and loop rules) and §3 (a rebuilt body takes over where it was queued); `ARCHITECTURE_SPEC.md` §4.7; `docs/IPC_PROTOCOL.md` §5.2; `docs/FIXTURE_LIBRARY.md` §6; `README.md`; the front page; both changelogs; `docs/RELEASE_TEST_0.9.3.md` chapter 2a (T-3D.5 and T-3D.10–17 new) and T-BOTH.4 |
+
+| Exit criterion | Result |
+|---|---|
+| A published GDTF moving head is drawn as its own model, not a rectangle | ✅ the Robin T1, looked at in Chromium at every level: base, yoke and head from its own glTF files, pan turning the yoke, tilt the head, the beam leaving at the lens |
+| Focus, strobe, blades, every colour including cold white, gobos | ✅ each read off the cable and asserted in `state.test.ts`; on the T1 in Chromium: two real gobo pictures in the haze and on the floor, a six-facet prism, blades cutting the pool, CTO warming three beams, the macro wheel, a soft focus |
+| Detail is a setting | ✅ four levels and haze, remembered per browser |
+| The tick untouched | ✅ **0 allocations on all eleven paths** (`tick_allocations.rs`, the new command variant included) |
+| The DMX Sheet keeps its budget with the viewer open on 64 universes | ✅ **`64 universes · 24.6 Hz · paint 0.20 ms (p99 0.30 ms) · 150 frames · 35 lost`** with the viewer **orbited throughout** on SwiftShader — `515 fixtures · 257 lit · 9.8 ms · 21 painted` (median 9.8 ms, p99 95.3 ms), at Low, half resolution and at most four frames a second. The criterion is the DMX Sheet above 20 Hz with its paint p99 under 8 ms. Without the viewer the same run measured `64 universes · 30.2 Hz · paint 0.10 ms (p99 0.30 ms) · 154 frames` |
+| Rust gates | ✅ `cargo test --workspace` **2 543 passed, 0 failed**, 23 ignored; clippy with warnings denied, fmt, `cargo doc` with warnings denied — all clean |
+| Interface gates | ✅ `tsc -b --force`, lint, vitest **1 046 passed** in 80 files, build; Playwright **57 passed** (4.6 min), none flaky |
+
+**Not done, and said so:** the venue — truss, set and walls out of an MVR — is
+not drawn, and there are no shadows; an MVR plan's rotation is still not read
+(§5). The visual checks with the T1 are screenshots looked at by the author,
+not assertions: a committed test cannot carry a published file (D12). The owner's
+rig test (`docs/RELEASE_TEST_0.9.3.md` chapter 2a) is where they are checked by
+somebody else.
+
 ---
 
 ## 3. Coverage tracking
@@ -5535,8 +5588,9 @@ Every one is recorded as plain data so verification is a data update, not a refa
 
 | Item | Blocks | Status |
 |---|---|---|
-| 📏 **GDTF's matrix: which part is the translation, and in which unit** — S61, sharpened by S30 | nothing today; **S62** reads the same format, and the viewer draws with it | ☐ **open, and S30 made it two questions and one of them is answered on paper.** S61 assumed the translation of a `Position` matrix is its **fourth row** and in **millimetres** (`MATRIX_TO_METRES` in `prism_core::library::gdtf::geometry`). S30 read the specification (`mvrdevelopment/spec`, `gdtf-spec.md`, the table of attribute value types), which says of `Matrix`, verbatim: *"Stored in a row-major order … The mathematical definition of the matrix is in a column-major order … the translation is stored in the 4th column."* So a published file writes `{a,b,c,X}{d,e,f,Y}{g,h,i,Z}{0,0,0,1}`, and the reader, which takes the fourth *group*, would read `0,0,0` there — and the rotation it takes from the rows is the transpose of the one meant. The **unit** is not stated in that table; the specification's metric system and every `Model` dimension are metres. **S30 did not change the reader**: the GDTF import was being reworked on another machine in parallel (S62), and a second hand in `geometry.rs` would have been a merge nobody could review. **What being wrong costs in the viewer is small and was measured by eye**: a beam leaves a few centimetres from where the file puts it (the body's origin instead of the lens), and only a beam geometry that is itself *turned* inside its head points wrongly — at home every published head's beam points down, and that is drawn right. **How to close it:** open one published moving head's `description.xml` (`docs/RELEASE_TEST_0.9.3.md` T-3D.10) and read a `<Beam Position=…>`; if the non-zero numbers are the fourth entry of the first three groups, read the translation from there and the rotation as columns, and set the unit from their size (`-0.2` is metres, `-200` millimetres). The byte-built archives in `ui/e2e/gdtf.ts`, `crates/prismd/tests/ui_patch.rs` and `ui_viewer.rs` were written against S61's reading and change with it. **The same question stands for MVR's rotation**: `ImportRig` takes a planned fixture's position (S30 + S62) and not its rotation, because whether `{u}{v}{w}` are the turned axes or their transpose decides which way every imported fixture faces; `docs/RELEASE_TEST_0.9.3.md` T-BOTH.3 asks the owner for the one real example that settles it |
-| 🖼️ **A GDTF's models and gobo pictures reach a client** — S61 | a viewer that draws models and gobos | ☐ **open, and S30 left it open on purpose.** S30 draws a device as a box of the size its GDTF states, with its beams where the file puts them, because the bytes of the model are still out of reach: fetching them is a query into the archive the desk's library read, and the library's loading is what **S62** was rebuilding on another machine the same day — a query into it written in parallel would have been written against code that was moving. The seam is ready on the drawing side: `ui/src/viewer/surface.ts::ViewSurface` is what a WebGL surface drawing meshes would be put behind (`ARCHITECTURE_SPEC.md` §4.7). **Before S30 it read:** Where the archives come from in the first place is now settled and researched — `docs/FIXTURE_LIBRARY.md`, decision **D12**: nothing from GDTF Share is redistributed, so the bytes a viewer wants live in the venue's own files. A profile carries the **names** GDTF gives its model and its wheel slot images (`FixturePhysical::model`, `AttributeRange::media`) and deliberately not paths: a show embeds its profiles (S11) so that it means the same on a desk with a different library, and a path into this desk's directory would give that away again. What does not exist yet is the other half — a way for a client to *fetch* the bytes those names refer to out of the archive the desk has. That is a query and a cache, it is only wanted by a thing that draws, and the thing that draws is S30 |
+| 📏 **GDTF's matrix: which part is the translation, and in which unit** — S61, sharpened by S30 | the viewer's proportions | ✅ **closed by S30b, 2026-09-21, against a published file.** A Robe Robin T1 Profile's `description.xml` hangs its yoke at `{1,0,0,0}{0,1,0,0}{0,0,1,-0.074}{0,0,0,1}`, its head `-0.335` below that and its beam `-0.291636` below the head: the translation is the **fourth entry of the first three groups**, as the specification says, and it is in **metres** — the lens 0.70 m below the base, which is the fixture's height. `prism_core::library::gdtf::geometry::Matrix` reads it so, the rotation as the columns it is, and `MATRIX_TO_METRES` is gone from the GDTF reader. The byte-built archives in `ui/e2e/gdtf.ts`, `crates/prismd/tests/ui_patch.rs` and `ui_viewer.rs` were rewritten to the specification's layout and both recordings regenerated. The ignored `a_published_archive_is_read_whole` reads any published file a person names (`PRISMDMX_GDTF_SAMPLE`) and asserts the lens is not at the base |
+| 🧭 **An MVR plan's rotation** — S62 + S30 | a planned rig that faces the way it was drawn | ☐ **open.** `ImportRig` hangs a planned fixture where the plan puts it and not the way it faces, because whether `{u}{v}{w}` are the turned axes or their transpose decides which way every imported fixture points. S30b settled the same question for GDTF with a published file; MVR needs its own. `docs/RELEASE_TEST_0.9.3.md` T-BOTH.3 asks the owner for the one real example that settles it; when it is settled the matrix goes through `prism_domain::placement::rotation_of` |
+| 🖼️ **A GDTF's models and gobo pictures reach a client** — S61 | a viewer that draws models and gobos | ✅ **closed by S30b.** `Query::FixtureResource` answers a file out of the archive the library read, found by the device's GDTF GUID first and its profile key second, half a megabyte at a time as base64; the daemon holds its core only to find where the file is and keeps the last eight read. The viewer fetches each device's models and gobo pictures once however many fixtures share them (`ui/src/viewer/resources.ts`) and draws them. Held by `the_head_s_files_are_served_out_of_its_archive` on the recorded bytes, `resources.test.ts` on the same bytes, and `a_profile_s_files_are_served_out_of_its_own_archive` for the archive, the unpacked directory and the MVR plan |
 | 🔑 **The GDTF Share login works against the real service** — S62 | nothing today; an operator who wants the published library | ☐ **open, and it can only be closed by a person with an account.** `prismd::share::Https` is three URLs and a cookie jar against `https://gdtf-share.com/apis/public/`, and it is the one part of that module no test covers: this container's egress policy refuses the host, and the service has no anonymous access, so there is nothing a CI job could sign in as either. Everything that *decides* is covered — `update` over a `Share` answering from memory, and `parse_list` against real answer text. **How to close it:** on a Windows desk with a free gdtf-share.com account, open *Settings → This machine → GDTF Share*, sign in, and watch the progress line count past a few hundred; then tick *keep this account*, restart the daemon and check the panel still names the account. **What being wrong would look like:** the login is refused although the credentials are right (the form-encoded-versus-JSON trap in `docs/FIXTURE_LIBRARY.md` §3), or the list comes back empty because the answer's shape moved. Both say so in one sentence in the progress row rather than failing silently |
 | 🔒 **Remembering an account on a desk that is not Windows** — S62 | nothing today; a Linux or Raspberry Pi desk whose operator wants the published library | ☐ **open, and deliberately refused rather than faked.** `prismd::secrets::Keychain` uses the Windows credential manager; on every other platform it answers `SecretError::Unsupported` in words and the operator types their password each time they update — which works. A desk in a rack has no logged-in desktop session to unlock a keyring, and a store that quietly fell back to a file would be exactly the plaintext that module exists to avoid. **How to close it, if it is ever worth closing:** decide what a headless desk should unlock a secret *with*, and only then pick a store. Until there is an answer to that, the refusal is the honest behaviour and not a gap |
 | 🚪 **A stranger gets from the front page to a running desk** | nothing — S41 and S42 are otherwise complete | ☐ **and it is the point of S42 rather than a loose end.** It is the one exit criterion in this project that no test can check, and it cannot be met from inside a session: it needs somebody who has not built this, on a Windows machine that has never had a Rust toolchain or this repository on it. **The recipe, and it is deliberately the whole of what that person should do:** (1) open `https://prismdmx.de` and read nothing but the front page; (2) follow *Herunterladen und installieren* and run the installer, clicking through SmartScreen or checking the checksum, whichever they prefer; (3) start it from the Start menu; (4) *Settings → Outputs*, add one output for whatever they have — an Art-Net node, an sACN receiver, or `--mock-output` if they have nothing, in which case (6) is read off the *DMX Sheet*; (5) open *Patch*, search the library for a fixture they own, give it number 1 and an address; (6) type `1 at full` and press Enter. **They must not ask the author anything, and every question they had to ask is the finding.** What comes back is a list of the places the site and the manuals are not enough, and that list is worth more than any test in this repository. Until somebody does it, S42's last criterion is met on paper and not in fact |
@@ -6096,6 +6150,37 @@ Architectural decisions D1–D11 are in `ARCHITECTURE_SPEC.md` §1. This log rec
 ---
 
 ## 7. Next actions
+
+**A picture that is right about a box is not a visualiser.** *(S30b)* S30 met
+every exit criterion it had written for itself and the owner turned it down in
+three sentences: no focus, no strobe, no blades, no gobos, no cold white, and a
+Robin T1 drawn as a rectangle. Every one of those was knowable before a line was
+written — they are what a lighting person looks at first — and the criteria had
+been written from what the data made easy rather than from what the operator
+would check. **Write the exit criteria from the operator's first five minutes
+with a real fixture, and get a real fixture into the session before the
+picture**: the T1 file found the matrix bug, the animation wheel that selects
+through a `…Pos` function, the rotate speeds a file does not state, the frost
+band — none of which a byte-built head would have had.
+
+**A new consumer finds the old races.** *(S30b)* The engine had handed rebuilt
+bodies to the tick since S11, and a programmer value sent in the same 23 ms as
+a rebuild had been lost since then, silently. Nothing in the desk noticed: an
+operator sets values seconds after a repatch. The viewer's recording did —
+three commands in a row after an Oops — and the first fix was wrong the other
+way, which `resilience.rs` found two runs in five. **When a test becomes flaky
+after a fix, the fix changed an ordering; find which, don't re-run.** The swap
+is a command in the queue now, `TickCommand::AdoptBody`.
+
+**Measure what the page pays, not what the drawing pays.** *(S30b)* The viewer's
+own draw time went from 18 ms to 9 ms and the DMX Sheet beside it got *worse*,
+because a software renderer's cost is not on the page's thread and not in the
+GPU fence either, and every saving the governor saw became another frame. Three
+experiments — a still viewer, a hover, a drag that moves nothing — isolated it
+in ten minutes where tuning had spent an hour. On a software renderer the
+viewer draws at most four frames a second, at half resolution, without
+multisampling, from Low; the 64-universe test holds the DMX Sheet to its rate
+while the viewer is orbited.
 
 **Look for the design before writing one.** *(S59)* The session set out to give
 the desk a vocabulary and spent its first hour writing questions about what that
@@ -8617,11 +8702,25 @@ Carried from Phase 1:
 Paste the block below into a fresh session. It is deliberately self-contained:
 it assumes no memory of this conversation and no knowledge of the project.
 
-**S30 is done — the 3D viewer, the last thing 0.9.3 waited for.** See §2.59.
-What is left before the tag is **the owner's rig test**: `docs/RELEASE_TEST_0.9.3.md`,
-with chapter **1b** for S62's ways into the library, **2a** for the viewer and
-**2b** for what only works with both. A clean result is the tag; a
-finding is a B-number and the release waits for it.
+**S30b is done — the 3D viewer rebuilt as a visualiser** after the owner turned
+S30's down (§2.60). It is on the branch `feat/s30b-visualizer`, not yet merged.
+What is left before the tag is **the owner's rig test**:
+`docs/RELEASE_TEST_0.9.3.md`, with chapter **1b** for S62's ways into the
+library, **2a** for the visualiser (T-3D.10 to T-3D.17 are new, and want a
+GDTF moving head such as the Robin T1) and **2b** for what only works with
+both. A clean result is the tag; a finding is a B-number and the release waits
+for it.
+
+Three things S30b changed that a next session will meet:
+
+- **The engine swaps a rebuilt body at a marker in the command queue**
+  (`TickCommand::AdoptBody`, `prismd::engine`). Anything else that hands the
+  tick a new state asynchronously should go the same way.
+- **A GDTF profile embeds its whole device** (`prism_domain::device`), and the
+  viewer evaluates channel functions in `ui/src/viewer/state.ts`. A new
+  attribute the viewer should show goes there, with a test on the recorded frame.
+- **The GDTF matrix is settled** (§5): fourth column, metres, checked against a
+  published file. MVR's rotation is still open and still needs a real plan.
 
 **S62 was built on another machine the same day and merged first** — MVR
 import, `.gdtf` import and the GDTF Share login (§2.58). It was reviewed on
@@ -8635,10 +8734,9 @@ places are worth knowing where the two sessions meet:
   plan's fixtures by their **position** through `Show::place_fixtures`; their
   **rotation** is not read yet, and when it is, it goes through
   **`rotation_of`**, not through an Euler order of its own.
-- **GDTF's matrix layout** (§5): the specification puts the translation in the
-  **fourth column**; S61's reader takes the fourth row, in millimetres. MVR's
-  own matrix is a different layout again (`{u}{v}{w}{o}`, millimetres). Whoever
-  reads the two should settle the GDTF one with a published file in hand.
+- **GDTF's matrix layout** (§5) is settled by S30b: the fourth column, in
+  metres. MVR's own matrix is a different layout (`{u}{v}{w}{o}`, millimetres)
+  and its rotation is the part still open.
 - **A textually clean merge is not a compiling one** (S61's lesson, met again):
   S62 and S30 merged without a conflict in any source file, and `prism-app` did
   not compile on Windows — S62's own, and invisible to a Linux CI. Build on

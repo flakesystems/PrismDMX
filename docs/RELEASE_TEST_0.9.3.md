@@ -1,9 +1,10 @@
-# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61 + S62 + S30)
+# Abnahmetest am Test-Rig — Build 0.9.3 (S59 + S61 + S62 + S30 + S30b)
 
 **Gilt für:** den Build von `master` nach dem Merge von **S30** — enthält **S59** (das
 Controls-Menü, die Tastenwörter, die Lampen, das Jogwheel), **S61** (die
 Fixture-Bibliothek ist GDTF), **S62** (wie eine Bibliothek hereinkommt: MVR,
-`.gdtf`-Import, der Login zu GDTF Share) und **S30** (der 3D-Viewer). Die Version im Installer ist weiterhin **`0.9.2`**:
+`.gdtf`-Import, der Login zu GDTF Share) und **S30** mit **S30b** (der 3D-Viewer,
+als vollständiger Visualizer neu gebaut). Die Version im Installer ist weiterhin **`0.9.2`**:
 0.9.3 ist noch nicht getaggt, und was hineinkommt, steht in `CHANGELOG.md` unter
 *Noch nicht veröffentlicht*.
 
@@ -47,9 +48,9 @@ target\release\bundle\nsis\PrismDMX_0.9.2_x64-setup.exe
 > für diesen Test reicht auch der Weg über den eigenen Ordner (T-GDTF.1), dann
 > ist eine leere Bibliothek in Ordnung.
 
-- [ ] **T-0.1** Installer auf dem Rig ausführen. Eine installierte 0.9.2 wird
+- [x] **T-0.1** Installer auf dem Rig ausführen. Eine installierte 0.9.2 wird
       dabei **überschrieben** — gleiche Versionsnummer.
-- [ ] **T-0.2** Vor dem ersten Start nach `%APPDATA%\PrismDMX\` kopieren:
+- [x] **T-0.2** Vor dem ersten Start nach `%APPDATA%\PrismDMX\` kopieren:
       `default.prism`, `machine.json` **und den Ordner `fixtures\`**.
 - [ ] **T-0.3** PrismDMX starten. Kopfzeile: grüner Punkt **Connected**.
       X-Touch-Scribble-Strips leuchten.
@@ -379,10 +380,17 @@ echtes Konto nötig ist: der Login selbst und das Herunterladen (T-LIB.4/5).
 
 ---
 
-## 2a. Neu — der 3D-Viewer (S30)
+## 2a. Neu — der 3D-Visualizer (S30 + S30b)
 
 **Wo:** Fenster **Viewer 3D** (Rechtsklick auf eine leere Stelle des Canvas oder
-`Einfg`, dann *Viewer 3D*). Am besten groß ziehen.
+`Einfg`, dann *Viewer 3D*). Am besten groß ziehen. Für T-3D.10 bis T-3D.15
+braucht es einen **GDTF-Moving-Head** im Patch — das Robe-Robin-T1-Profil, mit
+dem der erste Viewer abgelehnt wurde, ist genau richtig (in den Ordner
+`%APPDATA%\PrismDMX\fixtures\` legen oder über **Import fixture (GDTF)**).
+
+**Zuerst:** Die Zeile neben den Knöpfen sagt *… webgl*, wenn der Rechner in 3D
+zeichnet. Steht dort nichts davon, zeichnet der Browser ohne 3D — dann ist
+alles ab T-3D.10 nicht prüfbar; bitte vermerken.
 
 - [ ] **T-3D.1 — das Rig ist da.** Alle gepatchten Fixtures erscheinen. Die Zeile
       neben den Knöpfen sagt *N fixtures · 0 lit · N not placed* — ein Rig, das
@@ -395,12 +403,13 @@ echtes Konto nötig ist: der Login selbst und das Herunterladen (T-LIB.4/5).
 - [ ] **T-3D.3 — ein Oops.** `Oops` + Enter. **Alle vier** stehen wieder im
       Ursprung — die ganze Geste war ein Schritt. Nochmal **Spread**.
 - [ ] **T-3D.4 — die Strahlen kommen vom Kabel.** `Fixture 1 Thru 4 At Full`. Aus
-      allen vier kommt ein Strahl, am Boden ein Lichtfleck; die Zeile sagt *4 lit*.
-      Ein Executor mit einer Cue tut dasselbe: **was im DMX Sheet steht, steht
-      auch hier**.
-- [ ] **T-3D.5 — Pan, Tilt, Farbe.** An einem Moving Head Pan und Tilt drehen:
-      der Strahl folgt, in die richtige Richtung. An einem RGB-Gerät eine Farbe
-      ziehen: der Strahl hat sie. Shutter zu: der Strahl ist weg.
+      allen vier kommt ein Strahl im Dunst, am Boden ein Lichtfleck; die Zeile
+      sagt *4 lit*. Ein Executor mit einer Cue tut dasselbe: **was im DMX Sheet
+      steht, steht auch hier**.
+- [ ] **T-3D.5 — gleich nach dem Oops.** `Oops`, **sofort** danach `Fixture 1
+      At Full` (beides schnell hintereinander, oder als Makro). Das Licht am Rig
+      **und** im Viewer geht an. Vor S30b konnte ein Wert, der im selben Moment
+      wie ein Neuaufbau des Rigs gesetzt wurde, auf dem Ausgang fehlen.
 - [ ] **T-3D.6 — Rotation.** Ein Fixture wählen, **Rotation X** = `90`, **Set**:
       sein Strahl zeigt waagerecht zum Publikum. `180`: es steht auf dem Boden und
       strahlt nach oben.
@@ -408,19 +417,44 @@ echtes Konto nötig ist: der Login selbst und das Herunterladen (T-LIB.4/5).
       *Front / Top / Side / 3D / Frame all* tun, was sie sagen. Ein zweiter
       Client (zweites Fenster, anderer Bildschirm) behält **seine** Ansicht.
 - [ ] **T-3D.8 — klicken wählt.** Ein Klick auf ein Fixture im Bild nimmt es in
-      die Auswahl (gelber Rand, gelbe Nummer); nochmal klicken nimmt es heraus.
+      die Auswahl (gelber Rand); nochmal klicken nimmt es heraus.
 - [ ] **T-3D.9 — der Ausgang merkt nichts.** Während *DMX Sheet* und *Viewer 3D*
-      offen sind und eine Cue läuft: das DMX Sheet zeigt weiter ~30 Hz, die
-      Lampen am Rig flackern nicht, wenn man im Viewer dreht oder platziert.
-- [ ] **T-3D.10 — eine echte GDTF, und die offene Zahl.** Wer eine veröffentlichte
-      `.gdtf` eines Moving Heads hat (eigenes Konto bei gdtf-share.com): Datei
-      umbenennen in `.zip`, `description.xml` öffnen, die `<Beam … Position="…">`
-      suchen und den Wert **hier notieren**. Die GDTF-Spezifikation sagt, die
-      Translation steht **in der vierten Spalte** (`{a,b,c,X}{d,e,f,Y}{g,h,i,Z}`);
-      der Leser liest sie heute aus der vierten **Zeile** und rechnet in
-      Millimetern (`PROGRESS.md` §5). Im Viewer: sitzt der Strahl sichtbar am
-      Kopf, oder schwebt er? **Befund oder nicht — die notierte Zeile ist die
-      Antwort auf die offene Frage.**
+      offen sind und eine Cue läuft: **im Viewer dauernd drehen** (Ziehen, eine
+      halbe Minute). Das DMX Sheet zeigt weiter ~30 Hz, die Lampen am Rig
+      flackern nicht, die Kommandozeile reagiert sofort.
+- [ ] **T-3D.10 — das Gerät, nicht ein Kasten.** Der GDTF-Moving-Head ist als
+      **sein eigenes Modell** zu sehen — Fuß, Bügel, Kopf —, nicht als Rechteck.
+      Pan dreht den Bügel, Tilt den Kopf im Bügel, und der Strahl tritt **an der
+      Linse** aus, nicht am Fuß und nicht daneben. *(Beantwortet die offene
+      Frage der letzten Runde: die Verschiebung steht in der vierten Spalte der
+      Matrix, in Metern — an einem echten Robin T1 geprüft.)*
+- [ ] **T-3D.11 — Farben.** Am Moving Head Cyan, Magenta, Gelb einzeln und
+      gemischt ziehen, dann das Farbrad (`colorwheel at …`) durch seine Slots
+      und die Farbtemperatur (CTO) von kalt nach warm: der Strahl und der Fleck
+      am Boden haben die Farbe. An einem LED-Gerät mit **Kaltweiß** und
+      **Warmweiß** beide einzeln: Kaltweiß ist bläulich-weiß, Warmweiß gelblich.
+- [ ] **T-3D.12 — Gobos.** `gobo 2 at …` (das erste Goborad; `gobo` ohne Zahl ist
+      beim T1 das **Animationsrad**) durch die Slots: im Dunst und am Boden ist
+      **das Bild des Gobos** zu sehen, nicht ein Kreis. Gobo-Rotation dreht es,
+      ein drehendes Gobo dreht sich weiter, ohne dass jemand etwas tut.
+- [ ] **T-3D.13 — Fokus, Frost, Iris, Zoom.** Fokus von einem Ende zum anderen:
+      das Gobo wird scharf und wieder weich. Frost: der Strahl wird breiter und
+      weich. Iris zu: der Strahl wird dünn. Zoom: schmal und breit.
+- [ ] **T-3D.14 — Prisma und Blenden.** Prisma ein: der Strahl teilt sich in
+      seine Facetten (beim T1 sechs). Eine Blende hinein (`blade at …`,
+      `blade 3 at …`): der Fleck am Boden bekommt eine gerade Kante; die
+      Blendendrehung dreht sie.
+- [ ] **T-3D.15 — Strobe.** Shutter auf Strobe (am T1 `shutter at 30`): der
+      Strahl blitzt, schneller mit höherem Wert; Puls-Bereiche blenden auf und ab.
+- [ ] **T-3D.16 — Detail und Dunst.** **Detail** von *Low* bis *Ultra*: ab
+      *Medium* die Modelle, bei *High* und *Ultra* feinere Strahlen und ein
+      Glühen um helles Licht. Die Zeile zeigt, wie lange ein Bild braucht —
+      **bitte für jede Stufe notieren** (mit der Zahl der Fixtures). **Haze** auf
+      null: nur noch der Boden zeigt das Licht. Fenster schließen und wieder
+      öffnen: beide Einstellungen sind noch da.
+- [ ] **T-3D.17 — ein Profil ohne Gerätedaten.** Ein OFL-Moving-Head wird als
+      einfacher Moving Head gezeichnet und folgt Pan und Tilt; eine PAR-Kanne
+      als Kanne. Hat es ein Goborad, ist bei einem Gobo ein Muster im Strahl.
 
 ---
 
@@ -447,10 +481,10 @@ echtes Konto nötig ist: der Login selbst und das Herunterladen (T-LIB.4/5).
       wie (z. B. *Seitenlicht links, 90° zur Bühne*): das ist genau die Angabe,
       mit der die Rotation eingebaut werden kann.
 - [ ] **T-BOTH.4 — ein importiertes Profil wird richtig gezeichnet.** Ein
-      Moving Head aus der `.mvr` hat im Viewer seine **eigene Größe**, und sein
-      Strahl folgt Pan und Tilt (wie T-3D.5). Sitzt der Strahl sichtbar an der
-      Linse, oder schwebt er neben dem Gerät? Das ist dieselbe offene Frage wie
-      T-3D.10, diesmal mit einem echten Gerät aus Ihrer Planung.
+      Moving Head aus der `.mvr` ist im Viewer **sein eigenes Modell** (wie
+      T-3D.10), sein Strahl tritt an der Linse aus und folgt Pan und Tilt. Das
+      Gerät kommt aus der `.gdtf` **in** der `.mvr` — auch ohne dass es einzeln
+      in der Bibliothek liegt.
 - [ ] **T-BOTH.5 — die Bibliothek aktualisieren, während der Viewer läuft.**
       Mit Konto (T-LIB.4): *Update the library* drücken, während *Viewer 3D* und
       *DMX Sheet* offen sind und eine Cue läuft. Das DMX Sheet bleibt bei ~30 Hz,

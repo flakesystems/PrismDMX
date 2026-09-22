@@ -131,6 +131,29 @@ describe("the picture", () => {
     expect(sent.length).toBe(count);
   });
 
+  it("keeps its detail and haze in this browser and sends the desk nothing for them", () => {
+    localStorage.clear();
+    const { frames, stats, sent } = viewer();
+    frames.step();
+    // A test hands in a surface of its own, so the picture is the 2D fallback.
+    expect(stats().dataset.renderer).toBe("2d");
+    const detail = screen.getByTestId<HTMLSelectElement>("viewer-detail");
+    expect(detail.value).toBe("medium");
+    fireEvent.change(detail, { target: { value: "ultra" } });
+    expect(detail.value).toBe("ultra");
+    expect(localStorage.getItem("prismdmx.viewer.detail")).toBe("ultra");
+    // A level this build does not have is not taken.
+    fireEvent.change(detail, { target: { value: "extreme" } });
+    expect(localStorage.getItem("prismdmx.viewer.detail")).toBe("ultra");
+    fireEvent.change(screen.getByTestId("viewer-haze"), { target: { value: "0.8" } });
+    expect(localStorage.getItem("prismdmx.viewer.haze")).toBe("0.8");
+    frames.step();
+    // The loop the new level started draws on.
+    expect(Number(stats().dataset.painted)).toBeGreaterThan(0);
+    expect(sent).toEqual([]);
+    localStorage.clear();
+  });
+
   it("stops drawing when the window goes", () => {
     const { frames, view, stats } = viewer();
     frames.step();

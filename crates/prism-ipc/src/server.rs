@@ -134,6 +134,17 @@ pub trait ServerHandler: Send + Sync + 'static {
                 total: 0,
             },
             Query::FixtureOfMode { .. } => Answer::FixtureOfMode { fixture: None },
+            // No library, so no file: an empty path and nothing to send (S30b).
+            Query::FixtureResource {
+                kind, name, offset, ..
+            } => Answer::FixtureResource {
+                kind,
+                name,
+                path: String::new(),
+                offset,
+                total: 0,
+                data: String::new(),
+            },
             // A handler with no machine behind it has no ports and has chosen
             // none — which is the same answer a laptop with nothing plugged in
             // gives, so there is nothing here for a client to special-case.

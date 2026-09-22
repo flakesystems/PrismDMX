@@ -28,13 +28,27 @@ Every version so far is a **pre-release**.
 owner held the release until the Controls round (S59) and the 3D viewer (S30)
 were in it, and both now are.
 
-### The 3D viewer (S30)
+### The 3D visualiser (S30, S30b)
 
-**The *Viewer 3D* window shows the rig as it hangs**, and a beam out of every
-fixture that is lit, in the colour it is putting out. The beams come **off the
-cable** — the same levels as the DMX Sheet — so what you see is what the rig is
-actually being told: pan, tilt, zoom, dimmer, colour, a closed shutter.
+**The *Viewer 3D* window shows the rig as it hangs** — every device as what it
+is, and out of every one that is lit its beams in the haze and where they land
+on the floor. All of it comes **off the cable** — the same levels as the DMX
+Sheet — so what you see is what the rig is actually being told, whoever told it.
 
+- **A GDTF device is drawn as its manufacturer built it**: its own 3D models,
+  base, yoke and head moved by pan and tilt. Shown are dimmer, shutter,
+  **strobe** and pulse at their rate, **every colour** — warm and cold white,
+  amber, lime, UV, CMY, colour temperature and colour wheels in the file's own
+  colours among them —, zoom, **focus**, **frost**, iris, **gobos and animation
+  wheels** as their own pictures, turned and spinning, **prisms** and the
+  **framing blades**. A Robe Robin T1 is a Robin T1 and no longer a rectangle.
+- **Detail and haze** are set in the window: four levels from *Low* to
+  *Ultra*, fewer for an older machine. Both belong to the screen and are
+  remembered by the browser. On a machine without graphics hardware the window
+  starts at *Low* by itself and draws sparingly, so the rest of the desk stays
+  quick.
+- A profile from the Open Fixture Library or a generic one is drawn as a moving
+  head or a PAR can, with what its channel names say.
 - **Placing fixtures.** A panel beside the picture works on the selection:
   *Set* gives them a position and a rotation, *Spread* lays the selection out
   across the stage — a truss of eight in one go. Each is **one Oops**, and
@@ -43,11 +57,10 @@ actually being told: pan, tilt, zoom, dimmer, colour, a closed shutter.
   all*. The camera is the screen's own; a second screen may show the rig from
   somewhere else.
 - **A click on a fixture** selects it, as a click in the Fixture Sheet does.
-- A profile from a **GDTF** file is drawn at its size, with its beam where the
-  manufacturer says it leaves the body; any other as a small box. The devices'
-  own 3D models and the gobo pictures come later.
-- It draws on an ordinary 2D surface, so it runs on every machine the desk runs
-  on — graphics card or not.
+- A browser with no 3D at all gets a simple flat picture.
+- **Fixed:** a value set in the very moment the rig was rebuilt — just after a
+  patch or an Oops, say — could be missing from the output although the
+  programmer had it. It always arrives now.
 
 ### The fixture library is GDTF now (S61)
 

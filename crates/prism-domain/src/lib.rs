@@ -30,6 +30,7 @@ mod attribute;
 mod command;
 mod console;
 mod delta;
+mod device;
 mod executor;
 mod export;
 pub mod finite;
@@ -61,6 +62,10 @@ pub use command::{
 };
 pub use console::{CONSOLE_KEYS, ConsoleKey, KeyShape, appended};
 pub use delta::{Delta, NoticeLevel, SwitchState};
+pub use device::{
+    BeamShape, ChannelDetail, ChannelFunction, ChannelSet, GeometryNode, PrismFacet, Wheel,
+    WheelSlot,
+};
 pub use executor::{
     CrossfadeMode, EXECUTOR_BUTTONS, EXECUTORS_PER_PAGE, Executor, ExecutorButtonFunction,
     ExecutorButtonRef, ExecutorChange, ExecutorEncoderFunction, ExecutorFaderFunction, SPEED_UNITY,
@@ -92,8 +97,8 @@ pub use programmer::{
 };
 pub use query::{
     Answer, CommandLineQuestion, CommandLineReadingKind, CueTrackingRow, LibraryEntry,
-    LibraryFixture, LibraryMode, PatchConflict, PatchPreview, Query, StoreMode, StorePreview,
-    StoreTarget, TrackedValue,
+    LibraryFixture, LibraryMode, PatchConflict, PatchPreview, Query, ResourceKind, StoreMode,
+    StorePreview, StoreTarget, TrackedValue,
 };
 pub use sequence::{
     Cue, CueChange, CueEdit, CueKey, CuePart, CueProperty, CueTrack, CueTracking, CueTrackingMode,

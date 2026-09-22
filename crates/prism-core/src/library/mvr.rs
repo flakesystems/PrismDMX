@@ -316,11 +316,12 @@ fn read_addresses(node: &Node) -> Vec<RigAddress> {
 
 /// Where a fixture hangs, out of MVR's `Matrix`.
 ///
-/// The same brace-delimited shape GDTF uses for a geometry's position, and the
-/// same two conventions apply: the translation is the **fourth** group and is
-/// stated in **millimetres**, and MVR is Z-up where this desk is Y-up. Both are
-/// written down once in [`super::gdtf::geometry`]; this is the second place
-/// they are applied, and it says so rather than restating why.
+/// **Not** GDTF's layout, although it looks like it. MVR's `Matrix` is four
+/// groups of **three** — `{u}{v}{w}{o}`, the three turned axes and then the
+/// origin — in **millimetres** (the MVR specification, table 35), where GDTF's
+/// is four rows of four with the translation in the fourth column, in metres
+/// ([`super::gdtf::geometry`], corrected in S30b). Both are Z-up where this
+/// desk is Y-up.
 fn position_of(text: &str) -> Option<Vec3> {
     let mut groups = Vec::new();
     for group in text.split('{').skip(1) {

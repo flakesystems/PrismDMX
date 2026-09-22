@@ -154,6 +154,14 @@ pub enum TickCommand {
     ///
     /// The other two stages are selection state, which never reaches the tick.
     ClearProgrammer,
+    /// **Here the rebuilt body takes over** — S30b.
+    ///
+    /// A host that rebuilds the merge body on another thread (`prismd`'s
+    /// `BodySwap`) queues this straight after it has left the new body, so the
+    /// swap happens *at this point in the queue*: every command queued before
+    /// it reaches the body that is leaving, and every command after it the one
+    /// that is arriving. A `MergeBody` ignores it; the host acts on it.
+    AdoptBody,
 }
 
 impl TickCommand {
@@ -184,6 +192,8 @@ impl TickCommand {
     /// byte in the payload, because the encoding is a tag, a `u32` target and a
     /// `u16` value, and a mode is not a target or a value.
     const TAG_EXECUTOR_FADE: u8 = 15;
+    /// S30b's swap marker.
+    const TAG_ADOPT_BODY: u8 = 16;
 
     /// The target as the number the codec carries.
     const fn split(target: PlaybackId) -> u32 {
@@ -256,6 +266,7 @@ impl TickPayload for TickCommand {
             Self::SetProgrammerValue { slot, value } => (Self::TAG_PROGRAMMER_VALUE, slot, value),
             Self::ClearProgrammerValue { slot } => (Self::TAG_PROGRAMMER_CLEAR_VALUE, slot, 0),
             Self::ClearProgrammer => (Self::TAG_PROGRAMMER_CLEAR, 0, 0),
+            Self::AdoptBody => (Self::TAG_ADOPT_BODY, 0, 0),
         };
         let [e0, e1, e2, e3] = target.to_le_bytes();
         let [v0, v1] = value.to_le_bytes();
@@ -342,6 +353,7 @@ impl TickPayload for TickCommand {
             }),
             Self::TAG_PROGRAMMER_CLEAR_VALUE => Some(Self::ClearProgrammerValue { slot: target }),
             Self::TAG_PROGRAMMER_CLEAR => Some(Self::ClearProgrammer),
+            Self::TAG_ADOPT_BODY => Some(Self::AdoptBody),
             _ => None,
         }
     }
@@ -425,6 +437,7 @@ mod tests {
             },
             TickCommand::ClearProgrammerValue { slot: 4_242 },
             TickCommand::ClearProgrammer,
+            TickCommand::AdoptBody,
         ];
         for command in commands {
             assert_eq!(round_trip(command), Some(command), "{command:?}");

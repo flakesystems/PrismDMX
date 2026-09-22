@@ -951,6 +951,29 @@ pub struct FixturePhysical {
         proptest(strategy = "crate::arb::small_vec(2)")
     )]
     pub beams: Vec<FixtureBeam>,
+    /// The geometry tree, flattened — **S30b**. See [`crate::GeometryNode`].
+    /// Empty for a profile read before it existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(2)")
+    )]
+    pub geometries: Vec<crate::GeometryNode>,
+    /// Every patched channel's functions — **S30b**. See
+    /// [`crate::ChannelDetail`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(2)")
+    )]
+    pub channels: Vec<crate::ChannelDetail>,
+    /// Every wheel — **S30b**. See [`crate::Wheel`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(
+        any(test, feature = "proptest"),
+        proptest(strategy = "crate::arb::small_vec(2)")
+    )]
+    pub wheels: Vec<crate::Wheel>,
 }
 
 /// One beam of a device, where it sits and where it points — **S61**.

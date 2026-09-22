@@ -1,41 +1,47 @@
-//! Where a device's beams are, and how big its body is — **S61**, and the
-//! reason S30 can be built at all.
+//! What a device is made of and where its light leaves it — **S61**, rebuilt
+//! in **S30b** once a published file had been read.
 //!
 //! # What GDTF states and this reads
 //!
 //! A fixture's `<Geometries>` is a tree: a base, a yoke that turns on it, a head
-//! that tilts on the yoke, and a `<Beam>` in the head. Every node carries a
-//! `Position` — a 4×4 matrix relative to its parent — and a `Model`, which
-//! names the 3D file it is drawn with and states how big it is.
+//! that tilts in the yoke, a `<Beam>` in the head. Every node carries a
+//! `Position` — a transform relative to its parent — and a `Model`, which names
+//! the 3D file it is drawn with, the primitive to draw when there is no file,
+//! and how big it is.
 //!
-//! This walks that tree with the matrices multiplied down it and comes out with
-//! [`prism_domain::FixturePhysical`]: the body's size and model, and one
-//! [`prism_domain::FixtureBeam`] per `<Beam>`, with where it sits and which way
-//! it points.
+//! This reads the tree **whole**, as [`prism_domain::GeometryNode`]s with each
+//! node's transform relative to its parent — which is what a viewer turns a
+//! yoke by — and also flattened into [`prism_domain::FixtureBeam`]s at their
+//! home positions, which is what S61's readers and the 2D fallback use.
 //!
-//! # Two conventions, written down once
+//! # The matrix, as the specification states it — and S61 did not
 //!
-//! **Which way a beam points.** GDTF's beam leaves along its geometry's
-//! **−Z**. So a beam's direction is the matrix's third column, negated, and a
-//! device whose head is at home with an identity matrix points straight down —
-//! which is where a hanging light points.
+//! The value-type table of `gdtf-spec.md` says of `Matrix`: *stored in a
+//! row-major order … the mathematical definition of the matrix is in a
+//! column-major order … the translation is stored in the 4th column*. So a
+//! published file writes
 //!
-//! **Which way the world is.** GDTF is Z-up: X to the right, Y away from the
-//! operator, Z up. [`prism_domain::Vec3`] is Y-up — `x` across, `y` height,
-//! `z` depth — because that is what `prism_domain::Fixture::position` has meant
-//! since S1 and a viewer may not hold two opinions about which way up a stage
-//! is. [`to_show_axes`] is the one place that conversion happens.
+//! ```text
+//! {r00,r01,r02,tx}{r10,r11,r12,ty}{r20,r21,r22,tz}{0,0,0,1}
+//! ```
 //!
-//! # The unit, and the one thing here that is not settled
+//! — the groups are the matrix's **rows**, the rotation's columns are the
+//! turned axes, and the translation is the last number of each of the first
+//! three rows, **in metres**. A Robe Robin T1 Profile, read on 2026-09-21,
+//! states its yoke at `-0.074`, its head at `-0.335` and its lens at
+//! `-0.291636` below its parent — a 55 cm head, in metres. S61 read the fourth
+//! *group* as the translation and multiplied it by a thousandth, and with no
+//! published file to hand every test agreed with it, because the same
+//! assumption wrote them. Every node of every real fixture sat at its root.
 //!
-//! GDTF states lengths in metres and the **translation part of a matrix in
-//! millimetres**, which is why [`MATRIX_TO_METRES`] exists and is applied in
-//! exactly one place. It is the single assumption in this module that was not
-//! checked against a published archive while it was written — see
-//! `PROGRESS.md` §5. Everything else here is arithmetic the tests pin down, and
-//! if that number is ever found to be wrong, one constant is what changes.
+//! # Which way the world is
+//!
+//! GDTF is Z-up: X to the right, Y away from the operator, Z up.
+//! [`prism_domain::Vec3`] is Y-up with `z` upstage (`prism_domain::placement`).
+//! [`to_show_axes`] swaps the last two, and a rotation `R` becomes `P R P` —
+//! which, written as axes, is [`Matrix::show_axes`].
 
-use prism_domain::{FixtureBeam, FixturePhysical, Vec3};
+use prism_domain::{BeamShape, FixtureBeam, FixturePhysical, GeometryNode, Vec3};
 
 use super::xml::Node;
 use super::{non_empty, number};
@@ -54,24 +60,15 @@ const MAX_DEPTH: usize = 12;
 /// references multiply from filling memory with beams nobody will draw.
 const MAX_BEAMS: usize = 1_000;
 
-/// Millimetres to metres.
-///
-/// GDTF's matrices state their translation in millimetres while everything else
-/// in the format — a model's length, width and height — is in metres. This is
-/// the one place the two meet, and it is deliberately a named constant rather
-/// than a `0.001` in an expression: see this module's documentation.
-const MATRIX_TO_METRES: f64 = 0.001;
+/// The most geometry nodes one device may contribute, for the same reason.
+const MAX_NODES: usize = 4_000;
 
-/// A 4×4 transform, as GDTF writes one.
-///
-/// Held as the three basis vectors and the translation, which is all this needs
-/// of it: the fourth row of a GDTF matrix is `{0,0,0,1}` in every file the
-/// format produces, and a projective transform is not a thing a lighting
-/// fixture's geometry is.
+/// A transform, as GDTF writes one: a 3×3 rotation by **rows** and a
+/// translation in metres.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Matrix {
-    /// The X, Y and Z basis vectors, as columns.
-    basis: [[f64; 3]; 3],
+    /// `rows[row][column]`.
+    rows: [[f64; 3]; 3],
     /// Where the origin moved to, in metres.
     origin: [f64; 3],
 }
@@ -79,34 +76,34 @@ struct Matrix {
 impl Matrix {
     /// The transform that changes nothing.
     const IDENTITY: Self = Self {
-        basis: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+        rows: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
         origin: [0.0, 0.0, 0.0],
     };
 
-    /// `self` followed by `child` — the child's transform expressed in the
-    /// parent's frame.
+    /// `self · child` — the child's transform expressed in the parent's frame.
     fn then(&self, child: &Self) -> Self {
-        let mut basis = [[0.0; 3]; 3];
-        for (column, out) in basis.iter_mut().enumerate() {
-            for (row, cell) in out.iter_mut().enumerate() {
+        let mut rows = [[0.0; 3]; 3];
+        for (row, out) in rows.iter_mut().enumerate() {
+            for (column, cell) in out.iter_mut().enumerate() {
                 *cell = (0..3)
-                    .map(|inner| self.basis[inner][row] * child.basis[column][inner])
+                    .map(|inner| self.rows[row][inner] * child.rows[inner][column])
                     .sum();
             }
         }
         let mut origin = self.origin;
         for (row, cell) in origin.iter_mut().enumerate() {
             *cell += (0..3)
-                .map(|inner| self.basis[inner][row] * child.origin[inner])
+                .map(|inner| self.rows[row][inner] * child.origin[inner])
                 .sum::<f64>();
         }
-        Self { basis, origin }
+        Self { rows, origin }
     }
 
-    /// The matrix a `Position` attribute states.
+    /// The matrix a `Position` attribute states — see the module documentation
+    /// for the layout.
     ///
-    /// GDTF writes it as four brace-delimited groups of four numbers, the
-    /// first three the basis vectors and the last the translation. Anything
+    /// Three groups of at least four numbers are needed: the fourth row is
+    /// always `{0,0,0,1}` for a fixture's geometry and is not read. Anything
     /// that is not that — an attribute that is absent, a group short, a number
     /// that will not parse — is the identity, because a geometry whose position
     /// could not be read sits where its parent does rather than at infinity.
@@ -117,24 +114,27 @@ impl Matrix {
                 continue;
             };
             let numbers: Vec<f64> = body.split(',').filter_map(number).collect();
-            if numbers.len() < 3 {
-                return Self::IDENTITY;
-            }
             groups.push(numbers);
         }
-        if groups.len() < 4 {
+        if groups.len() < 3 || groups[..3].iter().any(|group| group.len() < 4) {
             return Self::IDENTITY;
         }
-        let mut basis = [[0.0; 3]; 3];
-        for (index, out) in basis.iter_mut().enumerate() {
+        let mut rows = [[0.0; 3]; 3];
+        let mut origin = [0.0; 3];
+        for (index, out) in rows.iter_mut().enumerate() {
             out.copy_from_slice(&groups[index][..3]);
+            origin[index] = groups[index][3];
         }
-        let origin = [
-            groups[3][0] * MATRIX_TO_METRES,
-            groups[3][1] * MATRIX_TO_METRES,
-            groups[3][2] * MATRIX_TO_METRES,
-        ];
-        Self { basis, origin }
+        Self { rows, origin }
+    }
+
+    /// Column `index` of the rotation: where the local axis points.
+    fn column(&self, index: usize) -> [f64; 3] {
+        [
+            self.rows[0][index],
+            self.rows[1][index],
+            self.rows[2][index],
+        ]
     }
 
     /// Where this transform's **−Z** points, as a unit vector.
@@ -143,12 +143,24 @@ impl Matrix {
     /// which is where a hanging light points, and never the zero vector that a
     /// viewer would have to special-case.
     fn beam_direction(&self) -> [f64; 3] {
-        let z = self.basis[2];
+        let z = self.column(2);
         let length = (z[0] * z[0] + z[1] * z[1] + z[2] * z[2]).sqrt();
         if !length.is_finite() || length <= f64::EPSILON {
             return [0.0, 0.0, -1.0];
         }
         [-z[0] / length, -z[1] / length, -z[2] / length]
+    }
+
+    /// The rotation in show axes, as the images of show's X, Y and Z.
+    ///
+    /// Show's Y is GDTF's Z and show's Z is GDTF's Y, so show's Y axis is
+    /// where GDTF's Z column points, converted — `P R P`, column by column.
+    fn show_axes(&self) -> (Vec3, Vec3, Vec3) {
+        (
+            to_show_axes(self.column(0)),
+            to_show_axes(self.column(2)),
+            to_show_axes(self.column(1)),
+        )
     }
 }
 
@@ -167,20 +179,29 @@ fn to_show_axes(vector: [f64; 3]) -> Vec3 {
 /// A fixture's models and geometries, ready to be asked about a mode.
 #[derive(Debug, Default)]
 pub struct Geometries {
-    /// Every `Model`, by name: the file it names and how big it is.
+    /// Every `Model`, by name.
     models: Vec<(String, Model)>,
     /// The top-level geometries, in the order the file lists them.
     roots: Vec<Node>,
 }
 
-/// One `Model`: the file it is drawn from and the box it fits in.
+/// One `Model`: the file it is drawn from, its primitive and its box.
 #[derive(Debug, Clone, Default)]
 struct Model {
     /// The file GDTF names, without a directory or an extension — the format
     /// ships the same model in several formats under one name.
     file: Option<String>,
+    /// `PrimitiveType`, where it is not `Undefined`.
+    primitive: Option<String>,
     /// Length (X), width (Y) and height (Z), in metres, as GDTF states them.
     size: [f64; 3],
+}
+
+/// What a walk is building.
+#[derive(Default)]
+struct Walk {
+    nodes: Vec<GeometryNode>,
+    beams: Vec<FixtureBeam>,
 }
 
 impl Geometries {
@@ -194,10 +215,14 @@ impl Geometries {
                 if name.is_empty() {
                     continue;
                 }
+                let primitive = non_empty(model.get("PrimitiveType"))
+                    .filter(|kind| !kind.eq_ignore_ascii_case("Undefined"))
+                    .map(str::to_owned);
                 models.push((
                     name,
                     Model {
                         file: non_empty(model.get("File")).map(str::to_owned),
+                        primitive,
                         size: [
                             number(model.get("Length")).unwrap_or(0.0),
                             number(model.get("Width")).unwrap_or(0.0),
@@ -234,21 +259,24 @@ impl Geometries {
             return super::empty_physical(fixture_type_id);
         }
 
-        let mut beams = Vec::new();
+        let mut walk = Walk::default();
         for root in roots {
-            self.walk(root, Matrix::IDENTITY, 0, &mut beams);
+            self.walk(root, None, Matrix::IDENTITY, 0, &mut walk);
         }
         // The body is the first root's model: the base of a moving head, the
-        // box of a PAR. A device whose root names no model has no size here,
-        // which a viewer reads as *size it yourself*.
+        // box of a PAR. The whole device is `geometries`; this stays for the
+        // readers that only want one box.
         let body = roots.first().and_then(|root| self.model_of(root));
         FixturePhysical {
             fixture_type_id: fixture_type_id.trim().to_owned(),
-            size: body.as_ref().map_or(Vec3::ZERO, |model| {
-                to_show_axes([model.size[0], model.size[1], model.size[2]])
-            }),
+            size: body
+                .as_ref()
+                .map_or(Vec3::ZERO, |model| to_show_axes(model.size)),
             model: body.and_then(|model| model.file),
-            beams,
+            beams: walk.beams,
+            geometries: walk.nodes,
+            channels: Vec::new(),
+            wheels: Vec::new(),
         }
     }
 
@@ -261,54 +289,91 @@ impl Geometries {
             .map(|(_, model)| model.clone())
     }
 
-    /// Walks one geometry and everything under it, collecting beams.
+    /// Walks one geometry and everything under it.
     ///
-    /// A `GeometryReference` is followed — it is how an LED bar states *and
-    /// here are the same eight pixels again* — with the reference's own
-    /// position applied, and with [`MAX_DEPTH`] as the thing that stops a file
-    /// whose references point at each other.
-    fn walk(&self, node: &Node, parent: Matrix, depth: usize, beams: &mut Vec<FixtureBeam>) {
-        if depth >= MAX_DEPTH || beams.len() >= MAX_BEAMS {
+    /// `parent` is the index of the node this one hangs from and `world` the
+    /// parent's transform from the device's origin. A `GeometryReference` is
+    /// followed — it is how an LED bar states *and here are the same eight
+    /// pixels again* — as a node of its own at the reference's position with
+    /// the referenced geometry's children under it, and [`MAX_DEPTH`] is what
+    /// stops a file whose references point at each other.
+    fn walk(&self, node: &Node, parent: Option<u32>, world: Matrix, depth: usize, walk: &mut Walk) {
+        if depth >= MAX_DEPTH || walk.nodes.len() >= MAX_NODES {
             return;
         }
-        let here = parent.then(&Matrix::parse(node.get("Position")));
-        if node.name == "Beam" {
-            beams.push(FixtureBeam {
+        let local = Matrix::parse(node.get("Position"));
+        let here = world.then(&local);
+
+        let reference = (node.name == "GeometryReference")
+            .then(|| {
+                non_empty(node.get("Geometry"))
+                    .and_then(|name| self.roots.iter().find(|root| root.get("Name") == name))
+            })
+            .flatten();
+        // A reference is drawn as what it refers to: its model and its kind.
+        let described = reference.unwrap_or(node);
+        let model = self.model_of(described);
+        let (x_axis, y_axis, z_axis) = local.show_axes();
+        let beam = (described.name == "Beam").then(|| BeamShape {
+            beam_type: non_empty(described.get("BeamType"))
+                .unwrap_or("Wash")
+                .to_owned(),
+            beam_angle: number(described.get("BeamAngle")).unwrap_or(0.0),
+            field_angle: number(described.get("FieldAngle")).unwrap_or(0.0),
+            beam_radius: number(described.get("BeamRadius")).unwrap_or(0.0),
+            luminous_flux: number(described.get("LuminousFlux")).unwrap_or(0.0),
+            color_temperature: number(described.get("ColorTemperature")).unwrap_or(0.0),
+            rectangle_ratio: number(described.get("RectangleRatio")).unwrap_or(1.0),
+        });
+        let index = u32::try_from(walk.nodes.len()).unwrap_or(u32::MAX);
+        walk.nodes.push(GeometryNode {
+            name: non_empty(node.get("Name"))
+                .map_or_else(|| format!("Geometry {}", index + 1), str::to_owned),
+            parent,
+            kind: if reference.is_some() {
+                described.name.clone()
+            } else {
+                node.name.clone()
+            },
+            model: model.as_ref().and_then(|model| model.file.clone()),
+            primitive: model.as_ref().and_then(|model| model.primitive.clone()),
+            size: model
+                .as_ref()
+                .map_or(Vec3::ZERO, |model| to_show_axes(model.size)),
+            position: to_show_axes(local.origin),
+            x_axis,
+            y_axis,
+            z_axis,
+            beam: beam.clone(),
+        });
+
+        if let Some(shape) = beam
+            && walk.beams.len() < MAX_BEAMS
+        {
+            walk.beams.push(FixtureBeam {
                 name: non_empty(node.get("Name"))
-                    .map_or_else(|| format!("Beam {}", beams.len() + 1), str::to_owned),
+                    .map_or_else(|| format!("Beam {}", walk.beams.len() + 1), str::to_owned),
                 position: to_show_axes(here.origin),
                 direction: to_show_axes(here.beam_direction()),
-                beam_angle: number(node.get("BeamAngle")).unwrap_or(0.0),
-                luminous_flux: number(node.get("LuminousFlux")).unwrap_or(0.0),
-                color_temperature: number(node.get("ColorTemperature")).unwrap_or(0.0),
+                beam_angle: shape.beam_angle,
+                luminous_flux: shape.luminous_flux,
+                color_temperature: shape.color_temperature,
             });
         }
-        if node.name == "GeometryReference" {
-            let target = non_empty(node.get("Geometry"))
-                .and_then(|name| self.roots.iter().find(|root| root.get("Name") == name));
-            if let Some(target) = target {
-                // The reference's own children are its DMX break overrides and
-                // not geometry, so only the target is walked — from **this**
-                // node's transform, which is what puts the eighth pixel of a
-                // bar where the eighth pixel is.
-                for child in &target.children {
-                    self.walk(child, here, depth + 1, beams);
-                }
-                if target.name == "Beam" {
-                    self.walk(target, parent, depth + 1, beams);
-                }
-            }
-            return;
-        }
-        for child in &node.children {
-            self.walk(child, here, depth + 1, beams);
+
+        // A reference's own children are its DMX break overrides and not
+        // geometry, so the target's children are walked instead — from this
+        // node, which is what puts the eighth pixel of a bar where it is.
+        let children = reference.map_or(&node.children, |target| &target.children);
+        for child in children {
+            self.walk(child, Some(index), here, depth + 1, walk);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Geometries, MATRIX_TO_METRES, Matrix, to_show_axes};
+    use super::{Geometries, Matrix, to_show_axes};
     use crate::library::gdtf::xml;
 
     /// The identity, as GDTF writes it.
@@ -323,19 +388,24 @@ mod tests {
             .clone()
     }
 
+    fn close(value: f64, expected: f64) -> bool {
+        (value - expected).abs() < 1e-9
+    }
+
+    /// **The layout a published file uses** — a Robe Robin T1 Profile's head,
+    /// verbatim: the translation is the fourth number of the third row, in
+    /// metres. S61 read the fourth group and would have put it at nought.
     #[test]
-    fn a_position_is_read_as_a_matrix_in_metres() {
-        // 1 200 mm up in GDTF's Z, which is 1.2 m of this desk's height.
-        let matrix = Matrix::parse("{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,1200,1}");
-        assert!((matrix.origin[2] - 1.2).abs() < 1e-9);
-        assert!((MATRIX_TO_METRES - 0.001).abs() < f64::EPSILON);
-        let shown = to_show_axes(matrix.origin);
-        assert!(
-            (shown.y - 1.2).abs() < 1e-9,
-            "GDTF's Z is this desk's height"
+    fn a_position_is_read_as_the_specification_states_it() {
+        let matrix = Matrix::parse(
+            "{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}\
+             {0.000000,0.000000,1.000000,-0.335000}{0,0,0,1}",
         );
-        assert!(shown.x.abs() < 1e-9);
-        assert!(shown.z.abs() < 1e-9);
+        assert!(close(matrix.origin[2], -0.335), "{matrix:?}");
+        let shown = to_show_axes(matrix.origin);
+        assert!(close(shown.y, -0.335), "GDTF's Z is this desk's height");
+        assert!(close(shown.x, 0.0));
+        assert!(close(shown.z, 0.0));
     }
 
     #[test]
@@ -343,6 +413,10 @@ mod tests {
         assert_eq!(Matrix::parse(""), Matrix::IDENTITY);
         assert_eq!(Matrix::parse("{1,0,0,0}"), Matrix::IDENTITY);
         assert_eq!(Matrix::parse("nonsense"), Matrix::IDENTITY);
+        assert_eq!(
+            Matrix::parse("{1,0,0}{0,1,0}{0,0,1}{0,0,0}"),
+            Matrix::IDENTITY
+        );
         assert_eq!(
             Matrix::parse("{a,b,c,d}{e,f,g,h}{i,j,k,l}{m,n,o,p}"),
             Matrix::IDENTITY
@@ -353,63 +427,95 @@ mod tests {
     fn a_beam_at_home_points_straight_down() {
         assert_eq!(Matrix::IDENTITY.beam_direction(), [0.0, 0.0, -1.0]);
         let shown = to_show_axes(Matrix::IDENTITY.beam_direction());
-        assert!((shown.y + 1.0).abs() < 1e-9, "down is negative height");
+        assert!(close(shown.y, -1.0), "down is negative height");
     }
 
+    /// The rotation is read by **columns**: a quarter turn about GDTF's X,
+    /// written as rows, sends local −Z to +Y — this desk's upstage.
     #[test]
     fn a_turned_geometry_turns_its_beam() {
-        // A quarter turn about GDTF's X: −Z becomes +Y, which is this desk's
-        // depth — a light on the floor pointing away from the operator.
-        let matrix = Matrix::parse("{1,0,0,0}{0,0,1,0}{0,-1,0,0}{0,0,0,1}");
+        // Rx(+90°) by rows: {1,0,0}{0,0,-1}{0,1,0}. Its Z column is (0,-1,0),
+        // so −Z points along +Y.
+        let matrix = Matrix::parse("{1,0,0,0}{0,0,-1,0}{0,1,0,0}{0,0,0,1}");
         let direction = to_show_axes(matrix.beam_direction());
-        assert!((direction.z - 1.0).abs() < 1e-9, "{direction:?}");
-        assert!(direction.x.abs() < 1e-9);
-        assert!(direction.y.abs() < 1e-9);
+        assert!(close(direction.z, 1.0), "{direction:?}");
+        assert!(close(direction.x, 0.0));
+        assert!(close(direction.y, 0.0));
+        let (x, y, z) = matrix.show_axes();
+        assert!(close(x.x, 1.0));
+        // Show's Y axis is where GDTF's Z column went: (0,-1,0) in GDTF, which
+        // is (0,0,-1) in show axes.
+        assert!(close(y.z, -1.0), "{y:?}");
+        assert!(close(z.y, 1.0), "{z:?}");
     }
 
+    /// The Robin T1's tree, as its file states it: the lens is 0.074 + 0.335 +
+    /// 0.292 m below the base, and every node keeps its **own** offset.
     #[test]
-    fn the_transforms_multiply_down_the_tree() {
-        // A yoke 500 mm up on a base, and a beam 300 mm up in the yoke: the
-        // beam is 800 mm up. A reader that took only the innermost matrix
-        // would put it at 300.
+    fn the_transforms_multiply_down_the_tree_and_each_node_keeps_its_own() {
         let node = fixture(
-            r#"<Geometries>
-                 <Geometry Name="Base" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
-                   <Axis Name="Yoke" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,500,1}">
-                     <Beam Name="Beam" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,300,1}"
-                           BeamAngle="14" LuminousFlux="9000" ColorTemperature="6500"/>
+            r#"<Models>
+                 <Model Name="Base" File="base" Length="0.384" Width="0.229" Height="0.101"/>
+                 <Model Name="Yoke" File="yoke" Length="0.399" Width="0.113" Height="0.394"/>
+                 <Model Name="Head" File="head" Length="0.278" Width="0.257" Height="0.535"/>
+                 <Model Name="Beam" File="" PrimitiveType="Cylinder" Length="0.127" Width="0.127" Height="0.001"/>
+               </Models>
+               <Geometries>
+                 <Geometry Model="Base" Name="Base" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
+                   <Axis Model="Yoke" Name="Yoke" Position="{1,0,0,0}{0,1,0,0}{0,0,1,-0.074}{0,0,0,1}">
+                     <Axis Model="Head" Name="Head" Position="{1,0,0,0}{0,1,0,0}{0,0,1,-0.335}{0,0,0,1}">
+                       <Beam BeamAngle="45" BeamRadius="0.0635" BeamType="Spot" FieldAngle="45"
+                             ColorTemperature="8000" LuminousFlux="10075" Model="Beam" Name="Beam"
+                             RectangleRatio="1.7777"
+                             Position="{1,0,0,0}{0,1,0,0}{0,0,1,-0.291636}{0,0,0,1}"/>
+                     </Axis>
                    </Axis>
                  </Geometry>
                </Geometries>"#,
         );
         let physical = Geometries::of(&node).physical("", "GUID");
+        let names: Vec<&str> = physical
+            .geometries
+            .iter()
+            .map(|n| n.name.as_str())
+            .collect();
+        assert_eq!(names, ["Base", "Yoke", "Head", "Beam"]);
+        let parents: Vec<Option<u32>> = physical.geometries.iter().map(|n| n.parent).collect();
+        assert_eq!(parents, [None, Some(0), Some(1), Some(2)]);
+        let kinds: Vec<&str> = physical
+            .geometries
+            .iter()
+            .map(|n| n.kind.as_str())
+            .collect();
+        assert_eq!(kinds, ["Geometry", "Axis", "Axis", "Beam"]);
+
+        let yoke = &physical.geometries[1];
+        assert_eq!(yoke.model.as_deref(), Some("yoke"));
+        assert!(close(yoke.position.y, -0.074), "{:?}", yoke.position);
+        // GDTF's length is across, its width is depth and its height is up.
+        assert!(
+            close(yoke.size.x, 0.399) && close(yoke.size.y, 0.394) && close(yoke.size.z, 0.113)
+        );
+        let lens = &physical.geometries[3];
+        assert_eq!(lens.primitive.as_deref(), Some("Cylinder"));
+        assert_eq!(lens.model, None, "an empty File is no file");
+        let shape = lens.beam.as_ref().expect("a beam has optics");
+        assert_eq!(shape.beam_type, "Spot");
+        assert!(close(shape.beam_radius, 0.0635));
+        assert!(close(shape.rectangle_ratio, 1.7777));
+
         assert_eq!(physical.beams.len(), 1);
         let beam = &physical.beams[0];
-        assert_eq!(beam.name, "Beam");
-        assert!((beam.position.y - 0.8).abs() < 1e-9, "{:?}", beam.position);
-        assert!((beam.beam_angle - 14.0).abs() < f64::EPSILON);
-        assert!((beam.luminous_flux - 9000.0).abs() < f64::EPSILON);
-        assert!((beam.color_temperature - 6500.0).abs() < f64::EPSILON);
-        assert_eq!(physical.fixture_type_id, "GUID");
-    }
-
-    #[test]
-    fn the_body_s_model_is_its_size_and_its_file() {
-        let node = fixture(
-            r#"<Models>
-                 <Model Name="Base" File="base" Length="0.3" Width="0.4" Height="0.5"/>
-               </Models>
-               <Geometries>
-                 <Geometry Name="Base" Model="Base" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}"/>
-               </Geometries>"#,
+        assert!(
+            close(beam.position.y, -(0.074 + 0.335 + 0.291_636)),
+            "{:?}",
+            beam.position
         );
-        let physical = Geometries::of(&node).physical("", "");
+        assert!(close(beam.direction.y, -1.0));
+        assert!(close(beam.beam_angle, 45.0));
         assert_eq!(physical.model.as_deref(), Some("base"));
-        // GDTF's length is across, its width is depth and its height is up.
-        assert!((physical.size.x - 0.3).abs() < 1e-9);
-        assert!((physical.size.z - 0.4).abs() < 1e-9);
-        assert!((physical.size.y - 0.5).abs() < 1e-9);
-        assert!(physical.beams.is_empty());
+        assert!(close(physical.size.x, 0.384));
+        assert_eq!(physical.fixture_type_id, "GUID");
     }
 
     #[test]
@@ -428,17 +534,12 @@ mod tests {
             .map(|beam| beam.name)
             .collect();
         assert_eq!(named, ["B"]);
-        // Naming none takes the lot, which is what a one-device file wants.
         assert_eq!(geometries.physical("", "").beams.len(), 2);
-        // Naming one that is not there is the same answer rather than none.
         assert_eq!(geometries.physical("Three", "").beams.len(), 2);
     }
 
     #[test]
     fn a_geometry_reference_repeats_a_pixel_where_it_is_referenced() {
-        // How an LED bar states its pixels: one `Pixel` geometry, referenced
-        // twice at two places. A reader that ignored the reference would give
-        // the bar one beam at the origin.
         let node = fixture(
             r#"<Geometries>
                  <Geometry Name="Pixel" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
@@ -446,17 +547,26 @@ mod tests {
                  </Geometry>
                  <Geometry Name="Bar" Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}">
                    <GeometryReference Name="P1" Geometry="Pixel"
-                                      Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{100,0,0,1}"/>
+                                      Position="{1,0,0,0.1}{0,1,0,0}{0,0,1,0}{0,0,0,1}"/>
                    <GeometryReference Name="P2" Geometry="Pixel"
-                                      Position="{1,0,0,0}{0,1,0,0}{0,0,1,0}{200,0,0,1}"/>
+                                      Position="{1,0,0,0.2}{0,1,0,0}{0,0,1,0}{0,0,0,1}"/>
                  </Geometry>
                </Geometries>"#,
         );
         let physical = Geometries::of(&node).physical("Bar", "");
         let across: Vec<f64> = physical.beams.iter().map(|beam| beam.position.x).collect();
         assert_eq!(across.len(), 2);
-        assert!((across[0] - 0.1).abs() < 1e-9, "{across:?}");
-        assert!((across[1] - 0.2).abs() < 1e-9, "{across:?}");
+        assert!(close(across[0], 0.1), "{across:?}");
+        assert!(close(across[1], 0.2), "{across:?}");
+        // In the tree the reference is a node of its own, named for itself,
+        // with the referenced geometry's beam under it.
+        let names: Vec<&str> = physical
+            .geometries
+            .iter()
+            .map(|n| n.name.as_str())
+            .collect();
+        assert_eq!(names, ["Bar", "P1", "Cell", "P2", "Cell"]);
+        assert_eq!(physical.geometries[2].parent, Some(1));
     }
 
     #[test]
@@ -470,8 +580,6 @@ mod tests {
                  </Geometry>
                </Geometries>"#,
         );
-        // It terminates, which is the assertion; how many beams a loop yields
-        // is not a fact worth freezing.
         let physical = Geometries::of(&node).physical("Loop", "");
         assert!(!physical.beams.is_empty());
     }
@@ -480,6 +588,7 @@ mod tests {
     fn a_fixture_with_no_geometry_has_none() {
         let physical = Geometries::of(&fixture("")).physical("", " GUID ");
         assert!(physical.beams.is_empty());
+        assert!(physical.geometries.is_empty());
         assert_eq!(physical.model, None);
         assert_eq!(physical.size, prism_domain::Vec3::ZERO);
         assert_eq!(physical.fixture_type_id, "GUID", "it is trimmed");

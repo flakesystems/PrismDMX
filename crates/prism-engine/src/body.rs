@@ -508,6 +508,8 @@ impl TickBody for MergeBody {
                 self.programmer.clear(slot as usize);
             }
             TickCommand::ClearProgrammer => self.programmer.clear_all(),
+            // The host's business: it swaps bodies, a body does not.
+            TickCommand::AdoptBody => {}
         }
     }
 

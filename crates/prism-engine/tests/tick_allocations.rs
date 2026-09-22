@@ -119,7 +119,8 @@ impl TickBody for RampBody {
             | TickCommand::SetGroupMaster { .. }
             | TickCommand::SetProgrammerValue { .. }
             | TickCommand::ClearProgrammerValue { .. }
-            | TickCommand::ClearProgrammer => {}
+            | TickCommand::ClearProgrammer
+            | TickCommand::AdoptBody => {}
         }
     }
 
