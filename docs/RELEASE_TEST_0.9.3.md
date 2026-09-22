@@ -490,6 +490,17 @@ alles ab T-3D.10 nicht prüfbar; bitte vermerken.
       T-3D.10), sein Strahl tritt an der Linse aus und folgt Pan und Tilt. Das
       Gerät kommt aus der `.gdtf` **in** der `.mvr` — auch ohne dass es einzeln
       in der Bibliothek liegt.
+- [ ] **T-BOTH.6 — das Pult startet mit der ganzen Bibliothek.** Mit der
+      heruntergeladenen GDTF-Bibliothek (über 12 000 Fixtures) die PrismDMX-App
+      beenden und neu starten. **Erster Start danach:** Oberfläche und
+      Tray-Symbol sind nach wenigen Sekunden da; nach einer Weile (auf dem
+      Entwicklungsrechner 19 s) meldet die Zeile unten *The fixture library is
+      ready*. **Zweiter Start:** die ganze Bibliothek ist sofort da (Patch-Fenster,
+      Suche nach einem Gerät). Im Task-Manager braucht `prismd` einige hundert
+      MB, nicht Gigabytes. **Bitte beide Zeiten notieren.**
+- [ ] **T-BOTH.7 — Import hält das Pult nicht an.** Während eine Cue läuft,
+      *Import fixture (GDTF)*: das importierte Gerät ist sofort im
+      Patch-Fenster, und das Pult reagiert in der Zeit danach ohne Pause.
 - [ ] **T-BOTH.5 — die Bibliothek aktualisieren, während der Viewer läuft.**
       Mit Konto (T-LIB.4): *Update the library* drücken, während *Viewer 3D* und
       *DMX Sheet* offen sind und eine Cue läuft. Das DMX Sheet bleibt bei ~30 Hz,

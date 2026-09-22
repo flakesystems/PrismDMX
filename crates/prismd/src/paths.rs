@@ -125,6 +125,14 @@ pub fn fixtures_dir(data_dir: &Path) -> PathBuf {
     data_dir.join("fixtures")
 }
 
+/// What the fixture library read at the last start, so the next need not read
+/// it again (2026-09-22) — a cache beside the show, always safe to delete. See
+/// `prism_core::library::index`.
+#[must_use]
+pub fn library_index(data_dir: &Path) -> PathBuf {
+    data_dir.join("library-index.json")
+}
+
 /// The note written into a freshly made [`fixtures_dir`].
 ///
 /// Plain text rather than Markdown because the person who opens this folder is

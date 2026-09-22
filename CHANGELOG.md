@@ -56,6 +56,17 @@ DMX Sheet —, also sieht man, was dem Rig tatsächlich gesagt wird, egal von we
   woanders zeigen.
 - **Ein Klick auf ein Fixture** wählt es aus wie ein Klick im Fixture Sheet.
 - Ein Browser ganz ohne 3D bekommt ein einfaches flaches Bild.
+
+### Eine große Bibliothek hält den Start nicht mehr auf
+
+- **Behoben:** Mit der ganzen heruntergeladenen GDTF-Bibliothek (über 12 000
+  Fixtures) brauchte das Pult über eine Minute zum Starten, die Oberfläche kam
+  nicht und das Tray-Symbol auch nicht. Jetzt ist das Pult nach wenigen Sekunden
+  da; beim ersten Start nach einem Download kommt die Bibliothek im Hintergrund
+  dazu, jeder weitere Start hat sie sofort. Das Pult braucht dafür ein
+  Zwölftel des Speichers.
+- **Behoben:** Ein Profil zu importieren oder die Bibliothek zu aktualisieren
+  hielt das ganze Pult fest, solange die Bibliothek neu gelesen wurde.
 - **Behoben:** Ein Wert, der im selben Augenblick gesetzt wurde, in dem das Rig
   neu aufgebaut wurde — etwa gleich nach einem Patch oder einem Oops —, konnte
   auf dem Ausgang fehlen, obwohl der Programmer ihn hatte. Er kommt jetzt immer

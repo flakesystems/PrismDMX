@@ -57,6 +57,7 @@
 //! [`ofl`] for the whole of what each conversion costs.
 
 pub mod gdtf;
+pub mod index;
 mod matrix;
 pub mod mvr;
 pub mod ofl;
@@ -64,6 +65,8 @@ pub mod zip;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+
+pub use index::LibraryIndex;
 
 use prism_domain::{
     AttributeDef, AttributeType, FeatureGroup, FixtureType, LibraryEntry, LibraryFixture,
@@ -253,8 +256,13 @@ pub fn generic_profiles() -> Vec<FixtureType> {
 pub struct FixtureLibrary {
     /// Keyed by [`FixtureType::id`], so a key is resolved without a scan and so
     /// the operator's own folder can override a vendored profile by using its
-    /// key.
-    profiles: BTreeMap<String, FixtureType>,
+    /// key. A GDTF profile is held as its summary alone and read back out of
+    /// its file when it is wanted whole — see [`Held`].
+    profiles: BTreeMap<String, Held>,
+    /// The GDTF profiles read back most recently — see [`Self::profile`].
+    recent: RecentProfiles,
+    /// What the last start read, so this one need not — see [`index`].
+    index: IndexSlot,
     /// The searchable form of each, in the order they were added.
     entries: Vec<LibraryEntry>,
     /// The entries **by fixture** — S57, punch-list B60 — as indices into
@@ -296,6 +304,84 @@ pub struct FixtureLibrary {
     /// `guid:<FixtureTypeID>`, so a viewer can be sent the models and the gobo
     /// pictures the profile names ([`Self::resource`]).
     sources: BTreeMap<String, Source>,
+}
+
+/// One profile as the library holds it (2026-09-22).
+///
+/// A published GDTF library is twelve thousand fixtures in fifty-five thousand
+/// modes, and held whole — every mode's geometry tree, every channel's
+/// functions, every wheel — it was 1.8 GB of a desk's memory for a menu. What a
+/// menu shows is two facts per mode, kept here; what patching needs is the
+/// whole profile, and for a GDTF that is read back out of its file in a few
+/// milliseconds when a fixture is patched ([`FixtureLibrary::profile`]). A
+/// profile that is not cheap to read again — an Open Fixture Library file, a
+/// rig plan, a built-in generic — is kept whole.
+#[derive(Debug, Clone, PartialEq)]
+struct Held {
+    /// Whether it has an intensity of its own — the patch window's question.
+    has_intensity: bool,
+    /// How many beams its device has — the patch window's other column.
+    beams: u16,
+    /// The profile, when it is kept; `None` when it is read from its source.
+    profile: Option<Box<FixtureType>>,
+}
+
+impl Held {
+    /// The summary of `profile`, keeping it whole or not.
+    fn of(profile: FixtureType, keep: bool) -> Self {
+        Self {
+            has_intensity: profile.has_dimmer(),
+            beams: profile.physical.as_ref().map_or(0, |physical| {
+                u16::try_from(physical.beams.len()).unwrap_or(u16::MAX)
+            }),
+            profile: keep.then(|| Box::new(profile)),
+        }
+    }
+}
+
+/// How many GDTF profiles read back from their files are kept.
+///
+/// A patch window asks for the same profile on every keystroke of its preview;
+/// a rig is a handful of fixture types. Sixteen covers both.
+const RECENT_PROFILES: usize = 16;
+
+/// The GDTF profiles read back most recently, newest last.
+///
+/// Behind a mutex because [`FixtureLibrary::profile`] is a read: a library is
+/// shared by reference and a profile being read back is not a change to it.
+/// Two libraries compare equal whatever each has read back, and a clone starts
+/// with nothing read back, because this is a cache and not the library.
+#[derive(Debug, Default)]
+struct RecentProfiles(std::sync::Mutex<Vec<FixtureType>>);
+
+impl Clone for RecentProfiles {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for RecentProfiles {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+/// The library's [`LibraryIndex`], while it reads. Not part of what a library
+/// *is*: two libraries compare equal whatever index each read with, and a
+/// clone has none.
+#[derive(Debug, Default)]
+struct IndexSlot(Option<LibraryIndex>);
+
+impl Clone for IndexSlot {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl PartialEq for IndexSlot {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 /// Where a profile's files are — **S30b**.
@@ -395,6 +481,126 @@ impl ResourceLookup {
             }
         }?;
         (found.1.len() <= MAX_RESOURCE_BYTES).then_some(found)
+    }
+}
+
+/// One file of a tree, waiting to be read — see
+/// [`FixtureLibrary::read_gdtf_files`].
+#[derive(Debug, Clone)]
+enum GdtfFile {
+    /// A `.gdtf` archive.
+    Archive(std::path::PathBuf),
+    /// An unpacked GDTF's `description.xml`.
+    Unpacked(std::path::PathBuf),
+    /// A rig plan.
+    Plan(std::path::PathBuf),
+}
+
+impl GdtfFile {
+    /// The file whose length and time say whether it changed — the archive, or
+    /// an unpacked GDTF's description. A plan is read whole every time.
+    fn indexed_path(&self) -> Option<&Path> {
+        match self {
+            Self::Archive(path) | Self::Unpacked(path) => Some(path),
+            Self::Plan(_) => None,
+        }
+    }
+
+    /// Where the files of what it holds are, for [`FixtureLibrary::resource`].
+    fn source(&self) -> Source {
+        match self {
+            Self::Archive(path) => Source::Archive(path.clone()),
+            Self::Unpacked(description) => {
+                Source::Unpacked(description.parent().unwrap_or(description).to_path_buf())
+            }
+            Self::Plan(path) => Source::Plan(path.clone()),
+        }
+    }
+}
+
+/// One profile a file produced, reduced to what the library holds.
+#[derive(Debug)]
+struct Reduced {
+    entry: LibraryEntry,
+    held: Held,
+    /// The device's GDTF GUID, upper case, for [`FixtureLibrary::resource`].
+    guid: Option<String>,
+}
+
+impl Reduced {
+    /// What the index remembered, as the library holds it: never whole, since
+    /// only a GDTF is indexed and a GDTF is read back from its file.
+    fn from_index(indexed: index::IndexedProfile) -> Self {
+        Self {
+            entry: indexed.entry,
+            held: Held {
+                has_intensity: indexed.has_intensity,
+                beams: indexed.beams,
+                profile: None,
+            },
+            guid: indexed.guid,
+        }
+    }
+
+    /// What the index remembers of it.
+    fn to_index(&self) -> index::IndexedProfile {
+        index::IndexedProfile {
+            entry: self.entry.clone(),
+            has_intensity: self.held.has_intensity,
+            beams: self.held.beams,
+            guid: self.guid.clone(),
+        }
+    }
+
+    fn of(entry: LibraryEntry, profile: FixtureType, keep: bool) -> Self {
+        let guid = profile
+            .physical
+            .as_ref()
+            .map(|physical| physical.fixture_type_id.to_ascii_uppercase())
+            .filter(|guid| !guid.is_empty());
+        Self {
+            entry,
+            held: Held::of(profile, keep),
+            guid,
+        }
+    }
+}
+
+/// What reading one file produced.
+enum ReadFile {
+    Gdtf(Vec<Reduced>, gdtf::Conversion),
+    Plan(Vec<Reduced>, mvr::Conversion),
+}
+
+/// Reads one file of a tree — on a worker thread, so nothing here touches the
+/// library. `None` for a file that could not be read off the disk at all.
+///
+/// A `.gdtf` is read **without reading the archive**: its end record, its
+/// central directory and its description, and none of its models or pictures
+/// ([`zip::read_from_file`]). Its profiles are read back from it when they are
+/// wanted whole; a plan's are kept, because a plan is read once whole.
+fn read_one(file: &GdtfFile, own: bool) -> Option<ReadFile> {
+    let reduce = |built: Vec<(LibraryEntry, FixtureType)>, keep: bool| -> Vec<Reduced> {
+        built
+            .into_iter()
+            .map(|(entry, profile)| Reduced::of(entry, profile, keep))
+            .collect()
+    };
+    match file {
+        GdtfFile::Archive(path) => {
+            let (built, counts) = gdtf::read_archive_file(path, own);
+            Some(ReadFile::Gdtf(reduce(built, false), counts))
+        }
+        GdtfFile::Unpacked(description) => {
+            let bytes = std::fs::read(description).ok()?;
+            let (built, counts) = gdtf::read_description(&bytes, own);
+            Some(ReadFile::Gdtf(reduce(built, false), counts))
+        }
+        GdtfFile::Plan(path) => {
+            let bytes = std::fs::read(path).ok()?;
+            let (built, counts, _) = mvr::read_archive(&bytes, own);
+            Some(ReadFile::Plan(reduce(built, true), counts))
+        }
     }
 }
 
@@ -574,11 +780,21 @@ impl FixtureLibrary {
     /// comes out of the file, so where it sits says nothing and nothing has to
     /// agree about it.
     fn read_gdtf_dir(&mut self, root: &Path, own: bool) {
-        self.walk_gdtf(root, own, 0);
+        let mut files = Vec::new();
+        Self::walk_gdtf(root, 0, &mut files);
+        self.read_gdtf_files(files, own);
     }
 
-    /// One level of [`Self::read_gdtf_dir`].
-    fn walk_gdtf(&mut self, directory: &Path, own: bool, depth: usize) {
+    /// One level of [`Self::read_gdtf_dir`]: every GDTF and rig plan under
+    /// `directory`, in the order they are filed, as work to be read — each with
+    /// its [`index::stamp_of`].
+    ///
+    /// **Everything asked of a file is asked of the directory listing**
+    /// (2026-09-22). On Windows the listing carries each entry's kind, length
+    /// and time, and asking the file itself opens it: twelve thousand of those,
+    /// with a virus scanner watching each, were fifteen seconds of a start
+    /// that read nothing else.
+    fn walk_gdtf(directory: &Path, depth: usize, into: &mut Vec<(GdtfFile, Option<(u64, u64)>)>) {
         if depth > MAX_LIBRARY_DEPTH {
             return;
         }
@@ -587,82 +803,160 @@ impl FixtureLibrary {
         };
         // Sorted, so a library built twice on two machines holds the same
         // profiles in the same order and a recording of it is stable.
-        let mut paths: Vec<std::path::PathBuf> =
-            entries.flatten().map(|entry| entry.path()).collect();
-        paths.sort();
+        let mut listed: Vec<std::fs::DirEntry> = entries.flatten().collect();
+        listed.sort_by_key(std::fs::DirEntry::path);
 
         // An unpacked GDTF is a directory with a description in it, and its
         // subdirectories are its models and its gobo pictures rather than more
         // fixtures — so it is read here and not descended into.
-        let description = directory.join(GDTF_DESCRIPTION);
-        if depth > 0 && description.is_file() {
-            self.read_gdtf_description(&description, own);
+        if depth > 0
+            && let Some(description) = listed
+                .iter()
+                .find(|entry| entry.file_name().eq_ignore_ascii_case(GDTF_DESCRIPTION))
+        {
+            let stamp = description
+                .metadata()
+                .ok()
+                .as_ref()
+                .and_then(index::stamp_of);
+            into.push((GdtfFile::Unpacked(description.path()), stamp));
             return;
         }
-        for path in paths {
-            if path.is_dir() {
-                self.walk_gdtf(&path, own, depth + 1);
-            } else if path
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case(GDTF_EXTENSION))
-            {
-                self.read_gdtf_archive(&path, own);
-            } else if path
-                .extension()
+        for entry in listed {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            let path = entry.path();
+            // A link is followed, as a directory walk always has: a venue may
+            // put its library on another drive and link it here.
+            let is_dir = kind.is_dir() || (kind.is_symlink() && path.is_dir());
+            if is_dir {
+                Self::walk_gdtf(&path, depth + 1, into);
+                continue;
+            }
+            let extension = path.extension();
+            if extension.is_some_and(|extension| extension.eq_ignore_ascii_case(GDTF_EXTENSION)) {
+                let stamp = entry.metadata().ok().as_ref().and_then(index::stamp_of);
+                into.push((GdtfFile::Archive(path), stamp));
+            } else if extension
                 .is_some_and(|extension| extension.eq_ignore_ascii_case(MVR_EXTENSION))
             {
-                self.read_mvr_archive(&path, own);
+                into.push((GdtfFile::Plan(path), None));
             }
         }
     }
 
-    /// One `.gdtf` archive.
-    fn read_gdtf_archive(&mut self, path: &Path, own: bool) {
-        let Ok(bytes) = std::fs::read(path) else {
-            self.gdtf_conversion.files_rejected += 1;
-            return;
-        };
-        let (built, counts) = gdtf::read_archive(&bytes, own);
-        self.absorb_gdtf(built, counts, own, &Source::Archive(path.to_path_buf()));
+    /// Reads every file of a tree **in parallel**, and files what each
+    /// produced **in order** (2026-09-22).
+    ///
+    /// Parsing a GDTF is a megabyte of XML and the files are independent, so
+    /// the work is spread over the machine's cores; filing is not, because the
+    /// first profile for a key wins and which is first has to be the same on
+    /// every machine. Each worker reduces what it read to what the library
+    /// holds ([`Held`]) before handing it on, so a library of twelve thousand
+    /// is never all in memory at once.
+    fn read_gdtf_files(&mut self, listed: Vec<(GdtfFile, Option<(u64, u64)>)>, own: bool) {
+        // What the index already knows, unchanged since it was read, is not
+        // read again; the stamps came with the listing.
+        let (files, stamps): (Vec<GdtfFile>, Vec<Option<(u64, u64)>>) = listed.into_iter().unzip();
+        let mut read: Vec<Option<ReadFile>> = Vec::new();
+        read.resize_with(files.len(), || None);
+        let mut todo: Vec<usize> = Vec::new();
+        for (index, (file, stamp)) in files.iter().zip(&stamps).enumerate() {
+            let known = match (&mut self.index.0, file.indexed_path(), stamp) {
+                (Some(library_index), Some(path), Some(stamp)) => {
+                    library_index.lookup(path, own, *stamp)
+                }
+                _ => None,
+            };
+            match known {
+                Some((profiles, counts)) => {
+                    let reduced = profiles.into_iter().map(Reduced::from_index).collect();
+                    if let Some(slot) = read.get_mut(index) {
+                        *slot = Some(ReadFile::Gdtf(reduced, counts));
+                    }
+                }
+                None => todo.push(index),
+            }
+        }
+
+        let workers = std::thread::available_parallelism()
+            .map_or(1, std::num::NonZeroUsize::get)
+            .clamp(1, 16)
+            .min(todo.len().max(1));
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let slots: Vec<std::sync::Mutex<Option<ReadFile>>> =
+            files.iter().map(|_| std::sync::Mutex::new(None)).collect();
+        std::thread::scope(|scope| {
+            for _ in 0..workers {
+                scope.spawn(|| {
+                    loop {
+                        let at = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(&index) = todo.get(at) else {
+                            break;
+                        };
+                        let Some(file) = files.get(index) else {
+                            break;
+                        };
+                        let done = read_one(file, own);
+                        if let Some(slot) = slots.get(index)
+                            && let Ok(mut slot) = slot.lock()
+                        {
+                            *slot = done;
+                        }
+                    }
+                });
+            }
+        });
+        for (slot, place) in slots.into_iter().zip(read.iter_mut()) {
+            if let Some(done) = slot.into_inner().ok().flatten() {
+                *place = Some(done);
+            }
+        }
+        for ((file, done), stamp) in files.iter().zip(read).zip(stamps) {
+            match done {
+                Some(ReadFile::Gdtf(built, counts)) => {
+                    if let (Some(library_index), Some(path), Some(stamp)) =
+                        (&mut self.index.0, file.indexed_path(), stamp)
+                    {
+                        let profiles = built.iter().map(Reduced::to_index).collect();
+                        library_index.record(path, own, stamp, profiles, counts);
+                    }
+                    self.absorb_gdtf(built, counts, own, &file.source());
+                }
+                Some(ReadFile::Plan(built, counts)) => self.absorb_plan(built, counts, own, file),
+                None => self.gdtf_conversion.files_rejected += 1,
+            }
+        }
     }
 
-    /// One `.mvr` — **S62**.
+    /// What one rig plan produced — **S62**.
     ///
     /// Every profile the plan carries, filed exactly as a loose `.gdtf` would
     /// be, so a fixture that arrives both ways is one row. What the plan *says*
     /// — the addresses, the positions — is read and **not acted on**; see
     /// [`mvr`] for why that is a separate decision.
-    fn read_mvr_archive(&mut self, path: &Path, own: bool) {
-        let Ok(bytes) = std::fs::read(path) else {
-            self.mvr_conversion.profiles_rejected += 1;
-            return;
-        };
-        let (built, counts, _) = mvr::read_archive(&bytes, own);
+    fn absorb_plan(
+        &mut self,
+        built: Vec<Reduced>,
+        counts: mvr::Conversion,
+        own: bool,
+        file: &GdtfFile,
+    ) {
         self.mvr_conversion.absorb(counts);
         // Each profile of the archive is filed on its own: they are separate
         // fixtures that happened to travel together, and B43's rule is per
         // fixture rather than per file.
-        let source = Source::Plan(path.to_path_buf());
-        for (entry, profile) in built {
-            let key = fixture_key(&entry.id).to_owned();
+        let source = file.source();
+        for reduced in built {
+            let key = fixture_key(&reduced.entry.id).to_owned();
             if own {
                 self.own_fixtures.insert(key);
             } else if self.own_fixtures.contains(&key) {
                 continue;
             }
-            self.insert_from(entry, profile, &source);
+            self.insert_from(reduced, &source);
         }
-    }
-
-    /// One unpacked GDTF's `description.xml`.
-    fn read_gdtf_description(&mut self, path: &Path, own: bool) {
-        let Ok(bytes) = std::fs::read(path) else {
-            self.gdtf_conversion.files_rejected += 1;
-            return;
-        };
-        let (built, counts) = gdtf::read_description(&bytes, own);
-        let directory = path.parent().unwrap_or(path).to_path_buf();
-        self.absorb_gdtf(built, counts, own, &Source::Unpacked(directory));
     }
 
     /// Files what one GDTF file produced, honouring B43's rule.
@@ -673,7 +967,7 @@ impl FixtureLibrary {
     /// again.
     fn absorb_gdtf(
         &mut self,
-        built: Vec<(LibraryEntry, FixtureType)>,
+        built: Vec<Reduced>,
         counts: gdtf::Conversion,
         own: bool,
         source: &Source,
@@ -681,7 +975,7 @@ impl FixtureLibrary {
         self.gdtf_conversion.absorb(counts);
         let Some(key) = built
             .first()
-            .map(|(entry, _)| fixture_key(&entry.id).to_owned())
+            .map(|reduced| fixture_key(&reduced.entry.id).to_owned())
         else {
             return;
         };
@@ -692,20 +986,16 @@ impl FixtureLibrary {
             // whole rather than mode by mode; see `own_fixtures`.
             return;
         }
-        for (entry, profile) in built {
-            self.insert_from(entry, profile, source);
+        for reduced in built {
+            self.insert_from(reduced, source);
         }
     }
 
     /// [`Self::insert`], remembering where the profile's files are — S30b.
-    fn insert_from(&mut self, entry: LibraryEntry, profile: FixtureType, source: &Source) {
-        let key = profile.id.clone();
-        let guid = profile
-            .physical
-            .as_ref()
-            .map(|physical| physical.fixture_type_id.to_ascii_uppercase())
-            .filter(|guid| !guid.is_empty());
-        if self.insert(entry, profile) {
+    fn insert_from(&mut self, reduced: Reduced, source: &Source) {
+        let Reduced { entry, held, guid } = reduced;
+        let key = entry.id.clone();
+        if self.insert_held(entry, held) {
             self.sources.insert(key, source.clone());
             if let Some(guid) = guid {
                 self.sources
@@ -790,10 +1080,18 @@ impl FixtureLibrary {
         let Ok(directory) = std::fs::read_dir(root) else {
             return;
         };
+        // The kind from the listing, not from asking each path — see
+        // `walk_gdtf`: a venue's folder of twelve thousand GDTF files is
+        // listed here too, and every one of them would be opened to learn
+        // that it is not a directory.
         let mut manufacturers: Vec<std::path::PathBuf> = directory
             .flatten()
+            .filter(|entry| {
+                entry
+                    .file_type()
+                    .is_ok_and(|kind| kind.is_dir() || (kind.is_symlink() && entry.path().is_dir()))
+            })
             .map(|entry| entry.path())
-            .filter(|path| path.is_dir())
             .collect();
         // Sorted, so a library built twice on two machines holds the same
         // profiles in the same order and a recording of it is stable.
@@ -828,7 +1126,13 @@ impl FixtureLibrary {
                 .profiles
                 .range(prefix.clone()..)
                 .take_while(|(id, _)| id.starts_with(&prefix))
-                .map(|(id, profile)| (id.clone(), profile.clone()))
+                // A redirect is the Open Fixture Library's, and its profiles
+                // are kept whole; one pointing at a GDTF is not followed.
+                .filter_map(|(id, held)| {
+                    held.profile
+                        .as_ref()
+                        .map(|profile| (id.clone(), profile.as_ref().clone()))
+                })
                 .collect();
             for (id, profile) in targets {
                 let mode = id[prefix.len()..].to_owned();
@@ -941,12 +1245,18 @@ impl FixtureLibrary {
         );
     }
 
-    /// Adds a profile unless its key is taken. See [`Self::read_ofl_tree`].
+    /// Adds a profile, kept whole, unless its key is taken. See
+    /// [`Self::read_ofl_tree`].
     fn insert(&mut self, entry: LibraryEntry, profile: FixtureType) -> bool {
-        if self.profiles.contains_key(&profile.id) {
+        self.insert_held(entry, Held::of(profile, true))
+    }
+
+    /// Adds a profile as the library holds it, unless its key is taken.
+    fn insert_held(&mut self, entry: LibraryEntry, held: Held) -> bool {
+        if self.profiles.contains_key(&entry.id) {
             return false;
         }
-        self.profiles.insert(profile.id.clone(), profile);
+        self.profiles.insert(entry.id.clone(), held);
         let key = (fixture_key(&entry.id).to_owned(), entry.own);
         let index = self.entries.len();
         self.entries.push(entry);
@@ -1040,14 +1350,8 @@ impl FixtureLibrary {
                     has_intensity: self
                         .profiles
                         .get(&entry.id)
-                        .is_some_and(FixtureType::has_dimmer),
-                    beams: self
-                        .profiles
-                        .get(&entry.id)
-                        .and_then(|profile| profile.physical.as_ref())
-                        .map_or(0, |physical| {
-                            u16::try_from(physical.beams.len()).unwrap_or(u16::MAX)
-                        }),
+                        .is_some_and(|held| held.has_intensity),
+                    beams: self.profiles.get(&entry.id).map_or(0, |held| held.beams),
                 })
                 .collect(),
         })
@@ -1093,10 +1397,76 @@ impl FixtureLibrary {
         self.entries.iter().filter(|entry| entry.gdtf).count()
     }
 
+    /// Files the profiles of one GDTF archive the venue has just imported, as
+    /// its own — **S62**'s import, without reading the library again
+    /// (2026-09-22).
+    ///
+    /// A profile whose key is already here is left as it is: which of two
+    /// copies of a fixture wins is the whole library's question, and a full
+    /// read in the background answers it. What this answers is the operator's
+    /// — a fixture imported is offered at once.
+    pub fn file_imported(&mut self, built: Vec<(LibraryEntry, FixtureType)>, archive: &Path) {
+        let source = Source::Archive(archive.to_path_buf());
+        for (entry, profile) in built {
+            self.own_fixtures.insert(fixture_key(&entry.id).to_owned());
+            self.insert_from(Reduced::of(entry, profile, false), &source);
+        }
+    }
+
+    /// Reads with `index` from here on: a file it knows, unchanged, is taken
+    /// from it rather than parsed — see [`index`].
+    pub fn use_index(&mut self, index: LibraryIndex) {
+        self.index.0 = Some(index);
+    }
+
+    /// The index, with what this library read recorded in it, to be saved.
+    pub fn take_index(&mut self) -> Option<LibraryIndex> {
+        self.index.0.take()
+    }
+
     /// One profile by key, ready to embed into a show.
+    ///
+    /// A GDTF profile is read back out of its file ([`Held`]) — a few
+    /// milliseconds, once per patch rather than once per start — and the
+    /// last few read are kept, so a patch window previewing on every
+    /// keystroke reads the file once. `None` when there is no such key, or
+    /// when the file it came from is gone or no longer holds it.
     #[must_use]
-    pub fn profile(&self, id: &str) -> Option<&FixtureType> {
-        self.profiles.get(id)
+    pub fn profile(&self, id: &str) -> Option<FixtureType> {
+        let held = self.profiles.get(id)?;
+        if let Some(profile) = &held.profile {
+            return Some(profile.as_ref().clone());
+        }
+        if let Ok(recent) = self.recent.0.lock()
+            && let Some(found) = recent.iter().find(|profile| profile.id == id)
+        {
+            return Some(found.clone());
+        }
+        let own = self
+            .entries
+            .iter()
+            .find(|entry| entry.id == id)
+            .is_some_and(|entry| entry.own);
+        let built = match self.sources.get(id)? {
+            Source::Archive(path) => gdtf::read_archive_file(path, own).0,
+            Source::Unpacked(directory) => {
+                let bytes = std::fs::read(directory.join(GDTF_DESCRIPTION)).ok()?;
+                gdtf::read_description(&bytes, own).0
+            }
+            // Kept whole when filed, so never here.
+            Source::Plan(_) => return None,
+        };
+        let profile = built
+            .into_iter()
+            .map(|(_, profile)| profile)
+            .find(|profile| profile.id == id)?;
+        if let Ok(mut recent) = self.recent.0.lock() {
+            if recent.len() >= RECENT_PROFILES {
+                recent.remove(0);
+            }
+            recent.push(profile.clone());
+        }
+        Some(profile)
     }
 
     /// Every entry, in key order. What a test walks; not what a client is sent.
@@ -1400,7 +1770,10 @@ mod tests {
         assert_eq!(library.len(), keys.len());
         assert!(!library.is_empty());
         for key in &keys {
-            assert_eq!(library.profile(key).map(|found| &found.id), Some(key));
+            assert_eq!(
+                library.profile(key).map(|found| found.id),
+                Some(key.clone())
+            );
         }
         assert_eq!(library.profile("nothing.at.all"), None);
     }
@@ -1544,8 +1917,8 @@ mod tests {
         assert_eq!(
             library
                 .profile("nameless-co/thing/4ch")
-                .map(|profile| profile.manufacturer.as_str()),
-            Some("nameless-co")
+                .map(|profile| profile.manufacturer),
+            Some("nameless-co".to_owned())
         );
     }
 
@@ -1568,8 +1941,8 @@ mod tests {
         assert_eq!(
             library
                 .profile("robe/wash-7q5/4ch")
-                .map(|profile| profile.name.as_str()),
-            Some("Wash 7Q5 (corrected)")
+                .map(|profile| profile.name),
+            Some("Wash 7Q5 (corrected)".to_owned())
         );
         assert_eq!(library.len(), 2, "and not four: the key is the same");
     }
@@ -2208,5 +2581,111 @@ mod tests {
         assert_eq!(library.search("", 3).len(), 3);
         assert_eq!(library.search("", usize::MAX).len(), 5, "all there are");
         const { assert!(MAX_SEARCH_LIMIT >= DEFAULT_SEARCH_LIMIT) };
+    }
+
+    /// A GDTF archive written into a fresh directory, for the start-up tests.
+    fn gdtf_tree(files: &[(&str, &str, &str, u16)]) -> tempfile::TempDir {
+        use crate::library::zip::testkit::Builder;
+        let dir = tempfile::tempdir().expect("a temporary directory");
+        for (file, manufacturer, name, footprint) in files {
+            let archive = Builder::new()
+                .deflated(
+                    "description.xml",
+                    gdtf_source(manufacturer, name, *footprint).as_bytes(),
+                )
+                .stored("models/gltf/body.glb", &[0_u8; 4096])
+                .build();
+            std::fs::write(dir.path().join(file), archive).expect("it writes");
+        }
+        dir
+    }
+
+    /// **A GDTF profile is held as its summary and read back whole** — the
+    /// library of twelve thousand (2026-09-22). What comes back is exactly
+    /// what reading the file gives, and the menu still knows the two facts it
+    /// shows without reading anything.
+    #[test]
+    fn a_gdtf_profile_is_read_back_out_of_its_file_when_it_is_wanted() {
+        let dir = gdtf_tree(&[("t1.gdtf", "Robe Lighting", "Robin T1 Profile", 3)]);
+        let mut library = FixtureLibrary::default();
+        library.read_installed_tree(dir.path());
+        let key = "robe-lighting/robin-t1-profile/standard";
+
+        let held = library.profiles.get(key).expect("filed");
+        assert!(held.profile.is_none(), "not kept whole");
+        let fixture = library.fixture_of(key).expect("a fixture");
+        assert!(fixture.modes[0].has_intensity);
+
+        let direct = super::gdtf::read_archive_file(&dir.path().join("t1.gdtf"), false)
+            .0
+            .into_iter()
+            .map(|(_, profile)| profile)
+            .find(|profile| profile.id == key)
+            .expect("the file holds it");
+        assert_eq!(library.profile(key), Some(direct.clone()));
+        // Kept for the next question, which does not need the file.
+        std::fs::remove_file(dir.path().join("t1.gdtf")).expect("removed");
+        assert_eq!(library.profile(key), Some(direct));
+        // A clone starts with nothing read back, so it has to ask the file.
+        assert_eq!(library.clone().profile(key), None);
+        assert_eq!(library.profile("no/such/key"), None);
+    }
+
+    /// **The second start reads nothing it read before** — and ends with the
+    /// same library.
+    #[test]
+    fn a_library_read_with_its_index_is_the_library_read_without_it() {
+        let dir = gdtf_tree(&[
+            ("a.gdtf", "Robe Lighting", "Robin T1 Profile", 3),
+            ("b.gdtf", "Martin", "MAC Aura", 14),
+        ]);
+        let index_at = tempfile::tempdir().expect("a directory");
+        let index_path = index_at.path().join("library-index.json");
+
+        let read = |expect_hits: usize| {
+            let mut library = FixtureLibrary::default();
+            library.use_index(super::LibraryIndex::open(&index_path));
+            library.read_installed_tree(dir.path());
+            let index = library.take_index().expect("the index");
+            assert_eq!(index.hits(), expect_hits);
+            index.save();
+            library
+        };
+        let first = read(0);
+        let second = read(2);
+        assert_eq!(first.entries(), second.entries());
+        assert_eq!(first, second, "the same library either way");
+        assert_eq!(
+            first.fixture_of("martin/mac-aura/standard"),
+            second.fixture_of("martin/mac-aura/standard")
+        );
+        assert_eq!(
+            first.gdtf_conversion(),
+            second.gdtf_conversion(),
+            "and the same counts"
+        );
+
+        // A file that changed is read again, and what it says now is filed.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let archive = crate::library::zip::testkit::Builder::new()
+            .deflated(
+                "description.xml",
+                gdtf_source("Martin", "MAC Aura", 20).as_bytes(),
+            )
+            .build();
+        std::fs::write(dir.path().join("b.gdtf"), archive).expect("rewritten");
+        let third = read(1);
+        assert_eq!(
+            third
+                .entries()
+                .iter()
+                .find(|entry| entry.id == "martin/mac-aura/standard")
+                .map(|entry| entry.footprint),
+            Some(20)
+        );
+
+        // An index that is not one is no index.
+        std::fs::write(&index_path, b"not json").expect("written");
+        let _ = read(0);
     }
 }

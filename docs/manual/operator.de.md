@@ -444,6 +444,14 @@ nichts davon steckt in irgendeinem Installationsprogramm.
 - Ein Profil, das sich nicht laden lässt oder das geladen wird und keine lesbare
   Fixture ist, wird **gezählt und übersprungen** — ein schlechter Eintrag kostet
   Sie nicht den Rest.
+- **Eine Bibliothek dieser Größe wird im Hintergrund gelesen.** Beim ersten
+  Start nach einem Download und in der Minute nach einer Aktualisierung kommt
+  das Pult mit seinen eingebauten Profilen hoch und nimmt die Bibliothek dazu,
+  sobald es sie gelesen hat — unten steht dann *The fixture library is ready*.
+  Licht und Show sind von der ersten Sekunde an da; nur die Liste der Fixtures,
+  die man *hinzufügen* kann, wächst. Danach merkt sich das Pult, was es gelesen
+  hat (`library-index.json` in seinem Datenordner, jederzeit löschbar), und
+  startet mit der ganzen Bibliothek in wenigen Sekunden.
 
 **Nötig ist das alles nicht.** Das Pult bringt die Open Fixture Library mit,
 liest eine `.gdtf`, die Sie selbst in den Ordner legen, und nimmt die `.mvr`

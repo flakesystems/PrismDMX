@@ -220,6 +220,25 @@ Drei Regeln, die dabei entschieden wurden:
 
 ---
 
+## 6a. Zwölftausend Fixtures beim Start (2026-09-22)
+
+Mit der ganzen heruntergeladenen Bibliothek — 12 574 `.gdtf`-Dateien, 13 GB,
+54 658 Modi — brauchte der Daemon **74 Sekunden**, bis er überhaupt antwortete,
+und **1,8 GB** Speicher; die Desktop-Shell gab nach zwanzig Sekunden auf, und das
+Pult startete nicht. Gemessen auf dem Entwicklungsrechner, Release-Build. Vier
+Ursachen, vier Antworten:
+
+| Ursache | Antwort | Wo |
+|---|---|---|
+| Die Listener warteten auf die Bibliothek | Der Start wartet höchstens drei Sekunden; danach läuft das Pult mit den eingebauten Profilen und nimmt die Bibliothek, sobald sie gelesen ist, mit einer Meldung. Import und Aktualisierung lesen ebenso im Hintergrund — vorher hielten sie das Pult für die Dauer des Lesens fest | `prismd::daemon::wait_for_library`, `Core::take_loaded_library` |
+| Jede Datei wurde ganz gelesen, Modelle und Bilder eingeschlossen | Nur Endsatz, Zentralverzeichnis und `description.xml` werden von der Platte gelesen | `library::zip::read_from_file` |
+| Jeder Modus wurde ganz im Speicher gehalten | Die Bibliothek hält je Modus nur, was die Liste zeigt; das ganze Profil wird beim Patchen aus seiner Datei gelesen (Millisekunden), die letzten sechzehn bleiben | `library::Held`, `FixtureLibrary::profile` |
+| Jede Datei wurde bei jedem Start neu geparst — und unter Windows für jede Datei einzeln das Dateisystem gefragt | Ein Index neben der Show (`library-index.json`) merkt sich je Datei Länge, Zeit und Ergebnis; Art, Länge und Zeit kommen aus dem Verzeichnislisting statt aus einem Öffnen der Datei; das Parsen läuft parallel auf allen Kernen | `library::index`, `FixtureLibrary::read_gdtf_files` |
+
+Danach: Der Daemon antwortet nach **4 s** und hat die Bibliothek nach **19 s**
+im Hintergrund beim ersten Start, nach **2,4 s** mit der ganzen Bibliothek bei
+jedem weiteren; **140 MB** statt 1,8 GB.
+
 ## 7. Was S62 gebaut hat, und was daran offen bleibt
 
 `IMPLEMENTATION_PLAN.md` trägt den Eintrag. Alle vier Punkte stehen:
